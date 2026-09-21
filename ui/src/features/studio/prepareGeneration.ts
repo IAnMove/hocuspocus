@@ -9,6 +9,8 @@ import {
 } from './generationSpec'
 import { generationProvenancePayload, type GenerationSubmissionContext } from './generationProvenance'
 import { translateLegacyImageGuides } from './imageCommandSubmission'
+import { supportsImageIntent } from './imageStudioIntent'
+import { storedImageFileUrl } from '../../lib/storedImageFiles'
 
 const MEDIA_FIELDS = ['image_refs', 'image_start', 'image_end', 'image_guide', 'image_mask'] as const
 
@@ -82,6 +84,12 @@ export type StudioImageIntentSource = {
     reference_pipeline?: boolean
     minimax_h3_text_encoder_choices?: unknown[] | null
     sliding_window_auto_prompt_pacing?: boolean
+    image_ref_inpaint?: boolean
+    inpaint_support?: boolean
+    image_source_support?: boolean
+    image_source_required?: boolean
+    image_conditioning_required?: boolean
+    image_ref_choices?: import('../../types').ChoiceConfig | null
   } | null
   models?: Array<{ model_type: string; name: string }>
   llmStatus?: { loaded?: boolean } | null
@@ -212,6 +220,16 @@ function snapshotFinish(source: StudioImageIntentSource): Pick<
   }
 }
 
+function validateImageIntent(source: StudioImageIntentSource): void {
+  if (!source.imageStudioIntent) return
+  if (!supportsImageIntent(source.imageStudioIntent, source.modelOptions)) throw new Error(i18n.t('studio:imageIntent.incompatible'))
+  if (source.imageStudioIntent === 'edit' && !source.params?.image_guide) throw new Error(i18n.t('studio:generate.needSource'))
+  const references = source.imageRefs?.length || source.params?.image_refs
+  if (source.imageStudioIntent === 'character' && !(Array.isArray(references) ? references.length : references)) {
+    throw new Error(i18n.t('studio:generate.needReference'))
+  }
+}
+
 /** Freeze the Studio image form. Later store reads must not mix this request. */
 export function snapshotStudioImageIntent(source: StudioImageIntentSource): StudioImageIntent {
   if (source.generationMode !== 'image') {
@@ -220,12 +238,9 @@ export function snapshotStudioImageIntent(source: StudioImageIntentSource): Stud
   source = { ...source, params: detachParams(source.params || {}) }
   if (source.imageStudioIntent && source.imageStudioIntent !== 'chooser') {
     const params = source.params!
+    validateImageIntent(source)
     const edit = source.imageStudioIntent === 'edit'
-    const refs = source.imageStudioIntent === 'character'
-    if (edit && !params.image_guide) throw new Error(i18n.t('studio:generate.needSource'))
-    if (refs && !source.imageRefs?.length && !(Array.isArray(params.image_refs) && params.image_refs.length)) {
-      throw new Error(i18n.t('studio:generate.needReference'))
-    }
+    const refs = source.imageStudioIntent === 'character' || (edit && source.modelOptions?.image_ref_inpaint === true)
     if (!edit) {
       for (const key of ['image_guide', 'image_mask', 'video_guide', 'video_mask', 'video_guide_outpainting']) delete params[key]
       params.denoising_strength = 1
@@ -244,8 +259,9 @@ export function snapshotStudioImageIntent(source: StudioImageIntentSource): Stud
     source.endImage = null
     source.clips = []
     params.image_prompt_type = 'T'
-    params.video_prompt_type = String(params.video_prompt_type || '')
-      .replace(edit ? /[KI]/g : refs ? /[VAG]/g : /[VAGKI]/g, '')
+    let flags = String(params.video_prompt_type || '')
+    for (const letter of edit ? (refs ? '' : 'KI') : refs ? 'VAG' : 'VAGKI') flags = flags.replaceAll(letter, '')
+    params.video_prompt_type = flags
   }
   return {
     generationMode: 'image',
@@ -567,7 +583,7 @@ async function uploadLiveImageRefs(
   const refPaths: string[] = []
   for (const file of intent.imageRefs) {
     try {
-      refPaths.push((await ports.uploadImage(file)).url)
+      refPaths.push(storedImageFileUrl(file) || (await ports.uploadImage(file)).url)
     } catch (error) {
       errors.push(String(error))
       console.error('Failed to upload reference image:', error)

@@ -304,10 +304,26 @@ The [Portal Rides gallery](ui/public/examples/portal-rides/README.md) adds a dow
 
 ### Qwen Image 2.1 in Studio
 
-Choose **Image → Create**, **Edit**, or **Character**. Each keeps its own prompt,
-canvas and image inputs; switching back restores the draft. Create submits no
-hidden editing image or mask. Edit needs a source; Character needs references.
+Choose **Image → Create**, **Edit**, or **References**. Each keeps its own prompt,
+canvas, image inputs, sampling settings, seed, LoRAs and output count; switching
+back restores the draft. The selected model is shared between these flows.
+Create submits no hidden editing image or mask. Edit needs a source; References needs references.
 **Start over** clears these drafts. Panorama has its own generation button.
+
+Gallery actions distinguish **Edit this image** (use the result as the new source),
+**Load settings** (restore the complete saved recipe) and **Use as reference**.
+Loading settings or applying a recipe restores source, mask, references, method,
+sampling and LoRAs together. Missing inputs produce an error without replacing
+the current draft; a late download cannot overwrite a newer edit. Stored inputs
+keep their source workspace. Hidden model variants can still be restored by ID.
+
+Qwen 2.1 and Qwen Edit Plus/Plus2 accept additional references inside **Edit**;
+the source counts toward the model's input limit. Older Qwen image models expose
+their supported inpainting methods and outpainting controls. Studio keeps the
+public image mode at `1` and translates legacy masked edits to native mode `2`
+at the server boundary. Qwen Layered offers an editing source and **Number of
+layers**, separate from the number of queued results. Incompatible flows are
+excluded from the chooser and blocked if already open after a model switch.
 
 Start with **Auto / 1K**, **40 steps**, **CFG 1**. Every Qwen 2.1 preset uses
 32-pixel aligned dimensions. Auto aspect follows the editing source; without a

@@ -1,9 +1,8 @@
 """Read-only model/resource preflight for full Studio image commands."""
-from copy import deepcopy
-
 from services.image_generation_commands import command_error, validate_image_model
 from services.studio_image_resources import validate_lora_multipliers
 from services.studio_image_conditioning import validate_image_selectors
+from services.image_edit_workflow import native_image_edit_params, validate_image_edit
 
 
 def _has_reference(value):
@@ -68,10 +67,11 @@ def prepare_studio_image(params, *, model_definition, model_downloaded, resource
         maximum_phases = _validate_conditioning(params, definition)
         validate_image_selectors(params, definition)
         _validate_model_options(params, definition)
+        validate_image_edit(params, definition)
         validate_lora_multipliers(params, maximum_phases)
         _validate_processors(params, processor_capabilities, validate_processors, processor_settings)
         working, media = resources.prepare_media(params)
         loras = resources.prepare_loras(params, definition)
-        return deepcopy(working), [*media, *loras]
+        return native_image_edit_params(working, definition), [*media, *loras]
     except (ValueError, OSError) as error:
         raise command_error(422, "invalid_studio_input", str(error)) from error

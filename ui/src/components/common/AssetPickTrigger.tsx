@@ -10,14 +10,16 @@ export function AssetPickTrigger({
   placeholder,
   onOpen,
   disabled,
+  showPreview = true,
 }: {
   label: string
   selected?: ApiOutput
   placeholder: string
   onOpen: () => void
   disabled?: boolean
+  showPreview?: boolean
 }) {
-  const preview = selected ? assetPreviewUrl(selected) : ''
+  const preview = selected && showPreview ? assetPreviewUrl(selected) : ''
   const picked = selected ? outputToPickerItem(selected, '') : null
   return (
     <div className="block text-[9px] text-text-muted">

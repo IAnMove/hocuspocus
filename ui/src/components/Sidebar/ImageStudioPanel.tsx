@@ -10,16 +10,19 @@ import { OutputCount } from './OutputCount'
 import { PanoramaLoopPanel } from './PanoramaLoopPanel'
 import { PromptInput } from './PromptInput'
 import { ResolutionPresets } from './ResolutionPresets'
+import { supportsImageIntent } from '../../features/studio/imageStudioIntent'
 
 export function ImageStudioPanel() {
   const { t } = useUiTranslation('studio')
   const intent = useStore(s => s.imageStudioIntent)
+  const options = useStore(s => s.modelOptions)
   const source = String(useStore(s => s.params.image_guide) || '')
   const resolution = String(useStore(s => s.params.resolution) || '')
   const queueCount = useStore(s => s.jobs.filter(job => ['queued', 'waiting_resource', 'running'].includes(job.status)).length)
   const [fitOpen, setFitOpen] = useState(false)
 
   if (intent === 'chooser') return <ImageIntentChooser />
+  if (!supportsImageIntent(intent, options)) return <><ImageIntentSwitch /><p role="status" className="text-xs text-text-muted">{t('imageIntent.incompatible')}</p></>
 
   return (
     <div className="space-y-3">
@@ -35,7 +38,7 @@ export function ImageStudioPanel() {
           {t('imageFit.open')}
         </button>
       ) : null}
-      {intent === 'character' && <ImageRefSection />}
+      {(intent === 'character' || (intent === 'edit' && options?.image_ref_inpaint)) && <ImageRefSection />}
       {intent === 'loop' && <PanoramaLoopPanel />}
       {intent !== 'loop' && (
         <>

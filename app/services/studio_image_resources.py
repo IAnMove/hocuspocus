@@ -115,7 +115,11 @@ class StudioImageResources:
             parsed = urlsplit(text)
             text = parsed.path + (("?" + parsed.query) if parsed.query else "")
         text = self._coerce_gallery_url(text)
-        if text.startswith(("/api/v1/", "asset_", "asset:", "asset-")):
+        if text.startswith(("asset_", "asset:", "asset-")):
+            text = self._asset_url(text)
+        elif text.startswith("/api/v1/assets/"):
+            text = self._asset_url(unquote(urlsplit(text).path[len("/api/v1/assets/"):]))
+        if text.startswith("/api/v1/"):
             self._media(text)
             return text
         source = Path(text)

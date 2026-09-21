@@ -7,8 +7,8 @@ import { newUserGenerationContext } from '../../features/studio/generationProven
 import { useViggleGenerationGuard } from '../../lib/useViggleGenerationGuard'
 import { isGenerationJobActive } from '../../lib/generationJobState'
 import { usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
-import { generateBlockedCopy, isRemoteMiniMaxImage } from '../../lib/generateButtonGate'
-import { imageStudioInputRequirement } from '../../features/studio/imageStudioIntent'
+import { generateBlockedCopy, hasOutpaintArea, isRemoteMiniMaxImage } from '../../lib/generateButtonGate'
+import { imageStudioInputRequirement, supportsImageIntent } from '../../features/studio/imageStudioIntent'
 
 export function GenerateButton() {
   const { t } = useUiTranslation('studio')
@@ -35,6 +35,7 @@ export function GenerateButton() {
   const imageRequirement = useStore(s => s.generationMode === 'image'
     ? imageStudioInputRequirement(s.imageStudioIntent, s.params.image_guide, s.imageRefs.length || s.params.image_refs?.length || 0)
     : null)
+  const incompatibleImage = useStore(s => s.generationMode === 'image' && !supportsImageIntent(s.imageStudioIntent, s.modelOptions))
   const needsImage = (generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage)
     || imageRequirement === 'source'
   const needsReference = (generationMode === 'video' && isOmniReference
@@ -44,13 +45,7 @@ export function GenerateButton() {
   const outpaintVideoBox = useStore(s => s.outpaintVideoBox)
   const isOutpaint = generationMode === 'avatar' && editSubMode === 'outpaint'
   const needsOutpaintSource = isOutpaint && !editVideoPath
-  const hasOutpaintArea = (
-    outpaintVideoBox.x > 0.0005
-    || outpaintVideoBox.y > 0.0005
-    || outpaintVideoBox.x + outpaintVideoBox.w < 0.9995
-    || outpaintVideoBox.y + outpaintVideoBox.h < 0.9995
-  )
-  const needsOutpaintArea = isOutpaint && !!editVideoPath && !hasOutpaintArea
+  const needsOutpaintArea = isOutpaint && !!editVideoPath && !hasOutpaintArea(outpaintVideoBox)
   const promptSchedulerEnabled = useStore(s => s.promptSchedulerEnabled)
   const imageMode = useStore(s => s.params.image_mode)
   const prompt = useStore(s => s.params.prompt)
@@ -62,7 +57,7 @@ export function GenerateButton() {
   const imageProvider = useStore(s => s.productionProfile?.image?.provider)
   const localUnavailable = usePlatformCapabilities()?.capabilities.wangp_local?.state === 'hidden'
     && !isRemoteMiniMaxImage(generationMode, modelType, imageProvider)
-  const blocked = localUnavailable || needsImage || needsReference || needsOutpaintSource
+  const blocked = incompatibleImage || localUnavailable || needsImage || needsReference || needsOutpaintSource
     || needsOutpaintArea || needsScheduledPrompts || needsPrompt
 
   const handleClick = async () => {
@@ -87,7 +82,7 @@ export function GenerateButton() {
 
   if (blocked) {
     const { label, title } = generateBlockedCopy({
-      localUnavailable, needsImage, needsReference, needsOutpaintSource, needsOutpaintArea,
+      incompatibleImage, localUnavailable, needsImage, needsReference, needsOutpaintSource, needsOutpaintArea,
       needsPrompt, needsScheduledPrompts, t,
     })
     return (

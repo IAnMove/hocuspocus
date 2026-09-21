@@ -506,12 +506,19 @@
     "newHint": "Crear desde el prompt, sin foto de origen.",
     "edit": "Editar imagen",
     "editHint": "Cambiar una foto que ya tienes.",
-    "character": "Personaje",
-    "characterHint": "Misma identidad con referencias.",
+    "character": "Referencias",
+    "characterHint": "Guiar el sujeto y el estilo con imágenes de referencia.",
     "loop": "Fondo en loop",
     "loopHint": "Panorama que se puede repetir.",
     "startOver": "Empezar de cero",
-    "canvas": "Lienzo {{size}}"
+    "canvas": "Lienzo {{size}}",
+    "incompatible": "Este modelo no admite este flujo. Elige uno de los modos disponibles u otro modelo.",
+    "changeModel": "Elige un modelo compatible"
+  },
+  "imageActions": {
+    "loadSettings": "Cargar ajustes",
+    "edit": "Editar esta imagen",
+    "reference": "Usar como referencia"
   },
   "imageFit": {
     "title": "Ajustar al modelo",
@@ -527,6 +534,10 @@
     "failed": "No se pudo ajustar la imagen o la máscara. Vuelve a intentarlo."
   },
   "imageEdit": {
+    "method": "Método de inpainting",
+    "maskStrength": "Intensidad de la máscara",
+    "layers": "Número de capas",
+    "referenceLimit": "Este modelo admite hasta {{count}} imágenes de entrada, incluida la imagen a editar.",
     "title": "Herramientas de edición",
     "native2k": "2K nativo",
     "refs": "Hasta {{count}} referencias de identidad",
@@ -535,7 +546,7 @@
     "rgba": "Transparencia RGBA",
     "source": "Imagen a editar",
     "maskImage": "Máscara de edición (blanco = cambiar)",
-    "sourceHint": "Opcional. Elige una foto de tu equipo: se usa aquí, no entra en la galería hasta generar. Sin ella, 2.1 crea desde el prompt y las referencias.",
+    "sourceHint": "Elige la imagen a editar. Una foto de tu equipo se conserva en esta pestaña hasta que generes.",
     "outpaintMargins": "Márgenes de outpaint (arriba abajo izquierda derecha %)",
     "outpaintHint": "Hace falta una imagen origen. Amplía el lienzo para que el modelo genere los lados nuevos.",
     "denoising": "Fuerza de denoising",

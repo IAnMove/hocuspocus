@@ -6496,6 +6496,7 @@ def _minimax_h3_runtime_advisory(model_def: dict) -> dict | None:
 @api.get("/api/v1/model-options/{model_type}")
 def get_model_options(model_type: str):
     """Return UI-relevant model options for dynamic rendering."""
+    from services.image_edit_workflow import image_edit_capabilities
     if _is_legacy_h3_model(model_type):
         return dict(minimax_h3_service.MODEL_OPTIONS)
     if model_type in model3d_service.MODEL_BY_ID:
@@ -6659,8 +6660,8 @@ def get_model_options(model_type: str):
         "max_image_refs": md.get("max_image_refs"),
         "inpaint_support": bool(md.get("inpaint_support", False)),
         "image_ref_inpaint": bool(md.get("image_ref_inpaint", False)),
-        "outpaint_support": isinstance(md.get("video_guide_outpainting"), (list, tuple))
-            and 1 in md.get("video_guide_outpainting"),
+        **image_edit_capabilities(md),
+        "model_name": md.get("name") or model_type,
         "native_rgba": bool(md.get("native_rgba", False)),
         "sample_solvers": solvers,
 

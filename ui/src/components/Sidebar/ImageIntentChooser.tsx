@@ -1,15 +1,16 @@
 import { useUiTranslation } from '../../i18n'
-import { IMAGE_STUDIO_INTENTS, type ImageStudioIntent } from '../../features/studio/imageStudioIntent'
+import { IMAGE_STUDIO_INTENTS, supportsImageIntent, type ImageStudioIntent } from '../../features/studio/imageStudioIntent'
 import { useStore } from '../../stores/useStore'
 
 export function ImageIntentChooser() {
   const { t } = useUiTranslation('studio')
   const setIntent = useStore(s => s.setImageStudioIntent)
+  const options = useStore(s => s.modelOptions)
   return (
     <section className="space-y-2" aria-label={t('imageIntent.title')}>
       <p className="text-[11px] text-text-muted">{t('imageIntent.subtitle')}</p>
       <div className="grid grid-cols-2 gap-2">
-        {IMAGE_STUDIO_INTENTS.map(item => (
+        {IMAGE_STUDIO_INTENTS.filter(item => supportsImageIntent(item.id, options)).map(item => (
           <button
             key={item.id}
             type="button"
@@ -31,11 +32,12 @@ export function ImageIntentSwitch() {
   const intent = useStore(s => s.imageStudioIntent)
   const setIntent = useStore(s => s.setImageStudioIntent)
   const reset = useStore(s => s.resetImageStudio)
+  const options = useStore(s => s.modelOptions)
   if (intent === 'chooser') return null
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="flex flex-wrap gap-1">
-        {IMAGE_STUDIO_INTENTS.map(item => (
+        {IMAGE_STUDIO_INTENTS.filter(item => supportsImageIntent(item.id, options)).map(item => (
           <button
             key={item.id}
             type="button"

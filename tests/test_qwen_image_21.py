@@ -178,7 +178,9 @@ class TestQwenImage21Definitions(unittest.TestCase):
         store = _read(root / "ui" / "src" / "stores" / "useStore.ts")
         self.assertIn('"inpaint_support": bool(md.get("inpaint_support", False))', launch)
         self.assertIn('"native_rgba": bool(md.get("native_rgba", False))', launch)
-        self.assertIn("1 in md.get(\"video_guide_outpainting\")", launch)
+        from services.image_edit_workflow import image_edit_capabilities
+        self.assertTrue(image_edit_capabilities(self.handler.query_model_def("qwen_image_21", {}))["outpaint_support"])
+        self.assertTrue(image_edit_capabilities(self.handler.query_model_def("qwen_image_edit_20B", {}))["outpaint_support"])
         self.assertIn("inpaint_support?: boolean", types_source)
         self.assertIn("native_rgba?: boolean", types_source)
         panel = _read(root / "ui" / "src" / "components" / "Sidebar" / "ImageStudioPanel.tsx")

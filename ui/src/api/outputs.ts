@@ -147,12 +147,17 @@ export function getUploadUrl(filename: string): string {
   return `${BASE}/api/v1/uploads/${encodeURIComponent(filename)}`
 }
 
-export function getStoredAssetUrl(pathOrFilename: string): string {
+export function getStoredAssetUrl(pathOrFilename: string, workspace?: string): string {
   const normalized = String(pathOrFilename || '').replace(/\\/g, '/')
+  if (normalized.startsWith('/api/v1/file/')) {
+    const url = new URL(normalized, 'http://localhost')
+    if (workspace && !url.searchParams.has('workspace')) url.searchParams.set('workspace', workspace)
+    return url.pathname + url.search
+  }
   const filename = storedAssetFilename(normalized)
   const isUpload = normalized.startsWith('/api/v1/uploads/')
     || /(^|\/)uploads\//i.test(normalized)
-  return isUpload ? getUploadUrl(filename) : getFileUrl(filename)
+  return isUpload ? getUploadUrl(filename) : getFileUrl(filename, workspace)
 }
 
 /**

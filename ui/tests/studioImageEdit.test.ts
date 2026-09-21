@@ -30,6 +30,7 @@ test('unlocks 2.1 image-generation tools from model options', () => {
     refs: true,
     maxRefs: 10,
     inpaint: true,
+    source: true,
     outpaint: true,
     rgba: true,
     twoK: true,

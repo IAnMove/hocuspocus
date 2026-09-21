@@ -197,7 +197,7 @@ class model_factory:
         if input_ref_images:
             if "K" in (video_prompt_type or "") and input_ref_images:
                 ref_w, ref_h = input_ref_images[0].size
-                height, width = calculate_new_dimensions(height, width, ref_h, ref_w, fit_into_canvas)
+                height, width = calculate_new_dimensions(height, width, ref_h, ref_w, fit_into_canvas, block_size=32)
             images = []
             for img in input_ref_images[:10]:
                 if not isinstance(img, Image.Image):

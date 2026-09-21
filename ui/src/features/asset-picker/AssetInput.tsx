@@ -22,6 +22,7 @@ export function AssetInput({
   disabled,
   workspaceId,
   keepLocal,
+  showPreview,
   onChoose,
 }: {
   label: string
@@ -34,6 +35,7 @@ export function AssetInput({
   disabled?: boolean
   workspaceId?: string
   keepLocal?: boolean
+  showPreview?: boolean
   onChoose: (item: ApiOutput | null) => void
 }) {
   const { t } = useUiTranslation('common')
@@ -96,7 +98,7 @@ export function AssetInput({
 
   return (
     <div className="space-y-1" onDrop={event => { event.preventDefault(); event.stopPropagation(); if (!disabled && !busy) void pickLocal(event.dataTransfer.files[0]) }} onDragOver={event => event.preventDefault()}>
-      <AssetPickTrigger label={label} selected={value} placeholder={busy ? t('picker.uploading') : placeholder} disabled={disabled || busy} onOpen={() => setOpen(true)} />
+      <AssetPickTrigger label={label} selected={value} showPreview={showPreview} placeholder={busy ? t('picker.uploading') : placeholder} disabled={disabled || busy} onOpen={() => setOpen(true)} />
       <div className="flex flex-wrap gap-1">
         <button type="button" disabled={disabled || busy} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
           <Monitor size={10} />{t('picker.fromDevice')}

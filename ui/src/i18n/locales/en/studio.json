@@ -506,12 +506,19 @@
     "newHint": "Create from the prompt, with no source photo.",
     "edit": "Edit image",
     "editHint": "Change a photo you already have.",
-    "character": "Character",
-    "characterHint": "Keep identity with reference stills.",
+    "character": "References",
+    "characterHint": "Guide the subject and style with reference images.",
     "loop": "Looping backdrop",
     "loopHint": "A panorama that can repeat.",
     "startOver": "Start over",
-    "canvas": "Canvas {{size}}"
+    "canvas": "Canvas {{size}}",
+    "incompatible": "This model does not support this workflow. Choose an available workflow or another model.",
+    "changeModel": "Choose a compatible model"
+  },
+  "imageActions": {
+    "loadSettings": "Load settings",
+    "edit": "Edit this image",
+    "reference": "Use as reference"
   },
   "imageFit": {
     "title": "Fit to the model",
@@ -535,7 +542,11 @@
     "rgba": "RGBA transparency",
     "source": "Image to edit",
     "maskImage": "Edit mask (white = change)",
-    "sourceHint": "Optional. A photo from your computer stays in this tab and is not added to the gallery until you generate. Without one, 2.1 creates from the prompt and references.",
+    "sourceHint": "Choose the image to edit. A photo from your computer stays in this tab until you generate.",
+    "method": "Inpainting method",
+    "maskStrength": "Mask strength",
+    "layers": "Number of layers",
+    "referenceLimit": "This model supports up to {{count}} input images, including the edit source.",
     "outpaintMargins": "Outpaint margins (top bottom left right %)",
     "outpaintHint": "Needs a source image. Pads the canvas so the model can generate the new sides.",
     "denoising": "Denoising strength",

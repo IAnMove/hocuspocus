@@ -59,6 +59,7 @@ class family_handler():
         extra_model_def["vae_upsampler"] = [1,2]
 
         if base_model_type == "qwen_image_21":
+            extra_model_def["vae_block_size"] = 32
             extra_model_def["text_encoder_folder"] = "Qwen3-VL-8B-Instruct"
             extra_model_def["text_encoder_URLs"] = [
                 build_hf_url("Comfy-Org/Qwen-Image-2.1", "text_encoders", "qwen3vl_8b_bf16.safetensors"),
@@ -108,6 +109,8 @@ class family_handler():
             return extra_model_def
 
         if base_model_type in ["qwen_image_layered_20B"]:
+            extra_model_def["image_source_required"] = True
+            extra_model_def["image_layer_count"] = {"min": 1, "max": 16, "default": 4}
             extra_model_def["batch_size_label"] = "Number of Layers"
             extra_model_def["set_video_prompt_type"] = "V"
             extra_model_def["guide_preprocessing"] = {
@@ -136,6 +139,7 @@ class family_handler():
             }
 
         if base_model_type in ["qwen_image_edit_20B", "qwen_image_edit_plus_20B", "qwen_image_edit_plus2_20B"]:
+            extra_model_def["image_conditioning_required"] = True
             extra_model_def["inpaint_support"] = True
             if base_model_type in ["qwen_image_edit_plus_20B", "qwen_image_edit_plus2_20B"]:
                 extra_model_def["inpaint_video_prompt_type"]= "VAGI"            

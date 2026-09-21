@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent, type SyntheticEvent } from 'react'
-import { Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo, Clock3 } from 'lucide-react'
+import { Pencil, SlidersHorizontal, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo, Clock3 } from 'lucide-react'
+import { editOutputImage, addOutputImageReference } from '../../features/studio/imageInputActions'
+import { beginImageSettingsChange } from '../../features/studio/imageSettingsRestore'
+import { outputImageUrl } from '../../lib/storedImageFiles'
 import { FeedMediaBody } from './FeedMediaBody'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
@@ -106,6 +109,7 @@ function RetryImage({ url, alt, maxHeight, onIntrinsicSize }: {
 
 export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, maxMediaHeight, style }: Props) {
   const { t } = useUiTranslation('activity')
+  const { t: tStudio } = useUiTranslation('studio')
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
   const setMediaFilter = useStore(s => s.setMediaFilter)
   const loadSettingsFromOutput = useStore(s => s.loadSettingsFromOutput)
@@ -524,19 +528,33 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const handleSendToInput = async () => {
     if (file.type !== 'image') return
     try {
-      const res = await fetch(getFileUrl(file.name))
-      const blob = await res.blob()
-      const imageFile = new File([blob], file.name, { type: blob.type || 'image/png' })
       if (generationMode === 'image') {
-        addImageRef(imageFile)
+        if (!await addOutputImageReference(file.name, outputWorkspace)) return
       } else {
+        const change = beginImageSettingsChange(useStore.getState)
+        const res = await fetch(outputImageUrl(file.name, outputWorkspace), { signal: change.signal })
+        if (!res.ok) throw new Error(`${file.name}: HTTP ${res.status}`)
+        const blob = await res.blob()
+        if (!change.current()) return
+        const imageFile = new File([blob], file.name, { type: blob.type || 'image/png' })
         setStartImage(imageFile)
       }
       setSentToInput(true)
       setTimeout(() => setSentToInput(false), 2000)
     } catch (e) {
-      console.error('Failed to send image to input:', e)
+      setSettingsError(e instanceof Error ? e.message : String(e))
     }
+  }
+
+  const handleEditImage = async () => {
+    if (settingsPending.current) return
+    settingsPending.current = true
+    setSettingsBusy(true)
+    setSettingsError('')
+    try {
+      if (!await editOutputImage(file.name, outputWorkspace)) setSettingsError(t('settingsUnavailable'))
+    } catch (error) { setSettingsError(error instanceof Error ? error.message : String(error)) }
+    finally { settingsPending.current = false; setSettingsBusy(false) }
   }
 
   // Capture the frame the video preview is currently SHOWING (canvas grab
@@ -788,9 +806,9 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
                 onClick={event => { event.stopPropagation(); void handleOutputSettings(false) }}
                 disabled={settingsBusy}
                 className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-                title="Load settings"
+                title={tStudio('imageActions.loadSettings')}
               >
-                <Pencil size={13} />
+                <SlidersHorizontal size={13} />
               </button>
               <button
                 onClick={event => { event.stopPropagation(); void handleOutputSettings(true) }}
@@ -839,6 +857,11 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
             </>
           )}
           {file.type === 'image' && (
+            <button onClick={event => { event.stopPropagation(); void handleEditImage() }} disabled={settingsBusy}
+              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue disabled:opacity-40"
+              title={tStudio('imageActions.edit')}><Pencil size={13} /></button>
+          )}
+          {file.type === 'image' && (
             <button
               onClick={(e) => { e.stopPropagation(); handleSendToInput() }}
               className={`p-1.5 rounded-lg transition-colors ${
@@ -846,7 +869,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
                   ? 'text-accent-green'
                   : 'hover:bg-bg-hover text-text-secondary hover:text-accent-blue'
               }`}
-              title={generationMode === 'image' ? 'Use as input image' : 'Use as start frame'}
+              title={generationMode === 'image' ? tStudio('imageActions.reference') : 'Use as start frame'}
             >
               {sentToInput ? <Check size={13} /> : <ArrowLeftToLine size={13} />}
             </button>

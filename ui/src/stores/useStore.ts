@@ -1,5 +1,6 @@
 import { concreteImageResolution, referenceImageResolution } from '../lib/imageResolution'
 import { IMAGE_INTENT_PARAMS, emptyImageStudioDraft, imageStudioDraft } from '../features/studio/imageStudioIntent'
+import { beginImageSettingsChange, imageSettingsMode, restoreStudioImageSettings } from '../features/studio/imageSettingsRestore'
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
 import {
   H3_EXPERIMENTAL_MAX_FRAMES,
@@ -605,6 +606,12 @@ const _PRIMARY_MODEL_DEFAULT_FIELDS: ReadonlyArray<string> = [
 // Monotonic sequence for loadModelOptions staleness detection — only the
 // most recently requested model's options may touch the store.
 let _modelOptionsSeq = 0
+let _modelDefaultsSeq = 0
+export function invalidateModelOptionsLoad() { _modelOptionsSeq += 1; _modelDefaultsSeq += 1 }
+
+function currentModelDefaults(sequence: number, state: Pick<AppState, 'selectedModelPerMode' | 'generationMode'>, model: string) {
+  return sequence === _modelDefaultsSeq && state.selectedModelPerMode[state.generationMode] === model
+}
 
 function _applyModelDefaults(
   storeGet: () => { selectedModelPerMode: Partial<Record<GenerationMode, string>>; generationMode: GenerationMode; params: GenerateParams },
@@ -612,13 +619,13 @@ function _applyModelDefaults(
   modelType: string,
   preservedRecipe?: Partial<GenerateParams>,
 ): void {
+  const sequence = ++_modelDefaultsSeq
   api.fetchDefaults(modelType).then((d) => {
     if (!d || typeof d !== 'object') return
     // Race guard: model may have been switched again while this fetch
     // was in flight. Apply only if still the active model in current mode.
     const state = storeGet()
-    const active = state.selectedModelPerMode[state.generationMode]
-    if (active !== modelType) return
+    if (!currentModelDefaults(sequence, state, modelType)) return
     const overrides: Record<string, unknown> = {}
     for (const field of _PRIMARY_MODEL_DEFAULT_FIELDS) {
       // Audio references belong to the selected tab. A late defaults response
@@ -2160,7 +2167,7 @@ export function resolveResolution(
     || '1280x720'
 }
 
-function findResolutionSelection(
+export function findResolutionSelection(
   resolution: string,
   modelOptions: ModelOptions | null,
 ): { preset: ResolutionPreset; ratio: AspectRatio } | null {
@@ -2268,7 +2275,7 @@ export const useStore = create<AppState>((set, get) => {
     if (state.imageStudioIntent === intent) return
     const drafts = { ...state.imageStudioDrafts }
     if (state.imageStudioIntent !== 'chooser') drafts[state.imageStudioIntent] = imageStudioDraft(state)
-    const draft = drafts[intent] || emptyImageStudioDraft()
+    const draft = drafts[intent] || emptyImageStudioDraft(state.modelOptions)
     const cleared = Object.fromEntries(IMAGE_INTENT_PARAMS.map(key => [key, undefined]))
     set({
       ...draft,
@@ -3433,10 +3440,25 @@ export const useStore = create<AppState>((set, get) => {
     // working set, and PREPOPULATE the prompt (a real, editable value — not
     // placeholder text) so the user just tweaks the subject. Seed and repeat
     // reset so a recipe reproduces a look, not a specific frame.
+    const recipeChange = beginImageSettingsChange(get)
     const recipe = await api.fetchRecipe(id)
     const { models } = get()
     const model = models.find(m => m.model_type === recipe.model_type)
     const mode = model ? getModelMode(recipe.model_type, model.family) : ((recipe.mode as GenerationMode) || 'video')
+    if (mode === 'image') {
+      if (!recipeChange.current()) throw new Error('The image form changed while loading the recipe')
+      _modelOptionsSeq += 1
+      set({ modelOptionsLoading: false })
+      const restored = await restoreStudioImageSettings({ ...recipe.params, model_type: recipe.model_type,
+        prompt: recipe.prompt_example || '', seed: -1,
+        activated_loras: (recipe.loras || []).map(item => item.filename),
+        loras_multipliers: (recipe.loras || []).map(item => String(item.multiplier ?? 1)).join(' '),
+      }, get().activeWorkspace, get, set)
+      if (!restored) throw new Error('The image form changed while loading the recipe')
+      await get().loadLoras(recipe.model_type)
+      const present = new Set(get().availableLoras.map(name => name.replace(/\\/g, '/').split('/').pop()))
+      return { missing: (recipe.loras || []).filter(item => !present.has(item.filename)) }
+    }
 
     const activated = (recipe.loras || []).map(l => l.filename)
     const multipliers = (recipe.loras || []).map(l => String(l.multiplier ?? '1.0')).join(' ')
@@ -3463,7 +3485,7 @@ export const useStore = create<AppState>((set, get) => {
         repeat_generation: 1,
         // Recipes are look presets — land in the base Studio sub-mode
         // (Frames for video, image-output for image), not Extend/Blend.
-        image_mode: mode === 'image' ? 1 : 0,
+        image_mode: 0,
       },
       loraWeights,
       availableLoras: [],
@@ -5928,8 +5950,10 @@ export const useStore = create<AppState>((set, get) => {
     set({ lorasLoading: true })
     try {
       const data = await api.fetchLoras(modelType)
+      if (get().params.model_type !== modelType) return
       set({ availableLoras: data.loras, lorasLoading: false })
     } catch {
+      if (get().params.model_type !== modelType) return
       set({ availableLoras: [], lorasLoading: false })
     }
   },
@@ -6365,6 +6389,10 @@ export const useStore = create<AppState>((set, get) => {
       }
       if (options.default_guidance_scale != null) {
         paramUpdates.guidance_scale = options.default_guidance_scale
+      }
+      if (get().generationMode === 'image') {
+        paramUpdates.model_mode = options.image_edit_modes?.default ?? 0
+        paramUpdates.batch_size = options.image_layer_count?.default ?? 1
       }
       // Flow shift is model-specific but was never applied on model switch,
       // so it carried over from whichever model was selected before.
@@ -8772,6 +8800,11 @@ export const useStore = create<AppState>((set, get) => {
     }
 
     // Determine generation mode from model (respects per-model avatar overrides)
+    if (imageSettingsMode(p, get())) {
+      _modelOptionsSeq += 1
+      set({ modelOptionsLoading: false })
+      return restoreStudioImageSettings(p, source?.workspace || get().activeWorkspace, get, set, restore.isCurrent)
+    }
     const model = models.find(m => m.model_type === modelType)
     if (model) {
       const mode = getModelMode(modelType, model.family)
