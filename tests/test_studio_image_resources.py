@@ -171,6 +171,15 @@ def test_canonicalize_legacy_uses_exact_contained_absolute_path_and_does_not_ado
     assert service.canonicalize_legacy(str(output)) == "/api/v1/file/same.png?workspace=output"
     with pytest.raises(ValueError):
         service.canonicalize_legacy("same.png")
+    unique = fixture["output"] / "unique-edit.png"
+    write_image(unique)
+    assert service.canonicalize_legacy("unique-edit.png") == "/api/v1/file/unique-edit.png?workspace=output"
+    assert service.canonicalize_legacy("/api/v1/file/unique-edit.png?workspace=output") == (
+        "/api/v1/file/unique-edit.png?workspace=output"
+    )
+    assert service.canonicalize_legacy(
+        "http://192.168.1.87:42010/api/v1/file/unique-edit.png?workspace=output"
+    ) == "/api/v1/file/unique-edit.png?workspace=output"
     nested = fixture["uploads"].parent / ".pinokio-temp"
     nested.mkdir()
     relative = nested / "picked.jpg"
@@ -186,6 +195,25 @@ def test_canonicalize_legacy_uses_exact_contained_absolute_path_and_does_not_ado
     write_image(outside)
     with pytest.raises(ValueError):
         service.canonicalize_legacy(str(outside))
+
+
+def test_canonicalize_legacy_maps_gallery_output_urls_to_workspace_files(resources_fixture):
+    fixture = resources_fixture
+    default = fixture["output"].parent / "default-workspace"
+    default.mkdir()
+    fixture["workspaces"]["default"] = default
+    picture = default / "gallery.png"
+    write_image(picture)
+    service = fixture["service"]
+    assert service.canonicalize_legacy("/api/v1/outputs/gallery.png") == (
+        "/api/v1/file/gallery.png?workspace=default"
+    )
+    assert service.canonicalize_legacy("/api/v1/outputs/thumbnail/gallery.png?v=1") == (
+        "/api/v1/file/gallery.png?workspace=default"
+    )
+    assert service.canonicalize_legacy("/api/v1/file/gallery.png") == (
+        "/api/v1/file/gallery.png?workspace=default"
+    )
 
 
 def test_canonicalize_legacy_rejects_symlink_outside_known_media_roots(resources_fixture, tmp_path):

@@ -205,15 +205,17 @@ class QwenImage21TextProjection(nn.Module):
 
 
 class QwenImage21SwiGLUFeedForward(nn.Module):
+    """Comfy INT8 ConvRot ships a fused `gate_up` (2 * mlp_hidden), not split proj/gate."""
+
     def __init__(self, hidden_size: int, mlp_hidden_size: int):
         super().__init__()
-        self.proj = nn.Linear(hidden_size, mlp_hidden_size, bias=False)
+        self.gate_up = nn.Linear(hidden_size, mlp_hidden_size * 2, bias=False)
         self.out = nn.Linear(mlp_hidden_size, hidden_size, bias=False)
-        self.gate_layer = nn.Linear(hidden_size, mlp_hidden_size, bias=False)
         self.activation_fn = nn.SiLU()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.out(self.activation_fn(self.gate_layer(hidden_states)) * self.proj(hidden_states))
+        gate, projected = self.gate_up(hidden_states).chunk(2, dim=-1)
+        return self.out(self.activation_fn(gate) * projected)
 
 
 class QwenImage21AdaLayerNormContinuous(nn.Module):

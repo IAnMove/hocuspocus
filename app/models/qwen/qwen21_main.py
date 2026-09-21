@@ -12,6 +12,7 @@ from shared.utils import files_locator as fl
 from shared.utils.utils import calculate_new_dimensions, convert_tensor_to_image
 
 from .autoencoder_kl_qwenimage21 import AutoencoderKLQwenImage21
+from .convert_diffusers_qwen21_vae import convert_qwen_image_21_vae_state_dict
 from .pipeline_qwenimage21 import QwenImage21Pipeline
 from .transformer_qwenimage21 import QwenImage21Transformer2DModel
 
@@ -19,6 +20,28 @@ _TRANSFORMER_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "qwen_i
 _VAE_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "qwen_image_21_vae.json")
 _VAE_FILENAME = "qwen_image_2.1_vae_bf16.safetensors"
 _TEXT_ENCODER_FOLDER = "Qwen3-VL-8B-Instruct"
+
+
+def _remap_qwen3vl_comfy_keys(state_dict):
+    """Comfy packs the LM under model.*; HuggingFace Qwen3-VL uses model.language_model.*."""
+    remapped = {}
+    for key, value in state_dict.items():
+        if key.startswith(("model.layers.", "model.embed_tokens.", "model.norm.")):
+            key = "model.language_model." + key[len("model."):]
+        remapped[key] = value
+    return remapped
+
+
+def _locate_qwen21_vae(vae_checkpoint):
+    """Comfy downloads the 2.1 VAE into ckpts/vae/; also accept a root-level copy."""
+    if isinstance(vae_checkpoint, str) and "://" in vae_checkpoint:
+        return fl.locate_file(vae_checkpoint)
+    basename = os.path.basename(vae_checkpoint)
+    for candidate in (vae_checkpoint, basename, os.path.join("vae", basename)):
+        found = fl.locate_file(candidate, error_if_none=False)
+        if found:
+            return found
+    return fl.locate_file(basename)
 
 
 class model_factory:
@@ -82,6 +105,8 @@ class model_factory:
             writable_tensors=True,
             modelClass=Qwen3VLForConditionalGeneration,
             defaultConfigPath=encoder_config,
+            preprocess_sd=_remap_qwen3vl_comfy_keys,
+            ignore_unused_weights=True,
         )
 
         vae_override = model_def.get("vae_URL") or model_def.get("vae_URLs")
@@ -91,10 +116,11 @@ class model_factory:
             vae_override = vae_override.get("URLs")
         vae_checkpoint = vae_override or _VAE_FILENAME
         vae = offload.fast_load_transformers_model(
-            fl.locate_file(os.path.basename(vae_checkpoint) if isinstance(vae_checkpoint, str) and "://" not in vae_checkpoint else vae_checkpoint),
+            _locate_qwen21_vae(vae_checkpoint),
             writable_tensors=True,
             modelClass=AutoencoderKLQwenImage21,
             defaultConfigPath=_VAE_CONFIG,
+            preprocess_sd=convert_qwen_image_21_vae_state_dict,
         )
         vae.to(dtype=VAE_dtype)
 
@@ -149,6 +175,10 @@ class model_factory:
     ):
         if n_prompt is None or len(n_prompt) == 0:
             n_prompt = " "
+
+        from shared.qtypes.int8_convrot import install_native_lora_forwards
+        install_native_lora_forwards(self.transformer)
+        install_native_lora_forwards(self.text_encoder)
 
         if input_frames is not None:
             input_ref_images = [convert_tensor_to_image(input_frames)] + (
