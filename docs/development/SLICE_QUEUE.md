@@ -1,6 +1,6 @@
 # Cola vigente de refactor
 
-Base verificada: `origin/development` `eb14a2c7`, 2026-09-07.
+Base verificada: `origin/development` `e44ee001`, 2026-09-21.
 Lee primero [CURRENT_WORK](CURRENT_WORK.md): integrado, en curso y límites de QA.
 No uses la ola F1–F12 como cola actual; es distinta de Labs L0–L12.
 
@@ -22,26 +22,20 @@ No uses la ola F1–F12 como cola actual; es distinta de Labs L0–L12.
 | Paquete | Propiedad prevista | Dependencia / alcance |
 |---|---|---|
 | Cierre de QA Labs | Tests UI/Wizard, browser y pruebas reales acotadas | L0–L12 y attemptId (#201) integrados. Quedan móvil real, equivalencia amplia y GPU |
-| Router Story Music | Nuevo router + cableado mínimo runtime | Finalización/spec/rehidratación ya integrados (#158–#163); reservar runtime en exclusiva |
-| Sesión Story | Controller/hooks de carga, draft, guardado y recuperación | Las pestañas ya se reorganizaron; preservar workspace fuente y CAS |
-| Slice musical Studio | `useStore` y slice musical | Reutilizar catálogo/spec existente; no extraer todo startGeneration |
-| Director siguiente corte | Helpers de locks/reconcile/delete/observer y tests | I/O extraído en #167; caracterizar dependencias, elegir un solo contrato antes de mover |
-| Concurrencia de ejecución Wizard | Runtime de workflow, autoridad backend y tests | CAS y 409 ya existen; verificar efectos/pasos concurrentes, no construir otra persistencia |
-| Proyección visible de intentos | Producers/GenerationRecord/Activity según inventario | No segundo scheduler; elegir un flujo concreto y reservar sus hotspots |
-| Policy H3 desde Studio | Adapter/request UI y tests de payload | No basta que el schema acepte policy; verificar envío y prompt efectivo |
-
-Después del próximo corte Director: cómic → H3 story-video → reparación/rerun →
-validación/planificación → ciclo de vida con dependencias tipadas, ajustando orden
-por acoplamiento real. Es orientación pendiente, no paquetes reservados ni una
-orden de extraerlos todos sin revisión.
+| Proyección visible de intentos | Activity / Library sobre GenerationRecord | Story Music ya proyecta (#432). Elegir **otro** productor concreto; no segundo scheduler |
+| Director ciclo de vida | Dependencias tipadas / PipelineRuntime | Locks (#427) y reconcile (#431) extraídos. Un solo contrato por PR |
+| H3 30 s real | Evidencia GPU del pase 719 | Contrato [H3_EXTENDED_DURATION](H3_EXTENDED_DURATION.md). No cambiar el catálogo 345 |
 
 ## No volver a poner en cola
 
 Finalización musical del servidor, rehidratación, contrato de idioma/proyección,
-I/O Director, refactor H3 y Labs L0–L12 ya tienen entregas integradas. Ver pruebas y
-límites en [CURRENT_WORK](CURRENT_WORK.md); integrado no significa QA audiovisual
-exhaustiva. Wizard 409 y Series→Comics provenance tampoco son tareas nuevas (#122,
-#124). No restaurar el viejo backlog post-#120.
+I/O Director, refactor H3, Labs L0–L12, router Story Music (#426), sesión Story
+(#428), slice musical Studio (#430), locks/reconcile Director (#427, #431),
+Wizard concurrente (#429), GenerationRecord de canción (#432), policy H3 desde
+Studio (#433) y routers de librería (#437, #438, #441) ya tienen entregas
+integradas. Ver pruebas y límites en [CURRENT_WORK](CURRENT_WORK.md); integrado
+no significa QA audiovisual exhaustiva. Wizard 409 y Series→Comics provenance
+tampoco son tareas nuevas (#122, #124). No restaurar el viejo backlog post-#120.
 
 ## Documentación histórica
 
