@@ -35,3 +35,52 @@ export function h3WindowMaximumFrames(options?: H3DurationOptions, extended?: un
   if (extended === true && supportsH3ExtendedDuration(options)) return H3_EXPERIMENTAL_MAX_FRAMES
   return options?.sliding_window_defaults?.window_max ?? options?.frames_maximum ?? null
 }
+
+type AlignableDurationOptions = H3DurationOptions & {
+  fps?: number | null
+  frames_minimum?: number | null
+  sliding_window?: boolean
+  frame_alignment_modulus?: number
+  frame_alignment_remainder?: number
+  frame_alignment_mode?: string
+}
+
+/** Catalog `frames_maximum` is the 15s pass. A 30s experiment must align against 719. */
+export function h3AlignmentOptions<T extends H3DurationOptions>(
+  options: T | null | undefined,
+  extended?: unknown,
+): T | null | undefined {
+  if (!options) return options
+  return { ...options, frames_maximum: h3MaximumFrames(options, extended) }
+}
+
+export function requestedVideoFrames(
+  durationSeconds: number,
+  options: AlignableDurationOptions | null | undefined,
+  extended: unknown,
+  alignFrameCount: (
+    frames: number,
+    options: AlignableDurationOptions | null | undefined,
+  ) => number,
+): number {
+  const fps = options?.fps ?? 16
+  const supportsSlidingWindows = options?.sliding_window === true
+  const minimumFrames = options?.frames_minimum ?? 1
+  const maximumFrames = h3MaximumFrames(options, extended)
+  let requestedFrames = Math.max(minimumFrames, Math.round(durationSeconds * fps))
+  requestedFrames = alignFrameCount(
+    requestedFrames,
+    h3AlignmentOptions(options, extended) ?? options,
+  )
+  if (!supportsSlidingWindows && maximumFrames != null) {
+    return Math.min(maximumFrames, requestedFrames)
+  }
+  if (
+    supportsSlidingWindows
+    && maximumFrames != null
+    && requestedFrames <= maximumFrames + 1
+  ) {
+    return Math.min(maximumFrames, requestedFrames)
+  }
+  return requestedFrames
+}
