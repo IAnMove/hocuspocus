@@ -53,22 +53,26 @@ function RetryImage({ url, alt, maxHeight, onIntrinsicSize }: {
   maxHeight?: number
   onIntrinsicSize?: (width: number, height: number) => void
 }) {
-  const [src, setSrc] = useState(url)
-  const retries = useRef(0)
+  const [request, setRequest] = useState({ url, tries: 0, bust: 0 })
   const maxRetries = 5
 
-  useEffect(() => {
-    setSrc(url)
-    retries.current = 0
-  }, [url])
+  if (request.url !== url) {
+    setRequest({ url, tries: 0, bust: 0 })
+  }
+
+  const src = request.bust
+    ? `${url}${url.includes('?') ? '&' : '?'}t=${request.bust}`
+    : url
 
   const scheduleRetry = useCallback(() => {
-    if (retries.current < maxRetries) {
-      retries.current++
+    setRequest(current => {
+      if (current.url !== url || current.tries >= maxRetries) return current
+      const tries = current.tries + 1
       setTimeout(() => {
-        setSrc(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`)
-      }, 800 * retries.current)
-    }
+        setRequest(latest => latest.url !== url ? latest : { ...latest, bust: Date.now() })
+      }, 800 * tries)
+      return { ...current, tries }
+    })
   }, [url])
 
   const handleError = useCallback(() => {
