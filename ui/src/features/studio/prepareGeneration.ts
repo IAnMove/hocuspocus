@@ -667,6 +667,8 @@ export async function prepareStudioImageCommand(
   if (referenceErrors.length) throw new Error(i18n.t('studio:commands.referenceFailed'))
   const snapshot = JSON.parse(stableSerialize(params)) as Record<string, unknown>
   translateLegacyImageGuides(snapshot)
+  const { materializeLocalEditFields } = await import('../../lib/localEditImages')
+  await materializeLocalEditFields(snapshot, MEDIA_FIELDS)
   await applyCanonicalImageReferences(snapshot, resolveReferences)
   const command = createStudioImageGenerationCommand(snapshot, intentId)
   return {
