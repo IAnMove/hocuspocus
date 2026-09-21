@@ -187,7 +187,10 @@
     "prompts": "{{used}}/{{total}} prompts",
     "manualVram": "Anulación manual de VRAM: {{resolution}} puede quedarse sin memoria en esta GPU de {{vram}} GB.",
     "autoRecommend": "Para {{vram}} GB, H3 Auto recomienda {{fallback}} en lugar de {{resolution}}. Bloquea el tamaño de ventana en Avanzado para anularlo.",
-    "lowerResolution": "una resolución más baja"
+    "lowerResolution": "una resolución más baja",
+    "allow30s": "Permitir clips de 30 s",
+    "experimental": "· Experimental",
+    "allow30sHint": "Un pase de 719 fotogramas (29,96 s a 24 fps) sin ventanas de continuación. Usa más VRAM y tiempo; el movimiento o la identidad pueden desviarse. El tamaño automático de ventana no cambia hasta que lo actives."
   },
   "window": {
     "size": "Tamaño de ventana",

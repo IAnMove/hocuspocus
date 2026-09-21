@@ -1,4 +1,5 @@
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
+import { h3MaximumFrames, h3WindowMaximumFrames } from '../lib/h3ExtendedDuration'
 import { isInstructionSpeechModel } from '../lib/instructionSpeech'
 import { h3ModelSwitchSettings, projectStudioH3RequestParams, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
 import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
@@ -4806,7 +4807,7 @@ export const useStore = create<AppState>((set, get) => {
       const fps = state.modelOptions?.fps ?? 16
       const supportsSlidingWindows = state.modelOptions?.sliding_window === true
       const minimumFrames = state.modelOptions?.frames_minimum ?? 1
-      const maximumFrames = state.modelOptions?.frames_maximum ?? null
+      const maximumFrames = h3MaximumFrames(state.modelOptions, state.params.minimax_h3_extended_duration)
       let requestedFrames = Math.max(
         minimumFrames,
         Math.round(state.durationSeconds * fps),
@@ -4829,7 +4830,7 @@ export const useStore = create<AppState>((set, get) => {
         let windowFrames = Math.round(state.slidingWindowSeconds * fps)
         if (swDefaults) {
           const windowMinimum = swDefaults.window_min ?? 1
-          const windowMaximum = swDefaults.window_max ?? windowFrames
+          const windowMaximum = h3WindowMaximumFrames(state.modelOptions, state.params.minimax_h3_extended_duration) ?? windowFrames
           const windowStep = Math.max(1, swDefaults.window_step ?? 1)
           windowFrames = windowMinimum
             + Math.round((windowFrames - windowMinimum) / windowStep) * windowStep
@@ -4842,7 +4843,9 @@ export const useStore = create<AppState>((set, get) => {
         params.sliding_window_overlap = swDefaults?.overlap_default
           ?? state.slidingWindowOverlap
         params.sliding_window_discard_last_frames = swDefaults?.discard_last_frames ?? 0
-        if (state.modelOptions?.sliding_window_memory_policy?.manual_override) {
+        if (state.params.minimax_h3_extended_duration) {
+          params.sliding_window_memory_override = true
+        } else if (state.modelOptions?.sliding_window_memory_policy?.manual_override) {
           params.sliding_window_memory_override = state.slidingWindowLocked
         } else {
           delete params.sliding_window_memory_override

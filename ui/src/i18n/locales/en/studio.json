@@ -187,7 +187,10 @@
     "prompts": "{{used}}/{{total}} prompts",
     "manualVram": "Manual VRAM override: {{resolution}} may run out of memory on this {{vram}} GB GPU.",
     "autoRecommend": "For {{vram}} GB, H3 Auto recommends {{fallback}} instead of {{resolution}}. Lock Window Size in Advanced to override.",
-    "lowerResolution": "a lower resolution"
+    "lowerResolution": "a lower resolution",
+    "allow30s": "Allow 30s clips",
+    "experimental": "· Experimental",
+    "allow30sHint": "One 719-frame pass (29.96s at 24 fps) without continuation windows. Uses more VRAM and time; motion or identity may drift. Auto window sizing stays unchanged until you opt in."
   },
   "window": {
     "size": "Window Size",
