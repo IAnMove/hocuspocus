@@ -116,7 +116,8 @@ class StudioImageResources:
             self._media(text)
             return text
         source = Path(text)
-        if not source.is_absolute():
+        relative = not source.is_absolute()
+        if relative:
             source = self._resolve_relative_media(text)
         if not source.is_file():
             raise ValueError("A legacy reference must be an exact existing local path")
@@ -129,7 +130,26 @@ class StudioImageResources:
         if located:
             workspace, root = located
             return wangp_media_url(resolved, workspace, uploads_dir=uploads, workspace_dir=root)
-        return self._adopt_into_uploads(resolved, uploads)
+        if relative:
+            return self._adopt_into_uploads(resolved, uploads)
+        raise ValueError("The legacy reference is outside known media locations")
+
+    def _local_media_roots(self, uploads: Path | None = None) -> list[Path]:
+        """Roots that may supply a leftover relative file such as .pinokio-temp/*.
+
+        cwd.parent is included only when it is not the filesystem root. A process
+        started from /workspace or /app would otherwise treat / as a media root
+        and copy any readable file into uploads.
+        """
+        cwd = Path.cwd().resolve()
+        roots = []
+        if uploads is not None:
+            roots.append(Path(uploads).resolve())
+        roots.append(cwd)
+        parent = cwd.parent.resolve()
+        if parent != cwd and len(parent.parts) > 1:
+            roots.append(parent)
+        return roots
 
     def _resolve_relative_media(self, value: str) -> Path:
         normalized = value.replace("\\", "/")
@@ -137,10 +157,10 @@ class StudioImageResources:
             raise ValueError("A legacy reference must be an exact existing local path")
         if "/" not in normalized:
             raise ValueError("A legacy reference must be an exact existing local path")
-        for root in (Path.cwd(), Path.cwd().parent):
+        for root in self._local_media_roots():
             candidate = (root / value).resolve()
             try:
-                candidate.relative_to(root.resolve())
+                candidate.relative_to(root)
             except ValueError:
                 continue
             if candidate.is_file():
@@ -148,8 +168,7 @@ class StudioImageResources:
         raise ValueError("A legacy reference must be an exact existing local path")
 
     def _adopt_into_uploads(self, resolved: Path, uploads: Path) -> str:
-        cwd = Path.cwd().resolve()
-        allowed = (uploads, cwd, cwd.parent.resolve())
+        allowed = self._local_media_roots(uploads)
         if not any(resolved == root or resolved.is_relative_to(root) for root in allowed):
             raise ValueError("The legacy reference is outside known media locations")
         dest = uploads / f"{uuid.uuid4().hex}{resolved.suffix.lower() or '.png'}"
