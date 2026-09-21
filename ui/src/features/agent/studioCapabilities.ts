@@ -26,7 +26,9 @@ import { compileProviderPrompt, type ProviderPromptOptions } from '../../lib/lan
 const RESOLUTION_PRESETS = new Set<ResolutionPreset>(['auto', '480p', '540p', '720p', '768p', '1080p'])
 const ASPECT_RATIOS = new Set<AspectRatio>(['auto', '21:9', '16:9', '9:16', '1:1', '4:3', '3:4'])
 const AUDIO_SUB_MODES = new Set<AgentPrepareAudioAction['subMode']>(['speech', 'music', 'sfx'])
-const REFERENCE_ROLES = new Set<AgentAttachStudioReferencesAction['role']>(['start_frame', 'subject', 'style'])
+const REFERENCE_ROLES = new Set<AgentAttachStudioReferencesAction['role']>([
+  'start_frame', 'subject', 'style', 'edit_source', 'edit_mask',
+])
 
 function text(value: unknown, maxLength: number): string {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
@@ -115,6 +117,9 @@ function imageAction(raw: Record<string, unknown>): AgentPrepareImageAction | nu
     guidanceScale: typeof raw.guidance_scale === 'number' && raw.guidance_scale >= 0
       ? number(raw.guidance_scale, 0, 30) : undefined,
     outputCount: number(raw.output_count, 1, 8, true),
+    outpaintMargins: /^\d{1,3}(?:\s+\d{1,3}){3}$/.test(text(raw.outpaint_margins, 32))
+      ? text(raw.outpaint_margins, 32)
+      : undefined,
   }
 }
 
@@ -227,10 +232,10 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   studioDefinition<AgentPrepareImageAction>({
   name: 'prepare_image',
   title: 'Prepare Studio image',
-  description: 'Open Studio → Image and fill a validated text-to-image form.',
-  useWhen: 'The user asks to prepare, show or fill an image generation form.',
-  parameters: ['prompt', 'model_type', 'resolution_preset', 'resolution', 'aspect_ratio', 'negative_prompt', 'seed', 'inference_steps', 'guidance_scale', 'output_count'],
-  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'prepare_image' }, prompt: { type: 'string', minLength: 1, maxLength: 200_000 }, model_type: { type: 'string' }, resolution_preset: { type: 'string', enum: [...RESOLUTION_PRESETS] }, resolution: { type: 'string' }, aspect_ratio: { type: 'string', enum: [...ASPECT_RATIOS] }, negative_prompt: { type: 'string', maxLength: 200_000 }, seed: { type: 'integer' }, inference_steps: { type: 'integer' }, guidance_scale: { type: 'number' }, output_count: { type: 'integer' } }, required: ['type', 'prompt'] },
+  description: 'Open Studio → Image and fill a validated text-to-image or unified image-edit form.',
+  useWhen: 'The user asks to prepare, show or fill an image generation or image-edit form.',
+  parameters: ['prompt', 'model_type', 'resolution_preset', 'resolution', 'aspect_ratio', 'negative_prompt', 'seed', 'inference_steps', 'guidance_scale', 'output_count', 'outpaint_margins'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'prepare_image' }, prompt: { type: 'string', minLength: 1, maxLength: 200_000 }, model_type: { type: 'string' }, resolution_preset: { type: 'string', enum: [...RESOLUTION_PRESETS] }, resolution: { type: 'string' }, aspect_ratio: { type: 'string', enum: [...ASPECT_RATIOS] }, negative_prompt: { type: 'string', maxLength: 200_000 }, seed: { type: 'integer' }, inference_steps: { type: 'integer' }, guidance_scale: { type: 'number' }, output_count: { type: 'integer' }, outpaint_margins: { type: 'string', maxLength: 32 } }, required: ['type', 'prompt'] },
   risk: 'edit', confirmation: 'none', progress: 'Rellenando Studio → Image…',
   resolve: imageAction,
   validate(action) { return action.prompt ? validType('prepare_image', action) : ['prompt is required'] },
@@ -318,8 +323,8 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   studioDefinition<AgentAttachStudioReferencesAction>({
   name: 'attach_studio_references',
   title: 'Attach existing image outputs to Studio',
-  description: 'Attach exact image outputs as Studio start-frame, subject or style references.',
-  useWhen: 'The user asks to use existing generated images as Studio conditioning.',
+  description: 'Attach exact image outputs as Studio start-frame, subject, style, edit-source or edit-mask references.',
+  useWhen: 'The user asks to use existing generated images as Studio conditioning, including Qwen Image 2.1 local edits.',
   parameters: ['reference_output_names', 'reference_role', 'replace_existing', 'remove_background'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'attach_studio_references' }, reference_output_names: { type: 'array', minItems: 1 }, reference_role: { type: 'string', enum: [...REFERENCE_ROLES] }, replace_existing: { type: 'boolean' }, remove_background: { type: 'boolean' } }, required: ['type', 'reference_output_names'] },
   risk: 'edit', confirmation: 'none', progress: 'Adjuntando referencias a Studio…',

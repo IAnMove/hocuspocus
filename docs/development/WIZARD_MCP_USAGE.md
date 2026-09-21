@@ -56,7 +56,7 @@ or render a video. Creation receipts include the premises actually saved.
 
 | Operation | Who uses it | What success means |
 | --- | --- | --- |
-| `generation.image` | Studio Image, Wizard `prepare_image` + `start_generation`, MCP | Admission queued. Inspect the task. |
+| `generation.image` | Studio Image, Wizard `prepare_image` + `start_generation`, MCP | Admission queued. Inspect the task. Qwen Image 2.1 (`qwen_image_21*`) is unified T2I+edit: Wizard `attach_studio_references` with `edit_source` / `edit_mask`, MCP v2 `image_guide` / `image_mask` / `image_refs`. |
 | `generation.speech` | Studio Audio → Speech, MCP | Same. Literal text is preserved. |
 | `generation.music` | Studio Audio → Music, MCP | Lyrics and Music Caption stay distinct. |
 | `generation.sfx` | Studio Audio → SFX, MCP | Text or a canonical video guide. |

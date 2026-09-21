@@ -124,6 +124,7 @@ export interface AgentPrepareImageAction extends AgentLanguageAwareAction {
   inferenceSteps?: number
   guidanceScale?: number
   outputCount?: number
+  outpaintMargins?: string
 }
 
 export interface AgentPrepareAudioAction extends AgentLanguageAwareAction {
@@ -550,7 +551,7 @@ export interface AgentGenerateComicPanelAction {
 export interface AgentAttachStudioReferencesAction {
   type: 'attach_studio_references'
   outputNames: string[]
-  role: 'start_frame' | 'subject' | 'style'
+  role: 'start_frame' | 'subject' | 'style' | 'edit_source' | 'edit_mask'
   replaceExisting: boolean
   removeBackground: boolean
 }
@@ -745,6 +746,9 @@ export interface AgentAppSnapshot {
     family: string
     installed: boolean
     enabled: boolean
+    unified_edit?: boolean
+    max_image_refs?: number
+    native_2k?: boolean
   }>
   available_audio_models: Array<{
     model_type: string
@@ -1046,6 +1050,7 @@ const CANONICAL_FIELD_NAMES = [
   'kit_name', 'look_notes', 'preset_id',
   'clip_names', 'clip_name', 'trim_start', 'trim_end', 'project_name',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
+  'outpaint_margins',
   'asset_id', 'source', 'source_workspace',
   'loras', 'weight',
   'workspace_name', 'workspace_id', 'expected_revision', 'description',
@@ -1212,6 +1217,9 @@ function parseAction(value: unknown): AgentAction | null {
         ? optionalNumber(raw.guidance_scale, 0, 30)
         : undefined,
       outputCount: optionalPositiveNumber(raw.output_count, 1, 8, true),
+      outpaintMargins: /^\d{1,3}(?:\s+\d{1,3}){3}$/.test(cleanString(raw.outpaint_margins, 32))
+        ? cleanString(raw.outpaint_margins, 32)
+        : undefined,
     }
   }
   if (type === 'prepare_3d') {
@@ -1569,7 +1577,11 @@ function parseAction(value: unknown): AgentAction | null {
       ? 'start_frame'
       : requestedRole === 'style'
         ? 'style'
-        : 'subject'
+        : requestedRole === 'edit_source'
+          ? 'edit_source'
+          : requestedRole === 'edit_mask'
+            ? 'edit_mask'
+            : 'subject'
     return {
       type: 'attach_studio_references',
       outputNames,
@@ -2768,7 +2780,8 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = mergeRe
           page_number: { type: 'integer', minimum: 0, maximum: 100 },
           panel_number: { type: 'integer', minimum: 0, maximum: 100 },
           reference_output_names: { type: 'array', maxItems: 12, items: { type: 'string', maxLength: 300 } },
-          reference_role: { type: 'string', enum: ['', 'start_frame', 'subject', 'style'] },
+          reference_role: { type: 'string', enum: ['', 'start_frame', 'subject', 'style', 'edit_source', 'edit_mask'] },
+          outpaint_margins: { type: 'string', maxLength: 32 },
           replace_existing: { type: 'boolean' },
           remove_background: { type: 'boolean' },
           asset_id: { type: 'string', maxLength: 180 },
@@ -2925,13 +2938,19 @@ export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions 
       .flatMap(family => getModelsForFamily(family.id, state.models, 'image'))
       .filter(model => !model.tool_only)
       .slice(0, 80)
-      .map(model => ({
-        model_type: model.model_type,
-        name: model.name,
-        family: model.family,
-        installed: model.is_downloaded === true,
-        enabled: state.enabledModels.has(model.model_type),
-      })),
+      .map(model => {
+        const qwen21 = model.model_type.startsWith('qwen_image_21')
+          || (model.architecture || '').startsWith('qwen_image_21')
+        return {
+          model_type: model.model_type,
+          name: model.name,
+          family: model.family,
+          installed: model.is_downloaded === true,
+          enabled: state.enabledModels.has(model.model_type),
+          unified_edit: qwen21 || /edit/i.test(model.model_type),
+          ...(qwen21 ? { max_image_refs: 10, native_2k: true } : {}),
+        }
+      }),
     available_audio_models: state.models
       .filter(model => model.family === 'tts' && !model.tool_only)
       .slice(0, 80)
