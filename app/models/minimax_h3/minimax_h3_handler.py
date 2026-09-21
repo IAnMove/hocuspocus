@@ -62,6 +62,12 @@ _TRANSFORMER_WORKING_VRAM_MB = 10 * 1024
 # ordinary FL2VA boundary anchor.
 _H3_MIN_FRAMES = 124
 _H3_MAX_FRAMES = 345
+
+
+def _h3_pass_maximum(model_def, inputs=None):
+    from models.minimax_h3.duration import h3_duration_model_def
+    effective = h3_duration_model_def(model_def or {}, inputs or {})
+    return max(_H3_MIN_FRAMES, int(effective.get("frames_maximum") or _H3_MAX_FRAMES))
 _H3_FUSED_RECOMMENDED_FRAMES = 243
 _H3_FUSED_DEFAULT_EVALUATIONS = 4
 _H3_FUSED_MIN_EVALUATIONS = 4
@@ -2259,6 +2265,10 @@ class family_handler:
         # Saved settings created before this family existed cannot need a
         # migration, but imported presets still need valid H3 geometry.
         from .packing import align_num_frames
+        from models.minimax_h3.duration import apply_h3_duration_override
+
+        model_def = apply_h3_duration_override(ui_defaults, model_def or {})
+        maximum_frames = _h3_pass_maximum(model_def, ui_defaults)
 
         try:
             requested_frames = int(ui_defaults.get("video_length", 124))
@@ -2273,13 +2283,13 @@ class family_handler:
             omni_reference
             and ui_defaults.get("minimax_h3_reference_sequence") is True
         )
-        if requested_frames <= _H3_MAX_FRAMES + 1:
+        if requested_frames <= maximum_frames + 1:
             ui_defaults["video_length"] = min(
-                _H3_MAX_FRAMES,
+                maximum_frames,
                 max(_H3_MIN_FRAMES, aligned_frames),
             )
         elif omni_reference and not omni_sequence:
-            ui_defaults["video_length"] = _H3_MAX_FRAMES
+            ui_defaults["video_length"] = maximum_frames
         else:
             # A long First/Last or enabled Omni Reference Sequence setting is
             # the joined output duration, not one H3 pass.
@@ -2290,13 +2300,13 @@ class family_handler:
 
         try:
             requested_window = int(
-                ui_defaults.get("sliding_window_size", _H3_MAX_FRAMES)
+                ui_defaults.get("sliding_window_size", maximum_frames)
             )
         except (TypeError, ValueError):
-            requested_window = _H3_MAX_FRAMES
+            requested_window = maximum_frames
         aligned_window = align_num_frames(max(1, requested_window))
         ui_defaults["sliding_window_size"] = min(
-            _H3_MAX_FRAMES,
+            maximum_frames,
             max(_H3_MIN_FRAMES, aligned_window),
         )
         if (
@@ -2405,6 +2415,9 @@ class family_handler:
     @staticmethod
     def validate_generative_settings(base_model_type, model_def, inputs):
         """Enforce H3's single-pass and continuation geometry server-side."""
+        from models.minimax_h3.duration import apply_h3_duration_override
+
+        model_def = apply_h3_duration_override(inputs, model_def or {})
 
         if (model_def or {}).get("minimax_h3_fused_turbo", False):
             try:
@@ -2565,20 +2578,21 @@ class family_handler:
         except (TypeError, ValueError):
             requested_frames = _H3_MIN_FRAMES
 
+        maximum_frames = _h3_pass_maximum(model_def, inputs)
         omni_sequence = (
             omni_reference
             and inputs.get("minimax_h3_reference_sequence") is True
         )
         if omni_reference and not omni_sequence:
             inputs["video_length"] = min(
-                _H3_MAX_FRAMES,
+                maximum_frames,
                 max(_H3_MIN_FRAMES, align_h3_num_frames(max(1, requested_frames))),
             )
             inputs["sliding_window_size"] = inputs["video_length"]
         else:
-            if requested_frames <= _H3_MAX_FRAMES + 1:
+            if requested_frames <= maximum_frames + 1:
                 requested_frames = min(
-                    _H3_MAX_FRAMES,
+                    maximum_frames,
                     max(
                         _H3_MIN_FRAMES,
                         align_h3_num_frames(max(1, requested_frames)),
@@ -2590,12 +2604,12 @@ class family_handler:
 
             try:
                 requested_window = int(
-                    inputs.get("sliding_window_size", _H3_MAX_FRAMES)
+                    inputs.get("sliding_window_size", maximum_frames)
                 )
             except (TypeError, ValueError):
-                requested_window = _H3_MAX_FRAMES
+                requested_window = maximum_frames
             inputs["sliding_window_size"] = min(
-                _H3_MAX_FRAMES,
+                maximum_frames,
                 max(
                     _H3_MIN_FRAMES,
                     align_h3_num_frames(max(1, requested_window)),

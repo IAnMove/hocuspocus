@@ -771,6 +771,8 @@ def validate_settings(state, model_type, single_prompt, inputs):
         return None, None, None, None
 
     model_def = get_model_def(model_type)
+    from models.minimax_h3.duration import apply_h3_duration_override
+    model_def = apply_h3_duration_override(inputs, model_def or {})
     model_handler = get_model_handler(model_type)
     image_outputs = inputs["image_mode"] > 0
     any_steps_skipping = (
@@ -7435,6 +7437,7 @@ def generate_video(
     minimax_h3_semantic_bridge_alpha=0.0,
     minimax_h3_semantic_bridge_magnitude="per_token",
     minimax_h3_multi_window=True,
+    minimax_h3_extended_duration=False,
     h3_reference_context="",
     wangp_processor_settings=None,
     attention_sparsity=1.3,
@@ -7482,7 +7485,11 @@ def generate_video(
         audio_file_settings_list = gen["audio_file_settings_list"]
 
 
-    model_def = get_model_def(model_type) 
+    model_def = get_model_def(model_type)
+    from models.minimax_h3.duration import h3_duration_model_def
+    model_def = h3_duration_model_def(model_def or {}, {
+        "minimax_h3_extended_duration": minimax_h3_extended_duration,
+    })
     is_image = image_mode > 0
     audio_only = model_def.get("audio_only", False)
     duration_def = model_def.get("duration_slider", None)

@@ -214,6 +214,8 @@ export interface GenerateParams {
   minimax_h3_semantic_bridge_alpha?: number
   minimax_h3_semantic_bridge_magnitude?: 'per_token' | 'global' | 'none'
   minimax_h3_multi_window?: boolean
+  /** Opt-in single 719-frame (~30s) H3 pass. Off by default. */
+  minimax_h3_extended_duration?: boolean
   h3_reference_context?: string
   /** Automatically expand one long H3 concept into window-local prompts. */
   minimax_h3_window_storyboard?: boolean
