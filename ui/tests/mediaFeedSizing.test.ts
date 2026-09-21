@@ -37,12 +37,14 @@ test('the feed applies the same viewport cap to rendered media and virtualizatio
   assert.match(itemSource, /style=\{maxMediaHeight == null \? undefined : \{ maxHeight:/)
 })
 
-test('still images do not sit in a 16:9 letterbox', async () => {
+test('stills and videos do not sit in a 16:9 letterbox', async () => {
   const itemSource = await fs.readFile(new URL('../src/components/MainContent/MediaFeedItem.tsx', import.meta.url), 'utf8')
-  assert.match(itemSource, /stillFrame \? '' : 'aspect-video'/)
+  assert.match(itemSource, /naturalFrame \? '' : 'aspect-video'/)
+  assert.match(itemSource, /file.type === 'video'/)
   assert.match(itemSource, /maxHeight=\{maxMediaHeight\}/)
-  assert.match(itemSource, /stillFrame \? \{ aspectRatio: stillAspect \}/)
+  assert.match(itemSource, /naturalFrame \? \{ aspectRatio: stillAspect \}/)
   assert.match(itemSource, /onIntrinsicSize=\{handleStillIntrinsicSize\}/)
+  assert.match(itemSource, /onLoadedMetadata/)
   assert.doesNotMatch(itemSource, /key=\{isActive \? file\.url/)
 })
 

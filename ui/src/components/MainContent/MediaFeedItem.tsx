@@ -256,7 +256,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const isModel3d = file.type === 'model3d'
   const isScene = file.type === 'scene'
   const isComic = file.type === 'comic'
-  const stillFrame = file.type === 'image' || isScene || isComic
+  const naturalFrame = file.type === 'image' || file.type === 'video' || isScene || isComic
   const [stillNaturalSize, setStillNaturalSize] = useState<{ name: string; width: number; height: number } | null>(null)
   const stillAspect = stillNaturalSize?.name === file.name
     ? mediaFeedStillAspectRatio(stillNaturalSize.width, stillNaturalSize.height)
@@ -630,10 +630,10 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       {/* Media player */}
       <div
         data-testid="media-feed-viewport"
-        className={`relative flex w-full items-center justify-center bg-media-canvas ${stillFrame ? '' : 'aspect-video'}`}
+        className={`relative flex w-full items-center justify-center bg-media-canvas ${naturalFrame ? '' : 'aspect-video'}`}
         style={{
           ...(maxMediaHeight == null ? {} : { maxHeight: `${maxMediaHeight}px` }),
-          ...(stillFrame ? { aspectRatio: stillAspect } : {}),
+          ...(naturalFrame ? { aspectRatio: stillAspect } : {}),
         }}
       >
         <button
@@ -656,21 +656,28 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
             autoPlay
             preload="metadata"
             poster={file.thumbnail_url || undefined}
-            className="w-full h-full object-contain"
+            className="mx-auto block h-auto w-auto max-w-full object-contain"
+            style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }}
             muted={!isActive}
+            onLoadedMetadata={event => {
+              const video = event.currentTarget
+              handleStillIntrinsicSize(video.videoWidth, video.videoHeight)
+            }}
           />
         ) : file.type === 'video' ? (
-          <div className="relative h-full w-full bg-black">
+          <div className="relative mx-auto inline-block max-w-full">
             {file.thumbnail_url ? (
               <img
                 src={file.thumbnail_url}
                 alt={file.name}
-                className="h-full w-full object-contain"
+                className="mx-auto block h-auto w-auto max-w-full object-contain"
+                style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }}
                 loading="lazy"
                 decoding="async"
+                onLoad={handleStillImageLoad}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-text-muted"><Film size={32} /></div>
+              <div className="flex h-48 w-full items-center justify-center text-text-muted"><Film size={32} /></div>
             )}
             <button
               type="button"
