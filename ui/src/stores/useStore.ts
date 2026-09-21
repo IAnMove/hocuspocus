@@ -1161,6 +1161,9 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
   setGenerationMode: (mode: GenerationMode) => void
+  imageStudioIntent: import('../features/studio/imageStudioIntent').ImageStudioIntent
+  setImageStudioIntent: (intent: import('../features/studio/imageStudioIntent').ImageStudioIntent) => void
+  resetImageStudio: () => void
   editSubMode: import('../types').EditSubMode
   setEditSubMode: (mode: import('../types').EditSubMode, recastEngine?: 'scail' | 'viggle') => void
   // Edit mode state (persists across sub-mode switches)
@@ -2251,6 +2254,27 @@ export const useStore = create<AppState>((set, get) => {
   },
   // Generation mode
   generationMode: 'video',
+  imageStudioIntent: 'chooser' as import('../features/studio/imageStudioIntent').ImageStudioIntent,
+  setImageStudioIntent: intent => set({ imageStudioIntent: intent }),
+  resetImageStudio: () => {
+    const state = get()
+    void import('../lib/localEditImages').then(({ forgetLocalImage }) => {
+      forgetLocalImage(String(state.params.image_guide || ''))
+      forgetLocalImage(String(state.params.image_mask || ''))
+    })
+    const flags = String(state.params.video_prompt_type || '').replace(/[VAG]/g, '')
+    set({
+      imageStudioIntent: 'chooser',
+      imageRefs: [],
+      params: {
+        ...state.params,
+        image_guide: undefined,
+        image_mask: undefined,
+        video_guide_outpainting: undefined,
+        video_prompt_type: flags,
+      },
+    })
+  },
   editSubMode: 'retake' as import('../types').EditSubMode,
   setEditSubMode: (mode: import('../types').EditSubMode, recastEngine?: 'scail' | 'viggle') => {
     const s = get()
@@ -2819,6 +2843,9 @@ export const useStore = create<AppState>((set, get) => {
 
     set(() => ({
       generationMode: mode,
+      ...(mode === 'image' && prevMode !== 'image'
+        ? { imageStudioIntent: 'chooser' as const }
+        : {}),
       ...(mode === 'audio' ? { audioSubMode: audioSubModeForModel(newModelType) } : {}),
       selectedModelPerMode: savedModels,
       savedLoraPerMode: savedLoras,
@@ -5071,8 +5098,14 @@ export const useStore = create<AppState>((set, get) => {
     // Image mode: force single frame + image output format
     // Backend uses image_mode > 0 to determine output as image (.jpg) vs video (.mp4)
     if (state.generationMode === 'image') {
+      const { concreteImageResolution } = await import('../lib/imageResolution')
+      const { materializeLocalEditImage } = await import('../lib/localEditImages')
       params.video_length = 1
       params.image_mode = 1
+      params.repeat_generation = Math.max(1, Number(state.outputCount) || 1)
+      params.resolution = concreteImageResolution(params.resolution, params.model_type)
+      params.image_guide = await materializeLocalEditImage(params.image_guide)
+      params.image_mask = await materializeLocalEditImage(params.image_mask)
     }
 
     // Audio mode: branch by sub-mode (Speech/Music vs SFX)

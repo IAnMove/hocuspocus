@@ -496,6 +496,32 @@
     "max_other": "Hasta {{count}} imágenes de referencia.",
     "hint": "La primera imagen es el sujeto/paisaje principal. Las demás son personas/objetos a inyectar. Arrastra para reordenar."
   },
+  "imageIntent": {
+    "title": "¿Qué quieres hacer?",
+    "subtitle": "Elige una intención. Solo verás las opciones de ese flujo.",
+    "new": "Nueva imagen",
+    "newHint": "Crear desde el prompt, sin foto de origen.",
+    "edit": "Editar imagen",
+    "editHint": "Cambiar una foto que ya tienes.",
+    "character": "Personaje",
+    "characterHint": "Misma identidad con referencias.",
+    "loop": "Fondo en loop",
+    "loopHint": "Panorama que se puede repetir.",
+    "startOver": "Empezar de cero",
+    "canvas": "Lienzo {{size}}"
+  },
+  "imageFit": {
+    "title": "Ajustar al modelo",
+    "hint": "Encaja la foto en un tamaño que el modelo admite: recorte, bandas negras o estirar.",
+    "open": "Ajustar tamaño al modelo…",
+    "target": "Tamaño de destino",
+    "contain": "Bandas negras",
+    "cover": "Recortar",
+    "stretch": "Estirar",
+    "apply": "Usar este recorte",
+    "cancel": "Cancelar",
+    "close": "Cerrar"
+  },
   "imageEdit": {
     "title": "Herramientas de edición",
     "native2k": "2K nativo",
@@ -505,7 +531,7 @@
     "rgba": "Transparencia RGBA",
     "source": "Imagen a editar",
     "maskImage": "Máscara de edición (blanco = cambiar)",
-    "sourceHint": "Opcional. Con una imagen origen, este modelo la edita; sin ella genera desde el prompt y las referencias.",
+    "sourceHint": "Opcional. Elige una foto de tu equipo: se usa aquí, no entra en la galería hasta generar. Sin ella, 2.1 crea desde el prompt y las referencias.",
     "outpaintMargins": "Márgenes de outpaint (arriba abajo izquierda derecha %)",
     "outpaintHint": "Hace falta una imagen origen. Amplía el lienzo para que el modelo genere los lados nuevos.",
     "denoising": "Fuerza de denoising",

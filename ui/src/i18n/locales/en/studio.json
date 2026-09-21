@@ -496,6 +496,32 @@
     "max_other": "Up to {{count}} reference images.",
     "hint": "First image is the main subject/landscape. Additional images are people/objects to inject. Drag to reorder."
   },
+  "imageIntent": {
+    "title": "What do you want to do?",
+    "subtitle": "Pick an intent. You only see the controls that flow needs.",
+    "new": "New image",
+    "newHint": "Create from the prompt, with no source photo.",
+    "edit": "Edit image",
+    "editHint": "Change a photo you already have.",
+    "character": "Character",
+    "characterHint": "Keep identity with reference stills.",
+    "loop": "Looping backdrop",
+    "loopHint": "A panorama that can repeat.",
+    "startOver": "Start over",
+    "canvas": "Canvas {{size}}"
+  },
+  "imageFit": {
+    "title": "Fit to the model",
+    "hint": "Fit the photo to a size this model admits: crop, letterbox or stretch.",
+    "open": "Fit size to the model…",
+    "target": "Target size",
+    "contain": "Letterbox",
+    "cover": "Crop",
+    "stretch": "Stretch",
+    "apply": "Use this fit",
+    "cancel": "Cancel",
+    "close": "Close"
+  },
   "imageEdit": {
     "title": "Image edit tools",
     "native2k": "Native 2K",
@@ -505,7 +531,7 @@
     "rgba": "RGBA transparency",
     "source": "Image to edit",
     "maskImage": "Edit mask (white = change)",
-    "sourceHint": "Optional. With a source, this model edits that picture; without one it generates from the prompt and references.",
+    "sourceHint": "Optional. A photo from your computer stays in this tab and is not added to the gallery until you generate. Without one, 2.1 creates from the prompt and references.",
     "outpaintMargins": "Outpaint margins (top bottom left right %)",
     "outpaintHint": "Needs a source image. Pads the canvas so the model can generate the new sides.",
     "denoising": "Denoising strength",

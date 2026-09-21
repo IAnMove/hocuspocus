@@ -10,6 +10,8 @@ import hashlib
 import math
 from pathlib import Path
 import re
+import shutil
+import uuid
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from services.wangp_submission import resolve_wangp_media, wangp_media_url
@@ -106,22 +108,55 @@ class StudioImageResources:
 
     def canonicalize_legacy(self, value):
         """Convert an exact legacy path, without matching basenames elsewhere."""
-        if value.startswith(("/api/v1/", "asset_", "asset:", "asset-")):
-            self._media(value)
-            return value
-        source = Path(value)
-        if not source.is_absolute() or not source.is_file():
+        text = str(value).strip()
+        if text.startswith(("http://", "https://")):
+            parsed = urlsplit(text)
+            text = parsed.path + (("?" + parsed.query) if parsed.query else "")
+        if text.startswith(("/api/v1/", "asset_", "asset:", "asset-")):
+            self._media(text)
+            return text
+        source = Path(text)
+        if not source.is_absolute():
+            source = self._resolve_relative_media(text)
+        if not source.is_file():
             raise ValueError("A legacy reference must be an exact existing local path")
         resolved = source.resolve()
         uploads = Path(self.uploads_dir()).resolve()
         if resolved.is_relative_to(uploads):
             return wangp_media_url(resolved, "default", uploads_dir=uploads,
                                    workspace_dir=self.workspace_dir("default"))
-        source = self._source_workspace(resolved)
-        if source:
-            workspace, root = source
+        located = self._source_workspace(resolved)
+        if located:
+            workspace, root = located
             return wangp_media_url(resolved, workspace, uploads_dir=uploads, workspace_dir=root)
-        raise ValueError("The legacy reference is outside known media locations")
+        return self._adopt_into_uploads(resolved, uploads)
+
+    def _resolve_relative_media(self, value: str) -> Path:
+        normalized = value.replace("\\", "/")
+        if normalized.startswith("../") or "/../" in f"/{normalized}/" or normalized in {".", ".."}:
+            raise ValueError("A legacy reference must be an exact existing local path")
+        if "/" not in normalized:
+            raise ValueError("A legacy reference must be an exact existing local path")
+        for root in (Path.cwd(), Path.cwd().parent):
+            candidate = (root / value).resolve()
+            try:
+                candidate.relative_to(root.resolve())
+            except ValueError:
+                continue
+            if candidate.is_file():
+                return candidate
+        raise ValueError("A legacy reference must be an exact existing local path")
+
+    def _adopt_into_uploads(self, resolved: Path, uploads: Path) -> str:
+        cwd = Path.cwd().resolve()
+        allowed = (uploads, cwd, cwd.parent.resolve())
+        if not any(resolved == root or resolved.is_relative_to(root) for root in allowed):
+            raise ValueError("The legacy reference is outside known media locations")
+        dest = uploads / f"{uuid.uuid4().hex}{resolved.suffix.lower() or '.png'}"
+        shutil.copy2(resolved, dest)
+        return wangp_media_url(
+            dest, "default", uploads_dir=uploads, workspace_dir=self.workspace_dir("default"),
+        )
 
     def prepare_media(self, params):
         working = deepcopy(params)

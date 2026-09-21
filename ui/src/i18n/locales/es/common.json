@@ -94,7 +94,7 @@
     "fromDevice": "Desde mi equipo",
     "fromLibrary": "Desde HocusPocus",
     "remove": "Quitar",
-    "uploading": "Subiendo…",
+    "uploading": "Añadiendo…",
     "uploadFailed": "No se pudo subir el archivo."
   },
   "welcome": {
@@ -104,6 +104,8 @@
     "modelsBody": "La instalación preparó la app, no los pesos del modelo. La primera vez que usas un modelo, sus archivos se descargan una vez — a menudo decenas de GB para un modelo de vídeo — antes de que aparezca nada. Las siguientes veces son rápidas. Mira el progreso abajo a la derecha; el primer vídeo puede tardar.",
     "directorTitle": "Director usa un LLM local",
     "directorBody": "El modo Director planifica el vídeo con un modelo de lenguaje local (Gemma 4, ~5 GB, se descarga en el primer uso de Director): no se envía nada a la nube. Puedes cambiar de modelo, o conectar una API externa, en Ajustes → Servicios.",
+    "recentTitle": "Últimos cambios",
+    "recentHint": "Una frase por PR, lo más reciente arriba. Desplaza la lista para verlos todos.",
     "enter": "Entrar al estudio",
     "closeAria": "Cerrar"
   }

@@ -94,7 +94,7 @@
     "fromDevice": "From my computer",
     "fromLibrary": "From HocusPocus",
     "remove": "Remove",
-    "uploading": "Uploading…",
+    "uploading": "Adding…",
     "uploadFailed": "The file could not be uploaded."
   },
   "welcome": {
@@ -104,6 +104,8 @@
     "modelsBody": "The install set up the app, not the model weights. The first time you use a given model, its files download once — often tens of GB for a video model — before anything appears. Later runs are fast. Watch progress at the bottom-right; the very first video can take a while.",
     "directorTitle": "Director runs on a local LLM",
     "directorBody": "Director mode plans your video with a local language model (Gemma 4, ~5 GB, downloaded on first Director use) — nothing is sent to the cloud. You can switch models, or plug in an external API, under Settings → Services.",
+    "recentTitle": "Latest changes",
+    "recentHint": "One short line per PR, newest first. Scroll the list to see them all.",
     "enter": "Enter the studio",
     "closeAria": "Close"
   }

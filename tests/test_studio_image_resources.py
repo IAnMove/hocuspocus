@@ -171,6 +171,17 @@ def test_canonicalize_legacy_uses_exact_contained_absolute_path_and_does_not_ado
     assert service.canonicalize_legacy(str(output)) == "/api/v1/file/same.png?workspace=output"
     with pytest.raises(ValueError):
         service.canonicalize_legacy("same.png")
+    nested = fixture["uploads"].parent / ".pinokio-temp"
+    nested.mkdir()
+    relative = nested / "picked.jpg"
+    write_image(relative)
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(fixture["uploads"].parent)
+    try:
+        adopted = service.canonicalize_legacy(".pinokio-temp/picked.jpg")
+    finally:
+        monkeypatch.undo()
+    assert adopted.startswith("/api/v1/uploads/")
     outside = fixture["uploads"].parent / "outside.png"
     write_image(outside)
     with pytest.raises(ValueError):

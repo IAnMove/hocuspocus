@@ -5,7 +5,21 @@ from shared.utils.hf import build_hf_url
 
 # Native 2.1 canvases are 32-aligned (VAE 16x, unpatched 2x2 tokens).
 # 1080p is labeled 2K in Studio because 2048 is the official default.
+_QWEN21_NATIVE_VALUES = {
+    "auto": "2048x2048",
+    "21:9": "2816x1216",
+    "16:9": "2752x1536",
+    "9:16": "1536x2752",
+    "1:1": "2048x2048",
+    "4:3": "2400x1792",
+    "3:4": "1792x2400",
+}
 _QWEN21_RESOLUTION_PRESETS = {
+    "auto": {
+        "label": "Auto",
+        "hint": "Native 2K (2048×2048). If you attach an image to edit, Auto can follow that photo.",
+        "values": dict(_QWEN21_NATIVE_VALUES),
+    },
     "720p": {
         "label": "1K",
         "hint": "1024-class canvas. Faster on 16 GB and when many references are attached.",
@@ -22,15 +36,7 @@ _QWEN21_RESOLUTION_PRESETS = {
     "1080p": {
         "label": "2K",
         "hint": "Native Qwen-Image 2.1 canvas (2048×2048 at 1:1). Official default; 40 steps, CFG 1.",
-        "values": {
-            "auto": "2048x2048",
-            "21:9": "2816x1216",
-            "16:9": "2752x1536",
-            "9:16": "1536x2752",
-            "1:1": "2048x2048",
-            "4:3": "2400x1792",
-            "3:4": "1792x2400",
-        },
+        "values": dict(_QWEN21_NATIVE_VALUES),
     },
 }
 _QWEN21_RESOLUTION_PRESET_ORDER = ["auto", "720p", "1080p"]
