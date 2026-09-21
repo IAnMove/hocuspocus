@@ -38,6 +38,7 @@ _REF2VA_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va.json"
 _FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_full.json"
 _REF2VA_FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va_full.json"
 _STORE_PATH = _ROOT / "ui" / "src" / "stores" / "useStore.ts"
+_H3_DURATION_PATH = _ROOT / "ui" / "src" / "lib" / "h3ExtendedDuration.ts"
 _STUDIO_CONFIGURATION_SLICE_PATH = (
     _ROOT / "ui" / "src" / "stores" / "studioConfigurationSlice.ts"
 )
@@ -1198,12 +1199,13 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertEqual(align(120, legacy, for_generation=True), 121)
 
         store = _read(_STORE_PATH)
-        submit_block = store[store.index("let requestedFrames = Math.max("):]
-        submit_block = submit_block[:submit_block.index("params.video_length = requestedFrames")]
-        self.assertIn(
-            "requestedFrames = alignFrameCount(requestedFrames, state.modelOptions)",
-            submit_block,
-        )
+        self.assertIn("params.video_length = requestedVideoFrames(", store)
+        self.assertIn("h3AlignmentOptions", store)
+        helper = _read(_H3_DURATION_PATH)
+        submit_block = helper[helper.index("let requestedFrames = Math.max("):]
+        submit_block = submit_block[:submit_block.index("if (!supportsSlidingWindows")]
+        self.assertIn("requestedFrames = alignFrameCount(", submit_block)
+        self.assertIn("h3AlignmentOptions(options, extended)", submit_block)
 
 
 class TestMiniMaxH3RuntimeSource(unittest.TestCase):

@@ -657,7 +657,7 @@ function _applyModelDefaults(
 export function alignFrameCount(
   frames: number,
   o: { frame_alignment_modulus?: number; frame_alignment_remainder?: number;
-       frame_alignment_mode?: string; frames_minimum?: number; frames_maximum?: number | null } | null | undefined,
+       frame_alignment_mode?: string; frames_minimum?: number | null; frames_maximum?: number | null } | null | undefined,
 ): number {
   const modulus = o?.frame_alignment_modulus ?? 0
   if (!modulus || modulus <= 0) return frames
