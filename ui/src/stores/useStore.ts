@@ -2497,6 +2497,11 @@ export const useStore = create<AppState>((set, get) => {
       const blob = await fetch(frameUrl).then(r => r.blob())
       const file = new File([blob], `${which}_frame.png`, { type: blob.type || 'image/png' })
       if (isViggle && get().activeWorkspace !== state.activeWorkspace) return
+      // Image now lands on the chooser and swaps drafts when an intent is
+      // picked. Leaving the frame on chooser meant Character restored an
+      // older draft and dropped this extract. Land on Character first so
+      // the write below replaces that draft instead of dying on chooser.
+      get().setImageStudioIntent('character')
       set(s => ({
         // Replace any pre-existing refs with just our extracted frame
         // for the duration of the round-trip. Restored from the
