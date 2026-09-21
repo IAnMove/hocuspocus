@@ -8,6 +8,7 @@ import { ImageIntentChooser, ImageIntentSwitch } from './ImageIntentChooser'
 import { ImageRefSection } from './ImageRefSection'
 import { OutputCount } from './OutputCount'
 import { PanoramaLoopPanel } from './PanoramaLoopPanel'
+import { PromptInput } from './PromptInput'
 import { ResolutionPresets } from './ResolutionPresets'
 
 export function ImageStudioPanel() {
@@ -23,6 +24,7 @@ export function ImageStudioPanel() {
   return (
     <div className="space-y-3">
       <ImageIntentSwitch />
+      <PromptInput />
       {intent === 'edit' && <ImageEditSection />}
       {intent === 'edit' && source ? (
         <button

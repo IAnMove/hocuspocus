@@ -17,6 +17,8 @@ export function generateBlockedCopy(input: {
   needsReference?: boolean
   needsOutpaintSource?: boolean
   needsOutpaintArea?: boolean
+  needsPrompt?: boolean
+  needsScheduledPrompts?: boolean
   t: TFunction<'studio'>
 }): { label: string; title?: string } {
   if (input.localUnavailable) {
@@ -29,6 +31,10 @@ export function generateBlockedCopy(input: {
   if (input.needsOutpaintSource) return { label: input.t('generate.needSource') }
   if (input.needsOutpaintArea) {
     return { label: input.t('generate.chooseCanvas'), title: input.t('generate.outpaintAreaHint') }
+  }
+  if (input.needsScheduledPrompts) return { label: input.t('generate.addPrompts') }
+  if (input.needsPrompt) {
+    return { label: input.t('generate.addPrompt'), title: input.t('generate.addPromptHint') }
   }
   return { label: input.t('generate.addPrompt') }
 }

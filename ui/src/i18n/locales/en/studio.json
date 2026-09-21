@@ -50,6 +50,7 @@
     "needSource": "Need source",
     "chooseCanvas": "Choose canvas",
     "addPrompt": "Add prompt",
+    "addPromptHint": "Type what to generate, or how to change the photo. The model cannot run on a blank prompt.",
     "addPrompts": "Add prompts",
     "outpaintAreaHint": "Choose a larger output aspect or resize the source to create an area for Outpaint to generate.",
     "referenceHint": "Add at least one image or video reference. Audio cannot be the only reference.",
@@ -61,6 +62,7 @@
   },
   "prompt": {
     "placeholderImage": "Describe your image...",
+    "placeholderImageEdit": "Describe the change, e.g. add Mario standing next to Banjo...",
     "placeholderVideo": "Describe your video...",
     "placeholderAudio": "Enter text to speak or describe audio...",
     "placeholderAvatar": "Describe your avatar animation...",
