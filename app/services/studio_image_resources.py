@@ -109,9 +109,12 @@ class StudioImageResources:
     def canonicalize_legacy(self, value):
         """Convert an exact legacy path, without matching basenames elsewhere."""
         text = str(value).strip()
+        if text.startswith(("blob:", "data:", "local-edit:")):
+            raise ValueError("Upload the image in this tab before generating")
         if text.startswith(("http://", "https://")):
             parsed = urlsplit(text)
             text = parsed.path + (("?" + parsed.query) if parsed.query else "")
+        text = self._coerce_gallery_url(text)
         if text.startswith(("/api/v1/", "asset_", "asset:", "asset-")):
             self._media(text)
             return text
@@ -131,11 +134,45 @@ class StudioImageResources:
             return wangp_media_url(resolved, workspace, uploads_dir=uploads, workspace_dir=root)
         return self._adopt_into_uploads(resolved, uploads)
 
+    def _coerce_gallery_url(self, text: str) -> str:
+        """Map gallery/output URLs onto the canonical file/upload forms `_media` accepts."""
+        parsed = urlsplit(text)
+        path = unquote(parsed.path)
+        if path.startswith("/api/v1/outputs/thumbnail/"):
+            name = path[len("/api/v1/outputs/thumbnail/"):].lstrip("/")
+            path = "/api/v1/file/" + name
+        elif path.startswith("/api/v1/outputs/"):
+            rest = path[len("/api/v1/outputs/"):].lstrip("/")
+            if rest and "/" not in rest.split("?")[0]:
+                path = "/api/v1/file/" + rest
+        if path.startswith("/api/v1/file/"):
+            name = path[len("/api/v1/file/"):]
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            workspace = (query.get("workspace") or ["default"])[0] or "default"
+            if workspace not in self._workspace_names():
+                workspace = "default"
+            return f"/api/v1/file/{quote(name, safe='')}?workspace={quote(workspace, safe='')}"
+        if path.startswith("/api/v1/uploads/"):
+            name = path[len("/api/v1/uploads/"):]
+            return f"/api/v1/uploads/{quote(name, safe='/')}"
+        return text
+
     def _resolve_relative_media(self, value: str) -> Path:
         normalized = value.replace("\\", "/")
         if normalized.startswith("../") or "/../" in f"/{normalized}/" or normalized in {".", ".."}:
             raise ValueError("A legacy reference must be an exact existing local path")
         if "/" not in normalized:
+            matches = []
+            uploads = Path(self.uploads_dir()).resolve()
+            candidate = uploads / normalized
+            if candidate.is_file():
+                matches.append(candidate)
+            for name in self._workspace_names():
+                candidate = Path(self.workspace_dir(name)).resolve() / normalized
+                if candidate.is_file():
+                    matches.append(candidate)
+            if len(matches) == 1:
+                return matches[0]
             raise ValueError("A legacy reference must be an exact existing local path")
         for root in (Path.cwd(), Path.cwd().parent):
             candidate = (root / value).resolve()

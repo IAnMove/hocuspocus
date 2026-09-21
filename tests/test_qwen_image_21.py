@@ -91,12 +91,18 @@ class TestQwenImage21Definitions(unittest.TestCase):
             "qwen_image_21_gguf_q4_k.json": "qwen_image_2.1-Q4_K.gguf",
             "qwen_image_21_gguf_q5_0.json": "qwen_image_2.1-Q5_0.gguf",
             "qwen_image_21_gguf_q8_0.json": "qwen_image_2.1-Q8_0.gguf",
+            "qwen_image_21_uncensored_gguf_q4_k_m.json": "qwen-image-2.1-Q4_K_M.gguf",
+            "qwen_image_21_uncensored_gguf_q5_k_m.json": "qwen-image-2.1-Q5_K_M.gguf",
+            "qwen_image_21_uncensored_gguf_q6_k.json": "qwen-image-2.1-Q6_K.gguf",
         }
         for filename, weight in catalog.items():
             with self.subTest(filename=filename):
                 item = json.loads((_APP / "defaults" / filename).read_text(encoding="utf-8"))
                 self.assertEqual(item["model"]["architecture"], "qwen_image_21")
                 self.assertIn(weight, item["model"]["URLs"][0])
+                if "uncensored" in filename:
+                    self.assertFalse(item["model"].get("nsfw_only", False))
+                    self.assertIn("abenzerps/Qwen-Image-2.1-Uncensored-GGUF", item["model"]["URLs"][0])
                 self.assertEqual(item["model"]["preload_URLs"], "qwen_image_21")
                 self.assertTrue(item["model"]["selector_help"])
                 self.assertIn("vram_gb", item["model"]["resource_requirements"])
@@ -127,9 +133,16 @@ class TestQwenImage21Definitions(unittest.TestCase):
         self.assertIn("AutoencoderKLQwenImage21", main)
         self.assertIn("Qwen3VLForConditionalGeneration", main)
         self.assertIn("Qwen3VLProcessor", main)
+        self.assertIn("_remap_qwen3vl_comfy_keys", main)
+        self.assertIn("model.language_model.", main)
+        self.assertIn("_locate_qwen21_vae", main)
+        self.assertIn('os.path.join("vae", basename)', main)
+        self.assertIn("convert_qwen_image_21_vae_state_dict", main)
         transformer = _read(_TRANSFORMER_PATH)
         self.assertIn("class QwenImage21Transformer2DModel", transformer)
         self.assertIn("causal_condition", transformer)
+        self.assertIn("self.gate_up", transformer)
+        self.assertNotIn("self.gate_layer", transformer)
         vae = _read(_VAE_PATH)
         self.assertIn("class AutoencoderKLQwenImage21", vae)
         self.assertIn("z_dim: int = 64", vae)
@@ -180,6 +193,52 @@ class TestQwenImage21Definitions(unittest.TestCase):
         self.assertEqual(_ARCHITECTURE_MAP["qwen_image_21"], ("qwen_image_edit.md", "qwen_image_gen.md"))
         self.assertEqual(longest_prefix("qwen_image_21", _ARCHITECTURE_MAP), "qwen_image_21")
         self.assertEqual(longest_prefix("qwen_image_21_gguf_q4_k", _ARCHITECTURE_MAP), "qwen_image_21")
+
+
+class TestQwenImage21VaeConvert(unittest.TestCase):
+    def test_nested_comfy_keys_and_5d_squeeze(self):
+        import torch
+        from models.qwen.convert_diffusers_qwen21_vae import convert_qwen_image_21_vae_state_dict
+
+        source = {
+            "conv1.weight": torch.zeros(128, 768, 1, 1, 1),
+            "encoder.conv1.weight": torch.zeros(96, 4, 1, 3, 3),
+            "encoder.downsamples.1.downsamples.0.residual.2.weight": torch.zeros(192, 96, 1, 3, 3),
+            "encoder.downsamples.1.downsamples.0.shortcut.weight": torch.zeros(192, 96, 1, 1, 1),
+            "encoder.downsamples.1.downsamples.2.resample.1.weight": torch.zeros(192, 192, 3, 3),
+            "encoder.downsamples.1.downsamples.2.time_conv.weight": torch.zeros(192, 192, 1, 1, 1),
+            "decoder.upsamples.2.upsamples.0.residual.2.weight": torch.zeros(576, 1152, 1, 3, 3),
+            "decoder.upsamples.2.upsamples.3.resample.1.weight": torch.zeros(576, 576, 3, 3),
+            "decoder.head.2.weight": torch.zeros(4, 144, 1, 3, 3),
+        }
+        converted = convert_qwen_image_21_vae_state_dict(source)
+        self.assertEqual(tuple(converted["quant_conv.weight"].shape), (128, 768, 1, 1))
+        self.assertEqual(tuple(converted["encoder.conv_in.weight"].shape), (96, 4, 3, 3))
+        self.assertEqual(
+            tuple(converted["encoder.down_blocks.1.resnets.0.conv1.weight"].shape),
+            (192, 96, 3, 3),
+        )
+        self.assertEqual(
+            tuple(converted["encoder.down_blocks.1.resnets.0.conv_shortcut.weight"].shape),
+            (192, 96, 1, 1),
+        )
+        self.assertEqual(
+            tuple(converted["encoder.down_blocks.1.downsampler.resample.1.weight"].shape),
+            (192, 192, 3, 3),
+        )
+        self.assertEqual(
+            tuple(converted["encoder.down_blocks.1.downsampler.time_conv.weight"].shape),
+            (192, 192, 1, 1),
+        )
+        self.assertEqual(
+            tuple(converted["decoder.up_blocks.2.resnets.0.conv1.weight"].shape),
+            (576, 1152, 3, 3),
+        )
+        self.assertEqual(
+            tuple(converted["decoder.up_blocks.2.upsampler.resample.1.weight"].shape),
+            (576, 576, 3, 3),
+        )
+        self.assertEqual(tuple(converted["decoder.conv_out.weight"].shape), (4, 144, 3, 3))
 
 
 class TestQwenImage21RgbFactors(unittest.TestCase):
