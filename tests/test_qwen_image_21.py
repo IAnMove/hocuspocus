@@ -143,6 +143,8 @@ class TestQwenImage21Definitions(unittest.TestCase):
         self.assertIn("image.shape[1] == 4", pipeline)
         self.assertIn("image_mask=image_mask", main)
         self.assertIn("denoising_strength=denoising_strength", main)
+        self.assertIn("preprocessor_config.json", main)
+        self.assertIn("text_encoder", main)
 
     def test_studio_image_generation_unlocks_2_1_features(self):
         root = _ROOT

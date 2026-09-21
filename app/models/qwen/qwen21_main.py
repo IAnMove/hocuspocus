@@ -43,9 +43,17 @@ class model_factory:
         tokenizer_path = fl.locate_folder(text_encoder_folder)
         if tokenizer_path is None:
             tokenizer_path = os.path.dirname(text_encoder_filename)
+        processor_dir = tokenizer_path
+        for candidate in (tokenizer_path, os.path.join(tokenizer_path, "processor")):
+            if os.path.isfile(os.path.join(candidate, "preprocessor_config.json")):
+                processor_dir = candidate
+                break
+        encoder_config = fl.locate_file(os.path.join(text_encoder_folder, "config.json"))
+        if encoder_config is None:
+            encoder_config = fl.locate_file(os.path.join(text_encoder_folder, "text_encoder", "config.json"))
 
-        processor = Qwen3VLProcessor.from_pretrained(tokenizer_path)
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        processor = Qwen3VLProcessor.from_pretrained(processor_dir)
+        tokenizer = AutoTokenizer.from_pretrained(processor_dir)
         self.base_model_type = base_model_type
 
         with open(_TRANSFORMER_CONFIG, "r", encoding="utf-8") as handle:
@@ -73,7 +81,7 @@ class model_factory:
             text_encoder_filename,
             writable_tensors=True,
             modelClass=Qwen3VLForConditionalGeneration,
-            defaultConfigPath=fl.locate_file(os.path.join(text_encoder_folder, "config.json")),
+            defaultConfigPath=encoder_config,
         )
 
         vae_override = model_def.get("vae_URL") or model_def.get("vae_URLs")
