@@ -1,5 +1,5 @@
 import { concreteImageResolution, referenceImageResolution } from '../lib/imageResolution'
-import { IMAGE_INTENT_PARAMS, imageStudioDraft } from '../features/studio/imageStudioIntent'
+import { IMAGE_INTENT_PARAMS, emptyImageStudioDraft, imageStudioDraft } from '../features/studio/imageStudioIntent'
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
 import {
   H3_EXPERIMENTAL_MAX_FRAMES,
@@ -2268,20 +2268,16 @@ export const useStore = create<AppState>((set, get) => {
     if (state.imageStudioIntent === intent) return
     const drafts = { ...state.imageStudioDrafts }
     if (state.imageStudioIntent !== 'chooser') drafts[state.imageStudioIntent] = imageStudioDraft(state)
-    const draft = drafts[intent]
+    const draft = drafts[intent] || emptyImageStudioDraft()
     const cleared = Object.fromEntries(IMAGE_INTENT_PARAMS.map(key => [key, undefined]))
     set({
+      ...draft,
       imageStudioIntent: intent, imageStudioDrafts: drafts,
-      imageRefs: draft?.imageRefs || [], imageRefType: draft?.imageRefType || '',
-      removeBackgroundRefs: draft?.removeBackgroundRefs || false,
-      startImage: draft?.startImage || null, endImage: draft?.endImage || null,
-      imageSourceSize: draft?.imageSourceSize || null,
-      resolutionPreset: draft?.resolutionPreset || 'auto', aspectRatio: draft?.aspectRatio || 'auto',
       params: { ...state.params, ...cleared,
         prompt: '', negative_prompt: '',
         video_prompt_type: '', image_prompt_type: 'T', denoising_strength: 1, masking_strength: 1,
-        ...draft?.params,
-        resolution: concreteImageResolution(draft?.params.resolution || resolveResolution(state.modelOptions, 'auto', 'auto'), state.params.model_type),
+        ...draft.params,
+        resolution: concreteImageResolution(draft.params.resolution || resolveResolution(state.modelOptions, 'auto', 'auto'), state.params.model_type),
       },
     })
   },

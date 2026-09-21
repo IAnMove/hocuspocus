@@ -31,6 +31,20 @@ export type ImageStudioDraft = {
   imageSourceSize: { source: string; width: number; height: number } | null
 }
 
+export function emptyImageStudioDraft(): ImageStudioDraft {
+  return {
+    params: {}, imageRefs: [], imageRefType: '', removeBackgroundRefs: false,
+    startImage: null, endImage: null, imageSourceSize: null,
+    resolutionPreset: 'auto', aspectRatio: 'auto',
+  }
+}
+
+export function imageStudioInputRequirement(intent: ImageStudioIntent, source: unknown, referenceCount: number): 'source' | 'reference' | null {
+  if (intent === 'edit' && !source) return 'source'
+  if (intent === 'character' && !referenceCount) return 'reference'
+  return null
+}
+
 export function imageStudioDraft(state: Omit<ImageStudioDraft, 'params'> & { params: object }): ImageStudioDraft {
   return {
     params: Object.fromEntries(IMAGE_INTENT_PARAMS.map(key => [key, (state.params as Record<string, unknown>)[key]])),

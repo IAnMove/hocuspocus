@@ -59,15 +59,23 @@ export function estimatedRemainingSeconds(task: ActivityTaskLike, now: number): 
   if (['loadingModel', 'encodingText', 'encodingImages', 'decoding', 'saving'].includes(phase)) return undefined
   const inferenceStart = epochMs(Number(task.metadata?.inference_started_at))
   if (phase === 'inference' && inferenceStart) {
-    const current = Number(task.current || 0)
-    const measured = current - Number(task.metadata?.inference_start_step || 0)
-    const remaining = Number(task.total || 0) - current
-    if (measured < 2 || remaining <= 0) return undefined
-    return Math.max(1, Math.round((now - inferenceStart) / 1000 / measured * remaining))
+    return samplingRemainingSeconds(task, now, inferenceStart)
   }
   // Local inference should wait for measured steps instead of extrapolating
   // loading/encoding time or a synthetic progress percentage.
   if (task.provider === 'local' && task.metadata?.adapter === 'generation') return undefined
+  return progressRemainingSeconds(task, now)
+}
+
+function samplingRemainingSeconds(task: ActivityTaskLike, now: number, inferenceStart: number): number | undefined {
+  const current = Number(task.current || 0)
+  const measured = current - Number(task.metadata?.inference_start_step || 0)
+  const remaining = Number(task.total || 0) - current
+  if (measured < 2 || remaining <= 0) return undefined
+  return Math.max(1, Math.round((now - inferenceStart) / 1000 / measured * remaining))
+}
+
+function progressRemainingSeconds(task: ActivityTaskLike, now: number): number | undefined {
   const elapsed = elapsedSeconds(task, now)
   const total = Number(task.total || 0)
   const current = Number(task.current || 0)

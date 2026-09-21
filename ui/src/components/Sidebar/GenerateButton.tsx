@@ -8,6 +8,7 @@ import { useViggleGenerationGuard } from '../../lib/useViggleGenerationGuard'
 import { isGenerationJobActive } from '../../lib/generationJobState'
 import { usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
 import { generateBlockedCopy, isRemoteMiniMaxImage } from '../../lib/generateButtonGate'
+import { imageStudioInputRequirement } from '../../features/studio/imageStudioIntent'
 
 export function GenerateButton() {
   const { t } = useUiTranslation('studio')
@@ -31,15 +32,13 @@ export function GenerateButton() {
     ) === true,
   )
   const hasStartImage = useStore(s => !!(s.startImage || s.params.image_start))
-  const imageIntent = useStore(s => s.imageStudioIntent)
-  const editImage = useStore(s => s.params.image_guide)
-  const storedRefs = useStore(s => s.params.image_refs)
-  const imageRefs = useStore(s => s.imageRefs)
+  const imageRequirement = useStore(s => s.generationMode === 'image'
+    ? imageStudioInputRequirement(s.imageStudioIntent, s.params.image_guide, s.imageRefs.length || s.params.image_refs?.length || 0)
+    : null)
   const needsImage = (generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage)
-    || (generationMode === 'image' && imageIntent === 'edit' && !editImage)
+    || imageRequirement === 'source'
   const needsReference = (generationMode === 'video' && isOmniReference
-    && !hasOmniVisualReference) || (generationMode === 'image' && imageIntent === 'character'
-    && !imageRefs.length && !storedRefs?.length)
+    && !hasOmniVisualReference) || imageRequirement === 'reference'
   const editSubMode = useStore(s => s.editSubMode)
   const editVideoPath = useStore(s => s.editVideoPath)
   const outpaintVideoBox = useStore(s => s.outpaintVideoBox)
