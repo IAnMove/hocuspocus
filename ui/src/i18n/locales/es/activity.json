@@ -214,5 +214,7 @@
     "feed": "De una en una",
     "grid": "Rejilla",
     "masonry": "Mosaico"
-  }
+  },
+  "referenceImages": "Imágenes de referencia",
+  "referenceImage": "Referencia {{n}}"
 }

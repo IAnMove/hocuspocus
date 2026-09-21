@@ -35906,6 +35906,7 @@ def _upsert_canonical_task(
 
 
 def _generation_task_fields(job: dict) -> dict:
+    from services.activity_media import activity_reference_images
     legacy_id = str(job.get("id") or "")
     workspace = str(job.get("workspace") or "default")
     details = _public_generation_details(job.get("params"))
@@ -35926,6 +35927,8 @@ def _generation_task_fields(job: dict) -> dict:
     task_metadata = {
         "adapter": "generation", "generation_details": details,
         "display_prompt": details.get("prompt", ""),
+        "reference_images": activity_reference_images(params, workspace,
+            uploads_dir=os.path.join(os.getcwd(), "uploads"), workspace_dir=_workspace_dir(workspace)),
         "inference_started_at": job.get("inference_started_at"),
         "inference_start_step": job.get("inference_start_step"),
         "owner_pipeline_id": owner_id,

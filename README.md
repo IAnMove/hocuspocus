@@ -379,8 +379,16 @@ references through the command reference endpoint; local browser tokens are
 materialized by Studio before submission.
 
 The abenzerps GGUF entries retain their legacy `qwen_image_21_uncensored_*`
-identifiers so saved recipes keep working, but the selector now labels them as
-**GGUF (abenzerps)**. The [publisher's current model card](https://huggingface.co/abenzerps/Qwen-Image-2.1-GGUF)
+identifiers so saved recipes keep working, but are hidden from the model selector
+until they offer a verified distinction from the other Qwen 2.1 variants. Existing
+downloaded weights are kept. The [publisher's current model card](https://huggingface.co/abenzerps/Qwen-Image-2.1-GGUF)
 identifies the downloads as quantizations of the original base weights and says
 a separate uncensored version is still in development. The former name is not
 evidence of a distinct uncensoring fine-tune.
+
+Image previews open from gallery cards and selected source/reference thumbnails.
+The enlarged view shows dimensions, file details and available generation metadata,
+with the full saved record under **All saved information**. Activity uses frozen
+reference links from the submitted job, with cached thumbnails and the same enlarged
+view. Updating the model catalog preserves the current Studio draft. A server or UI
+update now offers an explicit reload instead of discarding an in-progress form.

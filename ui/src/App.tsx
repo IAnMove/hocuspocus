@@ -11,6 +11,7 @@ import { DownloadStatusBanner } from './components/DownloadStatusBanner'
 import { PreflightBanner } from './components/PreflightBanner'
 import { PlatformModeBanner } from './components/PlatformModeBanner'
 import { ActivityFooter } from './components/ActivityFooter'
+import { RuntimeUpdateNotice } from './components/RuntimeUpdateNotice'
 import { GalleryReadyToast } from './components/MainContent/GalleryReadyToast'
 import { WelcomeModal } from './components/WelcomeModal'
 import { QueueRecoveryDialog } from './components/QueueRecoveryDialog'
@@ -150,23 +151,6 @@ function AppContent() {
     }
   }, [maybeRefreshGallery])
 
-  // Pinokio popup tabs can outlive the backend process. Reload once when the
-  // server instance or the served React build changes so an old bundle cannot
-  // keep mounting videos or showing stale telemetry after an update.
-  useEffect(() => {
-    if (!runtimeIdentity?.instance_id || !runtimeIdentity.ui_build_id) return
-    const key = 'maestro_runtime_identity'
-    const current = `${runtimeIdentity.instance_id}:${runtimeIdentity.ui_build_id}`
-    try {
-      const previous = window.sessionStorage.getItem(key)
-      window.sessionStorage.setItem(key, current)
-      if (previous && previous !== current) window.location.reload()
-    } catch {
-      // Storage may be disabled; periodic output refresh still keeps the tab
-      // functional, it simply cannot auto-reload across server versions.
-    }
-  }, [runtimeIdentity?.instance_id, runtimeIdentity?.ui_build_id])
-
   // Poll LLM status to stay in sync with backend auto-load/unload
   useEffect(() => {
     let inFlight = false
@@ -243,6 +227,7 @@ function AppContent() {
       </div>
       <GalleryReadyToast />
       <ActivityFooter />
+      <RuntimeUpdateNotice identity={runtimeIdentity} />
       <LazySettingsDrawer open={settingsOpen} />
       <LazyHelpOverlay />
       <LoraBrowser />

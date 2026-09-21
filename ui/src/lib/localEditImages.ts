@@ -16,6 +16,10 @@ export function localEditPreview(value: string | undefined): string {
   return previews.get(value) || value
 }
 
+export function localEditFile(value: string | undefined): File | undefined {
+  return value ? files.get(value) : undefined
+}
+
 export function forgetLocalImage(value: string | undefined): void {
   if (!value) return
   const preview = previews.get(value)

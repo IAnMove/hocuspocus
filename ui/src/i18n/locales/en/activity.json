@@ -214,5 +214,7 @@
     "feed": "One at a time",
     "grid": "Grid",
     "masonry": "Mosaic"
-  }
+  },
+  "referenceImages": "Reference images",
+  "referenceImage": "Reference {{n}}"
 }

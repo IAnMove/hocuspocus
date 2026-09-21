@@ -650,6 +650,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
         </button>
         <FeedMediaBody
           file={file}
+          workspace={outputWorkspace}
           isActive={isActive}
           maxMediaHeight={maxMediaHeight}
           videoReady={videoReady}

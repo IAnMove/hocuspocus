@@ -3738,6 +3738,13 @@ export const useStore = create<AppState>((set, get) => {
   },
   loadModels: async () => {
     try {
+      // A download/catalog refresh is not a new Studio session. Keep the
+      // live draft, selected model and options, even for a now-hidden model.
+      if (get().modelsLoaded) {
+        const catalog = await api.fetchModels()
+        set({ families: catalog.families, models: [...catalog.models, ...SFX_VIRTUAL_MODELS] })
+        return
+      }
       // The backend catalog is the single source for Hunyuan3D models too:
       // /api/v1/models already lists them (family included) with real
       // download state, so re-adding them from the capabilities endpoint

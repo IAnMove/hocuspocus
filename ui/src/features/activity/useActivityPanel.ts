@@ -79,6 +79,7 @@ export function useActivityPanel(groups: ActivityGroup[], workspace: string) {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (event.defaultPrevented) return
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
       event.preventDefault()
       event.stopPropagation()
       closePanel()

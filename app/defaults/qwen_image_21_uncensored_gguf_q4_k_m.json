@@ -2,6 +2,7 @@
     "model": {
         "name": "Qwen Image 2.1 GGUF (abenzerps) Q4_K_M 7B",
         "architecture": "qwen_image_21",
+        "visible": false,
         "description": "GGUF Q4_K_M quantization of the original Qwen Image 2.1 base weights by abenzerps. The publisher renamed the repository and says a separate uncensored variant is still in development. Uses the shared 2.1 VAE and Qwen3-VL encoder.",
         "selector_help": "Third-party quantization of the original base model, formerly labelled Uncensored. No separate uncensoring modification is documented for these weights. Same creation and editing tools as Qwen Image 2.1.",
         "URLs": [

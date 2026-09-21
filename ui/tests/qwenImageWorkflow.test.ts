@@ -105,3 +105,33 @@ test('footer identifies native phases and estimates sampling without loading tim
   }
   assert.equal(estimatedRemainingSeconds({ ...task, current: 1 }, 260_000), undefined)
 })
+
+test('background model catalog refresh preserves edits made while the request is pending', async () => {
+  const initial = useStore.getState()
+  const originalFetch = globalThis.fetch
+  let finish!: (response: Response) => void
+  const requests: string[] = []
+  globalThis.fetch = async input => {
+    requests.push(String(input))
+    return new Promise<Response>(resolve => { finish = resolve })
+  }
+  try {
+    useStore.setState({ modelsLoaded: true, generationMode: 'image', imageStudioIntent: 'edit',
+      params: { ...initial.params, model_type: 'qwen_image_21', prompt: 'A blue ceramic vase', image_guide: 'local-edit:source' },
+      resolutionPreset: '720p', aspectRatio: '3:2', modelOptionsLoading: false })
+    const pending = useStore.getState().loadModels()
+    useStore.getState().setParams({ prompt: 'A green ceramic vase', image_mask: 'local-edit:mask', resolution: '1248x832' })
+    const before = useStore.getState()
+    finish(new Response(JSON.stringify({ families: [], models: [{ model_type: 'qwen_image_21', name: 'Qwen', is_downloaded: true }] })))
+    await pending
+    const after = useStore.getState()
+    assert.deepEqual(requests, ['/api/v1/models'])
+    assert.equal(after.params, before.params)
+    assert.equal(after.modelOptions, before.modelOptions)
+    assert.equal(after.generationMode, 'image')
+    assert.equal(after.imageStudioIntent, 'edit')
+    assert.equal(after.aspectRatio, '3:2')
+    assert.equal(after.resolutionPreset, '720p')
+    assert.equal(after.models[0].is_downloaded, true)
+  } finally { globalThis.fetch = originalFetch; useStore.setState(initial, true) }
+})
