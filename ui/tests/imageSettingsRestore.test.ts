@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom'
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage })
 const { useStore } = await import('../src/stores/useStore')
+const { imageSettingsMode } = await import('../src/features/studio/imageSettingsRestore')
 const { snapshotStudioImageIntent, normalizeStudioImageParams, resolveStudioImageMedia } = await import('../src/features/studio/prepareGeneration')
 const { editOutputImage, addOutputImageReference } = await import('../src/features/studio/imageInputActions')
 const { createStudioImageGenerationCommand } = await import('../src/features/studio/generationSpec')
@@ -114,6 +115,35 @@ test('recipes commit tuned values after defaults and clear prior edit inputs', a
   assert.equal(useStore.getState().imageStudioIntent, 'new')
   useStore.getState().setImageStudioIntent('edit')
   assert.equal(useStore.getState().params.image_guide, '/api/v1/uploads/previous.png')
+})
+
+test('video sidecars stay out of image restore when the catalog is empty or the model is gone', () => {
+  const empty = { models: [] } as never
+  assert.equal(imageSettingsMode({
+    model_type: 'wan_2_2_i2v', generation_mode: 'video', image_mode: 2, video_length: 81, prompt: 'Extend clip',
+  }, empty), false)
+  assert.equal(imageSettingsMode({
+    model_type: 'ltx2_19b', image_mode: 1, video_length: 97, prompt: 'I2V frames',
+  }, empty), false)
+  assert.equal(imageSettingsMode({
+    model_type: 'qwen_image_21_uncensored_gguf_q6_k', image_mode: 1, prompt: 'Hidden still',
+  }, empty), true)
+  assert.equal(imageSettingsMode({
+    model_type: 'flux_dev', generation_mode: 'image', image_mode: 1, prompt: 'Still',
+  }, empty), true)
+})
+
+test('loading a video does not switch Studio to Image before models have loaded', async () => {
+  const video = { model_type: 'wan_2_2_i2v', generation_mode: 'video', image_mode: 2, video_length: 81,
+    prompt: 'Keep this as video', resolution: '1280x720', num_inference_steps: 8, guidance_scale: 5 }
+  setup({ generationMode: 'video', models: [], modelsLoaded: false, imageStudioIntent: 'chooser',
+    selectedOutputMeta: { params: video } as never })
+  await useStore.getState().loadSettingsFromOutput()
+  assert.equal(useStore.getState().generationMode, 'video')
+  assert.equal(useStore.getState().imageStudioIntent, 'chooser')
+  assert.equal(useStore.getState().params.prompt, video.prompt)
+  assert.equal(useStore.getState().params.image_mode, 2)
+  assert.equal(useStore.getState().params.video_length, 81)
 })
 
 test('hidden saved Qwen IDs restore into image mode without appearing in the model catalog', async () => {

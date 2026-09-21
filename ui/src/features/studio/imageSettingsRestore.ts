@@ -19,7 +19,13 @@ const FORM_FIELDS = ['params', 'generationMode', 'imageStudioIntent', 'activeWor
 export function imageSettingsMode(params: Record<string, unknown>, state: AppState): boolean {
   const model = state.models.find(item => item.model_type === params.model_type)
   if (model) return getModelMode(model.model_type, model.family) === 'image'
-  return params.generation_mode === 'image' || Number(params.image_mode) > 0 || String(params.model_type).startsWith('qwen_image_')
+  // Video sub-modes also use image_mode 1/2/3. When the catalog has not loaded
+  // or the model was removed, trust the sidecar mode — never treat a video
+  // job as an image restore just because image_mode is nonzero.
+  if (params.generation_mode) return params.generation_mode === 'image'
+  if (String(params.model_type).startsWith('qwen_image_')) return true
+  if (Number(params.video_length) > 1) return false
+  return Number(params.image_mode) === 1
 }
 
 /** Covers recipes, gallery actions and saved settings; editing the form wins over pending IO. */
