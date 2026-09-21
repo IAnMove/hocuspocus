@@ -6,6 +6,7 @@ import { InputsPanel } from './InputsPanel'
 import { OmniReferenceSection } from './OmniReferenceSection'
 import { PromptInput } from './PromptInput'
 import { ImageRefSection } from './ImageRefSection'
+import { ImageEditSection } from './ImageEditSection'
 import { AudioModeSection } from './AudioModeSection'
 import { MusicControls } from './MusicControls'
 import { AudioSubModeToggle } from './AudioSubModeToggle'
@@ -187,8 +188,9 @@ export function DirectGenerationWorkspace() {
         {isOmniReference && <OmniReferenceSection />}
         {isBlend && <BlendControls />}
 
-        {/* Image mode: reference images */}
+        {/* Image mode: reference images plus model-specific edit tools. */}
         {isImage && modelOptions?.image_ref_choices && <ImageRefSection />}
+        {isImage && <ImageEditSection />}
         {isImage && <PanoramaLoopPanel />}
 
         {/* Video/Image mode: audio controls (soundtrack, control video, etc.).

@@ -108,6 +108,8 @@ const ARCH_REQUIREMENTS: Array<[string, CatalogRequirements]> = [
   ['pi_flux2', { vram_gb: 8, ram_gb: 32, comfortable_vram_gb: 16 }],
   ['flux2', { vram_gb: 8, ram_gb: 32, comfortable_vram_gb: 16 }],
   ['flux', { vram_gb: 8, ram_gb: 16 }],
+  ['qwen_image_21_bf16', { vram_gb: 24, ram_gb: 48, storage_gb: 33, comfortable_vram_gb: 24 }],
+  ['qwen_image_21', { vram_gb: 16, ram_gb: 32, storage_gb: 18, comfortable_vram_gb: 24 }],
   ['qwen_image', { vram_gb: 12, ram_gb: 24, storage_gb: 20 }],
   ['z_image', { vram_gb: 6, ram_gb: 16 }],
   ['krea2', { vram_gb: 8, ram_gb: 16 }],
@@ -214,6 +216,9 @@ function meshCapability(model: ModelCatalogInput): ModelCapability {
 
 function imageCapability(model: ModelCatalogInput): ModelCapability {
   if (detectVariant(model) === 'edit') return 'imageEdit'
+  if ((model.architecture || '').startsWith('qwen_image_21') || model.model_type.startsWith('qwen_image_21')) {
+    return 'imageEdit'
+  }
   if (model.supports_ref_images) return 'imageRefs'
   return 'image'
 }

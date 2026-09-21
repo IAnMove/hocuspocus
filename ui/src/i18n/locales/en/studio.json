@@ -496,6 +496,21 @@
     "max_other": "Up to {{count}} reference images.",
     "hint": "First image is the main subject/landscape. Additional images are people/objects to inject. Drag to reorder."
   },
+  "imageEdit": {
+    "title": "Image edit tools",
+    "native2k": "Native 2K",
+    "refs": "Up to {{count}} identity references",
+    "mask": "Local mask edit",
+    "outpaint": "Outpaint",
+    "rgba": "RGBA transparency",
+    "source": "Image to edit",
+    "maskImage": "Edit mask (white = change)",
+    "sourceHint": "Optional. With a source, this model edits that picture; without one it generates from the prompt and references.",
+    "outpaintMargins": "Outpaint margins (top bottom left right %)",
+    "outpaintHint": "Needs a source image. Pads the canvas so the model can generate the new sides.",
+    "denoising": "Denoising strength",
+    "rgbaHint": "The RGBA VAE keeps transparency in the PNG."
+  },
   "voiceRef": {
     "title": "Voice Reference (ID-LoRA)",
     "addAudio": "+ Add audio",

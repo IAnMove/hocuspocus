@@ -58,6 +58,7 @@
         "tests/test_h3_studio_policy_request.py",
         "tests/test_h3_extended_duration.py",
         "tests/test_image_generation_commands.py",
+        "tests/test_qwen_image_21.py",
         "tests/test_independent_model_downloads.py",
         "tests/test_integration_audit_regressions.py",
         "tests/test_job_lifecycle.py",

@@ -52,6 +52,12 @@ test('explains what each model does instead of listing only the name', () => {
     model_type: 'qwen_image_edit_20B', architecture: 'qwen_image_edit_20B', family: 'qwen',
   }), 'imageEdit')
   assert.equal(detectCapability({
+    model_type: 'qwen_image_21', architecture: 'qwen_image_21', family: 'qwen',
+  }), 'imageEdit')
+  assert.equal(detectCapability({
+    model_type: 'qwen_image_21_gguf_q4_k', architecture: 'qwen_image_21', family: 'qwen',
+  }), 'imageEdit')
+  assert.equal(detectCapability({
     model_type: 'ace_step_v1_5_xl', architecture: 'ace_step_v1_5_xl', family: 'tts',
   }), 'music')
   assert.equal(detectCapability({

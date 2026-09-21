@@ -496,6 +496,21 @@
     "max_other": "Hasta {{count}} imágenes de referencia.",
     "hint": "La primera imagen es el sujeto/paisaje principal. Las demás son personas/objetos a inyectar. Arrastra para reordenar."
   },
+  "imageEdit": {
+    "title": "Herramientas de edición",
+    "native2k": "2K nativo",
+    "refs": "Hasta {{count}} referencias de identidad",
+    "mask": "Edición local con máscara",
+    "outpaint": "Outpaint",
+    "rgba": "Transparencia RGBA",
+    "source": "Imagen a editar",
+    "maskImage": "Máscara de edición (blanco = cambiar)",
+    "sourceHint": "Opcional. Con una imagen origen, este modelo la edita; sin ella genera desde el prompt y las referencias.",
+    "outpaintMargins": "Márgenes de outpaint (arriba abajo izquierda derecha %)",
+    "outpaintHint": "Hace falta una imagen origen. Amplía el lienzo para que el modelo genere los lados nuevos.",
+    "denoising": "Fuerza de denoising",
+    "rgbaHint": "El VAE RGBA conserva la transparencia en el PNG."
+  },
   "voiceRef": {
     "title": "Referencia de voz (ID-LoRA)",
     "addAudio": "+ Añadir audio",

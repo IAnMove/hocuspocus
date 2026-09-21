@@ -795,6 +795,11 @@ const DEFAULT_ENABLED_MODELS = new Set([
   'krea2_turbo',
   'krea2_raw_edit',
   'krea2_turbo_edit',
+  'qwen_image_21',
+  'qwen_image_21_bf16',
+  'qwen_image_21_gguf_q8_0',
+  'qwen_image_21_gguf_q5_0',
+  'qwen_image_21_gguf_q4_k',
   // Video
   // Default to just the LTX-2.3 Distilled 1.1 22B checkpoint (newer /
   // better quality). The FP8 build and every other video model
@@ -846,8 +851,9 @@ const DEFAULT_ENABLED_MODELS = new Set([
  * a user who then disables them stays disabled forever. (This is
  * deliberately narrower than auto-enabling every unknown model — only
  * the curated list's own additions are pushed.) */
-const DEFAULTS_VERSION = 12
+const DEFAULTS_VERSION = 13
 const DEFAULTS_ADDED_IN: Record<number, string[]> = {
+  13: ['qwen_image_21', 'qwen_image_21_bf16', 'qwen_image_21_gguf_q8_0', 'qwen_image_21_gguf_q5_0', 'qwen_image_21_gguf_q4_k'],
   12: ['yue2', 'auk', 'auk_flash'],
   11: ["viggle_animate", "h3_advanced_fl2va_pruned", "h3_advanced_ref2va_pruned", "h3_advanced_vdn_pruned", "sensenova_u1_5_8b_mot"],
   // v1.2.0: the ACE-Step XL SFT pair; LM_4B becomes the music default.

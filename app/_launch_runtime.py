@@ -6641,6 +6641,11 @@ def get_model_options(model_type: str):
         # Image reference options
         "background_removal_label": md.get("background_removal_label"),
         "max_image_refs": md.get("max_image_refs"),
+        "inpaint_support": bool(md.get("inpaint_support", False)),
+        "image_ref_inpaint": bool(md.get("image_ref_inpaint", False)),
+        "outpaint_support": isinstance(md.get("video_guide_outpainting"), (list, tuple))
+            and 1 in md.get("video_guide_outpainting"),
+        "native_rgba": bool(md.get("native_rgba", False)),
         "sample_solvers": solvers,
 
         # Self refiner
