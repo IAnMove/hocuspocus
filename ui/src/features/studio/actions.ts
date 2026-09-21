@@ -273,7 +273,11 @@ export async function prepareImage(action: PrepareImageCommand): Promise<Command
   await useStore.getState().loadModelOptions(selected.model_type)
 
   state = useStore.getState()
-  if (state.imageStudioIntent === 'chooser') state.setImageStudioIntent(action.outpaintMargins ? 'edit' : 'new')
+  // Always land on the workflow this prepare asked for. Isolation now rejects
+  // Character without refs and Edit without a source, and a leftover canvas
+  // would silently img2img a "create this" request. attach_* still switches
+  // to edit/character after this when the turn includes those roles.
+  state.setImageStudioIntent(action.outpaintMargins ? 'edit' : 'new')
   state.setStartImage(null)
   state.setEndImage(null)
   state.setOutputCount(action.outputCount ?? 1)
