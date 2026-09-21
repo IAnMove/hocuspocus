@@ -135,6 +135,21 @@ export function overlayCueMusicCandidate(
   }
 }
 
+/** Keep every server cue row after a 409 rebase. Overlaying only the row this
+ * persist wrote drops a sibling candidate the retry PUT already accepted. */
+export function overlaySavedCueCandidates(
+  live: StoryProject,
+  saved: StoryProject,
+): StoryProject {
+  return saved.music.cues.reduce(
+    (next, cue) => cue.candidates.reduce(
+      (project, candidate) => overlayCueMusicCandidate(project, cue.id, candidate),
+      next,
+    ),
+    live,
+  )
+}
+
 export function upsertCueMusicCandidate(
   project: StoryProject,
   cueId: string,
