@@ -9,6 +9,45 @@ Object.assign(globalThis, { window: dom.window, document: dom.window.document, l
 const { useStore } = await import('../src/stores/useStore.ts')
 const { snapshotStudioImageIntent, normalizeStudioImageParams, resolveStudioImageMedia } = await import('../src/features/studio/prepareGeneration.ts')
 
+test('prepareImage leaves Edit/Character so a create request cannot reuse the leftover canvas', async () => {
+  const initial = useStore.getState()
+  const { prepareImage } = await import('../src/features/studio/actions.ts')
+  const model = {
+    model_type: 'qwen_image_21', name: 'Qwen 2.1', family: 'qwen', architecture: 'qwen_image_21',
+    is_i2v: false, is_t2v: false, guidance_max_phases: 1, fps: 1, is_downloaded: true,
+  }
+  try {
+    useStore.setState({
+      modelsLoaded: true, generationMode: 'image', imageStudioIntent: 'edit', imageStudioDrafts: {},
+      families: [{ id: 'qwen', label: 'Qwen', order: 1 }], models: [model],
+      enabledModels: new Set(['qwen_image_21']),
+      loadModelOptions: async () => {}, loadOutputs: async () => {},
+      params: { ...initial.params, model_type: 'qwen_image_21', image_guide: 'local-edit:portrait',
+        image_mask: 'local-edit:mask', video_prompt_type: 'VAG', prompt: 'old edit' },
+    })
+    await prepareImage({ prompt: 'a mountain landscape at dusk' })
+    const state = useStore.getState()
+    assert.equal(state.imageStudioIntent, 'new')
+    assert.equal(state.params.prompt, 'a mountain landscape at dusk')
+    assert.equal(state.params.image_guide, undefined)
+    assert.equal(state.imageStudioDrafts.edit?.params.image_guide, 'local-edit:portrait')
+    const intent = snapshotStudioImageIntent(state)
+    const { params } = normalizeStudioImageParams(intent)
+    assert.equal(params.image_guide, undefined)
+    assert.equal(params.image_mask, undefined)
+    await prepareImage({ prompt: 'extend the canvas', outpaintMargins: '10 10 10 10' })
+    assert.equal(useStore.getState().imageStudioIntent, 'edit')
+    assert.equal(useStore.getState().params.video_guide_outpainting, '10 10 10 10')
+    useStore.setState({
+      imageStudioIntent: 'character', imageRefs: [],
+      params: { ...useStore.getState().params, image_refs: [] },
+    })
+    await prepareImage({ prompt: 'a red bicycle' })
+    assert.equal(useStore.getState().imageStudioIntent, 'new')
+    assert.doesNotThrow(() => snapshotStudioImageIntent(useStore.getState()))
+  } finally { useStore.setState(initial, true) }
+})
+
 test('edit, create and character restore separate drafts and submit only active resources', async () => {
   const initial = useStore.getState()
   try {
