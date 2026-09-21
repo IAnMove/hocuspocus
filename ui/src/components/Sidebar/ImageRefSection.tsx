@@ -29,7 +29,9 @@ export function ImageRefSection() {
   // max_image_refs is the model's total conditioning-image budget. In Edit
   // mode the uploaded source already consumes one slot.
   const configuredMaxRefs = modelOptions?.max_image_refs ?? null
-  const maxRefs = configuredMaxRefs == null ? null : Math.max(0, configuredMaxRefs - (imageMode === 2 ? 1 : 0))
+  const imageGuide = useStore(s => s.params.image_guide)
+  const usesEditSource = Boolean(imageGuide) || imageMode === 2
+  const maxRefs = configuredMaxRefs == null ? null : Math.max(0, configuredMaxRefs - (usesEditSource ? 1 : 0))
   const canAddMore = maxRefs == null || imageRefs.length < maxRefs
 
   const addFiles = useCallback((files: File[]) => {

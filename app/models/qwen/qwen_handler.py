@@ -3,6 +3,38 @@ import torch
 import gradio as gr
 from shared.utils.hf import build_hf_url
 
+# Native 2.1 canvases are 32-aligned (VAE 16x, unpatched 2x2 tokens).
+# 1080p is labeled 2K in Studio because 2048 is the official default.
+_QWEN21_RESOLUTION_PRESETS = {
+    "720p": {
+        "label": "1K",
+        "hint": "1024-class canvas. Faster on 16 GB and when many references are attached.",
+        "values": {
+            "auto": "1024x1024",
+            "21:9": "1536x672",
+            "16:9": "1376x768",
+            "9:16": "768x1376",
+            "1:1": "1024x1024",
+            "4:3": "1184x896",
+            "3:4": "896x1184",
+        },
+    },
+    "1080p": {
+        "label": "2K",
+        "hint": "Native Qwen-Image 2.1 canvas (2048×2048 at 1:1). Official default; 40 steps, CFG 1.",
+        "values": {
+            "auto": "2048x2048",
+            "21:9": "2816x1216",
+            "16:9": "2752x1536",
+            "9:16": "1536x2752",
+            "1:1": "2048x2048",
+            "4:3": "2400x1792",
+            "3:4": "1792x2400",
+        },
+    },
+}
+_QWEN21_RESOLUTION_PRESET_ORDER = ["auto", "720p", "1080p"]
+
 class family_handler():
     @staticmethod
     def query_model_def(base_model_type, model_def):
@@ -23,6 +55,55 @@ class family_handler():
         extra_model_def["text_encoder_folder"] = text_encoder_folder
 
         extra_model_def["vae_upsampler"] = [1,2]
+
+        if base_model_type == "qwen_image_21":
+            extra_model_def["text_encoder_folder"] = "Qwen3-VL-8B-Instruct"
+            extra_model_def["text_encoder_URLs"] = [
+                build_hf_url("Comfy-Org/Qwen-Image-2.1", "text_encoders", "qwen3vl_8b_bf16.safetensors"),
+                build_hf_url("Comfy-Org/Qwen-Image-2.1", "text_encoders", "qwen3vl_8b_int8_convrot.safetensors"),
+                build_hf_url("Comfy-Org/Qwen-Image-2.1", "text_encoders", "qwen3vl_8b_w4a8.safetensors"),
+            ]
+            extra_model_def["vae_upsampler"] = []
+            extra_model_def["sample_solvers"] = [("Default", "default")]
+            extra_model_def["max_image_refs"] = 10
+            extra_model_def["resolutions_categories"] = ["<=2k"]
+            extra_model_def["supports_auto_aspect"] = True
+            extra_model_def["resolution_presets"] = _QWEN21_RESOLUTION_PRESETS
+            extra_model_def["resolution_preset_order"] = _QWEN21_RESOLUTION_PRESET_ORDER
+            extra_model_def["image_ref_choices"] = {
+                "choices": [
+                    ("None", ""),
+                    ("Conditional Image is first Main Subject / Landscape and may be followed by People / Objects", "KI"),
+                    ("Conditional Images are People / Objects", "I"),
+                ],
+                "letters_filter": "KI",
+                "default": "",
+            }
+            extra_model_def["at_least_one_image_ref_needed"] = False
+            extra_model_def["inpaint_support"] = True
+            extra_model_def["inpaint_video_prompt_type"] = "VAG"
+            extra_model_def["image_video_prompt_type"] = ""
+            extra_model_def["image_ref_inpaint"] = True
+            extra_model_def["mask_preprocessing"] = {
+                "selection": ["", "A"],
+                "visible": True,
+            }
+            extra_model_def["video_guide_outpainting"] = [1, 2]
+            extra_model_def["outpainting_quantize_margins"] = 16
+            extra_model_def["background_removal_label"] = (
+                "Remove backgrounds only behind people or objects except the main subject / landscape"
+            )
+            extra_model_def["native_rgba"] = True
+            extra_model_def["inpaint_color"] = "FF0000"
+            extra_model_def["model_modes"] = {
+                "choices": [
+                    ("Masked Denoising: inpainted area may reuse masked content", 0),
+                ],
+                "default": 0,
+                "label": "Inpainting Method",
+                "image_modes": [1, 2],
+            }
+            return extra_model_def
 
         if base_model_type in ["qwen_image_layered_20B"]:
             extra_model_def["batch_size_label"] = "Number of Layers"
@@ -98,7 +179,7 @@ class family_handler():
 
     @staticmethod
     def query_supported_types():
-        return ["qwen_image_20B", "qwen_image_edit_20B", "qwen_image_edit_plus_20B", "qwen_image_edit_plus2_20B", "qwen_image_layered_20B"]
+        return ["qwen_image_20B", "qwen_image_21", "qwen_image_edit_20B", "qwen_image_edit_plus_20B", "qwen_image_edit_plus2_20B", "qwen_image_layered_20B"]
 
     @staticmethod
     def query_family_maps():
@@ -133,6 +214,34 @@ class family_handler():
 
     @staticmethod
     def query_model_files(computeList, base_model_type, model_def=None):
+        if base_model_type == "qwen_image_21":
+            return [
+                {
+                    "repoId": "Qwen/Qwen-Image-2.1",
+                    "sourceFolderList": ["processor", "text_encoder"],
+                    "targetFolderList": ["Qwen3-VL-8B-Instruct", "Qwen3-VL-8B-Instruct"],
+                    "fileList": [
+                        [
+                            "added_tokens.json",
+                            "chat_template.jinja",
+                            "merges.txt",
+                            "preprocessor_config.json",
+                            "special_tokens_map.json",
+                            "tokenizer.json",
+                            "tokenizer_config.json",
+                            "video_preprocessor_config.json",
+                            "vocab.json",
+                        ],
+                        ["config.json"],
+                    ],
+                },
+                {
+                    "repoId": "Comfy-Org/Qwen-Image-2.1",
+                    "sourceFolderList": ["vae"],
+                    "targetFolderList": [""],
+                    "fileList": [["qwen_image_2.1_vae_bf16.safetensors"]],
+                },
+            ]
         vae_files = ["qwen_vae.safetensors", "qwen_vae_config.json"]
         if base_model_type in ["qwen_image_layered_20B"]:
             vae_files.append("qwen_image_layered_vae_bf16.safetensors")
@@ -151,7 +260,10 @@ class family_handler():
 
     @staticmethod
     def load_model(model_filename, model_type, base_model_type, model_def, quantizeTransformer = False, text_encoder_quantization = None, dtype = torch.bfloat16, VAE_dtype = torch.float32, mixed_precision_transformer = False, save_quantized = False, submodel_no_list = None, text_encoder_filename = None, VAE_upsampling = None, **kwargs):
-        from .qwen_main import model_factory
+        if base_model_type == "qwen_image_21":
+            from .qwen21_main import model_factory
+        else:
+            from .qwen_main import model_factory
         from mmgp import offload
 
         pipe_processor = model_factory(
@@ -188,7 +300,15 @@ class family_handler():
         ui_defaults.update({
             "guidance_scale":  4,
             "sample_solver": "default",
-        })            
+        })
+        if base_model_type == "qwen_image_21":
+            ui_defaults.update({
+                "guidance_scale": 1,
+                "sample_solver": "default",
+                "num_inference_steps": 40,
+                "video_prompt_type": "",
+            })
+            return
         if base_model_type in ["qwen_image_edit_20B"]: 
             ui_defaults.update({
                 "video_prompt_type": "KI",
@@ -225,6 +345,10 @@ class family_handler():
             elif denoising_strength < 1 and model_mode_int != 0:
                 gr.Info("Denoising Strength will be ignored if Masked Denoising is not used")
 
+        if base_model_type == "qwen_image_21":
+            refs = inputs.get("image_refs") or []
+            if len(refs) > 10:
+                return "Qwen Image 2.1 accepts at most 10 reference images."
         if base_model_type in ["qwen_image_layered_20B"]:
             if inputs.get("image_guide") is None:
                 return "Qwen Image Layered requires a Control Image."
@@ -242,5 +366,5 @@ class family_handler():
     @staticmethod
     def get_rgb_factors(base_model_type ):
         from shared.RGB_factors import get_rgb_factors
-        latent_rgb_factors, latent_rgb_factors_bias = get_rgb_factors("qwen")
+        latent_rgb_factors, latent_rgb_factors_bias = get_rgb_factors("qwen", model_type=base_model_type)
         return latent_rgb_factors, latent_rgb_factors_bias

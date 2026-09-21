@@ -55,7 +55,7 @@ Walkthrough with screenshots: [Story → Comics → Video](docs/MAESTRO_X_STORY_
 | Kind | What ships in the box (among others) |
 |---|---|
 | Video | MiniMax H3 (picture + stereo audio), Wan 2.1 / 2.2, Hunyuan Video, LTX-2.3 |
-| Image | Flux 2 Klein, Qwen Image Edit |
+| Image | Flux 2 Klein, Qwen Image 2.1, Qwen Image Edit |
 | Audio | ACE-Step 1.5 XL (default new songs), MiniMax Music, Kugelaudio / Qwen3 TTS, MMAudio SFX |
 
 **Example — MiniMax H3.** Prompt a wide night sea and add `Audio: surf, wind, a low cello`. Use **FL2VA** when you have an exact first/last frame from Story. Use **Ref2VA** when you pass up to 9 images, 3 videos and 3 audio clips as identity/mood references (`<Picture 1>`, `<Video 1>`, `<Audio 1>`).

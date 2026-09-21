@@ -1,0 +1,30 @@
+{
+    "model": {
+        "name": "Qwen Image 2.1 GGUF Q4_K 7B",
+        "architecture": "qwen_image_21",
+        "description": "Smallest practical DiT (Q4_K, 4.0 GB). Lightest 2.1 option besides community INT4. Fine-detail and small text take a hit. Encoder + VAE still required (~10 GB extra). License follows Qwen Research License.",
+        "selector_help": "For 8–12 GB cards or when disk is tight. Not the 4090 recommendation — INT8 ConvRot is cleaner and faster on NVIDIA. Q2_K/Q3_K exist upstream but are too lossy to ship here. Default 1024.",
+        "URLs": [
+            "https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/resolve/main/qwen_image_2.1-Q4_K.gguf"
+        ],
+        "preload_URLs": "qwen_image_21",
+        "license_name": "Qwen Research License",
+        "license_url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
+        "resource_requirements": {
+            "vram_gb": 10,
+            "ram_gb": 24,
+            "storage_gb": 15,
+            "platform": "NVIDIA / AMD",
+            "backend": "GGUF Q4_K",
+            "tier": "experimental",
+            "note": "Lightest shipped 2.1 DiT. Use INT8 ConvRot on a 4090."
+        },
+        "attention": {"<89": "sdpa"},
+        "image_outputs": true
+    },
+    "prompt": "A neon shop sign that reads QWEN IMAGE 2.1, rainy night, reflections on wet pavement",
+    "resolution": "1024x1024",
+    "num_inference_steps": 40,
+    "guidance_scale": 1,
+    "batch_size": 1
+}

@@ -86,6 +86,8 @@ export interface GenerateParams {
   viggle_audio_mode?: 'source' | 'generated'
   switch_threshold?: number
   video_mask?: string
+  image_guide?: string
+  image_mask?: string
   denoising_strength?: number
   video_guide_outpainting?: string
   temporal_upsampling?: string
@@ -821,6 +823,10 @@ export interface ModelOptions {
   audio_prompt_type_sources: ChoiceConfig | null
   background_removal_label: string | null
   max_image_refs?: number | null
+  inpaint_support?: boolean
+  image_ref_inpaint?: boolean
+  outpaint_support?: boolean
+  native_rgba?: boolean
   sample_solvers: [string, string][] | null
   self_refiner: boolean
   self_refiner_max_plans: number

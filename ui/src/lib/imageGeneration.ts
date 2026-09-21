@@ -198,7 +198,10 @@ async function prepareLocalImageReferences(
         ? 'KI'
         : currentType.includes('I') ? currentType : `${currentType}I`
       referenceParams.remove_background_images_ref = 0
-      if (options.referenceMode === 'edit' && selected.startsWith('qwen_image_edit')) {
+      if (
+        options.referenceMode === 'edit'
+        && (selected.startsWith('qwen_image_edit') || selected.startsWith('qwen_image_21'))
+      ) {
         // Do not inherit inpainting/denoise state from whatever image model
         // happened to be selected in Studio. This is a full-canvas Qwen edit.
         referenceParams.model_mode = 0
