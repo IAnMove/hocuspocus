@@ -216,6 +216,29 @@ def test_canonicalize_legacy_maps_gallery_output_urls_to_workspace_files(resourc
     )
 
 
+def test_local_media_roots_never_include_the_filesystem_root(resources_fixture):
+    roots = resources_fixture["service"]._local_media_roots()
+    assert Path.cwd().resolve() in roots
+    assert all(len(root.parts) > 1 for root in roots)
+
+
+def test_canonicalize_legacy_rejects_absolute_cwd_file_and_root_relative_passwd(resources_fixture, tmp_path, monkeypatch):
+    service = resources_fixture["service"]
+    leak = Path("/etc/passwd")
+    if leak.is_file():
+        with pytest.raises(ValueError):
+            service.canonicalize_legacy(str(leak))
+        with pytest.raises(ValueError):
+            service.canonicalize_legacy("etc/passwd")
+    app = tmp_path / "app"
+    app.mkdir()
+    secret = app / "secret.png"
+    write_image(secret)
+    monkeypatch.chdir(app)
+    with pytest.raises(ValueError, match="outside known media"):
+        service.canonicalize_legacy(str(secret))
+
+
 def test_canonicalize_legacy_rejects_symlink_outside_known_media_roots(resources_fixture, tmp_path):
     fixture = resources_fixture
     outside = tmp_path / "not-managed.png"
