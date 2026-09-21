@@ -158,6 +158,12 @@ class TestQwenImage21Definitions(unittest.TestCase):
         self.assertIn("ImageEditSection", sidebar)
         self.assertIn("{isImage && <ImageEditSection />}", sidebar)
         self.assertIn("selected.startsWith('qwen_image_21')", image_gen)
+        knowledge = _read(root / "ui" / "src" / "features" / "agent" / "agentKnowledge.ts")
+        self.assertIn("qwen_image_21*", knowledge)
+        self.assertIn("unified text-to-image and image-edit", knowledge)
+        self.assertIn("reference_role=edit_source", knowledge)
+        mcp = _read(root / "app" / "routers" / "image_generation_commands.py")
+        self.assertIn("qwen_image_21*", mcp)
         self.assertIn("'qwen_image_21'", store.split("const DEFAULT_ENABLED_MODELS = new Set([", 1)[1].split("])\n", 1)[0])
         self.assertGreaterEqual(int(store.split("const DEFAULTS_VERSION = ", 1)[1].splitlines()[0]), 13)
 

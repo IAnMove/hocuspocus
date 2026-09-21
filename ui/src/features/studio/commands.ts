@@ -30,6 +30,7 @@ export type PrepareImageCommand = {
   inferenceSteps?: number
   guidanceScale?: number
   outputCount?: number
+  outpaintMargins?: string
 }
 
 export type PrepareAudioCommand = {
@@ -67,7 +68,7 @@ export type StartGenerationCommand = {
 
 export type AttachStudioReferencesCommand = {
   outputNames: string[]
-  role: 'start_frame' | 'subject' | 'style'
+  role: 'start_frame' | 'subject' | 'style' | 'edit_source' | 'edit_mask'
   replaceExisting: boolean
   removeBackground: boolean
 }
