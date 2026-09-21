@@ -48,7 +48,7 @@ class model_factory:
             if os.path.isfile(os.path.join(candidate, "preprocessor_config.json")):
                 processor_dir = candidate
                 break
-        encoder_config = fl.locate_file(os.path.join(text_encoder_folder, "config.json"))
+        encoder_config = fl.locate_file(os.path.join(text_encoder_folder, "config.json"), error_if_none=False)
         if encoder_config is None:
             encoder_config = fl.locate_file(os.path.join(text_encoder_folder, "text_encoder", "config.json"))
 
