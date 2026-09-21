@@ -241,6 +241,7 @@
         "tests/test_productions_router.py",
         "tests/test_project_catalog.py",
         "tests/test_projects_router.py",
+        "tests/test_prompt_enhancer_guides.py",
         "tests/test_provenance_3d_director.py",
         "tests/test_recipes_router.py",
         "tests/test_remove_background_tool.py",
