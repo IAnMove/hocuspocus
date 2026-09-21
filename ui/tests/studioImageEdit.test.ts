@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { concreteImageResolution, snapImageResolution } from '../src/lib/imageResolution.ts'
+import { IMAGE_STUDIO_INTENTS } from '../src/features/studio/imageStudioIntent.ts'
 import { mergeVideoPromptLetters, studioImageEditCapabilities } from '../src/lib/studioImageEdit.ts'
+
+test('lists the four Studio image intents', () => {
+  assert.deepEqual(IMAGE_STUDIO_INTENTS.map(item => item.id), ['new', 'edit', 'character', 'loop'])
+})
 
 test('unlocks 2.1 image-generation tools from model options', () => {
   const locked = studioImageEditCapabilities({
@@ -28,6 +34,37 @@ test('unlocks 2.1 image-generation tools from model options', () => {
     rgba: true,
     twoK: true,
   })
+})
+
+test('turns browser-local edit tokens into upload URLs', async () => {
+  const urls = globalThis.URL as typeof URL & { createObjectURL?: (file: Blob) => string; revokeObjectURL?: (url: string) => void }
+  urls.createObjectURL ??= () => 'blob:test'
+  urls.revokeObjectURL ??= () => undefined
+  const { rememberLocalImage, materializeLocalEditImage, studioMediaUrl } = await import('../src/lib/localEditImages.ts')
+  assert.equal(
+    studioMediaUrl('http://192.168.1.87:42010/api/v1/uploads/photo.png'),
+    '/api/v1/uploads/photo.png',
+  )
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async () => ({
+    ok: true,
+    json: async () => ({ filename: 'kept.png', url: '/api/v1/uploads/kept.png', path: '/tmp/kept.png' }),
+  })) as typeof fetch
+  try {
+    const token = rememberLocalImage(new File(['abc'], 'from-disk.png', { type: 'image/png' }))
+    assert.match(token, /^local-edit:\d+$/)
+    assert.equal(await materializeLocalEditImage(token), '/api/v1/uploads/kept.png')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('turns Auto into a pixel canvas for image commands', () => {
+  assert.equal(concreteImageResolution('auto', 'qwen_image_21'), '2048x2048')
+  assert.equal(concreteImageResolution('auto_1080p', 'qwen_image_21'), '2048x2048')
+  assert.equal(concreteImageResolution('auto', 'flux'), '1024x1024')
+  assert.equal(concreteImageResolution('1921x1080'), '1920x1080')
+  assert.equal(snapImageResolution(3000, 2000, 2048), '2048x1368')
 })
 
 test('keeps identity letters when adding or clearing a local-edit mask', () => {

@@ -6,7 +6,7 @@ import { InputsPanel } from './InputsPanel'
 import { OmniReferenceSection } from './OmniReferenceSection'
 import { PromptInput } from './PromptInput'
 import { ImageRefSection } from './ImageRefSection'
-import { ImageEditSection } from './ImageEditSection'
+import { ImageStudioPanel } from './ImageStudioPanel'
 import { AudioModeSection } from './AudioModeSection'
 import { MusicControls } from './MusicControls'
 import { AudioSubModeToggle } from './AudioSubModeToggle'
@@ -33,7 +33,6 @@ import { Hunyuan3DPanel } from './Hunyuan3DPanel'
 import { HardwareStatusBar } from './HardwareStatusBar'
 import { H3PromptControls } from './H3PromptControls'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
-import { PanoramaLoopPanel } from './PanoramaLoopPanel'
 
 import { useUiTranslation } from '../../i18n'
 import { StudioCommandPanels } from '../../features/studio/StudioCommandPanels'
@@ -60,6 +59,8 @@ export function DirectGenerationWorkspace() {
   const isVideo = generationMode === 'video'
   const isAdvancedH3 = String(modelType).startsWith('h3_advanced')
   const isImage = generationMode === 'image'
+  const imageStudioIntent = useStore(s => s.imageStudioIntent)
+  const imageChooser = isImage && imageStudioIntent === 'chooser'
   const isAudio = generationMode === 'audio'
   const isModel3d = generationMode === 'model3d'
   const audioSubMode = useStore(s => s.audioSubMode)
@@ -188,10 +189,7 @@ export function DirectGenerationWorkspace() {
         {isOmniReference && <OmniReferenceSection />}
         {isBlend && <BlendControls />}
 
-        {/* Image mode: reference images plus model-specific edit tools. */}
-        {isImage && modelOptions?.image_ref_choices && <ImageRefSection />}
-        {isImage && <ImageEditSection />}
-        {isImage && <PanoramaLoopPanel />}
+        {isImage && <ImageStudioPanel />}
 
         {/* Video/Image mode: audio controls (soundtrack, control video, etc.).
             In Frames mode (video, image_mode 0) the unified InputsPanel routes
@@ -208,7 +206,7 @@ export function DirectGenerationWorkspace() {
 
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.instructions')}</h3>
         {/* Prompt area (non-edit modes, skip for SFX/Mixer/Music which have their own UI) */}
-        {!isEdit && !(isAudio && (audioSubMode === 'sfx' || audioSubMode === 'mixer' || audioSubMode === 'music')) && (isMultiClip ? <MultiClipEditor /> : <PromptInput />)}
+        {!imageChooser && !isEdit && !(isAudio && (audioSubMode === 'sfx' || audioSubMode === 'mixer' || audioSubMode === 'music')) && (isMultiClip ? <MultiClipEditor /> : <PromptInput />)}
         <StudioCommandPanels mode={generationMode} audioSubMode={audioSubMode}
           workspace={workspace || 'default'} model={String(modelType)}
           visible={studioUnobscured && (!isMobile || sidebarOpen)} />
@@ -255,7 +253,7 @@ export function DirectGenerationWorkspace() {
           <div className="flex-1 min-w-0">
             <ModelSelector />
           </div>
-          {!(isAudio && audioSubMode === 'mixer') && (
+          {!imageChooser && !(isAudio && audioSubMode === 'mixer') && (
             <div className="shrink-0">
               <GenerateButton />
             </div>

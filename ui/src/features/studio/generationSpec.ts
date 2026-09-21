@@ -1,5 +1,6 @@
 import { stableSerialize } from '../../lib/commandContract'
 import imageCommandCatalog from '../../api/imageCommandCatalog.json'
+import { concreteImageResolution } from '../../lib/imageResolution'
 
 /**
  * The v2 Studio image input is deliberately a closed map.  The values are
@@ -663,6 +664,7 @@ export function createStudioImageGenerationCommand(
     if (!STUDIO_IMAGE_PARAM_CATALOG.has(key)) continue
     params[key] = value
   }
+  params.resolution = concreteImageResolution(params.resolution, params.model_type)
   const command: StudioImageGenerationCommand = {
     version: STUDIO_IMAGE_SCHEMA_VERSION,
     operation: STUDIO_IMAGE_OPERATION,

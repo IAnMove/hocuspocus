@@ -26,6 +26,7 @@ const context = await browser.newContext({ acceptDownloads: true, viewport: { wi
 await context.addInitScript(() => {
   window.localStorage.setItem('hocuspocus-ui-language', 'en')
   window.localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
+  window.localStorage.setItem('hocuspocus_welcome_seen_v2', '453')
 })
 const page = await context.newPage()
 page.on('console', msg => {

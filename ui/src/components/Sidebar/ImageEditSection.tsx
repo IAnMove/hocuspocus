@@ -1,4 +1,6 @@
 import { useUiTranslation } from '../../i18n'
+import { snapImageResolution } from '../../lib/imageResolution'
+import { forgetLocalImage, localEditPreview } from '../../lib/localEditImages'
 import { mergeVideoPromptLetters, studioImageEditCapabilities } from '../../lib/studioImageEdit'
 import { useStore } from '../../stores/useStore'
 import { WangpMediaInput } from './WangpMediaInput'
@@ -47,8 +49,11 @@ export function ImageEditSection() {
             label={t('imageEdit.source')}
             kind="image"
             path={source}
+            keepLocal
             onChoose={item => {
               if (!item) {
+                forgetLocalImage(source)
+                forgetLocalImage(mask)
                 setParams({
                   image_guide: undefined,
                   image_mask: undefined,
@@ -56,10 +61,19 @@ export function ImageEditSection() {
                 })
                 return
               }
+              const next = item.url || item.name
               setParams({
-                image_guide: item.url || item.name,
+                image_guide: next,
                 video_prompt_type: mergeVideoPromptLetters(flags, mask ? 'VAG' : 'V', ''),
               })
+              const previewUrl = localEditPreview(next)
+              if (previewUrl.startsWith('blob:') || previewUrl.startsWith('/api/') || previewUrl.startsWith('http')) {
+                const preview = new Image()
+                preview.onload = () => {
+                  useStore.getState().setParam('resolution', snapImageResolution(preview.width, preview.height, 2048))
+                }
+                preview.src = previewUrl
+              }
             }}
           />
           {source ? (
@@ -67,8 +81,10 @@ export function ImageEditSection() {
               label={t('imageEdit.maskImage')}
               kind="image"
               path={mask}
+              keepLocal
               onChoose={item => {
                 if (!item) {
+                  forgetLocalImage(mask)
                   setParams({
                     image_mask: undefined,
                     video_prompt_type: mergeVideoPromptLetters(flags, 'V', 'AG'),
