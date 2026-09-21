@@ -39,11 +39,12 @@ test('the feed applies the same viewport cap to rendered media and virtualizatio
 
 test('stills and videos do not sit in a 16:9 letterbox', async () => {
   const itemSource = await fs.readFile(new URL('../src/components/MainContent/MediaFeedItem.tsx', import.meta.url), 'utf8')
+  const bodySource = await fs.readFile(new URL('../src/components/MainContent/FeedMediaBody.tsx', import.meta.url), 'utf8')
   assert.match(itemSource, /naturalFrame \? '' : 'aspect-video'/)
   assert.match(itemSource, /naturalFrame \? \{ aspectRatio: stillAspect \}/)
-  assert.match(itemSource, /function FeedMediaBody\(/)
-  assert.match(itemSource, /file.type === 'video'/)
-  assert.match(itemSource, /onLoadedMetadata/)
+  assert.match(itemSource, /<FeedMediaBody/)
+  assert.match(bodySource, /file.type === 'video'/)
+  assert.match(bodySource, /onLoadedMetadata/)
   assert.doesNotMatch(itemSource, /key=\{isActive \? file\.url/)
 })
 
