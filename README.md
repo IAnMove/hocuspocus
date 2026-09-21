@@ -318,6 +318,8 @@ the current draft; a late download cannot overwrite a newer edit. Stored inputs
 keep their source workspace. Hidden model variants can still be restored by ID.
 Once Generate is pressed, the submission retains its selected local source and
 mask even if those inputs are replaced while the job is being prepared.
+Edit Anything / Viggle opens an extracted frame in References and restores the
+previous reference draft when the frame is applied, skipped or cancelled.
 
 Qwen 2.1 and Qwen Edit Plus/Plus2 accept additional references inside **Edit**;
 the source counts toward the model's input limit. Older Qwen image models expose

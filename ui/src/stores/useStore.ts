@@ -1,5 +1,5 @@
 import { concreteImageResolution, referenceImageResolution } from '../lib/imageResolution'
-import { IMAGE_INTENT_PARAMS, emptyImageStudioDraft, imageStudioDraft } from '../features/studio/imageStudioIntent'
+import { IMAGE_INTENT_PARAMS, emptyImageStudioDraft, imageStudioDraft, type ImageStudioDraft } from '../features/studio/imageStudioIntent'
 import { beginImageSettingsChange, imageSettingsMode, restoreStudioImageSettings } from '../features/studio/imageSettingsRestore'
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
 import {
@@ -1269,6 +1269,9 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
      *  their existing image-mode workflow state. */
     savedImageRefs: File[]
     savedImageRefType: string
+    /** Isolated Character form from before this trip. Leaving Image persists
+     *  the extract over that draft; apply/skip/cancel put it back. */
+    savedCharacterDraft?: ImageStudioDraft
     modelType?: string
     sourceResolution?: string
     /** Only images published after entering this Viggle trip can be applied. */
@@ -2247,6 +2250,18 @@ async function _syncGlobalProductionVideoFormat(
   })
 }
 
+function restoreCharacterDraft(
+  drafts: AppState['imageStudioDrafts'],
+  target: AppState['editReturnTarget'],
+) {
+  if (!target || !('savedCharacterDraft' in target)) return drafts
+  const saved = target.savedCharacterDraft
+  const imageStudioDrafts = { ...drafts }
+  if (saved) imageStudioDrafts.character = saved
+  else delete imageStudioDrafts.character
+  return imageStudioDrafts
+}
+
 export const useStore = create<AppState>((set, get) => {
   const developerMode = bindSlice(set, get, createDeveloperModeSlice)
   return {
@@ -2502,6 +2517,7 @@ export const useStore = create<AppState>((set, get) => {
       // older draft and dropped this extract. Land on Character first so
       // the write below replaces that draft instead of dying on chooser.
       get().setImageStudioIntent('character')
+      const savedCharacterDraft = get().imageStudioDrafts.character
       set(s => ({
         // Replace any pre-existing refs with just our extracted frame
         // for the duration of the round-trip. Restored from the
@@ -2523,6 +2539,7 @@ export const useStore = create<AppState>((set, get) => {
           endTime,
           savedImageRefs,
           savedImageRefType,
+          savedCharacterDraft,
           modelType: state.params.model_type,
           sourceResolution: state.editVideoResolution,
           ...(isViggle ? { viggleEditSession: {
@@ -2593,6 +2610,7 @@ export const useStore = create<AppState>((set, get) => {
       editReturnTarget: null,
       imageRefs: target.savedImageRefs,
       imageRefType: target.savedImageRefType,
+      imageStudioDrafts: restoreCharacterDraft(get().imageStudioDrafts, target),
     })
   },
   skipAnchorPhase: () => {
@@ -2609,6 +2627,7 @@ export const useStore = create<AppState>((set, get) => {
           : 'edit_anything',
       editReturnTarget: null,
       ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
+      imageStudioDrafts: restoreCharacterDraft(get().imageStudioDrafts, target),
     })
   },
   cancelAnchorReturn: () => {
@@ -2622,6 +2641,7 @@ export const useStore = create<AppState>((set, get) => {
           : 'edit_anything',
       editReturnTarget: null,
       ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
+      imageStudioDrafts: restoreCharacterDraft(get().imageStudioDrafts, target),
     })
   },
   editRetakeEngine: 'native' as const,
