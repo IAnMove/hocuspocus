@@ -4,7 +4,10 @@ import test from 'node:test'
 
 import {
   estimatedMediaFeedItemHeight,
+  isCollapsedMediaFeedMeasurement,
   mediaFeedMaxPreviewHeight,
+  mediaFeedStillAspectRatio,
+  MEDIA_FEED_PLACEHOLDER_ASPECT_RATIO,
 } from '../src/components/MainContent/mediaFeedSizing'
 
 test('wide media previews leave room for the complete card inside the feed viewport', () => {
@@ -38,4 +41,22 @@ test('still images do not sit in a 16:9 letterbox', async () => {
   const itemSource = await fs.readFile(new URL('../src/components/MainContent/MediaFeedItem.tsx', import.meta.url), 'utf8')
   assert.match(itemSource, /stillFrame \? '' : 'aspect-video'/)
   assert.match(itemSource, /maxHeight=\{maxMediaHeight\}/)
+  assert.match(itemSource, /stillFrame \? \{ aspectRatio: stillAspect \}/)
+  assert.match(itemSource, /onIntrinsicSize=\{handleStillIntrinsicSize\}/)
+  assert.doesNotMatch(itemSource, /key=\{isActive \? file\.url/)
+})
+
+test('still cards reserve 16:9 until the image reports its natural size', () => {
+  assert.equal(mediaFeedStillAspectRatio(), MEDIA_FEED_PLACEHOLDER_ASPECT_RATIO)
+  assert.equal(mediaFeedStillAspectRatio(0, 0), MEDIA_FEED_PLACEHOLDER_ASPECT_RATIO)
+  assert.equal(mediaFeedStillAspectRatio(1920, 1080), 1920 / 1080)
+  assert.equal(mediaFeedStillAspectRatio(1080, 1920), 1080 / 1920)
+})
+
+test('collapsed still measurements stay out of the virtualizer', () => {
+  assert.equal(isCollapsedMediaFeedMeasurement(48), true)
+  assert.equal(isCollapsedMediaFeedMeasurement(40), true)
+  assert.equal(isCollapsedMediaFeedMeasurement(Number.NaN), true)
+  assert.equal(isCollapsedMediaFeedMeasurement(144), false)
+  assert.equal(isCollapsedMediaFeedMeasurement(420), false)
 })

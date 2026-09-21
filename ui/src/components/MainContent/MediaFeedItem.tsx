@@ -23,6 +23,7 @@ import {
   readDirectorClipReplacementTarget,
   writeDirectorClipReplacementResult,
 } from '../../features/stories/directorClipHandoff'
+import { isCollapsedMediaFeedMeasurement, mediaFeedStillAspectRatio } from './mediaFeedSizing'
 
 interface Props {
   file: OutputFile
@@ -46,10 +47,20 @@ interface Props {
  *      check the user sees a half-image and feels they need to refresh
  *      the page (which loses Studio prompts/settings/reference images).
  */
-function RetryImage({ url, alt, maxHeight }: { url: string; alt: string; maxHeight?: number }) {
+function RetryImage({ url, alt, maxHeight, onIntrinsicSize }: {
+  url: string
+  alt: string
+  maxHeight?: number
+  onIntrinsicSize?: (width: number, height: number) => void
+}) {
   const [src, setSrc] = useState(url)
   const retries = useRef(0)
   const maxRetries = 5
+
+  useEffect(() => {
+    setSrc(url)
+    retries.current = 0
+  }, [url])
 
   const scheduleRetry = useCallback(() => {
     if (retries.current < maxRetries) {
@@ -71,12 +82,13 @@ function RetryImage({ url, alt, maxHeight }: { url: string; alt: string; maxHeig
     const img = e.currentTarget
     if (img.naturalWidth === 0 || img.naturalHeight === 0) {
       scheduleRetry()
+      return
     }
-  }, [scheduleRetry])
+    onIntrinsicSize?.(img.naturalWidth, img.naturalHeight)
+  }, [onIntrinsicSize, scheduleRetry])
 
   return (
     <img
-      key={src}
       src={src}
       alt={alt}
       className="mx-auto block h-auto w-auto max-w-full object-contain"
@@ -160,6 +172,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
     if (!el) return
     const ro = new ResizeObserver((entries) => {
       const height = entries[0].borderBoxSize?.[0]?.blockSize ?? entries[0].contentRect.height
+      if (isCollapsedMediaFeedMeasurement(height)) return
       onMeasured(index, height)
     })
     ro.observe(el)
@@ -240,6 +253,17 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const isScene = file.type === 'scene'
   const isComic = file.type === 'comic'
   const stillFrame = file.type === 'image' || isScene || isComic
+  const [stillNaturalSize, setStillNaturalSize] = useState<{ name: string; width: number; height: number } | null>(null)
+  const stillAspect = stillNaturalSize?.name === file.name
+    ? mediaFeedStillAspectRatio(stillNaturalSize.width, stillNaturalSize.height)
+    : mediaFeedStillAspectRatio()
+  const handleStillIntrinsicSize = useCallback((width: number, height: number) => {
+    if (width > 0 && height > 0) setStillNaturalSize({ name: file.name, width, height })
+  }, [file.name])
+  const handleStillImageLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = event.currentTarget
+    handleStillIntrinsicSize(img.naturalWidth, img.naturalHeight)
+  }, [handleStillIntrinsicSize])
   const canPreviewModel3d = isModel3d && /\.(glb|gltf)$/i.test(file.name)
   // Rigged outputs carry their baked glTF clip names in the sidecar; the
   // viewer autoplays one and offers a selector to switch.
@@ -603,7 +627,10 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       <div
         data-testid="media-feed-viewport"
         className={`relative flex w-full items-center justify-center bg-media-canvas ${stillFrame ? '' : 'aspect-video'}`}
-        style={maxMediaHeight == null ? undefined : { maxHeight: `${maxMediaHeight}px` }}
+        style={{
+          ...(maxMediaHeight == null ? {} : { maxHeight: `${maxMediaHeight}px` }),
+          ...(stillFrame ? { aspectRatio: stillAspect } : {}),
+        }}
       >
         <button
           type="button"
@@ -665,11 +692,11 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           </div>
         ) : isScene ? (
           file.thumbnail_url
-            ? <img src={file.thumbnail_url} alt={file.name} className="mx-auto block h-auto w-auto max-w-full object-contain" style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }} />
+            ? <img src={file.thumbnail_url} alt={file.name} className="mx-auto block h-auto w-auto max-w-full object-contain" style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }} onLoad={handleStillImageLoad} />
             : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
         ) : isComic ? (
           file.thumbnail_url
-            ? <img src={file.thumbnail_url} alt={file.name} className="mx-auto block h-auto w-auto max-w-full object-contain" style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }} />
+            ? <img src={file.thumbnail_url} alt={file.name} className="mx-auto block h-auto w-auto max-w-full object-contain" style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }} onLoad={handleStillImageLoad} />
             : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
         ) : isModel3d ? (
           <div className="w-full h-full relative">
@@ -703,10 +730,10 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           </div>
         ) : (
           <RetryImage
-            key={isActive ? file.url : (file.thumbnail_url || file.url)}
             url={isActive ? file.url : (file.thumbnail_url || file.url)}
             alt={file.name}
             maxHeight={maxMediaHeight}
+            onIntrinsicSize={handleStillIntrinsicSize}
           />
         )}
       </div>
