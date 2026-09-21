@@ -52,11 +52,13 @@ export function GenerateButton() {
   const schedulerApplies = promptSchedulerEnabled && generationMode === 'video' && imageMode === 0
   const scheduledVideoCount = schedulerApplies ? splitPromptSchedule(prompt).length : 0
   const needsScheduledPrompts = schedulerApplies && scheduledVideoCount === 0
+  const needsPrompt = generationMode === 'image' && !String(prompt || '').trim()
   const modelType = useStore(s => s.params.model_type)
   const imageProvider = useStore(s => s.productionProfile?.image?.provider)
   const localUnavailable = usePlatformCapabilities()?.capabilities.wangp_local?.state === 'hidden'
     && !isRemoteMiniMaxImage(generationMode, modelType, imageProvider)
-  const blocked = localUnavailable || needsImage || needsReference || needsOutpaintSource || needsOutpaintArea || needsScheduledPrompts
+  const blocked = localUnavailable || needsImage || needsReference || needsOutpaintSource
+    || needsOutpaintArea || needsScheduledPrompts || needsPrompt
 
   const handleClick = async () => {
     if (blocked || submissionPending.current) return
@@ -80,7 +82,8 @@ export function GenerateButton() {
 
   if (blocked) {
     const { label, title } = generateBlockedCopy({
-      localUnavailable, needsImage, needsReference, needsOutpaintSource, needsOutpaintArea, t,
+      localUnavailable, needsImage, needsReference, needsOutpaintSource, needsOutpaintArea,
+      needsPrompt, needsScheduledPrompts, t,
     })
     return (
       <button

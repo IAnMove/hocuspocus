@@ -50,6 +50,7 @@
     "needSource": "Falta origen",
     "chooseCanvas": "Elige el lienzo",
     "addPrompt": "Añade un prompt",
+    "addPromptHint": "Escribe qué generar, o cómo cambiar la foto. El modelo no puede arrancar con el prompt vacío.",
     "addPrompts": "Añade prompts",
     "outpaintAreaHint": "Elige un formato de salida más grande o redimensiona el origen para crear un área que Outpaint pueda generar.",
     "referenceHint": "Añade al menos una referencia de imagen o vídeo. El audio no puede ser la única referencia.",
@@ -61,6 +62,7 @@
   },
   "prompt": {
     "placeholderImage": "Describe tu imagen...",
+    "placeholderImageEdit": "Describe el cambio, p. ej. añade a Mario al lado de Banjo...",
     "placeholderVideo": "Describe tu vídeo...",
     "placeholderAudio": "Escribe el texto a pronunciar o describe el audio...",
     "placeholderAvatar": "Describe la animación del avatar...",

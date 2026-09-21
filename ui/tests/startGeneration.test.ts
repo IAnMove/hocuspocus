@@ -178,6 +178,16 @@ test('normalize keeps the literal prompt and does not invent catalog fields', ()
   }
 })
 
+test('a blank image prompt fails before a generation job is created', async () => {
+  const intent = snapshotStudioImageIntent(imageSource({ params: { prompt: '   ' } }))
+  const { sent, ports } = recordingPorts()
+  await assert.rejects(
+    () => startStudioImageGeneration(intent, ports),
+    /addPromptHint|non-blank|prompt/i,
+  )
+  assert.equal(sent.length, 0)
+})
+
 test('the same frozen intent yields the same effective command and prompt', async () => {
   const intent = snapshotStudioImageIntent(imageSource({
     params: { image_guide: '/api/v1/uploads/guide.png' },
