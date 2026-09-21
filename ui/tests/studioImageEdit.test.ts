@@ -36,6 +36,28 @@ test('unlocks 2.1 image-generation tools from model options', () => {
   })
 })
 
+test('materializeLocalEditFields uploads every media token before command submit', async () => {
+  const urls = globalThis.URL as typeof URL & { createObjectURL?: (file: Blob) => string; revokeObjectURL?: (url: string) => void }
+  urls.createObjectURL ??= () => 'blob:test-fields'
+  urls.revokeObjectURL ??= () => undefined
+  const { rememberLocalImage, materializeLocalEditFields } = await import('../src/lib/localEditImages.ts')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async () => ({
+    ok: true,
+    json: async () => ({ filename: 'fields.png', url: '/api/v1/uploads/fields.png', path: '/tmp/fields.png' }),
+  })) as typeof fetch
+  try {
+    const token = rememberLocalImage(new File(['xyz'], 'fields.png', { type: 'image/png' }))
+    const params: Record<string, unknown> = { image_guide: token, image_refs: [token] }
+    await materializeLocalEditFields(params, ['image_guide', 'image_refs', 'image_mask'])
+    assert.equal(params.image_guide, '/api/v1/uploads/fields.png')
+    assert.deepEqual(params.image_refs, ['/api/v1/uploads/fields.png'])
+    assert.equal(params.image_mask, undefined)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('turns browser-local edit tokens into upload URLs', async () => {
   const urls = globalThis.URL as typeof URL & { createObjectURL?: (file: Blob) => string; revokeObjectURL?: (url: string) => void }
   urls.createObjectURL ??= () => 'blob:test'

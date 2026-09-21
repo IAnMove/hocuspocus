@@ -56,3 +56,17 @@ export async function materializeLocalEditImage(value: unknown): Promise<unknown
   }
   return studioMediaUrl(token)
 }
+
+/** Upload in-tab edit tokens before the command reference API sees them. */
+export async function materializeLocalEditFields(
+  params: Record<string, unknown>,
+  fields: readonly string[],
+): Promise<void> {
+  for (const field of fields) {
+    const original = params[field]
+    if (!original) continue
+    params[field] = Array.isArray(original)
+      ? await Promise.all(original.map(item => materializeLocalEditImage(item)))
+      : await materializeLocalEditImage(original)
+  }
+}

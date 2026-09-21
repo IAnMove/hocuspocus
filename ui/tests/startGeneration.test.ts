@@ -260,6 +260,51 @@ test('the same intent is admitted once and retry keeps the same ids', async () =
   assert.equal(sent.every(command => command.intent_id === 'shared-intent'), true)
 })
 
+test('prepare uploads in-tab local-edit tokens before resolving command references', async () => {
+  const urls = globalThis.URL as typeof URL & {
+    createObjectURL?: (file: Blob) => string
+    revokeObjectURL?: (url: string) => void
+  }
+  urls.createObjectURL ??= () => 'blob:local-edit-test'
+  urls.revokeObjectURL ??= () => undefined
+  const { rememberLocalImage } = await import('../src/lib/localEditImages.ts')
+  const originalFetch = globalThis.fetch
+  const uploaded: string[] = []
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/api/v1/upload')) {
+      uploaded.push(url)
+      return {
+        ok: true,
+        json: async () => ({ filename: 'from-disk.png', url: '/api/v1/uploads/from-disk.png', path: '/tmp/from-disk.png' }),
+      }
+    }
+    throw new Error('unexpected fetch ' + url)
+  }) as typeof fetch
+  try {
+    const token = rememberLocalImage(new File(['pixels'], 'from-disk.png', { type: 'image/png' }))
+    const seen: unknown[][] = []
+    const prepared = await prepareStudioImageCommand(
+      {
+        ...normalizeStudioImageParams(snapshotStudioImageIntent(imageSource({
+          params: { image_guide: token, image_mask: token },
+        }))).params,
+      },
+      'local-edit-intent',
+      async references => {
+        seen.push(references)
+        return references.map(String)
+      },
+    )
+    assert.deepEqual(uploaded, ['/api/v1/upload', '/api/v1/upload'])
+    assert.deepEqual(seen, [['/api/v1/uploads/from-disk.png', '/api/v1/uploads/from-disk.png']])
+    assert.equal(prepared.command.input.params.image_guide, '/api/v1/uploads/from-disk.png')
+    assert.equal(prepared.command.input.params.image_mask, '/api/v1/uploads/from-disk.png')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('a rejected prepare does not POST and keeps the failed job identity local', async () => {
   const intent = snapshotStudioImageIntent(imageSource({
     params: { image_guide: '/api/v1/uploads/guide.png' },

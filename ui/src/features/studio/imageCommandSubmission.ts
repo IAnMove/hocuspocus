@@ -27,14 +27,8 @@ function assertSameForm(before: StudioState, current: StudioState): void {
 }
 
 async function canonicalReferences(params: Record<string, unknown>): Promise<void> {
-  const { materializeLocalEditImage } = await import('../../lib/localEditImages')
-  for (const field of MEDIA_FIELDS) {
-    const original = params[field]
-    if (!original) continue
-    params[field] = Array.isArray(original)
-      ? await Promise.all(original.map(item => materializeLocalEditImage(item)))
-      : await materializeLocalEditImage(original)
-  }
+  const { materializeLocalEditFields } = await import('../../lib/localEditImages')
+  await materializeLocalEditFields(params, MEDIA_FIELDS)
   for (const field of MEDIA_FIELDS) {
     const value = params[field]
     const values = Array.isArray(value) ? value : value ? [value] : []
