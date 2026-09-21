@@ -136,17 +136,29 @@ export function overlayCueMusicCandidate(
 }
 
 /** Keep every server cue row after a 409 rebase. Overlaying only the row this
- * persist wrote drops a sibling candidate the retry PUT already accepted. */
+ * persist wrote drops a sibling candidate the retry PUT already accepted, and
+ * mapping over live cues cannot attach a cue the local snapshot never loaded. */
 export function overlaySavedCueCandidates(
   live: StoryProject,
   saved: StoryProject,
 ): StoryProject {
+  const liveCueIds = new Set(live.music.cues.map(cue => cue.id))
+  const remoteOnlyCues = saved.music.cues.filter(cue => !liveCueIds.has(cue.id))
+  const base = remoteOnlyCues.length === 0
+    ? live
+    : {
+        ...live,
+        music: {
+          ...live.music,
+          cues: [...live.music.cues, ...remoteOnlyCues],
+        },
+      }
   return saved.music.cues.reduce(
     (next, cue) => cue.candidates.reduce(
       (project, candidate) => overlayCueMusicCandidate(project, cue.id, candidate),
       next,
     ),
-    live,
+    base,
   )
 }
 

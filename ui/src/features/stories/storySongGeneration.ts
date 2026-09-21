@@ -139,10 +139,10 @@ async function persistCueCandidate(
   const saved = library.projects[projectId]
   const latest = useStoryStore.getState()
   if (latest.workspace !== workspace) return saved
-  // A 409 rebase PUTs remote-only siblings — both extra stories and extra
-  // song rows on this story. Overlaying only this persist's candidate onto a
-  // stale snapshot leaves the next persist (ready/job) to rewrite the library
-  // without those rows.
+  // A 409 rebase PUTs remote-only siblings — extra stories, extra cues, and
+  // extra song rows on this story. Overlaying only this persist's candidate
+  // onto a stale snapshot leaves the next persist (ready/job) to rewrite the
+  // library without those rows.
   let merged = saved
   useStoryStore.setState(current => {
     if (current.workspace !== workspace) return {}
