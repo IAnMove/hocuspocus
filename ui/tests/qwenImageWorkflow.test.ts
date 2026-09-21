@@ -10,6 +10,24 @@ const { useStore } = await import('../src/stores/useStore.ts')
 const { emptyImageStudioDraft } = await import('../src/features/studio/imageStudioIntent.ts')
 const { snapshotStudioImageIntent, normalizeStudioImageParams, resolveStudioImageMedia } = await import('../src/features/studio/prepareGeneration.ts')
 
+function extractFrameFetch() {
+  return async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('extract-frames')) {
+      return Response.json({
+        start_path: 'source-frame.png', start_url: '/api/v1/uploads/source-frame.png', session_started_at: 1,
+      })
+    }
+    if (url.includes('model-selections')) return Response.json({})
+    return new Response('FRAME', { headers: { 'content-type': 'image/png' } })
+  }
+}
+
+async function drainStoreFetches() {
+  await new Promise(resolve => setTimeout(resolve, 0))
+  await new Promise(resolve => setTimeout(resolve, 0))
+}
+
 test('prepareImage leaves Edit/Character so a create request cannot reuse the leftover canvas', async () => {
   const initial = useStore.getState()
   const { prepareImage } = await import('../src/features/studio/actions.ts')
@@ -154,9 +172,7 @@ test('Edit Anything keeps the extracted frame on Character after Image draft iso
     model_type: 'qwen_image_21', name: 'Qwen', family: 'qwen', architecture: 'qwen_image_21',
     is_i2v: false, is_t2v: false, is_downloaded: true,
   }
-  globalThis.fetch = async input => String(input).includes('extract-frames')
-    ? Response.json({ start_path: 'source-frame.png', start_url: '/api/v1/uploads/source-frame.png', session_started_at: 1 })
-    : new Response('FRAME', { headers: { 'content-type': 'image/png' } })
+  globalThis.fetch = extractFrameFetch()
   try {
     useStore.setState({
       generationMode: 'avatar', editSubMode: 'recast', activeWorkspace: 'audit',
@@ -177,7 +193,45 @@ test('Edit Anything keeps the extracted frame on Character after Image draft iso
     state.setImageStudioIntent('new')
     state.setImageStudioIntent('character')
     assert.equal(useStore.getState().imageRefs[0]?.name, 'recast_frame.png')
+    state.skipAnchorPhase()
+    useStore.getState().setGenerationMode('image')
+    useStore.getState().setImageStudioIntent('character')
+    assert.equal(useStore.getState().imageRefs[0]?.name, 'old-character.png')
+    assert.equal(useStore.getState().imageStudioDrafts.character?.imageRefs[0]?.name, 'old-character.png')
   } finally {
+    await drainStoreFetches()
+    globalThis.fetch = originalFetch
+    useStore.setState(initial, true)
+  }
+})
+
+test('Edit Anything return drops a trip-only Character extract when there was no prior draft', async () => {
+  const initial = useStore.getState()
+  const originalFetch = globalThis.fetch
+  const model = {
+    model_type: 'qwen_image_21', name: 'Qwen', family: 'qwen', architecture: 'qwen_image_21',
+    is_i2v: false, is_t2v: false, is_downloaded: true,
+  }
+  globalThis.fetch = extractFrameFetch()
+  try {
+    useStore.setState({
+      generationMode: 'avatar', editSubMode: 'recast', activeWorkspace: 'audit',
+      editVideoPath: 'source.mp4', editVideoDuration: 3, editStartTime: 0, editEndTime: 3,
+      params: { ...initial.params, model_type: 'viggle_animate' },
+      selectedModelPerMode: { ...initial.selectedModelPerMode, image: 'qwen_image_21' },
+      families: [{ id: 'qwen', label: 'Qwen', order: 1 }], models: [model],
+      imageStudioIntent: 'chooser', imageRefs: [], imageStudioDrafts: {},
+      loadModelOptions: async () => {}, loadLoras: async () => {},
+    })
+    await useStore.getState().sendFrameToImageMode('recast')
+    assert.equal(useStore.getState().imageRefs[0]?.name, 'recast_frame.png')
+    useStore.getState().cancelAnchorReturn()
+    assert.equal(useStore.getState().imageStudioDrafts.character, undefined)
+    useStore.getState().setGenerationMode('image')
+    useStore.getState().setImageStudioIntent('character')
+    assert.deepEqual(useStore.getState().imageRefs, [])
+  } finally {
+    await drainStoreFetches()
     globalThis.fetch = originalFetch
     useStore.setState(initial, true)
   }
