@@ -517,6 +517,8 @@ class QwenImage21Pipeline:
             self._as_vae_tensor(source, width, height).to(device=device, dtype=dtype),
             generator,
         )
+        if batch_size > encoded.shape[0]:
+            encoded = encoded.repeat(batch_size, 1, 1, 1, 1)
         original = self._pack_latents(encoded, batch_size, num_channels_latents, latent_height, latent_width)
         strength = 1.0 if denoising_strength is None else float(denoising_strength)
         first_step = 0
@@ -697,6 +699,23 @@ class QwenImage21Pipeline:
 
         device = torch.device("cuda")
 
+        if VAE_tile_size is not None:
+            if isinstance(VAE_tile_size, int):
+                tiling_type = VAE_tile_size
+                VAE_tile_size = [False, 0] if tiling_type == 0 else [True, 256]
+            if VAE_tile_size[0]:
+                self.vae.enable_tiling(
+                    tile_sample_min_height=VAE_tile_size[1], tile_sample_min_width=VAE_tile_size[1],
+                    tile_sample_stride_height=VAE_tile_size[1] * 3 // 4,
+                    tile_sample_stride_width=VAE_tile_size[1] * 3 // 4,
+                )
+            elif hasattr(self.vae, "disable_tiling"):
+                self.vae.disable_tiling()
+            else:
+                self.vae.use_tiling = False
+        if hasattr(self.vae, "enable_slicing"):
+            self.vae.enable_slicing()
+
         # 1. Preprocess condition images: one resize feeds both the text encoder and the VAE.
         input_image_sizes, input_images, vae_images = [], None, None
         if image is not None:
@@ -727,6 +746,8 @@ class QwenImage21Pipeline:
                 "negative_prompt is passed but classifier-free guidance is not enabled since true_cfg_scale <= 1"
             )
 
+        if callback is not None:
+            callback(-1, phase_override="Encoding Prompt")
         prompt_embeds, prompt_embeds_mask, image_pad_mask = self.encode_prompt(
             image=input_images,
             prompt=prompt,
@@ -746,6 +767,8 @@ class QwenImage21Pipeline:
             )
 
         # 3. Prepare latents
+        if vae_images and callback is not None:
+            callback(-1, phase_override="Encoding Reference Images")
         num_channels_latents = self.transformer.config.in_channels
         latents, input_images_latents = self.prepare_latents(
             vae_images,
@@ -784,6 +807,8 @@ class QwenImage21Pipeline:
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
         self._num_timesteps = len(timesteps)
         source_image = image[0] if image else None
+        if image_mask is not None and source_image is not None and callback is not None:
+            callback(-1, phase_override="Encoding Source Image")
         edit_mask, original_image_latents, first_step, masked_steps = self._prepare_local_edit(
             image_mask,
             source_image,
@@ -822,24 +847,12 @@ class QwenImage21Pipeline:
         cond_cache = QwenImage21KVCache(num_blocks) if cache_enabled else None
         neg_cache = QwenImage21KVCache(num_blocks) if cache_enabled and do_true_cfg else None
 
-        if VAE_tile_size is not None:
-            if isinstance(VAE_tile_size, int):
-                tiling_type = VAE_tile_size
-                VAE_tile_size = [False, 0] if tiling_type == 0 else [True, 256]
-            if VAE_tile_size[0]:
-                self.vae.enable_tiling(tile_sample_min_height=VAE_tile_size[1], tile_sample_min_width=VAE_tile_size[1])
-            elif hasattr(self.vae, "disable_tiling"):
-                self.vae.disable_tiling()
-            else:
-                self.vae.use_tiling = False
-        if hasattr(self.vae, "enable_slicing"):
-            self.vae.enable_slicing()
-
         # 5. Denoising loop
         self.scheduler.set_begin_index(0)
         if callback is not None:
             from shared.utils.loras_mutipliers import update_loras_slists
-            update_loras_slists(self.transformer, loras_slists, len(timesteps))
+            if loras_slists is not None:
+                update_loras_slists(self.transformer, loras_slists, len(timesteps))
             callback(-1, None, True, override_num_inference_steps=len(timesteps))
 
         for i, t in enumerate(timesteps):
@@ -895,8 +908,8 @@ class QwenImage21Pipeline:
                 latents = latents.to(latents_dtype)
             if edit_mask is not None and original_image_latents is not None and i < masked_steps - 1:
                 next_t = timesteps[i + 1] if i < len(timesteps) - 1 else 0
-                noisy_source = original_image_latents * (1.0 - float(next_t) / 1000) + torch.randn_like(
-                    original_image_latents
+                noisy_source = original_image_latents * (1.0 - float(next_t) / 1000) + randn_tensor(
+                    original_image_latents.shape, generator=generator, device=device, dtype=latents.dtype
                 ) * (float(next_t) / 1000)
                 latents = noisy_source * (1 - edit_mask) + edit_mask * latents
 
@@ -914,9 +927,13 @@ class QwenImage21Pipeline:
                 callback(i, preview, False)
 
         self._current_timestep = None
+        if self.interrupt:
+            return None
         if output_type == "latent":
             image = latents
         else:
+            if callback is not None:
+                callback(len(timesteps) - 1, phase_override="VAE Decoding")
             latents = self._unpack_latents(latents, height, width, self.vae_scale_factor)
             latents = latents.to(self.vae.dtype)
             latents_mean = (

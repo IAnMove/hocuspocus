@@ -754,7 +754,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
             store,
         )
         self.assertIn(
-            "dependencies.resolveResolution(get().modelOptions, preset, get().aspectRatio)",
+            "dependencies.resolveResolution(state.modelOptions, preset, state.aspectRatio)",
             studio_configuration,
         )
         self.assertIn(

@@ -50,17 +50,20 @@
     "needSource": "Falta origen",
     "chooseCanvas": "Elige el lienzo",
     "addPrompt": "Añade un prompt",
+    "addPromptHint": "Escribe qué generar, o cómo cambiar la foto. El modelo no puede arrancar con el prompt vacío.",
     "addPrompts": "Añade prompts",
     "outpaintAreaHint": "Elige un formato de salida más grande o redimensiona el origen para crear un área que Outpaint pueda generar.",
     "referenceHint": "Añade al menos una referencia de imagen o vídeo. El audio no puede ser la única referencia.",
     "queuedCount": "{{count}} en cola",
     "queueCount": "Encolar {{count}}",
-    "goCount": "Ir ({{count}})",
+    "goCount": "Generar",
     "localUnavailable": "La generación local necesita NVIDIA",
-    "localUnavailableHint": "Este Mac sirve para editar y usar proveedores remotos. Abre el proyecto en un host NVIDIA Windows/Linux para generar en local."
+    "localUnavailableHint": "Este Mac sirve para editar y usar proveedores remotos. Abre el proyecto en un host NVIDIA Windows/Linux para generar en local.",
+    "activeCount": "{{count}} trabajos activos"
   },
   "prompt": {
     "placeholderImage": "Describe tu imagen...",
+    "placeholderImageEdit": "Describe el cambio, p. ej. añade a Mario al lado de Banjo...",
     "placeholderVideo": "Describe tu vídeo...",
     "placeholderAudio": "Escribe el texto a pronunciar o describe el audio...",
     "placeholderAvatar": "Describe la animación del avatar...",
@@ -503,12 +506,19 @@
     "newHint": "Crear desde el prompt, sin foto de origen.",
     "edit": "Editar imagen",
     "editHint": "Cambiar una foto que ya tienes.",
-    "character": "Personaje",
-    "characterHint": "Misma identidad con referencias.",
+    "character": "Referencias",
+    "characterHint": "Guiar el sujeto y el estilo con imágenes de referencia.",
     "loop": "Fondo en loop",
     "loopHint": "Panorama que se puede repetir.",
     "startOver": "Empezar de cero",
-    "canvas": "Lienzo {{size}}"
+    "canvas": "Lienzo {{size}}",
+    "incompatible": "Este modelo no admite este flujo. Elige uno de los modos disponibles u otro modelo.",
+    "changeModel": "Elige un modelo compatible"
+  },
+  "imageActions": {
+    "loadSettings": "Cargar ajustes",
+    "edit": "Editar esta imagen",
+    "reference": "Usar como referencia"
   },
   "imageFit": {
     "title": "Ajustar al modelo",
@@ -520,9 +530,14 @@
     "stretch": "Estirar",
     "apply": "Usar este recorte",
     "cancel": "Cancelar",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "failed": "No se pudo ajustar la imagen o la máscara. Vuelve a intentarlo."
   },
   "imageEdit": {
+    "method": "Método de inpainting",
+    "maskStrength": "Intensidad de la máscara",
+    "layers": "Número de capas",
+    "referenceLimit": "Este modelo admite hasta {{count}} imágenes de entrada, incluida la imagen a editar.",
     "title": "Herramientas de edición",
     "native2k": "2K nativo",
     "refs": "Hasta {{count}} referencias de identidad",
@@ -531,7 +546,7 @@
     "rgba": "Transparencia RGBA",
     "source": "Imagen a editar",
     "maskImage": "Máscara de edición (blanco = cambiar)",
-    "sourceHint": "Opcional. Elige una foto de tu equipo: se usa aquí, no entra en la galería hasta generar. Sin ella, 2.1 crea desde el prompt y las referencias.",
+    "sourceHint": "Elige la imagen a editar. Una foto de tu equipo se conserva en esta pestaña hasta que generes.",
     "outpaintMargins": "Márgenes de outpaint (arriba abajo izquierda derecha %)",
     "outpaintHint": "Hace falta una imagen origen. Amplía el lienzo para que el modelo genere los lados nuevos.",
     "denoising": "Fuerza de denoising",
@@ -1018,7 +1033,7 @@
       "title": "Paso 2 de 3 · Genera el fotograma sustituto",
       "references": "Conserva el fotograma original como referencia 1. Si quieres copiar la apariencia de otro personaje, añade su imagen como referencia 2.",
       "prompt": "Describe en el campo de texto qué personaje sustituir y cómo debe quedar. Usa un modelo de edición de imágenes que admita referencias.",
-      "generate": "Pulsa «Generar» o «Ir» en el botón azul inferior y espera a que termine la imagen. Añadir referencias todavía no realiza la sustitución.",
+      "generate": "Pulsa «Generar» en el botón azul inferior y espera a que termine la imagen. Añadir referencias todavía no realiza la sustitución.",
       "apply": "Revisa la última imagen generada y pulsa «Aplicar y volver». Volverás a Viggle para generar el vídeo.",
       "keepFrame": "Mantén la pose, el fondo y el encuadre del fotograma original. Deja la resolución y la proporción en Auto para conservar el lienzo del vídeo.",
       "exampleTitle": "Ejemplo de instrucción",
@@ -1117,5 +1132,11 @@
     "language": "El proveedor documenta inglés y chino; el español no está validado. El componente Qwen tiene condiciones de investigación/evaluación; consulta su licencia para uso comercial.",
     "steps": "Pasos de síntesis",
     "guidance": "Intensidad de seguimiento de instrucciones"
+  },
+  "imageResolution": {
+    "label": "Resolución",
+    "auto": "1K recomendado. Formato Auto sigue la imagen de edición; sin imagen, usa un lienzo cuadrado.",
+    "balanced": "1K recomendado: equilibrio entre velocidad, detalle y memoria en todos los formatos.",
+    "quality": "2K: aproximadamente 4× los píxeles de 1K. Tarda más y necesita más memoria. Consulta pasos y tiempo estimado en Actividad."
   }
 }

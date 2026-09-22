@@ -239,7 +239,7 @@ def redact_sensitive_data(value: Any, depth: int = 0) -> Any:
 
 
 def _bounded(value: Any, depth: int = 0) -> Any:
-    """Make task metadata JSON-safe and bounded without retaining prompts."""
+    """Bound metadata; only the explicit Activity display_prompt retains authored text."""
     if depth > 6:
         return None
     if isinstance(value, str):
@@ -253,6 +253,8 @@ def _bounded(value: Any, depth: int = 0) -> Any:
             lowered = str(key).lower()
             if lowered == "token_usage":
                 result[safe_key] = _normalize_token_usage(item)
+            elif lowered == "display_prompt" and isinstance(item, str):
+                result[safe_key] = _redact_string(item)[:32000]
             elif lowered not in {"prompt", "negative_prompt", "lyrics"} and not _is_sensitive_key(lowered):
                 result[safe_key] = _bounded(item, depth + 1)
         return result

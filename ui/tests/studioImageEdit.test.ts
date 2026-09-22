@@ -30,6 +30,7 @@ test('unlocks 2.1 image-generation tools from model options', () => {
     refs: true,
     maxRefs: 10,
     inpaint: true,
+    source: true,
     outpaint: true,
     rgba: true,
     twoK: true,
@@ -82,7 +83,7 @@ test('turns browser-local edit tokens into upload URLs', async () => {
 })
 
 test('turns Auto into a pixel canvas for image commands', () => {
-  assert.equal(concreteImageResolution('auto', 'qwen_image_21'), '2048x2048')
+  assert.equal(concreteImageResolution('auto', 'qwen_image_21'), '1024x1024')
   assert.equal(concreteImageResolution('auto_1080p', 'qwen_image_21'), '2048x2048')
   assert.equal(concreteImageResolution('auto', 'flux'), '1024x1024')
   assert.equal(concreteImageResolution('1921x1080'), '1920x1080')

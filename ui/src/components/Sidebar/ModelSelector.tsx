@@ -9,6 +9,10 @@ import type { ModelDef } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
 import { H3ModelName } from './H3ModelInfo'
 
+function displayName(model: ModelDef | undefined, savedName: string | undefined, modelType: string, fallback: string) {
+  return model?.name ?? savedName ?? (modelType || fallback)
+}
+
 export function ModelSelector() {
   const { t } = useUiTranslation('studio')
   const models = useStore(s => s.models)
@@ -17,6 +21,7 @@ export function ModelSelector() {
   const generationMode = useStore(s => s.generationMode)
   const editSubMode = useStore(s => s.editSubMode)
   const currentModelType = useStore(s => s.params.model_type)
+  const savedModelName = useStore(s => s.modelOptions?.model_type === s.params.model_type ? s.modelOptions.model_name : undefined)
   const selectModel = useStore(s => s.selectModel)
   const openModelVisibility = useStore(s => s.openModelVisibility)
   // Mature Mode gate: models with nsfw_only flag are hidden from the
@@ -81,7 +86,7 @@ export function ModelSelector() {
         className="w-full flex items-center gap-1.5 bg-bg-tertiary border border-border rounded-lg px-2.5 py-2 text-left hover:border-border-light transition-colors"
       >
         <span className="flex-1 min-w-0 truncate text-xs text-text-primary">
-          <H3ModelName modelType={currentModelType} fallback={currentModel?.name ?? t('model.select')} />
+          <H3ModelName modelType={currentModelType} fallback={displayName(currentModel, savedModelName, currentModelType, t('model.select'))} />
         </span>
         <ChevronDown size={14} className={`shrink-0 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>

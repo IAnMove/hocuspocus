@@ -178,6 +178,16 @@ test('normalize keeps the literal prompt and does not invent catalog fields', ()
   }
 })
 
+test('a blank image prompt fails before a generation job is created', async () => {
+  const intent = snapshotStudioImageIntent(imageSource({ params: { prompt: '   ' } }))
+  const { sent, ports } = recordingPorts()
+  await assert.rejects(
+    () => startStudioImageGeneration(intent, ports),
+    /addPromptHint|non-blank|prompt/i,
+  )
+  assert.equal(sent.length, 0)
+})
+
 test('the same frozen intent yields the same effective command and prompt', async () => {
   const intent = snapshotStudioImageIntent(imageSource({
     params: { image_guide: '/api/v1/uploads/guide.png' },
@@ -230,6 +240,33 @@ test('UI edits during await cannot mix the snapshotted image request', async () 
   assert.equal(sent[0].intent_id, 'frozen-intent')
   assert.equal(receipt?.result.job_id, 'job-frozen-intent')
   assert.equal(receipt?.result.task_id, 'task-frozen-intent')
+})
+
+test('replacing local source and mask during preparation cannot erase the frozen image command', async () => {
+  const { rememberLocalImage, forgetLocalImage } = await import('../src/lib/localEditImages.ts')
+  const source = rememberLocalImage(new File(['original source'], 'source.png', { type: 'image/png' }))
+  const mask = rememberLocalImage(new File(['original mask'], 'mask.png', { type: 'image/png' }))
+  const intent = snapshotStudioImageIntent(imageSource({ imageStudioIntent: 'edit', llmStatus: { loaded: true },
+    modelOptions: { inpaint_support: true }, params: { image_guide: source, image_mask: mask, video_prompt_type: 'VAG' } }))
+  const { sent, ports } = recordingPorts(), originalFetch = globalThis.fetch
+  const uploaded: string[] = []
+  globalThis.fetch = (async (_input, init) => {
+    const file = (init?.body as FormData).get('file') as File
+    uploaded.push(await file.text())
+    return new Response(JSON.stringify({ filename: file.name, url: `/api/v1/uploads/${file.name}` }))
+  }) as typeof fetch
+  let release!: () => void
+  try {
+    const started = startStudioImageGeneration(intent, { ...ports, unloadLlm: () => new Promise(resolve => { release = resolve }) })
+    forgetLocalImage(source)
+    forgetLocalImage(mask)
+    release()
+    await started
+    assert.equal(sent.length, 1)
+    assert.deepEqual(uploaded, ['original source', 'original mask'])
+    assert.equal(sent[0].input.params.image_guide, '/api/v1/uploads/source.png')
+    assert.equal(sent[0].input.params.image_mask, '/api/v1/uploads/mask.png')
+  } finally { globalThis.fetch = originalFetch; forgetLocalImage(source); forgetLocalImage(mask) }
 })
 
 test('the same intent is admitted once and retry keeps the same ids', async () => {

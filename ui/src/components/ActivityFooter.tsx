@@ -11,7 +11,7 @@ import { ActivityCompactBar } from '../features/activity/ActivityCompactBar'
 
 export function ActivityFooter() {
   const activeWorkspace = useStore(state => state.activeWorkspace)
-  const { tasks, tasksRef, busyIds, controlFailures, runControl } = useActivityTasks(activeWorkspace)
+  const { tasks, tasksRef, busyIds, controlFailures, runControl, loading, loadFailed } = useActivityTasks(activeWorkspace)
   const [historyWorkspace, setHistoryWorkspace] = useState(activeWorkspace)
   const [hiddenHistoryIds, setHiddenHistoryIds] = useState(() => readHiddenHistory(activeWorkspace))
   if (historyWorkspace !== activeWorkspace) {
@@ -58,6 +58,8 @@ export function ActivityFooter() {
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
       <ActivityDetailsPanel
         open={panel.detailsOpen}
+        loading={loading}
+        loadFailed={loadFailed}
         groups={groups}
         liveCount={liveGroups.length}
         historicalCount={groups.length - liveGroups.length}

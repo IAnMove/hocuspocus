@@ -75,6 +75,20 @@ def write_image(path: Path, color=(40, 80, 120)):
     Image.new("RGB", (17, 11), color).save(path)
 
 
+@pytest.mark.parametrize("identity", ["asset_saved", "/api/v1/assets/asset_saved"])
+def test_saved_asset_identity_restores_a_browser_url_in_its_source_workspace(resources_fixture, monkeypatch, identity):
+    fixture = resources_fixture
+    write_image(fixture["source"] / "reference.png")
+    url = "/api/v1/file/reference.png?workspace=source"
+    seen = []
+    def asset_url(value):
+        seen.append(value)
+        return url
+    monkeypatch.setattr(fixture["service"], "_asset_url", asset_url)
+    assert fixture["service"].canonicalize_legacy(identity) == url
+    assert seen == ["asset_saved"]
+
+
 def canonical_upload(name):
     return f"/api/v1/uploads/{name}"
 

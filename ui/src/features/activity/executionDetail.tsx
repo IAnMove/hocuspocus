@@ -2,6 +2,7 @@ import { AlertCircle, CheckCircle2, CircleSlash2, Copy, Loader2 } from 'lucide-r
 import { canResumeCanonicalTask, canonicalTaskVisualState } from '../../lib/canonicalTaskEvents'
 import { formatAppAction, formatAppTimestamp } from '../../lib/locale'
 import { useUiTranslation } from '../../i18n'
+import { ActivityReferenceImages } from './ActivityReferenceImages'
 import type { CanonicalTask } from '../../api/client'
 import {
   isLiveStatus,
@@ -202,6 +203,7 @@ function JobRow({
       <JobHeadline job={job} clock={clock} t={t} />
       <JobMeta child={child} t={t} onCopyId={onCopyId} />
       <JobPrompt child={child} t={t} onCopyPrompt={onCopyPrompt} />
+      <ActivityReferenceImages task={child} />
       {previous.map(attempt => (
         <AttemptRow key={attempt.id} attempt={attempt} inspected={attempt.id === inspectedAttemptId} />
       ))}
@@ -517,6 +519,7 @@ function GroupBody(props: ActivityExecutionDetailProps & { task: CanonicalTask; 
       </p>
       <GroupCopy recipe={generationRecipe(task)} initiator={generationInitiator(task)} resources={resourceSummary(task)} t={t} />
       <GroupPrompt task={task} t={t} onCopyPrompt={props.onCopyPrompt} />
+      <ActivityReferenceImages task={task} />
       {active ? <GroupActiveChild child={activeChild} clock={props.clock} t={t} /> : null}
       {props.group.recoveryReason ? <p role="status" className="mt-1 text-[9px] text-red-300">{t('lineage.recoveryReason', { reason: props.group.recoveryReason })}</p> : null}
       <GroupControlFailure task={task} failure={props.controlFailures[task.id]} busyIds={props.busyIds} onControl={props.onControl} t={t} tCommon={tCommon} />

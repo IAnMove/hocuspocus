@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
-import { localEditPreview, rememberLocalImage } from '../../lib/localEditImages'
+import { forgetLocalImage, localEditPreview, rememberLocalImage } from '../../lib/localEditImages'
 import { useStore } from '../../stores/useStore'
 
-type FitMode = 'contain' | 'cover' | 'stretch'
+import { fitFile, loadFitImage, paintFit, type FitMode } from '../../lib/imageFit'
 
 function modelCanvases(): string[] {
   const options = useStore.getState().modelOptions
@@ -20,27 +20,6 @@ function modelCanvases(): string[] {
   return [...values]
 }
 
-function paintFit(image: HTMLImageElement, width: number, height: number, mode: FitMode): HTMLCanvasElement {
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('canvas')
-  ctx.fillStyle = '#000'
-  ctx.fillRect(0, 0, width, height)
-  if (mode === 'stretch') {
-    ctx.drawImage(image, 0, 0, width, height)
-    return canvas
-  }
-  const scale = mode === 'cover'
-    ? Math.max(width / image.width, height / image.height)
-    : Math.min(width / image.width, height / image.height)
-  const drawW = image.width * scale
-  const drawH = image.height * scale
-  ctx.drawImage(image, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH)
-  return canvas
-}
-
 export function ImageFitDialog({
   source,
   onClose,
@@ -50,45 +29,59 @@ export function ImageFitDialog({
 }) {
   const { t } = useUiTranslation('studio')
   const setParams = useStore(s => s.setParams)
-  const setParam = useStore(s => s.setParam)
   const canvases = useMemo(() => modelCanvases(), [])
   const current = String(useStore.getState().params.resolution || canvases[0])
   const [target, setTarget] = useState(canvases.includes(current) ? current : canvases[0])
   const [mode, setMode] = useState<FitMode>('contain')
   const [preview, setPreview] = useState('')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const pending = useRef(false)
+  const active = useRef(true)
+  useEffect(() => { active.current = true; return () => { active.current = false } }, [])
   const src = localEditPreview(source)
 
   useEffect(() => {
-    const image = new Image()
-    image.onload = () => {
+    let cancelled = false
+    void loadFitImage(src).then(image => {
       const [width, height] = target.split('x').map(Number)
-      setPreview(paintFit(image, width, height, mode).toDataURL('image/jpeg', 0.85))
-    }
-    image.src = src
-  }, [src, target, mode])
+      if (!cancelled) setPreview(paintFit(image, width, height, mode).toDataURL('image/png'))
+    }).catch(() => { if (!cancelled) setError(t('imageFit.failed')) })
+    return () => { cancelled = true }
+  }, [src, target, mode, t])
 
   const apply = async () => {
-    const image = new Image()
-    image.src = src
-    await image.decode()
-    const [width, height] = target.split('x').map(Number)
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      paintFit(image, width, height, mode).toBlob(
-        value => value ? resolve(value) : reject(new Error('blob')),
-        'image/jpeg',
-        0.92,
-      )
-    })
+    if (pending.current) return
+    pending.current = true
     setBusy(true)
+    setError('')
+    const initial = useStore.getState()
+    const maskSource = String(initial.params.image_mask || '')
     try {
-      const file = new File([blob], 'fitted.jpg', { type: 'image/jpeg' })
+      const [image, mask] = await Promise.all([
+        loadFitImage(src), maskSource ? loadFitImage(localEditPreview(maskSource)) : null,
+      ])
+      const [width, height] = target.split('x').map(Number)
+      const [file, maskFile] = await Promise.all([
+        fitFile(paintFit(image, width, height, mode), 'fitted.png'),
+        mask ? fitFile(paintFit(mask, width, height, mode, image, true), 'fitted-mask.png') : null,
+      ])
+      const state = useStore.getState()
+      if (!active.current || state.imageStudioIntent !== 'edit'
+        || state.params.image_guide !== source || String(state.params.image_mask || '') !== maskSource
+        || state.params.model_type !== initial.params.model_type) return
       const token = rememberLocalImage(file)
-      setParams({ image_guide: token })
-      setParam('resolution', target)
+      const maskToken = maskFile ? rememberLocalImage(maskFile) : undefined
+      setParams({ image_guide: token, image_mask: maskToken, resolution: target })
+      useStore.setState({ imageSourceSize: { source: token, width, height } })
+      forgetLocalImage(source)
+      forgetLocalImage(maskSource)
       onClose()
+    } catch {
+      if (active.current) setError(t('imageFit.failed'))
     } finally {
-      setBusy(false)
+      pending.current = false
+      if (active.current) setBusy(false)
     }
   }
 
@@ -129,6 +122,7 @@ export function ImageFitDialog({
         {preview ? (
           <img src={preview} alt="" className="mt-3 max-h-48 w-full rounded-lg object-contain bg-black" />
         ) : null}
+        {error ? <p role="alert" className="mt-2 text-xs text-red-400">{error}</p> : null}
         <div className="mt-3 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs text-text-muted">{t('imageFit.cancel')}</button>
           <button type="button" disabled={busy} onClick={() => void apply()} className="rounded-lg bg-accent-blue px-3 py-1.5 text-xs text-white disabled:opacity-50">

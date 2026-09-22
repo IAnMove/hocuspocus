@@ -4,6 +4,7 @@ import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import type { AssetKind } from '../../api/assets'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
+import { ImagePreview } from '../common/ImagePreview'
 
 export type ToolsPanelTool = 'upscale' | 'revoice' | 'remove_background'
 export type ToolSource = {
@@ -57,6 +58,7 @@ export function ToolsSourcePanel(props: SourceProps) {
         placeholder={props.tool === 'revoice' ? t('tools.selectGallery') : t('tools.selectLibraryMedia')}
         items={props.items}
         value={value}
+        showPreview={false}
         accept={SOURCE_ACCEPT[props.tool]}
         workspaceId={workspaceId}
         optional
@@ -109,7 +111,7 @@ function SelectedSource({
   const { t } = useUiTranslation('studio')
   return (
     <div className="bg-bg-tertiary border border-border rounded-lg p-2 space-y-2">
-      {sourceUrl && <SourcePreview url={sourceUrl} kind={sourceKind} name={sourceName || ''} />}
+      {sourceUrl && <SourcePreview url={sourceUrl} kind={sourceKind} name={sourceName || ''} workspace={sourceWorkspace} />}
       <div className="flex items-center gap-2">
         {sourceKind === 'image'
           ? <ImageIcon size={12} className="text-accent-blue shrink-0" />
@@ -124,10 +126,12 @@ function SelectedSource({
   )
 }
 
-function SourcePreview({ url, kind, name }: { url: string; kind: ToolSource['kind']; name: string }) {
+function SourcePreview({ url, kind, name, workspace }: { url: string; kind: ToolSource['kind']; name: string; workspace?: string | null }) {
   return kind === 'image'
     ? <div className="overflow-hidden rounded-md bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px]">
-      <img src={url} alt={name} className="w-full max-h-64 object-contain" />
+      <ImagePreview image={{ url, name, workspace_id: workspace || undefined }} className="block w-full">
+        <img src={url} alt={name} className="w-full max-h-64 object-contain" />
+      </ImagePreview>
     </div>
     : <div className="rounded-md bg-[conic-gradient(#1c2330_25%,#343d4c_0_50%,#1c2330_0_75%,#343d4c_0)] bg-[length:16px_16px]"><video src={url} className="w-full rounded-md max-h-64" muted controls playsInline /></div>
 }

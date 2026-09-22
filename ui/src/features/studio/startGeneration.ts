@@ -23,6 +23,7 @@ import {
   type StudioImageResolvePorts,
 } from './prepareGeneration'
 import type { GenerationSubmissionContext } from './generationProvenance'
+import i18n from '../../i18n'
 
 export type { ScheduledPromptSubmission, StudioImageIntent, StudioImageIntentSource }
 
@@ -179,6 +180,10 @@ async function runStudioImageGeneration(
   scheduledPrompt?: ScheduledPromptSubmission,
   context?: GenerationSubmissionContext,
 ): Promise<GenerationReceiptLike | void> {
+  const prompt = String(scheduledPrompt?.prompt ?? intent.params.prompt ?? '').trim()
+  if (!prompt) {
+    throw new Error(i18n.t('studio:generate.addPromptHint'))
+  }
   await unloadLlmIfNeeded(intent, ports)
   const normalized = normalizeStudioImageParams(intent, scheduledPrompt, context)
   if (normalized.persistH3FirstFrame) ports.persistH3FirstFrame?.()
@@ -186,7 +191,7 @@ async function runStudioImageGeneration(
   const intentId = context?.commandId || ports.newIntentId()
   try {
     const prepared = await prepareStudioImageCommand(
-      normalized.params, intentId, ports.resolveReferences, errors,
+      normalized.params, intentId, ports.resolveReferences, errors, intent.localImageFiles,
     )
     return await sendPreparedImageCommand(prepared, intent, ports, scheduledPrompt, context)
   } catch (error) {

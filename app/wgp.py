@@ -4524,7 +4524,7 @@ def build_callback(state, pipe, send_cmd, status, num_inference_steps, preview_m
     _cumulative_total_locked = [False]  # once locked, total won't grow from overrides
     _current_pass_steps = [num_inference_steps]  # steps in current pass
     _first_override = [True]      # first override sets pass 1 (not an accumulation)
-    def callback(step_idx = -1, latent = None, force_refresh = True, read_state = False, override_num_inference_steps = -1, pass_no = -1, preview_meta=preview_meta, denoising_extra ="", progress_unit = None, total_steps_hint = -1):
+    def callback(step_idx = -1, latent = None, force_refresh = True, read_state = False, override_num_inference_steps = -1, pass_no = -1, preview_meta=preview_meta, denoising_extra ="", progress_unit = None, total_steps_hint = -1, phase_override = None):
         in_pause = False
         with gen_lock:
             process_status = gen.get("process_status", None)
@@ -4615,6 +4615,8 @@ def build_callback(state, pipe, send_cmd, status, num_inference_steps, preview_m
                 phase = "Aborting"    
             elif gen.get("early_stop", False):
                 phase = "Early Stop in progress"
+            elif phase_override is not None:
+                phase = phase_override
             elif step_idx  == num_inference_steps:
                 phase = "VAE Decoding"    
             else:

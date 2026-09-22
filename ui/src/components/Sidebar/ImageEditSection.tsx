@@ -1,21 +1,19 @@
 import { useUiTranslation } from '../../i18n'
-import { snapImageResolution } from '../../lib/imageResolution'
-import { forgetLocalImage, localEditPreview } from '../../lib/localEditImages'
-import { mergeVideoPromptLetters, studioImageEditCapabilities } from '../../lib/studioImageEdit'
+import { studioImageEditCapabilities } from '../../lib/studioImageEdit'
+import { setStudioImageMask, setStudioImageSource } from '../../features/studio/imageInputActions'
 import { useStore } from '../../stores/useStore'
 import { WangpMediaInput } from './WangpMediaInput'
+import { ImageEditControls } from './ImageEditControls'
 
 export function ImageEditSection() {
   const { t } = useUiTranslation('studio')
   const modelOptions = useStore(s => s.modelOptions)
   const params = useStore(s => s.params)
-  const setParams = useStore(s => s.setParams)
   const setParam = useStore(s => s.setParam)
   const capabilities = studioImageEditCapabilities(modelOptions)
   if (!capabilities) return null
-  if (!capabilities.inpaint && !capabilities.outpaint && !capabilities.rgba) return null
+  if (!capabilities.source && !capabilities.outpaint && !capabilities.rgba) return null
 
-  const flags = String(params.video_prompt_type || '')
   const source = String(params.image_guide || '')
   const mask = String(params.image_mask || '')
   const chips = [
@@ -43,59 +41,22 @@ export function ImageEditSection() {
       {capabilities.rgba && (
         <p className="text-[10px] text-text-muted">{t('imageEdit.rgbaHint')}</p>
       )}
-      {capabilities.inpaint && (
+      {capabilities.source && (
         <>
           <WangpMediaInput
             label={t('imageEdit.source')}
             kind="image"
             path={source}
             keepLocal
-            onChoose={item => {
-              if (!item) {
-                forgetLocalImage(source)
-                forgetLocalImage(mask)
-                setParams({
-                  image_guide: undefined,
-                  image_mask: undefined,
-                  video_prompt_type: mergeVideoPromptLetters(flags, '', 'VAG'),
-                })
-                return
-              }
-              const next = item.url || item.name
-              setParams({
-                image_guide: next,
-                video_prompt_type: mergeVideoPromptLetters(flags, mask ? 'VAG' : 'V', ''),
-              })
-              const previewUrl = localEditPreview(next)
-              if (previewUrl.startsWith('blob:') || previewUrl.startsWith('/api/') || previewUrl.startsWith('http')) {
-                const preview = new Image()
-                preview.onload = () => {
-                  useStore.getState().setParam('resolution', snapImageResolution(preview.width, preview.height, 2048))
-                }
-                preview.src = previewUrl
-              }
-            }}
+            onChoose={item => setStudioImageSource(item?.url || item?.name)}
           />
-          {source ? (
+          {source && capabilities.inpaint ? (
             <WangpMediaInput
               label={t('imageEdit.maskImage')}
               kind="image"
               path={mask}
               keepLocal
-              onChoose={item => {
-                if (!item) {
-                  forgetLocalImage(mask)
-                  setParams({
-                    image_mask: undefined,
-                    video_prompt_type: mergeVideoPromptLetters(flags, 'V', 'AG'),
-                  })
-                  return
-                }
-                setParams({
-                  image_mask: item.url || item.name,
-                  video_prompt_type: mergeVideoPromptLetters(flags, 'VAG', ''),
-                })
-              }}
+              onChoose={item => setStudioImageMask(item?.url || item?.name)}
             />
           ) : (
             <p className="text-[10px] text-text-muted">{t('imageEdit.sourceHint')}</p>
@@ -109,7 +70,7 @@ export function ImageEditSection() {
             className="mt-1 w-full rounded border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary"
             placeholder="0 0 0 0"
             value={String(params.video_guide_outpainting || '')}
-            onChange={event => setParam('video_guide_outpainting', event.target.value)}
+            onChange={event => setParam('video_guide_outpainting', event.target.value.trim() || undefined)}
           />
           <span className="mt-1 block text-[10px] text-text-muted">{t('imageEdit.outpaintHint')}</span>
         </label>
@@ -128,6 +89,7 @@ export function ImageEditSection() {
           />
         </label>
       ) : null}
+      <ImageEditControls />
     </section>
   )
 }

@@ -83,12 +83,14 @@ export interface Resolution {
 }
 
 export interface GenerateParams {
+  batch_size?: number
   viggle_audio_mode?: 'source' | 'generated'
   switch_threshold?: number
   video_mask?: string
   image_guide?: string
   image_mask?: string
   denoising_strength?: number
+  masking_strength?: number
   video_guide_outpainting?: string
   temporal_upsampling?: string
   wangp_processor_settings?: Record<string, unknown>
@@ -736,6 +738,7 @@ export interface SlidingWindowMemoryPolicy {
 }
 
 export interface ModelOptions {
+  model_name?: string
   wangp_1272?: boolean
   wangp_1272_capabilities?: { viggle: boolean; two_phase: boolean; grouped_mask: boolean; audio_refinement: boolean; vdn: boolean }
   model_type: string
@@ -827,6 +830,11 @@ export interface ModelOptions {
   max_image_refs?: number | null
   inpaint_support?: boolean
   image_ref_inpaint?: boolean
+  image_source_support?: boolean
+  image_source_required?: boolean
+  image_conditioning_required?: boolean
+  image_layer_count?: { min: number; max: number; default: number } | null
+  image_edit_modes?: { choices: [string, number][]; default: number; label: string; image_modes?: number[] } | null
   outpaint_support?: boolean
   native_rgba?: boolean
   sample_solvers: [string, string][] | null

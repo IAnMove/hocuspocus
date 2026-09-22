@@ -1,3 +1,6 @@
+import { concreteImageResolution, referenceImageResolution } from '../lib/imageResolution'
+import { IMAGE_INTENT_PARAMS, emptyImageStudioDraft, imageStudioDraft, type ImageStudioDraft } from '../features/studio/imageStudioIntent'
+import { beginImageSettingsChange, imageSettingsMode, restoreStudioImageSettings } from '../features/studio/imageSettingsRestore'
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
 import {
   H3_EXPERIMENTAL_MAX_FRAMES,
@@ -603,6 +606,12 @@ const _PRIMARY_MODEL_DEFAULT_FIELDS: ReadonlyArray<string> = [
 // Monotonic sequence for loadModelOptions staleness detection — only the
 // most recently requested model's options may touch the store.
 let _modelOptionsSeq = 0
+let _modelDefaultsSeq = 0
+export function invalidateModelOptionsLoad() { _modelOptionsSeq += 1; _modelDefaultsSeq += 1 }
+
+function currentModelDefaults(sequence: number, state: Pick<AppState, 'selectedModelPerMode' | 'generationMode'>, model: string) {
+  return sequence === _modelDefaultsSeq && state.selectedModelPerMode[state.generationMode] === model
+}
 
 function _applyModelDefaults(
   storeGet: () => { selectedModelPerMode: Partial<Record<GenerationMode, string>>; generationMode: GenerationMode; params: GenerateParams },
@@ -610,13 +619,13 @@ function _applyModelDefaults(
   modelType: string,
   preservedRecipe?: Partial<GenerateParams>,
 ): void {
+  const sequence = ++_modelDefaultsSeq
   api.fetchDefaults(modelType).then((d) => {
     if (!d || typeof d !== 'object') return
     // Race guard: model may have been switched again while this fetch
     // was in flight. Apply only if still the active model in current mode.
     const state = storeGet()
-    const active = state.selectedModelPerMode[state.generationMode]
-    if (active !== modelType) return
+    if (!currentModelDefaults(sequence, state, modelType)) return
     const overrides: Record<string, unknown> = {}
     for (const field of _PRIMARY_MODEL_DEFAULT_FIELDS) {
       // Audio references belong to the selected tab. A late defaults response
@@ -1165,6 +1174,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
   setGenerationMode: (mode: GenerationMode) => void
+  imageStudioDrafts: Partial<Record<import('../features/studio/imageStudioIntent').ImageStudioIntent, import('../features/studio/imageStudioIntent').ImageStudioDraft>>
   imageStudioIntent: import('../features/studio/imageStudioIntent').ImageStudioIntent
   setImageStudioIntent: (intent: import('../features/studio/imageStudioIntent').ImageStudioIntent) => void
   resetImageStudio: () => void
@@ -1259,6 +1269,9 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
      *  their existing image-mode workflow state. */
     savedImageRefs: File[]
     savedImageRefType: string
+    /** Isolated Character form from before this trip. Leaving Image persists
+     *  the extract over that draft; apply/skip/cancel put it back. */
+    savedCharacterDraft?: ImageStudioDraft
     modelType?: string
     sourceResolution?: string
     /** Only images published after entering this Viggle trip can be applied. */
@@ -2157,7 +2170,7 @@ export function resolveResolution(
     || '1280x720'
 }
 
-function findResolutionSelection(
+export function findResolutionSelection(
   resolution: string,
   modelOptions: ModelOptions | null,
 ): { preset: ResolutionPreset; ratio: AspectRatio } | null {
@@ -2237,6 +2250,18 @@ async function _syncGlobalProductionVideoFormat(
   })
 }
 
+function restoreCharacterDraft(
+  drafts: AppState['imageStudioDrafts'],
+  target: AppState['editReturnTarget'],
+) {
+  if (!target || !('savedCharacterDraft' in target)) return drafts
+  const saved = target.savedCharacterDraft
+  const imageStudioDrafts = { ...drafts }
+  if (saved) imageStudioDrafts.character = saved
+  else delete imageStudioDrafts.character
+  return imageStudioDrafts
+}
+
 export const useStore = create<AppState>((set, get) => {
   const developerMode = bindSlice(set, get, createDeveloperModeSlice)
   return {
@@ -2259,25 +2284,36 @@ export const useStore = create<AppState>((set, get) => {
   // Generation mode
   generationMode: 'video',
   imageStudioIntent: 'chooser' as import('../features/studio/imageStudioIntent').ImageStudioIntent,
-  setImageStudioIntent: intent => set({ imageStudioIntent: intent }),
-  resetImageStudio: () => {
+  imageStudioDrafts: {},
+  setImageStudioIntent: intent => {
     const state = get()
-    void import('../lib/localEditImages').then(({ forgetLocalImage }) => {
-      forgetLocalImage(String(state.params.image_guide || ''))
-      forgetLocalImage(String(state.params.image_mask || ''))
-    })
-    const flags = String(state.params.video_prompt_type || '').replace(/[VAG]/g, '')
+    if (state.imageStudioIntent === intent) return
+    const drafts = { ...state.imageStudioDrafts }
+    if (state.imageStudioIntent !== 'chooser') drafts[state.imageStudioIntent] = imageStudioDraft(state)
+    const draft = drafts[intent] || emptyImageStudioDraft(state.modelOptions)
+    const cleared = Object.fromEntries(IMAGE_INTENT_PARAMS.map(key => [key, undefined]))
     set({
-      imageStudioIntent: 'chooser',
-      imageRefs: [],
-      params: {
-        ...state.params,
-        image_guide: undefined,
-        image_mask: undefined,
-        video_guide_outpainting: undefined,
-        video_prompt_type: flags,
+      ...draft,
+      imageStudioIntent: intent, imageStudioDrafts: drafts,
+      params: { ...state.params, ...cleared,
+        prompt: '', negative_prompt: '',
+        video_prompt_type: '', image_prompt_type: 'T', denoising_strength: 1, masking_strength: 1,
+        ...draft.params,
+        resolution: concreteImageResolution(draft.params.resolution || resolveResolution(state.modelOptions, 'auto', 'auto'), state.params.model_type),
       },
     })
+  },
+  resetImageStudio: () => {
+    const state = get()
+    const drafts = [imageStudioDraft(state), ...Object.values(state.imageStudioDrafts)]
+    void import('../lib/localEditImages').then(({ forgetLocalImage }) => {
+      for (const draft of drafts) {
+        forgetLocalImage(String(draft.params.image_guide || ''))
+        forgetLocalImage(String(draft.params.image_mask || ''))
+      }
+    })
+    state.setImageStudioIntent('chooser')
+    set({ imageStudioDrafts: {} })
   },
   editSubMode: 'retake' as import('../types').EditSubMode,
   setEditSubMode: (mode: import('../types').EditSubMode, recastEngine?: 'scail' | 'viggle') => {
@@ -2476,6 +2512,12 @@ export const useStore = create<AppState>((set, get) => {
       const blob = await fetch(frameUrl).then(r => r.blob())
       const file = new File([blob], `${which}_frame.png`, { type: blob.type || 'image/png' })
       if (isViggle && get().activeWorkspace !== state.activeWorkspace) return
+      // Image now lands on the chooser and swaps drafts when an intent is
+      // picked. Leaving the frame on chooser meant Character restored an
+      // older draft and dropped this extract. Land on Character first so
+      // the write below replaces that draft instead of dying on chooser.
+      get().setImageStudioIntent('character')
+      const savedCharacterDraft = get().imageStudioDrafts.character
       set(s => ({
         // Replace any pre-existing refs with just our extracted frame
         // for the duration of the round-trip. Restored from the
@@ -2497,6 +2539,7 @@ export const useStore = create<AppState>((set, get) => {
           endTime,
           savedImageRefs,
           savedImageRefType,
+          savedCharacterDraft,
           modelType: state.params.model_type,
           sourceResolution: state.editVideoResolution,
           ...(isViggle ? { viggleEditSession: {
@@ -2567,6 +2610,7 @@ export const useStore = create<AppState>((set, get) => {
       editReturnTarget: null,
       imageRefs: target.savedImageRefs,
       imageRefType: target.savedImageRefType,
+      imageStudioDrafts: restoreCharacterDraft(get().imageStudioDrafts, target),
     })
   },
   skipAnchorPhase: () => {
@@ -2583,6 +2627,7 @@ export const useStore = create<AppState>((set, get) => {
           : 'edit_anything',
       editReturnTarget: null,
       ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
+      imageStudioDrafts: restoreCharacterDraft(get().imageStudioDrafts, target),
     })
   },
   cancelAnchorReturn: () => {
@@ -2596,6 +2641,7 @@ export const useStore = create<AppState>((set, get) => {
           : 'edit_anything',
       editReturnTarget: null,
       ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
+      imageStudioDrafts: restoreCharacterDraft(get().imageStudioDrafts, target),
     })
   },
   editRetakeEngine: 'native' as const,
@@ -2747,6 +2793,11 @@ export const useStore = create<AppState>((set, get) => {
   savedPromptPerMode: {} as Partial<Record<string, string>>,
 
   setGenerationMode: (mode) => {
+    const imageState = get()
+    if (imageState.generationMode === 'image' && mode !== 'image' && imageState.imageStudioIntent !== 'chooser') {
+      set({ imageStudioDrafts: { ...imageState.imageStudioDrafts, [imageState.imageStudioIntent]: imageStudioDraft(imageState) } })
+    }
+
     // Tools is a non-generative post-processing area — it owns no model, so
     // skip the per-mode model/LoRA/params RESTORE machinery entirely. We still
     // SAVE the leaving mode's state (prompt / model / LoRAs / params snapshot)
@@ -3414,10 +3465,25 @@ export const useStore = create<AppState>((set, get) => {
     // working set, and PREPOPULATE the prompt (a real, editable value — not
     // placeholder text) so the user just tweaks the subject. Seed and repeat
     // reset so a recipe reproduces a look, not a specific frame.
+    const recipeChange = beginImageSettingsChange(get)
     const recipe = await api.fetchRecipe(id)
     const { models } = get()
     const model = models.find(m => m.model_type === recipe.model_type)
     const mode = model ? getModelMode(recipe.model_type, model.family) : ((recipe.mode as GenerationMode) || 'video')
+    if (mode === 'image') {
+      if (!recipeChange.current()) throw new Error('The image form changed while loading the recipe')
+      _modelOptionsSeq += 1
+      set({ modelOptionsLoading: false })
+      const restored = await restoreStudioImageSettings({ ...recipe.params, model_type: recipe.model_type,
+        prompt: recipe.prompt_example || '', seed: -1,
+        activated_loras: (recipe.loras || []).map(item => item.filename),
+        loras_multipliers: (recipe.loras || []).map(item => String(item.multiplier ?? 1)).join(' '),
+      }, get().activeWorkspace, get, set)
+      if (!restored) throw new Error('The image form changed while loading the recipe')
+      await get().loadLoras(recipe.model_type)
+      const present = new Set(get().availableLoras.map(name => name.replace(/\\/g, '/').split('/').pop()))
+      return { missing: (recipe.loras || []).filter(item => !present.has(item.filename)) }
+    }
 
     const activated = (recipe.loras || []).map(l => l.filename)
     const multipliers = (recipe.loras || []).map(l => String(l.multiplier ?? '1.0')).join(' ')
@@ -3444,7 +3510,7 @@ export const useStore = create<AppState>((set, get) => {
         repeat_generation: 1,
         // Recipes are look presets — land in the base Studio sub-mode
         // (Frames for video, image-output for image), not Extend/Blend.
-        image_mode: mode === 'image' ? 1 : 0,
+        image_mode: 0,
       },
       loraWeights,
       availableLoras: [],
@@ -3719,6 +3785,13 @@ export const useStore = create<AppState>((set, get) => {
   },
   loadModels: async () => {
     try {
+      // A download/catalog refresh is not a new Studio session. Keep the
+      // live draft, selected model and options, even for a now-hidden model.
+      if (get().modelsLoaded) {
+        const catalog = await api.fetchModels()
+        set({ families: catalog.families, models: [...catalog.models, ...SFX_VIRTUAL_MODELS] })
+        return
+      }
       // The backend catalog is the single source for Hunyuan3D models too:
       // /api/v1/models already lists them (family included) with real
       // download state, so re-adding them from the capabilities endpoint
@@ -5902,8 +5975,10 @@ export const useStore = create<AppState>((set, get) => {
     set({ lorasLoading: true })
     try {
       const data = await api.fetchLoras(modelType)
+      if (get().params.model_type !== modelType) return
       set({ availableLoras: data.loras, lorasLoading: false })
     } catch {
+      if (get().params.model_type !== modelType) return
       set({ availableLoras: [], lorasLoading: false })
     }
   },
@@ -6283,6 +6358,11 @@ export const useStore = create<AppState>((set, get) => {
           nextResolutionPreset,
           nextAspectRatio,
         )
+        const sourceSize = activeState.imageSourceSize
+        if (modelType.startsWith('qwen_image_21') && nextAspectRatio === 'auto'
+          && sourceSize && sourceSize.source === activeState.params.image_guide) {
+          paramUpdates.resolution = referenceImageResolution(sourceSize.width, sourceSize.height, nextResolutionPreset, modelType)
+        }
       } else if (
         nextAspectRatio === 'auto'
         && activeState.generationMode !== 'image'
@@ -6334,6 +6414,10 @@ export const useStore = create<AppState>((set, get) => {
       }
       if (options.default_guidance_scale != null) {
         paramUpdates.guidance_scale = options.default_guidance_scale
+      }
+      if (get().generationMode === 'image') {
+        paramUpdates.model_mode = options.image_edit_modes?.default ?? 0
+        paramUpdates.batch_size = options.image_layer_count?.default ?? 1
       }
       // Flow shift is model-specific but was never applied on model switch,
       // so it carried over from whichever model was selected before.
@@ -8741,6 +8825,11 @@ export const useStore = create<AppState>((set, get) => {
     }
 
     // Determine generation mode from model (respects per-model avatar overrides)
+    if (imageSettingsMode(p, get())) {
+      _modelOptionsSeq += 1
+      set({ modelOptionsLoading: false })
+      return restoreStudioImageSettings(p, source?.workspace || get().activeWorkspace, get, set, restore.isCurrent)
+    }
     const model = models.find(m => m.model_type === modelType)
     if (model) {
       const mode = getModelMode(modelType, model.family)
@@ -9029,6 +9118,11 @@ export const useStore = create<AppState>((set, get) => {
 
     set(s => ({
       params: { ...s.params, ...newParams },
+      ...(s.generationMode === 'image' ? {
+        imageStudioIntent: newParams.image_guide ? 'edit' as const
+          : newParams.image_refs?.length ? 'character' as const : 'new' as const,
+        imageSourceSize: null,
+      } : {}),
       h3WindowPlan: restoredH3WindowPlan,
       loraWeights,
       startImage: null,

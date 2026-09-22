@@ -131,6 +131,8 @@ def test_generation_adapter_publishes_exact_story_song_identity():
 
     namespace = {
         "time": __import__("time"),
+        "os": __import__("os"),
+        "_workspace_dir": lambda workspace: str(Path("/tmp/activity-test") / workspace),
         "_public_generation_details": lambda _params: {
             "generation_mode": "audio",
             "model_type": "ace_step_v1_5_xl_sft_lm_4b",

@@ -206,7 +206,7 @@ export function DirectGenerationWorkspace() {
 
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.instructions')}</h3>
         {/* Prompt area (non-edit modes, skip for SFX/Mixer/Music which have their own UI) */}
-        {!imageChooser && !isEdit && !(isAudio && (audioSubMode === 'sfx' || audioSubMode === 'mixer' || audioSubMode === 'music')) && (isMultiClip ? <MultiClipEditor /> : <PromptInput />)}
+        {!isImage && !imageChooser && !isEdit && !(isAudio && (audioSubMode === 'sfx' || audioSubMode === 'mixer' || audioSubMode === 'music')) && (isMultiClip ? <MultiClipEditor /> : <PromptInput />)}
         <StudioCommandPanels mode={generationMode} audioSubMode={audioSubMode}
           workspace={workspace || 'default'} model={String(modelType)}
           visible={studioUnobscured && (!isMobile || sidebarOpen)} />
@@ -255,7 +255,7 @@ export function DirectGenerationWorkspace() {
           </div>
           {!imageChooser && !(isAudio && audioSubMode === 'mixer') && (
             <div className="shrink-0">
-              <GenerateButton />
+              {!(isImage && imageStudioIntent === 'loop') && <GenerateButton />}
             </div>
           )}
         </div>

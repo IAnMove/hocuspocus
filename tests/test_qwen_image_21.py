@@ -67,16 +67,26 @@ class TestQwenImage21Definitions(unittest.TestCase):
         self.assertTrue(model_def["background_removal_label"])
         self.assertEqual(model_def["resolution_presets"]["1080p"]["label"], "2K")
         self.assertEqual(model_def["resolution_presets"]["1080p"]["values"]["1:1"], "2048x2048")
-        self.assertEqual(model_def["resolution_presets"]["auto"]["values"]["1:1"], "2048x2048")
+        self.assertEqual(model_def["resolution_presets"]["auto"]["values"]["1:1"], "1024x1024")
         self.assertEqual(model_def["resolution_preset_order"], ["auto", "720p", "1080p"])
         self.assertIn("KI", [choice[1] for choice in model_def["image_ref_choices"]["choices"]])
+
+    def test_every_qwen_canvas_is_aligned_and_invalid_custom_size_is_rejected(self):
+        presets = self.handler.query_model_def("qwen_image_21", {})["resolution_presets"]
+        for preset in presets.values():
+            for size in preset["values"].values():
+                width, height = map(int, size.split("x"))
+                self.assertEqual(width % 32, 0)
+                self.assertEqual(height % 32, 0)
+                self.assertIsNone(self.handler.validate_generative_settings("qwen_image_21", {}, {"resolution": size}))
+        self.assertIn("divisible by 32", self.handler.validate_generative_settings("qwen_image_21", {}, {"resolution": "1280x720"}))
 
     def test_defaults_point_at_comfy_and_gguf_weights(self):
         payload = json.loads((_APP / "defaults" / "qwen_image_21.json").read_text(encoding="utf-8"))
         self.assertEqual(payload["model"]["architecture"], "qwen_image_21")
         self.assertEqual(payload["num_inference_steps"], 40)
         self.assertEqual(payload["guidance_scale"], 1)
-        self.assertEqual(payload["resolution"], "2048x2048")
+        self.assertEqual(payload["resolution"], "1024x1024")
         self.assertIn("4090", payload["model"]["selector_help"])
         self.assertEqual(payload["model"]["resource_requirements"]["vram_gb"], 16)
         self.assertTrue(any("qwen_image_2.1_int8_convrot.safetensors" in url for url in payload["model"]["URLs"]))
@@ -102,7 +112,7 @@ class TestQwenImage21Definitions(unittest.TestCase):
                 self.assertIn(weight, item["model"]["URLs"][0])
                 if "uncensored" in filename:
                     self.assertFalse(item["model"].get("nsfw_only", False))
-                    self.assertIn("abenzerps/Qwen-Image-2.1-Uncensored-GGUF", item["model"]["URLs"][0])
+                    self.assertIn("abenzerps/Qwen-Image-2.1-GGUF", item["model"]["URLs"][0])
                 self.assertEqual(item["model"]["preload_URLs"], "qwen_image_21")
                 self.assertTrue(item["model"]["selector_help"])
                 self.assertIn("vram_gb", item["model"]["resource_requirements"])
@@ -168,7 +178,9 @@ class TestQwenImage21Definitions(unittest.TestCase):
         store = _read(root / "ui" / "src" / "stores" / "useStore.ts")
         self.assertIn('"inpaint_support": bool(md.get("inpaint_support", False))', launch)
         self.assertIn('"native_rgba": bool(md.get("native_rgba", False))', launch)
-        self.assertIn("1 in md.get(\"video_guide_outpainting\")", launch)
+        from services.image_edit_workflow import image_edit_capabilities
+        self.assertTrue(image_edit_capabilities(self.handler.query_model_def("qwen_image_21", {}))["outpaint_support"])
+        self.assertTrue(image_edit_capabilities(self.handler.query_model_def("qwen_image_edit_20B", {}))["outpaint_support"])
         self.assertIn("inpaint_support?: boolean", types_source)
         self.assertIn("native_rgba?: boolean", types_source)
         panel = _read(root / "ui" / "src" / "components" / "Sidebar" / "ImageStudioPanel.tsx")

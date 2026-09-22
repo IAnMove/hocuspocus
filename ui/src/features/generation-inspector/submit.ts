@@ -42,6 +42,8 @@ export async function submitInspectorPlan(plan: ClonePlan, recipe: PortableRecip
   const options = { submissionContext: { actor: 'user' as const, commandId: plan.intentId, runId: plan.generationId } }
   const mode = params.generation_mode || (params.image_mode === 1 ? 'image' : recipe.mode)
   if (mode === 'image') {
+    // Saved native inpainting outputs use mode 2; the public image command uses mode 1.
+    params.image_mode = 1
     return (await submitImageGenerationCommand(createStudioImageGenerationCommand(params, plan.intentId), options)).result.task_id
   }
   if (mode === 'video') {

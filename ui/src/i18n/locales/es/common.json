@@ -108,5 +108,27 @@
     "recentHint": "Una frase por PR, lo más reciente arriba. Desplaza la lista para verlos todos.",
     "enter": "Entrar al estudio",
     "closeAria": "Cerrar"
+  },
+  "imagePreview": {
+    "open": "Ampliar {{name}}",
+    "title": "Información de la imagen",
+    "download": "Descargar imagen",
+    "loading": "Cargando información de la imagen…",
+    "failed": "No se ha podido cargar la imagen.",
+    "infoFailed": "La información de la imagen no está disponible.",
+    "noInfo": "Esta imagen no tiene metadatos de generación disponibles.",
+    "allInfo": "Toda la información guardada",
+    "fields": {
+      "model_type": "Modelo",
+      "resolution": "Resolución",
+      "seed": "Semilla",
+      "num_inference_steps": "Pasos",
+      "guidance_scale": "Guía"
+    }
+  },
+  "runtimeUpdate": {
+    "message": "Se ha detectado una actualización o un reinicio del servidor. Conservamos tu formulario. Recarga cuando termines; se borrarán los cambios sin enviar.",
+    "reload": "Recargar ahora",
+    "later": "Más tarde"
   }
 }

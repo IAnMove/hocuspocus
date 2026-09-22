@@ -9,6 +9,9 @@ import {
 } from './generationSpec'
 import { generationProvenancePayload, type GenerationSubmissionContext } from './generationProvenance'
 import { translateLegacyImageGuides } from './imageCommandSubmission'
+import { supportsImageIntent } from './imageStudioIntent'
+import { storedImageFileUrl } from '../../lib/storedImageFiles'
+import { materializeLocalEditFields, snapshotLocalEditFiles } from '../../lib/localEditImages'
 
 const MEDIA_FIELDS = ['image_refs', 'image_start', 'image_end', 'image_guide', 'image_mask'] as const
 
@@ -43,6 +46,7 @@ export type StudioImageIntent = {
   generationMode: 'image'
   activeWorkspace: string
   params: Record<string, unknown>
+  localImageFiles?: ReadonlyMap<string, File>
   model: StudioImageModelFlags
   models: Array<{ model_type: string; name: string }>
   llmLoaded: boolean
@@ -69,6 +73,7 @@ export type StudioImageIntent = {
 
 export type StudioImageIntentSource = {
   generationMode: string
+  imageStudioIntent?: import('./imageStudioIntent').ImageStudioIntent
   activeWorkspace?: string
   params?: Record<string, unknown>
   modelOptions?: {
@@ -81,6 +86,12 @@ export type StudioImageIntentSource = {
     reference_pipeline?: boolean
     minimax_h3_text_encoder_choices?: unknown[] | null
     sliding_window_auto_prompt_pacing?: boolean
+    image_ref_inpaint?: boolean
+    inpaint_support?: boolean
+    image_source_support?: boolean
+    image_source_required?: boolean
+    image_conditioning_required?: boolean
+    image_ref_choices?: import('../../types').ChoiceConfig | null
   } | null
   models?: Array<{ model_type: string; name: string }>
   llmStatus?: { loaded?: boolean } | null
@@ -211,15 +222,54 @@ function snapshotFinish(source: StudioImageIntentSource): Pick<
   }
 }
 
+function validateImageIntent(source: StudioImageIntentSource): void {
+  if (!source.imageStudioIntent) return
+  if (!supportsImageIntent(source.imageStudioIntent, source.modelOptions)) throw new Error(i18n.t('studio:imageIntent.incompatible'))
+  if (source.imageStudioIntent === 'edit' && !source.params?.image_guide) throw new Error(i18n.t('studio:generate.needSource'))
+  const references = source.imageRefs?.length || source.params?.image_refs
+  if (source.imageStudioIntent === 'character' && !(Array.isArray(references) ? references.length : references)) {
+    throw new Error(i18n.t('studio:generate.needReference'))
+  }
+}
+
 /** Freeze the Studio image form. Later store reads must not mix this request. */
 export function snapshotStudioImageIntent(source: StudioImageIntentSource): StudioImageIntent {
   if (source.generationMode !== 'image') {
     throw new Error('Studio image generation requires generationMode image')
   }
+  source = { ...source, params: detachParams(source.params || {}) }
+  if (source.imageStudioIntent && source.imageStudioIntent !== 'chooser') {
+    const params = source.params!
+    validateImageIntent(source)
+    const edit = source.imageStudioIntent === 'edit'
+    const refs = source.imageStudioIntent === 'character' || (edit && source.modelOptions?.image_ref_inpaint === true)
+    if (!edit) {
+      for (const key of ['image_guide', 'image_mask', 'video_guide', 'video_mask', 'video_guide_outpainting']) delete params[key]
+      params.denoising_strength = 1
+      params.masking_strength = 1
+    }
+    if (!refs) {
+      delete params.image_refs
+      delete params.remove_background_images_ref
+      source.imageRefs = []
+      source.imageRefType = ''
+      source.removeBackgroundRefs = false
+    }
+    delete params.image_start
+    delete params.image_end
+    source.startImage = null
+    source.endImage = null
+    source.clips = []
+    params.image_prompt_type = 'T'
+    let flags = String(params.video_prompt_type || '')
+    for (const letter of edit ? (refs ? '' : 'KI') : refs ? 'VAG' : 'VAGKI') flags = flags.replaceAll(letter, '')
+    params.video_prompt_type = flags
+  }
   return {
     generationMode: 'image',
     activeWorkspace: source.activeWorkspace || 'default',
     params: detachParams({ ...(source.params as Record<string, unknown> | undefined || {}) }),
+    localImageFiles: snapshotLocalEditFiles(source.params!, [...MEDIA_FIELDS, 'video_guide', 'video_mask']),
     model: snapshotModelFlags(source.modelOptions),
     models: [...(source.models || [])],
     llmLoaded: source.llmStatus?.loaded === true,
@@ -536,7 +586,7 @@ async function uploadLiveImageRefs(
   const refPaths: string[] = []
   for (const file of intent.imageRefs) {
     try {
-      refPaths.push((await ports.uploadImage(file)).url)
+      refPaths.push(storedImageFileUrl(file) || (await ports.uploadImage(file)).url)
     } catch (error) {
       errors.push(String(error))
       console.error('Failed to upload reference image:', error)
@@ -663,12 +713,12 @@ export async function prepareStudioImageCommand(
   intentId: string,
   resolveReferences: (references: unknown[]) => Promise<string[]>,
   referenceErrors: string[] = [],
+  localImageFiles?: ReadonlyMap<string, File>,
 ): Promise<{ command: StudioImageGenerationCommand; params: Record<string, unknown> }> {
   if (referenceErrors.length) throw new Error(i18n.t('studio:commands.referenceFailed'))
   const snapshot = JSON.parse(stableSerialize(params)) as Record<string, unknown>
   translateLegacyImageGuides(snapshot)
-  const { materializeLocalEditFields } = await import('../../lib/localEditImages')
-  await materializeLocalEditFields(snapshot, MEDIA_FIELDS)
+  await materializeLocalEditFields(snapshot, MEDIA_FIELDS, localImageFiles)
   await applyCanonicalImageReferences(snapshot, resolveReferences)
   const command = createStudioImageGenerationCommand(snapshot, intentId)
   return {

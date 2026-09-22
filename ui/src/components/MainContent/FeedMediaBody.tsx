@@ -2,11 +2,13 @@ import React, { useCallback, type ReactNode, type RefObject, type SyntheticEvent
 import { BookOpen, Box, Film, Play } from 'lucide-react'
 import { getFileUrl } from '../../api/client'
 import type { OutputFile } from '../../types'
+import { ImagePreview } from '../common/ImagePreview'
 
 const MEDIA_FIT = 'mx-auto block h-auto w-auto max-w-full object-contain'
 
 type FeedMediaBodyProps = {
   file: OutputFile
+  workspace?: string
   isActive: boolean
   maxMediaHeight?: number
   videoReady: boolean
@@ -151,7 +153,7 @@ export function FeedMediaBody(props: FeedMediaBodyProps) {
 function renderFeedMedia({
   file, isActive, maxMediaHeight, videoReady, videoRef, onPlay, onIntrinsicSize, onImageLoad,
   isScene, isComic, isModel3d, canPreviewModel3d, isRigged, riggedClips, activeClip, setActiveClip,
-  retryImage,
+  retryImage, workspace,
 }: FeedMediaBodyProps) {
   const maxHeight = maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }
   if (file.type === 'video') {
@@ -202,5 +204,7 @@ function renderFeedMedia({
       />
     )
   }
-  return retryImage(isActive ? file.url : (file.thumbnail_url || file.url))
+  return <ImagePreview image={{ ...file, workspace_id: workspace }} className="block max-w-full cursor-zoom-in">
+    {retryImage(isActive ? file.url : (file.thumbnail_url || file.url))}
+  </ImagePreview>
 }

@@ -2,7 +2,7 @@ import * as api from '../../api/client'
 import type { GenerationReceiptLike } from '../../api/generationCommandClient'
 import i18n from '../../i18n'
 import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
-import { getFamiliesForMode, getModelsForFamily, useStore } from '../../stores/useStore'
+import { getFamiliesForMode, getModelsForFamily, useStore, type AppState } from '../../stores/useStore'
 import type { ModelDef } from '../../types'
 import type {
   AttachStudioReferencesCommand,
@@ -15,7 +15,9 @@ import type {
 } from './commands'
 import { sfxPackContexts, sfxPackResult } from './sfxPackResult'
 import { hidesDirectGenerationSidebar } from '../../lib/navigationCategories'
-import { mergeVideoPromptLetters } from '../../lib/studioImageEdit'
+import { setStudioImageMask, setStudioImageSource } from './imageInputActions'
+import { beginImageSettingsChange } from './imageSettingsRestore'
+import { restoreImageFile } from '../../lib/storedImageFiles'
 import {
   generationProvenancePayload,
   type GenerationSubmissionContext,
@@ -273,6 +275,11 @@ export async function prepareImage(action: PrepareImageCommand): Promise<Command
   await useStore.getState().loadModelOptions(selected.model_type)
 
   state = useStore.getState()
+  // Always land on the workflow this prepare asked for. Isolation now rejects
+  // Character without refs and Edit without a source, and a leftover canvas
+  // would silently img2img a "create this" request. attach_* still switches
+  // to edit/character after this when the turn includes those roles.
+  state.setImageStudioIntent(action.outpaintMargins ? 'edit' : 'new')
   state.setStartImage(null)
   state.setEndImage(null)
   state.setOutputCount(action.outputCount ?? 1)
@@ -484,10 +491,7 @@ async function namedImageOutputs(names: string[]): Promise<Array<{ name: string;
 async function imageOutputFiles(names: string[]): Promise<File[]> {
   const files: File[] = []
   for (const item of await namedImageOutputs(names)) {
-    const response = await fetch(item.url)
-    if (!response.ok) throw new Error(`No pude leer la imagen “${item.name}” para usarla como referencia.`)
-    const blob = await response.blob()
-    files.push(new File([blob], item.name, { type: blob.type || 'image/png' }))
+    files.push((await restoreImageFile(item.url, workspaceId())).file)
   }
   return files
 }
@@ -500,27 +504,21 @@ async function attachImageEditCanvas(
   if (state.generationMode !== 'image') {
     throw new Error('La edición local de imagen sólo está disponible en Studio → Image.')
   }
-  if (!state.modelOptions?.inpaint_support) {
+  if (!state.modelOptions?.inpaint_support && !state.modelOptions?.image_source_support) {
     throw new Error(`${selectedName} no admite una imagen origen o una máscara de edición.`)
   }
+  const change = beginImageSettingsChange(useStore.getState)
   const [item] = await namedImageOutputs(action.outputNames.slice(0, 1))
-  const flags = String(state.params.video_prompt_type || '')
+  if (!change.current()) throw new Error('El formulario cambió mientras se cargaba la imagen.')
+  state.setImageStudioIntent('edit')
   if (action.role === 'edit_source') {
-    const keepMask = action.replaceExisting ? undefined : state.params.image_mask
-    state.setParams({
-      image_guide: item.url,
-      image_mask: keepMask,
-      video_prompt_type: mergeVideoPromptLetters(flags, keepMask ? 'VAG' : 'V', action.replaceExisting ? 'AG' : ''),
-    })
+    setStudioImageSource(item.url)
     return studioResult('image', 'Image', `He adjuntado “${item.name}” como imagen a editar en Studio → Image.`)
   }
-  if (!state.params.image_guide) {
+  if (!useStore.getState().params.image_guide) {
     throw new Error('Adjunta primero la imagen origen (edit_source) y después la máscara.')
   }
-  state.setParams({
-    image_mask: item.url,
-    video_prompt_type: mergeVideoPromptLetters(flags, 'VAG', ''),
-  })
+  setStudioImageMask(item.url)
   return studioResult('image', 'Image', `He adjuntado “${item.name}” como máscara de edición (blanco = cambiar).`)
 }
 
@@ -531,17 +529,34 @@ function clearImageReferences(): void {
   }
 }
 
+function selectedVisualModel(state: AppState) {
+  const selectedModel = state.models.find(model => model.model_type === state.params.model_type)
+    || (state.generationMode === 'image' && state.modelOptions?.model_type === state.params.model_type
+      ? { name: state.modelOptions.model_name || state.params.model_type, is_i2v: false } : undefined)
+  if (!selectedModel) throw new Error('Studio no tiene un modelo de imagen/vídeo válido seleccionado.')
+  return selectedModel
+}
+
+function validateReferenceBudget(state: AppState, action: AttachStudioReferencesCommand, count: number, name: string) {
+  const limit = state.modelOptions?.max_image_refs
+  const existing = (action.replaceExisting ? 0 : state.imageRefs.length) + (state.params.image_guide ? 1 : 0)
+  if (limit != null && existing + count > limit) {
+    throw new Error(`${name} admite como máximo ${limit} referencias; se solicitaron ${existing + count}.`)
+  }
+}
+
 export async function attachStudioReferences(action: AttachStudioReferencesCommand): Promise<CommandResult> {
   let state = useStore.getState()
   if (state.generationMode !== 'image' && state.generationMode !== 'video') {
     throw new Error('Las referencias visuales sólo pueden adjuntarse a Studio → Image o Studio → Video.')
   }
-  const selectedModel = state.models.find(model => model.model_type === state.params.model_type)
-  if (!selectedModel) throw new Error('Studio no tiene un modelo de imagen/vídeo válido seleccionado.')
+  const selectedModel = selectedVisualModel(state)
   if (action.role === 'edit_source' || action.role === 'edit_mask') {
     return attachImageEditCanvas(action, selectedModel.name)
   }
+  const change = beginImageSettingsChange(useStore.getState)
   const files = await imageOutputFiles(action.outputNames)
+  if (!change.current()) throw new Error('El formulario cambió mientras se cargaban las referencias.')
 
   if (action.role === 'start_frame') {
     if (state.generationMode !== 'video' || !selectedModel.is_i2v) {
@@ -561,11 +576,11 @@ export async function attachStudioReferences(action: AttachStudioReferencesComma
   if (!config || !supportsDesiredType) {
     throw new Error(`${selectedModel.name} no admite referencias de ${action.role === 'style' ? 'estilo/escenario' : 'sujeto'} en este formulario.`)
   }
-  const configuredLimit = state.modelOptions?.max_image_refs
-  const existingCount = action.replaceExisting ? 0 : state.imageRefs.length
-  if (configuredLimit != null && existingCount + files.length > configuredLimit) {
-    throw new Error(`${selectedModel.name} admite como máximo ${configuredLimit} referencias; se solicitaron ${existingCount + files.length}.`)
+  if (state.generationMode === 'image') {
+    state.setImageStudioIntent(state.imageStudioIntent === 'edit' && state.modelOptions?.image_ref_inpaint ? 'edit' : 'character')
+    state = useStore.getState()
   }
+  validateReferenceBudget(state, action, files.length, selectedModel.name)
   if (action.replaceExisting) clearImageReferences()
   files.forEach(file => useStore.getState().addImageRef(file))
   state = useStore.getState()

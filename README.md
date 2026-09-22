@@ -301,3 +301,114 @@ For a stationary viewpoint, select **Fixed camera**. Image cutouts can use **Hel
 The [Portal Ride study](ui/public/examples/skate-portal-v2/README.md) expands that experiment to three continuous world changes. Native world effects now support editable position/rotation/scale keyframes and screen-projected portal video with its own start, speed and loop controls.
 
 The [Portal Rides gallery](ui/public/examples/portal-rides/README.md) adds a downhill skater and a dragon rider. **Cinematic stage → Endless road** keeps a separately moving road underneath world changes; edit speed, slope and timeline continuity. **Image appearance → Tilt** rotates a cutout around its foot anchor to match a slope. Both clips are saved native scenes with portable templates, rendered from interpolated transparent video layers at natural speed.
+
+### Qwen Image 2.1 in Studio
+
+Choose **Image → Create**, **Edit**, or **References**. Each keeps its own prompt,
+canvas, image inputs, sampling settings, seed, LoRAs and output count; switching
+back restores the draft. The selected model is shared between these flows.
+Create submits no hidden editing image or mask. Edit needs a source; References needs references.
+**Start over** clears these drafts. Panorama has its own generation button.
+
+Gallery actions distinguish **Edit this image** (use the result as the new source),
+**Load settings** (restore the complete saved recipe) and **Use as reference**.
+Loading settings or applying a recipe restores source, mask, references, method,
+sampling and LoRAs together. Missing inputs produce an error without replacing
+the current draft; a late download cannot overwrite a newer edit. Stored inputs
+keep their source workspace. Hidden model variants can still be restored by ID.
+Once Generate is pressed, the submission retains its selected local source and
+mask even if those inputs are replaced while the job is being prepared.
+Edit Anything / Viggle opens an extracted frame in References and restores the
+previous reference draft when the frame is applied, skipped or cancelled.
+
+Qwen 2.1 and Qwen Edit Plus/Plus2 accept additional references inside **Edit**;
+the source counts toward the model's input limit. Older Qwen image models expose
+their supported inpainting methods and outpainting controls. Studio keeps the
+public image mode at `1` and translates legacy masked edits to native mode `2`
+at the server boundary. Qwen Layered offers an editing source and **Number of
+layers**, separate from the number of queued results. Incompatible flows are
+excluded from the chooser and blocked if already open after a model switch.
+
+Start with **Auto / 1K**, **40 steps**, **CFG 1**. Every Qwen 2.1 preset uses
+32-pixel aligned dimensions. Auto aspect follows the editing source; without a
+source it is square. **2K** has roughly four times as many pixels and requires
+more time and memory. Recommended 1K canvases:
+
+| Format | Pixels | 2K option |
+|---|---|---|
+| Square | 1024×1024 | 2048×2048 |
+| Landscape 16:9 | 1376×768 | 2752×1536 |
+| Portrait 9:16 | 768×1376 | 1536×2752 |
+| Landscape 4:3 | 1184×896 | 2400×1792 |
+| Portrait 3:4 | 896×1184 | 1792×2400 |
+| Wide 21:9 | 1536×672 | 2816×1216 |
+
+Use **VAE tiling: Auto** for memory management, including on a 24 GB GPU.
+Explicitly disabling tiling can still exhaust VRAM. The INT8 ConvRot text encoder
+now restores embedding orientation when loading; this also applies when the
+image transformer uses GGUF. No checkpoint re-download is required.
+
+**Fit to model** exports PNG, keeps transparency and applies the same crop,
+padding or stretch to the editing mask. Black mask padding preserves that area.
+Replacing a source clears its previous mask and outpainting margins.
+
+The **Activity** footer shows model, canvas, current stage, steps and a truncated
+prompt. Hover over the prompt to read it in full, or click to copy it. **Generate**
+keeps its action label; the separate active-job count includes running and queued
+jobs. The activity panel also opens while loading or reconnecting. Incomplete
+image writes are hidden until publication. Missing-model errors identify the
+selected variant and required files. ETA becomes
+available after measured sampling steps, excluding loading and reference encoding;
+decoding and saving can add time. It is an estimate for the current sampling pass,
+not a hardware-independent promise for the entire queue.
+
+The version-2 image command API accepts the same explicit resolutions. Reuse an
+`intent_id` only when retrying exactly the same request. Example request body:
+
+```json
+{"version":2,"operation":"generation.image","intent_id":"my-qwen-image-001","input":{"workspace":"default","params":{"model_type":"qwen_image_21","prompt":"A red toy house in a sunny meadow","resolution":"1024x1024","num_inference_steps":40,"guidance_scale":1,"seed":7}}}
+```
+
+Save it as `qwen-request.json`, then submit to your running app:
+
+```bash
+curl -H 'Content-Type: application/json' --data-binary @qwen-request.json "$HOCUS_BASE_URL/api/v1/generation/commands"
+```
+
+```javascript
+const body = JSON.parse(await (await import('node:fs/promises')).readFile('qwen-request.json', 'utf8'));
+const result = await fetch(`${process.env.HOCUS_BASE_URL}/api/v1/generation/commands`, {
+  method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+});
+console.log(await result.json());
+```
+
+```python
+import json, os, urllib.request
+body = json.load(open('qwen-request.json', encoding='utf-8'))
+request = urllib.request.Request(
+    os.environ['HOCUS_BASE_URL'] + '/api/v1/generation/commands',
+    data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
+with urllib.request.urlopen(request) as response:
+    print(json.load(response))
+```
+
+Use the receipt to identify the admitted job; live canonical tasks are available
+at `/api/v1/tasks` and `/api/v1/tasks/events`. For editing, use uploaded/catalog
+references through the command reference endpoint; local browser tokens are
+materialized by Studio before submission.
+
+The abenzerps GGUF entries retain their legacy `qwen_image_21_uncensored_*`
+identifiers so saved recipes keep working, but are hidden from the model selector
+until they offer a verified distinction from the other Qwen 2.1 variants. Existing
+downloaded weights are kept. The [publisher's current model card](https://huggingface.co/abenzerps/Qwen-Image-2.1-GGUF)
+identifies the downloads as quantizations of the original base weights and says
+a separate uncensored version is still in development. The former name is not
+evidence of a distinct uncensoring fine-tune.
+
+Image previews open from gallery cards and selected source/reference thumbnails.
+The enlarged view shows dimensions, file details and available generation metadata,
+with the full saved record under **All saved information**. Activity uses frozen
+reference links from the submitted job, with cached thumbnails and the same enlarged
+view. Updating the model catalog preserves the current Studio draft. A server or UI
+update now offers an explicit reload instead of discarding an in-progress form.

@@ -7,7 +7,8 @@ import { newUserGenerationContext } from '../../features/studio/generationProven
 import { useViggleGenerationGuard } from '../../lib/useViggleGenerationGuard'
 import { isGenerationJobActive } from '../../lib/generationJobState'
 import { usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
-import { generateBlockedCopy, isRemoteMiniMaxImage } from '../../lib/generateButtonGate'
+import { generateBlockedCopy, hasOutpaintArea, isRemoteMiniMaxImage } from '../../lib/generateButtonGate'
+import { imageStudioInputRequirement, supportsImageIntent } from '../../features/studio/imageStudioIntent'
 
 export function GenerateButton() {
   const { t } = useUiTranslation('studio')
@@ -31,32 +32,33 @@ export function GenerateButton() {
     ) === true,
   )
   const hasStartImage = useStore(s => !!(s.startImage || s.params.image_start))
-  const needsImage = generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage
-  const needsReference = generationMode === 'video' && isOmniReference
-    && !hasOmniVisualReference
+  const imageRequirement = useStore(s => s.generationMode === 'image'
+    ? imageStudioInputRequirement(s.imageStudioIntent, s.params.image_guide, s.imageRefs.length || s.params.image_refs?.length || 0)
+    : null)
+  const incompatibleImage = useStore(s => s.generationMode === 'image' && !supportsImageIntent(s.imageStudioIntent, s.modelOptions))
+  const needsImage = (generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage)
+    || imageRequirement === 'source'
+  const needsReference = (generationMode === 'video' && isOmniReference
+    && !hasOmniVisualReference) || imageRequirement === 'reference'
   const editSubMode = useStore(s => s.editSubMode)
   const editVideoPath = useStore(s => s.editVideoPath)
   const outpaintVideoBox = useStore(s => s.outpaintVideoBox)
   const isOutpaint = generationMode === 'avatar' && editSubMode === 'outpaint'
   const needsOutpaintSource = isOutpaint && !editVideoPath
-  const hasOutpaintArea = (
-    outpaintVideoBox.x > 0.0005
-    || outpaintVideoBox.y > 0.0005
-    || outpaintVideoBox.x + outpaintVideoBox.w < 0.9995
-    || outpaintVideoBox.y + outpaintVideoBox.h < 0.9995
-  )
-  const needsOutpaintArea = isOutpaint && !!editVideoPath && !hasOutpaintArea
+  const needsOutpaintArea = isOutpaint && !!editVideoPath && !hasOutpaintArea(outpaintVideoBox)
   const promptSchedulerEnabled = useStore(s => s.promptSchedulerEnabled)
   const imageMode = useStore(s => s.params.image_mode)
   const prompt = useStore(s => s.params.prompt)
   const schedulerApplies = promptSchedulerEnabled && generationMode === 'video' && imageMode === 0
   const scheduledVideoCount = schedulerApplies ? splitPromptSchedule(prompt).length : 0
   const needsScheduledPrompts = schedulerApplies && scheduledVideoCount === 0
+  const needsPrompt = generationMode === 'image' && !String(prompt || '').trim()
   const modelType = useStore(s => s.params.model_type)
   const imageProvider = useStore(s => s.productionProfile?.image?.provider)
   const localUnavailable = usePlatformCapabilities()?.capabilities.wangp_local?.state === 'hidden'
     && !isRemoteMiniMaxImage(generationMode, modelType, imageProvider)
-  const blocked = localUnavailable || needsImage || needsReference || needsOutpaintSource || needsOutpaintArea || needsScheduledPrompts
+  const blocked = incompatibleImage || localUnavailable || needsImage || needsReference || needsOutpaintSource
+    || needsOutpaintArea || needsScheduledPrompts || needsPrompt
 
   const handleClick = async () => {
     if (blocked || submissionPending.current) return
@@ -80,7 +82,8 @@ export function GenerateButton() {
 
   if (blocked) {
     const { label, title } = generateBlockedCopy({
-      localUnavailable, needsImage, needsReference, needsOutpaintSource, needsOutpaintArea, t,
+      incompatibleImage, localUnavailable, needsImage, needsReference, needsOutpaintSource, needsOutpaintArea,
+      needsPrompt, needsScheduledPrompts, t,
     })
     return (
       <button
@@ -116,7 +119,8 @@ export function GenerateButton() {
           ? t('generate.submitting')
           : scheduledVideoCount > 1
             ? t('generate.queueCount', { count: scheduledVideoCount })
-            : queueCount > 0 ? t('generate.goCount', { count: queueCount }) : tCommon('actions.generate')}
+            : tCommon('actions.generate')}
     </button>
+    {queueCount > 0 ? <p className="mt-1 text-right text-[10px] text-text-muted">{t('generate.activeCount', { count: queueCount })}</p> : null}
   </div>
 }

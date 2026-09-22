@@ -23,7 +23,7 @@ class JsonRequest:
 def _prepare_canonical_image_references(body, model_def, workspace, *, uploads_dir, workspace_dir):
     canonical_refs = body.pop('canonical_image_refs', False)
     if canonical_refs:
-        if canonical_refs is not True or not model_def.get('image_outputs') or body.get('image_mode') != 1:
+        if canonical_refs is not True or not model_def.get('image_outputs') or body.get('image_mode') not in (1, 2):
             raise ValueError('Canonical image references require an image generation request')
         references = body.get('image_refs')
         if not isinstance(references, list) or not references or any(not isinstance(value, str) for value in references):
@@ -35,7 +35,7 @@ def _prepare_canonical_image_references(body, model_def, workspace, *, uploads_d
 def _prepare_native_processors(body):
     if body.get('spatial_upsampling') or body.get('temporal_upsampling') or body.get('wangp_processor_settings'):
         from shared.wangp1272.processors import validate_selection, validated_settings
-        error = validate_selection(body.get('spatial_upsampling', ''), body.get('temporal_upsampling', ''), body.get('image_mode') == 1)
+        error = validate_selection(body.get('spatial_upsampling', ''), body.get('temporal_upsampling', ''), body.get('image_mode') in (1, 2))
         if error:
             raise ValueError(error)
         body['wangp_processor_settings'] = validated_settings(body.get('spatial_upsampling', ''), body.get('wangp_processor_settings'))
@@ -49,7 +49,7 @@ def prepare_generation_inputs(body, model_def, workspace, *, uploads_dir, worksp
     _prepare_native_processors(body)
     if not model_def.get('wangp_1272'):
         return
-    if prepared_images and (not model_def.get('image_outputs') or body.get('image_mode') != 1):
+    if prepared_images and (not model_def.get('image_outputs') or body.get('image_mode') not in (1, 2)):
         raise ValueError('Prepared image inputs require an image generation request')
     if prepared_speech and (not model_def.get('audio_only') or body.get('generation_mode') != 'audio'):
         raise ValueError('Prepared speech inputs require an audio generation request')

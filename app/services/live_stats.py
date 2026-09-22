@@ -55,8 +55,8 @@ def get_runtime_identity(ui_dist_dir: str | Path) -> dict:
     A Pinokio popup can survive a backend restart. Without a small handshake,
     that leaves the tab executing the previous JavaScript bundle indefinitely,
     even though every API request now reaches the new server. The frontend
-    stores this identity in ``sessionStorage`` and reloads once when either the
-    process or ``ui/dist/index.html`` changes.
+    observes this identity and offers an explicit reload when the process or
+    ``ui/dist/index.html`` changes, preserving edits until the user is ready.
     """
     index_path = Path(ui_dist_dir) / "index.html"
     try:
