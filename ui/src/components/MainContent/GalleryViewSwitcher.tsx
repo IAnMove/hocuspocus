@@ -36,7 +36,7 @@ export function GalleryViewSwitcher() {
             aria-pressed={active}
             title={label}
             aria-label={label}
-            className={`rounded-md p-1.5 transition-colors ${
+            className={`flex min-h-11 min-w-11 items-center justify-center rounded-md p-2 transition-colors ${
               active
                 ? 'bg-black/30 text-text-primary shadow-[inset_0_1px_3px_rgba(0,0,0,0.55)]'
                 : 'text-text-muted hover:bg-white/[0.07] hover:text-text-secondary'

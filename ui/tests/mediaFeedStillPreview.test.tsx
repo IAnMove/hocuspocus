@@ -52,11 +52,10 @@ function imageFile(overrides: Record<string, unknown> = {}) {
   }
 }
 
-test('still cards keep a reserved viewport while the image is unloaded', { concurrency: false }, async () => {
+test('image rows retain their reserved frame after portrait images decode', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { MediaFeedItem } = await import('../src/components/MainContent/MediaFeedItem.tsx')
-  const { MEDIA_FEED_PLACEHOLDER_ASPECT_RATIO } = await import('../src/components/MainContent/mediaFeedSizing.ts')
 
   ensureUiI18n().changeLanguage('en')
 
@@ -70,24 +69,24 @@ test('still cards keep a reserved viewport while the image is unloaded', { concu
     />)
 
     const viewport = screen.getByTestId('media-feed-viewport')
-    assert.equal(Number(viewport.style.aspectRatio), MEDIA_FEED_PLACEHOLDER_ASPECT_RATIO)
+    assert.equal(viewport.className.includes('aspect-video'), true)
 
     const img = viewport.querySelector('img')
     assert.ok(img)
     Object.defineProperty(img, 'naturalWidth', { configurable: true, value: 1080 })
     Object.defineProperty(img, 'naturalHeight', { configurable: true, value: 1920 })
     fireEvent.load(img)
-    assert.equal(Number(viewport.style.aspectRatio), 1080 / 1920)
+    assert.equal(viewport.className.includes('aspect-video'), true)
+    assert.equal(viewport.style.aspectRatio, '')
   } finally {
     cleanup()
   }
 })
 
-test('video cards use the clip aspect instead of a 16:9 letterbox', { concurrency: false }, async () => {
+test('video rows retain their reserved frame after portrait thumbnails decode', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { MediaFeedItem } = await import('../src/components/MainContent/MediaFeedItem.tsx')
-  const { MEDIA_FEED_PLACEHOLDER_ASPECT_RATIO } = await import('../src/components/MainContent/mediaFeedSizing.ts')
 
   ensureUiI18n().changeLanguage('en')
 
@@ -107,15 +106,16 @@ test('video cards use the clip aspect instead of a 16:9 letterbox', { concurrenc
     />)
 
     const viewport = screen.getByTestId('media-feed-viewport')
-    assert.equal(Number(viewport.style.aspectRatio), MEDIA_FEED_PLACEHOLDER_ASPECT_RATIO)
-    assert.equal(viewport.className.includes('aspect-video'), false)
+    assert.equal(viewport.className.includes('aspect-video'), true)
+    assert.equal(viewport.className.includes('aspect-video'), true)
 
     const img = viewport.querySelector('img')
     assert.ok(img)
     Object.defineProperty(img, 'naturalWidth', { configurable: true, value: 1080 })
     Object.defineProperty(img, 'naturalHeight', { configurable: true, value: 1920 })
     fireEvent.load(img)
-    assert.equal(Number(viewport.style.aspectRatio), 1080 / 1920)
+    assert.equal(viewport.className.includes('aspect-video'), true)
+    assert.equal(viewport.style.aspectRatio, '')
   } finally {
     cleanup()
   }
@@ -154,7 +154,7 @@ test('scene cards without a preview still reserve 16:9', { concurrency: false },
   }
 })
 
-test('switching from thumbnail to full URL keeps the still image mounted', { concurrency: false }, async () => {
+test('scrolling selection retains the lightweight thumbnail and mounted image', { concurrency: false }, async () => {
   const { render, screen, waitFor, cleanup } = await import('@testing-library/react')
   const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { MediaFeedItem } = await import('../src/components/MainContent/MediaFeedItem.tsx')
@@ -184,7 +184,7 @@ test('switching from thumbnail to full URL keeps the still image mounted', { con
 
     await waitFor(() => {
       assert.equal(screen.getByRole('img', { name: file.name }), img)
-      assert.equal(img.getAttribute('src'), file.url)
+      assert.equal(img.getAttribute('src'), file.thumbnail_url)
     })
   } finally {
     cleanup()

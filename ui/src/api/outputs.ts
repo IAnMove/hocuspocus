@@ -201,7 +201,7 @@ export async function fetchOutputMetadata(
     const timer = setTimeout(() => controller.abort(), PER_ATTEMPT_MS)
     try {
       const res = await fetch(url, { signal: controller.signal })
-      if (!res.ok) return { source: 'none', params: null }
+      if (!res.ok) throw new Error(`Failed to load output metadata (HTTP ${res.status})`)
       return await res.json()
     } catch (e) {
       lastErr = e

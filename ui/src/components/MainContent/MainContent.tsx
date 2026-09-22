@@ -328,6 +328,7 @@ export function MainContent() {
   const [containerHeight, setContainerHeight] = useState(800)
   const [containerWidth, setContainerWidth] = useState(800)
   const measuredHeights = useRef<Map<string, number>>(new Map())
+  const [measureEpoch, setMeasureEpoch] = useState(0)
   const jobsAnchorRef = useRef<HTMLDivElement>(null)
   const [placeholderTotalHeight, setPlaceholderTotalHeight] = useState(0)
   const prevPlaceholderHeight = useRef(0)
@@ -341,6 +342,18 @@ export function MainContent() {
   // one-up feed stays the only layout in the entry chunk.
   const galleryView = useStore(s => s.galleryView)
   const activeWorkspace = useStore(s => s.activeWorkspace)
+  const browsingUploads = useStore(s => s.browsingUploads)
+
+  useLayoutEffect(() => {
+    measuredHeights.current.clear()
+    prevOutputNames.current = []
+    scrollTargetIndex.current = null
+    isUserScrolling.current = false
+    if (feedRef.current) feedRef.current.scrollTop = 0
+    setScrollTop(0)
+    setGalleryFeedAtTop(true)
+    setMeasureEpoch(epoch => epoch + 1)
+  }, [activeWorkspace, browsingUploads, mediaFilter, galleryView, setGalleryFeedAtTop])
 
   // Measure container on mount and resize; clear stale heights whenever either
   // dimension changes because the viewport cap also makes item height depend
@@ -367,7 +380,7 @@ export function MainContent() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [mediaFilter, workspaceSurface])
 
   useLayoutEffect(() => {
     const el = jobsAnchorRef.current
@@ -432,18 +445,27 @@ export function MainContent() {
       totalHeight: Math.max(total, placeholderTotalHeight),
       itemOffsets: offsets,
     }
-  }, [outputs.length, scrollTop, containerHeight, getItemHeight, placeholderTotalHeight, estimatedItemHeight])
+  // The observer mutates the measurement cache; its epoch invalidates these offsets.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outputs.length, scrollTop, containerHeight, getItemHeight, placeholderTotalHeight, estimatedItemHeight, measureEpoch])
 
-  const [, setMeasureEpoch] = useState(0)
   const handleItemMeasured = useCallback((index: number, height: number) => {
     const name = outputs[index]?.name
     if (!name) return
     const prev = measuredHeights.current.get(name)
     if (prev !== height) {
+      const feed = feedRef.current
+      const item = feed?.querySelector<HTMLElement>(`[data-feed-index="${index}"]`)
+      const delta = height - (prev ?? estimatedItemHeight)
+      // Preserve the visible row when a card above it receives metadata.
+      if (feed && item && feed.scrollTop > item.offsetTop + (prev ?? estimatedItemHeight) + placeholderTotalHeight && scrollTargetIndex.current === null) {
+        feed.scrollTop += delta
+        setScrollTop(feed.scrollTop)
+      }
       measuredHeights.current.set(name, height)
       setMeasureEpoch(e => e + 1)
     }
-  }, [outputs])
+  }, [outputs, estimatedItemHeight, placeholderTotalHeight])
 
   const handleItemVisible = useCallback((index: number) => {
     if (scrollTargetIndex.current !== null) return
@@ -567,10 +589,17 @@ export function MainContent() {
     }
     if (prepended === 0 || el.scrollTop <= 24) return
     let extra = 0
-    for (let index = 0; index < prepended; index += 1) extra += getItemHeight(index) + GAP
+    if (galleryView === 'feed') {
+      for (let index = 0; index < prepended; index += 1) extra += getItemHeight(index) + GAP
+    } else {
+      const columns = Math.max(1, Math.floor((containerWidth + GAP) / (190 + GAP)))
+      const tile = Math.floor((containerWidth - GAP * (columns - 1)) / columns)
+      const rowHeight = (galleryView === 'grid' ? tile : tile * 3 / 4) + GAP
+      extra = Math.floor(prepended / columns) * rowHeight
+    }
     el.scrollTop += extra
     setScrollTop(el.scrollTop)
-  }, [outputs, getItemHeight])
+  }, [outputs, getItemHeight, galleryView, containerWidth])
 
 
   const visibleItems = useMemo(() => {
@@ -614,7 +643,7 @@ export function MainContent() {
       </div>
 
       {/* Content area: feed + thumbnails */}
-      <div className={`flex-1 flex min-h-0 overflow-hidden relative ${workspaceSurface === 'generate' ? 'flex-col xl:flex-row' : 'flex-row'}`}>
+      <div className={`flex-1 flex min-h-0 min-w-0 overflow-hidden relative ${workspaceSurface === 'generate' ? 'flex-col xl:flex-row' : 'flex-row'}`}>
         <Suspense fallback={<PanelLoadingFallback />}>
         {workspaceSurface === 'generate' && (
           <div className="flex min-h-0 w-full shrink-0 flex-col border-b border-border xl:h-full xl:max-w-xl xl:border-b-0 xl:border-r 2xl:max-w-2xl">
@@ -708,7 +737,8 @@ export function MainContent() {
         </div>
         <div
           ref={feedRef}
-          className="flex-1 overflow-y-auto p-3 md:p-4"
+          data-testid="media-feed"
+          className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 md:p-4"
           onScroll={handleFeedScroll}
         >
           {/* Pipeline + Job placeholders at top (not virtualized — small count) */}
@@ -775,13 +805,14 @@ export function MainContent() {
           ) : (
             <Suspense fallback={<PanelLoadingFallback />}>
               <GalleryLayouts
+                key={`${activeWorkspace}:${browsingUploads}:${mediaFilter}:${galleryView}`}
                 view={galleryView}
                 outputs={outputs}
-                workspace={activeWorkspace}
+                workspace={browsingUploads ? '__uploads__' : activeWorkspace}
                 activeIndex={activeIndex}
                 containerWidth={containerWidth}
                 containerHeight={containerHeight}
-                scrollTop={scrollTop}
+                scrollTop={Math.max(0, scrollTop - placeholderTotalHeight)}
                 onOpen={setSelectedOutput}
               />
             </Suspense>
@@ -853,10 +884,10 @@ export function MainContent() {
         </div>
 
         {/* Thumbnail sidebar */}
-        <ThumbnailGallery
+        {galleryView === 'feed' && <ThumbnailGallery
           activeIndex={activeIndex}
           onThumbnailClick={handleThumbnailClick}
-        />
+        />}
         </>}
         </Suspense>
       </div>

@@ -216,5 +216,9 @@
     "masonry": "Mosaic"
   },
   "referenceImages": "Reference images",
-  "referenceImage": "Reference {{n}}"
+  "referenceImage": "Reference {{n}}",
+  "moveOutput": {
+    "title": "Move to workspace",
+    "empty": "No other workspaces"
+  }
 }

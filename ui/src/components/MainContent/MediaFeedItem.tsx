@@ -6,6 +6,7 @@ import { outputImageUrl } from '../../lib/storedImageFiles'
 import { FeedMediaBody } from './FeedMediaBody'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
+import { MediaMoveDialog } from './MediaMoveDialog'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject, fetchSeriesLibrary, selectPipelineClipVideo } from '../../api/client'
@@ -99,7 +100,7 @@ function RetryImage({ url, alt, maxHeight, onIntrinsicSize }: {
     <img
       src={src}
       alt={alt}
-      className="mx-auto block h-auto w-auto max-w-full object-contain"
+      className="mx-auto block h-full w-full object-contain"
       style={maxHeight == null ? undefined : { maxHeight }}
       onError={handleError}
       onLoad={handleLoad}
@@ -146,6 +147,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const [showSaveRecipe, setShowSaveRecipe] = useState(false)
   const [showExtraInfo, setShowExtraInfo] = useState(false)
   const [videoReady, setVideoReady] = useState(false)
+  const [videoTime, setVideoTime] = useState(0)
   const confirmRef = useRef(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [copied, setCopied] = useState(false)
@@ -160,7 +162,6 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const [settingsError, setSettingsError] = useState('')
   const [settingsBusy, setSettingsBusy] = useState(false)
   const settingsPending = useRef(false)
-  const moveRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const metadataRequestRef = useRef(0)
@@ -248,6 +249,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
 
   useEffect(() => {
     setVideoReady(false)
+    setVideoTime(0)
     return releaseVideo
   }, [file.url, releaseVideo])
 
@@ -261,7 +263,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const isModel3d = file.type === 'model3d'
   const isScene = file.type === 'scene'
   const isComic = file.type === 'comic'
-  const naturalFrame = file.type === 'image' || file.type === 'video' || isScene || isComic
+  const stableFrame = file.type === 'image' || file.type === 'video'
+  const naturalFrame = isScene || isComic
   const [stillNaturalSize, setStillNaturalSize] = useState<{ name: string; width: number; height: number } | null>(null)
   const stillAspect = stillNaturalSize?.name === file.name
     ? mediaFeedStillAspectRatio(stillNaturalSize.width, stillNaturalSize.height)
@@ -499,16 +502,6 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
     }
   }
 
-  // Close move menu on outside click
-  useEffect(() => {
-    if (!showMoveMenu) return
-    const handler = (e: MouseEvent) => {
-      if (moveRef.current && !moveRef.current.contains(e.target as Node)) setShowMoveMenu(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [showMoveMenu])
-
   const handleMove = async (targetWs: string) => {
     setMoving(true)
     setShowMoveMenu(false)
@@ -563,17 +556,26 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   // pose you want, one click, it's your character reference.
   const handleSendFrameToRefs = async () => {
     if (file.type !== 'video') return
+    let temporaryVideo: HTMLVideoElement | null = null
     try {
       let video = videoRef.current
       if (!video || video.videoWidth === 0) {
-        // Preview not loaded (never hovered) — decode frame 0 offscreen.
+        // The dialog releases its player on close; recover its selected frame.
         video = document.createElement('video')
-        video.src = getFileUrl(file.name)
+        temporaryVideo = video
+        video.src = getFileUrl(file.name, outputWorkspace)
         video.muted = true
         await new Promise<void>((resolve, reject) => {
           video!.onloadeddata = () => resolve()
           video!.onerror = () => reject(new Error('video load failed'))
         })
+        if (videoTime > 0 && Number.isFinite(video.duration)) {
+          await new Promise<void>((resolve, reject) => {
+            video!.onseeked = () => resolve()
+            video!.onerror = () => reject(new Error('video seek failed'))
+            video!.currentTime = Math.min(videoTime, Math.max(0, video!.duration - 0.001))
+          })
+        }
       }
       const canvas = document.createElement('canvas')
       canvas.width = video.videoWidth
@@ -591,6 +593,12 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       setTimeout(() => setSentToInput(false), 2000)
     } catch (e) {
       console.error('Failed to capture video frame:', e)
+    } finally {
+      if (temporaryVideo) {
+        temporaryVideo.pause()
+        temporaryVideo.removeAttribute('src')
+        temporaryVideo.load()
+      }
     }
   }
 
@@ -650,7 +658,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       {/* Media player */}
       <div
         data-testid="media-feed-viewport"
-        className={`relative flex w-full items-center justify-center bg-media-canvas ${naturalFrame ? '' : 'aspect-video'}`}
+        className={`relative flex w-full items-center justify-center overflow-hidden bg-media-canvas ${naturalFrame ? '' : 'aspect-video'}`}
         style={{
           ...(maxMediaHeight == null ? {} : { maxHeight: `${maxMediaHeight}px` }),
           ...(naturalFrame ? { aspectRatio: stillAspect } : {}),
@@ -673,6 +681,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           maxMediaHeight={maxMediaHeight}
           videoReady={videoReady}
           videoRef={videoRef}
+          videoTime={videoTime}
+          onVideoTimeChange={setVideoTime}
           onPlay={() => { setSelectedOutput(index); setVideoReady(true) }}
           onIntrinsicSize={handleStillIntrinsicSize}
           onImageLoad={handleStillImageLoad}
@@ -697,8 +707,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       )}
 
       {/* Inline info bar */}
-      <div className="px-3 py-2 flex items-center gap-2 min-h-[40px]">
-        {imageStartFile && (
+      <div className={`px-3 flex ${stableFrame ? 'h-[100px] py-1 gap-1 flex-wrap content-start overflow-hidden' : 'py-2 gap-2 items-center min-h-[40px]'}`}>
+        {imageStartFile && !stableFrame && (
           <img
             src={getStoredAssetUrl(imageStartFile)}
             alt="Start"
@@ -706,7 +716,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
             title="Start image"
           />
         )}
-        {imageEndFile && (
+        {imageEndFile && !stableFrame && (
           <img
             src={getStoredAssetUrl(imageEndFile)}
             alt="End"
@@ -715,7 +725,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           />
         )}
 
-        <div className="flex-1 min-w-0">
+        <div className={stableFrame ? 'h-10 w-full min-w-0 overflow-hidden' : 'flex-1 min-w-0'}>
           {completionTime && (
             <div
               className="mb-0.5 flex items-center gap-1 text-[10px] text-text-muted"
@@ -760,7 +770,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+        <div className={`flex items-center gap-0.5 shrink-0 ${stableFrame ? 'h-11 w-full overflow-x-auto overscroll-x-contain [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:min-h-11 [&>button]:min-w-11 [&>button]:shrink-0 [&>a]:flex [&>a]:items-center [&>a]:justify-center [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:shrink-0' : ''}`} onClick={e => e.stopPropagation()}>
           {file.type === 'video' && directorReplacementTarget && (
             <button
               onClick={() => void handleUseAsDirectorReplacement()}
@@ -914,38 +924,20 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           </button>
           {/* Move to workspace */}
           {!browsingUploads && (
-          <div className="relative" ref={moveRef}>
+          <div className="relative shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); setShowMoveMenu(!showMoveMenu) }}
               disabled={moving}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`flex min-h-11 min-w-11 items-center justify-center p-1.5 rounded-lg transition-colors ${
                 moving ? 'text-accent-blue animate-pulse' : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
               }`}
               title="Move to workspace"
             >
               <FolderInput size={13} />
             </button>
-            {showMoveMenu && (
-              <div className="absolute right-0 bottom-full mb-1 w-40 bg-bg-secondary border border-border rounded-lg shadow-lg z-50 overflow-hidden" onClick={e => e.stopPropagation()}>
-                <div className="px-2 py-1 border-b border-border">
-                  <span className="text-[9px] text-text-muted uppercase tracking-wider">Move to</span>
-                </div>
-                <div className="max-h-[150px] overflow-y-auto">
-                  {workspaces.filter(ws => ws.name !== activeWorkspace).map(ws => (
-                    <button
-                      key={ws.name}
-                      onClick={() => handleMove(ws.name)}
-                      className="w-full text-left px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
-                    >
-                      {ws.name}
-                    </button>
-                  ))}
-                  {workspaces.filter(ws => ws.name !== activeWorkspace).length === 0 && (
-                    <div className="px-3 py-2 text-[10px] text-text-muted">No other workspaces</div>
-                  )}
-                </div>
-              </div>
-            )}
+            {showMoveMenu && <MediaMoveDialog workspaces={workspaces.filter(ws => ws.name !== activeWorkspace).map(ws => ws.name)}
+              onClose={() => setShowMoveMenu(false)} onMove={name => void handleMove(name)} />}
+
           </div>
           )}
           {!browsingUploads && (

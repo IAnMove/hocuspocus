@@ -1,4 +1,4 @@
-import React, { useCallback, type ReactNode, type RefObject, type SyntheticEvent } from 'react'
+import React, { type ReactNode, type RefObject, type SyntheticEvent } from 'react'
 import { BookOpen, Box, Film, Play } from 'lucide-react'
 import { getFileUrl } from '../../api/client'
 import type { OutputFile } from '../../types'
@@ -13,6 +13,8 @@ type FeedMediaBodyProps = {
   maxMediaHeight?: number
   videoReady: boolean
   videoRef: RefObject<HTMLVideoElement | null>
+  videoTime?: number
+  onVideoTimeChange?: (seconds: number) => void
   onPlay: () => void
   onIntrinsicSize: (width: number, height: number) => void
   onImageLoad: (event: SyntheticEvent<HTMLImageElement>) => void
@@ -27,68 +29,20 @@ type FeedMediaBodyProps = {
   retryImage: (url: string) => ReactNode
 }
 
-function FeedVideoPreview({
-  file, isActive, maxHeight, videoReady, videoRef, onPlay, onIntrinsicSize, onImageLoad,
-}: {
-  file: OutputFile
-  isActive: boolean
-  maxHeight?: { maxHeight: number }
-  videoReady: boolean
-  videoRef: RefObject<HTMLVideoElement | null>
-  onPlay: () => void
-  onIntrinsicSize: (width: number, height: number) => void
-  onImageLoad: (event: SyntheticEvent<HTMLImageElement>) => void
+function FeedVideoPreview({ file, workspace, videoTime, onVideoTimeChange }: {
+  file: OutputFile; workspace?: string; videoTime?: number; onVideoTimeChange?: (seconds: number) => void
 }) {
-  const play = useCallback((event: SyntheticEvent<HTMLButtonElement>) => {
-    event.stopPropagation()
-    onPlay()
-  }, [onPlay])
-  if (videoReady) {
-    return (
-      <video
-        ref={videoRef}
-        key={file.url}
-        src={file.url}
-        controls
-        loop
-        autoPlay
-        preload="metadata"
-        poster={file.thumbnail_url || undefined}
-        className={MEDIA_FIT}
-        style={maxHeight}
-        muted={!isActive}
-        onLoadedMetadata={event => {
-          const video = event.currentTarget
-          onIntrinsicSize(video.videoWidth, video.videoHeight)
-        }}
-      />
-    )
-  }
   return (
-    <div className="relative mx-auto inline-block max-w-full">
+    <ImagePreview image={{ ...file, type: 'video', workspace_id: workspace }} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} className="relative block h-full w-full cursor-zoom-in">
       {file.thumbnail_url ? (
-        <img
-          src={file.thumbnail_url}
-          alt={file.name}
-          className={MEDIA_FIT}
-          style={maxHeight}
-          loading="lazy"
-          decoding="async"
-          onLoad={onImageLoad}
-        />
+        <img src={file.thumbnail_url} alt={file.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
       ) : (
-        <div className="flex h-48 w-full items-center justify-center text-text-muted"><Film size={32} /></div>
+        <span className="flex h-full w-full items-center justify-center text-text-muted"><Film size={32} /></span>
       )}
-      <button
-        type="button"
-        onClick={play}
-        className="absolute left-1/2 top-1/2 z-10 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-xl transition-transform hover:scale-105 hover:bg-black/85"
-        aria-label={`Play ${file.name}`}
-        title="Load and play video"
-      >
+      <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-xl">
         <Play size={24} className="ml-1" />
-      </button>
-    </div>
+      </span>
+    </ImagePreview>
   )
 }
 
@@ -151,24 +105,13 @@ export function FeedMediaBody(props: FeedMediaBodyProps) {
 }
 
 function renderFeedMedia({
-  file, isActive, maxMediaHeight, videoReady, videoRef, onPlay, onIntrinsicSize, onImageLoad,
+  file, isActive, maxMediaHeight, onImageLoad,
   isScene, isComic, isModel3d, canPreviewModel3d, isRigged, riggedClips, activeClip, setActiveClip,
-  retryImage, workspace,
+  retryImage, workspace, videoTime, onVideoTimeChange,
 }: FeedMediaBodyProps) {
   const maxHeight = maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }
   if (file.type === 'video') {
-    return (
-      <FeedVideoPreview
-        file={file}
-        isActive={isActive}
-        maxHeight={maxHeight}
-        videoReady={videoReady}
-        videoRef={videoRef}
-        onPlay={onPlay}
-        onIntrinsicSize={onIntrinsicSize}
-        onImageLoad={onImageLoad}
-      />
-    )
+    return <FeedVideoPreview file={file} workspace={workspace} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} />
   }
   if (file.type === 'audio') {
     return (
@@ -204,7 +147,7 @@ function renderFeedMedia({
       />
     )
   }
-  return <ImagePreview image={{ ...file, workspace_id: workspace }} className="block max-w-full cursor-zoom-in">
-    {retryImage(isActive ? file.url : (file.thumbnail_url || file.url))}
+  return <ImagePreview image={{ ...file, type: 'image', workspace_id: workspace }} className="block h-full w-full cursor-zoom-in">
+    {retryImage(file.thumbnail_url || file.url)}
   </ImagePreview>
 }
