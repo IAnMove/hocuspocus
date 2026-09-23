@@ -1,5 +1,8 @@
+import { useMemo } from 'react'
+import { useUiTranslation } from '../../i18n'
+import type { GalleryOrder } from '../../api/outputs'
 import type { OutputFile } from '../../types'
-import type { GallerySection } from './mediaGalleryLayout'
+import type { GallerySection, GalleryLayoutView } from './mediaGalleryLayout'
 
 type Dated = Pick<OutputFile, 'created_at' | 'completed_at'>
 
@@ -41,4 +44,15 @@ export function daySections(
     previous = date
   })
   return sections
+}
+
+/** Day headings for grid and mosaic. None for the one-up feed, nor when
+ *  favourites come first and dates would interleave. */
+export function useDaySections(outputs: Dated[], view: GalleryLayoutView, order: GalleryOrder): GallerySection[] {
+  const { t, i18n } = useUiTranslation('activity')
+  const grouped = view !== 'feed' && order !== 'favorites'
+  return useMemo(
+    () => (grouped ? daySections(outputs, i18n.language, { today: t('view.today'), yesterday: t('view.yesterday') }) : []),
+    [grouped, outputs, i18n.language, t],
+  )
 }

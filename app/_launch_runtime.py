@@ -33560,7 +33560,12 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         # Combine index results with filename fallback (in case index missed
         # a file that was created between index builds)
         query_lower = search.lower()
-        files = [f for f in files if f["name"] in matching_names or query_lower in f["name"].lower()]
+        # The index is keyed by sidecar stem ("clip" for clip.mp4 and
+        # clip.meta.json); comparing full names never matched a prompt.
+        files = [
+            f for f in files
+            if os.path.splitext(f["name"])[0] in matching_names or query_lower in f["name"].lower()
+        ]
         return {"outputs": files, "total": len(files)}
 
     total = len(files)

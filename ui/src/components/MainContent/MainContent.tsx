@@ -8,11 +8,11 @@ import { useGallerySelection } from './useGallerySelection'
 import { useGalleryKeyboard } from './useGalleryKeyboard'
 import { useGridPinch } from './useGridPinch'
 import { useLiveMediaFacts } from './useLiveMediaFacts'
-import { daySections } from './galleryDays'
+import { useDaySections } from './galleryDays'
+import { GallerySearchEmpty } from './GallerySearch'
 import { galleryPositionKey, readGalleryPosition, writeGalleryPosition } from './galleryPositions'
 import type { DetailVideoTime, GalleryDetail } from './GalleryDetailsDialog'
 import { GALLERY_GRID_COLUMN_RANGE } from '../../stores/gallerySlice'
-import { useIsMobile } from '../../lib/useIsMobile'
 import { MediaFeedItem } from './MediaFeedItem'
 import { useStore } from '../../stores/useStore'
 import { jobFitsGalleryFilter } from '../../lib/galleryListQuery'
@@ -307,7 +307,7 @@ function PipelinePlaceholder() {
 }
 
 export function MainContent() {
-  const { t: tActivity, i18n } = useUiTranslation('activity')
+  const { t: tActivity } = useUiTranslation('activity')
   const outputs = useStore(s => s.filteredOutputs())
   const outputsLoading = useStore(s => s.outputsLoading)
   const jobs = useStore(s => s.jobs)
@@ -347,7 +347,6 @@ export function MainContent() {
   const setMobileHistoryOpen = useStore(s => s.setMobileHistoryOpen)
   const workspaces = useStore(s => s.workspaces)
   const outputsTotal = useStore(s => s.outputsTotal)
-  const isMobile = useIsMobile()
   const selection = useGallerySelection(outputs)
   const [detail, setDetail] = useState<GalleryDetail | null>(null)
   const galleryWorkspace = browsingUploads ? '__uploads__' : activeWorkspace
@@ -370,10 +369,8 @@ export function MainContent() {
   // Grid and mosaic group outputs under a heading per day, except when
   // favourites come first and dates would interleave.
   const galleryOrder = useStore(s => s.galleryOrder)
-  const sections = useMemo(() => (galleryView === 'feed' || galleryOrder === 'favorites'
-    ? []
-    : daySections(outputs, i18n.language, { today: tActivity('view.today'), yesterday: tActivity('view.yesterday') })),
-  [galleryView, galleryOrder, outputs, i18n.language, tActivity])
+  const searchQuery = useStore(s => s.outputSearchQuery)
+  const sections = useDaySections(outputs, galleryView, galleryOrder)
   const layout = useMemo(
     () => buildGalleryLayout(galleryView, outputs, viewport.width, viewport.height, { gridColumns: galleryGridColumns, sections }),
     [galleryView, outputs, viewport.width, viewport.height, galleryGridColumns, sections],
@@ -599,11 +596,6 @@ export function MainContent() {
   // Sizes and colours finished in the background settle into the list.
   useLiveMediaFacts(outputs, galleryWorkspace, viewport.width > 0)
 
-  // Exactly two picked images can be opened side by side.
-  const comparePair = useMemo(() => {
-    const picked = outputs.filter(file => selection.picked.has(file.name))
-    return picked.length === 2 && picked.every(file => file.type === 'image') ? [picked[0].name, picked[1].name] as const : null
-  }, [outputs, selection.picked])
 
   const phoneGrid = galleryView === 'grid' && viewport.width > 0 && viewport.width < 640
   useGridPinch({
@@ -769,8 +761,7 @@ export function MainContent() {
         <div className="flex min-h-[3.25rem] shrink-0 items-center border-b border-border/60 px-3 py-1 md:px-4">
           <GalleryToolbar
             view={galleryView}
-            canSelect={!browsingUploads && outputs.length > 0}
-            showHistory={isMobile && galleryView === 'feed' && outputs.length > 0}
+            hasItems={outputs.length > 0}
             selecting={selection.selecting}
             picked={selection.picked.size}
             busy={selection.busy}
@@ -781,8 +772,9 @@ export function MainContent() {
             onSelectAll={selection.selectAll}
             onAction={action => { void selection.apply(action) }}
             onDone={selection.clear}
-            onCompare={comparePair ? () => {
-              setDetail({ name: comparePair[0], origin: comparePair[0], compare: comparePair[1] })
+            onCompare={selection.comparePair ? () => {
+              const [first, second] = selection.comparePair!
+              setDetail({ name: first, origin: first, compare: second })
               selection.clear()
             } : undefined}
           />
@@ -884,7 +876,8 @@ export function MainContent() {
               to a first generation and sets the one expectation that most
               surprises new users: the first run of each model downloads
               its weights (tens of GB) before anything appears. */}
-          {!outputsLoading && outputs.length === 0 && visibleJobs.length === 0 && (() => {
+          <GallerySearchEmpty count={outputs.length} />
+          {!outputsLoading && outputs.length === 0 && visibleJobs.length === 0 && !searchQuery.trim() && (() => {
             const noun = mediaFilter === 'images' ? 'images'
               : mediaFilter === 'audio' ? 'audio'
               : mediaFilter === 'model3d' ? '3D models'

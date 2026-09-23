@@ -256,5 +256,16 @@
     "newest": "Newest first",
     "oldest": "Oldest first",
     "favorites": "Favourites first"
+  },
+  "gallerySearch": {
+    "open": "Search",
+    "label": "Search prompts, models and modes",
+    "placeholder": "Search prompts, models…",
+    "clear": "Clear search",
+    "close": "Close search",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "noResults": "No results for “{{query}}”",
+    "noResultsHint": "Words match as you type and accents do not matter."
   }
 }

@@ -47,7 +47,7 @@ class SearchIndex:
         with self._lock:
             result: Optional[set[str]] = None
             for token in tokens:
-                matches = self._index.get(token, set())
+                matches = self._prefix_matches(token)
                 if result is None:
                     result = set(matches)
                 else:
@@ -55,6 +55,16 @@ class SearchIndex:
                 if not result:
                     return set()
             return result or set()
+
+    def _prefix_matches(self, token: str) -> set[str]:
+        """Files with an indexed word starting with ``token``, so results
+        appear while a word is still being typed ("drag" finds "dragon").
+        Caller holds the lock."""
+        matches = set(self._index.get(token, ()))
+        for word, names in self._index.items():
+            if word.startswith(token):
+                matches |= names
+        return matches
 
     def invalidate(self):
         """Force a full rebuild on next search."""
@@ -163,7 +173,10 @@ class SearchIndex:
         Keeps tokens >= 2 chars. Splits on whitespace and common punctuation.
         """
         import re
-        tokens = re.split(r'[\s,._\-/\\()\[\]{}:;!?"+]+', text.lower())
+        import unicodedata
+        # Accents are dropped so "dragón" and "dragon" find each other.
+        folded = ''.join(ch for ch in unicodedata.normalize('NFKD', text.lower()) if not unicodedata.combining(ch))
+        tokens = re.split(r'[\s,._\-/\\()\[\]{}:;!?"+]+', folded)
         return [t for t in tokens if len(t) >= 2]
 
 

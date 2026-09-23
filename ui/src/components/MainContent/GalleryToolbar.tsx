@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCheck, CheckSquare, Columns2, FolderInput, Heart, HeartOff, History, Loader2, Trash2, X } from 'lucide-react'
+import { CheckCheck, CheckSquare, Columns2, FolderInput, Heart, HeartOff, History, Loader2, Search, Trash2, X } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { GalleryViewSwitcher } from './GalleryViewSwitcher'
 import { MediaMoveDialog } from './MediaMoveDialog'
@@ -7,6 +7,8 @@ import { ConfirmDialog } from '../common/ConfirmDialog'
 import type { GalleryBatchAction } from './galleryBatch'
 import { useStore } from '../../stores/useStore'
 import type { GalleryOrder } from '../../api/outputs'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { GallerySearch } from './GallerySearch'
 
 const iconButton = 'flex h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-text-secondary transition-colors hover:bg-white/[0.07] hover:text-text-primary disabled:opacity-40'
 
@@ -14,12 +16,11 @@ const iconButton = 'flex h-10 min-w-10 shrink-0 items-center justify-center gap-
  *  dense views, and the layout switcher. While selecting it becomes the
  *  selection's action bar. */
 export function GalleryToolbar({
-  view, canSelect, showHistory, selecting, picked, busy, error, moveTargets,
+  view, hasItems, selecting, picked, busy, error, moveTargets,
   onOpenHistory, onStartSelecting, onSelectAll, onAction, onDone, onCompare,
 }: {
   view: 'feed' | 'grid' | 'masonry'
-  canSelect: boolean
-  showHistory: boolean
+  hasItems: boolean
   selecting: boolean
   picked: number
   busy: boolean
@@ -34,8 +35,6 @@ export function GalleryToolbar({
   onCompare?: () => void
 }) {
   const { t } = useUiTranslation('activity')
-  const order = useStore(s => s.galleryOrder)
-  const setOrder = useStore(s => s.setGalleryOrder)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [moving, setMoving] = useState(false)
 
@@ -66,6 +65,31 @@ export function GalleryToolbar({
     )
   }
 
+  return <BrowseBar view={view} hasItems={hasItems} onOpenHistory={onOpenHistory} onStartSelecting={onStartSelecting} />
+}
+
+/** The toolbar while browsing: history (phones), selection, search, order
+ *  and layout. On a phone the search opens over the whole bar. */
+function BrowseBar({ view, hasItems, onOpenHistory, onStartSelecting }: {
+  view: 'feed' | 'grid' | 'masonry'
+  hasItems: boolean
+  onOpenHistory: () => void
+  onStartSelecting: () => void
+}) {
+  const { t } = useUiTranslation('activity')
+  const order = useStore(s => s.galleryOrder)
+  const setOrder = useStore(s => s.setGalleryOrder)
+  const searching = useStore(s => Boolean(s.outputSearchQuery.trim()))
+  const isMobile = useIsMobile()
+  const browsingUploads = useStore(s => s.browsingUploads)
+  const [searchOpen, setSearchOpen] = useState(false)
+  // Uploads are browse-only; history is the phone's stand-in for the strip.
+  const canSelect = hasItems && !browsingUploads
+  const showHistory = hasItems && isMobile && view === 'feed'
+
+  if (isMobile && (searchOpen || searching)) {
+    return <div className="flex min-w-0 flex-1 items-center gap-1"><GallerySearch autoFocus={searchOpen} onClose={() => setSearchOpen(false)} /></div>
+  }
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1">
       {showHistory && (
@@ -78,6 +102,9 @@ export function GalleryToolbar({
           <CheckSquare size={16} /><span className="text-xs">{t('view.select')}</span>
         </button>
       )}
+      {isMobile
+        ? <button type="button" className={iconButton} onClick={() => setSearchOpen(true)} aria-label={t('gallerySearch.open')} title={t('gallerySearch.open')}><Search size={16} /></button>
+        : <GallerySearch />}
       <select aria-label={t('order.label')} title={t('order.label')} value={order} onChange={event => setOrder(event.target.value as GalleryOrder)}
         className="ml-auto h-10 min-w-0 max-w-[9.5rem] shrink rounded-md border border-border/70 bg-bg-secondary px-2 text-xs text-text-secondary">
         <option value="newest">{t('order.newest')}</option>

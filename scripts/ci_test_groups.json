@@ -164,7 +164,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 1569,
+      "weight": 1573,
       "paths": [
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
@@ -196,6 +196,7 @@
         "tests/test_director_workspace_queue.py",
         "tests/test_download_state.py",
         "tests/test_durable_generation_queue.py",
+        "tests/test_gallery_search.py",
         "tests/test_generation_task_timing.py",
         "tests/test_h3_adoption.py",
         "tests/test_h3_advanced_convrot.py",

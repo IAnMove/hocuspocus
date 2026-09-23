@@ -777,6 +777,50 @@ test.describe('Media gallery viewer and tools', () => {
     }
   })
 
+  test('the gallery toolbar searches the library and clears back to the full list', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const session = await bootMixedGallery(page)
+    const searches: Array<string | null> = []
+    await page.route('**/api/v1/outputs?*', route => {
+      const url = new URL(route.request().url())
+      const search = url.searchParams.get('search')
+      const kind = url.searchParams.get('media_type')
+      searches.push(search)
+      const listed = MIXED.filter(file => (!kind || file.type === kind) && (!search || file.name.includes(search)))
+      return route.fulfill({ json: { outputs: listed, total: listed.length } })
+    })
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Grid')
+      const box = page.getByRole('searchbox', { name: 'Search prompts, models and modes' })
+      await box.fill('gallery-01')
+      await expect.poll(() => searches.at(-1)).toBe('gallery-01')
+      await expect(page.getByRole('search')).toContainText('10 results')
+      await expect(feed.locator('[data-gallery-index]')).toHaveCount(10)
+      await page.getByRole('button', { name: 'Clear search', exact: true }).click()
+      await expect.poll(() => searches.at(-1)).toBeNull()
+      await expect.poll(() => feed.locator('[data-gallery-index]').count()).toBeGreaterThan(10)
+
+      // Clearing on a filtered tab reloads that tab's full list.
+      await page.getByRole('tab', { name: 'Images', exact: true }).click()
+      await box.fill('gallery-00')
+      await expect.poll(() => searches.at(-1)).toBe('gallery-00')
+      const images = MIXED.filter(file => file.type === 'image')
+      await expect(feed.locator('[data-gallery-index]')).toHaveCount(images.filter(file => file.name.includes('gallery-00')).length)
+      await box.fill('')
+      await expect.poll(() => searches.at(-1)).toBeNull()
+      await expect.poll(() => feed.locator('[data-gallery-index]').count()).toBeGreaterThan(4)
+
+      await box.fill('nothing-like-this')
+      await expect(page.getByText('No results for “nothing-like-this”')).toBeVisible()
+      await expect(page.getByText('will appear here')).toHaveCount(0)
+      await page.getByRole('main').getByRole('button', { name: 'Clear search', exact: true }).last().click()
+      await expect(box).toHaveValue('')
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
   test('deleting from the dialog steps to the next output', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     const deleted: string[] = []
@@ -989,6 +1033,23 @@ test.describe('Media gallery on a touch phone', () => {
       await panel.getByRole('button', { name: MIXED[7].name, exact: true }).click()
       await expect(panel).not.toBeInViewport()
       await expect(page.getByTestId('media-feed').locator('[data-feed-index="7"]')).toBeInViewport()
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('search opens over the toolbar on a phone and Escape closes it', async ({ page }) => {
+    const session = await bootMixedGallery(page)
+    try {
+      await chooseView(page, 'Grid')
+      await expect(page.getByRole('searchbox')).toHaveCount(0)
+      await page.getByRole('button', { name: 'Search', exact: true }).click()
+      const box = page.getByRole('searchbox', { name: 'Search prompts, models and modes' })
+      await expect(box).toBeFocused()
+      await expect(box).toBeInViewport()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('searchbox')).toHaveCount(0)
+      await expect(page.getByRole('group', { name: 'Gallery layout' })).toBeVisible()
     } finally {
       await closeApp(page, session)
     }

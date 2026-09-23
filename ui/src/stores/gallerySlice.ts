@@ -428,13 +428,11 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     await get().refreshOutputs()
   },
   setOutputSearchQuery: (q) => {
+    const previous = get().outputSearchQuery.trim()
     set({ outputSearchQuery: q, selectedOutput: 0 })
-    if (q.trim()) {
-      get().loadOutputs()
-    } else if (get().mediaFilter === 'all') {
-      // Clear search: reload normal paginated view
-      get().loadOutputs()
-    }
+    // Any change reloads, including clearing a search on a filtered tab,
+    // which used to leave the search results on screen.
+    if (q.trim() !== previous) void get().loadOutputs()
   },
   filteredOutputs: () => {
     const { outputs, mediaFilter } = get()

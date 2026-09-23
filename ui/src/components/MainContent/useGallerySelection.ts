@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import type { OutputFile } from '../../types'
 import { runGalleryBatch, type GalleryBatchAction } from './galleryBatch'
@@ -80,5 +80,11 @@ export function useGallerySelection(outputs: OutputFile[]) {
     }
   }, [outputs, picked, clear, t])
 
-  return { selecting, picked, busy, error, start, clear, pick, longPress, selectAll, apply }
+  // Exactly two picked images can be opened side by side.
+  const comparePair = useMemo(() => {
+    const files = outputs.filter(file => picked.has(file.name))
+    return files.length === 2 && files.every(file => file.type === 'image') ? [files[0].name, files[1].name] as const : null
+  }, [outputs, picked])
+
+  return { selecting, picked, busy, error, start, clear, pick, longPress, selectAll, apply, comparePair }
 }

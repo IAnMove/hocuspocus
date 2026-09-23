@@ -256,5 +256,16 @@
     "newest": "Más recientes",
     "oldest": "Más antiguos",
     "favorites": "Favoritos primero"
+  },
+  "gallerySearch": {
+    "open": "Buscar",
+    "label": "Buscar en prompts, modelos y modos",
+    "placeholder": "Buscar en prompts, modelos…",
+    "clear": "Limpiar búsqueda",
+    "close": "Cerrar búsqueda",
+    "results_one": "{{count}} resultado",
+    "results_other": "{{count}} resultados",
+    "noResults": "Sin resultados para «{{query}}»",
+    "noResultsHint": "Las palabras coinciden mientras escribes y las tildes dan igual."
   }
 }
