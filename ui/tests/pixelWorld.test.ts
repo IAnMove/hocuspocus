@@ -313,3 +313,17 @@ test('tulip fields: a flower floor in perspective and sails turning on the mills
   assert.ok(early.every((angle, i) => angle !== later[i]), 'every mill turns')
   assert.ok((root as Group).children.some(child => child.rotation.x === -Math.PI / 2), 'the field lies on the floor')
 })
+
+test('neon alley: two walls run along the street and the neon buzzes', () => {
+  const plan = worldPlan('pixel-alley', resolvePixelScene('pixel-alley', undefined))
+  const walls = plan.layers.filter(layer => layer.turn)
+  assert.equal(walls.length, 2)
+  assert.ok(walls[0].x! < 0 && walls[1].x! > 0 && walls[0].turn! === -walls[1].turn!, 'facing each other across the street')
+  assert.ok([176, 177, 178, 179].some(slot => walls[0].paint(...walls[0].texture).data.includes(slot)), 'neon signs')
+  const root = pixelWorldGroup('pixel-alley'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-neon-alley').pixelWorld!, 1, 720)
+  const turned = (root as Group).children.filter(child => Math.abs(Math.abs(child.rotation.y) - Math.PI / 2) < 1e-6)
+  assert.equal(turned.length, 2, 'the wall planes are turned to line the street')
+  const tubes = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.neon, seconds); return Array.from(bytes.subarray(176 * 4, 180 * 4)).join() }
+  assert.ok(new Set([0, .5, 1.1, 2.3, 3.7, 5.2, 7.9].map(tubes)).size > 1, 'tubes flicker')
+})

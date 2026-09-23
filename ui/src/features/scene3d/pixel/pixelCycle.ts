@@ -47,6 +47,12 @@ const CYCLERS: Cycler[] = [
     const heat = Math.pow(1 - pulse(k, INDEX.lavaSteps, t, .9), 2)
     return heat > .5 ? mixHex('#ff4a0c', '#ffd878', (heat - .5) * 2) : mixHex('#5c0a04', '#ff4a0c', heat * 2)
   } },
+  // Neon tubes: steady, but each buzzes off for an instant now and then.
+  { start: INDEX.neon, steps: 4, color: (p, t, k) => {
+    const tube = ['#ff3aa0', '#3ae8ff', '#b4ff3a', '#ff8a3a'][k]
+    const buzz = Math.sin(t * (13 + k * 7)) * Math.sin(t * (.9 + k * .4) + k) > .82
+    return buzz ? mixHex(p.near[0], tube, .25) : mixHex(tube, '#ffffff', .15)
+  } },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]

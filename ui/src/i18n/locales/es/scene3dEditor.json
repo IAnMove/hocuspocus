@@ -1377,6 +1377,10 @@
     "pixel-tulip-fields": {
       "title": "Campos de tulipanes",
       "description": "Hileras de tulipanes rojos, amarillos, rosas y violetas corren hasta el horizonte en perspectiva real mientras los molinos giran sus aspas ante un atardecer que pasa al crepúsculo y al alba."
+    },
+    "pixel-neon-alley": {
+      "title": "Callejón de neón",
+      "description": "Una calle estrecha bajo la lluvia entre fachadas altas: ventanas encendidas, escaleras de incendios, escaparates y rótulos de neón que zumban y parpadean, todo reflejado en el suelo mojado, con la ciudad brillando al fondo."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1614,7 +1618,8 @@
       "abyss": "Abismo",
       "lagoon": "Laguna",
       "jungle": "Selva",
-      "cosmos": "Cosmos"
+      "cosmos": "Cosmos",
+      "neon": "Neón"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1634,7 +1639,8 @@
       "pixel-village": "Aldea nevada",
       "pixel-falls": "Cascada",
       "pixel-orbit": "Órbita",
-      "pixel-tulips": "Campos de tulipanes"
+      "pixel-tulips": "Campos de tulipanes",
+      "pixel-alley": "Callejón de neón"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

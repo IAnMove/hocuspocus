@@ -695,3 +695,40 @@ export function paintSails(size: number): IndexedLayer {
   }
   return sails
 }
+
+function paintSign(target: IndexedLayer, x0: number, y0: number, w: number, h: number, slot: number) {
+  for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) {
+    const edge = y === y0 || y === y0 + h - 1 || x === x0 || x === x0 + w - 1
+    const glyph = !edge && (x - x0) % 3 !== 0 && (y - y0) % 4 !== 0
+    if (edge || glyph) set(target, x, y, INDEX.neon + slot)
+    else set(target, x, y, INDEX.trees)
+  }
+}
+
+function paintFireEscape(target: IndexedLayer, x0: number, top: number, bottom: number) {
+  for (let y = top; y < bottom; y += 8) {
+    for (let x = x0; x < x0 + 12; x++) set(target, x, y, INDEX.trees)
+    for (let s = 0; s < 8; s++) set(target, x0 + (Math.floor(y / 8) % 2 ? s : 11 - s), y + s, INDEX.trees)
+  }
+}
+
+/** A wall of city façades seen along a street: windows lit in the cycling
+ *  slots, fire escapes, shopfronts and neon signs that buzz. */
+export function paintFacade(width: number, height: number, spec: Tone & { seed: number }): IndexedLayer {
+  const wall = layer(width, height)
+  for (let x = 0, b = 0; x < width; b++) {
+    const w = 30 + Math.floor(fxRandom(spec.seed, b) * 40), top = Math.round(height * (.05 + fxRandom(spec.seed, b + 30) * .3))
+    const tone = b % 2 ? spec.body : INDEX.far
+    for (let y = top; y < height; y++) for (let dx = 0; dx < w; dx++) {
+      const window = y < height - 14 && (dx % 7) > 1 && (dx % 7) < 5 && ((y - top) % 9) > 2 && ((y - top) % 9) < 7
+      // Each window is lit or dark as a whole, in its own cycling slot.
+      const pane = Math.floor(dx / 7) * 131 + Math.floor((y - top) / 9) + x * 7
+      set(wall, x + dx, y, window ? (fxRandom(spec.seed, pane) > .5 ? INDEX.window + (pane & 7) : INDEX.trees) : dx === 0 ? spec.rim : tone)
+    }
+    for (let dx = 2; dx < w - 2; dx++) for (let y = height - 12; y < height - 2; y++) set(wall, x + dx, y, (dx % 10) < 7 ? INDEX.window + (b & 7) : INDEX.trees)
+    if (fxRandom(spec.seed, b + 60) > .4) paintFireEscape(wall, x + 4, top + 6, height - 16)
+    if (fxRandom(spec.seed, b + 90) > .25) paintSign(wall, x + Math.round(w * .45), top + 8 + Math.round(fxRandom(spec.seed, b + 120) * 20), 12, 24 + Math.round(fxRandom(spec.seed, b + 150) * 14), b % 4)
+    x += w
+  }
+  return wall
+}

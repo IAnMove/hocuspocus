@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -8,6 +8,9 @@ export type LayerSpec = {
   sky?: boolean
   /** Meters per second the plane travels along x, looping over `loop` meters. */
   drift?: { speed: number; loop: number; offset?: number; /** Meters it bobs up and down. */ bob?: number }
+  /** Where it stands across x (meters) and how it is turned about y, for walls. */
+  x?: number
+  turn?: number
   /** Radians per second it turns about its own centre. */
   spin?: number
   /** Goes round a centre (x, y) at `radius`, staying upright, like a gondola. */
@@ -189,6 +192,13 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
   'pixel-tulips': scene => ({ ground: 'field', layers: [
     sky(scene), range(scene), hills(scene, true),
     { z: -28, width: 80, height: 12, bottom: -.6, texture: [640, 96], paint: (w, h) => paintWindmills(w, h, { ...near, seed: scene.seed + 4, lightFrom: bodySkyX(scene), count: 3 }) },
+  ] }),
+  'pixel-alley': scene => ({ ground: 'water', layers: [
+    sky(scene),
+    { z: -44, width: 60, height: 18, bottom: -1, texture: [480, 144], paint: (w, h) => paintSkyline(w, h, { ...far, seed: scene.seed + 11, lightFrom: bodySkyX(scene), tall: scene.city, windows: scene.windows }) },
+    // The street's two walls run away from the camera on either side.
+    { z: -14, x: -4.2, turn: Math.PI / 2, width: 46, height: 15, bottom: -.2, texture: [460, 150], paint: (w, h) => paintFacade(w, h, { ...near, seed: scene.seed + 21, lightFrom: .9 }) },
+    { z: -14, x: 4.2, turn: -Math.PI / 2, width: 46, height: 15, bottom: -.2, texture: [460, 150], paint: (w, h) => paintFacade(w, h, { ...near, seed: scene.seed + 22, lightFrom: .1 }) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

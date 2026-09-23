@@ -1377,6 +1377,10 @@
     "pixel-tulip-fields": {
       "title": "Tulip fields",
       "description": "Rows of red, yellow, pink and violet tulips run to the horizon in true perspective while windmills turn their sails against a sunset that fades through dusk to dawn."
+    },
+    "pixel-neon-alley": {
+      "title": "Neon alley",
+      "description": "A narrow street in the rain between tall façades: lit windows, fire escapes, shopfronts and neon signs that buzz and flicker, all mirrored in the wet ground, with the city glowing at the far end."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1614,7 +1618,8 @@
       "abyss": "Abyss",
       "lagoon": "Lagoon",
       "jungle": "Jungle",
-      "cosmos": "Cosmos"
+      "cosmos": "Cosmos",
+      "neon": "Neon"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1634,7 +1639,8 @@
       "pixel-village": "Snowy village",
       "pixel-falls": "Waterfall",
       "pixel-orbit": "Orbit",
-      "pixel-tulips": "Tulip fields"
+      "pixel-tulips": "Tulip fields",
+      "pixel-alley": "Neon alley"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

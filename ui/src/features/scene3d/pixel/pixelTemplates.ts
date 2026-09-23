@@ -114,6 +114,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  'pixel-neon-alley': ['pixel-alley', { palettes: ['neon', 'vapor'], hold: 10, meteors: 0 }],
   'pixel-tulip-fields': ['pixel-tulips', { palettes: ['sunset', 'dusk', 'dawn'], hold: 8, meteors: .2 }],
   'pixel-orbit': ['pixel-orbit', { palettes: ['cosmos', 'vapor'], hold: 10, meteors: .15 }],
   'pixel-waterfall': ['pixel-falls', { palettes: ['jungle', 'dusk', 'forest'], hold: 8, meteors: .2 }],
@@ -154,6 +155,8 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
   if (id === 'pixel-snow-village') doc.worldSfx = villageCues()
+  if (id === 'pixel-neon-alley') doc.worldSfx = parseWorldSfx([{ id: 'alley-rain', kind: 'rain', start: 0, end: 24, position: { x: 0, y: -1, z: 2 },
+    scale: 3.2, intensity: 1, color: '#b4a8e8', seed: 19, sound: true, volume: .3 }])
   if (id === 'pixel-cherry-garden') doc.worldSfx = parseWorldSfx([{ id: 'petals', kind: 'snow', start: 0, end: 24, position: { x: 0, y: -.5, z: 1 },
     scale: 3.4, intensity: .7, color: '#ffc2dc', seed: 5, sound: true, volume: .12 }])
   if (id === 'pixel-drive-in') {
@@ -168,6 +171,7 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   // the planet looked up to, the reef from below in the light.
   if (id === 'pixel-storm-lake') doc.camera = { family: 'establishment', eye: [0, 1.2, 9], look: [0, 3.6, -40], fov: 50 }
   if (id === 'pixel-planet-rise') doc.camera = { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 }
+  if (id === 'pixel-neon-alley') doc.camera = { family: 'establishment', eye: [0, 1.7, 8], look: [0, 3.4, -30], fov: 56 }
   // Underwater the camera sits low and looks up into the light.
   if (id === 'pixel-coral-reef') doc.camera = { family: 'establishment', eye: [0, .9, 8], look: [0, 6, -40], fov: 50 }
   return doc

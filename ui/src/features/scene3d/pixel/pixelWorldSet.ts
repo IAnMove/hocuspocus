@@ -100,7 +100,8 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
     vertexShader: LAYER_VERTEX, fragmentShader: LAYER_FRAGMENT, depthWrite: true,
   })
   const mesh = new Mesh(new PlaneGeometry(spec.width, spec.height), material)
-  mesh.position.set(0, spec.bottom + spec.height / 2, spec.z)
+  mesh.position.set(spec.x ?? 0, spec.bottom + spec.height / 2, spec.z)
+  if (spec.turn) mesh.rotation.y = spec.turn
   const hubs = painted.hubs
   const lamp = painted.lamp && [
     (painted.lamp[0] / width - .5) * spec.width, spec.bottom + (1 - painted.lamp[1] / height) * spec.height, spec.z + .4,
