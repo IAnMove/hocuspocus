@@ -44,6 +44,14 @@ function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number)
     const hue = bulb % 2 ? palette.windows : '#ff5a8a'
     writeColor(bytes, INDEX.bulb + bulb, lit ? mixHex(hue, '#ffffff', .25) : mixHex(palette.near[0], hue, .35))
   }
+  for (let fall = 0; fall < INDEX.fallSteps; fall++) {
+    // The bright slot walks down the water column, so streaks pour downward.
+    const pulse = ((fall / INDEX.fallSteps - seconds * 1.8) % 1 + 1) % 1
+    const foam = mixHex(palette.sky[2], '#ffffff', .55), deep = mixHex(palette.water, palette.far[1], .4)
+    writeColor(bytes, INDEX.fall + fall, mixHex(deep, foam, Math.pow(1 - pulse, 1.5)))
+  }
+  writeColor(bytes, INDEX.fallWater, mixHex(mixHex(palette.water, palette.far[1], .4), mixHex(palette.sky[2], '#ffffff', .55), .45))
+  ;['#ff6a6a', '#ffb45a', '#fff27a', '#7aff9a', '#7ab4ff'].forEach((hue, band) => writeColor(bytes, INDEX.rainbow + band, mixHex(palette.far[0], hue, .55)))
   for (let tail = 0; tail < 2; tail++) {
     // Now and then a driver touches the brake.
     const brake = Math.sin(seconds * (.7 + tail * .3) + tail * 2) > .92

@@ -510,3 +510,46 @@ export function paintSkater(width: number, height: number, seed: number): Indexe
   for (let dx = -2; dx <= 3; dx++) set(skater, c + dx, height - 1, INDEX.nearRim)
   return skater
 }
+
+/** A waterfall between two cliffs: every column of water steps through the
+ *  cycling fall slots with its own offset, so bright streaks pour down;
+ *  foam boils at the foot and a rainbow hangs in the spray. */
+export function paintFalls(width: number, height: number, spec: Tone & { seed: number; wide: number }): IndexedLayer {
+  const falls = layer(width, height)
+  const lip = Math.round(height * .18), cx = width / 2, half = width * (.04 + spec.wide * .06)
+  for (let x = 0; x < width; x++) {
+    const away = Math.abs(x - cx) - half
+    // Cliffs stand tallest either side of the fall and drop away from it.
+    const top = away < 0 ? lip : Math.round(lip - 4 + away * .42 + Math.sin(away * .08 + spec.seed) * 5 + (fxRandom(spec.seed, x >> 2) - .5) * 4)
+    for (let y = top; y < height; y++) {
+      if (away < 0 && y >= lip) continue
+      const ledge = Math.sin(y * .55 + Math.sin(x * .05 + spec.seed) * 2.4) > .86 && bayer(x, y) < .6
+      const moss = y - top < 3 && fxRandom(spec.seed, x * 17 + y) > .35
+      set(falls, x, y, moss ? INDEX.trees : ledge || (x < cx) === (cx / width > spec.lightFrom) && y - top < 2 ? spec.rim : spec.body)
+    }
+    if (away > 0 && away < 10 && fxRandom(spec.seed, x + 700) > .5) for (let y = top; y < top + 6 + (x % 5) * 3; y++) set(falls, x, y, INDEX.trees)
+  }
+  for (let x = Math.ceil(cx - half); x <= cx + half; x++) {
+    // Neighbouring columns share a phase, so the water pours in streaks.
+    const offset = Math.floor(fxRandom(spec.seed, Math.floor(x / 3) + 300) * 8)
+    // Some columns carry bright pouring streaks, the rest are steady water.
+    const streak = fxRandom(spec.seed, Math.floor(x / 2) + 900) > .45
+    for (let y = lip; y < height; y++) {
+      const edge = Math.abs(x - cx) > half - 2 && bayer(x, y) < .4
+      if (!edge) set(falls, x, y, streak ? INDEX.fall + ((y + offset) >> 2) % INDEX.fallSteps : INDEX.fallWater)
+    }
+  }
+  const foot = height - 1
+  for (let y = foot - 10; y <= foot; y++) {
+    const spread = half + (y - foot + 10) * 2.2
+    for (let x = Math.floor(cx - spread); x <= cx + spread; x++) if (bayer(x, y) < 1 - Math.abs(x - cx) / spread) set(falls, x, y, INDEX.fall + ((x + y) % INDEX.fallSteps))
+  }
+  for (let band = 0; band < 5; band++) {
+    const r = half * 3.2 - band * 1.6
+    for (let a = 0; a < 180; a++) {
+      const t = Math.PI + a / 180 * Math.PI, x = Math.round(cx + half * 1.4 + Math.cos(t) * r), y = Math.round(foot - 4 + Math.sin(t) * r * .8)
+      if (bayer(x, y) < .75 && falls.data[y * width + x] !== 0) set(falls, x, y, INDEX.rainbow + band)
+    }
+  }
+  return falls
+}

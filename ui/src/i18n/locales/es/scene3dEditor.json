@@ -1365,6 +1365,10 @@
     "pixel-snow-village": {
       "title": "Aldea nevada",
       "description": "Una aldea nevada al anochecer: ventanas encendidas, el campanario de la iglesia, humo saliendo de las chimeneas y patinadores deslizándose por un lago helado que lo refleja todo mientras sigue nevando."
+    },
+    "pixel-waterfall": {
+      "title": "Cascada",
+      "description": "Una cascada cae entre acantilados cubiertos de musgo con puro ciclo de color, la espuma hierve a sus pies, un arcoíris cuelga en la bruma y la luz de la selva pasa al crepúsculo y la noche."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1600,7 +1604,8 @@
       "alien": "Alienígena",
       "sakura": "Sakura",
       "abyss": "Abismo",
-      "lagoon": "Laguna"
+      "lagoon": "Laguna",
+      "jungle": "Selva"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1617,7 +1622,8 @@
       "pixel-reef": "Arrecife",
       "pixel-valley": "Valle",
       "pixel-fair": "Feria nocturna",
-      "pixel-village": "Aldea nevada"
+      "pixel-village": "Aldea nevada",
+      "pixel-falls": "Cascada"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

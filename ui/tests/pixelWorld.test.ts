@@ -272,3 +272,14 @@ test('snowy village: smoke rises from the chimneys the painter drew', () => {
   assert.equal(skaters.length, 3)
   assert.ok(new Set(skaters.map(layer => Math.sign(layer.drift!.speed))).size === 2, 'skaters glide both ways')
 })
+
+test('waterfall: streaks pour by cycling, with foam and a rainbow in the spray', () => {
+  const plan = worldPlan('pixel-falls', resolvePixelScene('pixel-falls', undefined))
+  const cliffs = plan.layers.find(layer => layer.z === -34)!
+  const used = new Set(cliffs.paint(...cliffs.texture).data)
+  assert.ok([140, 141, 142, 143, 144, 145, 146, 147].filter(slot => used.has(slot)).length >= 6, 'streaks step through the fall slots')
+  assert.ok(used.has(158), 'steady water between the streaks')
+  assert.ok([150, 151, 152, 153, 154].filter(slot => used.has(slot)).length >= 4, 'a rainbow hangs in the spray')
+  const at = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.jungle, seconds); return Array.from(bytes.subarray(140 * 4, 148 * 4)).join() }
+  assert.notEqual(at(0), at(.2))
+})

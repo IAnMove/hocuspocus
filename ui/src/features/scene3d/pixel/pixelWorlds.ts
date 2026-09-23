@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -165,6 +165,12 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       z, width: .8, height: 1, bottom: 0, texture: [8, 10] as [number, number], drift: { speed, loop: 36, offset },
       paint: (w: number, h: number) => paintSkater(w, h, scene.seed + i),
     })),
+    ...reeds(scene),
+  ] }),
+  'pixel-falls': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene),
+    { z: -34, width: 76, height: 16, bottom: -.8, texture: [608, 128], paint: (w, h) => paintFalls(w, h, { ...far, seed: scene.seed + 4, lightFrom: bodySkyX(scene), wide: scene.hills }) },
+    { z: -17, width: 44, height: 5, bottom: -.6, texture: [440, 50], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 6, tall: .35, density: scene.trees, body: INDEX.near }) },
     ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [

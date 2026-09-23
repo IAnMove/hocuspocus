@@ -1365,6 +1365,10 @@
     "pixel-snow-village": {
       "title": "Snowy village",
       "description": "A snowed-in village at dusk: lit windows, a church steeple, smoke curling from the chimneys and skaters gliding across a frozen lake that mirrors it all as the snow keeps falling."
+    },
+    "pixel-waterfall": {
+      "title": "Waterfall",
+      "description": "A waterfall pours between mossy cliffs by pure colour cycling, foam boils at its foot, a rainbow hangs in the spray and the jungle light turns to dusk and night."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1600,7 +1604,8 @@
       "alien": "Alien",
       "sakura": "Sakura",
       "abyss": "Abyss",
-      "lagoon": "Lagoon"
+      "lagoon": "Lagoon",
+      "jungle": "Jungle"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1617,7 +1622,8 @@
       "pixel-reef": "Reef",
       "pixel-valley": "Valley",
       "pixel-fair": "Night fair",
-      "pixel-village": "Snowy village"
+      "pixel-village": "Snowy village",
+      "pixel-falls": "Waterfall"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",
