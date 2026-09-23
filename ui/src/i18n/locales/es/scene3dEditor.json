@@ -369,6 +369,14 @@
     "stage": "Escenario"
   },
   "template": {
+    "topdown-dragon-portals": {
+      "title": "Dark Fantasy · El portal del dragón",
+      "description": "Un dragón animado y sin fondo atraviesa un portal 3D que gira, revela otro reino y se expande entre chispas. Capas y tiempos editables."
+    },
+    "topdown-cliff-flight": {
+      "title": "Dark Fantasy · Vuelo sobre el abismo",
+      "description": "Un dragón visto desde arriba planea entre acantilados independientes, con profundidad, niebla y partículas. Cámara fija vertical y cuatro capas editables."
+    },
     "dark-cathedral": {
       "title": "Dark Fantasy · La catedral del eclipse",
       "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."

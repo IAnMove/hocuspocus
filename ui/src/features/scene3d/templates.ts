@@ -7,7 +7,9 @@ import { mediaTemplateDocument, MEDIA_TEMPLATES, MEDIA_CATEGORIES } from './medi
 import { campaignTemplateDocument, CAMPAIGN_TEMPLATES, CAMPAIGN_CATEGORIES } from './campaignTemplates'
 import { adaptAuthoredCameraToFrame } from './frameFormat.ts'
 import { actionTemplateDocument, ACTION_TEMPLATES, ACTION_CATEGORIES } from './actionTemplates'
-import { createDefaultScene3DDocument } from './document.ts'
+import { createDefaultScene3DDocument, parseScene3DDocument } from './document.ts'
+import topdownCliffScene from './topdownCliffScene.json' with { type: 'json' }
+import topdownDragonPortalsScene from './topdownDragonPortalsScene.json' with { type: 'json' }
 import { SCENE3D_TEMPLATE_IDS, type Scene3DCamera, type Scene3DCameraFamily, type Scene3DDocument, type Scene3DSlot, type Scene3DSlotId, type Scene3DTemplateId } from './types.ts'
 
 export { SCENE3D_TEMPLATE_IDS, type Scene3DTemplateId }
@@ -25,6 +27,8 @@ export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative' | 'perspect
 export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
 export type Scene3DTemplateFilter = Scene3DTemplateCategory | Scene3DTemplateTag
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
+  'topdown-dragon-portals': 'cinema',
+  'topdown-cliff-flight': 'cinema',
   ...DARK_FANTASY_CATEGORIES,
   ...CREATIVE_CATEGORIES,
   ...CINEMATIC_CATEGORIES,
@@ -123,6 +127,8 @@ const CAMERA_PROFILES: Partial<Record<Scene3DTemplateId, Partial<Scene3DCamera>>
 }
 
 export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
+  { id: 'topdown-dragon-portals', camera: 'fixed', duration: 5, slots: ['subject_1', 'background', 'prop'], tags: ['dark-fantasy', 'perspective', 'animated'], frameFormat: 'portrait' },
+  { id: 'topdown-cliff-flight', camera: 'fixed', duration: 30, slots: ['subject_1', 'background', 'prop'], tags: ['dark-fantasy', 'perspective', 'animated'], frameFormat: 'portrait' },
   { id: 'two-shot', camera: 'establishment', duration: 6, slots: ['subject_1', 'subject_2', 'background'] },
   { id: 'product-orbit', camera: 'product', duration: 6, slots: ['subject_1', 'background'] },
   { id: 'hero-push', camera: 'establishment', duration: 5, slots: ['subject_1', 'background'] },
@@ -364,6 +370,14 @@ function emptySlot(id: Scene3DSlotId): Scene3DSlot {
 }
 
 export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
+  if (id === 'topdown-dragon-portals') {
+    const scene = parseScene3DDocument(structuredClone(topdownDragonPortalsScene))
+    if (scene) return scene
+  }
+  if (id === 'topdown-cliff-flight') {
+    const scene = parseScene3DDocument(structuredClone(topdownCliffScene))
+    if (scene) return scene
+  }
   const creative = creativeTemplateDocument(id)
   if (creative) return creative
   const fantasy = darkFantasyTemplateDocument(id)
