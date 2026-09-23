@@ -1361,6 +1361,10 @@
     "pixel-night-fair": {
       "title": "Night fair",
       "description": "A Ferris wheel turns over the harbour, its bulbs chasing round by colour cycling while the gondolas hang upright, striped tents glow under strings of lights and the whole fair shimmers in the water."
+    },
+    "pixel-snow-village": {
+      "title": "Snowy village",
+      "description": "A snowed-in village at dusk: lit windows, a church steeple, smoke curling from the chimneys and skaters gliding across a frozen lake that mirrors it all as the snow keeps falling."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1612,7 +1616,8 @@
       "pixel-garden": "Cherry garden",
       "pixel-reef": "Reef",
       "pixel-valley": "Valley",
-      "pixel-fair": "Night fair"
+      "pixel-fair": "Night fair",
+      "pixel-village": "Snowy village"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

@@ -6,7 +6,10 @@ import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { isPixelTemplate, PIXEL_TEMPLATE_IDS } from './pixelTemplateIds'
 import type { Scene3DTemplate } from '../templates'
 import { parseWorldSfx } from '../../sceneFx/world'
-import { VOLCANO_CENTER } from './pixelWorlds'
+import { VILLAGE, VOLCANO_CENTER } from './pixelWorlds'
+import { paintVillage } from './pixelPaintWorlds'
+import { INDEX } from './pixelPaint'
+import { PIXEL_SCENE_DEFAULTS } from './pixelScene'
 
 /** The recording every TV starts with; replace it on one TV or all of them. */
 export const PIXEL_TV_CLIP = '/examples/moving-cutouts/skate-neon.mp4'
@@ -74,6 +77,22 @@ function eruptionCues() {
   ])
 }
 
+/** Snowfall, and smoke from the village's real chimneys: the painter
+ *  reports where it drew them and they are mapped into the world here. */
+function villageCues() {
+  const [w, h] = VILLAGE.texture
+  const scene = PIXEL_SCENE_DEFAULTS['pixel-village']
+  const { chimneys } = paintVillage(w, h, { body: INDEX.near, rim: INDEX.nearRim, lightFrom: .2 + .6 * scene.bodyX, seed: scene.seed + 6, houses: 9 })
+  const smoke = chimneys.filter((_, i) => i % 3 === 0).slice(0, 4).map(([x, y], i) => ({
+    id: `chimney-${i + 1}`, kind: 'smoke', start: 0, end: 24, scale: .9, intensity: .8, color: '#c8d4e4', seed: 30 + i, sound: false, volume: 0,
+    position: { x: (x / w - .5) * VILLAGE.width, y: VILLAGE.bottom + (1 - y / h) * VILLAGE.height, z: VILLAGE.z + .2 },
+  }))
+  return parseWorldSfx([
+    { id: 'snowfall', kind: 'snow', start: 0, end: 24, position: { x: 0, y: -.5, z: 1 }, scale: 3.6, intensity: 1, color: '#f4f8ff', seed: 12, sound: true, volume: .14 },
+    ...smoke,
+  ])
+}
+
 /** Rain around the camera and single strikes on the far ranges, each with
  *  its thunder; the painted world flashes with every strike. */
 function stormCues() {
@@ -95,6 +114,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  'pixel-snow-village': ['pixel-village', { palettes: ['polar', 'midnight'], hold: 10, meteors: .3 }],
   'pixel-night-fair': ['pixel-fair', { palettes: ['harbor', 'vapor'], hold: 10, meteors: .3 }],
   'pixel-balloons': ['pixel-valley', { palettes: ['dawn', 'sunset'], hold: 10, meteors: 0 }],
   'pixel-coral-reef': ['pixel-reef', { palettes: ['lagoon', 'abyss'], hold: 9, meteors: 0 }],
@@ -130,6 +150,7 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   const doc = pixelDocument(id, dressing, pixel, id === 'pixel-storm-lake' ? 18 : 24)
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
+  if (id === 'pixel-snow-village') doc.worldSfx = villageCues()
   if (id === 'pixel-cherry-garden') doc.worldSfx = parseWorldSfx([{ id: 'petals', kind: 'snow', start: 0, end: 24, position: { x: 0, y: -.5, z: 1 },
     scale: 3.4, intensity: .7, color: '#ffc2dc', seed: 5, sound: true, volume: .12 }])
   if (id === 'pixel-drive-in') {

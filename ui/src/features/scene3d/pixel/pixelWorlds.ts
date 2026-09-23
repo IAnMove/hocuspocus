@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -22,6 +22,9 @@ const NEAR: Omit<LayerSpec, 'paint'> = { z: -37, width: 110, height: 7, bottom: 
 const far = { body: INDEX.far, rim: INDEX.farRim }
 /** The Ferris wheel's hub height and radius, meters (centred on x = 0). */
 const WHEEL = { y: 8.6, radius: 7.2 }
+
+/** The village plane; its chimneys are mapped into the world for smoke. */
+export const VILLAGE: Omit<LayerSpec, 'paint'> = { z: -26, width: 70, height: 9, bottom: -.6, texture: [560, 72] }
 
 /** Balloons: depth, size, height, drift speed, start and two cloth colours. */
 const BALLOONS: [number, number, number, number, number, number, number][] = [
@@ -153,6 +156,15 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       paint: (w: number, h: number) => paintCabin(w, h, INDEX.balloon + (i % 3)),
     })),
     { z: -16, width: 44, height: 3.2, bottom: -.2, texture: [300, 22], paint: (w, h) => paintTents(w, h, scene.seed + 5, 6) },
+    ...reeds(scene),
+  ] }),
+  'pixel-village': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene), hills(scene, true),
+    { ...VILLAGE, paint: (w, h) => paintVillage(w, h, { ...near, seed: scene.seed + 6, lightFrom: bodySkyX(scene), houses: 9 }) },
+    ...[[-11, 1.4, 20], [-8, -1.8, 44], [-14, 1.1, 8]].map(([z, speed, offset], i) => ({
+      z, width: .8, height: 1, bottom: 0, texture: [8, 10] as [number, number], drift: { speed, loop: 36, offset },
+      paint: (w: number, h: number) => paintSkater(w, h, scene.seed + i),
+    })),
     ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [

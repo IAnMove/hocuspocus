@@ -260,3 +260,15 @@ test('night fair: the wheel turns, gondolas stay upright and bulbs chase', () =>
   const bulbs = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.harbor, seconds); return Array.from(bytes.subarray(130 * 4, 138 * 4)).join() }
   assert.notEqual(bulbs(0), bulbs(.2), 'the marquee chases')
 })
+
+test('snowy village: smoke rises from the chimneys the painter drew', () => {
+  const doc = applyScene3DTemplate('pixel-snow-village')
+  const smoke = doc.worldSfx!.filter(cue => cue.kind === 'smoke')
+  assert.ok(smoke.length >= 2)
+  assert.ok(smoke.every(cue => cue.position.z > -26 && cue.position.y > 0 && Math.abs(cue.position.x) < 35), 'smoke sits on the village plane, above ground')
+  assert.ok(doc.worldSfx!.some(cue => cue.kind === 'snow'))
+  const plan = worldPlan('pixel-village', resolvePixelScene('pixel-village', undefined))
+  const skaters = plan.layers.filter(layer => layer.drift && layer.bottom === 0)
+  assert.equal(skaters.length, 3)
+  assert.ok(new Set(skaters.map(layer => Math.sign(layer.drift!.speed))).size === 2, 'skaters glide both ways')
+})

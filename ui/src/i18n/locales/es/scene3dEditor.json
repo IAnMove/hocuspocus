@@ -1361,6 +1361,10 @@
     "pixel-night-fair": {
       "title": "Feria nocturna",
       "description": "Una noria gira sobre el puerto, sus bombillas se persiguen con ciclo de color mientras las góndolas cuelgan rectas, las carpas a rayas brillan bajo guirnaldas de luces y toda la feria titila en el agua."
+    },
+    "pixel-snow-village": {
+      "title": "Aldea nevada",
+      "description": "Una aldea nevada al anochecer: ventanas encendidas, el campanario de la iglesia, humo saliendo de las chimeneas y patinadores deslizándose por un lago helado que lo refleja todo mientras sigue nevando."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1612,7 +1616,8 @@
       "pixel-garden": "Jardín de cerezos",
       "pixel-reef": "Arrecife",
       "pixel-valley": "Valle",
-      "pixel-fair": "Feria nocturna"
+      "pixel-fair": "Feria nocturna",
+      "pixel-village": "Aldea nevada"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

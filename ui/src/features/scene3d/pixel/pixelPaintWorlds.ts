@@ -462,3 +462,51 @@ export function paintTents(width: number, height: number, seed: number, count: n
   }
   return tents
 }
+
+function paintHouse(target: IndexedLayer, x: number, ground: number, w: number, wall: number, seed: number, tone: Tone, chimneys: [number, number][]) {
+  for (let y = ground - wall; y <= ground; y++) for (let dx = 0; dx < w; dx++) {
+    const window = y > ground - wall + 2 && y < ground - 2 && dx % 5 >= 2 && dx % 5 < 4 && dx > 1 && dx < w - 2 && fxRandom(seed, dx * 7 + y) > .25
+    set(target, x + dx, y, window ? INDEX.window + ((dx + seed) & 7) : tone.body)
+  }
+  const roof = Math.ceil(w / 2) + 1
+  for (let r = 0; r < roof; r++) for (let dx = r - 1; dx <= w - r; dx++) set(target, x + dx, ground - wall - r, r < 2 || dx === r - 1 || dx === w - r ? tone.rim : INDEX.trees)
+  const cx = x + Math.round(w * (.25 + fxRandom(seed, 1) * .5)), top = ground - wall - Math.round(roof * .6) - 3
+  for (let y = top; y < ground - wall - 1; y++) { set(target, cx, y, INDEX.trees); set(target, cx + 1, y, INDEX.trees) }
+  set(target, cx, top, tone.rim); set(target, cx + 1, top, tone.rim)
+  chimneys.push([cx + 1, top - 1])
+}
+
+/** A snowed-in village on a gentle slope: gabled houses with snow on the
+ *  roofs and lit windows, a church with a steeple, and the chimneys' tops
+ *  reported so smoke can rise from them. */
+export function paintVillage(width: number, height: number, spec: Tone & { seed: number; houses: number }): IndexedLayer & { chimneys: [number, number][] } {
+  const village = layer(width, height)
+  const chimneys: [number, number][] = []
+  const slope = ridge(spec.seed, width, height * .8, height * .05, 1, height * .08)
+  for (let x = 0; x < width; x++) for (let y = slope[x]; y < height; y++) set(village, x, y, y === slope[x] ? spec.rim : spec.body)
+  const church = Math.round(width * .52)
+  for (let h = 0; h < spec.houses; h++) {
+    const x = Math.round(width * (.04 + .92 * (h + fxRandom(spec.seed, h) * .6) / spec.houses)), w = 12 + Math.round(fxRandom(spec.seed, h + 30) * 10)
+    if (Math.abs(x + w / 2 - church) < 20) continue
+    paintHouse(village, x, slope[x] + 1, w, 7 + Math.round(fxRandom(spec.seed, h + 60) * 4), spec.seed + h, spec, chimneys)
+  }
+  const ground = slope[church] + 1
+  for (let y = ground - 26; y <= ground; y++) for (let dx = -4; dx <= 4; dx++) set(village, church + dx, y, y > ground - 22 && y < ground - 18 && Math.abs(dx) < 2 ? INDEX.window + 3 : spec.body)
+  for (let r = 0; r < 12; r++) for (let dx = -Math.floor(r / 3); dx <= Math.floor(r / 3); dx++) set(village, church + dx, ground - 38 + r, r < 3 ? spec.rim : INDEX.trees)
+  for (let y = ground - 43; y < ground - 38; y++) set(village, church, y, spec.rim)
+  set(village, church - 1, ground - 42, spec.rim); set(village, church + 1, ground - 42, spec.rim)
+  paintHouse(village, church + 5, ground, 14, 9, spec.seed + 99, spec, chimneys)
+  return Object.assign(village, { chimneys })
+}
+
+/** A skater gliding, arms out, a few pixels tall. */
+export function paintSkater(width: number, height: number, seed: number): IndexedLayer {
+  const skater = layer(width, height)
+  const c = Math.floor(width / 2), lean = seed % 2 ? 1 : -1
+  set(skater, c, 1, INDEX.trees); set(skater, c + lean, 1, INDEX.trees)
+  for (let y = 2; y < 6; y++) set(skater, c, y, INDEX.balloon + (seed % 3))
+  for (let dx = -2; dx <= 2; dx++) set(skater, c + dx, 3, INDEX.trees)
+  set(skater, c - 1, 6, INDEX.trees); set(skater, c + 1, 7, INDEX.trees); set(skater, c - 1, 7, INDEX.trees)
+  for (let dx = -2; dx <= 3; dx++) set(skater, c + dx, height - 1, INDEX.nearRim)
+  return skater
+}
