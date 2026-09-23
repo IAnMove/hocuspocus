@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, Box, ExternalLink, Film, Music } from 'lucide-react'
+import { ArrowLeftRight, BookOpen, Box, Columns2, ExternalLink, Film, Music, X } from 'lucide-react'
 import ImagePreviewDialog from '../common/ImagePreviewDialog'
+import { ZoomableImage } from '../common/ZoomableImage'
 import { useUiTranslation } from '../../i18n'
 import type { OutputFile } from '../../types'
 import { OutputActionBar } from './OutputActionBar'
@@ -20,6 +21,8 @@ export interface GalleryDetail {
   /** Output the dialog was opened from, and that card's seek state. */
   origin: string
   video?: DetailVideoTime
+  /** Open side by side with this image (from a two-image selection). */
+  compare?: string
 }
 
 const KIND_ICON = { audio: Music, model3d: Box, scene: Film, comic: BookOpen } as const
@@ -57,6 +60,66 @@ function OtherMedia({ file, onOpened }: { file: OutputFile; onOpened: () => void
   )
 }
 
+/** Two images side by side (stacked on a phone), each zoomable on its own.
+ *  A stays put; B is the one that stepping and swiping change. */
+function CompareMedia({ a, b, onSwipe }: { a: OutputFile; b: OutputFile; onSwipe: (direction: 'previous' | 'next') => void }) {
+  return (
+    <div data-testid="compare-view" className="grid w-full grid-rows-2 gap-2 md:grid-cols-2 md:grid-rows-1">
+      {[a, b].map((file, side) => (
+        <figure key={`${side}:${file.name}`} className="flex min-h-0 min-w-0 flex-col items-center justify-center gap-1">
+          <ZoomableImage src={file.url} alt={file.name} onSwipe={side === 1 ? onSwipe : undefined}
+            className="block max-h-[27dvh] max-w-full object-contain md:max-h-[min(70dvh,calc(100dvh-13rem))]" />
+          <figcaption className="max-w-full truncate text-[11px] text-text-muted" title={file.name}>
+            <span className="mr-1 font-semibold text-text-secondary">{side === 0 ? 'A' : 'B'}</span>{file.name}
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+  )
+}
+
+/** Side-by-side state: which image is B, and where stepping would move it. */
+function useCompare(outputs: OutputFile[], index: number, initial: string | undefined) {
+  const [compareName, setCompareName] = useState<string | null>(initial ?? null)
+  const images = useMemo(() => outputs.flatMap((item, at) => (item.type === 'image' ? [at] : [])), [outputs])
+  const compareIndex = compareName ? outputs.findIndex(item => item.name === compareName) : -1
+  const comparing = compareIndex >= 0 && compareIndex !== index && outputs[index]?.type === 'image'
+  /** The image B lands on when stepping, never the one pinned as A. */
+  const step = (direction: -1 | 1): number | undefined => {
+    if (!comparing) return undefined
+    let at = images.indexOf(compareIndex) + direction
+    if (images[at] === index) at += direction
+    return images[at]
+  }
+  const start = outputs[index]?.type === 'image'
+    ? images.find(at => at > index) ?? [...images].reverse().find(at => at < index)
+    : undefined
+  const show = (at: number | undefined) => { if (at != null) setCompareName(outputs[at].name) }
+  return { images, compareIndex, comparing, previous: step(-1), next: step(1), start, show, stop: () => setCompareName(null), setCompareName }
+}
+
+function CompareControls({ compare, current, onSwap }: {
+  compare: ReturnType<typeof useCompare>
+  current: OutputFile
+  onSwap: () => void
+}) {
+  const { t } = useUiTranslation('common')
+  const button = 'flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary'
+  if (compare.comparing) {
+    return <>
+      <button type="button" className={button} onClick={() => { compare.setCompareName(current.name); onSwap() }}>
+        <ArrowLeftRight size={15} />{t('imagePreview.swap')}
+      </button>
+      <button type="button" className={button} onClick={compare.stop}><X size={15} />{t('imagePreview.stopCompare')}</button>
+      <span className="text-[11px] text-text-muted">{t('imagePreview.compareHint')}</span>
+    </>
+  }
+  if (compare.start == null) return null
+  return <button type="button" className={button} onClick={() => compare.show(compare.start)}>
+    <Columns2 size={15} />{t('imagePreview.compare')}
+  </button>
+}
+
 /** The gallery's one details dialog, the same in all three views. It steps
  *  through every output in the current list — including ones scrolled far out
  *  of the virtualized window — offers the full action set of a one-up card,
@@ -76,6 +139,7 @@ export default function GalleryDetailsDialog({ outputs, hasMore, detail, workspa
   const file = outputs[index]
   const previous = index > 0 ? index - 1 : undefined
   const next = index >= 0 && index < outputs.length - 1 ? index + 1 : undefined
+  const compare = useCompare(outputs, index, detail.compare)
   // Seek positions for videos reached by stepping rather than from their card.
   // Read only when a video mounts, so updating it needs no re-render.
   const [videoTimes] = useState(() => new Map<string, number>())
@@ -106,8 +170,11 @@ export default function GalleryDetailsDialog({ outputs, hasMore, detail, workspa
         if (ownVideo) ownVideo.onChange(seconds)
         videoTimes.set(file.name, seconds)
       }}
-      media={visual ? undefined : <OtherMedia file={file} onOpened={onClose} />}
-      actions={
+      media={compare.comparing
+        ? <CompareMedia a={file} b={outputs[compare.compareIndex]} onSwipe={direction => compare.show(direction === 'next' ? compare.next : compare.previous)} />
+        : visual ? undefined : <OtherMedia file={file} onOpened={onClose} />}
+      actions={<div className="flex flex-wrap items-center gap-1">
+        <CompareControls compare={compare} current={file} onSwap={() => onNavigate(compare.compareIndex)} />
         <OutputActionBar
           file={file}
           index={index}
@@ -116,13 +183,20 @@ export default function GalleryDetailsDialog({ outputs, hasMore, detail, workspa
           // Deleting or moving the item steps to its neighbour instead of
           // leaving an empty dialog.
           onBeforeRemove={() => {
+            compare.stop()
             if (next != null) onNavigate(next)
             else if (previous != null) onNavigate(previous)
             else onClose()
           }}
         />
-      }
-      navigation={{
+      </div>}
+      navigation={compare.comparing ? {
+        // While comparing, stepping moves B through the images only.
+        position: compare.images.indexOf(compare.compareIndex) + 1,
+        total: compare.images.length,
+        onPrevious: compare.previous == null ? undefined : () => compare.show(compare.previous),
+        onNext: compare.next == null ? undefined : () => compare.show(compare.next),
+      } : {
         position: index + 1,
         total: hasMore ? `${outputs.length}+` : outputs.length,
         onPrevious: previous == null ? undefined : () => onNavigate(previous),

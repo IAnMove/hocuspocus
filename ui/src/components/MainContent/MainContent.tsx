@@ -587,6 +587,12 @@ export function MainContent() {
     onEscape: selection.selecting ? selection.clear : undefined,
   })
 
+  // Exactly two picked images can be opened side by side.
+  const comparePair = useMemo(() => {
+    const picked = outputs.filter(file => selection.picked.has(file.name))
+    return picked.length === 2 && picked.every(file => file.type === 'image') ? [picked[0].name, picked[1].name] as const : null
+  }, [outputs, selection.picked])
+
   const phoneGrid = galleryView === 'grid' && viewport.width > 0 && viewport.width < 640
   useGridPinch({
     target: feedRef,
@@ -763,6 +769,10 @@ export function MainContent() {
             onSelectAll={selection.selectAll}
             onAction={action => { void selection.apply(action) }}
             onDone={selection.clear}
+            onCompare={comparePair ? () => {
+              setDetail({ name: comparePair[0], origin: comparePair[0], compare: comparePair[1] })
+              selection.clear()
+            } : undefined}
           />
         </div>
         <div

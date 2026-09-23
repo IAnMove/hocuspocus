@@ -154,7 +154,11 @@
     "resetZoom": "Reset zoom",
     "outputTitle": "Output details",
     "openInEditor": "Open in its editor",
-    "noPreview": "No preview for this output"
+    "noPreview": "No preview for this output",
+    "compare": "Compare",
+    "stopCompare": "Stop comparing",
+    "swap": "Swap A and B",
+    "compareHint": "Arrows and swipes change B"
   },
   "runtimeUpdate": {
     "message": "An update or server restart was detected. Your current form is kept. Reload when you are ready; unsent edits will be cleared.",

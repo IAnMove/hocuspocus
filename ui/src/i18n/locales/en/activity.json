@@ -240,7 +240,8 @@
     "failed": "Some items could not be updated: {{names}}",
     "confirmDeleteTitle_one": "Delete {{count}} output?",
     "confirmDeleteTitle_other": "Delete {{count}} outputs?",
-    "confirmDeleteAction": "Delete"
+    "confirmDeleteAction": "Delete",
+    "compare": "Compare the two images"
   },
   "deleteOutput": {
     "title": "Delete this output?",

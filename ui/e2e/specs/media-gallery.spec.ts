@@ -638,6 +638,68 @@ test.describe('Media gallery viewer and tools', () => {
     }
   })
 
+  test('two images can be compared side by side from the dialog or a selection', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const session = await bootMixedGallery(page)
+    const images = MIXED.filter(file => file.type === 'image')
+    const captions = () => page.getByTestId('compare-view').locator('figcaption')
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Grid')
+      await feed.getByRole('button', { name: `Enlarge ${images[0].name}`, exact: true }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByRole('button', { name: 'Compare', exact: true }).click()
+      await expect(dialog.getByTestId('zoomable-image')).toHaveCount(2)
+      await expect(captions()).toHaveText([`A${images[0].name}`, `B${images[1].name}`])
+      await expect(dialog).toContainText(`2 of ${images.length}`)
+      // Stepping changes B only, skipping audio, scenes and A itself.
+      await page.keyboard.press('ArrowRight')
+      await expect(captions()).toHaveText([`A${images[0].name}`, `B${images[2].name}`])
+      await expect(dialogTitle(page)).toHaveText(images[0].name)
+      await page.keyboard.press('ArrowLeft')
+      await expect(captions()).toHaveText([`A${images[0].name}`, `B${images[1].name}`])
+      await expect(dialog.getByRole('button', { name: 'Previous', exact: true })).toHaveCount(0)
+
+      await dialog.getByRole('button', { name: 'Swap A and B', exact: true }).click()
+      await expect(captions()).toHaveText([`A${images[1].name}`, `B${images[0].name}`])
+      await expect(dialogTitle(page)).toHaveText(images[1].name)
+      await dialog.getByRole('button', { name: 'Stop comparing', exact: true }).click()
+      await expect(page.getByTestId('compare-view')).toHaveCount(0)
+      await page.keyboard.press('Escape')
+
+      await page.getByRole('button', { name: 'Select', exact: true }).click()
+      await feed.getByRole('checkbox', { name: images[2].name, exact: true }).click()
+      await expect(page.getByRole('button', { name: 'Compare the two images' })).toHaveCount(0)
+      await feed.getByRole('checkbox', { name: images[3].name, exact: true }).click()
+      await page.getByRole('button', { name: 'Compare the two images', exact: true }).click()
+      await expect(captions()).toHaveText([`A${images[2].name}`, `B${images[3].name}`])
+      await expect(feed.getByRole('checkbox')).toHaveCount(0)
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('comparing on a phone stacks both images fully on screen', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    const session = await bootMixedGallery(page)
+    const images = MIXED.filter(file => file.type === 'image')
+    try {
+      await chooseView(page, 'Grid')
+      await page.getByTestId('media-feed').getByRole('button', { name: `Enlarge ${images[0].name}`, exact: true }).click()
+      await page.getByRole('dialog').getByRole('button', { name: 'Compare', exact: true }).click()
+      const pictures = page.getByTestId('compare-view').locator('img')
+      await expect(pictures).toHaveCount(2)
+      for (const picture of await pictures.all()) {
+        await expect(picture).toHaveJSProperty('complete', true)
+        await expect(picture).toBeInViewport({ ratio: 1 })
+      }
+      const [top, bottom] = await pictures.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))
+      expect(bottom.top).toBeGreaterThanOrEqual(top.bottom - 1)
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
   test('deleting from the dialog steps to the next output', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     const deleted: string[] = []

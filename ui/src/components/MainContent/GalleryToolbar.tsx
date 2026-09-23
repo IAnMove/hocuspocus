@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCheck, CheckSquare, FolderInput, Heart, HeartOff, History, Loader2, Trash2, X } from 'lucide-react'
+import { CheckCheck, CheckSquare, Columns2, FolderInput, Heart, HeartOff, History, Loader2, Trash2, X } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { GalleryViewSwitcher } from './GalleryViewSwitcher'
 import { MediaMoveDialog } from './MediaMoveDialog'
@@ -13,7 +13,7 @@ const iconButton = 'flex h-10 min-w-10 shrink-0 items-center justify-center gap-
  *  selection's action bar. */
 export function GalleryToolbar({
   view, canSelect, showHistory, selecting, picked, busy, error, moveTargets,
-  onOpenHistory, onStartSelecting, onSelectAll, onAction, onDone,
+  onOpenHistory, onStartSelecting, onSelectAll, onAction, onDone, onCompare,
 }: {
   view: 'feed' | 'grid' | 'masonry'
   canSelect: boolean
@@ -28,6 +28,8 @@ export function GalleryToolbar({
   onSelectAll: () => void
   onAction: (action: GalleryBatchAction) => void
   onDone: () => void
+  /** Set when exactly two images are picked. */
+  onCompare?: () => void
 }) {
   const { t } = useUiTranslation('activity')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -44,6 +46,7 @@ export function GalleryToolbar({
         <button type="button" className={iconButton} onClick={onSelectAll} disabled={busy} title={t('selection.all')} aria-label={t('selection.all')}><CheckCheck size={17} /></button>
         <button type="button" className={iconButton} onClick={() => onAction({ kind: 'favorite', favorite: true })} disabled={none} title={t('selection.favorite')} aria-label={t('selection.favorite')}><Heart size={16} /></button>
         <button type="button" className={iconButton} onClick={() => onAction({ kind: 'favorite', favorite: false })} disabled={none} title={t('selection.unfavorite')} aria-label={t('selection.unfavorite')}><HeartOff size={16} /></button>
+        {onCompare && <button type="button" className={iconButton} onClick={onCompare} disabled={busy} title={t('selection.compare')} aria-label={t('selection.compare')}><Columns2 size={16} /></button>}
         <button type="button" className={iconButton} onClick={() => setMoving(true)} disabled={none} title={t('selection.move')} aria-label={t('selection.move')}><FolderInput size={16} /></button>
         <button type="button" className={`${iconButton} hover:text-red-400`} onClick={() => setConfirmDelete(true)} disabled={none} title={t('selection.delete')} aria-label={t('selection.delete')}><Trash2 size={16} /></button>
         <button type="button" className={iconButton} onClick={onDone} disabled={busy} title={t('selection.done')} aria-label={t('selection.done')}><X size={17} /></button>

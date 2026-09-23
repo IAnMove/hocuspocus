@@ -240,7 +240,8 @@
     "failed": "Algunos elementos no se pudieron actualizar: {{names}}",
     "confirmDeleteTitle_one": "¿Borrar {{count}} elemento?",
     "confirmDeleteTitle_other": "¿Borrar {{count}} elementos?",
-    "confirmDeleteAction": "Borrar"
+    "confirmDeleteAction": "Borrar",
+    "compare": "Comparar las dos imágenes"
   },
   "deleteOutput": {
     "title": "¿Borrar este elemento?",
