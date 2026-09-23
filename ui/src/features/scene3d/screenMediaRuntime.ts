@@ -160,9 +160,12 @@ function drawScreenFrame(context: CanvasRenderingContext2D, canvas: HTMLCanvasEl
   const { width, height } = canvas
   context.clearRect(0, 0, width, height)
   if (look.matte) { context.fillStyle = '#080c13'; context.fillRect(0, 0, width, height) }
-  if (look.tube) context.filter = `hue-rotate(${look.hue ?? 0}deg) saturate(1.3) contrast(1.12)`
+  // Canvas filters cost CPU on every frame; only shifted tubes pay for one.
+  const shifted = Boolean(look.tube && look.hue)
+  if (shifted) context.filter = `hue-rotate(${look.hue}deg) saturate(1.25)`
   context.drawImage(source, r.x, r.y, r.width, r.height)
-  if (look.tube) { context.filter = 'none'; context.drawImage(look.tube, 0, 0) }
+  if (shifted) context.filter = 'none'
+  if (look.tube) context.drawImage(look.tube, 0, 0)
 }
 
 async function loadScreenSource(screen: MediaScreen, shared: SharedVideo | null, image: HTMLImageElement | null, signal: AbortSignal) {

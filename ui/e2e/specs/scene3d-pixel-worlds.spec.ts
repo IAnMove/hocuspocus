@@ -3,6 +3,8 @@ import { gotoApp, closeApp } from '../helpers/gotoApp'
 
 // Real Three.js editor against the closed, simulated API.
 test('pixel worlds: a TV wall template relights, adds TVs and shares one recording', async ({ page }, testInfo) => {
+  // Two dozen video screens under software WebGL are slow on CI runners.
+  test.slow()
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   const session = await gotoApp(page)
