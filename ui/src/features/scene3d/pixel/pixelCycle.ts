@@ -130,6 +130,10 @@ export function writePalette(bytes: Uint8Array, palette: PixelPalette, seconds: 
     writeColor(bytes, INDEX.sand + step, t < .6 ? mixHex(mixHex(palette.sky[2], palette.water, .45), palette.water, t / .6) : mixHex(palette.water, palette.near[0], (t - .6) * .6))
   }
   writeColor(bytes, INDEX.lamp, palette.windows)
+  // A pond: lily green and a lotus, shallow and deep water from the mood.
+  ;['#2e6a34', '#5aa04a', '#f4a0c8'].forEach((green, i) => writeColor(bytes, INDEX.pad + i, mixHex(green, palette.light.color, .15)))
+  writeColor(bytes, INDEX.pond, mixHex(palette.water, palette.far[1], .25))
+  writeColor(bytes, INDEX.pond + 1, mixHex(palette.water, palette.trees, .35))
   // The new moon: the sky's own blue by day, a black disc against the corona.
   // It hangs where the sky gradient reaches its middle tone.
   writeColor(bytes, INDEX.umbra, palette.sky[1])

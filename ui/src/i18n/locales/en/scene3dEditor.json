@@ -1417,6 +1417,10 @@
     "pixel-cathedral": {
       "title": "Cathedral",
       "description": "Inside a Gothic nave: a great rose window and two lancets of stained glass glow in turn as the sun moves round, shafts of coloured light fall across the flagstones and dust motes turn slowly in the beams."
+    },
+    "pixel-koi-pond": {
+      "title": "Koi pond",
+      "description": "Looking down on a garden pond: koi circle slowly under lily pads and lotus flowers, sunlight ripples across the bottom in a net of caustics and petals drift onto the water."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1687,7 +1691,8 @@
       "pixel-daycycle": "Day cycle",
       "pixel-eclipse": "Eclipse",
       "pixel-seasons": "Seasons",
-      "pixel-cathedral": "Cathedral"
+      "pixel-cathedral": "Cathedral",
+      "pixel-koi": "Koi pond"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

@@ -1417,6 +1417,10 @@
     "pixel-cathedral": {
       "title": "Catedral",
       "description": "Dentro de una nave gótica: un gran rosetón y dos ventanales de vidriera brillan por turnos mientras gira el sol, haces de luz de colores caen sobre las losas y motas de polvo giran despacio en la luz."
+    },
+    "pixel-koi-pond": {
+      "title": "Estanque de carpas",
+      "description": "Mirando desde arriba un estanque de jardín: las carpas koi giran despacio bajo los nenúfares y las flores de loto, la luz del sol ondula por el fondo en una red de cáusticas y caen pétalos sobre el agua."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1687,7 +1691,8 @@
       "pixel-daycycle": "Ciclo del día",
       "pixel-eclipse": "Eclipse",
       "pixel-seasons": "Estaciones",
-      "pixel-cathedral": "Catedral"
+      "pixel-cathedral": "Catedral",
+      "pixel-koi": "Estanque de carpas"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

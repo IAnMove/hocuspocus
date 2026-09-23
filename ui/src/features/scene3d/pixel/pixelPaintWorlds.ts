@@ -1024,3 +1024,57 @@ export function paintFlagstones(width: number, height: number, seed: number): In
   }
   return floor
 }
+
+/** The pond's radius as a share of its plane, so lilies can stay inside. */
+const POND = .236
+
+/** A garden pond seen from above: grass, a rim of stones, then water whose
+ *  floor carries a net of caustics in the shimmer slots. */
+export function paintPond(width: number, height: number, seed: number): IndexedLayer {
+  const pond = layer(width, height)
+  const cx = width / 2, cy = height / 2
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const a = Math.atan2(y - cy, x - cx), wobble = 1 + Math.sin(a * 3 + seed) * .06 + Math.sin(a * 7) * .03
+    const d = Math.hypot((x - cx) / (width * POND), (y - cy) / (height * POND)) / wobble
+    if (d > 1.08) { set(pond, x, y, INDEX.pad + (fxRandom(seed, x * 31 + y) > .85 ? 1 : 0)); continue }
+    if (d > .97) { set(pond, x, y, fxRandom(seed, (x >> 2) * 7 + (y >> 2)) > .5 ? INDEX.farRim : INDEX.far); continue }
+    const net = Math.abs(Math.sin(x * .12 + Math.sin(y * .08) * 2) + Math.sin(y * .11 + Math.sin(x * .07) * 2))
+    set(pond, x, y, net < .1 ? INDEX.ray + ((x + y) >> 3) % INDEX.raySteps : d > .8 ? INDEX.pond : INDEX.pond + 1)
+  }
+  return pond
+}
+
+/** Lily pads, each a disc with a notch, some carrying a lotus flower. */
+export function paintLilies(width: number, height: number, seed: number, count: number): IndexedLayer {
+  const lilies = layer(width, height)
+  for (let l = 0; l < count; l++) {
+    // Scattered over the water, away from the rim.
+    const a = fxRandom(seed, l) * Math.PI * 2, reach = Math.sqrt(fxRandom(seed, l + 60)) * .8 * POND
+    const cx = width / 2 + Math.cos(a) * reach * width, cy = height / 2 + Math.sin(a) * reach * height, r = 6 + fxRandom(seed, l + 120) * 5, notch = fxRandom(seed, l + 180) * Math.PI * 2
+    for (let y = Math.floor(cy - r); y <= cy + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+      const d = Math.hypot(x - cx, y - cy), a = Math.atan2(y - cy, x - cx)
+      if (d > r || Math.abs(Math.atan2(Math.sin(a - notch), Math.cos(a - notch))) < .35) continue
+      set(lilies, x, y, d > r - 1 || (x - cx) * (y - cy) > 0 && d < r * .3 ? INDEX.pad + 1 : INDEX.pad)
+    }
+    if (fxRandom(seed, l + 240) > .55) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (Math.abs(dx) + Math.abs(dy) <= 3) set(lilies, Math.round(cx) + dx, Math.round(cy) + dy, (dx + dy) % 2 ? INDEX.pad + 2 : INDEX.balloon + 3)
+  }
+  return lilies
+}
+
+/** A koi seen from above, facing +x: a cream body with red or gold
+ *  patches, fins and a forked tail. */
+export function paintKoi(width: number, height: number, variant: number): IndexedLayer {
+  const koi = layer(width, height)
+  const cy = (height - 1) / 2, patch = INDEX.balloon + (variant % 2)
+  for (let x = 0; x < width; x++) {
+    const t = x / (width - 1), half = t < .25 ? t / .25 * .55 : Math.sin(Math.PI * Math.min(1, (t - .1) / .9)) * cy
+    for (let y = 0; y < height; y++) {
+      const dy = Math.abs(y - cy)
+      if (t < .22 ? dy > (.22 - t) * 10 + .5 : dy > half + .3) continue
+      const spot = ((x * 3 + variant * 5) % 11 < 5 && t > .3 && t < .85) || (t > .8 && variant % 3 !== 2)
+      set(koi, x, y, t < .22 ? patch : spot ? patch : INDEX.balloon + 3)
+    }
+  }
+  for (const dy of [-1, 1]) set(koi, Math.round(width * .6), Math.round(cy + dy * (cy + .5)), patch)
+  return koi
+}

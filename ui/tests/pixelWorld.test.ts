@@ -456,3 +456,17 @@ test('cathedral: stained glass glows in turn and coloured shafts follow it', () 
   assert.equal(power(1).length, plan.beams!.length)
   assert.notDeepEqual(power(1), power(5), 'shafts brighten and fade with their glass')
 })
+
+test('koi pond: seen from above, koi circle on the ground plane facing where they swim', () => {
+  const plan = worldPlan('pixel-koi', resolvePixelScene('pixel-koi', undefined))
+  const koi = plan.layers.filter(layer => layer.orbit?.flat)
+  assert.ok(koi.length >= 5 && new Set(koi.map(layer => Math.sign(layer.orbit!.speed))).size === 2, 'koi swim both ways round')
+  assert.equal(applyScene3DTemplate('pixel-koi-pond').camera.eye[1] > 10, true, 'the camera looks down from above')
+  const root = pixelWorldGroup('pixel-koi'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-koi-pond').pixelWorld!
+  const fish = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); const mesh = (root as Group).children.find(child => child.position.y === .02)!; return { at: mesh.position.clone(), heading: mesh.rotation.z } }
+  const a = fish(2), b = fish(2.1)
+  assert.ok(a.at.y === b.at.y && a.at.distanceTo(b.at) > 0, 'koi move across the ground, not up')
+  const travel = Math.atan2(-(b.at.z - a.at.z), b.at.x - a.at.x)
+  assert.ok(Math.abs(Math.atan2(Math.sin(travel - a.heading), Math.cos(travel - a.heading))) < .2, 'each koi faces where it swims')
+})

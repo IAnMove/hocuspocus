@@ -116,6 +116,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-koi-pond': ['pixel-koi', { palettes: ['jungle', 'midnight'], hold: 12, meteors: 0 }],
   'pixel-cathedral': ['pixel-cathedral', { palettes: ['nave'], hold: 20, meteors: 0 }],
   'pixel-four-seasons': ['pixel-seasons', { palettes: ['dawn', 'jungle', 'sunset', 'polar'], hold: 6, meteors: 0 }],
   'pixel-eclipse': ['pixel-eclipse', { palettes: ['noon'], hold: 20, meteors: 0 }],
@@ -166,6 +167,7 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
   if (id === 'pixel-snow-village') doc.worldSfx = villageCues()
+  if (id === 'pixel-koi-pond') doc.worldSfx = parseWorldSfx([{ id: 'petals', kind: 'snow', start: 0, end: 24, position: { x: 0, y: 1, z: 0 }, scale: 3.4, intensity: .4, color: '#ffc2dc', seed: 71, sound: false, volume: 0 }])
   // Dust motes turning slowly in the light.
   if (id === 'pixel-cathedral') doc.worldSfx = parseWorldSfx([{ id: 'motes', kind: 'snow', start: 0, end: 24, position: { x: 0, y: 1, z: -6 }, scale: 2.4, intensity: .35, color: '#ffe0a0', seed: 61, sound: false, volume: 0 }])
   // Petals in spring, leaves in autumn, snow in winter (the 3D snow drift, recoloured).
@@ -189,6 +191,8 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   // the planet looked up to, the reef from below in the light.
   if (id === 'pixel-storm-lake') doc.camera = { family: 'establishment', eye: [0, 1.2, 9], look: [0, 3.6, -40], fov: 50 }
   if (id === 'pixel-planet-rise') doc.camera = { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 }
+  // Looking down on the pond from above.
+  if (id === 'pixel-koi-pond') doc.camera = { family: 'fixed', eye: [0, 13.5, 3.2], look: [0, 0, 0], fov: 50 }
   if (id === 'pixel-cathedral') doc.camera = { family: 'establishment', eye: [0, 1.7, 8], look: [0, 6, -20], fov: 56 }
   if (id === 'pixel-night-express') doc.camera = { family: 'fixed', eye: [0, 1.75, 8.4], look: [0, 2.1, -40], fov: 50 }
   if (id === 'pixel-rainy-window') doc.camera = { family: 'fixed', eye: [0, 1.7, 8.4], look: [0, 1.95, -40], fov: 50 }

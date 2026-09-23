@@ -335,6 +335,12 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
     const angle = orbit.phase + seconds * orbit.speed
     // Gondolas hang below their pivot on the rim and never tilt.
     mesh.position.x = orbit.x + Math.cos(angle) * orbit.radius
+    if (orbit.flat) {
+      // Swimming on the ground plane: turn to face the way it goes.
+      mesh.position.z = orbit.y + Math.sin(angle) * (orbit.ry ?? orbit.radius)
+      mesh.rotation.z = Math.atan2(-Math.cos(angle) * (orbit.ry ?? orbit.radius) * Math.sign(orbit.speed), -Math.sin(angle) * orbit.radius * Math.sign(orbit.speed))
+      continue
+    }
     mesh.position.y = orbit.y + Math.sin(angle) * (orbit.ry ?? orbit.radius) - (orbit.drop ?? 0)
   }
 }

@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -18,7 +18,7 @@ export type LayerSpec = {
   /** Radians per second it turns about its own centre. */
   spin?: number
   /** Goes round a centre (x, y) at `radius`, staying upright, like a gondola. */
-  orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number }
+  orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number; /** Circles on the ground (y is then z), facing where it goes. */ flat?: boolean }
   /** The sun or moon on its arc: the key light follows whichever is higher. */
   celestial?: 'sun' | 'moon'
   paint: (w: number, h: number) => IndexedLayer
@@ -42,6 +42,9 @@ export function eclipseShade(seconds: number) {
   const cover = Math.max(0, Math.min(1, (2 * ECLIPSE.meters - apart) / (1.8 * ECLIPSE.meters)))
   return cover * cover
 }
+
+/** Koi: path radii, speed (radians/s, sign is the way round), start and length. */
+const KOI: [number, number, number, number, number][] = [[4.6, 3.1, .35, 0, 1.3], [3.4, 2.4, -.45, 1.7, 1.1], [2.2, 1.6, .6, 3.2, .9], [4, 2.2, -.3, 4.4, 1.2], [1.4, 1.2, -.7, .9, .8], [3, 2.8, .4, 5.3, 1]]
 
 /** A day in the day-cycle world lasts as long as its template's clip. */
 export const DAY_SECONDS = 24
@@ -303,6 +306,16 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     ...[0, 1, 2, 3, 4, 5].map(hue => ({ from: [(hue - 2.5) * .7, 15.4 - Math.abs(hue - 2.5) * .3, -19.8] as [number, number, number], to: [(hue - 2.5) * 1.6 + 1.5, 0, -4 + hue * .8] as [number, number, number], width: 1.1, hue })),
     { from: [-4.2, 6, -19.8], to: [-2.5, 0, -12], width: 1.4, hue: 1 },
     { from: [4.2, 6, -19.8], to: [3, 0, -11], width: 1.4, hue: 4 },
+  ] }),
+  'pixel-koi': scene => ({ ground: 'none', layers: [
+    { z: 0, width: 32, height: 22, bottom: 0, floor: true, texture: [512, 352], paint: (w, h) => paintPond(w, h, scene.seed) },
+    // Koi circle at their own pace and size, some each way, under the lily pads.
+    ...KOI.map(([radius, ry, speed, phase, size], i) => ({
+      z: 0, width: size, height: size * .36, bottom: .02, floor: true, texture: [16, 6] as [number, number],
+      orbit: { x: 0, y: 0, radius, ry, speed, phase, flat: true },
+      paint: (w: number, h: number) => paintKoi(w, h, i),
+    })),
+    { z: 0, width: 32, height: 22, bottom: .05, floor: true, texture: [512, 352], paint: (w, h) => paintLilies(w, h, scene.seed + 5, Math.round(6 + scene.trees * 8)) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
