@@ -3023,9 +3023,10 @@ const TAB_LABELS: Record<AgentTab, string> = {
 export async function executeAgentActions(
   actions: AgentAction[],
   onStep?: (message: string) => void,
+  context?: { workspace: string },
 ): Promise<AgentActionResult[]> {
   const results: AgentActionResult[] = []
-  let executionWorkspace = useStore.getState().activeWorkspace || 'default'
+  let executionWorkspace = context?.workspace || useStore.getState().activeWorkspace || 'default'
   let preparedStudio = false
   let preparedStudioAction: AgentPrepareVideoAction | AgentPrepareImageAction | AgentPrepareAudioAction | AgentPrepare3dAction | null = null
   let createdComicId = ''

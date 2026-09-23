@@ -1,5 +1,5 @@
 import type { AgentTab } from './agentActions'
-import type { AgentExecutionReport, AgentExecutionState } from './agentContract'
+import type { AgentExecutionReport, AgentExecutionState, AgentExecutionTarget } from './agentContract'
 
 export interface WizardExecutionCardControls {
   open: boolean
@@ -20,17 +20,24 @@ const RECOVERABLE: AgentExecutionState[] = ['partial', 'failed']
 export function cardFromReport(report: AgentExecutionReport, id?: string): WizardExecutionCard {
   const running = RUNNING.includes(report.state)
   const recoverable = report.recoverable || RECOVERABLE.includes(report.state)
+  const taskControls = Boolean(executionCardTaskId(report)) && report.target?.kind !== 'wizard_workflow'
   return {
     ...report,
     id: id || report.executionKey || report.taskId || report.pipelineId || report.message,
     controls: {
-      open: Boolean(report.target?.id || report.target?.kind),
-      cancel: running,
-      resume: recoverable && report.state !== 'running',
+      open: canOpenExecutionCard(report),
+      cancel: taskControls && running,
+      resume: taskControls && recoverable && RECOVERABLE.includes(report.state),
       viewErrors: report.state === 'failed' || report.state === 'partial',
-      retryPending: report.state === 'partial' || report.state === 'failed',
+      retryPending: taskControls && RECOVERABLE.includes(report.state),
     },
   }
+}
+
+function canOpenExecutionCard(report: AgentExecutionReport): boolean {
+  if (report.target?.kind === 'activity') return true
+  if (report.target?.kind === 'wizard_workflow') return Boolean(executionCardTaskId(report))
+  return Boolean(tabForExecutionTarget(report.target))
 }
 
 export function cardsFromResults(results: Array<{ report?: AgentExecutionReport }>): WizardExecutionCard[] {
@@ -47,8 +54,23 @@ export function applyPollToCard(card: WizardExecutionCard, update: Partial<Agent
   }, card.id)
 }
 
-export function tabForExecutionTarget(kind?: string): AgentTab {
-  switch (kind) {
+/** Card buttons must never turn a missing receipt into a queue-wide selector. */
+export function executionCardTaskId(report: Pick<AgentExecutionReport, 'taskId'>): string | null {
+  const id = report.taskId?.trim()
+  return id && !/\s/.test(id) && !['latest', 'active', 'current'].includes(id) ? id : null
+}
+
+const APPLICATION_TABS = new Set<AgentTab>([
+  'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d', 'story_lab',
+  'series_lab', 'comics', 'video_editor', 'video_3d', 'animate_3d', 'character_creator',
+  'character_kit', 'workspaces', 'settings',
+])
+
+export function tabForExecutionTarget(target?: AgentExecutionTarget): AgentTab | null {
+  if (target?.kind === 'application_section') {
+    return APPLICATION_TABS.has(target.id as AgentTab) ? target.id as AgentTab : null
+  }
+  switch (target?.kind) {
     case 'comic': return 'comics'
     case 'director_production': return 'director'
     case 'story': return 'story_lab'
@@ -58,6 +80,6 @@ export function tabForExecutionTarget(kind?: string): AgentTab {
     case 'character_kit': return 'character_kit'
     case 'video_editor': return 'video_editor'
     case 'workspace_collection': return 'workspaces'
-    default: return 'studio'
+    default: return null
   }
 }

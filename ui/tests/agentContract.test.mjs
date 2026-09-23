@@ -652,6 +652,6 @@ test('execution cards expose five controls and keep the same id on poll', async 
   assert.deepEqual(polled.outputNames, ['final.mp4'])
   const failed = cardFromReport({ state: 'failed', message: 'Error', recoverable: true })
   assert.equal(failed.controls.viewErrors, true)
-  assert.equal(failed.controls.retryPending, true)
-  assert.equal(failed.controls.resume, true)
+  assert.equal(failed.controls.retryPending, false)
+  assert.equal(failed.controls.resume, false)
 })
