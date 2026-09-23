@@ -366,7 +366,8 @@ test('lantern festival: flocks rise on the clock and never leave the sky empty',
   assert.ok(a1 > a0, 'lanterns rise')
   for (let t = 0; t < 40; t += 1.3) {
     const heights = near(t)
-    assert.ok(heights.some(y => y - 4 < 6), `a near flock is in view at ${t}s`)
+    // The near flock planes are 8 m tall; at their depth the view spans about 0-11 m.
+    assert.ok(heights.some(y => y - 4 < 11 && y + 4 > 0), `a near flock is in view at ${t}s`)
   }
   const flames = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.dusk, seconds); return Array.from(bytes.subarray(188 * 4, 192 * 4)).join() }
   assert.notEqual(flames(0), flames(.3), 'flames flicker')
