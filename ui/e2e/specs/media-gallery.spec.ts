@@ -364,14 +364,16 @@ const MIXED: ApiOutput[] = Array.from({ length: 48 }, (_, index) => {
 })
 const VIEWS = ['One at a time', 'Grid', 'Mosaic'] as const
 
-async function bootMixedGallery(page: Page, options: { holdImages?: boolean; beforeGoto?: () => Promise<void> } = {}) {
+async function bootMixedGallery(page: Page, options: { holdImages?: boolean; beforeGoto?: () => Promise<void>; removed?: Set<string> } = {}) {
   const session = await bootGalleryApp(page, options.beforeGoto), fixtures = await installGalleryFixtures(page)
   if (!options.holdImages) fixtures.releaseImages()
   fixtures.releaseMetadata()
   await page.route('**/api/v1/outputs?*', route => {
     const url = new URL(route.request().url())
-    const offset = Number(url.searchParams.get('offset') || 0), limit = Number(url.searchParams.get('limit') || MIXED.length)
-    return route.fulfill({ json: { outputs: MIXED.slice(offset, offset + limit), total: MIXED.length } })
+    // Like the server, a listing never returns outputs that were deleted or moved away.
+    const listed = MIXED.filter(file => !options.removed?.has(file.name))
+    const offset = Number(url.searchParams.get('offset') || 0), limit = Number(url.searchParams.get('limit') || listed.length)
+    return route.fulfill({ json: { outputs: listed.slice(offset, offset + limit), total: listed.length } })
   })
   await page.route('**/api/v1/file/gallery-*', route => {
     const name = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1)!)
@@ -530,7 +532,6 @@ test.describe('Media gallery geometry', () => {
   })
 })
 
-const MIXED_IMAGES = MIXED.filter(file => file.type === 'image' || file.type === 'video')
 const dialogTitle = (page: Page) => page.getByRole('dialog').locator('h2')
 
 /** Two-finger touch gesture through the Chrome protocol: real multi-touch,
@@ -555,27 +556,32 @@ async function touch(page: Page) {
 }
 
 test.describe('Media gallery viewer and tools', () => {
-  test('the details dialog steps through images and videos with buttons, keys and swipes', async ({ page }) => {
+  test('the details dialog steps through every output with buttons, keys and swipes', async ({ page }) => {
     test.setTimeout(90_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     const session = await bootMixedGallery(page)
     try {
       const feed = page.getByTestId('media-feed')
       await chooseView(page, 'Grid')
-      await feed.getByRole('button', { name: `Enlarge ${MIXED_IMAGES[0].name}`, exact: true }).click()
+      await feed.getByRole('button', { name: `Enlarge ${MIXED[0].name}`, exact: true }).click()
       const dialog = page.getByRole('dialog')
-      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[0].name)
-      await expect(dialog).toContainText(`1 of ${MIXED_IMAGES.length}`)
+      await expect(dialogTitle(page)).toHaveText(MIXED[0].name)
+      await expect(dialog).toContainText(`1 of ${MIXED.length}`)
       await expect(dialog.getByRole('button', { name: 'Previous', exact: true })).toHaveCount(0)
 
+      // Scenes and audio are part of the walk, with their own preview.
       await dialog.getByRole('button', { name: 'Next', exact: true }).click()
-      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[1].name)
+      await expect(page.getByRole('dialog', { name: 'Output details', exact: true })).toBeVisible()
+      await expect(dialogTitle(page)).toHaveText(MIXED[1].name)
+      await expect(dialog.getByRole('button', { name: 'Open in its editor', exact: true })).toBeVisible()
       await page.keyboard.press('ArrowRight')
-      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[2].name)
-      // The fixture never serves full videos, so check the dialog kind, not the player.
-      await expect(page.getByRole('dialog', { name: MIXED_IMAGES[2].type === 'video' ? 'Video details' : 'Image details', exact: true })).toBeVisible()
+      await expect(dialogTitle(page)).toHaveText(MIXED[2].name)
+      await expect(dialog.locator('audio')).toHaveCount(1)
+      await page.keyboard.press('ArrowRight')
+      await expect(dialogTitle(page)).toHaveText(MIXED[3].name)
       await page.keyboard.press('ArrowLeft')
-      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[1].name)
+      await expect(dialogTitle(page)).toHaveText(MIXED[2].name)
+      await page.keyboard.press('ArrowRight')
 
       // A horizontal drag on the picture is a swipe to the next item.
       const box = (await dialog.getByTestId('zoomable-image').boundingBox())!
@@ -583,18 +589,75 @@ test.describe('Media gallery viewer and tools', () => {
       await page.mouse.down()
       await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2, { steps: 6 })
       await page.mouse.up()
-      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[2].name)
+      await expect(dialogTitle(page)).toHaveText(MIXED[4].name)
 
       // Walk far beyond the rows mounted behind the dialog.
-      for (let step = 0; step < 20; step++) await page.keyboard.press('ArrowRight')
-      const far = MIXED_IMAGES[22]
-      await expect(dialogTitle(page)).toHaveText(far.name)
+      for (let step = 0; step < 19; step++) await page.keyboard.press('ArrowRight')
+      await expect(dialogTitle(page)).toHaveText(MIXED[23].name)
       await page.keyboard.press('Escape')
       await expect(dialog).toHaveCount(0)
       // Closing leaves the gallery on the item that was being viewed.
-      const tile = feed.locator(`[data-gallery-index="${MIXED.indexOf(far)}"]`)
+      const tile = feed.locator('[data-gallery-index="23"]')
       await expect(tile).toBeInViewport()
       await expect(tile).toHaveAttribute('aria-current', 'true')
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('all three views offer the one-up card actions in the details dialog', async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const session = await bootMixedGallery(page)
+    const labels = (bar: Locator) => bar.locator('button').evaluateAll(nodes =>
+      nodes.map(node => node.getAttribute('title') || node.getAttribute('aria-label') || '').filter(Boolean).sort())
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'One at a time')
+      const card = feed.locator('[data-feed-index="0"]')
+      await expect(card.getByTestId('output-actions').getByTitle('Copy prompt')).toBeVisible()
+      const cardActions = await labels(card.getByTestId('output-actions'))
+      expect(cardActions).toEqual(expect.arrayContaining(['Download', 'Move to workspace', 'Add to favorites', 'Delete output', 'Copy prompt']))
+      for (const view of VIEWS) {
+        await chooseView(page, view)
+        await feed.getByRole('button', { name: `Enlarge ${MIXED[0].name}`, exact: true }).click()
+        const bar = page.getByRole('dialog').getByTestId('output-actions')
+        await expect(bar.getByTitle('Copy prompt')).toBeVisible()
+        expect(await labels(bar), `${view}: dialog actions`).toEqual(cardActions)
+        await page.keyboard.press('Escape')
+      }
+
+      // Outputs without a picture get the same dialog and their actions.
+      await chooseView(page, 'Grid')
+      await feed.getByRole('button', { name: MIXED[2].name, exact: true }).click()
+      const audio = page.getByRole('dialog', { name: 'Output details', exact: true })
+      await expect(audio.locator('audio')).toHaveCount(1)
+      await expect(audio.getByTestId('output-actions').getByTitle('Download')).toBeVisible()
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('deleting from the dialog steps to the next output', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const deleted: string[] = []
+    const removed = new Set<string>()
+    const session = await bootMixedGallery(page, { removed })
+    await page.route(url => /\/api\/v1\/outputs\/[^/]+$/.test(url.pathname), route => {
+      if (route.request().method() !== 'DELETE') return route.fallback()
+      deleted.push(decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1)!))
+      removed.add(deleted.at(-1)!)
+      return route.fulfill({ json: { ok: true } })
+    })
+    try {
+      await chooseView(page, 'Mosaic')
+      await page.getByTestId('media-feed').getByRole('button', { name: `Enlarge ${MIXED[3].name}`, exact: true }).click()
+      const bar = page.getByRole('dialog').getByTestId('output-actions')
+      await bar.getByTitle('Delete output').click()
+      await bar.getByTitle('Click again to confirm delete').click()
+      await expect(dialogTitle(page)).toHaveText(MIXED[4].name)
+      await expect.poll(() => deleted).toEqual([MIXED[3].name])
+      await expect(page.getByTestId('media-feed').getByText(MIXED[3].name, { exact: true })).toHaveCount(0)
     } finally {
       await closeApp(page, session)
     }
@@ -605,7 +668,7 @@ test.describe('Media gallery viewer and tools', () => {
     const session = await bootMixedGallery(page)
     try {
       await chooseView(page, 'Grid')
-      await page.getByTestId('media-feed').getByRole('button', { name: `Enlarge ${MIXED_IMAGES[1].name}`, exact: true }).click()
+      await page.getByTestId('media-feed').getByRole('button', { name: `Enlarge ${MIXED[3].name}`, exact: true }).click()
       const zoom = page.getByRole('dialog').getByTestId('zoomable-image')
       await expect(zoom.locator('img')).toHaveJSProperty('complete', true)
       const box = (await zoom.boundingBox())!
@@ -619,7 +682,7 @@ test.describe('Media gallery viewer and tools', () => {
       await page.mouse.up()
       expect(await zoom.locator('img').evaluate(node => node.style.transform)).not.toBe(before)
       // A drag while zoomed pans; it never counts as a swipe.
-      await expect(page.getByRole('dialog').locator('h2')).toHaveText(MIXED_IMAGES[1].name)
+      await expect(page.getByRole('dialog').locator('h2')).toHaveText(MIXED[3].name)
       await page.mouse.dblclick(center.x, center.y)
       await expect(zoom).toHaveAttribute('data-zoom', '1.00')
     } finally {
@@ -679,7 +742,9 @@ test.describe('Media gallery viewer and tools', () => {
     await page.setViewportSize({ width: 1280, height: 800 })
     const calls: string[] = []
     const favorites = new Set<string>()
+    const removed = new Set<string>()
     const session = await bootMixedGallery(page, {
+      removed,
       beforeGoto: async () => {
         await page.route('**/api/v1/workspaces', route => route.request().method() === 'GET'
           ? route.fulfill({ json: { workspaces: [{ name: 'default' }, { name: 'archive' }] } }) : route.fallback())
@@ -695,7 +760,9 @@ test.describe('Media gallery viewer and tools', () => {
     await page.route(url => /\/api\/v1\/outputs\/[^/]+(\/move)?$/.test(url.pathname), route => {
       const parts = new URL(route.request().url()).pathname.split('/')
       const move = parts.at(-1) === 'move'
-      calls.push(`${move ? 'move' : route.request().method().toLowerCase()} ${decodeURIComponent(parts.at(move ? -2 : -1)!)}`)
+      const name = decodeURIComponent(parts.at(move ? -2 : -1)!)
+      calls.push(`${move ? 'move' : route.request().method().toLowerCase()} ${name}`)
+      removed.add(name)
       return route.fulfill({ json: { ok: true } })
     })
     try {

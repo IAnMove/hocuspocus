@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, Download, X } from 'lucide-react'
 import { fetchOutputMetadata } from '../../api/outputs'
 import { useUiTranslation } from '../../i18n'
@@ -38,12 +38,17 @@ function metadataTarget(image: PreviewImage): { name: string; workspace?: string
   }
 }
 
-export default function ImagePreviewDialog({ image, onClose, videoTime, onVideoTimeChange, navigation }: {
+export default function ImagePreviewDialog({ image, onClose, videoTime, onVideoTimeChange, navigation, actions, media, title }: {
   image: PreviewImage
   onClose: () => void
   videoTime?: number
   onVideoTimeChange?: (seconds: number) => void
   navigation?: PreviewNavigation
+  /** Output actions shown under the header (the gallery's full action set). */
+  actions?: ReactNode
+  /** Replaces the picture for outputs that are not images or videos. */
+  media?: ReactNode
+  title?: string
 }) {
   const { t } = useUiTranslation('common')
   const [dimensions, setDimensions] = useState('')
@@ -84,7 +89,7 @@ export default function ImagePreviewDialog({ image, onClose, videoTime, onVideoT
     src = retryUrl.href
   }
   const actionClass = 'flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg hover:bg-bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent'
-  return <ModalShell open title={t(isVideo ? 'imagePreview.videoTitle' : 'imagePreview.title')} onClose={onClose}
+  return <ModalShell open title={title ?? t(isVideo ? 'imagePreview.videoTitle' : 'imagePreview.title')} onClose={onClose}
     className="fixed inset-0 z-[150] flex items-center justify-center overflow-hidden bg-black/85 p-2 sm:p-6"
     onMouseDown={event => { event.stopPropagation(); if (event.target === event.currentTarget) onClose() }}>
     <section className="flex max-h-[calc(100dvh-1rem)] min-w-0 w-full max-w-[1600px] flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary text-text-primary sm:max-h-[calc(100dvh-3rem)]">
@@ -96,9 +101,10 @@ export default function ImagePreviewDialog({ image, onClose, videoTime, onVideoT
         <a href={image.url} download={image.name} className={actionClass} aria-label={t(isVideo ? 'imagePreview.downloadVideo' : 'imagePreview.download')}><Download size={18} /></a>
         <button type="button" className={actionClass} onClick={onClose} aria-label={t('actions.close')}><X size={20} /></button>
       </header>
+      {actions && <div className="shrink-0 border-b border-border px-2 py-1 text-text-secondary">{actions}</div>}
       <div className="flex min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain md:flex-row md:overflow-hidden">
         <div className="relative flex min-h-40 min-w-0 shrink-0 items-center justify-center bg-black/30 p-2 md:flex-1">
-          {failed ? <div role="alert" className="p-4 text-sm">{t(isVideo ? 'imagePreview.videoFailed' : 'imagePreview.failed')}
+          {media ? media : failed ? <div role="alert" className="p-4 text-sm">{t(isVideo ? 'imagePreview.videoFailed' : 'imagePreview.failed')}
             <button type="button" className="mt-2 block min-h-11 underline" onClick={() => { setFailed(false); setAttempt(value => value + 1) }}>{t('actions.retry')}</button>
           </div> : isVideo ? <video key={src} src={src} poster={image.thumbnail_url || undefined} controls playsInline preload="metadata" tabIndex={0}
             aria-label={image.name} className="block max-h-[55dvh] min-w-0 w-full object-contain md:max-h-[min(75dvh,calc(100dvh-9rem))]"

@@ -583,11 +583,7 @@ export function MainContent() {
       setSelectedOutput(next)
       revealIndex(next, layoutRef.current.view === 'feed' ? 'start' : 'nearest')
     },
-    onOpen: () => {
-      const file = outputs[activeIndex]
-      if (file?.type === 'image' || file?.type === 'video') openDetails(activeIndex)
-      else handleThumbnailClick(activeIndex)
-    },
+    onOpen: () => openDetails(activeIndex),
     onEscape: selection.selecting ? selection.clear : undefined,
   })
 

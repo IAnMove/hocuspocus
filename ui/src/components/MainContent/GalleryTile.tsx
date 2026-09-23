@@ -134,5 +134,7 @@ export const GalleryTile = memo(function GalleryTile({
       </ImagePreview>
     </div>
   }
-  return <button type="button" style={{ ...style, ...placeholder }} data-gallery-index={index} aria-current={active ? 'true' : undefined} className={className} onClick={open} {...pressHandlers}>{content}</button>
+  // Audio, 3D, scenes and comics open the same details dialog as pictures.
+  return <button type="button" style={{ ...style, ...placeholder }} data-gallery-index={index} aria-current={active ? 'true' : undefined} aria-label={file.name}
+    className={className} onClick={() => { open(); openDetails() }} {...pressHandlers}>{content}</button>
 })

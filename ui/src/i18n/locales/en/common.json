@@ -151,7 +151,10 @@
     "next": "Next",
     "position": "{{current}} of {{total}}",
     "zoomHint": "Double-tap or pinch to zoom",
-    "resetZoom": "Reset zoom"
+    "resetZoom": "Reset zoom",
+    "outputTitle": "Output details",
+    "openInEditor": "Open in its editor",
+    "noPreview": "No preview for this output"
   },
   "runtimeUpdate": {
     "message": "An update or server restart was detected. Your current form is kept. Reload when you are ready; unsent edits will be cleared.",

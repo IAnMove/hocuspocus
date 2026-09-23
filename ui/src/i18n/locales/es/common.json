@@ -151,7 +151,10 @@
     "next": "Siguiente",
     "position": "{{current}} de {{total}}",
     "zoomHint": "Doble toque o pellizca para ampliar",
-    "resetZoom": "Restablecer zoom"
+    "resetZoom": "Restablecer zoom",
+    "outputTitle": "Detalles del elemento",
+    "openInEditor": "Abrir en su editor",
+    "noPreview": "Este elemento no tiene vista previa"
   },
   "runtimeUpdate": {
     "message": "Se ha detectado una actualización o un reinicio del servidor. Conservamos tu formulario. Recarga cuando termines; se borrarán los cambios sin enviar.",
