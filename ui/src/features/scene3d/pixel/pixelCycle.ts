@@ -37,6 +37,9 @@ export function snowCover(seconds: number) {
   return Math.max(0, Math.min(1, (t - winter + 1) / 5))
 }
 
+/** Glass hues: ruby, sapphire, emerald, gold, amethyst, amber. */
+export const GLASS = ['#d82a3a', '#2a5ad8', '#2aa860', '#f0c030', '#9a3ad0', '#f07a20']
+
 type Cycler = { start: number; steps: number; color: (palette: PixelPalette, seconds: number, k: number) => string }
 const pulse = (k: number, steps: number, seconds: number, speed: number) => ((k / steps - seconds * speed) % 1 + 1) % 1
 
@@ -92,6 +95,8 @@ const CYCLERS: Cycler[] = [
   // Snow piles up level by level as winter deepens, on the far range and the hills.
   { start: INDEX.snowFar, steps: 4, color: (p, t, k) => snowCover(t) > (k + .5) / 4 ? mixHex('#f4f8ff', p.light.color, .2) : p.far[0] },
   { start: INDEX.snowNear, steps: 4, color: (p, t, k) => snowCover(t) > (k + .5) / 4 ? mixHex('#f4f8ff', p.light.color, .2) : p.near[0] },
+  // Stained glass: each hue glows brighter in turn as the sun moves round.
+  { start: INDEX.glass, steps: INDEX.glassSteps, color: (_p, t, k) => mixHex(mixHex(GLASS[k], '#000000', .45), mixHex(GLASS[k], '#ffffff', .2), .5 + .5 * Math.sin(t * .5 - k * 1.05)) },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]

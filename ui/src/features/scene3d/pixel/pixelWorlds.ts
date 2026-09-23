@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -23,7 +23,9 @@ export type LayerSpec = {
   celestial?: 'sun' | 'moon'
   paint: (w: number, h: number) => IndexedLayer
 }
-export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean }
+/** A shaft of coloured light from a window to the floor, in meters. */
+export type Beam = { from: [number, number, number]; to: [number, number, number]; width: number; hue: number }
+export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -291,6 +293,17 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       ...reeds(scene),
     ] }
   },
+  'pixel-cathedral': scene => ({ ground: 'none', layers: [
+    { z: -20, width: 30, height: 22, bottom: 0, texture: [360, 264], paint: w => paintNaveWall(w, 264) },
+    { z: -6, x: -7, turn: Math.PI / 2, width: 28, height: 22, bottom: 0, texture: [336, 264], paint: (w, h) => paintArcade(w, h) },
+    { z: -6, x: 7, turn: -Math.PI / 2, width: 28, height: 22, bottom: 0, texture: [336, 264], paint: (w, h) => paintArcade(w, h) },
+    { z: -6, width: 14, height: 28, bottom: 0, floor: true, texture: [168, 336], paint: (w, h) => paintFlagstones(w, h, scene.seed) },
+  ], beams: [
+    // Light from the rose window and the lancets falls across the floor.
+    ...[0, 1, 2, 3, 4, 5].map(hue => ({ from: [(hue - 2.5) * .7, 15.4 - Math.abs(hue - 2.5) * .3, -19.8] as [number, number, number], to: [(hue - 2.5) * 1.6 + 1.5, 0, -4 + hue * .8] as [number, number, number], width: 1.1, hue })),
+    { from: [-4.2, 6, -19.8], to: [-2.5, 0, -12], width: 1.4, hue: 1 },
+    { from: [4.2, 6, -19.8], to: [3, 0, -11], width: 1.4, hue: 4 },
+  ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

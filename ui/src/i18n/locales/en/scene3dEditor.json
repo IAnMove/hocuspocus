@@ -1413,6 +1413,10 @@
     "pixel-four-seasons": {
       "title": "Four seasons",
       "description": "A whole year over a lake in one clip: trees blossom pink in spring, deepen to green in summer, flare orange and red in autumn as leaves drift down, then snow piles up level by level on the peaks and hills in winter, all by colour cycling."
+    },
+    "pixel-cathedral": {
+      "title": "Cathedral",
+      "description": "Inside a Gothic nave: a great rose window and two lancets of stained glass glow in turn as the sun moves round, shafts of coloured light fall across the flagstones and dust motes turn slowly in the beams."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1652,7 +1656,8 @@
       "jungle": "Jungle",
       "cosmos": "Cosmos",
       "neon": "Neon",
-      "noon": "Noon"
+      "noon": "Noon",
+      "nave": "Nave"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1681,7 +1686,8 @@
       "pixel-express": "Train window",
       "pixel-daycycle": "Day cycle",
       "pixel-eclipse": "Eclipse",
-      "pixel-seasons": "Seasons"
+      "pixel-seasons": "Seasons",
+      "pixel-cathedral": "Cathedral"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

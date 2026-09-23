@@ -967,3 +967,60 @@ export function paintOrchard(width: number, height: number, spec: Tone & { seed:
   }
   return hills
 }
+
+/** A rose window: glass in six hues by ring and petal, held by lead. */
+function paintRose(target: IndexedLayer, cx: number, cy: number, r: number) {
+  for (let y = Math.floor(cy - r); y <= cy + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+    const d = Math.hypot(x - cx, y - cy) / r, a = Math.atan2(y - cy, x - cx)
+    if (d > 1) continue
+    const petal = Math.floor(((a / (Math.PI * 2) + 1) % 1) * 12), ring = d < .3 ? 0 : d < .68 ? 1 : 2
+    const lead = d > .96 || Math.abs(d - .3) < .03 || Math.abs(d - .68) < .025 || (ring > 0 && Math.abs(((a / (Math.PI * 2) + 1) % 1) * 12 - Math.round(((a / (Math.PI * 2) + 1) % 1) * 12)) < .06 / Math.max(.3, d))
+    set(target, x, y, lead ? INDEX.trees : INDEX.glass + (ring === 0 ? 3 : (petal + ring * 2) % INDEX.glassSteps))
+  }
+}
+
+/** A tall pointed lancet window with a grid of glass. */
+function paintLancet(target: IndexedLayer, cx: number, top: number, bottom: number, half: number, hue: number) {
+  for (let y = top; y < bottom; y++) {
+    const arch = y < top + half * 1.6 ? Math.sqrt(Math.max(0, 1 - ((top + half * 1.6 - y) / (half * 1.6)) ** 2)) * half : half
+    for (let x = Math.round(cx - arch); x <= cx + arch; x++) {
+      const lead = (y - top) % 9 === 0 || x === Math.round(cx) || Math.abs(Math.abs(x - cx) - arch) < 1
+      set(target, x, y, lead ? INDEX.trees : INDEX.glass + ((hue + Math.floor((y - top) / 9)) % INDEX.glassSteps))
+    }
+  }
+}
+
+/** The nave's far wall: dressed stone, a rose window and two lancets. */
+export function paintNaveWall(width: number, height: number): IndexedLayer {
+  const wall = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const course = y % 8 === 0 || (x + (Math.floor(y / 8) % 2) * 6) % 12 === 0
+    set(wall, x, y, course ? INDEX.far : INDEX.near)
+  }
+  paintRose(wall, width / 2, height * .3, height * .2)
+  paintLancet(wall, width * .36, Math.round(height * .52), Math.round(height * .9), 9, 1)
+  paintLancet(wall, width * .64, Math.round(height * .52), Math.round(height * .9), 9, 4)
+  return wall
+}
+
+/** A side of the nave: a row of piers and pointed arches in shadow. */
+export function paintArcade(width: number, height: number): IndexedLayer {
+  const side = layer(width, height)
+  const bay = 48
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const along = x % bay, pier = along < 8
+    const archTop = height * .3 + Math.pow(Math.abs(along - bay / 2 - 4) / (bay / 2 - 4), 2) * height * .18
+    set(side, x, y, pier || y < archTop ? (pier && along < 2 ? INDEX.farRim : INDEX.far) : INDEX.trees)
+  }
+  return side
+}
+
+/** A stone floor of large slabs, laid on the ground. */
+export function paintFlagstones(width: number, height: number, seed: number): IndexedLayer {
+  const floor = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const joint = y % 14 === 0 || (x + (Math.floor(y / 14) % 2) * 10) % 20 === 0
+    set(floor, x, y, joint ? INDEX.trees : fxRandom(seed, (x >> 3) * 97 + (y >> 3)) > .5 ? INDEX.near : INDEX.far)
+  }
+  return floor
+}

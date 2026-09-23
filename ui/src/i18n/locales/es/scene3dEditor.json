@@ -1413,6 +1413,10 @@
     "pixel-four-seasons": {
       "title": "Las cuatro estaciones",
       "description": "Un año entero sobre un lago en un solo clip: los árboles florecen rosas en primavera, se oscurecen de verde en verano, arden naranjas y rojos en otoño mientras caen las hojas, y en invierno la nieve se acumula por niveles en picos y colinas, todo con ciclo de color."
+    },
+    "pixel-cathedral": {
+      "title": "Catedral",
+      "description": "Dentro de una nave gótica: un gran rosetón y dos ventanales de vidriera brillan por turnos mientras gira el sol, haces de luz de colores caen sobre las losas y motas de polvo giran despacio en la luz."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1652,7 +1656,8 @@
       "jungle": "Selva",
       "cosmos": "Cosmos",
       "neon": "Neón",
-      "noon": "Mediodía"
+      "noon": "Mediodía",
+      "nave": "Nave"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1681,7 +1686,8 @@
       "pixel-express": "Ventana del tren",
       "pixel-daycycle": "Ciclo del día",
       "pixel-eclipse": "Eclipse",
-      "pixel-seasons": "Estaciones"
+      "pixel-seasons": "Estaciones",
+      "pixel-cathedral": "Catedral"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

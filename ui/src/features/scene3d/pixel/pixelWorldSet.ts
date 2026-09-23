@@ -1,5 +1,5 @@
 import {
-  AdditiveBlending, BoxGeometry, Color, DataTexture, DoubleSide, Group, HemisphereLight, Mesh, MeshStandardMaterial, NearestFilter, NoColorSpace,
+  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, Group, HemisphereLight, Mesh, MeshStandardMaterial, NearestFilter, NoColorSpace,
   PlaneGeometry, RedFormat, RGBAFormat, SRGBColorSpace, ShaderMaterial, UnsignedByteType, Vector2, Vector4,
   type Object3D, type Scene, type Vector3,
 } from 'three'
@@ -9,10 +9,10 @@ import { flashPalette, mixPalettes, paletteAt, PIXEL_PALETTES, tintPalette, type
 import type { ScreenLight } from './screenGlow'
 import { paintField, paintSails, paintSand } from './pixelPaintWorlds'
 import type { IndexedLayer } from './pixelPaint'
-import { fireworksAt, meteorsAt, writePalette } from './pixelCycle'
+import { fireworksAt, GLASS, meteorsAt, writePalette } from './pixelCycle'
 import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { bodyDirection, isPixelWorldKind, PIXEL_WORLD_KINDS, resolvePixelScene, type PixelScene, type PixelWorldKind } from './pixelScene'
-import { eclipseShade, worldPlan, type LayerSpec } from './pixelWorlds'
+import { eclipseShade, worldPlan, type Beam, type LayerSpec } from './pixelWorlds'
 
 export type PixelDressing = PixelWorldKind | 'pixel-gallery'
 export const PIXEL_DRESSINGS: readonly PixelDressing[] = [...PIXEL_WORLD_KINDS, 'pixel-gallery']
@@ -22,7 +22,7 @@ export function isPixelDressing(kind: unknown): kind is PixelDressing {
 
 type PixelRuntime = {
   kind: PixelDressing; key: string; palette: DataTexture; bytes: Uint8Array
-  skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; sky: [number, number]
+  skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; shafts: Mesh[]; sky: [number, number]
   movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; rise?: boolean; y: number }[]
   fireworks?: boolean
   spinners: { mesh: Mesh; speed: number }[]
@@ -193,6 +193,27 @@ function sailsOn(spec: LayerSpec, hubs: [number, number][], palette: DataTexture
   })
 }
 
+/** A shaft of light: a quad widening from the window to the floor, glowing
+ *  in its glass hue and fading toward the floor and its edges. */
+function lightShaft(beam: Beam) {
+  const [fx, fy, fz] = beam.from, [tx, ty, tz] = beam.to, half = beam.width / 2
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array([fx - half * .6, fy, fz, fx + half * .6, fy, fz, tx - half, ty, tz, tx + half, ty, tz]), 3))
+  geometry.setAttribute('uv', new BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), 2))
+  geometry.setIndex([0, 2, 1, 1, 2, 3])
+  const material = new ShaderMaterial({
+    name: 'pixel-world-shaft',
+    uniforms: { uColor: { value: new Color(GLASS[beam.hue]) }, uPower: { value: 1 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+    fragmentShader: `uniform vec3 uColor; uniform float uPower; varying vec2 vUv;
+      void main(){ float edge=1.-pow(abs(vUv.x-.5)*2.,2.); float a=edge*(.55-vUv.y*.3)*uPower; gl_FragColor=vec4(uColor*a,a); }`,
+    transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide,
+  })
+  const mesh = new Mesh(geometry, material)
+  mesh.userData.hue = beam.hue
+  return mesh
+}
+
 /** The lighthouse beam: two crossed light blades that sweep round the lamp. */
 function lighthouseBeam(at: [number, number, number]) {
   const root = new Group()
@@ -252,7 +273,7 @@ function clear(root: Object3D) {
  *  layout (not the lighting) changes. */
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -262,6 +283,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   }
   const plan = worldPlan(runtime.kind, scene)
   runtime.fireworks = plan.fireworks
+  for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
   for (const spec of plan.layers) {
     const { mesh, lamp, hubs } = layerMesh(spec, runtime.palette)
     if (spec.sky) runtime.skies.push(mesh.material as ShaderMaterial)
@@ -286,7 +308,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -306,6 +328,8 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
     if (mover.bob) mover.mesh.position.y = mover.y + sway
   }
   for (const spinner of runtime.spinners) spinner.mesh.rotation.z = seconds * spinner.speed
+  // Shafts brighten with their glass as the sun moves round.
+  for (const shaft of runtime.shafts) (shaft.material as ShaderMaterial).uniforms.uPower.value = .5 + .5 * Math.sin(seconds * .5 - shaft.userData.hue * 1.05)
   for (const scroller of runtime.scrollers) scroller.material.uniforms.uScroll.value = seconds * scroller.speed
   for (const { mesh, orbit } of runtime.orbiters) {
     const angle = orbit.phase + seconds * orbit.speed

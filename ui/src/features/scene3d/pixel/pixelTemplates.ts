@@ -116,6 +116,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-cathedral': ['pixel-cathedral', { palettes: ['nave'], hold: 20, meteors: 0 }],
   'pixel-four-seasons': ['pixel-seasons', { palettes: ['dawn', 'jungle', 'sunset', 'polar'], hold: 6, meteors: 0 }],
   'pixel-eclipse': ['pixel-eclipse', { palettes: ['noon'], hold: 20, meteors: 0 }],
   'pixel-whole-day': ['pixel-daycycle', { palettes: ['dawn', 'jungle', 'sunset', 'midnight'], hold: 6, meteors: .3 }],
@@ -165,6 +166,8 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
   if (id === 'pixel-snow-village') doc.worldSfx = villageCues()
+  // Dust motes turning slowly in the light.
+  if (id === 'pixel-cathedral') doc.worldSfx = parseWorldSfx([{ id: 'motes', kind: 'snow', start: 0, end: 24, position: { x: 0, y: 1, z: -6 }, scale: 2.4, intensity: .35, color: '#ffe0a0', seed: 61, sound: false, volume: 0 }])
   // Petals in spring, leaves in autumn, snow in winter (the 3D snow drift, recoloured).
   if (id === 'pixel-four-seasons') doc.worldSfx = parseWorldSfx(([['petals', 0, 6, '#ffc2dc', .7], ['leaves', 12, 18, '#e0702a', .8], ['snow', 18, 24, '#f4f8ff', 1]] as const).map(([name, start, end, color, intensity], i) => ({
     id: `season-${name}`, kind: 'snow', start, end, position: { x: 0, y: -.5, z: 1 }, scale: 3.4, intensity, color, seed: 40 + i, sound: name === 'snow', volume: .12,
@@ -186,6 +189,7 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   // the planet looked up to, the reef from below in the light.
   if (id === 'pixel-storm-lake') doc.camera = { family: 'establishment', eye: [0, 1.2, 9], look: [0, 3.6, -40], fov: 50 }
   if (id === 'pixel-planet-rise') doc.camera = { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 }
+  if (id === 'pixel-cathedral') doc.camera = { family: 'establishment', eye: [0, 1.7, 8], look: [0, 6, -20], fov: 56 }
   if (id === 'pixel-night-express') doc.camera = { family: 'fixed', eye: [0, 1.75, 8.4], look: [0, 2.1, -40], fov: 50 }
   if (id === 'pixel-rainy-window') doc.camera = { family: 'fixed', eye: [0, 1.7, 8.4], look: [0, 1.95, -40], fov: 50 }
   if (id === 'pixel-glow-tide') doc.camera = { family: 'establishment', eye: [0, 1.5, 10.5], look: [0, 2.2, -40], fov: 48 }

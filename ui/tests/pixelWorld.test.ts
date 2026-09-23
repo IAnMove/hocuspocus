@@ -89,11 +89,12 @@ test('every world paints its planes from a layout that can be reimagined', () =>
   for (const kind of PIXEL_WORLD_KINDS) {
     const scene = resolvePixelScene(kind, undefined)
     const plan = worldPlan(kind, scene)
-    assert.ok(plan.layers.some(layer => layer.sky), kind)
-    const sky = plan.layers.find(layer => layer.sky)!
+    // Interiors have no sky; their seeded plane is the floor.
+    const pick = (layers: typeof plan.layers) => layers.find(layer => layer.sky) ?? layers.find(layer => layer.floor)!
+    const sky = pick(plan.layers)
     const first = sky.paint(...sky.texture).data
     assert.deepEqual(first, sky.paint(...sky.texture).data, `${kind} is deterministic`)
-    const other = worldPlan(kind, { ...scene, seed: scene.seed + 1 }).layers.find(layer => layer.sky)!
+    const other = pick(worldPlan(kind, { ...scene, seed: scene.seed + 1 }).layers)
     assert.notDeepEqual(first, other.paint(...other.texture).data, `${kind} reimagines with a new seed`)
   }
   const coast = worldPlan('pixel-coast', resolvePixelScene('pixel-coast', undefined)).layers.find(layer => layer.z === -28)!
@@ -440,4 +441,18 @@ test('four seasons: foliage turns with the year and snow piles up level by level
   const orchard = plan.layers.find(layer => layer.z === -30)!.paint(640, 70)
   assert.ok([218, 219, 220, 221].every(slot => orchard.data.includes(slot)) && [210, 211, 212].every(slot => orchard.data.includes(slot)))
   assert.deepEqual(applyScene3DTemplate('pixel-four-seasons').worldSfx?.map(cue => [cue.start, cue.end]), [[0, 6], [12, 18], [18, 24]])
+})
+
+test('cathedral: stained glass glows in turn and coloured shafts follow it', () => {
+  const plan = worldPlan('pixel-cathedral', resolvePixelScene('pixel-cathedral', undefined))
+  assert.equal(plan.ground, 'none')
+  assert.ok((plan.beams?.length ?? 0) >= 6 && plan.beams!.every(beam => beam.from[1] > beam.to[1]), 'light falls from the windows')
+  const wall = plan.layers.find(layer => layer.z === -20)!.paint(360, 264)
+  assert.equal([222, 223, 224, 225, 226, 227].filter(slot => wall.data.includes(slot)).length, 6, 'six hues of glass')
+  const glass = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.nave, seconds); return Array.from(bytes.subarray(222 * 4, 228 * 4)).join() }
+  assert.notEqual(glass(0), glass(3))
+  const root = pixelWorldGroup('pixel-cathedral'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const power = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-cathedral').pixelWorld!, seconds, 720); return (root as Group).children.filter(child => child.userData.hue !== undefined).map(child => (child as Mesh).material.uniforms.uPower.value) }
+  assert.equal(power(1).length, plan.beams!.length)
+  assert.notDeepEqual(power(1), power(5), 'shafts brighten and fade with their glass')
 })
