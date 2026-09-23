@@ -357,3 +357,32 @@ export function paintSchool(width: number, height: number, seed: number, count: 
   }
   return school
 }
+
+/** A band of valley fog: solid in the middle, dithered away above and below. */
+export function paintMist(width: number, height: number, seed: number, density = 1): IndexedLayer {
+  const mist = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const wave = Math.sin(x * .03 + fxRandom(seed, Math.floor(x / 40)) * 3) * .12
+    const edge = 1 - Math.abs(y / height - .5 - wave) * 2.4
+    if (edge > 0 && bayer(x, y) < edge * density) set(mist, x, y, INDEX.sky + INDEX.skySteps - 3)
+  }
+  return mist
+}
+
+/** A hot-air balloon: striped gores lit on one side, ropes and a basket. */
+export function paintBalloon(width: number, height: number, spec: { colors: [number, number]; lightFrom: number }): IndexedLayer {
+  const balloon = layer(width, height)
+  const cx = (width - 1) / 2, envelope = Math.round(height * .74), r = width / 2 - .5
+  for (let y = 0; y < envelope; y++) {
+    const t = y / envelope, half = r * (t < .62 ? Math.sin((t / .62) * Math.PI / 2) : 1 - (t - .62) / .38 * .72)
+    for (let x = Math.ceil(cx - half); x <= cx + half; x++) {
+      const gore = Math.floor(((x - cx) / Math.max(1, half) + 1) * 3) % 2
+      const lit = (x - cx) / Math.max(1, half) * (spec.lightFrom < .5 ? -1 : 1) > .45
+      set(balloon, x, y, lit ? INDEX.balloon + 4 : spec.colors[gore])
+    }
+  }
+  const neck = r * .28, basketTop = envelope + Math.round(height * .12)
+  for (let y = envelope; y < basketTop; y++) { set(balloon, Math.round(cx - neck), y, INDEX.trees); set(balloon, Math.round(cx + neck), y, INDEX.trees) }
+  for (let y = basketTop; y < height; y++) for (let x = Math.round(cx - neck); x <= cx + neck; x++) set(balloon, x, y, INDEX.trees)
+  return balloon
+}

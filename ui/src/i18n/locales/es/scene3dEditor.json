@@ -1353,6 +1353,10 @@
     "pixel-coral-reef": {
       "title": "Arrecife de coral",
       "description": "Bajo el mar: rayos de sol que titilan desde una superficie ondulante, algas sobre el coral, dos bancos de peces que se cruzan en direcciones opuestas y plancton que destella, de una laguna luminosa al azul profundo."
+    },
+    "pixel-balloons": {
+      "title": "Globos al amanecer",
+      "description": "Globos aerostáticos flotan sobre un valle con niebla mientras sale el sol, los cercanos grandes y lentos, los lejanos pequeños, todos reflejados en el lago mientras el amanecer se calienta hacia el atardecer."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1602,7 +1606,8 @@
       "pixel-volcano": "Volcán",
       "pixel-drivein": "Autocine",
       "pixel-garden": "Jardín de cerezos",
-      "pixel-reef": "Arrecife"
+      "pixel-reef": "Arrecife",
+      "pixel-valley": "Valle"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

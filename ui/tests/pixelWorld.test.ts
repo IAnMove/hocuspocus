@@ -230,3 +230,16 @@ test('coral reef: sunlight shimmers down, schools cross both ways on the clock',
   assert.ok(a1 > a0 && b1 < b0, 'one school swims right, the other left')
   assert.ok(Math.abs(schools(0)[0]) < 20, 'the schools start in view')
 })
+
+test('balloons at dawn: several balloons drift at different depths and bob', () => {
+  const plan = worldPlan('pixel-valley', resolvePixelScene('pixel-valley', undefined))
+  const balloons = plan.layers.filter(layer => layer.drift?.bob)
+  assert.ok(balloons.length >= 4 && new Set(balloons.map(layer => layer.z)).size === balloons.length, 'each at its own depth')
+  const cloth = new Set(balloons.flatMap(layer => [...layer.paint(...layer.texture).data]))
+  assert.ok([124, 125, 126, 127].filter(slot => cloth.has(slot)).length >= 3, 'balloons wear several colours')
+  const root = pixelWorldGroup('pixel-valley'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-balloons').pixelWorld!
+  const heights = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.filter(child => child.position.z === -14).map(child => child.position.y) }
+  assert.notDeepEqual(heights(0), heights(2), 'balloons bob')
+  assert.deepEqual(heights(1), heights(1))
+})

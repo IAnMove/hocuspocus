@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -7,7 +7,7 @@ export type LayerSpec = {
   z: number; width: number; height: number; bottom: number; texture: [number, number]
   sky?: boolean
   /** Meters per second the plane travels along x, looping over `loop` meters. */
-  drift?: { speed: number; loop: number; offset?: number }
+  drift?: { speed: number; loop: number; offset?: number; /** Meters it bobs up and down. */ bob?: number }
   paint: (w: number, h: number) => IndexedLayer
 }
 export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand'; /** Height of the floor, meters. */ groundY?: number }
@@ -16,6 +16,11 @@ const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: 
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
 const NEAR: Omit<LayerSpec, 'paint'> = { z: -37, width: 110, height: 7, bottom: -1, texture: [720, 46] }
 const far = { body: INDEX.far, rim: INDEX.farRim }
+/** Balloons: depth, size, height, drift speed, start and two cloth colours. */
+const BALLOONS: [number, number, number, number, number, number, number][] = [
+  [-40, 5, 11, .5, 60, 0, 3], [-30, 3.6, 6.5, .7, 88, 2, 3], [-22, 2.6, 8.5, .9, 52, 1, 0], [-14, 1.9, 4.6, 1.1, 70, 3, 2], [-34, 3, 14, .6, 104, 1, 3],
+]
+
 /** Where the volcano's crater stands across its plane, for the smoke above it. */
 export const VOLCANO_CENTER = .56
 const near = { body: INDEX.near, rim: INDEX.nearRim }
@@ -118,6 +123,18 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       { z: -3, width: 22, height: 3.6, bottom: -3.2, texture: [440, 72], paint: (w, h) => paintReef(w, h, { body: INDEX.trees, rim: INDEX.near, seed: scene.seed + 3, lightFrom: .5, kelp: scene.trees * .7, tall: 1.7 }) },
     ] }
   },
+  'pixel-valley': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene),
+    { z: -41, width: 124, height: 4, bottom: 1.2, texture: [640, 22], paint: (w, h) => paintMist(w, h, scene.seed, .8) },
+    { ...NEAR, z: -38, paint: hills(scene, true).paint },
+    { z: -35, width: 104, height: 1.2, bottom: -.3, texture: [620, 8], paint: (w, h) => paintMist(w, h, scene.seed + 1, .45) },
+    ...BALLOONS.map(([z, size, y, speed, offset, a, b]) => ({
+      z, width: size * .8, height: size, bottom: y, texture: [Math.round(size * 7.2), Math.round(size * 9)] as [number, number],
+      drift: { speed, loop: 150, offset, bob: size * .08 },
+      paint: (w: number, h: number) => paintBalloon(w, h, { colors: [INDEX.balloon + a, INDEX.balloon + b] as [number, number], lightFrom: bodySkyX(scene) }),
+    })),
+    ...reeds(scene),
+  ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

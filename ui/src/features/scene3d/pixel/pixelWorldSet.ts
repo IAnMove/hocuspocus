@@ -23,7 +23,7 @@ export function isPixelDressing(kind: unknown): kind is PixelDressing {
 type PixelRuntime = {
   kind: PixelDressing; key: string; palette: DataTexture; bytes: Uint8Array
   skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; sky: [number, number]
-  movers: { mesh: Mesh; speed: number; loop: number; offset?: number }[]
+  movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; y: number }[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
@@ -214,7 +214,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   for (const spec of plan.layers) {
     const { mesh, lamp } = layerMesh(spec, runtime.palette)
     if (spec.sky) runtime.skies.push(mesh.material as ShaderMaterial)
-    if (spec.drift) runtime.movers.push({ mesh, ...spec.drift })
+    if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y })
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
   }
@@ -259,7 +259,10 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
     runtime.water.uniforms.uCalm.value = runtime.kind === 'pixel-gallery' ? .85 : 1 - Math.min(1, scene.ripple * 1.25)
   }
   // Travelling planes follow the scene clock, so scrubbing and export agree.
-  for (const mover of runtime.movers) mover.mesh.position.x = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
+  for (const mover of runtime.movers) {
+    mover.mesh.position.x = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
+    if (mover.bob) mover.mesh.position.y = mover.y + Math.sin(seconds * .6 + (mover.offset ?? 0)) * mover.bob
+  }
   if (runtime.beam) {
     runtime.beam.rotation.y = seconds * .9
     const material = (runtime.beam.children[0].children[0] as Mesh).material as ShaderMaterial

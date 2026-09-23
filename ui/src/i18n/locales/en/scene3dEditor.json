@@ -1353,6 +1353,10 @@
     "pixel-coral-reef": {
       "title": "Coral reef",
       "description": "Under the sea: shafts of sunlight shimmer down from a rippling surface, kelp sways over coral, two schools of fish cross in opposite directions and plankton glints, from a bright lagoon to the deep blue."
+    },
+    "pixel-balloons": {
+      "title": "Balloons at dawn",
+      "description": "Hot-air balloons drift and bob over a misty valley as the sun comes up, near ones large and slow, far ones small, all mirrored in the lake while dawn warms into sunset."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1602,7 +1606,8 @@
       "pixel-volcano": "Volcano",
       "pixel-drivein": "Drive-in",
       "pixel-garden": "Cherry garden",
-      "pixel-reef": "Reef"
+      "pixel-reef": "Reef",
+      "pixel-valley": "Valley"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",
