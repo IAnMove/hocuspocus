@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -14,7 +14,7 @@ export type LayerSpec = {
   orbit?: { x: number; y: number; radius: number; speed: number; phase: number }
   paint: (w: number, h: number) => IndexedLayer
 }
-export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand'; /** Height of the floor, meters. */ groundY?: number }
+export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand' | 'none'; /** Height of the floor, meters. */ groundY?: number }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -173,6 +173,19 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { z: -17, width: 44, height: 5, bottom: -.6, texture: [440, 50], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 6, tall: .35, density: scene.trees, body: INDEX.near }) },
     ...reeds(scene),
   ] }),
+  'pixel-orbit': scene => {
+    const stars = sky(scene)
+    return { ground: 'none', layers: [
+      { ...stars, bottom: -30, height: 82, texture: [700, 336], paint: (w, h) => paintNebula(stars.paint(w, h), scene.seed) },
+      { z: -40, width: 150, height: 30, bottom: -24, texture: [700, 140], paint: (w, h) => paintPlanetLimb(w, h, { seed: scene.seed + 3, curve: 1.6 + scene.mountains * 3, lightFrom: bodySkyX(scene) }) },
+      { z: -24, width: 15, height: 6, bottom: 5, texture: [120, 48], drift: { speed: .45, loop: 70, offset: 30, bob: .25 }, paint: (w, h) => paintStation(w, h, scene.seed) },
+      ...[[-18, 1.2, 2.5, -.7, 20], [-12, .7, 5.5, .5, 44], [-30, 2, 9, -.3, 60]].map(([z, size, y, speed, offset], i) => ({
+        z, width: size, height: size, bottom: y, texture: [Math.round(size * 12), Math.round(size * 12)] as [number, number],
+        drift: { speed, loop: 60, offset, bob: .3 }, spin: (i % 2 ? .3 : -.2),
+        paint: (w: number) => paintAsteroid(w, w, scene.seed + i),
+      })),
+    ] }
+  },
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

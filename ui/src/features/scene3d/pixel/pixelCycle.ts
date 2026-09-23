@@ -52,6 +52,11 @@ function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number)
   }
   writeColor(bytes, INDEX.fallWater, mixHex(mixHex(palette.water, palette.far[1], .4), mixHex(palette.sky[2], '#ffffff', .55), .45))
   ;['#ff6a6a', '#ffb45a', '#fff27a', '#7aff9a', '#7ab4ff'].forEach((hue, band) => writeColor(bytes, INDEX.rainbow + band, mixHex(palette.far[0], hue, .55)))
+  for (let gas = 0; gas < 4; gas++) {
+    // Nebula gas breathes slowly, its brighter folds most of all.
+    const breath = .85 + .15 * Math.sin(seconds * .6 + gas * .9)
+    writeColor(bytes, INDEX.nebula + gas, mixHex(palette.sky[1], palette.aurora, (.25 + gas * .22) * breath))
+  }
   for (let tail = 0; tail < 2; tail++) {
     // Now and then a driver touches the brake.
     const brake = Math.sin(seconds * (.7 + tail * .3) + tail * 2) > .92

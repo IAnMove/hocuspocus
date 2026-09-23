@@ -553,3 +553,71 @@ export function paintFalls(width: number, height: number, spec: Tone & { seed: n
   }
   return falls
 }
+
+/** Smooth value noise from the seeded hash, for clouds of gas. */
+function valueNoise(seed: number, x: number, y: number) {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy
+  const at = (a: number, b: number) => fxRandom(seed, a * 7919 + b * 104729)
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy)
+  return (at(ix, iy) * (1 - sx) + at(ix + 1, iy) * sx) * (1 - sy) + (at(ix, iy + 1) * (1 - sx) + at(ix + 1, iy + 1) * sx) * sy
+}
+
+/** Nebula clouds over the star field, dithered into four glowing slots. */
+export function paintNebula(sky: IndexedLayer, seed: number) {
+  for (let y = 0; y < sky.height; y++) for (let x = 0; x < sky.width; x++) {
+    const n = valueNoise(seed, x / 60, y / 40) * .6 + valueNoise(seed + 1, x / 22, y / 16) * .3 + valueNoise(seed + 2, x / 8, y / 8) * .1
+    const band = Math.exp(-(((y / sky.height) - .35 - Math.sin(x / sky.width * 5) * .12) ** 2) * 18)
+    const level = (n * band - .22) * 5
+    // Gas lies behind the stars and moon: only open sky is painted over.
+    const open = sky.data[y * sky.width + x] >= INDEX.sky && sky.data[y * sky.width + x] < INDEX.sky + INDEX.skySteps
+    if (open && level > 0 && bayer(x, y) < level % 1 + .001) set(sky, x, y, INDEX.nebula + Math.min(3, Math.floor(level)))
+  }
+  return sky
+}
+
+/** A planet's limb from orbit: a curved horizon with a glowing atmosphere,
+ *  cloud bands on the day side and city lights on the night side. */
+export function paintPlanetLimb(width: number, height: number, spec: { seed: number; curve: number; lightFrom: number }): IndexedLayer {
+  const limb = layer(width, height)
+  const cx = width / 2
+  for (let x = 0; x < width; x++) {
+    const top = Math.round(height * .35 + ((x - cx) / width) ** 2 * height * spec.curve)
+    for (let y = top - 3; y < height; y++) {
+      if (y < top) { if (bayer(x, y) < (y - top + 4) / 4) set(limb, x, y, INDEX.ray + ((x >> 2) % INDEX.raySteps)); continue }
+      const day = (x / width < spec.lightFrom ? 1 - Math.abs(x / width - spec.lightFrom) * 1.6 : 1 - (x / width - spec.lightFrom) * 2.2)
+      const cloud = valueNoise(spec.seed, x / 9, y / 2.5) > .7
+      const land = valueNoise(spec.seed + 5, x / 26, y / 9) > .58
+      if (day > .15) set(limb, x, y, cloud ? INDEX.farRim : land ? INDEX.near : INDEX.far)
+      else set(limb, x, y, land && fxRandom(spec.seed, x * 31 + y) > .9 ? INDEX.window + ((x + y) & 7) : INDEX.trees)
+    }
+  }
+  return limb
+}
+
+/** A space station: a truss with modules, wide solar wings and blinking lights. */
+export function paintStation(width: number, height: number, seed: number): IndexedLayer {
+  const station = layer(width, height)
+  const mid = Math.round(height / 2)
+  for (let x = 4; x < width - 4; x++) set(station, x, mid, INDEX.nearRim)
+  for (let m = 0; m < 4; m++) {
+    const x0 = Math.round(width * (.3 + m * .1)), w = 5 + (m % 2) * 3
+    for (let y = mid - 3; y <= mid + 3; y++) for (let x = x0; x < x0 + w; x++) set(station, x, y, y === mid - 3 ? INDEX.nearRim : INDEX.near)
+  }
+  for (const x0 of [4, width - 18]) for (const dy of [-8, 5]) {
+    for (let y = mid + dy; y < mid + dy + 4; y++) for (let x = x0; x < x0 + 14; x++) set(station, x, y, (x - x0) % 3 === 2 ? INDEX.near : INDEX.far)
+    for (let y = Math.min(mid, mid + dy); y <= Math.max(mid, mid + dy); y++) set(station, x0 + 7, y, INDEX.nearRim)
+  }
+  set(station, Math.round(width * .3), mid - 4, INDEX.tail); set(station, Math.round(width * .62), mid - 4, INDEX.window + (seed & 7))
+  return station
+}
+
+/** A lumpy asteroid lit on one side. */
+export function paintAsteroid(width: number, height: number, seed: number): IndexedLayer {
+  const rock = layer(width, height)
+  const c = (width - 1) / 2, r = width / 2 - 1
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const a = Math.atan2(y - c, x - c), bump = r * (.75 + valueNoise(seed, a * 2 + 9, 0) * .3), d = Math.hypot(x - c, y - c)
+    if (d <= bump) set(rock, x, y, x - c < -r * .2 && y - c < r * .3 ? INDEX.nearRim : fxRandom(seed, x * 13 + y) > .85 ? INDEX.trees : INDEX.near)
+  }
+  return rock
+}

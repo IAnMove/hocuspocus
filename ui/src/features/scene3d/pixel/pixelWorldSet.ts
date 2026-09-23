@@ -222,6 +222,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
   }
+  if (plan.ground === 'none') return
   if (plan.ground === 'sand') { root.add(sandFloor(runtime.palette, plan.groundY)); return }
   const lake = water(150, 54, -11)
   runtime.water = lake.material as ShaderMaterial
@@ -250,7 +251,8 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
   const meteors = meteorsAt(seconds, pixel.meteors, runtime.sky, 5, scene.meteorDirection)
   for (const sky of runtime.skies) {
     sky.uniforms.uTime.value = seconds
-    sky.uniforms.uAurora.value = palette.auroraAmount
+    // No aurora hangs in open space.
+    sky.uniforms.uAurora.value = runtime.kind === 'pixel-orbit' ? 0 : palette.auroraAmount
     sky.uniforms.uAuroraBase.value = .54 - .4 * scene.auroraHeight
     sky.uniforms.uAuroraColor.value.set(palette.aurora)
     sky.uniforms.uMeteorColor.value.set(palette.meteor)

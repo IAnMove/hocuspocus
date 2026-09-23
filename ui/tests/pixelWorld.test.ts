@@ -283,3 +283,19 @@ test('waterfall: streaks pour by cycling, with foam and a rainbow in the spray',
   const at = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.jungle, seconds); return Array.from(bytes.subarray(140 * 4, 148 * 4)).join() }
   assert.notEqual(at(0), at(.2))
 })
+
+test('orbit: no ground, a curved planet limb, nebula behind the stars and drifting craft', () => {
+  const scene = resolvePixelScene('pixel-orbit', undefined)
+  const plan = worldPlan('pixel-orbit', scene)
+  assert.equal(plan.ground, 'none')
+  const sky = plan.layers.find(layer => layer.sky)!.paint(700, 336)
+  assert.ok([160, 161, 162, 163].some(slot => sky.data.includes(slot)), 'nebula gas')
+  assert.ok(sky.data.includes(30), 'the moon stays in front of the gas')
+  const limb = plan.layers.find(layer => layer.z === -40)!.paint(700, 140)
+  const top = (x: number) => { for (let y = 0; y < 140; y++) if (limb.data[y * 700 + x]) return y; return 140 }
+  assert.ok(top(10) > top(350) + 10, 'the horizon curves away at the edges')
+  assert.ok(plan.layers.some(layer => layer.spin) && plan.layers.some(layer => layer.drift), 'asteroids tumble, craft drift')
+  const root = pixelWorldGroup('pixel-orbit'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-orbit').pixelWorld!, 1, 720)
+  assert.ok(!(root as Group).children.some(child => child.type === 'Mesh' && child.rotation.x === -Math.PI / 2), 'no floor under open space')
+})

@@ -1369,6 +1369,10 @@
     "pixel-waterfall": {
       "title": "Cascada",
       "description": "Una cascada cae entre acantilados cubiertos de musgo con puro ciclo de color, la espuma hierve a sus pies, un arcoíris cuelga en la bruma y la luz de la selva pasa al crepúsculo y la noche."
+    },
+    "pixel-orbit": {
+      "title": "Órbita",
+      "description": "Muy por encima de un planeta: su horizonte curvo brilla con la atmósfera, las luces de las ciudades salpican el lado nocturno, las nebulosas respiran entre estrellas densas y una estación espacial y asteroides pasan a la deriva."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1605,7 +1609,8 @@
       "sakura": "Sakura",
       "abyss": "Abismo",
       "lagoon": "Laguna",
-      "jungle": "Selva"
+      "jungle": "Selva",
+      "cosmos": "Cosmos"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1623,7 +1628,8 @@
       "pixel-valley": "Valle",
       "pixel-fair": "Feria nocturna",
       "pixel-village": "Aldea nevada",
-      "pixel-falls": "Cascada"
+      "pixel-falls": "Cascada",
+      "pixel-orbit": "Órbita"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

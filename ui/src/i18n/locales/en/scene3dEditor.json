@@ -1369,6 +1369,10 @@
     "pixel-waterfall": {
       "title": "Waterfall",
       "description": "A waterfall pours between mossy cliffs by pure colour cycling, foam boils at its foot, a rainbow hangs in the spray and the jungle light turns to dusk and night."
+    },
+    "pixel-orbit": {
+      "title": "Orbit",
+      "description": "High above a planet: its curved horizon glows with atmosphere, city lights dot the night side, nebula clouds breathe among dense stars and a space station and tumbling asteroids drift by."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1605,7 +1609,8 @@
       "sakura": "Sakura",
       "abyss": "Abyss",
       "lagoon": "Lagoon",
-      "jungle": "Jungle"
+      "jungle": "Jungle",
+      "cosmos": "Cosmos"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1623,7 +1628,8 @@
       "pixel-valley": "Valley",
       "pixel-fair": "Night fair",
       "pixel-village": "Snowy village",
-      "pixel-falls": "Waterfall"
+      "pixel-falls": "Waterfall",
+      "pixel-orbit": "Orbit"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",
