@@ -52,38 +52,40 @@ function imageFile(overrides: Record<string, unknown> = {}) {
   }
 }
 
-test('image rows retain their reserved frame after portrait images decode', { concurrency: false }, async () => {
+const ROW = { top: 240, height: 424, mediaHeight: 320 }
+
+test('image rows keep the frame the layout reserved after a portrait image decodes', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { MediaFeedItem } = await import('../src/components/MainContent/MediaFeedItem.tsx')
 
   ensureUiI18n().changeLanguage('en')
+  resizeObservers.length = 0
 
   try {
-    render(<MediaFeedItem
-      file={imageFile()}
-      index={0}
-      isActive={false}
-      onVisible={() => undefined}
-      onMeasured={() => undefined}
-    />)
+    render(<MediaFeedItem file={imageFile()} index={0} isActive={false} onVisible={() => undefined} {...ROW} />)
 
     const viewport = screen.getByTestId('media-feed-viewport')
-    assert.equal(viewport.className.includes('aspect-video'), true)
+    const card = viewport.closest('[data-feed-index]') as HTMLElement
+    assert.equal(card.style.top, '240px')
+    assert.equal(card.style.height, '424px')
+    assert.equal(viewport.style.height, '320px')
 
     const img = viewport.querySelector('img')
     assert.ok(img)
     Object.defineProperty(img, 'naturalWidth', { configurable: true, value: 1080 })
     Object.defineProperty(img, 'naturalHeight', { configurable: true, value: 1920 })
     fireEvent.load(img)
-    assert.equal(viewport.className.includes('aspect-video'), true)
-    assert.equal(viewport.style.aspectRatio, '')
+    assert.equal(viewport.style.height, '320px')
+    assert.equal(card.style.height, '424px')
+    // The row is sized by the layout, never by measuring itself.
+    assert.equal(resizeObservers.length, 0)
   } finally {
     cleanup()
   }
 })
 
-test('video rows retain their reserved frame after portrait thumbnails decode', { concurrency: false }, async () => {
+test('video rows keep their frame after portrait thumbnails decode', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { MediaFeedItem } = await import('../src/components/MainContent/MediaFeedItem.tsx')
@@ -97,35 +99,32 @@ test('video rows retain their reserved frame after portrait thumbnails decode', 
         url: '/api/v1/file/portrait.mp4',
         type: 'video',
         mode: 'video',
-        thumbnail_url: '/api/v1/file/portrait.mp4?thumb=1',
+        thumbnail_url: '/api/v1/outputs/thumbnail/portrait.mp4?v=1',
       })}
       index={2}
       isActive={false}
       onVisible={() => undefined}
-      onMeasured={() => undefined}
+      {...ROW}
     />)
 
     const viewport = screen.getByTestId('media-feed-viewport')
-    assert.equal(viewport.className.includes('aspect-video'), true)
-    assert.equal(viewport.className.includes('aspect-video'), true)
-
     const img = viewport.querySelector('img')
     assert.ok(img)
+    assert.equal(img.getAttribute('src'), '/api/v1/outputs/thumbnail/portrait.mp4?v=1&size=md')
     Object.defineProperty(img, 'naturalWidth', { configurable: true, value: 1080 })
     Object.defineProperty(img, 'naturalHeight', { configurable: true, value: 1920 })
     fireEvent.load(img)
-    assert.equal(viewport.className.includes('aspect-video'), true)
-    assert.equal(viewport.style.aspectRatio, '')
+    assert.equal(viewport.style.height, '320px')
+    assert.equal(viewport.querySelectorAll('video').length, 0)
   } finally {
     cleanup()
   }
 })
 
-test('scene cards without a preview still reserve 16:9', { concurrency: false }, async () => {
+test('scene cards without a preview keep the layout height', { concurrency: false }, async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
   const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { MediaFeedItem } = await import('../src/components/MainContent/MediaFeedItem.tsx')
-  const { MEDIA_FEED_PLACEHOLDER_ASPECT_RATIO } = await import('../src/components/MainContent/mediaFeedSizing.ts')
 
   ensureUiI18n().changeLanguage('en')
 
@@ -143,11 +142,11 @@ test('scene cards without a preview still reserve 16:9', { concurrency: false },
       index={1}
       isActive={false}
       onVisible={() => undefined}
-      onMeasured={() => undefined}
+      {...ROW}
     />)
 
     const viewport = screen.getByTestId('media-feed-viewport')
-    assert.equal(Number(viewport.style.aspectRatio), MEDIA_FEED_PLACEHOLDER_ASPECT_RATIO)
+    assert.equal(viewport.style.height, '320px')
     assert.match(viewport.textContent || '', /Saved scene/)
   } finally {
     cleanup()
@@ -160,60 +159,41 @@ test('scrolling selection retains the lightweight thumbnail and mounted image', 
   const { MediaFeedItem } = await import('../src/components/MainContent/MediaFeedItem.tsx')
 
   ensureUiI18n().changeLanguage('en')
-  const file = imageFile()
+  const file = imageFile({ thumbnail_url: '/api/v1/outputs/thumbnail/portrait.png?v=2&workspace=default' })
+  const preview = '/api/v1/outputs/thumbnail/portrait.png?v=2&workspace=default&size=md'
 
   try {
-    const view = render(<MediaFeedItem
-      file={file}
-      index={0}
-      isActive={false}
-      onVisible={() => undefined}
-      onMeasured={() => undefined}
-    />)
+    const view = render(<MediaFeedItem file={file} index={0} isActive={false} onVisible={() => undefined} {...ROW} />)
 
     const img = screen.getByRole('img', { name: file.name })
-    assert.equal(img.getAttribute('src'), file.thumbnail_url)
+    assert.equal(img.getAttribute('src'), preview)
 
-    view.rerender(<MediaFeedItem
-      file={file}
-      index={0}
-      isActive
-      onVisible={() => undefined}
-      onMeasured={() => undefined}
-    />)
+    view.rerender(<MediaFeedItem file={file} index={0} isActive onVisible={() => undefined} {...ROW} />)
 
     await waitFor(() => {
       assert.equal(screen.getByRole('img', { name: file.name }), img)
-      assert.equal(img.getAttribute('src'), file.thumbnail_url)
+      assert.equal(img.getAttribute('src'), preview)
     })
   } finally {
     cleanup()
   }
 })
 
-test('onMeasured ignores the info-bar-only collapse', { concurrency: false }, async () => {
-  resizeObservers.length = 0
-  const { render, cleanup } = await import('@testing-library/react')
+test('the info bar keeps every text line whole inside its fixed height', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
   const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { MediaFeedItem } = await import('../src/components/MainContent/MediaFeedItem.tsx')
 
   ensureUiI18n().changeLanguage('en')
-  const measured: number[] = []
 
   try {
-    render(<MediaFeedItem
-      file={imageFile()}
-      index={0}
-      isActive={false}
-      onVisible={() => undefined}
-      onMeasured={(_index, height) => { measured.push(height) }}
-    />)
-
-    assert.ok(resizeObservers.length > 0)
-    const notify = resizeObservers[resizeObservers.length - 1]
-    notify([{ borderBoxSize: [{ blockSize: 48 }], contentRect: { height: 48 } }])
-    notify([{ borderBoxSize: [{ blockSize: 420 }], contentRect: { height: 420 } }])
-    assert.deepEqual(measured, [420])
+    render(<MediaFeedItem file={imageFile()} index={0} isActive={false} onVisible={() => undefined} {...ROW} />)
+    const viewport = screen.getByTestId('media-feed-viewport')
+    const bar = viewport.nextElementSibling as HTMLElement
+    assert.match(bar.className, /h-\[100px\]/)
+    const lines = [...bar.querySelectorAll<HTMLElement>('.leading-4 > div')]
+    assert.ok(lines.length > 0)
+    for (const line of lines) assert.match(line.className, /\bh-4\b/)
   } finally {
     cleanup()
   }

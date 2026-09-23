@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 1555,
+      "weight": 1567,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -72,6 +72,7 @@
         "tests/test_llm_request_cancellation.py",
         "tests/test_ltx_gemma_prompt_batching.py",
         "tests/test_ltx_prompt_queue.py",
+        "tests/test_media_gallery_listing.py",
         "tests/test_media_path_security.py",
         "tests/test_media_thumbnails.py",
         "tests/test_minimax_h3_duration.py",

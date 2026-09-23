@@ -19,9 +19,16 @@ import {
 } from '../../features/stories/directorClipHandoff'
 import { useUiTranslation } from '../../i18n'
 import {
-  estimatedMediaFeedItemHeight,
-  mediaFeedMaxPreviewHeight,
-} from './mediaFeedSizing'
+  FEED_CARD_BORDER,
+  FEED_INFO_BAR_HEIGHT,
+  anchorAt,
+  anchorOffset,
+  buildGalleryLayout,
+  visibleBlocks,
+  type BlockRange,
+  type GalleryAnchor,
+  type GalleryLayout,
+} from './mediaGalleryLayout'
 
 const GalleryLayouts = lazy(() => import('./GalleryLayouts'))
 const DirectGenerationWorkspace = lazy(() => import('../Sidebar/Sidebar').then(module => ({ default: module.DirectGenerationWorkspace })))
@@ -65,12 +72,6 @@ function PanelLoadingFallback() {
     </div>
   )
 }
-
-// How many items to render beyond the viewport in each direction
-const OVERSCAN = 5
-// Info bar height + border/padding
-// Gap between items (tailwind space-y-3 = 12px)
-const GAP = 12
 
 function stripTimeSuffix(msg: string): string {
   return msg.replace(/\s*\|\s*\d+:\d+.*$/, '').trim()
@@ -319,153 +320,127 @@ export function MainContent() {
   }, [developerMode, mediaFilter, setMediaFilter])
 
   const feedRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const jobsAnchorRef = useRef<HTMLDivElement>(null)
   const activeIndex = selectedOutput
   const isUserScrolling = useRef(false)
   const scrollTargetIndex = useRef<number | null>(null)
+  const feedAtTop = useRef(true)
 
-  // Virtualization state
-  const [scrollTop, setScrollTop] = useState(0)
-  const [containerHeight, setContainerHeight] = useState(800)
-  const [containerWidth, setContainerWidth] = useState(800)
-  const measuredHeights = useRef<Map<string, number>>(new Map())
-  const [measureEpoch, setMeasureEpoch] = useState(0)
-  const jobsAnchorRef = useRef<HTMLDivElement>(null)
-  const [placeholderTotalHeight, setPlaceholderTotalHeight] = useState(0)
-  const prevPlaceholderHeight = useRef(0)
-  const prevOutputNames = useRef<string[]>([])
-
-  // Dynamic estimated item height based on actual container width
-  const maxMediaHeight = mediaFeedMaxPreviewHeight(containerHeight)
-  const estimatedItemHeight = estimatedMediaFeedItemHeight(containerWidth, containerHeight)
-
-  // Gallery layout. Grid and mosaic live in a lazily loaded module so the
-  // one-up feed stays the only layout in the entry chunk.
   const galleryView = useStore(s => s.galleryView)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const browsingUploads = useStore(s => s.browsingUploads)
 
-  useLayoutEffect(() => {
-    measuredHeights.current.clear()
-    prevOutputNames.current = []
-    scrollTargetIndex.current = null
-    isUserScrolling.current = false
-    if (feedRef.current) feedRef.current.scrollTop = 0
-    setScrollTop(0)
-    setGalleryFeedAtTop(true)
-    setMeasureEpoch(epoch => epoch + 1)
-  }, [activeWorkspace, browsingUploads, mediaFilter, galleryView, setGalleryFeedAtTop])
-
-  // Measure container on mount and resize; clear stale heights whenever either
-  // dimension changes because the viewport cap also makes item height depend
-  // on the available vertical space.
+  // Width and a *stable* height of the feed's content box. Phone browsers
+  // grow and shrink the dynamic viewport as their toolbars slide away while
+  // scrolling; sizing rows from that live height re-flowed every row mid-
+  // gesture. Subtracting the toolbar allowance (dynamic minus small viewport)
+  // keeps rows fixed until the window really changes size.
+  const [viewport, setViewport] = useState({ width: 0, height: 0 })
   useEffect(() => {
     const el = feedRef.current
     if (!el) return
-    let prevWidth = 0
-    let prevHeight = 0
-    const ro = new ResizeObserver((entries) => {
-      const rect = entries[0].contentRect
-      const newHeight = rect.height
-      setContainerHeight(newHeight)
-      const newWidth = rect.width
-      setContainerWidth(newWidth)
-      if (
-        (prevWidth && Math.abs(newWidth - prevWidth) > 2)
-        || (prevHeight && Math.abs(newHeight - prevHeight) > 2)
-      ) {
-        measuredHeights.current.clear()
-      }
-      prevWidth = newWidth
-      prevHeight = newHeight
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
+    const probe = document.createElement('div')
+    probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:100svh;visibility:hidden;pointer-events:none'
+    document.body.appendChild(probe)
+    const measure = () => {
+      const style = getComputedStyle(el)
+      const width = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      const content = el.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+      const small = probe.getBoundingClientRect().height
+      const toolbar = small > 0 ? Math.max(0, window.innerHeight - small) : 0
+      const height = Math.max(0, content - toolbar)
+      setViewport(prev => (Math.abs(prev.width - width) < 1 && Math.abs(prev.height - height) < 1 ? prev : { width, height }))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      probe.remove()
+    }
   }, [mediaFilter, workspaceSurface])
 
+  // Grid and mosaic cells live in a lazy chunk; fetch it once the feed has
+  // settled so the first switch draws immediately instead of blank.
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void import('./GalleryLayouts') }, 1200)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  const layout = useMemo(
+    () => buildGalleryLayout(galleryView, outputs, viewport.width, viewport.height),
+    [galleryView, outputs, viewport.width, viewport.height],
+  )
+  const layoutRef = useRef<GalleryLayout>(layout)
+  const outputsRef = useRef(outputs)
+  const anchorRef = useRef<GalleryAnchor | null>(null)
+  const [range, setRange] = useState<BlockRange>({ first: 0, last: -1 })
+
+  /** Scroll offset inside the virtual list (below the job placeholders). */
+  const listOffset = useCallback(() => {
+    const el = feedRef.current
+    return el ? el.scrollTop - (listRef.current?.offsetTop ?? 0) : 0
+  }, [])
+
+  const syncWindow = useCallback(() => {
+    const el = feedRef.current
+    if (!el) return
+    const current = layoutRef.current
+    // Mount rows ahead of a fast fling. Cards are memoized, so rows that stay
+    // mounted do not re-render while the reader scrolls.
+    const overscan = el.clientHeight * (current.view === 'feed' ? 1.5 : 1)
+    const next = visibleBlocks(current, listOffset(), el.clientHeight, overscan)
+    setRange(prev => (prev.first === next.first && prev.last === next.last ? prev : next))
+  }, [listOffset])
+
+  const markFeedTop = useCallback((atTop: boolean) => {
+    if (feedAtTop.current === atTop) return
+    feedAtTop.current = atTop
+    setGalleryFeedAtTop(atTop)
+  }, [setGalleryFeedAtTop])
+
+  // A new workspace, source or filter starts at the top of its own list.
+  useLayoutEffect(() => {
+    anchorRef.current = null
+    scrollTargetIndex.current = null
+    isUserScrolling.current = false
+    if (feedRef.current) feedRef.current.scrollTop = 0
+    feedAtTop.current = false
+    markFeedTop(true)
+  }, [activeWorkspace, browsingUploads, mediaFilter, markFeedTop])
+
+  // Job placeholders sit above the rows; their height moves every row.
+  const [placeholderTotalHeight, setPlaceholderTotalHeight] = useState(0)
   useLayoutEffect(() => {
     const el = jobsAnchorRef.current
-    if (!el) {
-      setPlaceholderTotalHeight(0)
-      return
-    }
-    const update = () => setPlaceholderTotalHeight(el.offsetHeight)
-    update()
-    const observer = new ResizeObserver(update)
+    if (!el) return
+    const observer = new ResizeObserver(() => setPlaceholderTotalHeight(el.offsetHeight))
     observer.observe(el)
     return () => observer.disconnect()
-  }, [visibleJobs.length])
+  }, [mediaFilter, workspaceSurface])
 
+  // Whenever the geometry changes — new outputs above, a finished job's
+  // placeholder, another view, a rotated phone — keep the item the reader was
+  // looking at in place. At the very top there is no anchor, so new work
+  // appears in view instead of being scrolled past.
   useLayoutEffect(() => {
+    const previous = layoutRef.current
+    layoutRef.current = layout
+    outputsRef.current = outputs
     const el = feedRef.current
-    const previous = prevPlaceholderHeight.current
-    prevPlaceholderHeight.current = placeholderTotalHeight
-    if (!el || previous === 0) return
-    const delta = placeholderTotalHeight - previous
-    if (delta === 0 || el.scrollTop <= 24) return
-    el.scrollTop += delta
-    setScrollTop(el.scrollTop)
-  }, [placeholderTotalHeight])
-
-  const getItemHeight = useCallback((index: number) => {
-    const name = outputs[index]?.name
-    if (name) {
-      const measured = measuredHeights.current.get(name)
-      if (measured) return measured
-    }
-    return estimatedItemHeight
-  }, [estimatedItemHeight, outputs])
-
-  const { startIndex, endIndex, totalHeight, itemOffsets } = useMemo(() => {
-    const count = outputs.length
-    const offsets: number[] = new Array(count)
-    let cumulative = placeholderTotalHeight
-
-    for (let i = 0; i < count; i++) {
-      offsets[i] = cumulative
-      cumulative += getItemHeight(i) + GAP
-    }
-    const total = cumulative - (count > 0 ? GAP : 0)
-
-    let lo = 0, hi = count - 1
-    const viewStart = scrollTop - OVERSCAN * estimatedItemHeight
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1
-      if (offsets[mid] + getItemHeight(mid) < viewStart) lo = mid + 1
-      else hi = mid
-    }
-    const start = Math.max(0, lo)
-
-    const viewEnd = scrollTop + containerHeight + OVERSCAN * estimatedItemHeight
-    let end = start
-    while (end < count && offsets[end] < viewEnd) end++
-
-    return {
-      startIndex: start,
-      endIndex: Math.min(end, count),
-      totalHeight: Math.max(total, placeholderTotalHeight),
-      itemOffsets: offsets,
-    }
-  // The observer mutates the measurement cache; its epoch invalidates these offsets.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outputs.length, scrollTop, containerHeight, getItemHeight, placeholderTotalHeight, estimatedItemHeight, measureEpoch])
-
-  const handleItemMeasured = useCallback((index: number, height: number) => {
-    const name = outputs[index]?.name
-    if (!name) return
-    const prev = measuredHeights.current.get(name)
-    if (prev !== height) {
-      const feed = feedRef.current
-      const item = feed?.querySelector<HTMLElement>(`[data-feed-index="${index}"]`)
-      const delta = height - (prev ?? estimatedItemHeight)
-      // Preserve the visible row when a card above it receives metadata.
-      if (feed && item && feed.scrollTop > item.offsetTop + (prev ?? estimatedItemHeight) + placeholderTotalHeight && scrollTargetIndex.current === null) {
-        feed.scrollTop += delta
-        setScrollTop(feed.scrollTop)
+    const anchor = anchorRef.current
+    if (el && anchor) {
+      const sameShape = previous.view === layout.view && previous.width === layout.width
+      const target = anchorOffset(layout, outputs, anchor, sameShape)
+      if (target != null) {
+        const top = Math.round(target + (listRef.current?.offsetTop ?? 0))
+        if (Math.abs(el.scrollTop - top) > 1) el.scrollTop = top
+        if (!sameShape) anchorRef.current = { name: anchor.name, within: 0 }
       }
-      measuredHeights.current.set(name, height)
-      setMeasureEpoch(e => e + 1)
     }
-  }, [outputs, estimatedItemHeight, placeholderTotalHeight])
+    syncWindow()
+  }, [layout, outputs, placeholderTotalHeight, syncWindow])
 
   const handleItemVisible = useCallback((index: number) => {
     if (scrollTargetIndex.current !== null) return
@@ -482,86 +457,29 @@ export function MainContent() {
       return
     }
     setSelectedOutput(index)
+    const feedEl = feedRef.current
+    const current = layoutRef.current
+    const block = current.blocks[current.blockOf[index]]
+    if (!feedEl || !block) return
+    // Row positions are exact, so one jump lands on the item. The guard keeps
+    // the rows scrolled past during the jump from claiming the selection.
     scrollTargetIndex.current = index
     isUserScrolling.current = false
-    const feedEl = feedRef.current
-    if (!feedEl) return
-
-    // ── Why this is two phases ──
-    // The virtualizer only renders items inside [startIndex, endIndex].
-    // Items outside that window have NEVER been measured — their height
-    // is an estimate. Summing the estimates to compute an offset for a
-    // distant target accumulates error linearly with distance: a click
-    // 200 items away can land hundreds of px off.
-    //
-    // The previous implementation did a single smooth scrollTo to the
-    // estimated offset. As items entered the viewport mid-animation,
-    // they got measured and the total height shifted under the
-    // animation, so the smooth scroll landed on the wrong item. The
-    // 800ms guard then expired and the IntersectionObserver picked up
-    // a wrong-active item → thumbnail strip auto-scrolled away from
-    // what the user clicked → infinite oscillation.
-    //
-    // The fix:
-    //   Phase 1: INSTANT jump to the estimated offset. This is allowed
-    //            to be slightly wrong; its only job is to bring the
-    //            target item into the virtualizer's render window so
-    //            it actually mounts in the DOM.
-    //   Phase 2: requestAnimationFrame wait until the DOM contains an
-    //            element with `data-feed-index="${index}"`, then call
-    //            scrollIntoView on it for pixel-precise alignment.
-    //            By the time the element exists, its height has been
-    //            measured, so this final align is accurate.
-    //   Guard:   scrollTargetIndex.current is held until phase 2
-    //            finishes (not a fixed timeout). handleItemVisible
-    //            ignores intersection events while this is non-null,
-    //            so no wrong-active leak through.
-    //   Re-entrancy: a stale align loop checks scrollTargetIndex
-    //            against its captured target on every frame and bails
-    //            if a newer click overrode it.
-
-    const estimatedOffset = placeholderTotalHeight +
-      Array.from({ length: index }, (_, i) => getItemHeight(i) + GAP).reduce((a, b) => a + b, 0)
-    feedEl.scrollTo({ top: estimatedOffset, behavior: 'auto' })
-
-    const targetIndexAtStart = index
-    let attempts = 0
-    const MAX_ATTEMPTS = 30 // ~500ms at 60fps
-    const align = () => {
-      // Newer click overrode our target — bail.
-      if (scrollTargetIndex.current !== targetIndexAtStart) return
-      attempts++
-      const targetEl = feedEl.querySelector(`[data-feed-index="${index}"]`) as HTMLElement | null
-      if (targetEl) {
-        targetEl.scrollIntoView({ behavior: 'auto', block: 'start' })
-        // One more frame so any post-mount measurement settles
-        // before we release the guard.
-        requestAnimationFrame(() => {
-          if (scrollTargetIndex.current === targetIndexAtStart) {
-            scrollTargetIndex.current = null
-          }
-        })
-      } else if (attempts < MAX_ATTEMPTS) {
-        requestAnimationFrame(align)
-      } else {
-        // Item didn't mount within the budget — release the guard so
-        // the user isn't stuck. Rare; happens if outputs.length changed
-        // mid-flight or the index is out of range.
-        if (scrollTargetIndex.current === targetIndexAtStart) {
-          scrollTargetIndex.current = null
-        }
-      }
-    }
-    requestAnimationFrame(align)
-  }, [getItemHeight, outputs, placeholderTotalHeight, setSelectedOutput])
+    feedEl.scrollTo({ top: block.top + (listRef.current?.offsetTop ?? 0), behavior: 'auto' })
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (scrollTargetIndex.current === index) scrollTargetIndex.current = null
+    }))
+  }, [outputs, setSelectedOutput])
 
   // Infinite scroll: load more when near the bottom
   const loadingMore = useRef(false)
   const handleFeedScroll = useCallback(() => {
     const el = feedRef.current
     if (!el) return
-    setScrollTop(el.scrollTop)
-    setGalleryFeedAtTop(el.scrollTop <= 24)
+    const offset = listOffset()
+    anchorRef.current = el.scrollTop <= 24 ? null : anchorAt(layoutRef.current, outputsRef.current, offset)
+    markFeedTop(el.scrollTop <= 24)
+    syncWindow()
     if (scrollTargetIndex.current === null) {
       isUserScrolling.current = true
     }
@@ -574,66 +492,40 @@ export function MainContent() {
         store.loadMoreOutputs().finally(() => { loadingMore.current = false })
       }
     }
-  }, [setGalleryFeedAtTop])
+  }, [listOffset, markFeedTop, syncWindow])
 
-  useLayoutEffect(() => {
-    const el = feedRef.current
-    const previous = prevOutputNames.current
-    const names = outputs.map(file => file.name)
-    prevOutputNames.current = names
-    if (!el || previous.length === 0) return
-    let prepended = 0
-    for (const name of names) {
-      if (previous.includes(name)) break
-      prepended += 1
-    }
-    if (prepended === 0 || el.scrollTop <= 24) return
-    let extra = 0
-    if (galleryView === 'feed') {
-      for (let index = 0; index < prepended; index += 1) extra += getItemHeight(index) + GAP
-    } else {
-      const columns = Math.max(1, Math.floor((containerWidth + GAP) / (190 + GAP)))
-      const tile = Math.floor((containerWidth - GAP * (columns - 1)) / columns)
-      const rowHeight = (galleryView === 'grid' ? tile : tile * 3 / 4) + GAP
-      extra = Math.floor(prepended / columns) * rowHeight
-    }
-    el.scrollTop += extra
-    setScrollTop(el.scrollTop)
-  }, [outputs, getItemHeight, galleryView, containerWidth])
-
-
-  const visibleItems = useMemo(() => {
+  const feedCards = useMemo(() => {
+    if (layout.view !== 'feed') return null
     const items: JSX.Element[] = []
-    for (let i = startIndex; i < endIndex; i++) {
-      const file = outputs[i]
+    for (let row = range.first; row <= range.last; row++) {
+      const block = layout.blocks[row]
+      const cell = block?.cells[0]
+      const file = cell && outputs[cell.index]
       if (!file) continue
       items.push(
         <MediaFeedItem
           key={file.name}
           file={file}
-          index={i}
-          isActive={activeIndex === i}
+          index={cell.index}
+          isActive={activeIndex === cell.index}
           onVisible={handleItemVisible}
-          onMeasured={handleItemMeasured}
-          maxMediaHeight={maxMediaHeight}
-          style={{
-            position: 'absolute',
-            top: itemOffsets[i],
-            left: 0,
-            right: 0,
-          }}
+          top={block.top}
+          height={block.height}
+          mediaHeight={block.height - FEED_INFO_BAR_HEIGHT - FEED_CARD_BORDER}
         />
       )
     }
     return items
-  }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets, maxMediaHeight])
+  }, [layout, range, outputs, activeIndex, handleItemVisible])
   const [replacementTarget, setReplacementTarget] = useState(readVideoEditorReplacementTarget)
   const [directorReplacementTarget, setDirectorReplacementTarget] = useState(readDirectorClipReplacementTarget)
-
-  useEffect(() => {
+  // Re-read the pending replacement handoffs whenever the filter changes.
+  const [handoffFilter, setHandoffFilter] = useState(mediaFilter)
+  if (handoffFilter !== mediaFilter) {
+    setHandoffFilter(mediaFilter)
     setReplacementTarget(mediaFilter !== 'videoeditor' ? readVideoEditorReplacementTarget() : null)
     setDirectorReplacementTarget(mediaFilter !== 'stories' ? readDirectorClipReplacementTarget() : null)
-  }, [mediaFilter])
+  }
 
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden">
@@ -731,14 +623,17 @@ export function MainContent() {
             </div>
           </div>
         ) : <>
-        {/* Scrollable media feed */}
-        <div className="pointer-events-none absolute right-3 top-3 z-20 md:right-4 md:top-4">
+        {/* Gallery column: its own toolbar above the rows, so the layout
+            switcher belongs to the rows it changes rather than floating over
+            the cards or the history strip. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center justify-end border-b border-border/60 px-3 py-1 md:px-4">
           <GalleryViewSwitcher />
         </div>
         <div
           ref={feedRef}
           data-testid="media-feed"
-          className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 md:p-4"
+          className="relative min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 [overflow-anchor:none] md:p-4"
           onScroll={handleFeedScroll}
         >
           {/* Pipeline + Job placeholders at top (not virtualized — small count) */}
@@ -791,32 +686,22 @@ export function MainContent() {
           </div>
 
           {/* Position container for virtualized output items */}
-          {galleryView === 'feed' ? (
-            <div className="relative" style={{ height: totalHeight - placeholderTotalHeight }}>
-              {visibleItems.map(item => {
-                // Adjust top positions to be relative to this container (subtract placeholder height)
-                const adjustedStyle = {
-                  ...item.props.style,
-                  top: (item.props.style?.top as number) - placeholderTotalHeight,
-                }
-                return { ...item, props: { ...item.props, style: adjustedStyle } }
-              })}
-            </div>
-          ) : (
-            <Suspense fallback={<PanelLoadingFallback />}>
-              <GalleryLayouts
-                key={`${activeWorkspace}:${browsingUploads}:${mediaFilter}:${galleryView}`}
-                view={galleryView}
-                outputs={outputs}
-                workspace={browsingUploads ? '__uploads__' : activeWorkspace}
-                activeIndex={activeIndex}
-                containerWidth={containerWidth}
-                containerHeight={containerHeight}
-                scrollTop={Math.max(0, scrollTop - placeholderTotalHeight)}
-                onOpen={setSelectedOutput}
-              />
-            </Suspense>
-          )}
+          {/* One positioned list for every view. Its height is the exact
+              layout height, so the scrollbar never jumps as rows mount. */}
+          <div ref={listRef} className="relative" style={{ height: layout.height }}>
+            {layout.view === 'feed' ? feedCards : (
+              <Suspense fallback={null}>
+                <GalleryLayouts
+                  layout={layout}
+                  range={range}
+                  outputs={outputs}
+                  workspace={browsingUploads ? '__uploads__' : activeWorkspace}
+                  activeIndex={activeIndex}
+                  onOpen={setSelectedOutput}
+                />
+              </Suspense>
+            )}
+          </div>
 
           {/* Loading state */}
           {outputsLoading && outputs.length === 0 && (
@@ -881,6 +766,8 @@ export function MainContent() {
               </div>
             )
           })()}
+        </div>
+
         </div>
 
         {/* Thumbnail sidebar */}

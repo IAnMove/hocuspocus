@@ -165,6 +165,7 @@ function toOutputFile(output: api.ApiOutput): OutputFile {
     completed_at: output.completed_at,
     completion_time_source: output.completion_time_source,
     thumbnail_url: output.thumbnail_url || null,
+    ...(output.width && output.height ? { width: output.width, height: output.height } : {}),
   }
 }
 
@@ -180,6 +181,8 @@ function outputSnapshotEquals(current: OutputFile, latest: OutputFile): boolean 
     && latest.completion_time_source === current.completion_time_source
     && latest.thumbnail_url === current.thumbnail_url
     && latest.result_kind === current.result_kind
+    && latest.width === current.width
+    && latest.height === current.height
 }
 
 function mergeRefreshedOutputs(current: OutputFile[], fresh: OutputFile[]): {

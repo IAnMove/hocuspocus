@@ -1,65 +1,45 @@
-import { useMemo } from 'react'
 import type { JSX } from 'react'
 import { GalleryTile } from './GalleryTile'
+import type { BlockRange, GalleryLayout } from './mediaGalleryLayout'
 import type { OutputFile } from '../../types'
 
-const GAP = 12
-const MIN_TILE = 190
-
-/** Grid and mosaic layouts for the gallery. Kept out of the entry chunk —
+/** Grid and mosaic cells for the visible rows. Kept out of the entry chunk —
  *  the one-up feed is what loads with the app, and these arrive when the
- *  reader actually asks for them. */
+ *  reader actually asks for them. The geometry comes from the shared gallery
+ *  layout, so every cell is placed before its image decodes. */
 export default function GalleryLayouts({
-  view, outputs, workspace, activeIndex, containerWidth, containerHeight, scrollTop, onOpen,
+  layout, range, outputs, workspace, activeIndex, onOpen,
 }: {
-  view: 'grid' | 'masonry'
+  layout: GalleryLayout
+  range: BlockRange
   outputs: OutputFile[]
   workspace: string
   activeIndex: number
-  containerWidth: number
-  containerHeight: number
-  scrollTop: number
   onOpen: (index: number) => void
 }) {
-  const columns = Math.max(1, Math.floor((containerWidth + GAP) / (MIN_TILE + GAP)))
-  const tile = Math.floor((containerWidth - GAP * (columns - 1)) / columns)
-  const tileHeight = view === 'grid' ? tile : tile * 3 / 4
-  const rowHeight = tileHeight + GAP
-
-  // Both layouts reserve row sizes before decoding. Mosaic contains the whole
-  // image in a landscape tile; Grid crops to a square. DOM order stays row-first.
-  const grid = useMemo(() => {
-    const totalRows = Math.ceil(outputs.length / columns)
-    const overscan = 2
-    const firstRow = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
-    const lastRow = Math.min(totalRows, Math.ceil((scrollTop + containerHeight) / rowHeight) + overscan)
-    const cells: JSX.Element[] = []
-    for (let row = firstRow; row < lastRow; row++) {
-      for (let column = 0; column < columns; column++) {
-        const index = row * columns + column
-        const file = outputs[index]
-        if (!file) break
-        cells.push(
-          <GalleryTile
-            key={file.name}
-            file={file}
-            workspace={workspace}
-            active={activeIndex === index}
-            fixedAspect={view === 'grid'}
-            onOpen={() => onOpen(index)}
-            style={{
-              position: 'absolute',
-              top: row * rowHeight,
-              left: column * (tile + GAP),
-              width: tile,
-              height: tileHeight,
-            }}
-          />
-        )
-      }
+  const cells: JSX.Element[] = []
+  for (let row = range.first; row <= range.last; row++) {
+    const block = layout.blocks[row]
+    if (!block) continue
+    for (const cell of block.cells) {
+      const file = outputs[cell.index]
+      if (!file) continue
+      cells.push(
+        <GalleryTile
+          key={file.name}
+          file={file}
+          workspace={workspace}
+          index={cell.index}
+          active={activeIndex === cell.index}
+          cover={layout.view === 'grid'}
+          top={block.top}
+          left={cell.left}
+          width={cell.width}
+          height={cell.height}
+          onOpen={onOpen}
+        />
+      )
     }
-    return { cells, height: totalRows * rowHeight }
-  }, [view, outputs, columns, rowHeight, tile, tileHeight, scrollTop, containerHeight, activeIndex, workspace, onOpen])
-
-  return <div className="relative" style={{ height: grid.height }}>{grid.cells}</div>
+  }
+  return <>{cells}</>
 }

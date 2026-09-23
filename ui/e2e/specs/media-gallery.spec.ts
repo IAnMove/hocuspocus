@@ -169,13 +169,17 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
         await feed.evaluate(node => node.scrollTo({ top: node.scrollHeight, behavior: 'instant' }))
         const distant = feed.getByRole('button', { name: `Enlarge ${LAST_IMAGE}`, exact: true })
         await expect(distant).toBeInViewport({ timeout: 10_000 })
+        await distant.scrollIntoViewIfNeeded()
+        await twoFrames(page)
         const scrollBefore = await feed.evaluate(node => node.scrollTop)
         expect(scrollBefore).toBeGreaterThan(await feed.evaluate(node => node.clientHeight))
         await expectNoOverlap(feed)
-        expect(await previews(feed).count()).toBeLessThan(30)
+        expect(await previews(feed).count()).toBeLessThan(FIXTURES.filter(file => file.type === 'image').length)
         await distant.click()
         const dialog = page.getByRole('dialog', { name: 'Image details', exact: true })
         await expect(dialog).toBeVisible()
+        const scrollAtOpen = await feed.evaluate(node => node.scrollTop)
+        expect(Math.abs(scrollAtOpen - scrollBefore), 'Opening details moved the gallery').toBeLessThanOrEqual(2)
         await expect(dialog.getByRole('status')).toContainText('Loading')
         await expectContained(page, dialog)
         fixtures.releaseMetadata()
@@ -194,7 +198,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
         await expect(dialog).toHaveCount(0)
         await expect(distant).toBeFocused()
         await expect(viewButton).toHaveAttribute('aria-pressed', 'true')
-        expect(Math.abs(await feed.evaluate(node => node.scrollTop) - scrollBefore)).toBeLessThanOrEqual(2)
+        expect(Math.abs(await feed.evaluate(node => node.scrollTop) - scrollAtOpen)).toBeLessThanOrEqual(2)
         expect(fixtures.requests.every(url => new URL(url).searchParams.get('workspace') === 'default')).toBe(true)
         expect(errors).toEqual([])
       } finally {
@@ -322,17 +326,204 @@ test.describe('Media touch interactions', () => {
       await page.screenshot({ path: test.info().outputPath('touch-image-details.png') })
       await dialog.getByRole('button', { name: 'Close', exact: true }).tap()
       await expect(dialog).toHaveCount(0)
-      const box = (await feed.boundingBox())!
+      const box = (await opener.boundingBox())!
       const cdp = await page.context().newCDPSession(page)
-      await cdp.send('Input.synthesizeScrollGesture', {
-        x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height * 0.7),
-        yDistance: -250, speed: 500, gestureSourceType: 'touch',
-      })
+      const x = Math.round(box.x + box.width / 2), y = Math.round(box.y + box.height / 2)
+      // dispatchTouchEvent exercises the mobile pan; synthesizeScrollGesture
+      // does not scroll even a plain overflowing div in headless Chromium.
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] })
+      for (let step = 1; step <= 10; step++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - step * 15 }] })
+        await twoFrames(page)
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
       await expect.poll(() => feed.evaluate(node => node.scrollTop)).toBeGreaterThan(100)
       await expectNoOverlap(feed)
       await cdp.detach()
     } finally {
       fixtures.releaseImages(); fixtures.releaseMetadata()
+      await closeApp(page, session)
+    }
+  })
+})
+
+// A library that mixes every kind the gallery shows. Images carry the pixel
+// size the listing now reports; videos, scenes, comics, audio and 3D fall back.
+const MIXED: ApiOutput[] = Array.from({ length: 48 }, (_, index) => {
+  const kinds = ['image', 'scene', 'audio', 'image', 'comic', 'video', 'model3d', 'image'] as const
+  const type = kinds[index % kinds.length]
+  const stem = `gallery-${String(index).padStart(3, '0')}`
+  const name = `${stem}.${{ image: 'png', video: 'mp4', audio: 'mp3', scene: 'scene.json', comic: 'comic.json', model3d: 'glb' }[type]}`
+  const thumbnail_url = type === 'scene' ? `/api/v1/file/${stem}.preview.png?workspace=default`
+    : type === 'comic' ? `/api/v1/file/${stem}.comic.preview.png?workspace=default`
+    : type === 'image' || type === 'video' ? `/api/v1/outputs/thumbnail/${name}?workspace=default` : null
+  const size = type === 'image' ? (index % 2 === 0 ? { width: 480, height: 1600 } : { width: 1600, height: 480 }) : {}
+  return { name, type, ...size, mode: type === 'audio' ? 'audio' : 'image', favorite: false, size: 1000,
+    created_at: 1_790_000_000 - index, completed_at: 1_790_000_020 - index, completion_time_source: 'metadata',
+    url: `/api/v1/file/${name}?workspace=default`, thumbnail_url }
+})
+const VIEWS = ['One at a time', 'Grid', 'Mosaic'] as const
+
+async function bootMixedGallery(page: Page) {
+  const session = await bootGalleryApp(page), fixtures = await installGalleryFixtures(page)
+  fixtures.releaseImages(); fixtures.releaseMetadata()
+  await page.route('**/api/v1/outputs?*', route => {
+    const url = new URL(route.request().url())
+    const offset = Number(url.searchParams.get('offset') || 0), limit = Number(url.searchParams.get('limit') || MIXED.length)
+    return route.fulfill({ json: { outputs: MIXED.slice(offset, offset + limit), total: MIXED.length } })
+  })
+  await page.route('**/api/v1/file/gallery-*', route => {
+    const name = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1)!)
+    return name.endsWith('.png') ? route.fulfill({ contentType: 'image/svg+xml', body: svg(name) }) : route.fulfill({ status: 404, body: '' })
+  })
+  await page.getByRole('button', { name: 'Media', exact: true }).click()
+  await page.getByRole('tab', { name: 'All', exact: true }).click()
+  return session
+}
+async function chooseView(page: Page, view: string) {
+  const button = page.getByRole('group', { name: 'Gallery layout' }).getByRole('button', { name: view, exact: true })
+  await button.click()
+  await expect(button).toHaveAttribute('aria-pressed', 'true')
+  await twoFrames(page)
+}
+/** Rows and tiles in the list, relative to the feed's top edge. */
+async function rows(feed: Locator) {
+  return feed.evaluate(node => {
+    const top = node.getBoundingClientRect().top
+    const list = node.querySelector<HTMLElement>(':scope > div.relative')!
+    const boxes = [...list.children].map(child => {
+      const rect = child.getBoundingClientRect()
+      return { label: child.getAttribute('data-feed-index') ?? child.querySelector('[aria-label]')?.getAttribute('aria-label') ?? child.textContent ?? '',
+        left: rect.left, right: rect.right, top: rect.top - top, bottom: rect.bottom - top, height: rect.height }
+    })
+    return { boxes, listHeight: list.style.height, listRight: list.getBoundingClientRect().right, viewport: node.clientHeight, scrollTop: node.scrollTop, max: node.scrollHeight - node.clientHeight }
+  })
+}
+function overlaps(boxes: Array<{ label: string; left: number; right: number; top: number; bottom: number }>) {
+  const found: string[] = []
+  for (let a = 0; a < boxes.length; a++) for (let b = a + 1; b < boxes.length; b++) {
+    if (Math.min(boxes[a].right, boxes[b].right) - Math.max(boxes[a].left, boxes[b].left) > 1
+      && Math.min(boxes[a].bottom, boxes[b].bottom) - Math.max(boxes[a].top, boxes[b].top) > 1) found.push(`${boxes[a].label} × ${boxes[b].label}`)
+  }
+  return found
+}
+
+test.describe('Media gallery geometry', () => {
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+    test(`the layout switcher sits in its own bar above the rows at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+      await page.setViewportSize(viewport)
+      const session = await bootMixedGallery(page)
+      try {
+        const feed = page.getByTestId('media-feed')
+        for (const view of VIEWS) {
+          await chooseView(page, view)
+          const switcher = (await page.getByRole('group', { name: 'Gallery layout' }).boundingBox())!
+          const area = (await feed.boundingBox())!
+          expect(switcher.y + switcher.height, `${view}: switcher above the rows`).toBeLessThanOrEqual(area.y + 1)
+          expect(switcher.x + switcher.width, `${view}: switcher inside the rows column`).toBeLessThanOrEqual(area.x + area.width + 1)
+          expect(switcher.x).toBeGreaterThanOrEqual(area.x - 1)
+        }
+      } finally {
+        await closeApp(page, session)
+      }
+    })
+  }
+
+  test('rows stay put and scrolling stays exact while a phone toolbar slides away', async ({ page }) => {
+    test.setTimeout(90_000)
+    // The small viewport (toolbar shown) is the window; sliding the toolbar
+    // away grows the dynamic viewport and #root, as mobile browsers do.
+    await page.setViewportSize({ width: 390, height: 768 })
+    const session = await bootMixedGallery(page)
+    const toolbar = (extra: number) => page.evaluate(value => {
+      Object.defineProperty(window, 'innerHeight', { configurable: true, get: () => 768 + value })
+      document.getElementById('root')!.style.height = `${768 + value}px`
+    }, extra)
+    try {
+      const feed = page.getByTestId('media-feed')
+      for (const view of VIEWS) {
+        await toolbar(0)
+        await chooseView(page, view)
+        await feed.evaluate(node => node.scrollTo({ top: 0, behavior: 'instant' }))
+        await twoFrames(page)
+        const start = await rows(feed)
+        let last = 0
+        for (let step = 0; step < 14; step++) {
+          // The browser clamps a scroll to the bottom it had at that moment,
+          // and again if the toolbar then shortens the scrollable range.
+          const maxAtScroll = await feed.evaluate(node => {
+            node.scrollBy({ top: 260, behavior: 'instant' })
+            return node.scrollHeight - node.clientHeight
+          })
+          await toolbar(step % 2 === 0 ? 76 : 0)
+          await twoFrames(page)
+          const now = await rows(feed)
+          expect(now.listHeight, `${view} step ${step}: rows re-flowed`).toBe(start.listHeight)
+          expect(Math.abs(now.scrollTop - Math.min(last + 260, maxAtScroll, now.max)), `${view} step ${step}: scroll jumped`).toBeLessThanOrEqual(2)
+          expect(overlaps(now.boxes), `${view} step ${step}`).toEqual([])
+          for (const box of now.boxes) expect(box.height, `${view}: ${box.label} taller than the screen`).toBeLessThanOrEqual(start.viewport + 1)
+          last = now.scrollTop
+        }
+        if (view === 'One at a time') {
+          const cards = (await rows(feed)).boxes.sort((a, b) => a.top - b.top)
+          for (let index = 1; index < cards.length; index++) expect(Math.round(cards[index].top - cards[index - 1].bottom)).toBe(12)
+        }
+      }
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('a real resize and a view switch keep the same item in view', async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.setViewportSize({ width: 390, height: 844 })
+    const session = await bootMixedGallery(page)
+    const firstVisible = (feed: Locator) => rows(feed).then(state => state.boxes.filter(box => box.bottom > 0).sort((a, b) => a.top - b.top)[0])
+    try {
+      const feed = page.getByTestId('media-feed')
+      for (const view of VIEWS) {
+        await page.setViewportSize({ width: 390, height: 844 })
+        await chooseView(page, view)
+        await feed.evaluate(node => node.scrollTo({ top: 1500, behavior: 'instant' }))
+        await twoFrames(page)
+        const before = await firstVisible(feed)
+        await page.setViewportSize({ width: 390, height: 700 })
+        await twoFrames(page)
+        const after = await firstVisible(feed)
+        expect(after.label, `${view}: another item took its place`).toBe(before.label)
+        expect(Math.abs(after.top - before.top), `${view}: item moved`).toBeLessThanOrEqual(2)
+      }
+      await page.setViewportSize({ width: 390, height: 844 })
+      await chooseView(page, 'One at a time')
+      await feed.evaluate(node => node.scrollTo({ top: 5000, behavior: 'instant' }))
+      await twoFrames(page)
+      const card = await firstVisible(feed)
+      const name = MIXED[Number(card.label)].name
+      await chooseView(page, 'Grid')
+      await expect(feed.locator(`[aria-label$="${name}"], button:has-text("${name}")`).first()).toBeInViewport()
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('mosaic rows are justified and keep each output aspect', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const session = await bootMixedGallery(page)
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Mosaic')
+      await expect(feed.getByRole('button', { name: 'Enlarge gallery-000.png', exact: true })).toBeVisible()
+      const state = await rows(feed)
+      const lines = new Map<number, typeof state.boxes>()
+      for (const box of state.boxes) lines.set(Math.round(box.top), [...(lines.get(Math.round(box.top)) ?? []), box])
+      const ordered = [...lines.entries()].sort((a, b) => a[0] - b[0]).slice(0, 3)
+      expect(ordered.length).toBe(3)
+      for (const [, line] of ordered) expect(Math.abs(Math.max(...line.map(box => box.right)) - (state.listRight))).toBeLessThanOrEqual(1)
+      const portrait = state.boxes.find(box => box.label.endsWith('gallery-000.png'))!
+      expect((portrait.right - portrait.left) / portrait.height).toBeCloseTo(0.4, 1)
+      const landscape = state.boxes.find(box => box.label.endsWith('gallery-003.png'))!
+      expect((landscape.right - landscape.left) / landscape.height).toBeCloseTo(3, 1)
+    } finally {
       await closeApp(page, session)
     }
   })

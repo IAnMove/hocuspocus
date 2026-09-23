@@ -33323,6 +33323,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         raw_entries = cached_snapshot["raw_entries"]
         sidecar_cache = cached_snapshot["sidecar_cache"]
         clip_groups = cached_snapshot["clip_groups"]
+        dimensions = cached_snapshot.get("dimensions", {})
     else:
         raw_entries = []
         for name in os.listdir(out_dir):
@@ -33383,6 +33384,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 "mode": meta.get("generation_mode"),
                 "edit_sub_mode": params.get("edit_sub_mode"),
                 "multi_clip_info": params.get("multi_clip_info"),
+                "resolution": params.get("resolution"),
                 "result_kind": classify_output_result_kind(name, params, meta),
                 "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
                 # Output sidecars are written only after the generated asset
@@ -33406,6 +33408,8 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         for info in clip_groups.values():
             if info["highest_index"] >= info["total"] - 1:
                 info["has_final"] = True
+        from services.media_dimensions import listing_dimensions
+        dimensions = listing_dimensions(raw_entries, sidecar_cache)
 
         with _output_scan_cache_lock:
             if len(_output_scan_cache) >= 16 and out_dir not in _output_scan_cache:
@@ -33420,6 +33424,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 "raw_entries": raw_entries,
                 "sidecar_cache": sidecar_cache,
                 "clip_groups": clip_groups,
+                "dimensions": dimensions,
             }
 
     # Second pass: build the file list using the cached sidecar data.
@@ -33463,6 +33468,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             "created_at": mtime,
             "completed_at": metadata_completed_at or mtime,
             "completion_time_source": "metadata" if metadata_completed_at else "file",
+            **dimensions.get(name, {}),
             "url": f"/api/v1/file/{name}{workspace_suffix}",
             "thumbnail_url": (
                 f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png{workspace_suffix}"
@@ -33559,9 +33565,9 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
 
 
 @api.get("/api/v1/outputs/thumbnail/{filename:path}")
-def serve_output_thumbnail(filename: str, workspace: str | None = None):
+def serve_output_thumbnail(filename: str, workspace: str | None = None, size: str | None = None):
     """Lazily create one small static preview for an image or video output."""
-    from services.media_thumbnails import ensure_media_thumbnail
+    from services.media_thumbnails import FITTED_THUMBNAIL_SIZES, ensure_fitted_thumbnail, ensure_media_thumbnail
 
     if workspace == "__uploads__":
         source = _safe_join(os.path.join(os.getcwd(), "uploads"), filename)
@@ -33576,17 +33582,17 @@ def serve_output_thumbnail(filename: str, workspace: str | None = None):
     video_extensions = {".mp4", ".webm", ".gif", ".mov", ".mkv", ".avi", ".m4v"}
     if extension not in image_extensions | video_extensions:
         raise HTTPException(status_code=400, detail="This output has no media thumbnail")
+    if size is not None and size not in FITTED_THUMBNAIL_SIZES:
+        raise HTTPException(status_code=400, detail="Unknown thumbnail size")
     try:
-        thumbnail = ensure_media_thumbnail(
-            source,
-            _MEDIA_THUMBNAIL_CACHE_DIR,
-            is_video=extension in video_extensions,
-        )
+        is_video = extension in video_extensions
+        thumbnail = (ensure_fitted_thumbnail(source, _MEDIA_THUMBNAIL_CACHE_DIR, is_video=is_video, size=size)
+                     if size else ensure_media_thumbnail(source, _MEDIA_THUMBNAIL_CACHE_DIR, is_video=is_video))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not create thumbnail: {exc}") from exc
     return FileResponse(
         thumbnail,
-        media_type="image/jpeg",
+        media_type="image/webp" if thumbnail.endswith(".webp") else "image/jpeg",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
 

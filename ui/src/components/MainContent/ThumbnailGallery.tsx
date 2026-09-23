@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Box, Film, Music, PanelRightClose, PanelRightOpen, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
+import { galleryThumbnailUrl } from './galleryThumbnail'
 
 // Thumbnail dimensions: 80px wide, 16:9 aspect = 45px tall, 6px gap
 const THUMB_HEIGHT = 45
@@ -134,7 +135,7 @@ function VirtualizedThumbnailList({ activeIndex, onThumbnailClick, onMobileClick
               }}
             >
               {file.type === 'video' ? (
-                <VideoThumbnail src={file.thumbnail_url} name={file.name} />
+                <VideoThumbnail src={galleryThumbnailUrl(file, undefined, 'sm')} name={file.name} />
               ) : file.type === 'audio' ? (
                 <div className="w-full h-full bg-bg-active flex items-center justify-center">
                   <Music size={14} className="text-text-muted" />
@@ -146,7 +147,7 @@ function VirtualizedThumbnailList({ activeIndex, onThumbnailClick, onMobileClick
                   ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-bg-active flex items-center justify-center"><Film size={14} className="text-text-muted" /></div>
               ) : (
-                <img src={file.thumbnail_url || file.url} alt={file.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                <img src={galleryThumbnailUrl(file, undefined, 'sm') || file.url} alt={file.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
               )}
             </button>
           )
@@ -219,7 +220,7 @@ export function ThumbnailGallery({ activeIndex, onThumbnailClick }: Props) {
       {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute right-0 top-2 z-10 w-5 h-10 bg-bg-secondary border border-border border-r-0 rounded-l-md flex items-center justify-center text-text-muted hover:text-text-primary transition-colors"
+        className="absolute top-1/2 z-10 -translate-y-1/2 w-5 h-10 bg-bg-secondary border border-border border-r-0 rounded-l-md flex items-center justify-center text-text-muted hover:text-text-primary transition-colors"
         style={{ right: collapsed ? 0 : 80 }}
         title={collapsed ? 'Show thumbnails' : 'Hide thumbnails'}
       >

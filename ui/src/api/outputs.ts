@@ -25,6 +25,9 @@ export interface ApiOutput {
   url: string
   /** Small static preview for image/video cards and saved 3D/scene assets. */
   thumbnail_url?: string | null
+  /** Pixel size, when known: image headers, or the video's recorded resolution. */
+  width?: number
+  height?: number
   /** Edit-mode sub-classification (retake / inpaint / outpaint / restyle /
    *  edit_anything). Field added as a recovery stub after a git
    *  filter-repo reset wiped the original Stream C/D work that

@@ -99,7 +99,7 @@ export function ModalShell({
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
       if (dialog) openDialogs.splice(openDialogs.indexOf(dialog), 1)
-      restoreFocusRef.current?.focus()
+      restoreFocusRef.current?.focus({ preventScroll: true })
       restoreFocusRef.current = null
     }
   }, [open])

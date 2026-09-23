@@ -1,23 +1,24 @@
-import React, { type ReactNode, type RefObject, type SyntheticEvent } from 'react'
+import React, { type ReactNode, type RefObject } from 'react'
 import { BookOpen, Box, Film, Play } from 'lucide-react'
 import { getFileUrl } from '../../api/client'
 import type { OutputFile } from '../../types'
 import { ImagePreview } from '../common/ImagePreview'
 
-const MEDIA_FIT = 'mx-auto block h-auto w-auto max-w-full object-contain'
+// The card's media box has a fixed height; every preview is contained in it.
+const MEDIA_FIT = 'block h-full w-full object-contain'
 
 type FeedMediaBodyProps = {
   file: OutputFile
   workspace?: string
   isActive: boolean
-  maxMediaHeight?: number
+  /** Aspect-preserving preview for images and videos; saved scenes, comics
+   *  and 3D models pass their own preview image. */
+  previewUrl: string | null
   videoReady: boolean
   videoRef: RefObject<HTMLVideoElement | null>
   videoTime?: number
   onVideoTimeChange?: (seconds: number) => void
   onPlay: () => void
-  onIntrinsicSize: (width: number, height: number) => void
-  onImageLoad: (event: SyntheticEvent<HTMLImageElement>) => void
   isScene: boolean
   isComic: boolean
   isModel3d: boolean
@@ -29,13 +30,13 @@ type FeedMediaBodyProps = {
   retryImage: (url: string) => ReactNode
 }
 
-function FeedVideoPreview({ file, workspace, videoTime, onVideoTimeChange }: {
-  file: OutputFile; workspace?: string; videoTime?: number; onVideoTimeChange?: (seconds: number) => void
+function FeedVideoPreview({ file, workspace, previewUrl, videoTime, onVideoTimeChange }: {
+  file: OutputFile; workspace?: string; previewUrl: string | null; videoTime?: number; onVideoTimeChange?: (seconds: number) => void
 }) {
   return (
     <ImagePreview image={{ ...file, type: 'video', workspace_id: workspace }} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} className="relative block h-full w-full cursor-zoom-in">
-      {file.thumbnail_url ? (
-        <img src={file.thumbnail_url} alt={file.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+      {previewUrl ? (
+        <img src={previewUrl} alt={file.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
       ) : (
         <span className="flex h-full w-full items-center justify-center text-text-muted"><Film size={32} /></span>
       )}
@@ -105,33 +106,32 @@ export function FeedMediaBody(props: FeedMediaBodyProps) {
 }
 
 function renderFeedMedia({
-  file, isActive, maxMediaHeight, onImageLoad,
+  file, isActive, previewUrl,
   isScene, isComic, isModel3d, canPreviewModel3d, isRigged, riggedClips, activeClip, setActiveClip,
   retryImage, workspace, videoTime, onVideoTimeChange,
 }: FeedMediaBodyProps) {
-  const maxHeight = maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }
   if (file.type === 'video') {
-    return <FeedVideoPreview file={file} workspace={workspace} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} />
+    return <FeedVideoPreview file={file} workspace={workspace} previewUrl={previewUrl} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} />
   }
   if (file.type === 'audio') {
     return (
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex w-full min-w-0 flex-col items-center gap-4 px-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-active">
           <Play size={24} className="text-text-muted" />
         </div>
-        <p className="mb-2 text-xs text-text-muted">{file.name}</p>
-        <audio key={file.url} src={file.url} controls className="w-64" />
+        <p className="mb-2 max-w-full truncate text-xs text-text-muted" title={file.name}>{file.name}</p>
+        <audio key={file.url} src={file.url} controls className="w-64 max-w-full" />
       </div>
     )
   }
   if (isScene) {
     return file.thumbnail_url
-      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} style={maxHeight} onLoad={onImageLoad} />
+      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} loading="lazy" decoding="async" />
       : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
   }
   if (isComic) {
     return file.thumbnail_url
-      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} style={maxHeight} onLoad={onImageLoad} />
+      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} loading="lazy" decoding="async" />
       : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
   }
   if (isModel3d) {
@@ -148,6 +148,6 @@ function renderFeedMedia({
     )
   }
   return <ImagePreview image={{ ...file, type: 'image', workspace_id: workspace }} className="block h-full w-full cursor-zoom-in">
-    {retryImage(file.thumbnail_url || file.url)}
+    {retryImage(previewUrl || file.url)}
   </ImagePreview>
 }

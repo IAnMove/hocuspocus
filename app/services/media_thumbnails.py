@@ -103,3 +103,75 @@ def ensure_media_thumbnail(
                     os.remove(temporary)
             except OSError:
                 pass
+
+
+# Gallery previews keep the source aspect (no letterbox) so cropped grid cells
+# and justified mosaic rows show the picture rather than black bars. Stills are
+# resized in-process: spawning FFmpeg per image made a page of fresh cards
+# arrive two at a time behind the generation slots above.
+FITTED_THUMBNAIL_SIZES = {"sm": 320, "md": 640}
+_fitted_image_slots = threading.Semaphore(4)
+
+
+def _write_atomically(destination: str, key: str, suffix: str, write) -> str:
+    temporary = os.path.join(os.path.dirname(destination), f".{key}-{uuid.uuid4().hex}.tmp{suffix}")
+    try:
+        write(temporary)
+        if not os.path.isfile(temporary) or os.path.getsize(temporary) <= 0:
+            raise RuntimeError("thumbnail writer produced no data")
+        os.replace(temporary, destination)
+        return destination
+    finally:
+        try:
+            if os.path.exists(temporary):
+                os.remove(temporary)
+        except OSError:
+            pass
+
+
+def ensure_fitted_thumbnail(source: str, cache_dir: str, *, is_video: bool, size: str) -> str:
+    """Return a cached preview whose longest side is at most ``FITTED_THUMBNAIL_SIZES[size]``.
+
+    Stills become WebP so transparent outputs stay transparent; videos become
+    a JPEG of an early frame.
+    """
+    if size not in FITTED_THUMBNAIL_SIZES:
+        raise ValueError(f"unknown thumbnail size: {size}")
+    if not os.path.isfile(source):
+        raise FileNotFoundError(source)
+    limit = FITTED_THUMBNAIL_SIZES[size]
+    key = thumbnail_cache_key(source)
+    os.makedirs(cache_dir, exist_ok=True)
+    suffix = ".jpg" if is_video else ".webp"
+    destination = os.path.join(cache_dir, f"{key}-fit{limit}{suffix}")
+    if os.path.isfile(destination) and os.path.getsize(destination) > 0:
+        return destination
+
+    def write_still(path: str) -> None:
+        from PIL import Image, ImageOps
+
+        with Image.open(source) as opened:
+            opened.draft("RGB", (limit, limit))
+            image = ImageOps.exif_transpose(opened)
+            image.thumbnail((limit, limit), Image.Resampling.BICUBIC, reducing_gap=2.0)
+            if image.mode not in ("RGB", "RGBA"):
+                image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+            image.save(path, format="WEBP", quality=80, method=4)
+
+    def write_frame(path: str) -> None:
+        video_filter = f"scale=w='min({limit},iw)':h='min({limit},ih)':force_original_aspect_ratio=decrease"
+        for seek in (True, False):
+            command = ["ffmpeg", "-v", "error", "-y", *(["-ss", "0.1"] if seek else []),
+                       "-i", source, "-map", "0:v:0", "-frames:v", "1", "-vf", video_filter, "-q:v", "4", path]
+            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, timeout=90, check=False)
+            if result.returncode == 0 and os.path.isfile(path) and os.path.getsize(path) > 0:
+                return
+        raise RuntimeError((result.stderr or "FFmpeg did not produce a thumbnail").strip()[-800:])
+
+    with _lock_for(destination):
+        if os.path.isfile(destination) and os.path.getsize(destination) > 0:
+            return destination
+        slots = _thumbnail_generation_slots if is_video else _fitted_image_slots
+        with slots:
+            return _write_atomically(destination, key, suffix, write_frame if is_video else write_still)

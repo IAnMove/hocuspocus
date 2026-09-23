@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent, type SyntheticEvent } from 'react'
+import React, { memo, useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent, type SyntheticEvent } from 'react'
 import { Pencil, SlidersHorizontal, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo, Clock3 } from 'lucide-react'
 import { editOutputImage, addOutputImageReference } from '../../features/studio/imageInputActions'
 import { beginImageSettingsChange } from '../../features/studio/imageSettingsRestore'
@@ -28,16 +28,18 @@ import {
   readDirectorClipReplacementTarget,
   writeDirectorClipReplacementResult,
 } from '../../features/stories/directorClipHandoff'
-import { isCollapsedMediaFeedMeasurement, mediaFeedStillAspectRatio } from './mediaFeedSizing'
+import { galleryThumbnailUrl } from './galleryThumbnail'
 
 interface Props {
   file: OutputFile
   index: number
   isActive: boolean
   onVisible: (index: number) => void
-  onMeasured: (index: number, height: number) => void
-  maxMediaHeight?: number
-  style?: CSSProperties
+  /** Row geometry from the gallery layout. The card is exactly this tall, so
+   *  the virtualizer's positions are the rendered positions. */
+  top: number
+  height: number
+  mediaHeight: number
 }
 
 /** Image component that retries loading if the file isn't fully written yet.
@@ -52,11 +54,9 @@ interface Props {
  *      check the user sees a half-image and feels they need to refresh
  *      the page (which loses Studio prompts/settings/reference images).
  */
-function RetryImage({ url, alt, maxHeight, onIntrinsicSize }: {
+function RetryImage({ url, alt }: {
   url: string
   alt: string
-  maxHeight?: number
-  onIntrinsicSize?: (width: number, height: number) => void
 }) {
   const [request, setRequest] = useState({ url, tries: 0, bust: 0 })
   const maxRetries = 5
@@ -93,22 +93,21 @@ function RetryImage({ url, alt, maxHeight, onIntrinsicSize }: {
       scheduleRetry()
       return
     }
-    onIntrinsicSize?.(img.naturalWidth, img.naturalHeight)
-  }, [onIntrinsicSize, scheduleRetry])
+  }, [scheduleRetry])
 
   return (
     <img
       src={src}
       alt={alt}
       className="mx-auto block h-full w-full object-contain"
-      style={maxHeight == null ? undefined : { maxHeight }}
+      decoding="async"
       onError={handleError}
       onLoad={handleLoad}
     />
   )
 }
 
-export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, maxMediaHeight, style }: Props) {
+export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive, onVisible, top, height, mediaHeight }: Props) {
   const { t } = useUiTranslation('activity')
   const { t: tStudio } = useUiTranslation('studio')
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
@@ -175,19 +174,6 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
     video.removeAttribute('src')
     video.load()
   }, [])
-
-  // Measure actual height and report to parent
-  useEffect(() => {
-    const el = itemRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const height = entries[0].borderBoxSize?.[0]?.blockSize ?? entries[0].contentRect.height
-      if (isCollapsedMediaFeedMeasurement(height)) return
-      onMeasured(index, height)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [index, onMeasured])
 
   // IntersectionObserver to detect visibility (for active tracking)
   useEffect(() => {
@@ -263,19 +249,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const isModel3d = file.type === 'model3d'
   const isScene = file.type === 'scene'
   const isComic = file.type === 'comic'
-  const stableFrame = file.type === 'image' || file.type === 'video'
-  const naturalFrame = isScene || isComic
-  const [stillNaturalSize, setStillNaturalSize] = useState<{ name: string; width: number; height: number } | null>(null)
-  const stillAspect = stillNaturalSize?.name === file.name
-    ? mediaFeedStillAspectRatio(stillNaturalSize.width, stillNaturalSize.height)
-    : mediaFeedStillAspectRatio()
-  const handleStillIntrinsicSize = useCallback((width: number, height: number) => {
-    if (width > 0 && height > 0) setStillNaturalSize({ name: file.name, width, height })
-  }, [file.name])
-  const handleStillImageLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
-    const img = event.currentTarget
-    handleStillIntrinsicSize(img.naturalWidth, img.naturalHeight)
-  }, [handleStillIntrinsicSize])
+  const cardStyle = useMemo<CSSProperties>(() => ({ position: 'absolute', top, left: 0, right: 0, height }), [top, height])
+  const previewUrl = galleryThumbnailUrl(file, outputWorkspace, 'md')
   const canPreviewModel3d = isModel3d && /\.(glb|gltf)$/i.test(file.name)
   // Rigged outputs carry their baked glTF clip names in the sidecar; the
   // viewer autoplays one and offers a selector to switch.
@@ -630,8 +605,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
     <div
       ref={itemRef}
       data-feed-index={index}
-      style={style}
-      className={`rounded-xl border-2 overflow-hidden transition-colors ${
+      style={cardStyle}
+      className={`flex flex-col rounded-xl border-2 overflow-hidden transition-colors ${
         // Active frame: theme-aware bezel via frame-active-gradient.
         //
         // Default theme: linear gradient with both stops set to
@@ -658,11 +633,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       {/* Media player */}
       <div
         data-testid="media-feed-viewport"
-        className={`relative flex w-full items-center justify-center overflow-hidden bg-media-canvas ${naturalFrame ? '' : 'aspect-video'}`}
-        style={{
-          ...(maxMediaHeight == null ? {} : { maxHeight: `${maxMediaHeight}px` }),
-          ...(naturalFrame ? { aspectRatio: stillAspect } : {}),
-        }}
+        className={`relative flex w-full shrink-0 items-center justify-center overflow-hidden bg-media-canvas ${isAudio ? 'py-4' : ''}`}
+        style={{ height: mediaHeight }}
       >
         <button
           type="button"
@@ -678,14 +650,12 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           file={file}
           workspace={outputWorkspace}
           isActive={isActive}
-          maxMediaHeight={maxMediaHeight}
+          previewUrl={previewUrl}
           videoReady={videoReady}
           videoRef={videoRef}
           videoTime={videoTime}
           onVideoTimeChange={setVideoTime}
           onPlay={() => { setSelectedOutput(index); setVideoReady(true) }}
-          onIntrinsicSize={handleStillIntrinsicSize}
-          onImageLoad={handleStillImageLoad}
           isScene={isScene}
           isComic={isComic}
           isModel3d={isModel3d}
@@ -694,21 +664,21 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           riggedClips={riggedClips}
           activeClip={activeClip}
           setActiveClip={setActiveClip}
-          retryImage={url => (
-            <RetryImage url={url} alt={file.name} maxHeight={maxMediaHeight} onIntrinsicSize={handleStillIntrinsicSize} />
-          )}
+          retryImage={url => <RetryImage url={url} alt={file.name} />}
         />
+        {comicOpenError && (
+          <div role="alert" className="absolute inset-x-0 bottom-0 z-10 border-t border-red-500/30 bg-red-950/90 px-3 py-2 text-xs text-red-200">
+            {t('comicOpenFailed', { error: comicOpenError })}
+          </div>
+        )}
       </div>
 
-      {comicOpenError && (
-        <div role="alert" className="border-t border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-          {t('comicOpenFailed', { error: comicOpenError })}
-        </div>
-      )}
-
       {/* Inline info bar */}
-      <div className={`px-3 flex ${stableFrame ? 'h-[100px] py-1 gap-1 flex-wrap content-start overflow-hidden' : 'py-2 gap-2 items-center min-h-[40px]'}`}>
-        {imageStartFile && !stableFrame && (
+      {/* Fixed-height info bar: three single-line rows of text and one row of
+          actions. Every line truncates, so no line is ever half visible. */}
+      <div className="flex h-[100px] shrink-0 flex-col gap-1 overflow-hidden px-3 py-1">
+        <div className="flex h-12 min-w-0 items-center gap-2">
+        {imageStartFile && file.type !== 'image' && file.type !== 'video' && (
           <img
             src={getStoredAssetUrl(imageStartFile)}
             alt="Start"
@@ -716,7 +686,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
             title="Start image"
           />
         )}
-        {imageEndFile && !stableFrame && (
+        {imageEndFile && file.type !== 'image' && file.type !== 'video' && (
           <img
             src={getStoredAssetUrl(imageEndFile)}
             alt="End"
@@ -725,10 +695,10 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           />
         )}
 
-        <div className={stableFrame ? 'h-10 w-full min-w-0 overflow-hidden' : 'flex-1 min-w-0'}>
+        <div className="min-w-0 flex-1 leading-4">
           {completionTime && (
             <div
-              className="mb-0.5 flex items-center gap-1 text-[10px] text-text-muted"
+              className="flex h-4 items-center gap-1 text-[10px] text-text-muted"
               title={`${completionLabel}: ${completionTime}${!browsingUploads && !completionTimeIsExact ? ' (file timestamp, approximate)' : ''}`}
             >
               <Clock3 size={10} className="shrink-0" aria-hidden="true" />
@@ -740,7 +710,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           )}
           {params ? (
             <>
-              <div className="text-xs text-text-secondary truncate">
+              <div className="h-4 truncate text-xs text-text-secondary" title={generationBreakdown || undefined}>
                 {modelLabel && <span className="font-medium" title={modelType}>{modelLabel}</span>}
                 {resolution && <span className="text-text-muted"> &middot; {resolution}</span>}
                 {seed != null && seed >= 0 && <span className="text-text-muted"> &middot; seed {seed}</span>}
@@ -751,26 +721,20 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
                   <span className="text-accent-blue"> &middot; clip {clipIndex + 1}/{clipTotal}</span>
                 )}
               </div>
-              {generationBreakdown && (
-                <div className="text-[10px] text-text-muted truncate mt-0.5" title={generationBreakdown}>
-                  {generationBreakdown}
-                </div>
-              )}
-              {prompt && (
-                <div className="text-[11px] text-text-muted truncate mt-0.5" title={prompt}>
-                  {prompt}
-                </div>
-              )}
+              <div className="h-4 truncate text-[11px] text-text-muted" title={prompt || generationBreakdown || undefined}>
+                {prompt || generationBreakdown}
+              </div>
             </>
           ) : metaLoaded ? (
-            <div className="text-[11px] text-text-muted truncate">{file.name}</div>
+            <div className="h-4 truncate text-[11px] text-text-muted">{file.name}</div>
           ) : (
-            <div className="text-[11px] text-text-muted animate-pulse">Loading...</div>
+            <div className="h-4 text-[11px] text-text-muted animate-pulse">Loading...</div>
           )}
+        </div>
         </div>
 
         {/* Action buttons */}
-        <div className={`flex items-center gap-0.5 shrink-0 ${stableFrame ? 'h-11 w-full overflow-x-auto overscroll-x-contain [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:min-h-11 [&>button]:min-w-11 [&>button]:shrink-0 [&>a]:flex [&>a]:items-center [&>a]:justify-center [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:shrink-0' : ''}`} onClick={e => e.stopPropagation()}>
+        <div className="flex h-11 w-full shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:min-h-11 [&>button]:min-w-11 [&>button]:shrink-0 [&>a]:flex [&>a]:items-center [&>a]:justify-center [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:shrink-0" onClick={e => e.stopPropagation()}>
           {file.type === 'video' && directorReplacementTarget && (
             <button
               onClick={() => void handleUseAsDirectorReplacement()}
@@ -988,4 +952,4 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
     </div>
     </React.Fragment>
   )
-}
+})
