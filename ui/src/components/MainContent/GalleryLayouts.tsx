@@ -8,14 +8,19 @@ import type { OutputFile } from '../../types'
  *  reader actually asks for them. The geometry comes from the shared gallery
  *  layout, so every cell is placed before its image decodes. */
 export default function GalleryLayouts({
-  layout, range, outputs, workspace, activeIndex, onOpen,
+  layout, range, outputs, workspace, activeIndex, selecting, picked, onOpen, onOpenDetails, onPick, onLongPress,
 }: {
   layout: GalleryLayout
   range: BlockRange
   outputs: OutputFile[]
   workspace: string
   activeIndex: number
+  selecting: boolean
+  picked: ReadonlySet<string>
   onOpen: (index: number) => void
+  onOpenDetails: (index: number) => void
+  onPick: (index: number, range: boolean) => void
+  onLongPress: (index: number) => void
 }) {
   const cells: JSX.Element[] = []
   for (let row = range.first; row <= range.last; row++) {
@@ -36,7 +41,12 @@ export default function GalleryLayouts({
           left={cell.left}
           width={cell.width}
           height={cell.height}
+          selecting={selecting}
+          picked={selecting && picked.has(file.name)}
           onOpen={onOpen}
+          onOpenDetails={onOpenDetails}
+          onPick={onPick}
+          onLongPress={onLongPress}
         />
       )
     }

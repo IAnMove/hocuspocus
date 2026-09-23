@@ -8,6 +8,18 @@ export type GalleryView = 'feed' | 'grid' | 'masonry'
 const GALLERY_VIEW_KEY = 'hocuspocus_gallery_view'
 const GALLERY_VIEWS: readonly GalleryView[] = ['feed', 'grid', 'masonry']
 
+const GALLERY_GRID_COLUMNS_KEY = 'hocuspocus_gallery_grid_columns'
+export const GALLERY_GRID_COLUMN_RANGE = [2, 6] as const
+
+function readStoredGridColumns(): number | null {
+  try {
+    const stored = Number(localStorage.getItem(GALLERY_GRID_COLUMNS_KEY))
+    return Number.isInteger(stored) && stored >= GALLERY_GRID_COLUMN_RANGE[0] && stored <= GALLERY_GRID_COLUMN_RANGE[1] ? stored : null
+  } catch {
+    return null
+  }
+}
+
 function readStoredGalleryView(): GalleryView {
   try {
     const stored = localStorage.getItem(GALLERY_VIEW_KEY)
@@ -35,6 +47,12 @@ export type GallerySlice = {
    *  moment and reviewing one-up the next. */
   galleryView: GalleryView
   setGalleryView: (view: GalleryView) => void
+  /** Phone grid columns chosen with a pinch; null follows the screen width. */
+  galleryGridColumns: number | null
+  setGalleryGridColumns: (columns: number | null) => void
+  /** The phone history panel, opened from the gallery toolbar. */
+  mobileHistoryOpen: boolean
+  setMobileHistoryOpen: (open: boolean) => void
   outputSearchQuery: string
   galleryFeedAtTop: boolean
   galleryRefreshPending: boolean
@@ -166,6 +184,7 @@ function toOutputFile(output: api.ApiOutput): OutputFile {
     completion_time_source: output.completion_time_source,
     thumbnail_url: output.thumbnail_url || null,
     ...(output.width && output.height ? { width: output.width, height: output.height } : {}),
+    ...(output.color && /^#[0-9a-f]{6}$/i.test(output.color) ? { color: output.color } : {}),
   }
 }
 
@@ -183,6 +202,7 @@ function outputSnapshotEquals(current: OutputFile, latest: OutputFile): boolean 
     && latest.result_kind === current.result_kind
     && latest.width === current.width
     && latest.height === current.height
+    && latest.color === current.color
 }
 
 function mergeRefreshedOutputs(current: OutputFile[], fresh: OutputFile[]): {
@@ -329,6 +349,18 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     set({ galleryView: view })
     try { localStorage.setItem(GALLERY_VIEW_KEY, view) } catch { /* private browsing */ }
   },
+  galleryGridColumns: readStoredGridColumns(),
+  setGalleryGridColumns: (columns) => {
+    const [min, max] = GALLERY_GRID_COLUMN_RANGE
+    const next = columns == null ? null : Math.min(max, Math.max(min, Math.round(columns)))
+    set({ galleryGridColumns: next })
+    try {
+      if (next == null) localStorage.removeItem(GALLERY_GRID_COLUMNS_KEY)
+      else localStorage.setItem(GALLERY_GRID_COLUMNS_KEY, String(next))
+    } catch { /* private browsing */ }
+  },
+  mobileHistoryOpen: false,
+  setMobileHistoryOpen: (open) => set({ mobileHistoryOpen: open }),
   outputSearchQuery: '',
   galleryFeedAtTop: true,
   galleryRefreshPending: false,

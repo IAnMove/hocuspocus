@@ -1685,6 +1685,10 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   /** Gallery layout preference — see gallerySlice. */
   galleryView: GalleryView
   setGalleryView: (view: GalleryView) => void
+  galleryGridColumns: number | null
+  setGalleryGridColumns: (columns: number | null) => void
+  mobileHistoryOpen: boolean
+  setMobileHistoryOpen: (open: boolean) => void
   outputSearchQuery: string
   galleryFeedAtTop: boolean
   galleryRefreshPending: boolean

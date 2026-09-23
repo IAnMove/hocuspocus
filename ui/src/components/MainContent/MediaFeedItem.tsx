@@ -29,12 +29,14 @@ import {
   writeDirectorClipReplacementResult,
 } from '../../features/stories/directorClipHandoff'
 import { galleryThumbnailUrl } from './galleryThumbnail'
+import type { DetailVideoTime } from './GalleryDetailsDialog'
 
 interface Props {
   file: OutputFile
   index: number
   isActive: boolean
   onVisible: (index: number) => void
+  onOpenDetails: (index: number, video?: DetailVideoTime) => void
   /** Row geometry from the gallery layout. The card is exactly this tall, so
    *  the virtualizer's positions are the rendered positions. */
   top: number
@@ -54,11 +56,14 @@ interface Props {
  *      check the user sees a half-image and feels they need to refresh
  *      the page (which loses Studio prompts/settings/reference images).
  */
-function RetryImage({ url, alt }: {
+function RetryImage({ url, alt, color }: {
   url: string
   alt: string
+  /** Average colour shown until the preview decodes. */
+  color?: string
 }) {
   const [request, setRequest] = useState({ url, tries: 0, bust: 0 })
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null)
   const maxRetries = 5
 
   if (request.url !== url) {
@@ -93,6 +98,7 @@ function RetryImage({ url, alt }: {
       scheduleRetry()
       return
     }
+    setLoadedUrl(img.getAttribute('src'))
   }, [scheduleRetry])
 
   return (
@@ -100,6 +106,7 @@ function RetryImage({ url, alt }: {
       src={src}
       alt={alt}
       className="mx-auto block h-full w-full object-contain"
+      style={loadedUrl === src || !color ? undefined : { backgroundColor: color }}
       decoding="async"
       onError={handleError}
       onLoad={handleLoad}
@@ -107,7 +114,7 @@ function RetryImage({ url, alt }: {
   )
 }
 
-export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive, onVisible, top, height, mediaHeight }: Props) {
+export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive, onVisible, onOpenDetails, top, height, mediaHeight }: Props) {
   const { t } = useUiTranslation('activity')
   const { t: tStudio } = useUiTranslation('studio')
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
@@ -656,6 +663,7 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
           videoTime={videoTime}
           onVideoTimeChange={setVideoTime}
           onPlay={() => { setSelectedOutput(index); setVideoReady(true) }}
+          onOpenDetails={() => onOpenDetails(index, { time: videoTime, onChange: setVideoTime })}
           isScene={isScene}
           isComic={isComic}
           isModel3d={isModel3d}
@@ -664,7 +672,7 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
           riggedClips={riggedClips}
           activeClip={activeClip}
           setActiveClip={setActiveClip}
-          retryImage={url => <RetryImage url={url} alt={file.name} />}
+          retryImage={url => <RetryImage url={url} alt={file.name} color={file.color} />}
         />
         {comicOpenError && (
           <div role="alert" className="absolute inset-x-0 bottom-0 z-10 border-t border-red-500/30 bg-red-950/90 px-3 py-2 text-xs text-red-200">

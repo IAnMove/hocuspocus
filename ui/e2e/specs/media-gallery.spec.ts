@@ -357,16 +357,17 @@ const MIXED: ApiOutput[] = Array.from({ length: 48 }, (_, index) => {
   const thumbnail_url = type === 'scene' ? `/api/v1/file/${stem}.preview.png?workspace=default`
     : type === 'comic' ? `/api/v1/file/${stem}.comic.preview.png?workspace=default`
     : type === 'image' || type === 'video' ? `/api/v1/outputs/thumbnail/${name}?workspace=default` : null
-  const size = type === 'image' ? (index % 2 === 0 ? { width: 480, height: 1600 } : { width: 1600, height: 480 }) : {}
+  const size = type === 'image' ? (index % 2 === 0 ? { width: 480, height: 1600, color: '#3366aa' } : { width: 1600, height: 480, color: '#aa4433' }) : {}
   return { name, type, ...size, mode: type === 'audio' ? 'audio' : 'image', favorite: false, size: 1000,
     created_at: 1_790_000_000 - index, completed_at: 1_790_000_020 - index, completion_time_source: 'metadata',
     url: `/api/v1/file/${name}?workspace=default`, thumbnail_url }
 })
 const VIEWS = ['One at a time', 'Grid', 'Mosaic'] as const
 
-async function bootMixedGallery(page: Page) {
-  const session = await bootGalleryApp(page), fixtures = await installGalleryFixtures(page)
-  fixtures.releaseImages(); fixtures.releaseMetadata()
+async function bootMixedGallery(page: Page, options: { holdImages?: boolean; beforeGoto?: () => Promise<void> } = {}) {
+  const session = await bootGalleryApp(page, options.beforeGoto), fixtures = await installGalleryFixtures(page)
+  if (!options.holdImages) fixtures.releaseImages()
+  fixtures.releaseMetadata()
   await page.route('**/api/v1/outputs?*', route => {
     const url = new URL(route.request().url())
     const offset = Number(url.searchParams.get('offset') || 0), limit = Number(url.searchParams.get('limit') || MIXED.length)
@@ -378,7 +379,7 @@ async function bootMixedGallery(page: Page) {
   })
   await page.getByRole('button', { name: 'Media', exact: true }).click()
   await page.getByRole('tab', { name: 'All', exact: true }).click()
-  return session
+  return Object.assign(session, { releaseImages: fixtures.releaseImages })
 }
 async function chooseView(page: Page, view: string) {
   const button = page.getByRole('group', { name: 'Gallery layout' }).getByRole('button', { name: view, exact: true })
@@ -523,6 +524,301 @@ test.describe('Media gallery geometry', () => {
       expect((portrait.right - portrait.left) / portrait.height).toBeCloseTo(0.4, 1)
       const landscape = state.boxes.find(box => box.label.endsWith('gallery-003.png'))!
       expect((landscape.right - landscape.left) / landscape.height).toBeCloseTo(3, 1)
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+})
+
+const MIXED_IMAGES = MIXED.filter(file => file.type === 'image' || file.type === 'video')
+const dialogTitle = (page: Page) => page.getByRole('dialog').locator('h2')
+
+/** Two-finger touch gesture through the Chrome protocol: real multi-touch,
+ *  which Playwright's single-point touchscreen cannot produce. */
+async function touch(page: Page) {
+  const cdp = await page.context().newCDPSession(page)
+  const send = (type: string, touchPoints: Array<{ x: number; y: number; id: number }>) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: touchPoints.map(({ id, ...point }) => ({ ...point, id, radiusX: 4, radiusY: 4, force: 1 })) })
+  return {
+    async pinch(center: { x: number; y: number }, from: number, to: number) {
+      const points = (spread: number) => [{ x: center.x - spread / 2, y: center.y, id: 1 }, { x: center.x + spread / 2, y: center.y, id: 2 }]
+      await send('touchStart', points(from))
+      for (let step = 1; step <= 10; step++) await send('touchMove', points(from + (to - from) * step / 10))
+      await send('touchEnd', [])
+    },
+    async longPress(point: { x: number; y: number }) {
+      await send('touchStart', [{ ...point, id: 1 }])
+      await page.waitForTimeout(700)
+      await send('touchEnd', [])
+    },
+  }
+}
+
+test.describe('Media gallery viewer and tools', () => {
+  test('the details dialog steps through images and videos with buttons, keys and swipes', async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const session = await bootMixedGallery(page)
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Grid')
+      await feed.getByRole('button', { name: `Enlarge ${MIXED_IMAGES[0].name}`, exact: true }).click()
+      const dialog = page.getByRole('dialog')
+      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[0].name)
+      await expect(dialog).toContainText(`1 of ${MIXED_IMAGES.length}`)
+      await expect(dialog.getByRole('button', { name: 'Previous', exact: true })).toHaveCount(0)
+
+      await dialog.getByRole('button', { name: 'Next', exact: true }).click()
+      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[1].name)
+      await page.keyboard.press('ArrowRight')
+      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[2].name)
+      // The fixture never serves full videos, so check the dialog kind, not the player.
+      await expect(page.getByRole('dialog', { name: MIXED_IMAGES[2].type === 'video' ? 'Video details' : 'Image details', exact: true })).toBeVisible()
+      await page.keyboard.press('ArrowLeft')
+      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[1].name)
+
+      // A horizontal drag on the picture is a swipe to the next item.
+      const box = (await dialog.getByTestId('zoomable-image').boundingBox())!
+      await page.mouse.move(box.x + box.width * 0.7, box.y + box.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2, { steps: 6 })
+      await page.mouse.up()
+      await expect(dialogTitle(page)).toHaveText(MIXED_IMAGES[2].name)
+
+      // Walk far beyond the rows mounted behind the dialog.
+      for (let step = 0; step < 20; step++) await page.keyboard.press('ArrowRight')
+      const far = MIXED_IMAGES[22]
+      await expect(dialogTitle(page)).toHaveText(far.name)
+      await page.keyboard.press('Escape')
+      await expect(dialog).toHaveCount(0)
+      // Closing leaves the gallery on the item that was being viewed.
+      const tile = feed.locator(`[data-gallery-index="${MIXED.indexOf(far)}"]`)
+      await expect(tile).toBeInViewport()
+      await expect(tile).toHaveAttribute('aria-current', 'true')
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('the details image zooms with a double click and pans while zoomed', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const session = await bootMixedGallery(page)
+    try {
+      await chooseView(page, 'Grid')
+      await page.getByTestId('media-feed').getByRole('button', { name: `Enlarge ${MIXED_IMAGES[1].name}`, exact: true }).click()
+      const zoom = page.getByRole('dialog').getByTestId('zoomable-image')
+      await expect(zoom.locator('img')).toHaveJSProperty('complete', true)
+      const box = (await zoom.boundingBox())!
+      const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      await page.mouse.dblclick(center.x, center.y)
+      await expect(zoom).toHaveAttribute('data-zoom', '2.50')
+      const before = await zoom.locator('img').evaluate(node => node.style.transform)
+      await page.mouse.move(center.x, center.y)
+      await page.mouse.down()
+      await page.mouse.move(center.x - 120, center.y + 40, { steps: 5 })
+      await page.mouse.up()
+      expect(await zoom.locator('img').evaluate(node => node.style.transform)).not.toBe(before)
+      // A drag while zoomed pans; it never counts as a swipe.
+      await expect(page.getByRole('dialog').locator('h2')).toHaveText(MIXED_IMAGES[1].name)
+      await page.mouse.dblclick(center.x, center.y)
+      await expect(zoom).toHaveAttribute('data-zoom', '1.00')
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('tiles paint the output colour until the preview arrives', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const session = await bootMixedGallery(page, { holdImages: true })
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Grid')
+      const tile = feed.locator('[data-gallery-index="0"]')
+      await expect(tile.locator('span[aria-hidden="true"][style*="background-color"]')).toHaveCSS('background-color', 'rgb(51, 102, 170)')
+      await expect(tile.locator('img')).toHaveCSS('opacity', '0')
+      session.releaseImages()
+      await expect(tile.locator('img')).toHaveCSS('opacity', '1')
+      await expect(tile.locator('span[aria-hidden="true"][style*="background-color"]')).toHaveCount(0)
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('arrows move through the grid a row at a time and Enter opens the item', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const session = await bootMixedGallery(page)
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Grid')
+      await page.locator('body').click({ position: { x: 5, y: 5 } })
+      const current = feed.locator('[aria-current="true"]')
+      await expect(current).toHaveAttribute('data-gallery-index', '0')
+      await page.keyboard.press('ArrowRight')
+      await expect(current).toHaveAttribute('data-gallery-index', '1')
+      const columns = await feed.evaluate(node => new Set([...node.querySelectorAll<HTMLElement>('[data-gallery-index]')]
+        .filter(tile => Math.round(tile.getBoundingClientRect().top) === Math.round(node.querySelector<HTMLElement>('[data-gallery-index="0"]')!.getBoundingClientRect().top))
+        .map(tile => tile.dataset.galleryIndex)).size)
+      await page.keyboard.press('ArrowDown')
+      await expect(current).toHaveAttribute('data-gallery-index', String(1 + columns))
+      for (let step = 0; step < 6; step++) await page.keyboard.press('j')
+      await expect(current).toBeInViewport()
+      const index = Number(await current.getAttribute('data-gallery-index'))
+      await page.keyboard.press('ArrowLeft')
+      await page.keyboard.press('ArrowRight')
+      await page.keyboard.press('Enter')
+      if (MIXED[index].type === 'image' || MIXED[index].type === 'video') {
+        await expect(dialogTitle(page)).toHaveText(MIXED[index].name)
+      }
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('multi-select favourites, moves and deletes several outputs at once', async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const calls: string[] = []
+    const favorites = new Set<string>()
+    const session = await bootMixedGallery(page, {
+      beforeGoto: async () => {
+        await page.route('**/api/v1/workspaces', route => route.request().method() === 'GET'
+          ? route.fulfill({ json: { workspaces: [{ name: 'default' }, { name: 'archive' }] } }) : route.fallback())
+      },
+    })
+    await page.route('**/api/v1/favorites/*', route => {
+      const name = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1)!)
+      calls.push(`favorite ${name}`)
+      if (favorites.has(name)) favorites.delete(name)
+      else favorites.add(name)
+      return route.fulfill({ json: { name, favorite: favorites.has(name) } })
+    })
+    await page.route(url => /\/api\/v1\/outputs\/[^/]+(\/move)?$/.test(url.pathname), route => {
+      const parts = new URL(route.request().url()).pathname.split('/')
+      const move = parts.at(-1) === 'move'
+      calls.push(`${move ? 'move' : route.request().method().toLowerCase()} ${decodeURIComponent(parts.at(move ? -2 : -1)!)}`)
+      return route.fulfill({ json: { ok: true } })
+    })
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Grid')
+      await page.getByRole('button', { name: 'Select', exact: true }).click()
+      const box = (index: number) => feed.getByRole('checkbox', { name: MIXED[index].name, exact: true })
+      await box(0).click()
+      await box(3).click({ modifiers: ['Shift'] })
+      await expect(page.getByRole('toolbar')).toContainText('4 selected')
+      await box(2).click()
+      await expect(box(2)).toHaveAttribute('aria-checked', 'false')
+
+      await page.getByRole('button', { name: 'Favorite', exact: true }).click()
+      await expect.poll(() => calls.filter(call => call.startsWith('favorite')).sort()).toEqual([0, 1, 3].map(index => `favorite ${MIXED[index].name}`))
+      await expect(page.getByRole('toolbar')).toContainText('Tap items to select them')
+
+      await box(5).click()
+      await page.getByRole('button', { name: 'Move', exact: true }).click()
+      await page.getByRole('dialog').getByRole('button', { name: 'archive', exact: true }).click()
+      await expect.poll(() => calls.includes(`move ${MIXED[5].name}`)).toBe(true)
+      await expect(feed.getByText(MIXED[5].name, { exact: true })).toHaveCount(0)
+
+      await page.getByRole('button', { name: 'Select', exact: true }).click()
+      await box(0).click()
+      await box(1).click()
+      await page.getByRole('button', { name: 'Delete', exact: true }).click()
+      await page.getByRole('button', { name: 'Delete 2 items? This cannot be undone.' }).click()
+      await expect.poll(() => calls.filter(call => call.startsWith('delete')).sort()).toEqual([0, 1].map(index => `delete ${MIXED[index].name}`))
+      await expect(feed.getByRole('checkbox')).toHaveCount(0)
+      await expect(feed.getByText(MIXED[0].name, { exact: true })).toHaveCount(0)
+      await expect(feed.locator('[data-gallery-index="0"]')).toContainText(MIXED[2].name)
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('each list returns to where the reader left it', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    const session = await bootMixedGallery(page)
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'One at a time')
+      await feed.evaluate(node => node.scrollTo({ top: 4200, behavior: 'instant' }))
+      await twoFrames(page)
+      const before = await rows(feed).then(state => state.boxes.filter(box => box.bottom > 0).sort((a, b) => a.top - b.top)[0])
+      await page.getByRole('tab', { name: 'Images', exact: true }).click()
+      await expect.poll(() => feed.evaluate(node => node.scrollTop)).toBeLessThan(30)
+      await page.getByRole('tab', { name: 'All', exact: true }).click()
+      await expect.poll(async () => (await rows(feed)).boxes.filter(box => box.bottom > 0).sort((a, b) => a.top - b.top)[0]?.label).toBe(before.label)
+      const after = await rows(feed).then(state => state.boxes.filter(box => box.bottom > 0).sort((a, b) => a.top - b.top)[0])
+      expect(Math.abs(after.top - before.top)).toBeLessThanOrEqual(2)
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+})
+
+test.describe('Media gallery on a touch phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test('history opens from the toolbar and nothing floats over the cards', async ({ page }) => {
+    const session = await bootMixedGallery(page)
+    try {
+      await chooseView(page, 'One at a time')
+      await expect(page.getByRole('button', { name: 'Show thumbnails' })).toHaveCount(0)
+      await page.getByRole('button', { name: 'History', exact: true }).click()
+      const panel = page.locator('aside').filter({ hasText: 'History' })
+      await expect(panel).toBeInViewport()
+      await panel.getByRole('button', { name: MIXED[7].name, exact: true }).click()
+      await expect(panel).not.toBeInViewport()
+      await expect(page.getByTestId('media-feed').locator('[data-feed-index="7"]')).toBeInViewport()
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('pinching the grid changes its columns and the choice persists', async ({ page }) => {
+    const session = await bootMixedGallery(page)
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Grid')
+      const columns = () => feed.evaluate(node => {
+        const first = node.querySelector<HTMLElement>('[data-gallery-index="0"]')?.getBoundingClientRect().top
+        if (first == null) return 0
+        return [...node.querySelectorAll<HTMLElement>('[data-gallery-index]')].filter(tile => Math.round(tile.getBoundingClientRect().top) === Math.round(first)).length
+      })
+      await expect.poll(columns).toBe(3)
+      const area = (await feed.boundingBox())!
+      const center = { x: area.x + area.width / 2, y: area.y + area.height / 2 }
+      const gestures = await touch(page)
+      await gestures.pinch(center, 120, 260)
+      await expect.poll(columns).toBe(2)
+      await gestures.pinch(center, 240, 100)
+      await expect.poll(columns).toBeGreaterThanOrEqual(4)
+      const chosen = await columns()
+      await page.reload()
+      await page.getByRole('button', { name: 'Media', exact: true }).click()
+      await page.getByRole('tab', { name: 'All', exact: true }).click()
+      await expect.poll(columns).toBe(chosen)
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
+  test('a long press starts selecting, and pinch zooms the details image', async ({ page }) => {
+    const session = await bootMixedGallery(page)
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Grid')
+      const tile = (await feed.locator('[data-gallery-index="3"]').boundingBox())!
+      const gestures = await touch(page)
+      await gestures.longPress({ x: tile.x + tile.width / 2, y: tile.y + tile.height / 2 })
+      await expect(page.getByRole('toolbar')).toContainText('1 selected')
+      await expect(feed.getByRole('checkbox', { name: MIXED[3].name, exact: true })).toHaveAttribute('aria-checked', 'true')
+      await page.getByRole('button', { name: 'Done', exact: true }).click()
+
+      await feed.getByRole('button', { name: `Enlarge ${MIXED[3].name}`, exact: true }).tap()
+      const zoom = page.getByRole('dialog').getByTestId('zoomable-image')
+      await expect(zoom.locator('img')).toHaveJSProperty('complete', true)
+      const box = (await zoom.boundingBox())!
+      await gestures.pinch({ x: box.x + box.width / 2, y: box.y + box.height / 2 }, 60, 200)
+      await expect.poll(async () => Number(await zoom.getAttribute('data-zoom'))).toBeGreaterThan(2)
     } finally {
       await closeApp(page, session)
     }

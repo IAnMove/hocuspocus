@@ -28,6 +28,8 @@ export interface ApiOutput {
   /** Pixel size, when known: image headers, or the video's recorded resolution. */
   width?: number
   height?: number
+  /** Average colour of the preview (`#rrggbb`), painted while it loads. */
+  color?: string
   /** Edit-mode sub-classification (retake / inpaint / outpaint / restyle /
    *  edit_anything). Field added as a recovery stub after a git
    *  filter-repo reset wiped the original Stream C/D work that

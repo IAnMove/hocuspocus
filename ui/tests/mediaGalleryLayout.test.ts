@@ -12,6 +12,7 @@ import {
   galleryAspect,
   gridColumns,
   mosaicAspect,
+  neighborIndex,
   visibleBlocks,
   type GalleryLayout,
 } from '../src/components/MainContent/mediaGalleryLayout.ts'
@@ -133,4 +134,30 @@ test('anchor follows the same item across inserts and view changes', () => {
   const grid = buildGalleryLayout('grid', items, 378, 578)
   assert.equal(anchorOffset(grid, items, anchor, false), grid.blocks[4].top)
   assert.equal(anchorOffset(grid, items, { name: 'gone', within: 0 }, false), null)
+})
+
+test('a pinched column count applies to phone grids only and regroups rows', () => {
+  const items = library(30)
+  assert.equal(gridColumns(378, 5), 5)
+  assert.equal(gridColumns(1236, 2), 6, 'wide screens follow their width')
+  const three = buildGalleryLayout('grid', items, 378, 600)
+  const five = buildGalleryLayout('grid', items, 378, 600, { gridColumns: 5 })
+  assert.equal(five.blocks[0].cells.length, 5)
+  assert.notEqual(three.shape, five.shape)
+  assert.equal(buildGalleryLayout('grid', items, 378, 600).shape, three.shape)
+  assertStacked(five, 4)
+})
+
+test('keyboard steps walk the list and keep the column between rows', () => {
+  const layout = buildGalleryLayout('grid', library(20), 1236, 600)
+  assert.equal(layout.blocks[0].cells.length, 6)
+  assert.equal(neighborIndex(layout, 2, 'down'), 8)
+  assert.equal(neighborIndex(layout, 8, 'up'), 2)
+  assert.equal(neighborIndex(layout, 2, 'right'), 3)
+  assert.equal(neighborIndex(layout, 0, 'left'), 0)
+  assert.equal(neighborIndex(layout, 1, 'up'), 1, 'no row above')
+  assert.equal(neighborIndex(layout, 17, 'down'), 19, 'the short last row takes the nearest column')
+  const feed = buildGalleryLayout('feed', library(5), 386, 578)
+  assert.equal(neighborIndex(feed, 1, 'down'), 2)
+  assert.equal(neighborIndex(feed, 4, 'down'), 4)
 })

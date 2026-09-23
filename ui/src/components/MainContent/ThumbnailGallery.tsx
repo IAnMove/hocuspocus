@@ -147,7 +147,8 @@ function VirtualizedThumbnailList({ activeIndex, onThumbnailClick, onMobileClick
                   ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-bg-active flex items-center justify-center"><Film size={14} className="text-text-muted" /></div>
               ) : (
-                <img src={galleryThumbnailUrl(file, undefined, 'sm') || file.url} alt={file.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                <img src={galleryThumbnailUrl(file, undefined, 'sm') || file.url} alt={file.name} className="w-full h-full object-cover" loading="lazy" decoding="async"
+                  style={file.color ? { backgroundColor: file.color } : undefined} />
               )}
             </button>
           )
@@ -162,7 +163,10 @@ export function ThumbnailGallery({ activeIndex, onThumbnailClick }: Props) {
   const outputsLoading = useStore(s => s.outputsLoading)
   const isMobile = useIsMobile()
   const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
+  // Opened from the gallery toolbar; a floating button here used to cover
+  // the last action of every card on a phone.
+  const mobileOpen = useStore(s => s.mobileHistoryOpen)
+  const setMobileOpen = useStore(s => s.setMobileHistoryOpen)
 
   if (outputs.length === 0 && !outputsLoading) return null
 
@@ -170,15 +174,6 @@ export function ThumbnailGallery({ activeIndex, onThumbnailClick }: Props) {
   if (isMobile) {
     return (
       <>
-        {/* Toggle button - fixed in bottom-right */}
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="fixed bottom-4 right-4 z-30 w-10 h-10 rounded-full bg-bg-secondary border border-border shadow-lg flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors"
-          title="Show thumbnails"
-        >
-          <PanelRightOpen size={18} />
-        </button>
-
         {/* Overlay backdrop */}
         {mobileOpen && (
           <div

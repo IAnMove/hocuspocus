@@ -14,11 +14,14 @@ export interface PreviewImage {
   thumbnail_url?: string | null
 }
 
-export function ImagePreview({ image, children, className, onOpen, videoTime, onVideoTimeChange }: {
+export function ImagePreview({ image, children, className, onOpen, onOpenDialog, videoTime, onVideoTimeChange }: {
   image: PreviewImage
   children: ReactNode
   className?: string
   onOpen?: () => void
+  /** Show the details in a dialog the caller owns (the gallery's, which can
+   *  step through its list) instead of this preview's own. */
+  onOpenDialog?: () => void
   videoTime?: number
   onVideoTimeChange?: (seconds: number) => void
 }) {
@@ -26,7 +29,12 @@ export function ImagePreview({ image, children, className, onOpen, videoTime, on
   const [open, setOpen] = useState(false)
   return <>
     <button type="button" className={className} aria-label={t(image.type === 'video' ? 'imagePreview.openVideo' : 'imagePreview.open', { name: image.name })}
-      onClick={event => { event.stopPropagation(); onOpen?.(); setOpen(true) }}>{children}</button>
+      onClick={event => {
+        event.stopPropagation()
+        onOpen?.()
+        if (onOpenDialog) onOpenDialog()
+        else setOpen(true)
+      }}>{children}</button>
     {open && <Suspense fallback={<div role="status" className="fixed right-4 top-4 z-[150] rounded bg-bg-secondary p-3">{t('imagePreview.loading')}</div>}>
       <ImagePreviewDialog key={`${image.url}:${image.workspace_id || ''}:${image.type || 'image'}`} image={image} onClose={() => setOpen(false)}
         videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} />

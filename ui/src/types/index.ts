@@ -396,6 +396,8 @@ export interface OutputFile {
   /** Pixel size when the listing knows it. The gallery sizes rows from it. */
   width?: number
   height?: number
+  /** Average preview colour, shown as a placeholder while the preview loads. */
+  color?: string
 }
 
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'

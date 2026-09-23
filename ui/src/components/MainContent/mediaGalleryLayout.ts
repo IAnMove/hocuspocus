@@ -23,6 +23,9 @@ export interface GalleryBlock {
 export interface GalleryLayout {
   view: GalleryLayoutView
   width: number
+  /** Changes whenever rows are regrouped (view, width or grid columns), so an
+   *  anchor knows its offset inside the old row no longer applies. */
+  shape: string
   blocks: GalleryBlock[]
   height: number
   /** Block that holds each output index. */
@@ -76,7 +79,7 @@ export function feedCardHeight(file: SizedOutput, width: number, viewportHeight:
   return feedMediaHeight(file, width, viewportHeight) + FEED_INFO_BAR_HEIGHT + FEED_CARD_BORDER
 }
 
-function stack(view: GalleryLayoutView, width: number, rows: Array<{ height: number; cells: GalleryCell[] }>, count: number): GalleryLayout {
+function stack(view: GalleryLayoutView, width: number, rows: Array<{ height: number; cells: GalleryCell[] }>, count: number, variant = ''): GalleryLayout {
   const gap = galleryGap(view, width)
   const blocks: GalleryBlock[] = []
   const blockOf = new Array<number>(count)
@@ -86,7 +89,7 @@ function stack(view: GalleryLayoutView, width: number, rows: Array<{ height: num
     blocks.push({ top, height: row.height, cells: row.cells })
     top += row.height + gap
   }
-  return { view, width, blocks, height: blocks.length ? top - gap : 0, blockOf }
+  return { view, width, shape: `${view}:${width}:${variant}`, blocks, height: blocks.length ? top - gap : 0, blockOf }
 }
 
 function feedLayout(outputs: SizedOutput[], width: number, viewportHeight: number): GalleryLayout {
@@ -97,15 +100,18 @@ function feedLayout(outputs: SizedOutput[], width: number, viewportHeight: numbe
   }), outputs.length)
 }
 
-export function gridColumns(width: number): number {
+/** Columns for the square grid. A phone may override the width-derived count
+ *  with a pinch; wider screens always follow their width. */
+export function gridColumns(width: number, preferred?: number | null): number {
+  if (preferred && width < PHONE_WIDTH) return Math.max(1, Math.round(preferred))
   const gap = galleryGap('grid', width)
   const minTile = width < PHONE_WIDTH ? 110 : 190
   return Math.max(1, Math.floor((width + gap) / (minTile + gap)))
 }
 
-function gridLayout(outputs: SizedOutput[], width: number, viewportHeight: number): GalleryLayout {
+function gridLayout(outputs: SizedOutput[], width: number, viewportHeight: number, preferred?: number | null): GalleryLayout {
   const gap = galleryGap('grid', width)
-  const columns = gridColumns(width)
+  const columns = gridColumns(width, preferred)
   const tile = Math.max(1, Math.floor((width - gap * (columns - 1)) / columns))
   const height = Math.min(tile, Math.max(MIN_MEDIA_HEIGHT, Math.floor(viewportHeight)))
   const rows: Array<{ height: number; cells: GalleryCell[] }> = []
@@ -116,7 +122,7 @@ function gridLayout(outputs: SizedOutput[], width: number, viewportHeight: numbe
     }
     rows.push({ height, cells })
   }
-  return stack('grid', width, rows, outputs.length)
+  return stack('grid', width, rows, outputs.length, String(columns))
 }
 
 /** Justified rows: every item keeps its aspect, each full row spans the width
@@ -173,9 +179,15 @@ function masonryLayout(outputs: SizedOutput[], width: number, viewportHeight: nu
   return stack('masonry', width, rows, outputs.length)
 }
 
-export function buildGalleryLayout(view: GalleryLayoutView, outputs: SizedOutput[], width: number, viewportHeight: number): GalleryLayout {
+export function buildGalleryLayout(
+  view: GalleryLayoutView,
+  outputs: SizedOutput[],
+  width: number,
+  viewportHeight: number,
+  options: { gridColumns?: number | null } = {},
+): GalleryLayout {
   const usableWidth = Math.max(1, Math.floor(width))
-  if (view === 'grid') return gridLayout(outputs, usableWidth, viewportHeight)
+  if (view === 'grid') return gridLayout(outputs, usableWidth, viewportHeight, options.gridColumns)
   if (view === 'masonry') return masonryLayout(outputs, usableWidth, viewportHeight)
   return feedLayout(outputs, usableWidth, viewportHeight)
 }
@@ -238,4 +250,26 @@ export function anchorOffset(
   const block = layout.blocks[layout.blockOf[index]]
   if (!block) return null
   return block.top + (keepWithin ? Math.min(anchor.within, Math.max(0, block.height - 1)) : 0)
+}
+
+export type GalleryDirection = 'up' | 'down' | 'left' | 'right'
+
+/** The item a keyboard step lands on. Left/right walk the list order; up/down
+ *  move one row and keep the column closest to the current item. */
+export function neighborIndex(layout: GalleryLayout, index: number, direction: GalleryDirection): number {
+  const count = layout.blockOf.length
+  if (!count) return index
+  const current = Math.min(Math.max(0, index), count - 1)
+  if (direction === 'left') return Math.max(0, current - 1)
+  if (direction === 'right') return Math.min(count - 1, current + 1)
+  const row = layout.blockOf[current]
+  const target = layout.blocks[row + (direction === 'down' ? 1 : -1)]
+  if (!target) return current
+  const cell = layout.blocks[row].cells.find(item => item.index === current)
+  const center = cell ? cell.left + cell.width / 2 : 0
+  let best = target.cells[0]
+  for (const candidate of target.cells) {
+    if (Math.abs(candidate.left + candidate.width / 2 - center) < Math.abs(best.left + best.width / 2 - center)) best = candidate
+  }
+  return best.index
 }

@@ -213,12 +213,30 @@
     "label": "Disposición de la galería",
     "feed": "De una en una",
     "grid": "Rejilla",
-    "masonry": "Mosaico"
+    "masonry": "Mosaico",
+    "history": "Historial",
+    "select": "Seleccionar",
+    "density": "Tamaño de la rejilla"
   },
   "referenceImages": "Imágenes de referencia",
   "referenceImage": "Referencia {{n}}",
   "moveOutput": {
     "title": "Mover a otro espacio de trabajo",
     "empty": "No hay otros espacios de trabajo"
+  },
+  "selection": {
+    "count_one": "{{count}} seleccionado",
+    "count_other": "{{count}} seleccionados",
+    "none": "Toca elementos para seleccionarlos",
+    "all": "Seleccionar todo",
+    "favorite": "Favorito",
+    "unfavorite": "Quitar favorito",
+    "move": "Mover",
+    "delete": "Borrar",
+    "confirmDelete_one": "¿Borrar {{count}} elemento? No se puede deshacer.",
+    "confirmDelete_other": "¿Borrar {{count}} elementos? No se puede deshacer.",
+    "done": "Listo",
+    "working": "Procesando…",
+    "failed": "Algunos elementos no se pudieron actualizar: {{names}}"
   }
 }

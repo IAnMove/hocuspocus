@@ -146,7 +146,12 @@
     "sources": {
       "sidecar": "Saved metadata",
       "embedded": "Embedded metadata"
-    }
+    },
+    "previous": "Previous",
+    "next": "Next",
+    "position": "{{current}} of {{total}}",
+    "zoomHint": "Double-tap or pinch to zoom",
+    "resetZoom": "Reset zoom"
   },
   "runtimeUpdate": {
     "message": "An update or server restart was detected. Your current form is kept. Reload when you are ready; unsent edits will be cleared.",

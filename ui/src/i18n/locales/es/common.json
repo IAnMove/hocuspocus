@@ -146,7 +146,12 @@
     "sources": {
       "sidecar": "Metadatos guardados",
       "embedded": "Metadatos incrustados"
-    }
+    },
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "position": "{{current}} de {{total}}",
+    "zoomHint": "Doble toque o pellizca para ampliar",
+    "resetZoom": "Restablecer zoom"
   },
   "runtimeUpdate": {
     "message": "Se ha detectado una actualización o un reinicio del servidor. Conservamos tu formulario. Recarga cuando termines; se borrarán los cambios sin enviar.",

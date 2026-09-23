@@ -213,12 +213,30 @@
     "label": "Gallery layout",
     "feed": "One at a time",
     "grid": "Grid",
-    "masonry": "Mosaic"
+    "masonry": "Mosaic",
+    "history": "History",
+    "select": "Select",
+    "density": "Grid size"
   },
   "referenceImages": "Reference images",
   "referenceImage": "Reference {{n}}",
   "moveOutput": {
     "title": "Move to workspace",
     "empty": "No other workspaces"
+  },
+  "selection": {
+    "count_one": "{{count}} selected",
+    "count_other": "{{count}} selected",
+    "none": "Tap items to select them",
+    "all": "Select all",
+    "favorite": "Favorite",
+    "unfavorite": "Remove favorite",
+    "move": "Move",
+    "delete": "Delete",
+    "confirmDelete_one": "Delete {{count}} item? This cannot be undone.",
+    "confirmDelete_other": "Delete {{count}} items? This cannot be undone.",
+    "done": "Done",
+    "working": "Working…",
+    "failed": "Some items could not be updated: {{names}}"
   }
 }

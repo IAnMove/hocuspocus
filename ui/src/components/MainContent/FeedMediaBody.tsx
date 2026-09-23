@@ -1,4 +1,4 @@
-import React, { type ReactNode, type RefObject } from 'react'
+import React, { useState, type ReactNode, type RefObject } from 'react'
 import { BookOpen, Box, Film, Play } from 'lucide-react'
 import { getFileUrl } from '../../api/client'
 import type { OutputFile } from '../../types'
@@ -19,6 +19,8 @@ type FeedMediaBodyProps = {
   videoTime?: number
   onVideoTimeChange?: (seconds: number) => void
   onPlay: () => void
+  /** Open the gallery's details dialog for this item. */
+  onOpenDetails: () => void
   isScene: boolean
   isComic: boolean
   isModel3d: boolean
@@ -30,13 +32,13 @@ type FeedMediaBodyProps = {
   retryImage: (url: string) => ReactNode
 }
 
-function FeedVideoPreview({ file, workspace, previewUrl, videoTime, onVideoTimeChange }: {
-  file: OutputFile; workspace?: string; previewUrl: string | null; videoTime?: number; onVideoTimeChange?: (seconds: number) => void
+function FeedVideoPreview({ file, workspace, previewUrl, videoTime, onVideoTimeChange, onOpenDetails }: {
+  file: OutputFile; workspace?: string; previewUrl: string | null; videoTime?: number; onVideoTimeChange?: (seconds: number) => void; onOpenDetails: () => void
 }) {
   return (
-    <ImagePreview image={{ ...file, type: 'video', workspace_id: workspace }} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} className="relative block h-full w-full cursor-zoom-in">
+    <ImagePreview image={{ ...file, type: 'video', workspace_id: workspace }} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} onOpenDialog={onOpenDetails} className="relative block h-full w-full cursor-zoom-in">
       {previewUrl ? (
-        <img src={previewUrl} alt={file.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+        <PlaceholderImage src={previewUrl} alt={file.name} color={file.color} />
       ) : (
         <span className="flex h-full w-full items-center justify-center text-text-muted"><Film size={32} /></span>
       )}
@@ -101,6 +103,13 @@ function FeedModel3dPreview({
   )
 }
 
+/** Paints the output's average colour until its preview has decoded. */
+function PlaceholderImage({ src, alt, color }: { src: string; alt: string; color?: string }) {
+  const [loaded, setLoaded] = useState<string | null>(null)
+  return <img src={src} alt={alt} className="h-full w-full object-contain" loading="lazy" decoding="async"
+    style={loaded === src || !color ? undefined : { backgroundColor: color }} onLoad={() => setLoaded(src)} />
+}
+
 export function FeedMediaBody(props: FeedMediaBodyProps) {
   return <React.Fragment>{renderFeedMedia(props)}</React.Fragment>
 }
@@ -108,10 +117,10 @@ export function FeedMediaBody(props: FeedMediaBodyProps) {
 function renderFeedMedia({
   file, isActive, previewUrl,
   isScene, isComic, isModel3d, canPreviewModel3d, isRigged, riggedClips, activeClip, setActiveClip,
-  retryImage, workspace, videoTime, onVideoTimeChange,
+  retryImage, workspace, videoTime, onVideoTimeChange, onOpenDetails,
 }: FeedMediaBodyProps) {
   if (file.type === 'video') {
-    return <FeedVideoPreview file={file} workspace={workspace} previewUrl={previewUrl} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} />
+    return <FeedVideoPreview file={file} workspace={workspace} previewUrl={previewUrl} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} onOpenDetails={onOpenDetails} />
   }
   if (file.type === 'audio') {
     return (
@@ -147,7 +156,7 @@ function renderFeedMedia({
       />
     )
   }
-  return <ImagePreview image={{ ...file, type: 'image', workspace_id: workspace }} className="block h-full w-full cursor-zoom-in">
+  return <ImagePreview image={{ ...file, type: 'image', workspace_id: workspace }} onOpenDialog={onOpenDetails} className="block h-full w-full cursor-zoom-in">
     {retryImage(previewUrl || file.url)}
   </ImagePreview>
 }

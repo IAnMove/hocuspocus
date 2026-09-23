@@ -1,11 +1,27 @@
 import { useEffect, useState } from 'react'
-import { Download, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, X } from 'lucide-react'
 import { fetchOutputMetadata } from '../../api/outputs'
 import { useUiTranslation } from '../../i18n'
 import { formatGenerationDuration } from '../../lib/generationTiming'
 import { ModalShell } from './ModalShell'
 import type { PreviewImage } from './ImagePreview'
 import { ImagePreviewInformation, type PreviewMetadataState } from './ImagePreviewMetadata'
+import { ZoomableImage } from './ZoomableImage'
+
+/** Stepping through a list from inside the dialog (the media gallery). */
+export interface PreviewNavigation {
+  /** 1-based position among the items that can be previewed. */
+  position: number
+  /** A count, or e.g. "120+" while more pages remain on the server. */
+  total: number | string
+  onPrevious?: () => void
+  onNext?: () => void
+}
+
+function isTypingTarget(target: EventTarget | null) {
+  const element = target as HTMLElement | null
+  return !!element && (element.isContentEditable || /^(INPUT|TEXTAREA|SELECT|VIDEO|AUDIO)$/.test(element.tagName))
+}
 
 function metadataTarget(image: PreviewImage): { name: string; workspace?: string } | null {
   try {
@@ -22,11 +38,12 @@ function metadataTarget(image: PreviewImage): { name: string; workspace?: string
   }
 }
 
-export default function ImagePreviewDialog({ image, onClose, videoTime, onVideoTimeChange }: {
+export default function ImagePreviewDialog({ image, onClose, videoTime, onVideoTimeChange, navigation }: {
   image: PreviewImage
   onClose: () => void
   videoTime?: number
   onVideoTimeChange?: (seconds: number) => void
+  navigation?: PreviewNavigation
 }) {
   const { t } = useUiTranslation('common')
   const [dimensions, setDimensions] = useState('')
@@ -46,6 +63,20 @@ export default function ImagePreviewDialog({ image, onClose, videoTime, onVideoT
       .catch(() => { if (!controller.signal.aborted) setInfo({ failed: true, done: true }) })
     return () => controller.abort()
   }, [name, url, workspace_id, metadataAttempt]) // Descriptor objects may change with progress renders.
+  const onPrevious = navigation?.onPrevious
+  const onNext = navigation?.onNext
+  useEffect(() => {
+    if (!onPrevious && !onNext) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || isTypingTarget(event.target)) return
+      const step = event.key === 'ArrowLeft' ? onPrevious : event.key === 'ArrowRight' ? onNext : undefined
+      if (!step) return
+      event.preventDefault()
+      step()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onPrevious, onNext])
   let src = image.url
   if (attempt && !/^(blob:|data:)/i.test(src)) {
     const retryUrl = new URL(src, window.location.href)
@@ -59,11 +90,14 @@ export default function ImagePreviewDialog({ image, onClose, videoTime, onVideoT
     <section className="flex max-h-[calc(100dvh-1rem)] min-w-0 w-full max-w-[1600px] flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary text-text-primary sm:max-h-[calc(100dvh-3rem)]">
       <header className="flex shrink-0 items-center gap-2 border-b border-border p-2 sm:p-3">
         <h2 className="min-w-0 flex-1 truncate pl-1 text-sm" title={image.name}>{image.name}</h2>
+        {navigation && <span className="shrink-0 text-xs tabular-nums text-text-muted" aria-live="polite">
+          {t('imagePreview.position', { current: navigation.position, total: navigation.total })}
+        </span>}
         <a href={image.url} download={image.name} className={actionClass} aria-label={t(isVideo ? 'imagePreview.downloadVideo' : 'imagePreview.download')}><Download size={18} /></a>
         <button type="button" className={actionClass} onClick={onClose} aria-label={t('actions.close')}><X size={20} /></button>
       </header>
       <div className="flex min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain md:flex-row md:overflow-hidden">
-        <div className="flex min-h-40 min-w-0 shrink-0 items-center justify-center bg-black/30 p-2 md:flex-1">
+        <div className="relative flex min-h-40 min-w-0 shrink-0 items-center justify-center bg-black/30 p-2 md:flex-1">
           {failed ? <div role="alert" className="p-4 text-sm">{t(isVideo ? 'imagePreview.videoFailed' : 'imagePreview.failed')}
             <button type="button" className="mt-2 block min-h-11 underline" onClick={() => { setFailed(false); setAttempt(value => value + 1) }}>{t('actions.retry')}</button>
           </div> : isVideo ? <video key={src} src={src} poster={image.thumbnail_url || undefined} controls playsInline preload="metadata" tabIndex={0}
@@ -76,8 +110,17 @@ export default function ImagePreviewDialog({ image, onClose, videoTime, onVideoT
             }} onTimeUpdate={event => {
               const time = event.currentTarget.currentTime
               if (Number.isFinite(time)) onVideoTimeChange?.(time)
-            }} /> : <img src={src} alt={image.name} className="block max-h-[55dvh] max-w-full object-contain md:max-h-[min(75dvh,calc(100dvh-9rem))]"
-            onError={() => setFailed(true)} onLoad={event => setDimensions(`${event.currentTarget.naturalWidth} × ${event.currentTarget.naturalHeight}`)} />}
+            }} /> : <ZoomableImage src={src} alt={image.name} className="block max-h-[55dvh] max-w-full object-contain md:max-h-[min(75dvh,calc(100dvh-9rem))]"
+            onError={() => setFailed(true)} onLoad={event => setDimensions(`${event.currentTarget.naturalWidth} × ${event.currentTarget.naturalHeight}`)}
+            onSwipe={direction => (direction === 'next' ? onNext : onPrevious)?.()} />}
+          {onPrevious && <button type="button" onClick={onPrevious} aria-label={t('imagePreview.previous')}
+            className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80">
+            <ChevronLeft size={22} />
+          </button>}
+          {onNext && <button type="button" onClick={onNext} aria-label={t('imagePreview.next')}
+            className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80">
+            <ChevronRight size={22} />
+          </button>}
         </div>
         <ImagePreviewInformation image={image} dimensions={dimensions} duration={duration} info={info}
           onRetry={() => { setInfo({}); setMetadataAttempt(value => value + 1) }} />
