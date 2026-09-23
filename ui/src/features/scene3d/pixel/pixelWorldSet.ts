@@ -22,6 +22,7 @@ export function isPixelDressing(kind: unknown): kind is PixelDressing {
 type PixelRuntime = {
   kind: PixelDressing; key: string; palette: DataTexture; bytes: Uint8Array
   skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; sky: [number, number]
+  movers: { mesh: Mesh; speed: number; loop: number }[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
@@ -200,7 +201,7 @@ function clear(root: Object3D) {
  *  layout (not the lighting) changes. */
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.movers = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -212,6 +213,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   for (const spec of plan.layers) {
     const { mesh, lamp } = layerMesh(spec, runtime.palette)
     if (spec.sky) runtime.skies.push(mesh.material as ShaderMaterial)
+    if (spec.drift) runtime.movers.push({ mesh, ...spec.drift })
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
   }
@@ -225,7 +227,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], movers: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -255,6 +257,8 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
     runtime.water.uniforms.uCell.value = Math.max(1, pixel.pixelSize * frameHeight / 720)
     runtime.water.uniforms.uCalm.value = runtime.kind === 'pixel-gallery' ? .85 : 1 - Math.min(1, scene.ripple * 1.25)
   }
+  // Travelling planes follow the scene clock, so scrubbing and export agree.
+  for (const mover of runtime.movers) mover.mesh.position.x = -mover.loop / 2 + (seconds * mover.speed) % mover.loop
   if (runtime.beam) {
     runtime.beam.rotation.y = seconds * .9
     const material = (runtime.beam.children[0].children[0] as Mesh).material as ShaderMaterial

@@ -1329,6 +1329,10 @@
     "pixel-planet-rise": {
       "title": "Salida del planeta",
       "description": "Un planeta con anillos se alza sobre picos alienígenas y un mar violeta; sus bandas de nubes derivan con ciclo de color mientras la luz pasa del turquesa alienígena al neón vapor."
+    },
+    "pixel-night-train": {
+      "title": "Tren de medianoche",
+      "description": "Un tren iluminado cruza un viaducto de piedra sobre un lago de luna, con sus ventanas brillando en el agua, mientras la medianoche se vuelve amanecer."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1570,7 +1574,8 @@
       "pixel-city": "Ciudad de neón",
       "pixel-desert": "Desierto",
       "pixel-coast": "Acantilado",
-      "pixel-forest": "Bosque"
+      "pixel-forest": "Bosque",
+      "pixel-viaduct": "Viaducto"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

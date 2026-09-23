@@ -142,3 +142,46 @@ export function paintSand(width: number, height: number, seed: number): IndexedL
   }
   return sand
 }
+
+/** A stone viaduct: a lit deck on a row of arches over the water. */
+export function paintViaduct(width: number, height: number, spec: Tone & { seed: number }): IndexedLayer {
+  const bridge = layer(width, height)
+  const deck = Math.round(height * .12), under = Math.round(height * .26), span = 44, pier = 7
+  for (let x = 0; x < width; x++) {
+    const along = (x % span) - span / 2, half = span / 2 - pier
+    // Keystone at the top of each opening, the curve falling to the piers.
+    const arch = Math.abs(along) < half ? under + Math.round((height - under) * .45 * (1 - Math.sqrt(Math.max(0, 1 - (along / half) ** 2)))) : height
+    for (let y = deck; y < height; y++) {
+      if (Math.abs(along) < half && y > arch) continue
+      const edge = Math.abs(along) < half && y === arch
+      const joint = (y - deck) % 5 === 0 && bayer(x, y) < .3
+      set(bridge, x, y, y === deck || edge ? spec.rim : joint ? INDEX.farShade : spec.body)
+    }
+    if (x % 9 === 0) for (let y = deck - 2; y < deck; y++) set(bridge, x, y, spec.body)
+  }
+  return bridge
+}
+
+/** A night train facing right: a locomotive with a lamp and carriages whose
+ *  windows glow in the cycling window slots. */
+export function paintTrain(width: number, height: number, spec: { seed: number; carriages: number }): IndexedLayer {
+  const train = layer(width, height)
+  const car = Math.floor((width - 30) / spec.carriages), roof = 1, wheels = height - 2
+  const box = (x0: number, x1: number, y0: number, y1: number, index: number) => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) set(train, x, y, index)
+  }
+  for (let c = 0; c < spec.carriages; c++) {
+    const x0 = c * car + 1, x1 = x0 + car - 2
+    box(x0, x1, roof, wheels, INDEX.trees)
+    box(x0 + 1, x1 - 1, roof, roof + 1, INDEX.nearRim)
+    for (let x = x0 + 3; x < x1 - 3; x += 4) box(x, x + 2, roof + 2, roof + 4, INDEX.window + ((x + c * 3 + spec.seed) % INDEX.windowSteps))
+  }
+  const loco = spec.carriages * car + 1
+  box(loco, width - 4, roof + 1, wheels, INDEX.trees)
+  box(loco + 2, loco + 8, roof - 1, roof + 3, INDEX.trees)
+  box(loco + 3, loco + 6, roof + 1, roof + 3, INDEX.lamp)
+  box(width - 6, width - 3, roof + 4, roof + 6, INDEX.lamp)
+  box(width - 12, width - 8, 0, roof + 1, INDEX.trees)
+  for (let x = 2; x < width - 4; x += 3) set(train, x, wheels, INDEX.farShade)
+  return train
+}

@@ -1,11 +1,13 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
 export type LayerSpec = {
   z: number; width: number; height: number; bottom: number; texture: [number, number]
   sky?: boolean
+  /** Meters per second the plane travels along x, looping over `loop` meters. */
+  drift?: { speed: number; loop: number }
   paint: (w: number, h: number) => IndexedLayer
 }
 export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand' }
@@ -74,6 +76,13 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
   'pixel-coast': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -28, width: 90, height: 16, bottom: -1, texture: [640, 114], paint: (w, h) => paintCliff(w, h, { ...near, seed: scene.seed + 2, lightFrom: bodySkyX(scene), tall: .4 + scene.hills * .6, trees: scene.trees }) },
+    ...reeds(scene),
+  ] }),
+  'pixel-viaduct': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene), hills(scene, true),
+    { z: -24, width: 96, height: 6, bottom: -.5, texture: [768, 48], paint: (w, h) => paintViaduct(w, h, { ...near, seed: scene.seed + 4, lightFrom: bodySkyX(scene) }) },
+    // The train rides the deck, crossing the whole bridge and coming round again.
+    { z: -23.8, width: 26, height: 1.25, bottom: 4.78, texture: [208, 10], drift: { speed: 5.5, loop: 130 }, paint: (w, h) => paintTrain(w, h, { seed: scene.seed, carriages: 5 }) },
     ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [

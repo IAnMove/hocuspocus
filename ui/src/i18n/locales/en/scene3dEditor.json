@@ -1329,6 +1329,10 @@
     "pixel-planet-rise": {
       "title": "Planet rise",
       "description": "A ringed planet rises over jagged alien peaks and a violet sea; its cloud bands drift by colour cycling while the light slides from alien teal to vapor neon."
+    },
+    "pixel-night-train": {
+      "title": "Midnight train",
+      "description": "A lit night train crosses a stone viaduct over a moonlit lake, its windows glowing on the water, as midnight slowly turns to dawn."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1570,7 +1574,8 @@
       "pixel-city": "Neon city",
       "pixel-desert": "Desert",
       "pixel-coast": "Sea cliff",
-      "pixel-forest": "Forest"
+      "pixel-forest": "Forest",
+      "pixel-viaduct": "Viaduct"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

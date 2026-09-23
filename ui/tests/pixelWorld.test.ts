@@ -146,3 +146,15 @@ test('a ringed planet: bands drift by cycling and the ring crosses in front of t
   assert.notDeepEqual(Array.from(a.subarray(92 * 4, 96 * 4)), Array.from(b.subarray(92 * 4, 96 * 4)))
   assert.equal(applyScene3DTemplate('pixel-planet-rise').pixelWorld?.scene?.body, 'planet')
 })
+
+test('the night train rides the viaduct on the scene clock', () => {
+  const root = pixelWorldGroup('pixel-viaduct'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-night-train').pixelWorld!
+  const trainX = (seconds: number) => {
+    paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)
+    return (root as Group).children.find(child => Math.abs(child.position.z + 23.8) < .01)!.position.x
+  }
+  const early = trainX(2), later = trainX(4)
+  assert.ok(later > early, 'the train moves along the deck')
+  assert.equal(trainX(2), early, 'seeking back puts it where it was')
+})
