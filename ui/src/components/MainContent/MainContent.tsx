@@ -7,6 +7,7 @@ import { GalleryToolbar } from './GalleryToolbar'
 import { useGallerySelection } from './useGallerySelection'
 import { useGalleryKeyboard } from './useGalleryKeyboard'
 import { useGridPinch } from './useGridPinch'
+import { useLiveMediaFacts } from './useLiveMediaFacts'
 import { galleryPositionKey, readGalleryPosition, writeGalleryPosition } from './galleryPositions'
 import type { DetailVideoTime, GalleryDetail } from './GalleryDetailsDialog'
 import { GALLERY_GRID_COLUMN_RANGE } from '../../stores/gallerySlice'
@@ -586,6 +587,9 @@ export function MainContent() {
     onOpen: () => openDetails(activeIndex),
     onEscape: selection.selecting ? selection.clear : undefined,
   })
+
+  // Sizes and colours finished in the background settle into the list.
+  useLiveMediaFacts(outputs, galleryWorkspace, viewport.width > 0)
 
   // Exactly two picked images can be opened side by side.
   const comparePair = useMemo(() => {

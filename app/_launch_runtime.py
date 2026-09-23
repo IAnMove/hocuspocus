@@ -33564,17 +33564,25 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
     return {"outputs": files, "total": total}
 
 
+def _resolve_gallery_file(filename: str, workspace: str | None = None) -> str | None:
+    """An output in ``workspace``, or an upload for the virtual Uploads view."""
+    if workspace == "__uploads__":
+        source = _safe_join(os.path.join(os.getcwd(), "uploads"), filename)
+        return source if source and os.path.isfile(source) else None
+    return _resolve_output_file(filename, workspace)
+
+
+from routers.output_facts import create_output_facts_router  # noqa: E402
+
+api.include_router(create_output_facts_router(_resolve_gallery_file))
+
+
 @api.get("/api/v1/outputs/thumbnail/{filename:path}")
 def serve_output_thumbnail(filename: str, workspace: str | None = None, size: str | None = None):
     """Lazily create one small static preview for an image or video output."""
     from services.media_thumbnails import FITTED_THUMBNAIL_SIZES, ensure_fitted_thumbnail, ensure_media_thumbnail
 
-    if workspace == "__uploads__":
-        source = _safe_join(os.path.join(os.getcwd(), "uploads"), filename)
-        if source and not os.path.isfile(source):
-            source = None
-    else:
-        source = _resolve_output_file(filename, workspace)
+    source = _resolve_gallery_file(filename, workspace)
     if not source:
         raise HTTPException(status_code=404, detail="Output not found")
     extension = os.path.splitext(source)[1].lower()

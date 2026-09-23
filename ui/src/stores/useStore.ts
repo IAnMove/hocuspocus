@@ -1704,6 +1704,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   loadMoreOutputs: () => Promise<void>
   refreshOutputs: () => Promise<void>
   toggleFavorite: (name: string) => Promise<void>
+  mergeOutputFacts: (facts: import('../api/outputs').OutputFacts) => number
 
   // Output metadata (lazy-loaded for selected output)
   selectedOutputMeta: OutputMetadata | null

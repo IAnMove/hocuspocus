@@ -351,6 +351,8 @@ function exactCatalog(): Record<string, ReturnType<typeof json> | { sse: true }>
       active: 'default',
     }),
     'GET /api/v1/outputs': json({ outputs: [], total: 0 }),
+    // The gallery asks for sizes/colours finished in the background; none here.
+    'POST /api/v1/outputs/facts': json({ facts: {} }),
     'GET /api/v1/character-kits/speech/capabilities': json({ rhubarb: true,
       vocalIsolation: { available: false, model: 'BS-RoFormer', device: 'cpu', downloads: false, maxSeconds: 90, reason: 'optional_model_missing' },
     }),

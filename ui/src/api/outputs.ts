@@ -58,6 +58,23 @@ export async function moveOutput(name: string, workspace: string): Promise<void>
   }
 }
 
+// --- Media facts ---
+
+/** Sizes and average colours the server has worked out since the list was
+ *  loaded, for outputs that were still missing them. */
+export type OutputFacts = Record<string, { width?: number; height?: number; color?: string }>
+
+export async function fetchOutputFacts(names: string[], workspace?: string, signal?: AbortSignal): Promise<OutputFacts> {
+  const res = await fetch(`${BASE}/api/v1/outputs/facts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ names, ...(workspace ? { workspace } : {}) }),
+    signal,
+  })
+  if (!res.ok) throw new Error(`Output facts: HTTP ${res.status}`)
+  return ((await res.json()) as { facts?: OutputFacts }).facts ?? {}
+}
+
 // --- Favorites ---
 
 export async function toggleFavorite(name: string): Promise<{ name: string; favorite: boolean }> {

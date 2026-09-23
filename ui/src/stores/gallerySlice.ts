@@ -68,6 +68,8 @@ export type GallerySlice = {
   loadMoreOutputs: () => Promise<void>
   refreshOutputs: () => Promise<void>
   toggleFavorite: (name: string) => Promise<void>
+  /** Fold late sizes and colours into listed outputs. Returns how many changed. */
+  mergeOutputFacts: (facts: api.OutputFacts) => number
   selectedOutputMeta: OutputMetadata | null
   metadataLoading: boolean
   loadOutputMetadata: (name: string) => Promise<void>
@@ -536,6 +538,21 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     }
   },
 
+  mergeOutputFacts: (facts) => {
+    let changed = 0
+    const outputs = get().outputs.map(file => {
+      const fact = facts[file.name]
+      if (!fact) return file
+      const width = fact.width && fact.height ? fact.width : file.width
+      const height = fact.width && fact.height ? fact.height : file.height
+      const color = fact.color && /^#[0-9a-f]{6}$/i.test(fact.color) ? fact.color : file.color
+      if (width === file.width && height === file.height && color === file.color) return file
+      changed += 1
+      return { ...file, width, height, color }
+    })
+    if (changed) set({ outputs })
+    return changed
+  },
   toggleFavorite: async (name) => {
     const workspace = _workspaceName(get())
     const workspaceEpoch = _workspaceRequestEpoch

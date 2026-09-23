@@ -700,6 +700,35 @@ test.describe('Media gallery viewer and tools', () => {
     }
   })
 
+  test('sizes and colours worked out later settle into the list without a reload', async ({ page }) => {
+    test.setTimeout(60_000)
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const video = MIXED.find(file => file.type === 'video')!
+    let ready = false
+    const requested: string[][] = []
+    const session = await bootMixedGallery(page)
+    await page.route('**/api/v1/outputs/facts', route => {
+      const names = (route.request().postDataJSON() as { names: string[] }).names
+      requested.push(names)
+      return route.fulfill({ json: { facts: ready ? { [video.name]: { width: 720, height: 1280, color: '#224466' } } : {} } })
+    })
+    try {
+      const feed = page.getByTestId('media-feed')
+      await chooseView(page, 'Mosaic')
+      const tile = feed.locator(`[data-gallery-index="${MIXED.indexOf(video)}"]`)
+      const aspect = () => tile.evaluate(node => node.getBoundingClientRect().width / node.getBoundingClientRect().height)
+      expect(await aspect()).toBeCloseTo(16 / 9, 1)
+      // Only the outputs still missing facts are asked about.
+      await expect.poll(() => requested.length, { timeout: 10_000 }).toBeGreaterThan(0)
+      expect(requested[0]).toContain(video.name)
+      expect(requested[0]).not.toContain(MIXED.find(file => file.type === 'audio')!.name)
+      ready = true
+      await expect.poll(aspect, { timeout: 15_000 }).toBeCloseTo(720 / 1280, 1)
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
   test('deleting from the dialog steps to the next output', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     const deleted: string[] = []

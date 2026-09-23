@@ -164,7 +164,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 1566,
+      "weight": 1569,
       "paths": [
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
@@ -233,6 +233,7 @@
         "tests/test_music_video_pacing.py",
         "tests/test_nightly_wizard_report.py",
         "tests/test_openai_compatible_comic_llm.py",
+        "tests/test_output_facts.py",
         "tests/test_output_result_kind.py",
         "tests/test_pass2_duration_buckets.py",
         "tests/test_pass2_duration_enforcement.py",

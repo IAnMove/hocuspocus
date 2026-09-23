@@ -186,6 +186,12 @@ def average_color(preview_path: str) -> str:
     return "#{:02x}{:02x}{:02x}".format((red + half) // weight, (green + half) // weight, (blue + half) // weight)
 
 
+def media_kind(path: str) -> str:
+    """``"image"``, ``"video"`` or ``""`` from the file extension."""
+    ext = os.path.splitext(path)[1].lower()
+    return "image" if ext in _IMAGE_EXTENSIONS else "video" if ext in _VIDEO_EXTENSIONS else ""
+
+
 def listing_fields(ftype: str, filepath: str, size: int, mtime: float, resolution: object = None) -> dict:
     """Extra listing fields for one output: ``width``/``height`` and ``color`` when known."""
     if ftype not in ("image", "video"):
