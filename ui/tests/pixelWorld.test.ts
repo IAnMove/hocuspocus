@@ -212,3 +212,21 @@ test('cherry garden: blossom, a lit pagoda, lanterns and drifting petals', () =>
   const doc = applyScene3DTemplate('pixel-cherry-garden')
   assert.equal(doc.worldSfx?.[0].kind, 'snow'); assert.equal(doc.worldSfx?.[0].color, '#ffc2dc')
 })
+
+test('coral reef: sunlight shimmers down, schools cross both ways on the clock', () => {
+  const plan = worldPlan('pixel-reef', resolvePixelScene('pixel-reef', undefined))
+  const water = plan.layers.find(layer => layer.sky)!
+  assert.ok([...new Set(water.paint(...water.texture).data)].filter(slot => slot >= 114 && slot < 122).length >= 6, 'rays use the shimmer slots')
+  const speeds = plan.layers.filter(layer => layer.drift).map(layer => Math.sign(layer.drift!.speed))
+  assert.deepEqual(speeds.sort(), [-1, 1])
+  assert.ok(plan.groundY! < 0, 'the seabed lies under the corals')
+  const root = pixelWorldGroup('pixel-reef'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-coral-reef').pixelWorld!
+  const schools = (seconds: number) => {
+    paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)
+    return (root as Group).children.filter(child => child.position.z === -30 || child.position.z === -9).map(child => child.position.x)
+  }
+  const [a0, b0] = schools(1), [a1, b1] = schools(2)
+  assert.ok(a1 > a0 && b1 < b0, 'one school swims right, the other left')
+  assert.ok(Math.abs(schools(0)[0]) < 20, 'the schools start in view')
+})

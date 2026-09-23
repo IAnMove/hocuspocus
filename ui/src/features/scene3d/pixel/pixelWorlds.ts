@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -7,10 +7,10 @@ export type LayerSpec = {
   z: number; width: number; height: number; bottom: number; texture: [number, number]
   sky?: boolean
   /** Meters per second the plane travels along x, looping over `loop` meters. */
-  drift?: { speed: number; loop: number }
+  drift?: { speed: number; loop: number; offset?: number }
   paint: (w: number, h: number) => IndexedLayer
 }
-export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand' }
+export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand'; /** Height of the floor, meters. */ groundY?: number }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -104,6 +104,20 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { z: -9, width: 30, height: 4.2, bottom: -.3, texture: [360, 50], paint: (w, h) => paintGarden(w, h, { body: INDEX.trees, rim: INDEX.near, seed: scene.seed + 3, lightFrom: bodySkyX(scene), trees: Math.round(2 + scene.trees * 3), pagoda: false, lanterns: 3, size: 11 }) },
     ...reeds(scene),
   ] }),
+  'pixel-reef': scene => {
+    const water = sky(scene)
+    // The seabed lies below the corals, which stand on it rather than in it.
+    return { ground: 'sand', groundY: -2.6, layers: [
+      { ...water, paint: (w, h) => paintSeaLight(water.paint(w, h), scene.seed) },
+      { ...FAR, bottom: -2.8, height: 31, paint: (w, h) => paintReef(w, h, { ...far, seed: scene.seed + 1, lightFrom: .5, kelp: scene.trees * .6, tall: .5 + scene.mountains * .5 }) },
+      // Two schools cross at different depths, in opposite directions.
+      { z: -30, width: 10, height: 3.4, bottom: 5.5, texture: [66, 22], drift: { speed: 1.6, loop: 110, offset: 48 }, paint: (w, h) => paintSchool(w, h, scene.seed + 7, 16) },
+      { z: -9, width: 4, height: 1.6, bottom: 2.4, texture: [40, 16], drift: { speed: -2.3, loop: 70, offset: 40 }, paint: (w, h) => paintSchool(w, h, scene.seed + 9, 10) },
+      { z: -13, width: 62, height: 9, bottom: -2.8, texture: [620, 90], paint: (w, h) => paintReef(w, h, { ...near, seed: scene.seed + 2, lightFrom: .5, kelp: scene.trees, tall: .4 + scene.hills * .6 }) },
+      // Coral close to the lens, darkest of all, frames the view.
+      { z: -3, width: 22, height: 3.6, bottom: -3.2, texture: [440, 72], paint: (w, h) => paintReef(w, h, { body: INDEX.trees, rim: INDEX.near, seed: scene.seed + 3, lightFrom: .5, kelp: scene.trees * .7, tall: 1.7 }) },
+    ] }
+  },
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

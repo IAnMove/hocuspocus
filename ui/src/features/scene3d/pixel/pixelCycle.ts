@@ -33,6 +33,11 @@ function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number)
     const drift = .5 + .5 * Math.sin(seconds * .55 + band * Math.PI / 2)
     writeColor(bytes, INDEX.band + band, mixHex(palette.moon, palette.far[1], drift * .65))
   }
+  for (let ray = 0; ray < INDEX.raySteps; ray++) {
+    // Sunlight through moving water: each slot brightens and dims in turn.
+    const shimmer = .5 + .5 * Math.sin(seconds * 2.4 - ray * Math.PI / 4)
+    writeColor(bytes, INDEX.ray + ray, mixHex(palette.sky[1], palette.moon, .25 + shimmer * .5))
+  }
   for (let tail = 0; tail < 2; tail++) {
     // Now and then a driver touches the brake.
     const brake = Math.sin(seconds * (.7 + tail * .3) + tail * 2) > .92

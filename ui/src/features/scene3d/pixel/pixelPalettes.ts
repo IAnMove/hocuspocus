@@ -74,6 +74,18 @@ export const PIXEL_PALETTES = {
     aurora: '#70ffd0', auroraAmount: .5, meteor: '#ffffff', windows: '#fff4c8',
     light: { color: '#dff0ff', intensity: 1.8 }, ambient: { sky: '#8ab4dc', ground: '#1a2c44', intensity: .9 },
   },
+  abyss: {
+    sky: ['#7ae0e0', '#1a6a8a', '#06203a'], moon: '#eaffff', stars: '#aef6ff',
+    far: ['#0e3a4e', '#3a9aa8'], near: ['#08263a', '#2a8a90'], trees: '#041420', water: '#6a6a5a',
+    aurora: '#7affe0', auroraAmount: 0, meteor: '#eaffff', windows: '#ffe8a0',
+    light: { color: '#7ae0ff', intensity: 1.1 }, ambient: { sky: '#2a8aa0', ground: '#06202a', intensity: .85 },
+  },
+  lagoon: {
+    sky: ['#b8fff0', '#2aa8b8', '#0a4a6a'], moon: '#ffffff', stars: '#e0fff8',
+    far: ['#1a6a7a', '#7ae8d8'], near: ['#0e4a5a', '#5ad0c0'], trees: '#06283a', water: '#a89a70',
+    aurora: '#aaffee', auroraAmount: 0, meteor: '#ffffff', windows: '#fff0b0',
+    light: { color: '#c8fff4', intensity: 1.6 }, ambient: { sky: '#5ad0d0', ground: '#0a3a4a', intensity: 1 },
+  },
   sakura: {
     sky: ['#2a2250', '#b86a9a', '#ffc6b0'], moon: '#fff4ea', stars: '#ffe6f0',
     far: ['#5a4a7a', '#f0c0d8'], near: ['#3a2a4a', '#b07a9a'], trees: '#24162a', water: '#6a4a7a',

@@ -1349,6 +1349,10 @@
     "pixel-cherry-garden": {
       "title": "Jardín de cerezos",
       "description": "Cerezos en flor alrededor de un estanque en calma, una pagoda con ventanas encendidas bajo un pico nevado, faroles de piedra brillando y pétalos cayendo mientras el crepúsculo rosa se vuelve noche."
+    },
+    "pixel-coral-reef": {
+      "title": "Arrecife de coral",
+      "description": "Bajo el mar: rayos de sol que titilan desde una superficie ondulante, algas sobre el coral, dos bancos de peces que se cruzan en direcciones opuestas y plancton que destella, de una laguna luminosa al azul profundo."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1582,7 +1586,9 @@
       "harbor": "Puerto",
       "dusk": "Crepúsculo",
       "alien": "Alienígena",
-      "sakura": "Sakura"
+      "sakura": "Sakura",
+      "abyss": "Abismo",
+      "lagoon": "Laguna"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1595,7 +1601,8 @@
       "pixel-viaduct": "Viaducto",
       "pixel-volcano": "Volcán",
       "pixel-drivein": "Autocine",
-      "pixel-garden": "Jardín de cerezos"
+      "pixel-garden": "Jardín de cerezos",
+      "pixel-reef": "Arrecife"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

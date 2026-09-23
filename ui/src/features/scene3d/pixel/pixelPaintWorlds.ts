@@ -304,3 +304,56 @@ export function paintGarden(width: number, height: number, spec: Tone & { seed: 
   }
   return garden
 }
+
+/** Light from the surface: a shimmering band along the top and slanted rays
+ *  that fade with depth, all in cycling slots so they ripple. */
+export function paintSeaLight(sky: IndexedLayer, seed: number) {
+  for (let y = 0; y < 10; y++) for (let x = 0; x < sky.width; x++) {
+    if (bayer(x, y) < y / 10) continue
+    set(sky, x, y, INDEX.ray + ((Math.floor(x / 3) + Math.floor(Math.sin(x * .07 + y) * 3) + 16) % INDEX.raySteps))
+  }
+  for (let r = 0; r < 9; r++) {
+    const x0 = sky.width * (.05 + .9 * fxRandom(seed, r)), wide = 8 + fxRandom(seed, r + 20) * 18
+    for (let y = 8; y < sky.height * .85; y++) {
+      const fade = 1 - y / (sky.height * .85), x = x0 + y * .35
+      for (let dx = 0; dx < wide; dx++) if (bayer(Math.round(x + dx), y) < fade * .85) set(sky, Math.round(x + dx), y, INDEX.ray + ((r + Math.floor(y / 6)) % INDEX.raySteps))
+    }
+  }
+  return sky
+}
+
+/** A reef: bumpy rock, round coral heads lit from above, and kelp that
+ *  bends as it climbs. */
+export function paintReef(width: number, height: number, spec: Tone & { seed: number; kelp: number; tall: number }): IndexedLayer {
+  const reef = layer(width, height)
+  const top = ridge(spec.seed, width, height * (1 - .35 * spec.tall), height * .18, 6, height * .2 * spec.tall)
+  for (let x = 0; x < width; x++) for (let y = top[x]; y < height; y++) set(reef, x, y, y - top[x] < 2 ? spec.rim : spec.body)
+  for (let c = 0; c < width / 22; c++) {
+    const x = Math.floor(fxRandom(spec.seed, c + 300) * width), r = 2 + fxRandom(spec.seed, c + 340) * 5
+    for (let y = Math.floor(top[x] - r * 2); y <= top[x]; y++) for (let px = Math.floor(x - r); px <= x + r; px++) {
+      const d = Math.hypot(px - x, (y - top[x] + r) * 1.2) / r
+      if (d <= 1) set(reef, px, y, d < .55 && y < top[x] - r ? spec.rim : spec.body)
+    }
+  }
+  for (let k = 0; k < width / 9 * spec.kelp; k++) {
+    const x0 = Math.floor(fxRandom(spec.seed, k + 500) * width), tall = height * (.25 + fxRandom(spec.seed, k + 560) * .45)
+    for (let y = 0; y < tall; y++) {
+      const x = Math.round(x0 + Math.sin(y * .18 + k) * 2 + y * .08)
+      set(reef, x, top[x0] - y, spec.body)
+      if (y % 5 === 2) set(reef, x + (k % 2 ? 1 : -1), top[x0] - y, spec.rim)
+    }
+  }
+  return reef
+}
+
+/** A school of small fish silhouettes, bunched in a loose oval. */
+export function paintSchool(width: number, height: number, seed: number, count: number): IndexedLayer {
+  const school = layer(width, height)
+  for (let f = 0; f < count; f++) {
+    const a = fxRandom(seed, f) * Math.PI * 2, r = Math.sqrt(fxRandom(seed, f + 90))
+    const x = Math.round(width / 2 + Math.cos(a) * r * width * .42), y = Math.round(height / 2 + Math.sin(a) * r * height * .38)
+    for (const [dx, dy] of [[0, 0], [1, 0], [2, 0], [1, -1], [1, 1], [-1, -1], [-1, 1]]) set(school, x + dx, y + dy, INDEX.trees)
+    set(school, x + 2, y, INDEX.nearRim)
+  }
+  return school
+}

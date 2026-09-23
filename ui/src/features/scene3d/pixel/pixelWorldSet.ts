@@ -23,7 +23,7 @@ export function isPixelDressing(kind: unknown): kind is PixelDressing {
 type PixelRuntime = {
   kind: PixelDressing; key: string; palette: DataTexture; bytes: Uint8Array
   skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; sky: [number, number]
-  movers: { mesh: Mesh; speed: number; loop: number }[]
+  movers: { mesh: Mesh; speed: number; loop: number; offset?: number }[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
@@ -136,10 +136,10 @@ function water(width: number, depth: number, z: number) {
 }
 
 /** A flat sand floor painted in depth, for worlds without water. */
-function sandFloor(palette: DataTexture) {
+function sandFloor(palette: DataTexture, y = 0) {
   const { mesh } = layerMesh({ z: 0, width: 150, height: 54, bottom: 0, texture: [300, 180], paint: (w, h) => paintSand(w, h, 7) }, palette)
   mesh.rotation.x = -Math.PI / 2
-  mesh.position.set(0, 0, -11)
+  mesh.position.set(0, y, -11)
   return mesh
 }
 
@@ -218,7 +218,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
   }
-  if (plan.ground === 'sand') { root.add(sandFloor(runtime.palette)); return }
+  if (plan.ground === 'sand') { root.add(sandFloor(runtime.palette, plan.groundY)); return }
   const lake = water(150, 54, -11)
   runtime.water = lake.material as ShaderMaterial
   root.add(lake)
@@ -259,7 +259,7 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
     runtime.water.uniforms.uCalm.value = runtime.kind === 'pixel-gallery' ? .85 : 1 - Math.min(1, scene.ripple * 1.25)
   }
   // Travelling planes follow the scene clock, so scrubbing and export agree.
-  for (const mover of runtime.movers) mover.mesh.position.x = -mover.loop / 2 + (seconds * mover.speed) % mover.loop
+  for (const mover of runtime.movers) mover.mesh.position.x = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
   if (runtime.beam) {
     runtime.beam.rotation.y = seconds * .9
     const material = (runtime.beam.children[0].children[0] as Mesh).material as ShaderMaterial

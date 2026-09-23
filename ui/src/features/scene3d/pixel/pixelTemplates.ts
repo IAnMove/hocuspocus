@@ -95,6 +95,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  'pixel-coral-reef': ['pixel-reef', { palettes: ['lagoon', 'abyss'], hold: 9, meteors: 0 }],
   'pixel-cherry-garden': ['pixel-garden', { palettes: ['sakura', 'midnight'], hold: 10, meteors: .2 }],
   'pixel-drive-in': ['pixel-drivein', { palettes: ['midnight', 'vapor'], hold: 10, meteors: .5, screenGlow: 1.6 }],
   'pixel-volcano': ['pixel-volcano', { palettes: ['eclipse', 'dusk'], hold: 9, meteors: .3 }],
@@ -137,5 +138,7 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
     doc.camera = { family: 'establishment', eye: [0, 1.5, 6.5], look: [0, 3.2, -14], fov: 46 }
   }
   doc.camera = { family: 'establishment', eye: [0, 1.6, 8], look: [0, 3.2, -40], fov: 45 }
+  // Underwater the camera sits low and looks up into the light.
+  if (id === 'pixel-coral-reef') doc.camera = { family: 'establishment', eye: [0, .9, 8], look: [0, 6, -40], fov: 50 }
   return doc
 }
