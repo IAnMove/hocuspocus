@@ -152,6 +152,37 @@ test('explicit workspace selection authorizes following actions in its destinati
  assert.match(requests[0],/workspace=chosen-B/)
 })
 
+test('cancelling a running workflow card stops the task attached after execute', async()=>{
+ const {defaultWizardWorkflowRuntime:runtime}=await import('../src/features/agent/wizardWorkflowRuntime.ts')
+ const {executeWizardCardControl}=await import('../src/features/agent/wizardCardActions.ts')
+ const original={get:runtime.get,cancel:runtime.cancel,resume:runtime.resume}
+ const live={
+  workflowId:'workflow-running',workspace:'workflow-space',executorOwner:'',state:'running',
+  currentStep:0,steps:[{taskId:'',state:'running'}],taskIds:[] as string[],
+ }
+ runtime.get=()=>JSON.parse(JSON.stringify(live))
+ runtime.cancel=async()=>{
+  live.state='cancelled'
+  live.steps=[{taskId:'task-submitted',state:'cancelled'}]
+  live.taskIds=['task-submitted']
+  return JSON.parse(JSON.stringify(live))
+ }
+ const cancels:string[]=[]
+ const runningTask={id:'task-submitted',root_id:'task-submitted',kind:'video',title:'Render',status:'running',updated_at:9,created_at:1,resumable:false,recoverable:false,cancelable:true,metadata:{},result_refs:[]}
+ useStore.setState({activeWorkspace:'workflow-space'})
+ installFetch(url=>{
+  if(url.includes('/api/v1/tasks?')) return Promise.resolve(reply({tasks:[runningTask]}))
+  if(url.includes('/cancel')) {cancels.push(url);return Promise.resolve(reply({task:{...runningTask,status:'cancelled'}}))}
+  return Promise.resolve(reply({tasks:[runningTask]}))
+ })
+ try {
+  const card=cardFromReport({state:'running',message:'Working',target:{kind:'wizard_workflow',id:live.workflowId,title:'Workflow'}})
+  await executeWizardCardControl(card,'cancel','workflow-space')
+  assert.equal(cancels.length,1)
+  assert.match(cancels[0],/task-submitted/)
+ } finally {Object.assign(runtime,original)}
+})
+
 test('workflow controls use workflow identity without falling back to unrelated tasks', async()=>{
  const {defaultWizardWorkflowRuntime:runtime}=await import('../src/features/agent/wizardWorkflowRuntime.ts')
  const {executeWizardCardControl,wizardCardControls}=await import('../src/features/agent/wizardCardActions.ts')
