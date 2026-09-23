@@ -99,6 +99,9 @@ export function writePalette(bytes: Uint8Array, palette: PixelPalette, seconds: 
     writeColor(bytes, INDEX.sand + step, t < .6 ? mixHex(mixHex(palette.sky[2], palette.water, .45), palette.water, t / .6) : mixHex(palette.water, palette.near[0], (t - .6) * .6))
   }
   writeColor(bytes, INDEX.lamp, palette.windows)
+  // The new moon: the sky's own blue by day, a black disc against the corona.
+  // It hangs where the sky gradient reaches its middle tone.
+  writeColor(bytes, INDEX.umbra, palette.sky[1])
   // Balloon cloth keeps its colours in any mood, warmed by the light.
   ;['#d8402e', '#f2b33c', '#2e9aa0', '#f4ead2'].forEach((cloth, i) => writeColor(bytes, INDEX.balloon + i, mixHex(cloth, palette.light.color, .18)))
   writeColor(bytes, INDEX.balloon + 4, mixHex('#fff4dc', palette.light.color, .3))

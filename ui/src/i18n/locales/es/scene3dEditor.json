@@ -1405,6 +1405,10 @@
     "pixel-whole-day": {
       "title": "Un día entero",
       "description": "Un time-lapse sobre un lago: el sol sale por el este, cruza el cielo en arco y se pone por el oeste, luego le sigue la luna, mientras la luz pasa del amanecer al día, el atardecer y la noche y cae sobre los personajes desde donde estén el sol o la luna."
+    },
+    "pixel-eclipse": {
+      "title": "Eclipse",
+      "description": "Mediodía sobre mesetas rojas: la luna se desliza sobre el sol, el desierto se oscurece como de noche en plena tarde, aparecen las estrellas y la corona solar, y el día vuelve cuando la luna sigue su camino."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1643,7 +1647,8 @@
       "lagoon": "Laguna",
       "jungle": "Selva",
       "cosmos": "Cosmos",
-      "neon": "Neón"
+      "neon": "Neón",
+      "noon": "Mediodía"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1670,7 +1675,8 @@
       "pixel-lanterns": "Lago de farolillos",
       "pixel-window": "Ventana",
       "pixel-express": "Ventana del tren",
-      "pixel-daycycle": "Ciclo del día"
+      "pixel-daycycle": "Ciclo del día",
+      "pixel-eclipse": "Eclipse"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

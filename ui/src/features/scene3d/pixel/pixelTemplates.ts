@@ -115,6 +115,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
+  'pixel-eclipse': ['pixel-eclipse', { palettes: ['noon'], hold: 20, meteors: 0 }],
   'pixel-whole-day': ['pixel-daycycle', { palettes: ['dawn', 'jungle', 'sunset', 'midnight'], hold: 6, meteors: .3 }],
   'pixel-night-express': ['pixel-express', { palettes: ['dusk', 'midnight', 'aurora'], hold: 9, meteors: .5 }],
   'pixel-rainy-window': ['pixel-window', { palettes: ['harbor', 'storm'], hold: 12, meteors: 0 }],
@@ -158,7 +159,7 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
     return doc
   }
   const [dressing, pixel] = LANDSCAPES[id]
-  const doc = pixelDocument(id, dressing, pixel, id === 'pixel-storm-lake' ? 18 : 24)
+  const doc = pixelDocument(id, dressing, pixel, id === 'pixel-storm-lake' ? 18 : id === 'pixel-eclipse' ? 20 : 24)
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
   if (id === 'pixel-snow-village') doc.worldSfx = villageCues()

@@ -9,7 +9,7 @@ import { INDEX, paintRange, paintSky, ridge } from '../src/features/scene3d/pixe
 import { fireworksAt, meteorsAt, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
-import { worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
+import { eclipseShade, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
 import { paintLoopRange } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3, type Mesh } from 'three'
@@ -414,4 +414,17 @@ test('a whole day: the sun and moon cross the sky and the light follows the high
   assert.ok(night.moon.y > night.sun.y, 'the moon rules the night')
   assert.ok(Math.sign(dawn.light.x) === Math.sign(dawn.sun.x) && Math.sign(night.light.x) === Math.sign(night.moon.x || 1e-9) || night.moon.x === 0, 'light comes from the higher body')
   assert.deepEqual(at(6).sun.toArray(), noon.sun.toArray())
+})
+
+test('eclipse: the day darkens as the moon covers the sun, deepest at mid-clip', () => {
+  assert.equal(eclipseShade(0), 0)
+  assert.equal(eclipseShade(20), 0)
+  assert.ok(eclipseShade(10) > .95, 'totality at mid-clip')
+  assert.ok(eclipseShade(9) > 0 && eclipseShade(9) < eclipseShade(10) && eclipseShade(11) < eclipseShade(10))
+  const root = pixelWorldGroup('pixel-eclipse'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-eclipse').pixelWorld!
+  const light = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return dir.intensity }
+  assert.ok(light(10) < light(2) * .7, 'the light falls at totality')
+  const moon = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.find(child => child.position.z === -59.5)!.position.x }
+  assert.ok(Math.abs(moon(10)) < .01 && moon(5) < 0 && moon(15) > 0, 'the moon crosses the sun at mid-clip')
 })

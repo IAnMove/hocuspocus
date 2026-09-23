@@ -29,6 +29,18 @@ const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: 
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
 const NEAR: Omit<LayerSpec, 'paint'> = { z: -37, width: 110, height: 7, bottom: -1, texture: [720, 46] }
 const far = { body: INDEX.far, rim: INDEX.farRim }
+/** The eclipse: where the discs hang, how fast the moon crosses and its
+ *  size in texels (on a 24 m, 96 texel plate). */
+export const ECLIPSE = { y: 20, speed: 2, start: -20, texels: 11, meters: 11 * 24 / 96 }
+
+/** How dark the eclipse makes the day at `seconds`, 0 to 1: the share of the
+ *  sun the moon covers, eased so totality is brief and deep. */
+export function eclipseShade(seconds: number) {
+  const apart = Math.abs(ECLIPSE.start + ECLIPSE.speed * seconds)
+  const cover = Math.max(0, Math.min(1, (2 * ECLIPSE.meters - apart) / (1.8 * ECLIPSE.meters)))
+  return cover * cover
+}
+
 /** A day in the day-cycle world lasts as long as its template's clip. */
 export const DAY_SECONDS = 24
 
@@ -255,6 +267,21 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       paint: (w: number, h: number) => { const disc = layer(w, h); paintMoon(disc, scene.seed, { kind, x: .5, y: .5, radius: kind === 'sun' ? 11 : 9, crescent: kind === 'sun' ? 0 : scene.crescent }); return disc },
     })),
   ] }),
+  'pixel-eclipse': scene => {
+    const desert = WORLDS['pixel-desert']({ ...scene, body: 'none' })
+    const disc = (kind: 'sun' | 'moon') => (w: number, h: number) => {
+      const plate = layer(w, h)
+      if (kind === 'sun') paintMoon(plate, scene.seed, { kind: 'sun', x: .5, y: .5, radius: ECLIPSE.texels, crescent: 0 })
+      else for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (Math.hypot(x + .5 - w / 2, y + .5 - h / 2) <= ECLIPSE.texels + .5) plate.data[y * w + x] = INDEX.umbra
+      return plate
+    }
+    const plate = { width: 24, height: 24, bottom: ECLIPSE.y - 12, texture: [96, 96] as [number, number] }
+    return { ...desert, layers: [...desert.layers,
+      { ...plate, z: -60, paint: disc('sun') },
+      // The moon slides across the sun on the clock, darkest at mid-clip.
+      { ...plate, z: -59.5, drift: { speed: ECLIPSE.speed, loop: 200, offset: ECLIPSE.start + 100 }, paint: disc('moon') },
+    ] }
+  },
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

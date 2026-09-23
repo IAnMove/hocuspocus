@@ -5,14 +5,14 @@ import {
 } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { ENERGY_NOISE } from '../../sceneFx/energyShaders'
-import { flashPalette, paletteAt, tintPalette, type PixelPalette } from './pixelPalettes'
+import { flashPalette, mixPalettes, paletteAt, PIXEL_PALETTES, tintPalette, type PixelPalette } from './pixelPalettes'
 import type { ScreenLight } from './screenGlow'
 import { paintField, paintSails, paintSand } from './pixelPaintWorlds'
 import type { IndexedLayer } from './pixelPaint'
 import { fireworksAt, meteorsAt, writePalette } from './pixelCycle'
 import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { bodyDirection, isPixelWorldKind, PIXEL_WORLD_KINDS, resolvePixelScene, type PixelScene, type PixelWorldKind } from './pixelScene'
-import { worldPlan, type LayerSpec } from './pixelWorlds'
+import { eclipseShade, worldPlan, type LayerSpec } from './pixelWorlds'
 
 export type PixelDressing = PixelWorldKind | 'pixel-gallery'
 export const PIXEL_DRESSINGS: readonly PixelDressing[] = [...PIXEL_WORLD_KINDS, 'pixel-gallery']
@@ -326,7 +326,7 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
   for (const sky of runtime.skies) {
     sky.uniforms.uTime.value = seconds
     // No aurora hangs in open space.
-    sky.uniforms.uAurora.value = runtime.kind === 'pixel-orbit' || runtime.fireworks ? 0 : palette.auroraAmount
+    sky.uniforms.uAurora.value = runtime.kind === 'pixel-orbit' || runtime.kind === 'pixel-eclipse' || runtime.fireworks ? 0 : palette.auroraAmount
     sky.uniforms.uAuroraBase.value = .54 - .4 * scene.auroraHeight
     sky.uniforms.uAuroraColor.value.set(palette.aurora)
     sky.uniforms.uMeteorColor.value.set(palette.meteor)
@@ -349,6 +349,12 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
   return scene
 }
 
+/** During an eclipse the day turns to night as the moon covers the sun. */
+function eclipsed(runtime: PixelRuntime | undefined, mood: PixelPalette, seconds: number) {
+  const shade = runtime?.kind === 'pixel-eclipse' ? eclipseShade(seconds) : 0
+  return shade ? mixPalettes(mood, PIXEL_PALETTES.midnight, shade) : mood
+}
+
 /** Relight the world for `seconds`: palette, sky motion, water and lights.
  *  The key light comes from wherever the sun or moon hangs. */
 export function paintPixelWorld(dressing: Object3D | null, scene: Scene, dir: { color: Color; intensity: number; position: Vector3 }, authored: PixelWorld | undefined, seconds: number, frameHeight: number, flash = 0, screens?: ScreenLight): PixelPalette | null {
@@ -356,7 +362,7 @@ export function paintPixelWorld(dressing: Object3D | null, scene: Scene, dir: { 
   if (!authored && !runtime) return null
   // A pixel set without authored lighting still needs a palette to show.
   const pixel = authored ?? defaultPixelWorld()
-  const mood = paletteAt(pixel.palettes, pixel.hold, seconds, pixel.colors)
+  const mood = eclipsed(runtime, paletteAt(pixel.palettes, pixel.hold, seconds, pixel.colors), seconds)
   const palette = flashPalette(screens ? tintPalette(mood, screens.color, screens.amount) : mood, flash)
   const layout = runtime && dressing ? syncSet(dressing, runtime, pixel, palette, seconds, frameHeight) : undefined
   dir.color.set(palette.light.color)

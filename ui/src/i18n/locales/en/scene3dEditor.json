@@ -1405,6 +1405,10 @@
     "pixel-whole-day": {
       "title": "A whole day",
       "description": "A time-lapse over a lake: the sun rises in the east, arcs across the sky and sets in the west, then the moon follows, while the light turns from dawn to day, sunset and night and falls on actors from wherever the sun or moon stands."
+    },
+    "pixel-eclipse": {
+      "title": "Eclipse",
+      "description": "Noon over red mesas: the moon slides across the sun, the desert dims to night in mid-afternoon, stars and the sun's corona appear, then day comes back as the moon moves on."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1643,7 +1647,8 @@
       "lagoon": "Lagoon",
       "jungle": "Jungle",
       "cosmos": "Cosmos",
-      "neon": "Neon"
+      "neon": "Neon",
+      "noon": "Noon"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1670,7 +1675,8 @@
       "pixel-lanterns": "Lantern lake",
       "pixel-window": "Window",
       "pixel-express": "Train window",
-      "pixel-daycycle": "Day cycle"
+      "pixel-daycycle": "Day cycle",
+      "pixel-eclipse": "Eclipse"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",
