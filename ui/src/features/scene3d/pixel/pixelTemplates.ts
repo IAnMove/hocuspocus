@@ -163,6 +163,10 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
     doc.camera = { family: 'establishment', eye: [0, 1.5, 6.5], look: [0, 3.2, -14], fov: 46 }
   }
   doc.camera = { family: 'establishment', eye: [0, 1.6, 8], look: [0, 3.2, -40], fov: 45 }
+  // Each landscape gets its own shot: the storm low and wide over the water,
+  // the planet looked up to, the reef from below in the light.
+  if (id === 'pixel-storm-lake') doc.camera = { family: 'establishment', eye: [0, 1.2, 9], look: [0, 3.6, -40], fov: 50 }
+  if (id === 'pixel-planet-rise') doc.camera = { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 }
   // Underwater the camera sits low and looks up into the light.
   if (id === 'pixel-coral-reef') doc.camera = { family: 'establishment', eye: [0, .9, 8], look: [0, 6, -40], fov: 50 }
   return doc

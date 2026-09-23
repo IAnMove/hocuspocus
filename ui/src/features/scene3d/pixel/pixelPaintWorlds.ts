@@ -464,9 +464,9 @@ export function paintTents(width: number, height: number, seed: number, count: n
 }
 
 function paintHouse(target: IndexedLayer, x: number, ground: number, w: number, wall: number, seed: number, tone: Tone, chimneys: [number, number][]) {
+  const lit = (dx: number, y: number) => y > ground - wall + 2 && y < ground - 2 && dx % 5 >= 2 && dx % 5 < 4 && dx > 1 && dx < w - 2
   for (let y = ground - wall; y <= ground; y++) for (let dx = 0; dx < w; dx++) {
-    const window = y > ground - wall + 2 && y < ground - 2 && dx % 5 >= 2 && dx % 5 < 4 && dx > 1 && dx < w - 2 && fxRandom(seed, dx * 7 + y) > .25
-    set(target, x + dx, y, window ? INDEX.window + ((dx + seed) & 7) : tone.body)
+    set(target, x + dx, y, lit(dx, y) && fxRandom(seed, dx * 7 + y) > .25 ? INDEX.window + ((dx + seed) & 7) : tone.body)
   }
   const roof = Math.ceil(w / 2) + 1
   for (let r = 0; r < roof; r++) for (let dx = r - 1; dx <= w - r; dx++) set(target, x + dx, ground - wall - r, r < 2 || dx === r - 1 || dx === w - r ? tone.rim : INDEX.trees)
@@ -511,47 +511,66 @@ export function paintSkater(width: number, height: number, seed: number): Indexe
   return skater
 }
 
-/** A waterfall between two cliffs: every column of water steps through the
- *  cycling fall slots with its own offset, so bright streaks pour down;
- *  foam boils at the foot and a rainbow hangs in the spray. */
-export function paintFalls(width: number, height: number, spec: Tone & { seed: number; wide: number }): IndexedLayer {
-  const falls = layer(width, height)
-  const lip = Math.round(height * .18), cx = width / 2, half = width * (.04 + spec.wide * .06)
-  for (let x = 0; x < width; x++) {
-    const away = Math.abs(x - cx) - half
-    // Cliffs stand tallest either side of the fall and drop away from it.
-    const top = away < 0 ? lip : Math.round(lip - 4 + away * .42 + Math.sin(away * .08 + spec.seed) * 5 + (fxRandom(spec.seed, x >> 2) - .5) * 4)
-    for (let y = top; y < height; y++) {
-      if (away < 0 && y >= lip) continue
+type Falls = { lip: number; cx: number; half: number }
+
+function cliffTop(falls: Falls, x: number, seed: number) {
+  const away = Math.abs(x - falls.cx) - falls.half
+  // Cliffs stand tallest either side of the fall and drop away from it.
+  return away < 0 ? falls.lip : Math.round(falls.lip - 4 + away * .42 + Math.sin(away * .08 + seed) * 5 + (fxRandom(seed, x >> 2) - .5) * 4)
+}
+
+function paintCliffs(target: IndexedLayer, falls: Falls, spec: Tone & { seed: number }) {
+  for (let x = 0; x < target.width; x++) {
+    const away = Math.abs(x - falls.cx) - falls.half, top = cliffTop(falls, x, spec.seed)
+    const lit = (x < falls.cx) === (falls.cx / target.width > spec.lightFrom)
+    for (let y = top; y < target.height; y++) {
+      if (away < 0 && y >= falls.lip) continue
       const ledge = Math.sin(y * .55 + Math.sin(x * .05 + spec.seed) * 2.4) > .86 && bayer(x, y) < .6
       const moss = y - top < 3 && fxRandom(spec.seed, x * 17 + y) > .35
-      set(falls, x, y, moss ? INDEX.trees : ledge || (x < cx) === (cx / width > spec.lightFrom) && y - top < 2 ? spec.rim : spec.body)
+      set(target, x, y, moss ? INDEX.trees : ledge || (lit && y - top < 2) ? spec.rim : spec.body)
     }
-    if (away > 0 && away < 10 && fxRandom(spec.seed, x + 700) > .5) for (let y = top; y < top + 6 + (x % 5) * 3; y++) set(falls, x, y, INDEX.trees)
+    if (away > 0 && away < 10 && fxRandom(spec.seed, x + 700) > .5) for (let y = top; y < top + 6 + (x % 5) * 3; y++) set(target, x, y, INDEX.trees)
   }
-  for (let x = Math.ceil(cx - half); x <= cx + half; x++) {
-    // Neighbouring columns share a phase, so the water pours in streaks.
-    const offset = Math.floor(fxRandom(spec.seed, Math.floor(x / 3) + 300) * 8)
-    // Some columns carry bright pouring streaks, the rest are steady water.
-    const streak = fxRandom(spec.seed, Math.floor(x / 2) + 900) > .45
-    for (let y = lip; y < height; y++) {
-      const edge = Math.abs(x - cx) > half - 2 && bayer(x, y) < .4
-      if (!edge) set(falls, x, y, streak ? INDEX.fall + ((y + offset) >> 2) % INDEX.fallSteps : INDEX.fallWater)
+}
+
+function paintWater(target: IndexedLayer, falls: Falls, seed: number) {
+  for (let x = Math.ceil(falls.cx - falls.half); x <= falls.cx + falls.half; x++) {
+    // Neighbouring columns share a phase, so the water pours in streaks;
+    // some columns carry bright streaks, the rest are steady water.
+    const offset = Math.floor(fxRandom(seed, Math.floor(x / 3) + 300) * 8)
+    const streak = fxRandom(seed, Math.floor(x / 2) + 900) > .45
+    for (let y = falls.lip; y < target.height; y++) {
+      if (Math.abs(x - falls.cx) > falls.half - 2 && bayer(x, y) < .4) continue
+      set(target, x, y, streak ? INDEX.fall + ((y + offset) >> 2) % INDEX.fallSteps : INDEX.fallWater)
     }
   }
-  const foot = height - 1
+}
+
+function paintSpray(target: IndexedLayer, falls: Falls) {
+  const foot = target.height - 1
   for (let y = foot - 10; y <= foot; y++) {
-    const spread = half + (y - foot + 10) * 2.2
-    for (let x = Math.floor(cx - spread); x <= cx + spread; x++) if (bayer(x, y) < 1 - Math.abs(x - cx) / spread) set(falls, x, y, INDEX.fall + ((x + y) % INDEX.fallSteps))
+    const spread = falls.half + (y - foot + 10) * 2.2
+    for (let x = Math.floor(falls.cx - spread); x <= falls.cx + spread; x++) if (bayer(x, y) < 1 - Math.abs(x - falls.cx) / spread) set(target, x, y, INDEX.fall + ((x + y) % INDEX.fallSteps))
   }
   for (let band = 0; band < 5; band++) {
-    const r = half * 3.2 - band * 1.6
+    const r = falls.half * 3.2 - band * 1.6
     for (let a = 0; a < 180; a++) {
-      const t = Math.PI + a / 180 * Math.PI, x = Math.round(cx + half * 1.4 + Math.cos(t) * r), y = Math.round(foot - 4 + Math.sin(t) * r * .8)
-      if (bayer(x, y) < .75 && falls.data[y * width + x] !== 0) set(falls, x, y, INDEX.rainbow + band)
+      const t = Math.PI + a / 180 * Math.PI, x = Math.round(falls.cx + falls.half * 1.4 + Math.cos(t) * r), y = Math.round(foot - 4 + Math.sin(t) * r * .8)
+      if (bayer(x, y) < .75 && target.data[y * target.width + x] !== 0) set(target, x, y, INDEX.rainbow + band)
     }
   }
-  return falls
+}
+
+/** A waterfall between two cliffs: streaked columns step through the
+ *  cycling fall slots so the water pours; foam boils at the foot and a
+ *  rainbow hangs in the spray. */
+export function paintFalls(width: number, height: number, spec: Tone & { seed: number; wide: number }): IndexedLayer {
+  const target = layer(width, height)
+  const falls = { lip: Math.round(height * .18), cx: width / 2, half: width * (.04 + spec.wide * .06) }
+  paintCliffs(target, falls, spec)
+  paintWater(target, falls, spec.seed)
+  paintSpray(target, falls)
+  return target
 }
 
 /** Smooth value noise from the seeded hash, for clouds of gas. */

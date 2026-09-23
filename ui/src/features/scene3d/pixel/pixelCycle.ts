@@ -16,62 +16,45 @@ export function mixHex(a: string, b: string, t: number) {
   return '#' + x.map((v, i) => Math.round((v + (y[i] - v) * Math.max(0, Math.min(1, t))) * 255).toString(16).padStart(2, '0')).join('')
 }
 
-/** Slots that cycle: stars twinkle, windows switch on and off, fireflies pulse. */
+type Cycler = { start: number; steps: number; color: (palette: PixelPalette, seconds: number, k: number) => string }
+const pulse = (k: number, steps: number, seconds: number, speed: number) => ((k / steps - seconds * speed) % 1 + 1) % 1
+
+/** Slots that cycle, each range with its own rule. The world is painted
+ *  once; only these colours change from frame to frame. */
+const CYCLERS: Cycler[] = [
+  // Stars twinkle.
+  { start: INDEX.star, steps: INDEX.starSteps, color: (p, t, k) => mixHex(p.sky[0], p.stars, .3 + .7 * (.5 + .5 * Math.sin(t * 1.9 + k * 2.1))) },
+  // Most rooms stay lit; each slot goes dark for a while on its own clock, one flickers.
+  { start: INDEX.window, steps: INDEX.windowSteps, color: (p, t, k) => Math.sin(t * (.21 + k * .037) + k * 1.7) > -.55
+    ? mixHex(p.near[0], p.windows, k === 7 ? .75 + .25 * Math.sin(t * 23) : 1) : mixHex(p.near[0], p.windows, .12) },
+  // A planet's cloud bands trade tones slowly, so its weather drifts.
+  { start: INDEX.band, steps: INDEX.bandSteps, color: (p, t, k) => mixHex(p.moon, p.far[1], (.5 + .5 * Math.sin(t * .55 + k * Math.PI / 2)) * .65) },
+  // Sunlight through moving water: each slot brightens and dims in turn.
+  { start: INDEX.ray, steps: INDEX.raySteps, color: (p, t, k) => mixHex(p.sky[1], p.moon, .25 + (.5 + .5 * Math.sin(t * 2.4 - k * Math.PI / 4)) * .5) },
+  // Marquee chase: every fourth bulb is lit and the lit ones march round.
+  { start: INDEX.bulb, steps: INDEX.bulbSteps, color: (p, t, k) => {
+    const hue = k % 2 ? p.windows : '#ff5a8a'
+    return (k - Math.floor(t * 6)) % 4 === 0 ? mixHex(hue, '#ffffff', .25) : mixHex(p.near[0], hue, .35)
+  } },
+  // The bright slot walks down the water column, so streaks pour downward.
+  { start: INDEX.fall, steps: INDEX.fallSteps, color: (p, t, k) => mixHex(mixHex(p.water, p.far[1], .4), mixHex(p.sky[2], '#ffffff', .55), Math.pow(1 - pulse(k, INDEX.fallSteps, t, 1.8), 1.5)) },
+  // Nebula gas breathes slowly, its brighter folds most of all.
+  { start: INDEX.nebula, steps: 4, color: (p, t, k) => mixHex(p.sky[1], p.aurora, (.25 + k * .22) * (.85 + .15 * Math.sin(t * .6 + k * .9))) },
+  // Now and then a driver touches the brake.
+  { start: INDEX.tail, steps: 2, color: (_p, t, k) => Math.sin(t * (.7 + k * .3) + k * 2) > .92 ? '#ff4a52' : '#9a1420' },
+  // A bright pulse walks down the lava slots, so the rivers run downhill.
+  { start: INDEX.lava, steps: INDEX.lavaSteps, color: (_p, t, k) => {
+    const heat = Math.pow(1 - pulse(k, INDEX.lavaSteps, t, .9), 2)
+    return heat > .5 ? mixHex('#ff4a0c', '#ffd878', (heat - .5) * 2) : mixHex('#5c0a04', '#ff4a0c', heat * 2)
+  } },
+  // Fireflies pulse on and off.
+  { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
+]
+
 function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number) {
-  for (let star = 0; star < INDEX.starSteps; star++) {
-    const twinkle = .3 + .7 * (.5 + .5 * Math.sin(seconds * 1.9 + star * 2.1))
-    writeColor(bytes, INDEX.star + star, mixHex(palette.sky[0], palette.stars, twinkle))
-  }
-  for (let slot = 0; slot < INDEX.windowSteps; slot++) {
-    // Most rooms stay lit; each slot goes dark for a while on its own clock.
-    const lit = Math.sin(seconds * (.21 + slot * .037) + slot * 1.7) > -.55
-    const flicker = slot === 7 ? .75 + .25 * Math.sin(seconds * 23) : 1
-    writeColor(bytes, INDEX.window + slot, lit ? mixHex(palette.near[0], palette.windows, flicker) : mixHex(palette.near[0], palette.windows, .12))
-  }
-  for (let band = 0; band < INDEX.bandSteps; band++) {
-    // Cloud bands trade tones slowly, so the planet's weather drifts.
-    const drift = .5 + .5 * Math.sin(seconds * .55 + band * Math.PI / 2)
-    writeColor(bytes, INDEX.band + band, mixHex(palette.moon, palette.far[1], drift * .65))
-  }
-  for (let ray = 0; ray < INDEX.raySteps; ray++) {
-    // Sunlight through moving water: each slot brightens and dims in turn.
-    const shimmer = .5 + .5 * Math.sin(seconds * 2.4 - ray * Math.PI / 4)
-    writeColor(bytes, INDEX.ray + ray, mixHex(palette.sky[1], palette.moon, .25 + shimmer * .5))
-  }
-  for (let bulb = 0; bulb < INDEX.bulbSteps; bulb++) {
-    // Marquee chase: every fourth bulb is lit and the lit ones march round.
-    const lit = (bulb - Math.floor(seconds * 6)) % 4 === 0
-    const hue = bulb % 2 ? palette.windows : '#ff5a8a'
-    writeColor(bytes, INDEX.bulb + bulb, lit ? mixHex(hue, '#ffffff', .25) : mixHex(palette.near[0], hue, .35))
-  }
-  for (let fall = 0; fall < INDEX.fallSteps; fall++) {
-    // The bright slot walks down the water column, so streaks pour downward.
-    const pulse = ((fall / INDEX.fallSteps - seconds * 1.8) % 1 + 1) % 1
-    const foam = mixHex(palette.sky[2], '#ffffff', .55), deep = mixHex(palette.water, palette.far[1], .4)
-    writeColor(bytes, INDEX.fall + fall, mixHex(deep, foam, Math.pow(1 - pulse, 1.5)))
-  }
+  for (const cycler of CYCLERS) for (let k = 0; k < cycler.steps; k++) writeColor(bytes, cycler.start + k, cycler.color(palette, seconds, k))
   writeColor(bytes, INDEX.fallWater, mixHex(mixHex(palette.water, palette.far[1], .4), mixHex(palette.sky[2], '#ffffff', .55), .45))
   ;['#ff6a6a', '#ffb45a', '#fff27a', '#7aff9a', '#7ab4ff'].forEach((hue, band) => writeColor(bytes, INDEX.rainbow + band, mixHex(palette.far[0], hue, .55)))
-  for (let gas = 0; gas < 4; gas++) {
-    // Nebula gas breathes slowly, its brighter folds most of all.
-    const breath = .85 + .15 * Math.sin(seconds * .6 + gas * .9)
-    writeColor(bytes, INDEX.nebula + gas, mixHex(palette.sky[1], palette.aurora, (.25 + gas * .22) * breath))
-  }
-  for (let tail = 0; tail < 2; tail++) {
-    // Now and then a driver touches the brake.
-    const brake = Math.sin(seconds * (.7 + tail * .3) + tail * 2) > .92
-    writeColor(bytes, INDEX.tail + tail, brake ? '#ff4a52' : '#9a1420')
-  }
-  for (let lava = 0; lava < INDEX.lavaSteps; lava++) {
-    // A bright pulse walks down the slots, so the rivers seem to run downhill.
-    const pulse = ((lava / INDEX.lavaSteps - seconds * .9) % 1 + 1) % 1
-    const heat = Math.pow(1 - pulse, 2)
-    writeColor(bytes, INDEX.lava + lava, heat > .5 ? mixHex('#ff4a0c', '#ffd878', (heat - .5) * 2) : mixHex('#5c0a04', '#ff4a0c', heat * 2))
-  }
-  for (let fly = 0; fly < INDEX.fireflySteps; fly++) {
-    const glow = Math.pow(Math.max(0, Math.sin(seconds * (1.4 + fly * .23) + fly * 1.9)), 3)
-    writeColor(bytes, INDEX.firefly + fly, mixHex(palette.trees, palette.windows, glow))
-  }
 }
 
 /** Every palette slot for this moment: the mood plus the cycling ranges. */
