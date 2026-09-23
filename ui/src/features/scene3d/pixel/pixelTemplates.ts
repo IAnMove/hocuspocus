@@ -114,6 +114,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  'pixel-rainy-window': ['pixel-window', { palettes: ['harbor', 'storm'], hold: 12, meteors: 0 }],
   'pixel-lantern-festival': ['pixel-lanterns', { palettes: ['dusk', 'midnight'], hold: 12, meteors: 0 }],
   'pixel-glow-tide': ['pixel-beach', { palettes: ['midnight', 'harbor'], hold: 12, meteors: .5 }],
   'pixel-castle-fireworks': ['pixel-castle', { palettes: ['midnight', 'harbor'], hold: 10, meteors: 0 }],
@@ -158,6 +159,7 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
   if (id === 'pixel-snow-village') doc.worldSfx = villageCues()
+  if (id === 'pixel-rainy-window') doc.worldSfx = parseWorldSfx([{ id: 'city-rain', kind: 'rain', start: 0, end: 24, position: { x: 0, y: -1, z: -2 }, scale: 3.6, intensity: 1, color: '#a8b8e0', seed: 23, sound: true, volume: .3 }])
   if (id === 'pixel-neon-alley') doc.worldSfx = parseWorldSfx([{ id: 'alley-rain', kind: 'rain', start: 0, end: 24, position: { x: 0, y: -1, z: 2 },
     scale: 3.2, intensity: 1, color: '#b4a8e8', seed: 19, sound: true, volume: .3 }])
   if (id === 'pixel-cherry-garden') doc.worldSfx = parseWorldSfx([{ id: 'petals', kind: 'snow', start: 0, end: 24, position: { x: 0, y: -.5, z: 1 },
@@ -174,6 +176,7 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   // the planet looked up to, the reef from below in the light.
   if (id === 'pixel-storm-lake') doc.camera = { family: 'establishment', eye: [0, 1.2, 9], look: [0, 3.6, -40], fov: 50 }
   if (id === 'pixel-planet-rise') doc.camera = { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 }
+  if (id === 'pixel-rainy-window') doc.camera = { family: 'fixed', eye: [0, 1.7, 8.4], look: [0, 1.95, -40], fov: 50 }
   if (id === 'pixel-glow-tide') doc.camera = { family: 'establishment', eye: [0, 1.5, 10.5], look: [0, 2.2, -40], fov: 48 }
   if (id === 'pixel-neon-alley') doc.camera = { family: 'establishment', eye: [0, 1.7, 8], look: [0, 3.4, -30], fov: 56 }
   // Underwater the camera sits low and looks up into the light.

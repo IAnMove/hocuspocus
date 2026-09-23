@@ -1393,6 +1393,10 @@
     "pixel-lantern-festival": {
       "title": "Festival de farolillos",
       "description": "Cientos de farolillos de papel suben despacio desde un lago en calma al anochecer, balanceándose y titilando cálidos, los cercanos más rápidos que los lejanos, todos reflejados en el agua."
+    },
+    "pixel-rainy-window": {
+      "title": "Ventana con lluvia",
+      "description": "Desde una habitación a la luz de una vela, la ciudad de noche a través de una ventana: la lluvia resbala por el cristal, las cortinas enmarcan la vista y una planta y una vela reposan en el alféizar mientras brillan las luces del puerto."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1655,7 +1659,8 @@
       "pixel-alley": "Callejón de neón",
       "pixel-castle": "Castillo",
       "pixel-beach": "Playa",
-      "pixel-lanterns": "Lago de farolillos"
+      "pixel-lanterns": "Lago de farolillos",
+      "pixel-window": "Ventana"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

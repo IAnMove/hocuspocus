@@ -804,3 +804,68 @@ export function paintLanterns(width: number, height: number, seed: number, count
   }
   return sky
 }
+
+type Pane = { x0: number; x1: number; y0: number; y1: number }
+
+function paintRoomWall(room: IndexedLayer, pane: Pane) {
+  const lightX = (pane.x0 + pane.x1) / 2, lightY = pane.y1
+  for (let y = 0; y < room.height; y++) for (let x = 0; x < room.width; x++) {
+    if (x > pane.x0 && x < pane.x1 && y > pane.y0 && y < pane.y1) continue
+    // Candlelight from the sill warms the wall around the window.
+    const glow = 1 - Math.hypot((x - lightX) / room.width, (y - lightY) / room.height) * 3.2
+    set(room, x, y, glow > .45 || (glow > 0 && bayer(x, y) < glow * 2.2) ? INDEX.room + 1 : INDEX.room)
+  }
+}
+
+function paintWindowFrame(room: IndexedLayer, pane: Pane) {
+  const midX = Math.round((pane.x0 + pane.x1) / 2), midY = Math.round((pane.y0 + pane.y1) / 2)
+  for (let y = pane.y0 - 3; y <= pane.y1 + 3; y++) for (let x = pane.x0 - 3; x <= pane.x1 + 3; x++) {
+    const onFrame = x <= pane.x0 || x >= pane.x1 || y <= pane.y0 || y >= pane.y1 || Math.abs(x - midX) < 2 || Math.abs(y - midY) < 2
+    if (onFrame) set(room, x, y, INDEX.room + 2)
+  }
+  for (let x = pane.x0 - 8; x <= pane.x1 + 8; x++) for (let y = pane.y1 + 3; y < pane.y1 + 8; y++) set(room, x, y, y === pane.y1 + 3 ? INDEX.room + 1 : INDEX.room + 2)
+}
+
+function paintCurtains(room: IndexedLayer, pane: Pane) {
+  for (const side of [-1, 1]) {
+    const edge = side < 0 ? pane.x0 - 10 : pane.x1 + 10
+    for (let y = 0; y < pane.y1 + 20 && y < room.height; y++) {
+      const drape = 14 + Math.round(Math.sin(y * .05) * 3) + (y > pane.y1 - 10 ? Math.round((y - pane.y1 + 10) * .4) : 0)
+      for (let d = 0; d < drape; d++) set(room, edge + side * (d - drape + 8), y, (d + Math.round(y * .1)) % 5 === 0 ? INDEX.room + 2 : INDEX.room + 3)
+    }
+  }
+}
+
+function paintSill(room: IndexedLayer, pane: Pane) {
+  const sill = pane.y1 + 3, plant = pane.x0 + 8, candle = pane.x1 - 12
+  for (let y = sill - 6; y < sill; y++) for (let dx = -3; dx <= 3; dx++) if (Math.abs(dx) <= 3 - (sill - y > 4 ? 1 : 0)) set(room, plant + dx, y, INDEX.room + 2)
+  for (let leaf = 0; leaf < 7; leaf++) {
+    const angle = -Math.PI / 2 + (leaf - 3) * .38, length = 6 + (leaf % 3) * 3
+    for (let d = 0; d < length; d++) for (const w of [0, 1]) set(room, Math.round(plant + Math.cos(angle) * d) + w, Math.round(sill - 6 + Math.sin(angle) * d), INDEX.room + 4)
+  }
+  for (let y = sill - 9; y < sill; y++) for (let dx = -2; dx <= 2; dx++) set(room, candle + dx, y, INDEX.room + 5)
+  for (let y = sill - 14; y < sill - 9; y++) for (let dx = -1; dx <= 1; dx++) if (Math.abs(dx) < 1 || y > sill - 12) set(room, candle + dx, y, INDEX.flame)
+}
+
+/** Rain running down the glass: short trails whose bright slot walks down. */
+function paintRainOnGlass(room: IndexedLayer, pane: Pane, seed: number) {
+  for (let d = 0; d < (pane.x1 - pane.x0) * .7; d++) {
+    const x = pane.x0 + 2 + Math.floor(fxRandom(seed, d) * (pane.x1 - pane.x0 - 4)), y0 = pane.y0 + Math.floor(fxRandom(seed, d + 99) * (pane.y1 - pane.y0) * .8)
+    const length = 3 + Math.floor(fxRandom(seed, d + 199) * 10)
+    for (let y = y0; y < Math.min(pane.y1 - 1, y0 + length); y++) set(room, x, y, INDEX.drop + ((y + d * 3) % INDEX.dropSteps))
+  }
+}
+
+/** A cosy room seen from inside: warm wall, a window with a cross frame
+ *  whose panes stay open onto the world behind, curtains, a sill with a
+ *  plant and a candle, and rain running down the glass. */
+export function paintRoom(width: number, height: number, seed: number): IndexedLayer {
+  const room = layer(width, height)
+  const pane = { x0: Math.round(width * .24), x1: Math.round(width * .76), y0: Math.round(height * .12), y1: Math.round(height * .66) }
+  paintRoomWall(room, pane)
+  paintWindowFrame(room, pane)
+  paintCurtains(room, pane)
+  paintSill(room, pane)
+  paintRainOnGlass(room, pane, seed)
+  return room
+}

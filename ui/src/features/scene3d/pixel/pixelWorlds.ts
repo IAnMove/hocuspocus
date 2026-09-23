@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -226,6 +226,11 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     }))),
     ...reeds(scene),
   ] }),
+  'pixel-window': scene => {
+    const city = WORLDS['pixel-city'](scene)
+    // The room wall stands just in front of the camera; its panes are open.
+    return { ...city, layers: [...city.layers, { z: 6, width: 5.4, height: 3.1, bottom: .15, texture: [324, 186], paint: (w, h) => paintRoom(w, h, scene.seed) }] }
+  },
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

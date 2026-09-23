@@ -1393,6 +1393,10 @@
     "pixel-lantern-festival": {
       "title": "Lantern festival",
       "description": "Hundreds of paper lanterns rise slowly from a still lake at dusk, swaying as they climb and flickering warm, near ones faster than far ones, all mirrored in the water."
+    },
+    "pixel-rainy-window": {
+      "title": "Rainy window",
+      "description": "From a candle-lit room, the city at night through a window: rain slides down the glass, curtains frame the view and a plant and a candle sit on the sill while the harbour lights shimmer outside."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1655,7 +1659,8 @@
       "pixel-alley": "Neon alley",
       "pixel-castle": "Castle",
       "pixel-beach": "Beach",
-      "pixel-lanterns": "Lantern lake"
+      "pixel-lanterns": "Lantern lake",
+      "pixel-window": "Window"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

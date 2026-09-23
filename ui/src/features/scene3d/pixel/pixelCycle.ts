@@ -64,12 +64,16 @@ const CYCLERS: Cycler[] = [
     const flicker = .75 + .25 * Math.sin(t * (7 + k * 2.3) + k) * Math.sin(t * (2.1 + k) + k * 3)
     return mixHex(mixHex('#c8401a', '#ffb04a', flicker), p.light.color, .12)
   } },
+  // Raindrops slide down the glass: a bright bead walks down each trail.
+  { start: INDEX.drop, steps: INDEX.dropSteps, color: (p, t, k) => mixHex(mixHex(p.sky[1], p.windows, .15), '#e8f0ff', Math.pow(1 - pulse(k, INDEX.dropSteps, t, -.7), 4) * .8) },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]
 
 function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number) {
   for (const cycler of CYCLERS) for (let k = 0; k < cycler.steps; k++) writeColor(bytes, cycler.start + k, cycler.color(palette, seconds, k))
+  // A candle-lit room: warm wall, lit wall, wood, curtain; tinted by the night outside.
+  ;['#2a1a1c', '#6a3a26', '#3a2218', '#5a1e2a', '#3a6a3c', '#e8d8b8'].forEach((tone, i) => writeColor(bytes, INDEX.room + i, mixHex(tone, palette.near[0], .15)))
   writeColor(bytes, INDEX.fallWater, mixHex(mixHex(palette.water, palette.far[1], .4), mixHex(palette.sky[2], '#ffffff', .55), .45))
   ;['#e8384a', '#f5c542', '#f07ab0', '#8a5ad8'].forEach((bloom, row) => writeColor(bytes, INDEX.tulip + row, mixHex(bloom, palette.light.color, .2)))
   ;['#ff6a6a', '#ffb45a', '#fff27a', '#7aff9a', '#7ab4ff'].forEach((hue, band) => writeColor(bytes, INDEX.rainbow + band, mixHex(palette.far[0], hue, .55)))

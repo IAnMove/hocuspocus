@@ -372,3 +372,16 @@ test('lantern festival: flocks rise on the clock and never leave the sky empty',
   const flames = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.dusk, seconds); return Array.from(bytes.subarray(188 * 4, 192 * 4)).join() }
   assert.notEqual(flames(0), flames(.3), 'flames flicker')
 })
+
+test('rainy window: a room frames the city through open panes, rain runs down the glass', () => {
+  const plan = worldPlan('pixel-window', resolvePixelScene('pixel-window', undefined))
+  const room = plan.layers.find(layer => layer.z === 6)!
+  const painted = room.paint(...room.texture)
+  const [w, h] = room.texture
+  assert.equal(painted.data[Math.round(h * .3) * w + Math.round(w * .4)] === 0 || painted.data[Math.round(h * .3) * w + Math.round(w * .4)] >= 200, true, 'the pane shows the world or rain on the glass')
+  assert.ok(painted.data[5 * w + 5] >= 192 && painted.data[5 * w + 5] < 200, 'the wall is painted')
+  assert.ok([200, 201, 202, 203, 204, 205, 206, 207].filter(slot => painted.data.includes(slot)).length >= 6, 'rain trails')
+  assert.ok(plan.layers.some(layer => layer.z === -36), 'the city lies outside')
+  const drops = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.harbor, seconds); return Array.from(bytes.subarray(200 * 4, 208 * 4)).join() }
+  assert.notEqual(drops(0), drops(.4))
+})
