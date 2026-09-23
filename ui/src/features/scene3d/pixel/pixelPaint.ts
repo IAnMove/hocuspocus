@@ -86,10 +86,28 @@ export function paintSky(width: number, height: number, spec: SkySpec): IndexedL
   return sky
 }
 
-export type RangeSpec = { seed: number; base: number; rough: number; peaks: number; peakLift?: number; body: number; rim: number; shade?: number; lightFrom: number; trees?: boolean; mist?: boolean }
+export type RangeSpec = { seed: number; base: number; rough: number; peaks: number; peakLift?: number; snow?: number; body: number; rim: number; shade?: number; lightFrom: number; trees?: boolean; mist?: boolean }
 
-function rangePixel(spec: RangeSpec, top: number[], x: number, y: number, height: number) {
-  if (spec.mist && y > height * .8 && bayer(x, y) < (y - height * .8) / (height * .2)) return INDEX.sky + INDEX.skySteps - 1
+/** How far each column rises above the valleys around it, in rows. */
+function prominence(top: number[], reach: number) {
+  return top.map((row, x) => {
+    let valley = row
+    for (let dx = -reach; dx <= reach; dx++) valley = Math.max(valley, top[Math.min(top.length - 1, Math.max(0, x + dx))])
+    return valley - row
+  })
+}
+
+/** Snow caps the peaks, deeper the higher they stand over their valleys,
+ *  and frays into the rock below. */
+function snowAt(spec: RangeSpec, top: number[], rise: number[], x: number, y: number) {
+  if (!spec.snow) return false
+  const depth = spec.snow * Math.max(0, rise[x] / Math.max(1, spec.peakLift ?? spec.rough) - .25), below = y - top[x]
+  return below < depth && (below < depth * .6 || bayer(x, y) < (depth - below) / (depth * .4))
+}
+
+function rangePixel(spec: RangeSpec, top: number[], rise: number[], x: number, y: number, height: number) {
+  if (spec.mist && y > height * .88 && bayer(x, y) < (y - height * .88) / (height * .12)) return INDEX.sky + INDEX.skySteps - 1
+  if (snowAt(spec, top, rise, x, y)) return spec.rim
   const awayFromLight = x > 0 && top[x] > top[x - 1] === x / top.length > spec.lightFrom
   return spec.shade && awayFromLight && bayer(x, y) < .5 && y - top[x] < 14 ? spec.shade : spec.body
 }
@@ -119,8 +137,9 @@ function paintStreaks(range: IndexedLayer, spec: RangeSpec, top: number[]) {
 export function paintRange(width: number, height: number, spec: RangeSpec): IndexedLayer {
   const range = layer(width, height)
   const top = ridge(spec.seed, width, spec.base, spec.rough, spec.peaks, spec.peakLift)
+  const rise = spec.snow ? prominence(top, Math.round(width / 10)) : []
   for (let x = 0; x < width; x++) {
-    for (let y = Math.max(0, top[x]); y < height; y++) set(range, x, y, rangePixel(spec, top, x, y, height))
+    for (let y = Math.max(0, top[x]); y < height; y++) set(range, x, y, rangePixel(spec, top, rise, x, y, height))
     paintRim(range, spec, top, x)
   }
   if (spec.trees) paintPines(range, top, spec.seed)

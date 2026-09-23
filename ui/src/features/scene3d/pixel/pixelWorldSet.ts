@@ -131,11 +131,11 @@ function lakeLayers(peaks: boolean): LayerSpec[] {
   const seed = peaks ? 311 : 97
   return [
     { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true,
-      paint: (w, h) => paintSky(w, h, { seed, horizonRow: Math.round(h * .92), stars: peaks ? 260 : 340, moon: { x: peaks ? .36 : .59, y: .58, radius: 11 } }) },
+      paint: (w, h) => paintSky(w, h, { seed, horizonRow: Math.round(h * .92), stars: peaks ? 260 : 340, moon: { x: peaks ? .36 : .59, y: peaks ? .4 : .58, radius: 11 } }) },
     { z: -46, width: 130, height: peaks ? 24 : 18, bottom: -1.5, texture: [680, peaks ? 126 : 94],
-      paint: (w, h) => paintRange(w, h, { seed: seed + 1, base: h * .72, rough: h * .2, peaks: peaks ? 6 : 4, peakLift: h * (peaks ? .55 : .45), body: INDEX.far, rim: INDEX.farRim, shade: INDEX.farShade, lightFrom: peaks ? .36 : .59, mist: true }) },
+      paint: (w, h) => paintRange(w, h, { seed: seed + 1, base: h * .72, rough: h * .2, peaks: peaks ? 6 : 4, peakLift: h * (peaks ? .55 : .45), snow: peaks ? h * .3 : 0, body: INDEX.far, rim: INDEX.farRim, shade: INDEX.farShade, lightFrom: peaks ? .36 : .59, mist: true }) },
     { z: -37, width: 110, height: 7, bottom: -1, texture: [720, 46],
-      paint: (w, h) => paintRange(w, h, { seed: seed + 2, base: h * (peaks ? .8 : .5), rough: h * (peaks ? .08 : .25), peaks: 2, body: INDEX.near, rim: INDEX.nearRim, lightFrom: .5, trees: !peaks }) },
+      paint: (w, h) => paintRange(w, h, { seed: seed + 2, base: h * (peaks ? .45 : .5), rough: h * .25, peaks: peaks ? 3 : 2, peakLift: h * (peaks ? .35 : .25), body: INDEX.near, rim: INDEX.nearRim, lightFrom: .5, trees: !peaks }) },
     { z: 4.5, width: 7, height: 1.15, bottom: -.02, texture: [480, 80], paint: (w, h) => paintReeds(w, h, seed + 3) },
   ]
 }
@@ -163,8 +163,7 @@ export function pixelWorldGroup(kind: PixelDressing): Object3D {
     runtime.water = floor.material as ShaderMaterial
     root.add(floor)
   } else {
-    // The frozen peaks rise straight out of the lake, without a wooded shore.
-    for (const spec of lakeLayers(kind === 'pixel-peaks').filter((_spec, i) => !(kind === 'pixel-peaks' && i === 2))) {
+    for (const spec of lakeLayers(kind === 'pixel-peaks')) {
       const mesh = layerMesh(spec, palette)
       if (spec.sky) runtime.skies.push(mesh.material as ShaderMaterial)
       root.add(mesh)
