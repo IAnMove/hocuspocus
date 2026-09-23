@@ -23,12 +23,19 @@ export function wizardCardControls(card: WizardExecutionCard, workspace: string)
   }
 }
 
+function workflowStepTaskId(workflow: WizardWorkflowRecord | undefined): string | null {
+  if (!workflow) return null
+  return executionCardTaskId({ taskId: workflow.steps[workflow.currentStep]?.taskId })
+}
+
 async function cancelWorkflow(workflow: WizardWorkflowRecord): Promise<AgentActionResult[]> {
+  const knownTaskId = workflowStepTaskId(workflow)
   await runtime.cancel(workflow.workflowId)
-  const step = workflow.steps[workflow.currentStep]
-  if (!step?.taskId || step.state !== 'waiting') return []
-  // Stop only the canonical task belonging to this cancelled workflow.
-  return executeAgentActions([{ type: 'cancel_task', taskId: step.taskId, confirm: true }], undefined, { workspace: workflow.workspace })
+  // `runtime.get` clones: the object we cancelled is stale. Read the live
+  // checkpoint so a task id attached while execute() was in flight is stopped.
+  const taskId = workflowStepTaskId(runtime.get(workflow.workflowId)) || knownTaskId
+  if (!taskId) return []
+  return executeAgentActions([{ type: 'cancel_task', taskId, confirm: true }], undefined, { workspace: workflow.workspace })
 }
 
 async function controlWorkflow(card: WizardExecutionCard, control: WizardCardControl, workspace: string): Promise<AgentActionResult[]> {

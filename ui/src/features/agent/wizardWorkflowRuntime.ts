@@ -640,6 +640,13 @@ export class WizardWorkflowRuntime {
   }
 
   async cancel(workflowId: string): Promise<WizardWorkflowRecord> {
+    const live = this.collection.workflows.find(item => item.workflowId === workflowId)
+    if (live) {
+      // Raise the flag before waiting for `execute()` so a completed step
+      // cannot start the next one while this cancel is queued on the lock.
+      live.cancelRequested = true
+      live.resumeRequested = false
+    }
     await this.serial(workflowId, async () => {
       const workflow = this.find(workflowId)
       workflow.cancelRequested = true
@@ -824,6 +831,7 @@ export class WizardWorkflowRuntime {
           workflow: clone(workflow), step: clone(step), inputSnapshot: clone(workflow.inputSnapshot),
         })
       } catch (error) {
+        if (await this.abandonIfCancelled(workflow, step, owner)) return
         step.state = 'failed'
         step.error = error instanceof Error ? error.message : String(error)
         workflow.state = failureState(workflow)
@@ -842,6 +850,7 @@ export class WizardWorkflowRuntime {
       workflow.outputRefs = unique([...workflow.outputRefs, ...step.outputRefs])
       workflow.updatedAt = Date.now()
       workflow.resumeRequested = false
+      if (await this.abandonIfCancelled(workflow, step, owner)) return
       if (result.state === 'completed') {
         step.state = 'completed'
         step.completedAt = workflow.updatedAt
@@ -907,6 +916,24 @@ export class WizardWorkflowRuntime {
     workflow.state = 'completed'
     workflow.updatedAt = Date.now()
     await this.persistAndEmit(workflow, owner)
+  }
+
+  private async abandonIfCancelled(
+    workflow: WizardWorkflowRecord,
+    step: WizardWorkflowStepRecord,
+    owner: {
+      workspace: string
+      collection: WizardWorkflowCollection
+      openSequence: number
+    },
+  ): Promise<boolean> {
+    if (!workflow.cancelRequested) return false
+    step.state = 'cancelled'
+    workflow.state = 'cancelled'
+    workflow.resumeRequested = false
+    workflow.updatedAt = Date.now()
+    await this.persistAndEmit(workflow, owner)
+    return true
   }
 
   private find(workflowId: string): WizardWorkflowRecord {
