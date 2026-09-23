@@ -33,6 +33,11 @@ function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number)
     const drift = .5 + .5 * Math.sin(seconds * .55 + band * Math.PI / 2)
     writeColor(bytes, INDEX.band + band, mixHex(palette.moon, palette.far[1], drift * .65))
   }
+  for (let tail = 0; tail < 2; tail++) {
+    // Now and then a driver touches the brake.
+    const brake = Math.sin(seconds * (.7 + tail * .3) + tail * 2) > .92
+    writeColor(bytes, INDEX.tail + tail, brake ? '#ff4a52' : '#9a1420')
+  }
   for (let lava = 0; lava < INDEX.lavaSteps; lava++) {
     // A bright pulse walks down the slots, so the rivers seem to run downhill.
     const pulse = ((lava / INDEX.lavaSteps - seconds * .9) % 1 + 1) % 1

@@ -146,6 +146,13 @@ export function flashPalette(palette: PixelPalette, flash: number): PixelPalette
   return mixPalettes(palette, white, Math.min(.45, flash * .3))
 }
 
+/** Screens light the painted land around them with what they show. */
+export function tintPalette(palette: PixelPalette, color: string, amount: number): PixelPalette {
+  if (amount <= .01) return palette
+  const lit = { ...palette, far: [color, color] as [string, string], near: [color, color] as [string, string], trees: color, water: color }
+  return mixPalettes(palette, lit, Math.min(.22, amount * .14))
+}
+
 /** Colours a user changed on one mood; everything else keeps the preset. */
 export type PaletteColors = {
   sky0?: string; sky1?: string; sky2?: string; moon?: string; stars?: string; far0?: string; far1?: string

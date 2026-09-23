@@ -217,3 +217,25 @@ export function paintVolcano(width: number, height: number, spec: Tone & { seed:
   }
   return volcano
 }
+
+/** A row of parked cars seen from behind: rounded bodies, rear windows
+ *  catching the screen, and brake lights in their own cycling slots. */
+export function paintCars(width: number, height: number, spec: { seed: number; count: number; body: number; rim: number }): IndexedLayer {
+  const cars = layer(width, height)
+  const pitch = width / spec.count
+  for (let c = 0; c < spec.count; c++) {
+    if (fxRandom(spec.seed, c) > .82) continue
+    const w = Math.round(pitch * (.62 + fxRandom(spec.seed, c + 50) * .16)), x0 = Math.round(c * pitch + (pitch - w) / 2)
+    const cabin = Math.round(height * .42), roofInset = Math.round(w * .2)
+    for (let y = 0; y < height - 1; y++) {
+      const inset = y < cabin ? roofInset - Math.round(y * .6) : Math.max(0, 1 - (y - cabin))
+      for (let x = x0 + Math.max(0, inset); x < x0 + w - Math.max(0, inset); x++) {
+        const glass = y > 1 && y < cabin - 1 && x > x0 + inset + 1 && x < x0 + w - inset - 2
+        set(cars, x, y, y === 0 ? spec.rim : glass ? INDEX.nearRim : spec.body)
+      }
+    }
+    const lights = INDEX.tail + (c % 2), row = cabin + 2
+    for (const x of [x0 + 1, x0 + 2, x0 + w - 3, x0 + w - 2]) { set(cars, x, row, lights); set(cars, x, row + 1, lights) }
+  }
+  return cars
+}

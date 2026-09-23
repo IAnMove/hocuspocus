@@ -10,7 +10,7 @@ import { meteorsAt, writePalette } from '../src/features/scene3d/pixel/pixelCycl
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
-import { flashPalette, paletteWith, parsePaletteOverrides } from '../src/features/scene3d/pixel/pixelPalettes'
+import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3 } from 'three'
 import { addTv, applyScreenToAllTvs } from '../src/features/scene3d/pixel/pixelEdits'
 import { PIXEL_TEMPLATE_IDS } from '../src/features/scene3d/pixel/pixelTemplateIds'
@@ -185,4 +185,18 @@ test('volcano: lava runs by cycling its slots and the crater smokes', () => {
   assert.notDeepEqual(frame(0), frame(.3), 'the lava pulse moves')
   const doc = applyScene3DTemplate('pixel-volcano')
   assert.deepEqual(doc.worldSfx?.map(cue => cue.kind), ['smoke', 'sparks'])
+})
+
+test('drive-in: the big screen plays the recording and its light tints the world', () => {
+  const doc = applyScene3DTemplate('pixel-drive-in')
+  const screen = doc.slots.find(slot => slot.media === 'screen')!
+  assert.equal(screen.screen?.style, 'billboard'); assert.equal(screen.screen?.media, 'video')
+  assert.ok(doc.pixelWorld!.screenGlow > 0)
+  const plan = worldPlan('pixel-drivein', resolvePixelScene('pixel-drivein', undefined))
+  const cars = plan.layers.filter(layer => layer.z > -3)
+  assert.equal(cars.length, 2)
+  assert.ok(cars.every(layer => layer.paint(...layer.texture).data.includes(108)), 'rear lights use the brake slot')
+  const tinted = tintPalette(PIXEL_PALETTES.midnight, '#ff0000', 1)
+  assert.ok(parseInt(tinted.water.slice(1, 3), 16) > parseInt(PIXEL_PALETTES.midnight.water.slice(1, 3), 16))
+  assert.equal(tintPalette(PIXEL_PALETTES.midnight, '#ff0000', 0), PIXEL_PALETTES.midnight)
 })

@@ -14,7 +14,7 @@ export const PIXEL_TV_CLIP = '/examples/moving-cutouts/skate-neon.mp4'
 export const PIXEL_TEMPLATES: Scene3DTemplate[] = PIXEL_TEMPLATE_IDS.map(id => ({
   id, camera: 'establishment', duration: id === 'pixel-tv-wall' ? 10 : 24,
   // Landscapes start empty: a placeholder actor would stand in the lake.
-  slots: id === 'pixel-tv-wall' || id === 'pixel-tv-lake' ? ['prop'] : [],
+  slots: id === 'pixel-tv-wall' || id === 'pixel-tv-lake' || id === 'pixel-drive-in' ? ['prop'] : [],
   tags: ['pixel', 'animated'],
 }))
 export const PIXEL_CATEGORIES = Object.fromEntries(PIXEL_TEMPLATE_IDS.map(id => [id, 'cinema'])) as Record<typeof PIXEL_TEMPLATE_IDS[number], 'cinema'>
@@ -95,6 +95,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  'pixel-drive-in': ['pixel-drivein', { palettes: ['midnight', 'vapor'], hold: 10, meteors: .5, screenGlow: 1.6 }],
   'pixel-volcano': ['pixel-volcano', { palettes: ['eclipse', 'dusk'], hold: 9, meteors: .3 }],
   'pixel-storm-lake': ['pixel-lake', { palettes: ['storm'], hold: 20, meteors: 0,
     scene: { body: 'none', stars: 0, mountains: .62, roughness: .6, trees: .9, ripple: 1, reeds: true } }],
@@ -125,6 +126,13 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   const doc = pixelDocument(id, dressing, pixel, id === 'pixel-storm-lake' ? 18 : 24)
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
+  if (id === 'pixel-drive-in') {
+    // The big screen plays your recording; its light washes over cars and sand.
+    const screen: Scene3DSlot = { id: 'drive-in-screen', slot: 'prop', media: 'screen', position: [0, 0, -14], rotationY: 0, scale: 1, sourceUrl: '', clip: null,
+      screen: { ...defaultMediaScreen(), sourceUrl: PIXEL_TV_CLIP, media: 'video', style: 'billboard', fit: 'cover', width: 11, height: 6.2 } }
+    doc.slots = [screen]
+    doc.camera = { family: 'establishment', eye: [0, 1.5, 6.5], look: [0, 3.2, -14], fov: 46 }
+  }
   doc.camera = { family: 'establishment', eye: [0, 1.6, 8], look: [0, 3.2, -40], fov: 45 }
   return doc
 }

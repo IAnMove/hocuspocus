@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -91,6 +91,12 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     sky(scene),
     { ...FAR, paint: (w, h) => paintVolcano(w, h, { ...far, seed: scene.seed + 1, lightFrom: bodySkyX(scene), peak: .45 + scene.mountains * .3, center: VOLCANO_CENTER }) },
     hills(scene, true), ...reeds(scene),
+  ] }),
+  'pixel-drivein': scene => ({ ground: 'sand', layers: [
+    sky(scene),
+    { ...FAR, paint: (w, h) => paintMesas(w, h, { ...far, seed: scene.seed + 1, lightFrom: bodySkyX(scene), tall: .12 + scene.mountains * .4, count: 3 }) },
+    { z: -2.5, width: 16, height: 1.5, bottom: 0, texture: [256, 24], paint: (w, h) => paintCars(w, h, { seed: scene.seed + 3, count: 7, ...near }) },
+    { z: 1.5, width: 11, height: 1.3, bottom: 0, texture: [176, 21], paint: (w, h) => paintCars(w, h, { seed: scene.seed + 4, count: 4, body: INDEX.trees, rim: INDEX.near }) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

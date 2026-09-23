@@ -32,9 +32,13 @@ type Lit = { slot: Scene3DSlot; screen: ScreenMediaRuntime & { canvas: HTMLCanva
 
 /** Screens light the room: neighbouring screens share one light placed in
  *  front of them, coloured by what they show right now. */
-export function syncScreenGlow(scene: Scene, slots: readonly Scene3DSlot[], runtimes: (id: string) => ScreenMediaRuntime | undefined, strength: number) {
+/** What the screens show, on average, and how strongly they shine: the
+ *  painted world takes a tint of it. */
+export type ScreenLight = { color: string; amount: number }
+
+export function syncScreenGlow(scene: Scene, slots: readonly Scene3DSlot[], runtimes: (id: string) => ScreenMediaRuntime | undefined, strength: number): ScreenLight | undefined {
   // Scenes without screen light never pay for the extra lights.
-  if (strength <= 0 && !lights.has(scene)) return
+  if (strength <= 0 && !lights.has(scene)) return undefined
   const list = pool(scene)
   const lit: Lit[] = []
   if (strength > 0) for (const slot of slots) {
@@ -61,4 +65,7 @@ export function syncScreenGlow(scene: Scene, slots: readonly Scene3DSlot[], runt
     light.position.set(at[0] / members.length, at[1] / members.length, at[2] / members.length)
     light.intensity = strength * brightness * 6 * Math.sqrt(members.length)
   })
+  if (!colors.length) return undefined
+  const mean = colors.reduce((sum, color) => sum.add(color), new Color(0, 0, 0)).multiplyScalar(1 / colors.length)
+  return { color: '#' + mean.getHexString(), amount: strength * Math.max(mean.r, mean.g, mean.b) }
 }

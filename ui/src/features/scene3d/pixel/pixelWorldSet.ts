@@ -5,7 +5,8 @@ import {
 } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { ENERGY_NOISE } from '../../sceneFx/energyShaders'
-import { flashPalette, paletteAt, type PixelPalette } from './pixelPalettes'
+import { flashPalette, paletteAt, tintPalette, type PixelPalette } from './pixelPalettes'
+import type { ScreenLight } from './screenGlow'
 import { paintSand } from './pixelPaintWorlds'
 import type { IndexedLayer } from './pixelPaint'
 import { meteorsAt, writePalette } from './pixelCycle'
@@ -269,12 +270,13 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
 
 /** Relight the world for `seconds`: palette, sky motion, water and lights.
  *  The key light comes from wherever the sun or moon hangs. */
-export function paintPixelWorld(dressing: Object3D | null, scene: Scene, dir: { color: Color; intensity: number; position: Vector3 }, authored: PixelWorld | undefined, seconds: number, frameHeight: number, flash = 0): PixelPalette | null {
+export function paintPixelWorld(dressing: Object3D | null, scene: Scene, dir: { color: Color; intensity: number; position: Vector3 }, authored: PixelWorld | undefined, seconds: number, frameHeight: number, flash = 0, screens?: ScreenLight): PixelPalette | null {
   const runtime = dressing?.userData.pixelWorld as PixelRuntime | undefined
   if (!authored && !runtime) return null
   // A pixel set without authored lighting still needs a palette to show.
   const pixel = authored ?? defaultPixelWorld()
-  const palette = flashPalette(paletteAt(pixel.palettes, pixel.hold, seconds, pixel.colors), flash)
+  const mood = paletteAt(pixel.palettes, pixel.hold, seconds, pixel.colors)
+  const palette = flashPalette(screens ? tintPalette(mood, screens.color, screens.amount) : mood, flash)
   const layout = runtime && dressing ? syncSet(dressing, runtime, pixel, palette, seconds, frameHeight) : undefined
   dir.color.set(palette.light.color)
   dir.intensity = palette.light.intensity

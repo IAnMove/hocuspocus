@@ -411,10 +411,10 @@ function paintActor(world: GpuWorld, slot: Scene3DSlot, sceneSeconds: number) {
 
 /** Palette mood, sky motion and the light that screens throw. */
 function paintPixelLight(world: GpuWorld, document: Scene3DDocument, slots: readonly Scene3DSlot[], sceneSeconds: number) {
+  const screens = syncScreenGlow(world.scene, slots, id => world.slots.get(id)?.screen, document.pixelWorld?.screenGlow ?? 0)
   // Lightning in the scene lights the painted world at the moment it strikes.
   const flash = Math.max(0, ...(document.worldSfx ?? []).filter(cue => cue.kind === 'lightning').map(cue => lightningGlow(cue, sceneSeconds)))
-  world.pixelPalette = paintPixelWorld(world.dressing, world.scene, world.dir, document.pixelWorld, sceneSeconds, world.renderer.domElement?.height ?? document.height, flash)
-  syncScreenGlow(world.scene, slots, id => world.slots.get(id)?.screen, document.pixelWorld?.screenGlow ?? 0)
+  world.pixelPalette = paintPixelWorld(world.dressing, world.scene, world.dir, document.pixelWorld, sceneSeconds, world.renderer.domElement?.height ?? document.height, flash, screens)
 }
 
 export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
