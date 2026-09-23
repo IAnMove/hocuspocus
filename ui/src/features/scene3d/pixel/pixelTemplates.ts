@@ -6,6 +6,7 @@ import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { isPixelTemplate, PIXEL_TEMPLATE_IDS } from './pixelTemplateIds'
 import type { Scene3DTemplate } from '../templates'
 import { parseWorldSfx } from '../../sceneFx/world'
+import { VOLCANO_CENTER } from './pixelWorlds'
 
 /** The recording every TV starts with; replace it on one TV or all of them. */
 export const PIXEL_TV_CLIP = '/examples/moving-cutouts/skate-neon.mp4'
@@ -63,6 +64,16 @@ function pixelDocument(id: string, dressing: Scene3DDocument['dressing'], pixel:
   return doc
 }
 
+/** Smoke and embers rising from the crater, which stands on the far plane
+ *  at 60% of its height (see the volcano world). */
+function eruptionCues() {
+  const crater = { x: (VOLCANO_CENTER - .5) * 130, y: 16.2, z: -45 }
+  return parseWorldSfx([
+    { id: 'volcano-smoke', kind: 'smoke', start: 0, end: 24, position: crater, scale: 6, intensity: 1.4, color: '#8a7a84', seed: 3, sound: false, volume: 0 },
+    { id: 'volcano-embers', kind: 'sparks', start: 0, end: 24, position: crater, scale: 3.2, intensity: 1.2, color: '#ff8a3a', seed: 9, sound: true, volume: .18 },
+  ])
+}
+
 /** Rain around the camera and single strikes on the far ranges, each with
  *  its thunder; the painted world flashes with every strike. */
 function stormCues() {
@@ -84,6 +95,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  'pixel-volcano': ['pixel-volcano', { palettes: ['eclipse', 'dusk'], hold: 9, meteors: .3 }],
   'pixel-storm-lake': ['pixel-lake', { palettes: ['storm'], hold: 20, meteors: 0,
     scene: { body: 'none', stars: 0, mountains: .62, roughness: .6, trees: .9, ripple: 1, reeds: true } }],
   'pixel-night-train': ['pixel-viaduct', { palettes: ['midnight', 'dawn'], hold: 9, meteors: .4 }],
@@ -112,6 +124,7 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   const [dressing, pixel] = LANDSCAPES[id]
   const doc = pixelDocument(id, dressing, pixel, id === 'pixel-storm-lake' ? 18 : 24)
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
+  if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
   doc.camera = { family: 'establishment', eye: [0, 1.6, 8], look: [0, 3.2, -40], fov: 45 }
   return doc
 }

@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -16,6 +16,8 @@ const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: 
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
 const NEAR: Omit<LayerSpec, 'paint'> = { z: -37, width: 110, height: 7, bottom: -1, texture: [720, 46] }
 const far = { body: INDEX.far, rim: INDEX.farRim }
+/** Where the volcano's crater stands across its plane, for the smoke above it. */
+export const VOLCANO_CENTER = .56
 const near = { body: INDEX.near, rim: INDEX.nearRim }
 
 function sky(scene: PixelScene): LayerSpec {
@@ -84,6 +86,11 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     // The train rides the deck, crossing the whole bridge and coming round again.
     { z: -23.8, width: 26, height: 1.25, bottom: 4.78, texture: [208, 10], drift: { speed: 5.5, loop: 130 }, paint: (w, h) => paintTrain(w, h, { seed: scene.seed, carriages: 5 }) },
     ...reeds(scene),
+  ] }),
+  'pixel-volcano': scene => ({ ground: 'water', layers: [
+    sky(scene),
+    { ...FAR, paint: (w, h) => paintVolcano(w, h, { ...far, seed: scene.seed + 1, lightFrom: bodySkyX(scene), peak: .45 + scene.mountains * .3, center: VOLCANO_CENTER }) },
+    hills(scene, true), ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

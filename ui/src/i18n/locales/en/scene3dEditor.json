@@ -1337,6 +1337,10 @@
     "pixel-storm-lake": {
       "title": "Storm on the lake",
       "description": "Rain lashes a dark pixel lake while lightning strikes the far ranges; every bolt lights the whole painted world for an instant and its thunder rolls in on cue."
+    },
+    "pixel-volcano": {
+      "title": "Volcano",
+      "description": "Rivers of lava run down a volcano by pure colour cycling, the crater glows and breathes smoke and embers, and the red spills across the sea under an eclipsed moon."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1579,7 +1583,8 @@
       "pixel-desert": "Desert",
       "pixel-coast": "Sea cliff",
       "pixel-forest": "Forest",
-      "pixel-viaduct": "Viaduct"
+      "pixel-viaduct": "Viaduct",
+      "pixel-volcano": "Volcano"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

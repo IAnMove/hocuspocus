@@ -33,6 +33,12 @@ function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number)
     const drift = .5 + .5 * Math.sin(seconds * .55 + band * Math.PI / 2)
     writeColor(bytes, INDEX.band + band, mixHex(palette.moon, palette.far[1], drift * .65))
   }
+  for (let lava = 0; lava < INDEX.lavaSteps; lava++) {
+    // A bright pulse walks down the slots, so the rivers seem to run downhill.
+    const pulse = ((lava / INDEX.lavaSteps - seconds * .9) % 1 + 1) % 1
+    const heat = Math.pow(1 - pulse, 2)
+    writeColor(bytes, INDEX.lava + lava, heat > .5 ? mixHex('#ff4a0c', '#ffd878', (heat - .5) * 2) : mixHex('#5c0a04', '#ff4a0c', heat * 2))
+  }
   for (let fly = 0; fly < INDEX.fireflySteps; fly++) {
     const glow = Math.pow(Math.max(0, Math.sin(seconds * (1.4 + fly * .23) + fly * 1.9)), 3)
     writeColor(bytes, INDEX.firefly + fly, mixHex(palette.trees, palette.windows, glow))

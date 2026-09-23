@@ -185,3 +185,35 @@ export function paintTrain(width: number, height: number, spec: { seed: number; 
   for (let x = 2; x < width - 4; x += 3) set(train, x, wheels, INDEX.farShade)
   return train
 }
+
+/** A volcano: a cone with a notched crater and rivers of lava whose pixels
+ *  step through the cycling lava slots, so they flow without repainting. */
+export function paintVolcano(width: number, height: number, spec: Tone & { seed: number; peak: number; center: number }): IndexedLayer {
+  const volcano = layer(width, height)
+  const cx = width * spec.center, peakRow = Math.round(height * (1 - spec.peak)), crater = 14
+  const top = Array.from({ length: width }, (_, x) => {
+    const away = Math.max(0, Math.abs(x - cx) - crater)
+    const dip = Math.abs(x - cx) < crater ? 3 - Math.round(3 * (Math.abs(x - cx) / crater) ** 2) : 0
+    // Steep by the crater, spreading out towards the base, like a real cone.
+    return Math.round(peakRow + (height - peakRow) * 1.15 * (1 - Math.exp(-away / (width * .16))) + (fxRandom(spec.seed, Math.floor(x / 3)) - .5) * 3 + dip)
+  })
+  for (let x = 0; x < width; x++) {
+    const lit = (x < cx) === (cx / width > spec.lightFrom)
+    for (let y = Math.max(0, top[x]); y < height; y++) set(volcano, x, y, lit && y - top[x] < 3 ? spec.rim : spec.body)
+  }
+  for (let river = 0; river < 4; river++) {
+    let x = cx + (river - 1.5) * 6, flowed = 0
+    const lean = (river - 1.5) * .45
+    for (let y = peakRow + 2; y < height - 1; y++, flowed++) {
+      x += lean + (fxRandom(spec.seed + river, y) - .5) * 1.6
+      const slot = INDEX.lava + ((INDEX.lavaSteps * 8 - Math.floor(flowed / 2)) % INDEX.lavaSteps)
+      const wide = 1 + Math.floor(flowed / 40)
+      for (let dx = -wide; dx <= wide; dx++) if (y >= top[Math.round(x + dx)]) set(volcano, Math.round(x + dx), y, slot)
+      if (fxRandom(spec.seed + river, y + 999) > .996) break
+    }
+  }
+  for (let x = Math.round(cx - crater); x <= cx + crater; x++) {
+    for (let y = top[x] - 1; y <= top[x] + 1; y++) set(volcano, x, y, INDEX.lava + (x % INDEX.lavaSteps))
+  }
+  return volcano
+}

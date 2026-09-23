@@ -1337,6 +1337,10 @@
     "pixel-storm-lake": {
       "title": "Tormenta en el lago",
       "description": "La lluvia azota un lago pixel oscuro mientras los rayos caen sobre las cordilleras; cada rayo ilumina todo el mundo pintado un instante y su trueno llega a tiempo."
+    },
+    "pixel-volcano": {
+      "title": "Volcán",
+      "description": "Ríos de lava bajan por un volcán con puro ciclo de color, el cráter brilla y exhala humo y ascuas, y el rojo se derrama sobre el mar bajo una luna eclipsada."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1579,7 +1583,8 @@
       "pixel-desert": "Desierto",
       "pixel-coast": "Acantilado",
       "pixel-forest": "Bosque",
-      "pixel-viaduct": "Viaducto"
+      "pixel-viaduct": "Viaducto",
+      "pixel-volcano": "Volcán"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

@@ -175,3 +175,14 @@ function hexLum(hex: string) {
   const value = parseInt(hex.slice(1), 16)
   return ((value >> 16 & 255) + (value >> 8 & 255) + (value & 255)) / 765
 }
+
+test('volcano: lava runs by cycling its slots and the crater smokes', () => {
+  const plan = worldPlan('pixel-volcano', resolvePixelScene('pixel-volcano', undefined))
+  const cone = plan.layers.find(layer => layer.z === -46)!.paint(680, 157)
+  const lava = new Set([...cone.data].filter(slot => slot >= 100 && slot < 108))
+  assert.ok(lava.size >= 6, 'rivers step through the lava slots')
+  const frame = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.eclipse, seconds); return Array.from(bytes.subarray(400, 432)) }
+  assert.notDeepEqual(frame(0), frame(.3), 'the lava pulse moves')
+  const doc = applyScene3DTemplate('pixel-volcano')
+  assert.deepEqual(doc.worldSfx?.map(cue => cue.kind), ['smoke', 'sparks'])
+})
