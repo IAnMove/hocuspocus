@@ -8,9 +8,11 @@ import type { Scene3DSlot } from './types'
 import { Scene3DPoseSequenceControls } from './Scene3DPoseSequenceControls'
 import { Scene3DLoopControls } from './Scene3DLoopControls'
 
-export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, disabled, workspace, onChange, onChoose, onRemove }: {
+export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, disabled, workspace, onChange, onChoose, onRemove, onApplyToAll }: {
   slot: Scene3DSlot; meshes: string[]; nodes?: string[]; items: ApiOutput[]; disabled: boolean; workspace?: string
   onChange: (screen: MediaScreen | undefined) => void; onChoose: (item: ApiOutput | null) => void; onRemove: () => void
+  /** Give every screen in the scene this one's recording. */
+  onApplyToAll?: () => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   if (!supportsScreenControls(slot)) return null
@@ -26,8 +28,7 @@ export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, dis
       {slot.media === 'model3d' && <ModelScreenPlacement screen={screen} nodes={nodes} meshes={meshes} disabled={disabled} patch={patch} />}
       {!screen.poseSequence && <ScreenSourceControls screen={screen} items={items} disabled={disabled} onChoose={onChoose} patch={patch} />}
       {slot.media === 'image' && <Scene3DPoseSequenceControls key={`${slot.id}:${slot.sourceUrl}`} screen={screen} baseUrl={slot.sourceUrl} items={items} disabled={disabled} workspace={workspace} onChange={onChange} />}
-      {slot.media === 'screen' && <label className="flex items-center justify-between gap-2">{t('screens.style')}<select aria-label={t('screens.style')} disabled={disabled} value={screen.style} onChange={event => patch({ style: event.target.value as MediaScreen['style'] })} className="min-h-9 rounded border border-border bg-bg-primary px-2">
-        {(['monitor', 'billboard', 'frameless'] as const).map(style => <option key={style} value={style}>{t(`screens.${style}`)}</option>)}</select></label>}
+      {slot.media === 'screen' && <ScreenStyleControls screen={screen} disabled={disabled} patch={patch} onApplyToAll={onApplyToAll} />}
       {slot.media !== 'image' && <div className="grid grid-cols-2 gap-3">{field('width', .02, 80)}{field('height', .02, 80)}</div>}
       <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={screen.flipY} disabled={disabled} onChange={event => patch({ flipY: event.target.checked })} />{t('screens.flipY')}</label>
       <ScreenPlaybackControls screen={screen} disabled={disabled} patch={patch} field={field} />
@@ -105,5 +106,27 @@ function ModelScreenPlacement({ screen, nodes, meshes, disabled, patch }: {
           <input type="number" aria-label={t(`screens.${key}`)} min={-180} max={180} step="1" disabled={disabled} value={Math.round(((screen[key] ?? 0) * 180) / Math.PI)}
             onChange={event => { const value = Number(event.target.value); if (event.target.value && Number.isFinite(value)) patch({ [key]: Math.max(-180, Math.min(180, value)) * Math.PI / 180 }) }}
             className="min-h-9 w-20 rounded border border-border bg-bg-primary p-1" /></label>)}
+  </>
+}
+
+function ScreenStyleControls({ screen, disabled, patch, onApplyToAll }: {
+  screen: MediaScreen; disabled: boolean; patch: (value: Partial<MediaScreen>) => void; onApplyToAll?: () => void
+}) {
+  const { t } = useUiTranslation('scene3dEditor')
+  return <>
+    <label className="flex items-center justify-between gap-2">{t('screens.style')}<select aria-label={t('screens.style')} disabled={disabled} value={screen.style} onChange={event => patch({ style: event.target.value as MediaScreen['style'] })} className="min-h-9 rounded border border-border bg-bg-primary px-2">
+      {(['monitor', 'billboard', 'frameless', 'crt'] as const).map(style => <option key={style} value={style}>{t(`screens.${style}`)}</option>)}</select></label>
+    {screen.style === 'crt' && <CrtControls screen={screen} disabled={disabled} patch={patch} onApplyToAll={onApplyToAll} />}
+  </>
+}
+
+function CrtControls({ screen, disabled, patch, onApplyToAll }: {
+  screen: MediaScreen; disabled: boolean; patch: (value: Partial<MediaScreen>) => void; onApplyToAll?: () => void
+}) {
+  const { t } = useUiTranslation('scene3dEditor')
+  return <>
+    <label className="flex items-center justify-between gap-2 text-xs">{t('screens.hue')}
+      <input type="range" min={-180} max={180} step={5} disabled={disabled} value={screen.hue ?? 0} aria-label={t('screens.hue')} onChange={event => patch({ hue: event.target.valueAsNumber })} className="w-32" /></label>
+    {onApplyToAll && screen.sourceUrl && <button type="button" disabled={disabled} onClick={onApplyToAll} className="min-h-9 rounded border border-border px-3 text-xs">{t('screens.applyAll')}</button>}
   </>
 }

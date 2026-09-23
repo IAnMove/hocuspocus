@@ -6,6 +6,8 @@ import { applyImageColorKey } from './imageColorKey'
 import { loadImagePoses } from './imagePoseRuntime'
 
 export type ScreenMediaRuntime = {
+  /** The painted picture, for light the screen throws on its surroundings. */
+  canvas?: HTMLCanvasElement
   ready: boolean
   error: Error | null
   seek: (seconds: number, screen: MediaScreen) => Promise<void>
@@ -76,7 +78,9 @@ function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: b
   const canvas = document.createElement('canvas')
   const previous = target.material
   const aspect = screenSurfaceAspect(target, screen, Boolean(imagePlate))
-  canvas.width = Math.max(2, Math.round(Math.min(1920, 1080 * aspect))); canvas.height = Math.max(2, Math.round(canvas.width / aspect))
+  // A CRT shows few lines; a small picture is both authentic and cheap for a wall of TVs.
+  const lines = screen.style === 'crt' ? 240 : 1080
+  canvas.width = Math.max(2, Math.round(Math.min(1920, lines * aspect))); canvas.height = Math.max(2, Math.round(canvas.width / aspect))
   const context = canvas.getContext('2d')!
   const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace; texture.flipY = imagePlate || standalone || plane ? !screen.flipY : screen.flipY
   const material = imagePlate && !Array.isArray(previous) && 'map' in previous ? previous.clone() as MeshBasicMaterial
@@ -85,18 +89,103 @@ function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: b
   return { attachedPlane, target, previous, canvas, context, texture, material }
 }
 
+type SharedVideo = { url: string; video: HTMLVideoElement; users: number; ready: Promise<void>; busy: boolean; waiting: (() => void)[]; pooled: boolean }
+const sharedVideos = new Map<string, SharedVideo>()
+
+/** TVs showing the same clip share one decoder: a wall of TVs in sync costs
+ *  one seek per frame instead of one per TV. Other screens keep their own. */
+function acquireVideo(url: string, pooled: boolean): SharedVideo {
+  const known = pooled ? sharedVideos.get(url) : undefined
+  if (known) { known.users++; return known }
+  const video = document.createElement('video')
+  video.crossOrigin = 'anonymous'; video.muted = true; video.playsInline = true; video.preload = 'auto'
+  const ready = waitMedia(video, 'loadeddata', new AbortController().signal)
+  video.src = url; video.load()
+  const shared: SharedVideo = { url, video, users: 1, ready, busy: false, waiting: [], pooled }
+  if (pooled) {
+    ready.catch(() => { if (sharedVideos.get(url) === shared) sharedVideos.delete(url) })
+    sharedVideos.set(url, shared)
+  }
+  return shared
+}
+
+function releaseVideo(shared: SharedVideo) {
+  if (--shared.users > 0) return
+  if (sharedVideos.get(shared.url) === shared) sharedVideos.delete(shared.url)
+  shared.video.pause(); shared.video.removeAttribute('src'); shared.video.load()
+}
+
+/** Seek and paint without another screen moving the shared decoder between.
+ *  A free decoder starts the seek at once, in the caller's turn. */
+function exclusive(shared: SharedVideo, task: () => Promise<void>): Promise<void> {
+  const run = () => {
+    shared.busy = true
+    return task().finally(() => { shared.busy = false; shared.waiting.shift()?.() })
+  }
+  if (!shared.busy) return run()
+  return new Promise((resolve, reject) => shared.waiting.push(() => { run().then(resolve, reject) }))
+}
+
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal) {
+  return new Promise<T>((resolve, reject) => {
+    const aborted = () => reject(new Error('screen-media-disposed'))
+    if (signal.aborted) { aborted(); return }
+    signal.addEventListener('abort', aborted, { once: true })
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', aborted))
+  })
+}
+
+/** Scanlines, a darker rim and a glint of curved glass, drawn over each
+ *  frame of a CRT picture. */
+function crtOverlay(width: number, height: number) {
+  const overlay = document.createElement('canvas')
+  overlay.width = width; overlay.height = height
+  const context = overlay.getContext('2d')
+  if (!context) return overlay
+  context.fillStyle = 'rgba(0,0,0,.3)'
+  for (let y = 0; y < height; y += 3) context.fillRect(0, y, width, 1)
+  const rim = context.createRadialGradient(width / 2, height / 2, Math.min(width, height) * .35, width / 2, height / 2, Math.hypot(width, height) * .55)
+  rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(1, 'rgba(0,0,0,.65)')
+  context.fillStyle = rim; context.fillRect(0, 0, width, height)
+  const glint = context.createLinearGradient(0, 0, width * .6, height * .6)
+  glint.addColorStop(0, 'rgba(255,255,255,.09)'); glint.addColorStop(.45, 'rgba(255,255,255,0)')
+  context.fillStyle = glint; context.fillRect(0, 0, width, height)
+  return overlay
+}
+
+/** One picture on the screen canvas: optional matte, then the source, then
+ *  the CRT tube over it. */
+function drawScreenFrame(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, source: CanvasImageSource, r: { x: number; y: number; width: number; height: number },
+  look: { matte: boolean; tube: HTMLCanvasElement | null; hue?: number }) {
+  const { width, height } = canvas
+  context.clearRect(0, 0, width, height)
+  if (look.matte) { context.fillStyle = '#080c13'; context.fillRect(0, 0, width, height) }
+  if (look.tube) context.filter = `hue-rotate(${look.hue ?? 0}deg) saturate(1.3) contrast(1.12)`
+  context.drawImage(source, r.x, r.y, r.width, r.height)
+  if (look.tube) { context.filter = 'none'; context.drawImage(look.tube, 0, 0) }
+}
+
+async function loadScreenSource(screen: MediaScreen, shared: SharedVideo | null, image: HTMLImageElement | null, signal: AbortSignal) {
+  if (screen.poseSequence) return loadImagePoses(screen.poseSequence, signal)
+  if (shared) await untilAborted(shared.ready, signal)
+  else { image!.crossOrigin = 'anonymous'; image!.src = screen.sourceUrl; await image!.decode() }
+  return undefined
+}
+
 /** Video is paused and sought from the scene clock, including during export. */
 export async function bindScreenMedia(root: Object3D, screen: MediaScreen, standalone: boolean, signal: AbortSignal, onFrame: () => void = () => {}, imagePlate?: { look?: ImageLook }): Promise<ScreenMediaRuntime> {
   const { attachedPlane, target, previous, canvas, context, texture, material } = prepareScreenSurface(root, screen, standalone, imagePlate)
-  const video = screen.media === 'video' ? document.createElement('video') : null
+  const shared = screen.media === 'video' ? acquireVideo(screen.sourceUrl, screen.style === 'crt') : null
+  const video = shared?.video ?? null
   const image = video || screen.poseSequence ? null : new Image()
   let poses: Awaited<ReturnType<typeof loadImagePoses>> | undefined
   const abort = new AbortController()
   let released = false
-  const runtime: ScreenMediaRuntime = { ready: false, error: null, seek: async () => {}, dispose: () => {
+  const tube = screen.style === 'crt' ? crtOverlay(canvas.width, canvas.height) : null
+  const runtime: ScreenMediaRuntime = { canvas, ready: false, error: null, seek: async () => {}, dispose: () => {
     if (released) return
     released = true
-    abort.abort(); if (video) { video.pause(); video.removeAttribute('src'); video.load() }
+    abort.abort(); if (shared) releaseVideo(shared)
     if (image) image.src = ''; target.material = previous; texture.dispose(); material.dispose()
     poses?.dispose()
     if (attachedPlane) detachScreenPlane(root, attachedPlane)
@@ -108,24 +197,16 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
     const source = video ?? image!, width = video?.videoWidth ?? image!.naturalWidth, height = video?.videoHeight ?? image!.naturalHeight
     if (!width || !height || abort.signal.aborted) return
     const r = mediaScreenRect(canvas.width, canvas.height, width, height, screen.fit)
-    context.clearRect(0, 0, canvas.width, canvas.height)
-    if (!screen.transparent && !imagePlate?.look?.colorKey) { context.fillStyle = '#080c13'; context.fillRect(0, 0, canvas.width, canvas.height) }
-    context.drawImage(source, r.x, r.y, r.width, r.height); texture.needsUpdate = true
+    drawScreenFrame(context, canvas, source, r, { matte: !screen.transparent && !imagePlate?.look?.colorKey, tube, hue: screen.hue })
+    texture.needsUpdate = true
     onFrame()
   }
   try {
     if (signal.aborted) throw new Error('screen-media-disposed')
-    if (screen.poseSequence) {
-      poses = await loadImagePoses(screen.poseSequence, abort.signal)
-    } else if (video) {
-      video.crossOrigin = 'anonymous'; video.muted = true; video.playsInline = true; video.preload = 'auto'
-      const loaded = waitMedia(video, 'loadeddata', abort.signal); video.src = screen.sourceUrl; video.load(); await loaded
-    } else {
-      image!.crossOrigin = 'anonymous'; image!.src = screen.sourceUrl; await image!.decode()
-    }
+    poses = await loadScreenSource(screen, shared, image, abort.signal)
     if (abort.signal.aborted) throw new Error('screen-media-disposed')
     target.material = material; paint(); runtime.ready = true
-    let pending: Promise<void> | null = null, desired = 0, settled = 0
+    let pending: Promise<void> | null = null, desired = 0, settled = 0, shown = video?.currentTime ?? 0
     runtime.seek = async (seconds, current) => {
       if (runtime.error) throw runtime.error
       if (poses && !abort.signal.aborted) { poses.paint(context, current, seconds); texture.needsUpdate = true; onFrame(); return }
@@ -137,14 +218,17 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
         if (!pending) pending = (async () => {
           while (!abort.signal.aborted && settled !== desired) {
             const target = desired
-            if (Number.isFinite(target) && Math.abs(video.currentTime - target) > .0005) {
-              try {
-                const sought = waitMedia(video, 'seeked', abort.signal, target); video.currentTime = target; await sought
-              } catch (error) {
-                if (abort.signal.aborted) throw error instanceof Error ? error : new Error(String(error))
+            await exclusive(shared!, async () => {
+              if (Number.isFinite(target) && Math.abs(video.currentTime - target) > .0005) {
+                try {
+                  const sought = waitMedia(video, 'seeked', abort.signal, target); video.currentTime = target; await sought
+                } catch (error) {
+                  if (abort.signal.aborted) throw error instanceof Error ? error : new Error(String(error))
+                }
               }
-              paint()
-            }
+              // Another screen may already have brought the decoder here.
+              if (shown !== target) { paint(); shown = target }
+            })
             settled = Number.isFinite(target) ? target : 0
           }
         })().catch(error => { runtime.error = error instanceof Error ? error : new Error(String(error)); throw runtime.error }).finally(() => { pending = null })

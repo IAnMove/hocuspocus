@@ -4,6 +4,7 @@ import { creativeTemplateDocument, CREATIVE_TEMPLATES, CREATIVE_CATEGORIES } fro
 import { cinematicDocument, CINEMATIC_TEMPLATES, CINEMATIC_CATEGORIES } from './cinematicTemplates'
 import { speechTemplateDocument, SPEECH_TEMPLATES, SPEECH_CATEGORIES } from './speech/templates'
 import { mediaTemplateDocument, MEDIA_TEMPLATES, MEDIA_CATEGORIES } from './mediaTemplates'
+import { pixelTemplateDocument, PIXEL_TEMPLATES, PIXEL_CATEGORIES } from './pixel/pixelTemplates'
 import { campaignTemplateDocument, CAMPAIGN_TEMPLATES, CAMPAIGN_CATEGORIES } from './campaignTemplates'
 import { adaptAuthoredCameraToFrame } from './frameFormat.ts'
 import { actionTemplateDocument, ACTION_TEMPLATES, ACTION_CATEGORIES } from './actionTemplates'
@@ -23,7 +24,7 @@ export type Scene3DTemplate = {
   frameFormat?: 'landscape' | 'portrait'
 }
 
-export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative' | 'perspective' | 'animated'
+export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative' | 'perspective' | 'animated' | 'pixel'
 export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
 export type Scene3DTemplateFilter = Scene3DTemplateCategory | Scene3DTemplateTag
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
@@ -34,6 +35,7 @@ export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCateg
   ...CINEMATIC_CATEGORIES,
   ...SPEECH_CATEGORIES,
   ...MEDIA_CATEGORIES,
+  ...PIXEL_CATEGORIES,
   ...CAMPAIGN_CATEGORIES,
   ...ACTION_CATEGORIES,
   'reflective-stage': 'cinema',
@@ -175,6 +177,7 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   ...CREATIVE_TEMPLATES,
   ...SPEECH_TEMPLATES,
   ...MEDIA_TEMPLATES,
+  ...PIXEL_TEMPLATES,
   ...EFFECTS_TEMPLATES,
   ...CAMPAIGN_TEMPLATES,
   ...ACTION_TEMPLATES,
@@ -380,6 +383,8 @@ export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
   }
   const creative = creativeTemplateDocument(id)
   if (creative) return creative
+  const pixel = pixelTemplateDocument(id)
+  if (pixel) return pixel
   const fantasy = darkFantasyTemplateDocument(id)
   if (fantasy) return fantasy
   const action = actionTemplateDocument(id)

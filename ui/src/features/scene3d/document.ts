@@ -7,6 +7,7 @@ import { validScene3DShape } from './documentValidation.ts'
 import { scene3dPlaybackSpeed } from './clock.ts'
 import { reviewClipNumber } from './performance.ts'
 import { normalizeScene3DSlot, parseDressing } from './documentSlot.ts'
+import { parsePixelWorld } from './pixel/pixelWorld'
 import { SCENE3D_TEMPLATE_IDS, type Scene3DDocument, type Scene3DSlot, type Scene3DTemplateId } from './types.ts'
 
 const SLOT_COLORS: Record<string, [number, number, number]> = {
@@ -88,6 +89,11 @@ function knownTemplateId(value: unknown): Scene3DTemplateId {
 function parseWorkshopScreen(value: unknown) {
   return value === 'error' || value === 'success' ? value : undefined
 }
+function pixelWorldField(raw: unknown): Pick<Scene3DDocument, 'pixelWorld'> {
+  const pixelWorld = parsePixelWorld(raw)
+  return pixelWorld ? { pixelWorld } : {}
+}
+
 export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Partial<Scene3DDocument>
@@ -102,5 +108,6 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const dressing = parseDressing(value.dressing)
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
-  return { ...value, environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
+  const { pixelWorld, ...fields } = value
+  return { ...fields, ...pixelWorldField(pixelWorld), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }

@@ -16,7 +16,9 @@ export type MediaScreen = MediaLoop & {
   roll: number
   width: number
   height: number
-  style: 'monitor' | 'billboard' | 'frameless'
+  style: 'monitor' | 'billboard' | 'frameless' | 'crt'
+  /** Colour shift of a CRT, in degrees, so a wall of TVs is not uniform. */
+  hue?: number
   fit: 'contain' | 'cover'
   start: number
   speed: number
@@ -65,7 +67,7 @@ export function defaultModelScreen(nodeNames: readonly string[] = [], meshNames:
 }
 
 function parseScreenStyle(value: unknown): MediaScreen['style'] {
-  return value === 'billboard' || value === 'frameless' ? value : 'monitor'
+  return value === 'billboard' || value === 'frameless' || value === 'crt' ? value : 'monitor'
 }
 
 function parseScreenFit(value: unknown): MediaScreen['fit'] {
@@ -85,6 +87,10 @@ function parseScreenGeometry(value: Partial<MediaScreen>, defaults: MediaScreen,
   }
 }
 
+function parseHue(value: unknown): { hue?: number } {
+  return typeof value === 'number' && Number.isFinite(value) && value ? { hue: Math.max(-180, Math.min(180, value)) } : {}
+}
+
 export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as Partial<MediaScreen>, defaults = defaultMediaScreen()
@@ -99,6 +105,7 @@ export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
     start: bounded(value.start, 0, 0, 86400), speed: bounded(value.speed, 1, 0.05, 8),
     loop: value.loop !== false, flipY: value.flipY === true,
     ...(value.transparent || poseSequence ? { transparent: true } : {}),
+    ...parseHue(value.hue),
     ...(poseSequence ? { poseSequence } : {}),
     ...parseMediaLoop(value),
   }
@@ -121,6 +128,6 @@ export function mediaScreenMountKey(screen?: MediaScreen) {
   return JSON.stringify([
     screen.sourceUrl, screen.media, screen.mode, screen.targetMesh, screen.anchor,
     screen.offset, screen.pitch, screen.yaw, screen.roll, screen.width, screen.height, screen.style, screen.fit, screen.flipY,
-    Boolean(screen.transparent), screen.poseSequence?.map(pose => pose.sourceUrl),
+    Boolean(screen.transparent), screen.poseSequence?.map(pose => pose.sourceUrl), screen.hue ?? 0,
   ])
 }

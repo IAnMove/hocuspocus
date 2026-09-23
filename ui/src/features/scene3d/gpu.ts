@@ -48,6 +48,9 @@ import { paintCitadel } from './citadelSet.ts'
 import { paintActionSet } from './actionSets.ts'
 import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLight, Scene3DSlot } from './types.ts'
 import { syncWorldSfx, type WorldSfxGpu } from '../sceneFx/worldRuntime'
+import { paintPixelWorld } from './pixel/pixelWorldSet'
+import { syncScreenGlow } from './pixel/screenGlow'
+import type { PixelPalette } from './pixel/pixelPalettes'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -93,6 +96,8 @@ export type GpuWorld = {
   driveSpeed: number
   slots: Map<string, SlotGpu>
   worldSfx?: Map<string, WorldSfxGpu>
+  /** The pixel-world mood of the frame being painted, if any. */
+  pixelPalette?: PixelPalette | null
 }
 
 export function clipKeyOf(clip: Scene3DSlot['clip']): string {
@@ -403,6 +408,12 @@ function paintActor(world: GpuWorld, slot: Scene3DSlot, sceneSeconds: number) {
   if (gpu.contactShadow && world.renderer.shadowMap.enabled) gpu.contactShadow.visible = false
 }
 
+/** Palette mood, sky motion and the light that screens throw. */
+function paintPixelLight(world: GpuWorld, document: Scene3DDocument, slots: readonly Scene3DSlot[], sceneSeconds: number) {
+  world.pixelPalette = paintPixelWorld(world.dressing, world.scene, world.dir, document.pixelWorld, sceneSeconds, world.renderer.domElement?.height ?? document.height)
+  syncScreenGlow(world.scene, slots, id => world.slots.get(id)?.screen, document.pixelWorld?.screenGlow ?? 0)
+}
+
 export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
   const posedSlots = document.slots.map(slot => ({ ...slot, ...slotPoseAtTime(slot, sceneSeconds, document.duration) }))
   applyLoopOffset(world, sceneSeconds)
@@ -412,6 +423,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds)
+  paintPixelLight(world, document, posedSlots, sceneSeconds)
   const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing
   const target = posedSlots.find(slot => slot.id === framing?.targetSlot)
   const root = target && world.slots.get(target.id)?.root
@@ -433,7 +445,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
       root: world.slots.get(slot.id)?.root,
     })), { width: world.renderer.domElement?.width ?? document.width, height: world.renderer.domElement?.height ?? document.height })
   }
-  if (world.cinema || document.environment || document.worldSfx?.length || document.slots.some(s => s.surface === 'environment')) {
+  if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment')) {
     world.cinema ??= new CinematicRuntime(world)
     world.cinema.sync(document, sceneSeconds)
     world.cinema.render(document)

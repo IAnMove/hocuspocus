@@ -636,3 +636,11 @@ def test_service_helpers_without_http(tmp_path: Path):
             _shot(title="X", glb={**refs["glb"], "url": "blob:temp"}, voice=refs["voice"],
                   screen=refs["screen"], environment=refs["env"]),
         ], reader, workspace="film")
+
+
+def test_pixel_world_lighting_is_a_known_document_field():
+    from services.scene_packages import collect_unknown_fields
+
+    document = {"version": 1, "slots": [], "dressing": "pixel-lake",
+                "pixelWorld": {"palettes": ["midnight", "aurora"], "hold": 6}}
+    assert collect_unknown_fields(document) == []

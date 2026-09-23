@@ -224,3 +224,31 @@ test('portals sharing a URL keep independent playback and disposal', async () =>
     assert.equal(second.frames.at(-1), 2)
   } finally { a.dispose(); b.dispose(); second.restore(); first.restore() }
 })
+
+test('a wall of CRTs playing one clip shares a decoder and seeks it once per frame', async () => {
+  const h = mediaHarness(), create = globalThis.document.createElement
+  let videos = 0, assignments = 0, time = 0
+  globalThis.document.createElement = kind => {
+    if (kind === 'video') { videos++; return create(kind) }
+    const element = create(kind), context = element.getContext()
+    context.createRadialGradient = context.createLinearGradient = () => ({ addColorStop() {} })
+    return element
+  }
+  // The CRT overlay is drawn too; count only video frames.
+  const shown = () => h.frames.filter(frame => frame !== undefined)
+  Object.defineProperty(h.video, 'currentTime', { configurable: true, get() { return time }, set(value) { assignments++; time = value } })
+  const screen = { ...defaultMediaScreen(), media: 'video', style: 'crt', sourceUrl: '/wall.mp4' }
+  const roots = [0, 1, 2].map(() => { const root = new Group(), mesh = new Mesh(undefined, new MeshBasicMaterial()); mesh.name = 'SCREEN_CONTENT'; root.add(mesh); return root })
+  const tvs = await Promise.all(roots.map(root => bindScreenMedia(root, screen, true, new AbortController().signal)))
+  try {
+    assert.equal(videos, 1)
+    const frames = shown().length
+    const seeks = tvs.map(tv => tv.seek(2, screen))
+    h.finishSeek(); await Promise.all(seeks)
+    assert.equal(assignments, 1)
+    assert.equal(shown().length - frames, 3, 'every TV repaints the shared frame')
+    tvs[0].dispose()
+    const next = tvs[1].seek(3, screen); h.finishSeek(); await next
+    assert.equal(shown().at(-1), 3, 'the others keep playing after one TV is removed')
+  } finally { tvs.forEach(tv => tv.dispose()); h.restore() }
+})

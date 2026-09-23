@@ -350,7 +350,8 @@
     "psx": "PSX",
     "creative": "Creativas",
     "perspective": "Perspectivas",
-    "animated": "Fondos vivos"
+    "animated": "Fondos vivos",
+    "pixel": "Mundos pixel"
   },
   "setting": {
     "sea": "Mar",
@@ -1292,6 +1293,22 @@
     "creative-motion-skate-portal": {
       "title": "El mar al otro lado",
       "description": "Personaje con filtro PSX, piedra inmóvil y un horizonte que se mueve detrás del arco."
+    },
+    "pixel-tv-wall": {
+      "title": "Muro de televisores",
+      "description": "Dos bancos de televisores CRT apilados en una galería oscura. Cada pantalla reproduce tu grabación; los tubos iluminan el suelo mojado y la sala pasa de fría a neón."
+    },
+    "pixel-moon-lake": {
+      "title": "Lago de luna",
+      "description": "Noche pixel dibujada a mano sobre un lago en calma: luna con halo, aurora, estrellas fugaces y un reflejo que ondula, pasando de medianoche a aurora, amanecer y atardecer."
+    },
+    "pixel-tv-lake": {
+      "title": "Televisores en el lago",
+      "description": "Televisores antiguos dentro de un lago pixel de noche, brillando con tu grabación y reflejados en el agua mientras el cielo pasa por neón y eclipse."
+    },
+    "pixel-aurora-peaks": {
+      "title": "Picos de aurora",
+      "description": "Montañas pixel nevadas sobre un lago helado bajo cortinas de aurora; la luz pasa del verde polar al día helado y vuelve a la noche."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1401,7 +1418,11 @@
     "loopStart": "Inicio del tramo (s)",
     "loopEnd": "Final del tramo (s)",
     "timeOffset": "Tiempo acumulado entre planos (s)",
-    "loopDetailsHelp": "Ida y vuelta evita el salto al reiniciar; también invierte el movimiento. Usa el tiempo acumulado para continuar la misma animación en el siguiente plano."
+    "loopDetailsHelp": "Ida y vuelta evita el salto al reiniciar; también invierte el movimiento. Usa el tiempo acumulado para continuar la misma animación en el siguiente plano.",
+    "crt": "Televisor CRT",
+    "hue": "Tono del tubo",
+    "applyAll": "Usar en todos los televisores",
+    "applyAllDone": "Todas las pantallas reproducen ahora esta grabación"
   },
   "library": {
     "name": "Nombre de la escena",
@@ -1492,5 +1513,38 @@
   "stillnessReview": "Ver cámara fija y poses",
   "movingCutoutsReview": "Personajes en movimiento · 6 clips ↗",
   "portalRidesReview": "Ver calzada y dragón",
-  "kingdomRoadReview": "Viajes y película musical"
+  "kingdomRoadReview": "Viajes y película musical",
+  "pixelWorld": {
+    "title": "Luz pixel",
+    "enable": "Iluminación de mundo pixel",
+    "help": "El mundo está pintado con huecos de paleta: al cambiar la paleta se reilumina cada píxel, como el arte con ciclo de color.",
+    "palettes": "Programa de iluminación",
+    "add": "Añadir ambiente",
+    "remove": "Quitar {{name}}",
+    "hold": "Segundos por ambiente",
+    "meteors": "Estrellas fugaces",
+    "pixelSize": "Tamaño de píxel",
+    "levels": "Niveles de color",
+    "dither": "Tramado",
+    "screenGlow": "Luz de pantallas",
+    "setting": "Mundo",
+    "noSet": "Mantener el decorado actual",
+    "palette": {
+      "midnight": "Medianoche",
+      "aurora": "Aurora",
+      "dawn": "Amanecer",
+      "sunset": "Atardecer",
+      "storm": "Tormenta",
+      "eclipse": "Eclipse",
+      "vapor": "Vapor",
+      "polar": "Polar"
+    },
+    "set": {
+      "pixel-lake": "Lago de luna",
+      "pixel-peaks": "Picos nevados",
+      "pixel-gallery": "Galería oscura"
+    },
+    "addTv": "Añadir televisor",
+    "tvs": "{{count}} televisores"
+  }
 }

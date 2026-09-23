@@ -11,6 +11,8 @@ import type { GpuWorld } from './gpu'
 import type { Scene3DDocument } from './types'
 import { cinematicReflectorVisible } from './cinematicSettings'
 import { BackdropFloor } from './backdropFloor'
+import { createPixelPass, syncPixelPass } from './pixel/pixelPass'
+import type { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 
 /** Shared preview/export pipeline. No frame delta, random state or private assets. */
 export class CinematicRuntime {
@@ -19,6 +21,7 @@ export class CinematicRuntime {
   private platform?: Group
   private composer?: EffectComposer
   private bloom?: UnrealBloomPass
+  private pixel?: ShaderPass
   private lights: PointLight[] = []
   private background?: Texture
   private source?: Texture
@@ -75,7 +78,7 @@ export class CinematicRuntime {
       this.background?.dispose(); this.source = texture; this.background = texture?.clone()
       if (this.background) this.background.needsUpdate = true
     }
-    world.scene.background = this.background ?? new Color(0x10141c)
+    world.scene.background = this.background ?? new Color(world.pixelPalette?.sky[0] ?? 0x10141c)
     this.fitBackground()
     for (const s of doc.slots) if (s.surface === 'environment') {
       const gpu = world.slots.get(s.id); if (gpu) gpu.root.visible = false
@@ -108,6 +111,7 @@ export class CinematicRuntime {
     this.composer.addPass(new RenderPass(world.scene, world.camera))
     this.bloom = new UnrealBloomPass(new Vector2(1280, 720), .48, .55, 1.15)
     this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass())
+    this.pixel = createPixelPass(); this.composer.addPass(this.pixel)
     // Fixed pool: many overlapping cues cannot create unbounded shader/light work.
     for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
   }
@@ -120,11 +124,14 @@ export class CinematicRuntime {
   sync(doc: Scene3DDocument, seconds: number) {
     this.document = doc
     this.syncBackground(doc); this.syncStage(doc)
-    const active = Boolean(doc?.environment || doc?.worldSfx?.length)
-    this.world.renderer.toneMapping = active ? ACESFilmicToneMapping : NoToneMapping
+    const active = Boolean(doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld)
+    // Pixel worlds show their palette as painted; filmic curves would shift it.
+    this.world.renderer.toneMapping = active && !doc.pixelWorld ? ACESFilmicToneMapping : NoToneMapping
     if (!active) { this.road?.sync(false, undefined, seconds); return }
     this.ensureComposer()
     this.bloom!.strength = doc.environment?.bloom ?? .48
+    const frame = this.world.renderer.getDrawingBufferSize(new Vector2())
+    syncPixelPass(this.pixel!, doc.pixelWorld, frame.x, frame.y)
     this.syncRoad(doc, seconds)
     this.syncLights(doc, seconds)
   }
@@ -146,7 +153,7 @@ export class CinematicRuntime {
   }
   render(doc = this.document) {
     const { renderer, scene, camera } = this.world
-    if (this.composer && (doc?.environment || doc?.worldSfx?.length)) {
+    if (this.composer && (doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld)) {
       const size = renderer.getDrawingBufferSize(new Vector2())
       if (!size.equals(this.size)) {
         this.size.copy(size); this.composer.setPixelRatio(1); this.composer.setSize(size.x, size.y)

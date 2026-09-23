@@ -350,7 +350,8 @@
     "psx": "PSX",
     "creative": "Creative",
     "perspective": "Perspectives",
-    "animated": "Living backgrounds"
+    "animated": "Living backgrounds",
+    "pixel": "Pixel worlds"
   },
   "setting": {
     "sea": "Sea",
@@ -1292,6 +1293,22 @@
     "creative-motion-skate-portal": {
       "title": "The Sea Beyond",
       "description": "A PSX actor, static stonework and a moving sea horizon behind the arch."
+    },
+    "pixel-tv-wall": {
+      "title": "TV wall",
+      "description": "Two banks of stacked CRT televisions in a dark gallery. Every screen plays your recording; the tubes light the wet floor and the room shifts from cold to neon."
+    },
+    "pixel-moon-lake": {
+      "title": "Moon lake",
+      "description": "Hand-drawn pixel night over a still lake: a haloed moon, aurora, shooting stars and a rippling reflection, gliding from midnight through aurora and dawn to sunset."
+    },
+    "pixel-tv-lake": {
+      "title": "TVs on the lake",
+      "description": "Old televisions standing in a pixel lake at night, glowing with your recording and reflected in the water while the sky cycles through neon and eclipse."
+    },
+    "pixel-aurora-peaks": {
+      "title": "Aurora peaks",
+      "description": "Snowy pixel mountains rise out of a frozen lake under curtains of aurora; the light slides from polar green to icy day and back to night."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1401,7 +1418,11 @@
     "loopStart": "Interval start (s)",
     "loopEnd": "Interval end (s)",
     "timeOffset": "Elapsed time across shots (s)",
-    "loopDetailsHelp": "Back-and-forth playback avoids a reset jump and reverses the motion. Use elapsed time to continue the same animation in the next shot."
+    "loopDetailsHelp": "Back-and-forth playback avoids a reset jump and reverses the motion. Use elapsed time to continue the same animation in the next shot.",
+    "crt": "CRT television",
+    "hue": "Tube colour shift",
+    "applyAll": "Use on every TV",
+    "applyAllDone": "All screens now play this recording"
   },
   "library": {
     "name": "Scene name",
@@ -1492,5 +1513,38 @@
   "stillnessReview": "Review fixed cameras and poses",
   "movingCutoutsReview": "Moving characters · 6 clips ↗",
   "portalRidesReview": "Review downhill and dragon",
-  "kingdomRoadReview": "Journeys and music film"
+  "kingdomRoadReview": "Journeys and music film",
+  "pixelWorld": {
+    "title": "Pixel light",
+    "enable": "Pixel world lighting",
+    "help": "The world is painted in palette slots: changing the palette relights every pixel, like colour-cycling art.",
+    "palettes": "Lighting program",
+    "add": "Add mood",
+    "remove": "Remove {{name}}",
+    "hold": "Seconds per mood",
+    "meteors": "Shooting stars",
+    "pixelSize": "Pixel size",
+    "levels": "Colour levels",
+    "dither": "Dithering",
+    "screenGlow": "Screen light",
+    "setting": "World",
+    "noSet": "Keep current set",
+    "palette": {
+      "midnight": "Midnight",
+      "aurora": "Aurora",
+      "dawn": "Dawn",
+      "sunset": "Sunset",
+      "storm": "Storm",
+      "eclipse": "Eclipse",
+      "vapor": "Vapor",
+      "polar": "Polar"
+    },
+    "set": {
+      "pixel-lake": "Moon lake",
+      "pixel-peaks": "Snow peaks",
+      "pixel-gallery": "Dark gallery"
+    },
+    "addTv": "Add TV",
+    "tvs": "{{count}} TVs"
+  }
 }

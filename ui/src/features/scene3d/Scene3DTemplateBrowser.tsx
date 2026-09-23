@@ -7,7 +7,7 @@ import { SCENE3D_TEMPLATES, type Scene3DTemplateFilter, type Scene3DTemplateId }
 import { filterScene3DTemplates, settingsIn, type TemplateSetting } from './templateFilters'
 import { Scene3DTemplateThumb } from './Scene3DTemplateThumb'
 
-const categories = ['animated', 'perspective', 'creative', 'dark-fantasy', 'psx', 'action', 'cinema', 'drive', 'space', 'music', 'product'] as const
+const categories = ['pixel', 'animated', 'perspective', 'creative', 'dark-fantasy', 'psx', 'action', 'cinema', 'drive', 'space', 'music', 'product'] as const
 
 export function Scene3DTemplateBrowser({ selected, disabled, onSelect }: {
   selected?: Scene3DTemplateId; disabled: boolean; onSelect: (id: Scene3DTemplateId) => void

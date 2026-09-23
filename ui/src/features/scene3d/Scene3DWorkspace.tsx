@@ -1,4 +1,6 @@
 import { CinematicControls, AppearanceControls } from './CinematicControls'
+import { PixelWorldControls } from './PixelWorldControls'
+import { addTv, applyScreenToAllTvs } from './pixel/pixelEdits'
 import { useSceneDocumentHandoff } from '../sceneFx/handoff'
 import { SceneFxControls } from '../sceneFx/SceneFxControls'
 import { SceneFxOverlay } from '../sceneFx/SceneFxOverlay'
@@ -368,6 +370,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       <Scene3DSpeechSelector slots={sceneDoc.slots} selected={selected} open={speechOpen}
         onToggle={() => { setPickTarget(undefined); setSpeechOpen(open => !open) }} onSelect={selectSlot} />
       <CinematicControls environment={sceneDoc.environment} disabled={editingLocked} onChange={environment => applyScene(current => ({ ...current, environment }))} />
+      <PixelWorldControls pixelWorld={sceneDoc.pixelWorld} dressing={sceneDoc.dressing} tvs={sceneDoc.slots.filter(slot => slot.screen?.style === 'crt').length} disabled={editingLocked}
+        onChange={patch => applyScene(current => ({ ...current, ...patch }))} onAddTv={() => applyScene(current => addTv(current))} />
       <SceneFxControls cues={sceneDoc.sfx} duration={sceneDoc.duration} disabled={editingLocked} onChange={sfx => applyScene(current => ({ ...current, sfx }))} onShowcase={collection => applyScene(current => withFxShowcase(current, collection))} />
       <WorldSfxControls cues={sceneDoc.worldSfx} duration={sceneDoc.duration} selectedId={selectedWorldSfxId} disabled={editingLocked}
         onSelect={id => { setPickTarget(undefined); setSelectedWorldSfxId(id) }}
@@ -665,6 +669,7 @@ function Scene3DSlotCard({
       </div>}
       <Scene3DScreenControls slot={slot} meshes={meshes} nodes={nodes} items={[...imageItems, ...videoItems]} disabled={editingLocked} workspace={workspace}
         onChange={screen => onApplyScene(current => patchScene3DSlot(current, slot.id, { screen }))}
+        onApplyToAll={() => onApplyScene(current => applyScreenToAllTvs(current, slot.id))}
         onChoose={item => {
           if (item && item.type !== 'image' && item.type !== 'video') return
           const commit = commitSlotSourceChoice(liveSource(), captureFromLive(), item)

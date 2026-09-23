@@ -8,7 +8,7 @@ import { parseScene3DLoop } from './backdrop.ts'
 import { durableScene3DSourceUrl, parseScene3DSourceRef } from './slotSource.ts'
 import type { Scene3DDressing, Scene3DSlot } from './types.ts'
 
-const DRESSINGS = new Set<Scene3DDressing>(['street', 'space', 'treadmill', 'cafe', 'drive-city', 'drive-coast', 'drive-tunnel', 'citadel', 'workshop', 'chase-street', 'retro-lab', 'observatory', 'broadcast-plaza', 'open-sea', 'lunar', 'rooftop', 'hangar', 'desert', 'train', 'space-lane', 'jungle', 'snow', 'casino'])
+const DRESSINGS = new Set<Scene3DDressing>(['street', 'space', 'treadmill', 'cafe', 'drive-city', 'drive-coast', 'drive-tunnel', 'citadel', 'workshop', 'chase-street', 'retro-lab', 'observatory', 'broadcast-plaza', 'open-sea', 'lunar', 'rooftop', 'hangar', 'desert', 'train', 'space-lane', 'jungle', 'snow', 'casino', 'pixel-lake', 'pixel-peaks', 'pixel-gallery'])
 export const parseDressing = (value?: Scene3DDressing) => DRESSINGS.has(value!) ? value : undefined
 
 function textureRepeat(value: unknown) {
