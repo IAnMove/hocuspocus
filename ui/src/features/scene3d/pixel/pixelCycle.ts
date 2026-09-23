@@ -28,6 +28,11 @@ function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number)
     const flicker = slot === 7 ? .75 + .25 * Math.sin(seconds * 23) : 1
     writeColor(bytes, INDEX.window + slot, lit ? mixHex(palette.near[0], palette.windows, flicker) : mixHex(palette.near[0], palette.windows, .12))
   }
+  for (let band = 0; band < INDEX.bandSteps; band++) {
+    // Cloud bands trade tones slowly, so the planet's weather drifts.
+    const drift = .5 + .5 * Math.sin(seconds * .55 + band * Math.PI / 2)
+    writeColor(bytes, INDEX.band + band, mixHex(palette.moon, palette.far[1], drift * .65))
+  }
   for (let fly = 0; fly < INDEX.fireflySteps; fly++) {
     const glow = Math.pow(Math.max(0, Math.sin(seconds * (1.4 + fly * .23) + fly * 1.9)), 3)
     writeColor(bytes, INDEX.firefly + fly, mixHex(palette.trees, palette.windows, glow))
@@ -54,6 +59,8 @@ export function writePalette(bytes: Uint8Array, palette: PixelPalette, seconds: 
     writeColor(bytes, INDEX.sand + step, t < .6 ? mixHex(mixHex(palette.sky[2], palette.water, .45), palette.water, t / .6) : mixHex(palette.water, palette.near[0], (t - .6) * .6))
   }
   writeColor(bytes, INDEX.lamp, palette.windows)
+  writeColor(bytes, INDEX.ring, mixHex(palette.moon, palette.stars, .35))
+  writeColor(bytes, INDEX.ringShade, mixHex(palette.moon, palette.sky[1], .6))
   writeCycling(bytes, palette, seconds)
 }
 

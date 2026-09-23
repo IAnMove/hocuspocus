@@ -134,3 +134,15 @@ test('city windows switch on and off by cycling, fireflies pulse', () => {
   assert.ok(new Set(changed.map(bytes => slots(bytes, 72).join())).size > 1, 'fireflies pulse')
   assert.deepEqual(meteorsAt(40, 1, [700, 214], 5, 'left').filter(m => m.w > 0).every(m => Math.cos(m.z) < 0), true)
 })
+
+test('a ringed planet: bands drift by cycling and the ring crosses in front of the disc', () => {
+  assert.equal(parsePixelScene({ body: 'planet' })?.body, 'planet')
+  const sky = paintSky(200, 120, { seed: 1, horizonRow: 110, stars: 0, moon: { kind: 'planet', x: .5, y: .5, radius: 20, crescent: 0 } })
+  const used = new Set(sky.data)
+  assert.ok([92, 93, 94, 95].filter(slot => used.has(slot)).length >= 3, 'cloud bands use the cycling slots')
+  assert.ok(used.has(96), 'the ring is painted')
+  const a = new Uint8Array(1024), b = new Uint8Array(1024)
+  writePalette(a, PIXEL_PALETTES.alien, 0); writePalette(b, PIXEL_PALETTES.alien, 2)
+  assert.notDeepEqual(Array.from(a.subarray(92 * 4, 96 * 4)), Array.from(b.subarray(92 * 4, 96 * 4)))
+  assert.equal(applyScene3DTemplate('pixel-planet-rise').pixelWorld?.scene?.body, 'planet')
+})

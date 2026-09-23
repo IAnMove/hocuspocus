@@ -1325,6 +1325,10 @@
     "pixel-firefly-forest": {
       "title": "Bosque de luciérnagas",
       "description": "Pinos altos alrededor de un lago del bosque, con luciérnagas que laten entre los árboles y los juncos, bajo una aurora verde."
+    },
+    "pixel-planet-rise": {
+      "title": "Salida del planeta",
+      "description": "Un planeta con anillos se alza sobre picos alienígenas y un mar violeta; sus bandas de nubes derivan con ciclo de color mientras la luz pasa del turquesa alienígena al neón vapor."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1556,7 +1560,8 @@
       "polar": "Polar",
       "forest": "Bosque",
       "harbor": "Puerto",
-      "dusk": "Crepúsculo"
+      "dusk": "Crepúsculo",
+      "alien": "Alienígena"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1577,7 +1582,8 @@
       "bodyKind": {
         "moon": "Luna",
         "sun": "Sol",
-        "none": "Ninguno"
+        "none": "Ninguno",
+        "planet": "Planeta con anillos"
       },
       "bodyX": "Posición en el cielo",
       "bodyY": "Altura en el cielo",

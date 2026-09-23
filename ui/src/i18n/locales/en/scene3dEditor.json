@@ -1325,6 +1325,10 @@
     "pixel-firefly-forest": {
       "title": "Firefly forest",
       "description": "Tall pines around a forest lake, fireflies pulsing among the trees and in the reeds, under a green aurora."
+    },
+    "pixel-planet-rise": {
+      "title": "Planet rise",
+      "description": "A ringed planet rises over jagged alien peaks and a violet sea; its cloud bands drift by colour cycling while the light slides from alien teal to vapor neon."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1556,7 +1560,8 @@
       "polar": "Polar",
       "forest": "Forest",
       "harbor": "Harbour",
-      "dusk": "Dusk"
+      "dusk": "Dusk",
+      "alien": "Alien"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1577,7 +1582,8 @@
       "bodyKind": {
         "moon": "Moon",
         "sun": "Sun",
-        "none": "None"
+        "none": "None",
+        "planet": "Ringed planet"
       },
       "bodyX": "Position across the sky",
       "bodyY": "Height in the sky",

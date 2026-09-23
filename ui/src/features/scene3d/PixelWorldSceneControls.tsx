@@ -9,7 +9,7 @@ type Slider = keyof Pick<PixelScene, 'bodyX' | 'bodyY' | 'bodySize' | 'crescent'
 /** Sliders that matter for a world: no waves in the desert, no windows
  *  outside the city, no phase on the sun. */
 function slidersFor(kind: PixelWorldKind, scene: PixelScene): Slider[] {
-  const body: Slider[] = scene.body === 'none' ? [] : ['bodyX', 'bodyY', 'bodySize', ...(scene.body === 'moon' ? ['crescent' as const] : [])]
+  const body: Slider[] = scene.body === 'none' ? [] : ['bodyX', 'bodyY', 'bodySize', ...(scene.body === 'sun' ? [] : ['crescent' as const])]
   const land: Slider[] = ['mountains', 'roughness', 'snow', 'hills', 'trees']
   return [...body, ...land, 'stars', 'auroraHeight', ...(kind === 'pixel-desert' ? [] : ['ripple' as const]), ...(kind === 'pixel-city' ? ['city' as const, 'windows' as const] : [])]
 }
@@ -31,7 +31,7 @@ export function PixelWorldSceneControls({ kind, pixelWorld, onChange }: {
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="flex items-center justify-between gap-2">{t('pixelWorld.scene.body')}
           <select value={scene.body} onChange={e => patch({ body: e.target.value as PixelScene['body'] })} className="min-h-9 rounded border border-border bg-bg-tertiary px-2">
-            {(['moon', 'sun', 'none'] as const).map(body => <option key={body} value={body}>{t(`pixelWorld.scene.bodyKind.${body}`)}</option>)}
+            {(['moon', 'sun', 'planet', 'none'] as const).map(body => <option key={body} value={body}>{t(`pixelWorld.scene.bodyKind.${body}`)}</option>)}
           </select></label>
         <label className="flex items-center justify-between gap-2">{t('pixelWorld.scene.meteorDirection')}
           <select value={scene.meteorDirection} onChange={e => patch({ meteorDirection: e.target.value as PixelScene['meteorDirection'] })} className="min-h-9 rounded border border-border bg-bg-tertiary px-2">

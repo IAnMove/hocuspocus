@@ -14,6 +14,7 @@ export const INDEX = {
   firefly: 72, fireflySteps: 8,
   sand: 80, sandSteps: 8,
   lamp: 90,
+  band: 92, bandSteps: 4, ring: 96, ringShade: 97,
 } as const
 
 export type IndexedLayer = { width: number; height: number; data: Uint8Array; /** A light source painted in, in texels (the lighthouse lamp). */ lamp?: [number, number] }
@@ -48,7 +49,7 @@ export function ridge(seed: number, width: number, base: number, rough: number, 
   return heights.slice(0, width).map(value => Math.max(2, Math.round(value)))
 }
 
-export type SkyBody = { x: number; y: number; radius: number; kind: 'moon' | 'sun'; crescent: number }
+export type SkyBody = { x: number; y: number; radius: number; kind: 'moon' | 'sun' | 'planet'; crescent: number }
 export type SkySpec = { seed: number; moon: SkyBody | null; horizonRow: number; stars: number }
 
 function paintStars(sky: IndexedLayer, spec: SkySpec) {
@@ -79,7 +80,21 @@ function sunDisc(body: SkyBody, dy: number) {
   return INDEX.moon
 }
 
+/** A ringed planet: drifting cloud bands (cycling slots), a phase shadow
+ *  and a tilted ring that passes behind the disc and in front of it. */
+function planetPixel(body: SkyBody, x: number, y: number, dx: number, dy: number) {
+  const r = body.radius, tilt = -.32, u = dx * Math.cos(tilt) - dy * Math.sin(tilt), v = dx * Math.sin(tilt) + dy * Math.cos(tilt)
+  const ring = Math.hypot(u / (r * 2.15), v / (r * .5)), onRing = ring > .7 && ring < 1 && !(ring > .82 && ring < .86)
+  const inDisc = Math.hypot(dx, dy) <= r
+  if (onRing && (v > 0 || !inDisc)) return ring > .93 || bayer(x, y) < .2 ? INDEX.ringShade : INDEX.ring
+  if (!inDisc) return 0
+  if (Math.hypot(dx - r * (2 - 1.7 * body.crescent), dy) < r) return INDEX.moonDark
+  const band = dy / r * 3.2 + Math.sin(dx * .35) * .18 + 8
+  return INDEX.band + (Math.floor(band + (bayer(x, y) - .5) * .5) % INDEX.bandSteps)
+}
+
 function bodyPixel(seed: number, body: SkyBody, x: number, y: number, dx: number, dy: number) {
+  if (body.kind === 'planet') return planetPixel(body, x, y, dx, dy)
   const r = body.radius, d = Math.hypot(dx, dy), halo = body.kind === 'sun' ? 1.5 : 1
   if (d <= r) return body.kind === 'sun' ? sunDisc(body, dy) : moonDisc(seed, body, x, y, dx, dy)
   if (d <= r * (1 + .7 * halo) && bayer(x, y) < 1 - (d - r) / (r * .7 * halo)) return INDEX.haloInner
@@ -88,7 +103,7 @@ function bodyPixel(seed: number, body: SkyBody, x: number, y: number, dx: number
 }
 
 function paintMoon(sky: IndexedLayer, seed: number, body: SkyBody) {
-  const cx = body.x * sky.width, cy = body.y * sky.height, reach = body.radius * (body.kind === 'sun' ? 3.8 : 3)
+  const cx = body.x * sky.width, cy = body.y * sky.height, reach = body.radius * (body.kind === 'sun' ? 3.8 : body.kind === 'planet' ? 2.3 : 3)
   for (let y = Math.floor(cy - reach); y <= cy + reach; y++) for (let x = Math.floor(cx - reach); x <= cx + reach; x++) {
     const index = bodyPixel(seed, body, x, y, x + .5 - cx, y + .5 - cy)
     if (index) set(sky, x, y, index)

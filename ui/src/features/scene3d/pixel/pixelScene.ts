@@ -3,7 +3,7 @@
  *  ranges are, how much snow, trees, stars, water ripple and city light. */
 
 export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest'
-export type PixelBody = 'moon' | 'sun' | 'none'
+export type PixelBody = 'moon' | 'sun' | 'planet' | 'none'
 export type MeteorDirection = 'left' | 'right' | 'both'
 
 export type PixelScene = {
@@ -67,7 +67,7 @@ export function parsePixelScene(raw: unknown): Partial<PixelScene> | undefined {
   }
   if ('bodySize' in value) out.bodySize = unit(value.bodySize, 1, .4, 2.5)
   if ('seed' in value) out.seed = Math.round(unit(value.seed, BASE.seed, 1, 999999))
-  if (value.body === 'moon' || value.body === 'sun' || value.body === 'none') out.body = value.body
+  if (value.body === 'moon' || value.body === 'sun' || value.body === 'planet' || value.body === 'none') out.body = value.body
   if (value.meteorDirection === 'left' || value.meteorDirection === 'right' || value.meteorDirection === 'both') out.meteorDirection = value.meteorDirection
   if (typeof value.reeds === 'boolean') out.reeds = value.reeds
   return Object.keys(out).length ? out : undefined
