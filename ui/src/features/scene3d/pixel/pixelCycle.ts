@@ -16,6 +16,27 @@ export function mixHex(a: string, b: string, t: number) {
   return '#' + x.map((v, i) => Math.round((v + (y[i] - v) * Math.max(0, Math.min(1, t))) * 255).toString(16).padStart(2, '0')).join('')
 }
 
+/** The year runs over 24 s: spring, summer, autumn and winter, 6 s each. */
+export const YEAR_SECONDS = 24
+const LEAVES: [string, string, string][] = [
+  ['#4a8a3a', '#8ac860', '#f0a8c8'], ['#1e5a2a', '#3a8a3a', '#7ac050'],
+  ['#8a2a14', '#d8641e', '#f4b040'], ['#8a98b0', '#c8d4e4', '#f4f8ff'],
+]
+
+/** Foliage for `seconds` into the year: each season holds, then turns. */
+function leafAt(seconds: number, k: number) {
+  const phase = ((seconds % YEAR_SECONDS) + YEAR_SECONDS) % YEAR_SECONDS / (YEAR_SECONDS / 4)
+  const season = Math.floor(phase), turn = Math.max(0, (phase - season - .55) / .45)
+  return mixHex(LEAVES[season][k], LEAVES[(season + 1) % 4][k], turn)
+}
+
+/** How deep the snow lies: it falls through winter and melts in early spring. */
+export function snowCover(seconds: number) {
+  const t = ((seconds % YEAR_SECONDS) + YEAR_SECONDS) % YEAR_SECONDS, winter = YEAR_SECONDS * .75
+  if (t < 2) return 1 - t / 2
+  return Math.max(0, Math.min(1, (t - winter + 1) / 5))
+}
+
 type Cycler = { start: number; steps: number; color: (palette: PixelPalette, seconds: number, k: number) => string }
 const pulse = (k: number, steps: number, seconds: number, speed: number) => ((k / steps - seconds * speed) % 1 + 1) % 1
 
@@ -66,6 +87,11 @@ const CYCLERS: Cycler[] = [
   } },
   // Raindrops slide down the glass: a bright bead walks down each trail.
   { start: INDEX.drop, steps: INDEX.dropSteps, color: (p, t, k) => mixHex(mixHex(p.sky[1], p.windows, .15), '#e8f0ff', Math.pow(1 - pulse(k, INDEX.dropSteps, t, -.7), 4) * .8) },
+  // Foliage turns with the seasons.
+  { start: INDEX.leaf, steps: 3, color: (p, t, k) => mixHex(leafAt(t, k), p.light.color, .12) },
+  // Snow piles up level by level as winter deepens, on the far range and the hills.
+  { start: INDEX.snowFar, steps: 4, color: (p, t, k) => snowCover(t) > (k + .5) / 4 ? mixHex('#f4f8ff', p.light.color, .2) : p.far[0] },
+  { start: INDEX.snowNear, steps: 4, color: (p, t, k) => snowCover(t) > (k + .5) / 4 ? mixHex('#f4f8ff', p.light.color, .2) : p.near[0] },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]

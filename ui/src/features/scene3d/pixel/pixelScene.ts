@@ -2,7 +2,7 @@
  *  moon hangs (and so where the light comes from), how tall and rough the
  *  ranges are, how much snow, trees, stars, water ripple and city light. */
 
-export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse'
+export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons'
 export type PixelBody = 'moon' | 'sun' | 'planet' | 'none'
 export type MeteorDirection = 'left' | 'right' | 'both'
 
@@ -66,6 +66,7 @@ export const PIXEL_SCENE_DEFAULTS: Record<PixelWorldKind, PixelScene> = {
   'pixel-express': { ...BASE, seed: 144, bodyX: .6, bodyY: .62, bodySize: .9, crescent: .2, mountains: .6, trees: .8, stars: .6, reeds: false, ripple: .4 },
   'pixel-daycycle': { ...BASE, seed: 240, crescent: .15, mountains: .55, roughness: .45, hills: .5, trees: .7, stars: .3, ripple: .35, reeds: true },
   'pixel-eclipse': { ...BASE, seed: 23, body: 'none', crescent: 0, mountains: .45, roughness: .3, trees: 0, hills: .6, stars: .8, reeds: false, ripple: 0 },
+  'pixel-seasons': { ...BASE, seed: 402, body: 'sun', bodyX: .7, bodyY: .5, bodySize: 1, crescent: 0, mountains: .55, roughness: .5, hills: .5, trees: .7, stars: .15, ripple: .3, reeds: true },
   'pixel-forest': { ...BASE, seed: 131, bodyX: .5, bodyY: .72, bodySize: .8, mountains: .45, trees: 1, hills: .8, stars: .55, ripple: .3 },
 }
 

@@ -1409,6 +1409,10 @@
     "pixel-eclipse": {
       "title": "Eclipse",
       "description": "Noon over red mesas: the moon slides across the sun, the desert dims to night in mid-afternoon, stars and the sun's corona appear, then day comes back as the moon moves on."
+    },
+    "pixel-four-seasons": {
+      "title": "Four seasons",
+      "description": "A whole year over a lake in one clip: trees blossom pink in spring, deepen to green in summer, flare orange and red in autumn as leaves drift down, then snow piles up level by level on the peaks and hills in winter, all by colour cycling."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1676,7 +1680,8 @@
       "pixel-window": "Window",
       "pixel-express": "Train window",
       "pixel-daycycle": "Day cycle",
-      "pixel-eclipse": "Eclipse"
+      "pixel-eclipse": "Eclipse",
+      "pixel-seasons": "Seasons"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

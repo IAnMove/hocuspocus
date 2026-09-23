@@ -920,3 +920,50 @@ export function paintCarriage(width: number, height: number): IndexedLayer {
   for (let y = y1 + 5; y < y1 + 8; y++) set(wall, cup + 5, y, INDEX.room + 5)
   return wall
 }
+
+/** Snow waiting to fall: a band under each column's top edge painted in
+ *  four levels, first ones on the heights. As winter deepens the levels
+ *  turn white in order, so snow piles up without repainting. */
+export function dustSnow(target: IndexedLayer, depth: number, slot: number, seed: number) {
+  const tops = Array.from({ length: target.width }, (_, x) => {
+    let top = 0
+    while (top < target.height && target.data[top * target.width + x] === 0) top++
+    return top
+  })
+  const high = Math.min(...tops), low = Math.max(...tops.filter(top => top < target.height))
+  for (let x = 0; x < target.width; x++) {
+    // Deepest on the heights, thin in the hollows, with a ragged lower edge.
+    const reach = depth * (.25 + 1.1 * (1 - (tops[x] - high) / Math.max(1, low - high))) * (.75 + fxRandom(seed, x >> 2) * .5)
+    for (let y = tops[x]; y < Math.min(target.height, tops[x] + reach); y++) {
+      const level = Math.floor(Math.max(0, Math.min(.99, (y - tops[x]) / reach + (fxRandom(seed, x * 53 + y) - .5) * .5)) * 4)
+      set(target, x, y, slot + level)
+    }
+  }
+  return target
+}
+
+/** A round deciduous tree: canopy in the seasonal leaf slots (shade, body,
+ *  light), lit on the side facing the sun. */
+function paintLeafTree(target: IndexedLayer, x: number, ground: number, size: number, seed: number, lightFrom: number) {
+  for (let y = 0; y < size * .9; y++) { set(target, x, ground - y, INDEX.trees); set(target, x + 1, ground - y, INDEX.trees) }
+  const litSide = x / target.width < lightFrom ? 1 : -1, cy = ground - size * 1.3
+  for (let y = Math.floor(cy - size); y <= cy + size * .8; y++) for (let px = Math.floor(x - size); px <= x + size; px++) {
+    const d = Math.hypot(px - x, (y - cy) * 1.15) / size + (fxRandom(seed, px * 7 + y) - .5) * .25
+    if (d > 1) continue
+    const light = ((px - x) * litSide - (y - cy)) / size
+    set(target, px, y, INDEX.leaf + (light > .45 ? 2 : light < -.3 ? 0 : 1))
+  }
+}
+
+/** Rolling hills dotted with round trees, snow waiting on the crests. */
+export function paintOrchard(width: number, height: number, spec: Tone & { seed: number; trees: number }): IndexedLayer {
+  const hills = layer(width, height)
+  const ground = ridge(spec.seed, width, height * .6, height * .12, 3, height * .2)
+  for (let x = 0; x < width; x++) for (let y = ground[x]; y < height; y++) set(hills, x, y, y === ground[x] ? spec.rim : spec.body)
+  dustSnow(hills, 6, INDEX.snowNear, spec.seed)
+  for (let t = 0; t < spec.trees; t++) {
+    const x = Math.round(width * (.03 + .94 * (t + fxRandom(spec.seed, t) * .7) / spec.trees))
+    paintLeafTree(hills, x, ground[x] + 2, 5 + fxRandom(spec.seed, t + 50) * 5, spec.seed + t, spec.lightFrom)
+  }
+  return hills
+}

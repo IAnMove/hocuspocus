@@ -115,6 +115,8 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
+  // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-four-seasons': ['pixel-seasons', { palettes: ['dawn', 'jungle', 'sunset', 'polar'], hold: 6, meteors: 0 }],
   'pixel-eclipse': ['pixel-eclipse', { palettes: ['noon'], hold: 20, meteors: 0 }],
   'pixel-whole-day': ['pixel-daycycle', { palettes: ['dawn', 'jungle', 'sunset', 'midnight'], hold: 6, meteors: .3 }],
   'pixel-night-express': ['pixel-express', { palettes: ['dusk', 'midnight', 'aurora'], hold: 9, meteors: .5 }],
@@ -163,6 +165,10 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
   if (id === 'pixel-snow-village') doc.worldSfx = villageCues()
+  // Petals in spring, leaves in autumn, snow in winter (the 3D snow drift, recoloured).
+  if (id === 'pixel-four-seasons') doc.worldSfx = parseWorldSfx(([['petals', 0, 6, '#ffc2dc', .7], ['leaves', 12, 18, '#e0702a', .8], ['snow', 18, 24, '#f4f8ff', 1]] as const).map(([name, start, end, color, intensity], i) => ({
+    id: `season-${name}`, kind: 'snow', start, end, position: { x: 0, y: -.5, z: 1 }, scale: 3.4, intensity, color, seed: 40 + i, sound: name === 'snow', volume: .12,
+  })))
   if (id === 'pixel-rainy-window') doc.worldSfx = parseWorldSfx([{ id: 'city-rain', kind: 'rain', start: 0, end: 24, position: { x: 0, y: -1, z: -2 }, scale: 3.6, intensity: 1, color: '#a8b8e0', seed: 23, sound: true, volume: .3 }])
   if (id === 'pixel-neon-alley') doc.worldSfx = parseWorldSfx([{ id: 'alley-rain', kind: 'rain', start: 0, end: 24, position: { x: 0, y: -1, z: 2 },
     scale: 3.2, intensity: 1, color: '#b4a8e8', seed: 19, sound: true, volume: .3 }])

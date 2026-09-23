@@ -1409,6 +1409,10 @@
     "pixel-eclipse": {
       "title": "Eclipse",
       "description": "Mediodía sobre mesetas rojas: la luna se desliza sobre el sol, el desierto se oscurece como de noche en plena tarde, aparecen las estrellas y la corona solar, y el día vuelve cuando la luna sigue su camino."
+    },
+    "pixel-four-seasons": {
+      "title": "Las cuatro estaciones",
+      "description": "Un año entero sobre un lago en un solo clip: los árboles florecen rosas en primavera, se oscurecen de verde en verano, arden naranjas y rojos en otoño mientras caen las hojas, y en invierno la nieve se acumula por niveles en picos y colinas, todo con ciclo de color."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1676,7 +1680,8 @@
       "pixel-window": "Ventana",
       "pixel-express": "Ventana del tren",
       "pixel-daycycle": "Ciclo del día",
-      "pixel-eclipse": "Eclipse"
+      "pixel-eclipse": "Eclipse",
+      "pixel-seasons": "Estaciones"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

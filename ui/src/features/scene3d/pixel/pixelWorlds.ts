@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -280,6 +280,15 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       { ...plate, z: -60, paint: disc('sun') },
       // The moon slides across the sun on the clock, darkest at mid-clip.
       { ...plate, z: -59.5, drift: { speed: ECLIPSE.speed, loop: 200, offset: ECLIPSE.start + 100 }, paint: disc('moon') },
+    ] }
+  },
+  'pixel-seasons': scene => {
+    const mountains = range(scene)
+    return { ground: 'water', layers: [
+      sky(scene),
+      { ...mountains, paint: (w, h) => dustSnow(mountains.paint(w, h), 14, INDEX.snowFar, scene.seed) },
+      { z: -30, width: 96, height: 10, bottom: -.8, texture: [640, 70], paint: (w, h) => paintOrchard(w, h, { ...near, seed: scene.seed + 3, lightFrom: bodySkyX(scene), trees: Math.round(6 + scene.trees * 22) }) },
+      ...reeds(scene),
     ] }
   },
   'pixel-forest': scene => ({ ground: 'water', layers: [

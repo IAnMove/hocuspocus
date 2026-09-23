@@ -6,7 +6,7 @@ import { parseMediaScreen } from '../src/features/scene3d/mediaScreen'
 import { paletteAt, PIXEL_PALETTES } from '../src/features/scene3d/pixel/pixelPalettes'
 import { parsePixelWorld } from '../src/features/scene3d/pixel/pixelWorld'
 import { INDEX, paintRange, paintSky, ridge } from '../src/features/scene3d/pixel/pixelPaint'
-import { fireworksAt, meteorsAt, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
+import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { eclipseShade, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
@@ -427,4 +427,17 @@ test('eclipse: the day darkens as the moon covers the sun, deepest at mid-clip',
   assert.ok(light(10) < light(2) * .7, 'the light falls at totality')
   const moon = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.find(child => child.position.z === -59.5)!.position.x }
   assert.ok(Math.abs(moon(10)) < .01 && moon(5) < 0 && moon(15) > 0, 'the moon crosses the sun at mid-clip')
+})
+
+test('four seasons: foliage turns with the year and snow piles up level by level', () => {
+  assert.equal(snowCover(8), 0, 'no snow in summer')
+  assert.ok(snowCover(19) > 0 && snowCover(19) < snowCover(22) && snowCover(22) <= 1, 'snow deepens through winter')
+  assert.ok(snowCover(1) > 0 && snowCover(1) < snowCover(0.1), 'and melts in early spring')
+  const slots = (seconds: number, from: number, count: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.polar, seconds); return Array.from(bytes.subarray(from * 4, (from + count) * 4)).join() }
+  assert.equal(new Set([2, 8, 14, 21].map(t => slots(t, 210, 3))).size, 4, 'four distinct foliages')
+  assert.notEqual(slots(19.2, 214, 4), slots(22.8, 214, 4), 'snow levels whiten in turn')
+  const plan = worldPlan('pixel-seasons', resolvePixelScene('pixel-seasons', undefined))
+  const orchard = plan.layers.find(layer => layer.z === -30)!.paint(640, 70)
+  assert.ok([218, 219, 220, 221].every(slot => orchard.data.includes(slot)) && [210, 211, 212].every(slot => orchard.data.includes(slot)))
+  assert.deepEqual(applyScene3DTemplate('pixel-four-seasons').worldSfx?.map(cue => [cue.start, cue.end]), [[0, 6], [12, 18], [18, 24]])
 })

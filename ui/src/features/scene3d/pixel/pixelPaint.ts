@@ -29,6 +29,7 @@ export const INDEX = {
   flame: 188, flameSteps: 4,
   room: 192, drop: 200, dropSteps: 8,
   umbra: 208,
+  leaf: 210, snowFar: 214, snowNear: 218,
 } as const
 
 export type IndexedLayer = { width: number; height: number; data: Uint8Array; /** A light source painted in, in texels (the lighthouse lamp). */ lamp?: [number, number]; /** Where sails turn, in texels (windmill hubs). */ hubs?: [number, number][] }
