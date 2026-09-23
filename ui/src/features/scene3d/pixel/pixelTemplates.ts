@@ -11,7 +11,8 @@ export const PIXEL_TV_CLIP = '/examples/moving-cutouts/skate-neon.mp4'
 
 export const PIXEL_TEMPLATES: Scene3DTemplate[] = PIXEL_TEMPLATE_IDS.map(id => ({
   id, camera: 'establishment', duration: id === 'pixel-tv-wall' ? 10 : 24,
-  slots: id === 'pixel-moon-lake' || id === 'pixel-aurora-peaks' ? ['subject_1'] : ['prop'],
+  // Landscapes start empty: a placeholder actor would stand in the lake.
+  slots: id === 'pixel-moon-lake' || id === 'pixel-aurora-peaks' ? [] : ['prop'],
   tags: ['pixel', 'animated'],
 }))
 export const PIXEL_CATEGORIES = Object.fromEntries(PIXEL_TEMPLATE_IDS.map(id => [id, 'cinema'])) as Record<typeof PIXEL_TEMPLATE_IDS[number], 'cinema'>
@@ -83,7 +84,6 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   const doc = pixelDocument(id, peaks ? 'pixel-peaks' : 'pixel-lake', peaks
     ? { palettes: ['aurora', 'polar', 'midnight'], hold: 7, meteors: .3 }
     : { palettes: ['midnight', 'aurora', 'dawn', 'sunset'], hold: 6, meteors: .6 }, 24)
-  doc.slots = [{ id: 'subject_1', slot: 'subject_1', media: 'model3d', sourceUrl: '', clip: null, position: [0, 0, 2], rotationY: 0, scale: 1, grounded: true }]
   doc.camera = { family: 'establishment', eye: [0, 1.6, 8], look: [0, 3.2, -40], fov: 45 }
   return doc
 }
