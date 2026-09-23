@@ -869,3 +869,54 @@ export function paintRoom(width: number, height: number, seed: number): IndexedL
   paintRainOnGlass(room, pane, seed)
   return room
 }
+
+/** A ridge that wraps: its outline is a sum of whole waves across the
+ *  width (plus noise on a grid that divides it), so a scrolling layer has
+ *  no seam where it comes round. */
+export function paintLoopRange(width: number, height: number, spec: Tone & { seed: number; base: number; amp: number; trees: number }): IndexedLayer {
+  const range = layer(width, height)
+  const waves = [1, 2, 3, 5, 8, 13].map((k, i) => ({ k, a: 1 / (i + 1.4), phase: fxRandom(spec.seed, i) * Math.PI * 2 }))
+  const top = Array.from({ length: width }, (_, x) => Math.round(spec.base - spec.amp * waves.reduce((sum, w) => sum + w.a * Math.sin(w.k * Math.PI * 2 * x / width + w.phase), 0) + (fxRandom(spec.seed, x >> 2) - .5) * 2))
+  for (let x = 0; x < width; x++) {
+    for (let y = Math.max(0, top[x]); y < height; y++) set(range, x, y, spec.body)
+    set(range, x, top[x], spec.rim)
+  }
+  if (spec.trees > 0) paintPines(range, top, spec.seed, spec.trees)
+  return range
+}
+
+/** Telegraph poles with sagging wires, spaced to wrap seamlessly. */
+export function paintPoles(width: number, height: number, spacing: number): IndexedLayer {
+  const poles = layer(width, height)
+  const top = Math.round(height * .12)
+  for (let x = 0; x < width; x += spacing) {
+    for (let y = top; y < height; y++) { set(poles, x, y, INDEX.trees); set(poles, x + 1, y, INDEX.trees) }
+    for (let dx = -5; dx <= 6; dx++) set(poles, x + dx, top + 3, INDEX.trees)
+    for (const wire of [top + 3, top + 9]) for (let dx = 0; dx < spacing; dx++) {
+      const t = dx / spacing
+      set(poles, (x + dx) % width, Math.round(wire + 7 * (1 - (2 * t - 1) ** 2)), INDEX.trees)
+    }
+  }
+  return poles
+}
+
+/** A carriage wall with a round-cornered window open onto the world, a
+ *  lit rim, and a little table with a cup under it. */
+export function paintCarriage(width: number, height: number): IndexedLayer {
+  const wall = layer(width, height)
+  const x0 = Math.round(width * .14), x1 = Math.round(width * .86), y0 = Math.round(height * .1), y1 = Math.round(height * .68), r = 14
+  const inside = (x: number, y: number) => {
+    const cx = Math.min(Math.max(x, x0 + r), x1 - r), cy = Math.min(Math.max(y, y0 + r), y1 - r)
+    return Math.hypot(x - cx, y - cy) <= r && x > x0 && x < x1 && y > y0 && y < y1
+  }
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (inside(x, y)) continue
+    const rim = inside(x - 3, y) || inside(x + 3, y) || inside(x, y - 3) || inside(x, y + 3)
+    set(wall, x, y, rim ? INDEX.room + 2 : y > y1 + 10 ? INDEX.room + 1 : INDEX.room)
+  }
+  for (let x = x0 + 30; x < x1 - 30; x++) for (let y = y1 + 10; y < y1 + 14; y++) set(wall, x, y, INDEX.room + 2)
+  const cup = Math.round(width * .6)
+  for (let y = y1 + 3; y < y1 + 10; y++) for (let dx = -3; dx <= 3; dx++) set(wall, cup + dx, y, INDEX.room + 5)
+  for (let y = y1 + 5; y < y1 + 8; y++) set(wall, cup + 5, y, INDEX.room + 5)
+  return wall
+}

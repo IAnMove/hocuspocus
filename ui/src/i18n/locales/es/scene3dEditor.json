@@ -1397,6 +1397,10 @@
     "pixel-rainy-window": {
       "title": "Ventana con lluvia",
       "description": "Desde una habitación a la luz de una vela, la ciudad de noche a través de una ventana: la lluvia resbala por el cristal, las cortinas enmarcan la vista y una planta y una vela reposan en el alféizar mientras brillan las luces del puerto."
+    },
+    "pixel-night-express": {
+      "title": "Expreso nocturno",
+      "description": "La vista desde un tren en marcha: las montañas pasan despacio, las colinas de pinos más rápido y los postes del telégrafo cruzan veloces la ventana, todo reflejado en un lago, mientras la luna acompaña y el crepúsculo se vuelve noche de aurora."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1660,7 +1664,8 @@
       "pixel-castle": "Castillo",
       "pixel-beach": "Playa",
       "pixel-lanterns": "Lago de farolillos",
-      "pixel-window": "Ventana"
+      "pixel-window": "Ventana",
+      "pixel-express": "Ventana del tren"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

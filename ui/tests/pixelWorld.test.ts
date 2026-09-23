@@ -10,8 +10,9 @@ import { fireworksAt, meteorsAt, writePalette } from '../src/features/scene3d/pi
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
+import { paintLoopRange } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
-import { Color, Group, Scene, Vector3 } from 'three'
+import { Color, Group, Scene, Vector3, type Mesh } from 'three'
 import { addTv, applyScreenToAllTvs } from '../src/features/scene3d/pixel/pixelEdits'
 import { PIXEL_TEMPLATE_IDS } from '../src/features/scene3d/pixel/pixelTemplateIds'
 
@@ -384,4 +385,17 @@ test('rainy window: a room frames the city through open panes, rain runs down th
   assert.ok(plan.layers.some(layer => layer.z === -36), 'the city lies outside')
   const drops = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.harbor, seconds); return Array.from(bytes.subarray(200 * 4, 208 * 4)).join() }
   assert.notEqual(drops(0), drops(.4))
+})
+
+test('night express: layers slide by at parallax speeds and wrap without a seam', () => {
+  const plan = worldPlan('pixel-express', resolvePixelScene('pixel-express', undefined))
+  const speeds = plan.layers.filter(layer => layer.scroll).sort((a, b) => a.z - b.z).map(layer => layer.scroll!)
+  assert.ok(speeds.length === 3 && speeds[0] < speeds[1] && speeds[1] < speeds[2], 'nearer layers slide faster')
+  const range = paintLoopRange(720, 100, { body: 40, rim: 41, lightFrom: .5, seed: 3, base: 70, amp: 20, trees: 0 })
+  const top = (x: number) => { for (let y = 0; y < 100; y++) if (range.data[y * 720 + x]) return y; return 100 }
+  assert.ok(Math.abs(top(0) - top(719)) <= 3, 'the ridge meets itself where it wraps')
+  const root = pixelWorldGroup('pixel-express'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const scroll = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-night-express').pixelWorld!, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms?.uScroll?.value ?? 0) }
+  assert.notDeepEqual(scroll(1), scroll(2))
+  assert.deepEqual(scroll(1), scroll(1))
 })

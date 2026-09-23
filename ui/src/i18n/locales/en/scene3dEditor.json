@@ -1397,6 +1397,10 @@
     "pixel-rainy-window": {
       "title": "Rainy window",
       "description": "From a candle-lit room, the city at night through a window: rain slides down the glass, curtains frame the view and a plant and a candle sit on the sill while the harbour lights shimmer outside."
+    },
+    "pixel-night-express": {
+      "title": "Night express",
+      "description": "The view from a moving train: mountains glide by slowly, pine hills faster and telegraph poles flash past the window, all mirrored in a lake, while the moon keeps pace and dusk turns to an aurora night."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1660,7 +1664,8 @@
       "pixel-castle": "Castle",
       "pixel-beach": "Beach",
       "pixel-lanterns": "Lantern lake",
-      "pixel-window": "Window"
+      "pixel-window": "Window",
+      "pixel-express": "Train window"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

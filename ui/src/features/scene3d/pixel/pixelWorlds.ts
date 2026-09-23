@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -11,6 +11,8 @@ export type LayerSpec = {
   /** Where it stands across x (meters) and how it is turned about y, for walls. */
   x?: number
   turn?: number
+  /** Texels per second its painting slides past, wrapping (painted to loop). */
+  scroll?: number
   /** Lies flat on the ground instead of standing, centred at `z`. */
   floor?: boolean
   /** Radians per second it turns about its own centre. */
@@ -231,6 +233,14 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     // The room wall stands just in front of the camera; its panes are open.
     return { ...city, layers: [...city.layers, { z: 6, width: 5.4, height: 3.1, bottom: .15, texture: [324, 186], paint: (w, h) => paintRoom(w, h, scene.seed) }] }
   },
+  'pixel-express': scene => ({ ground: 'water', layers: [
+    sky(scene),
+    // Farther layers slide by slower: parallax from a moving train.
+    { ...FAR, texture: [720, 157], scroll: 4, paint: (w, h) => paintLoopRange(w, h, { ...far, seed: scene.seed + 1, lightFrom: bodySkyX(scene), base: h * .7, amp: h * .18 * (.4 + scene.mountains), trees: 0 }) },
+    { ...NEAR, z: -30, height: 8, texture: [720, 64], scroll: 18, paint: (w, h) => paintLoopRange(w, h, { ...near, seed: scene.seed + 2, lightFrom: bodySkyX(scene), base: h * .72, amp: h * .12, trees: scene.trees }) },
+    { z: -7, width: 22, height: 6, bottom: -.3, texture: [480, 130], scroll: 150, paint: (w, h) => paintPoles(w, h, 160) },
+    { z: 6, width: 5.4, height: 3.1, bottom: .15, texture: [324, 186], paint: (w, h) => paintCarriage(w, h) },
+  ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

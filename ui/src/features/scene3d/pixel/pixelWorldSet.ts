@@ -26,12 +26,13 @@ type PixelRuntime = {
   movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; rise?: boolean; y: number }[]
   fireworks?: boolean
   spinners: { mesh: Mesh; speed: number }[]
+  scrollers: { material: ShaderMaterial; speed: number }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
 const LAYER_FRAGMENT = `varying vec2 vUv;
-  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase;
+  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll;
   uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
@@ -87,7 +88,7 @@ const LAYER_FRAGMENT = `varying vec2 vUv;
     return add;
   }
   void main(){
-    vec2 cell=floor(vUv*uRes); vec2 uv=(cell+.5)/uRes;
+    vec2 cell=floor(vUv*uRes); cell.x=mod(cell.x+floor(uScroll),uRes.x); vec2 uv=(cell+.5)/uRes;
     float index=floor(texture2D(uIndex,uv).r*255.+.5);
     if(index<.5) discard;
     vec3 color=texture2D(uPalette,vec2((index+.5)/256.,.5)).rgb;
@@ -116,7 +117,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
     uniforms: {
       uIndex: { value: indexTexture(painted) }, uPalette: { value: palette },
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
-      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
+      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
       uBursts: { value: [0, 1, 2, 3].map(() => new Vector4(0, 0, 0, 0)) }, uBurstColors: { value: [0, 1, 2, 3].map(() => new Color()) },
     },
@@ -250,7 +251,7 @@ function clear(root: Object3D) {
  *  layout (not the lighting) changes. */
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -265,6 +266,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
     if (spec.sky) runtime.skies.push(mesh.material as ShaderMaterial)
     if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y })
     if (spec.spin) runtime.spinners.push({ mesh, speed: spec.spin })
+    if (spec.scroll) runtime.scrollers.push({ material: mesh.material as ShaderMaterial, speed: spec.scroll })
     if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
@@ -282,7 +284,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], movers: [], spinners: [], orbiters: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], movers: [], spinners: [], orbiters: [], scrollers: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -302,6 +304,7 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
     if (mover.bob) mover.mesh.position.y = mover.y + sway
   }
   for (const spinner of runtime.spinners) spinner.mesh.rotation.z = seconds * spinner.speed
+  for (const scroller of runtime.scrollers) scroller.material.uniforms.uScroll.value = seconds * scroller.speed
   for (const { mesh, orbit } of runtime.orbiters) {
     const angle = orbit.phase + seconds * orbit.speed
     // Gondolas hang below their pivot on the rim and never tilt.
