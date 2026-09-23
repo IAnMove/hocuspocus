@@ -36785,7 +36785,8 @@ def run_server():
     install_quiet_access_filter()
 
     try:
-        uvicorn.run(api, host=host, port=port)
+        from services.server_lifecycle import run_until_stopped
+        run_until_stopped(api, host=host, port=port)
     except OSError as e:
         # The probe above narrows this to a genuine race (port taken in the
         # window between probe and uvicorn's own bind). Still fail loudly and
