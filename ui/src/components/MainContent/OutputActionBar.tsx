@@ -6,6 +6,7 @@ import { outputImageUrl } from '../../lib/storedImageFiles'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { MediaMoveDialog } from './MediaMoveDialog'
+import { ConfirmDialog } from '../common/ConfirmDialog'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, selectPipelineClipVideo } from '../../api/client'
@@ -87,8 +88,6 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showSaveRecipe, setShowSaveRecipe] = useState(false)
   const [showExtraInfo, setShowExtraInfo] = useState(false)
-  const confirmRef = useRef(false)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [copied, setCopied] = useState(false)
   const [rejoining, setRejoining] = useState(false)
   const [sentToInput, setSentToInput] = useState(false)
@@ -201,19 +200,9 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
     }
   }
 
+  // Deleting cannot be undone, so the button only asks; the confirmation
+  // dialog calls this.
   const handleDelete = async () => {
-    if (!confirmRef.current) {
-      confirmRef.current = true
-      setConfirmDelete(true)
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = setTimeout(() => {
-        confirmRef.current = false
-        setConfirmDelete(false)
-      }, 3000)
-      return
-    }
-    clearTimeout(timeoutRef.current)
-    confirmRef.current = false
     setConfirmDelete(false)
     // Release video element src to unlock the file on Windows
     const playing = getVideoElement?.()
@@ -364,7 +353,7 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
   }
 
 
-  return { activeWorkspace, addImageRef, browsingUploads, clipTotal, confirmDelete, confirmRef, copied, deleteOutput, directorReplacementTarget, editorReplacementTarget, file, generationMode, groupId, handleContinueFrom, handleCopyPrompt, handleDelete, handleEditImage, handleMove, handleOpenInVideoEditor, handleOutputSettings, handleRejoin, handleSendFrameToRefs, handleSendToInput, handleUseAsDirectorReplacement, handleUseAsEditorReplacement, index, loadSettingsFromOutput, montageSelectionError, moving, multiClipInfo, nsfwMode, openRetakeDialog, outputWorkspace, params, prompt, rejoinClipGroup, rejoining, rerollGeneration, saveRecipeFromOutput, selectingForMontage, sentToInput, setConfirmDelete, setContinueVideo, setCopied, setMediaFilter, setMontageSelectionError, setMoving, setParam, setRejoining, setSelectedOutput, setSelectingForMontage, setSentToInput, setSettingsBusy, setSettingsError, setShowExtraInfo, setShowMoveMenu, setShowSaveRecipe, setStartImage, settingsBusy, settingsError, settingsPending, showExtraInfo, showMoveMenu, showSaveRecipe, t, tStudio, timeoutRef, toggleFavorite, workspaces }
+  return { activeWorkspace, addImageRef, browsingUploads, clipTotal, confirmDelete, copied, deleteOutput, directorReplacementTarget, editorReplacementTarget, file, generationMode, groupId, handleContinueFrom, handleCopyPrompt, handleDelete, handleEditImage, handleMove, handleOpenInVideoEditor, handleOutputSettings, handleRejoin, handleSendFrameToRefs, handleSendToInput, handleUseAsDirectorReplacement, handleUseAsEditorReplacement, index, loadSettingsFromOutput, montageSelectionError, moving, multiClipInfo, nsfwMode, openRetakeDialog, outputWorkspace, params, prompt, rejoinClipGroup, rejoining, rerollGeneration, saveRecipeFromOutput, selectingForMontage, sentToInput, setConfirmDelete, setContinueVideo, setCopied, setMediaFilter, setMontageSelectionError, setMoving, setParam, setRejoining, setSelectedOutput, setSelectingForMontage, setSentToInput, setSettingsBusy, setSettingsError, setShowExtraInfo, setShowMoveMenu, setShowSaveRecipe, setStartImage, settingsBusy, settingsError, settingsPending, showExtraInfo, showMoveMenu, showSaveRecipe, t, tStudio, toggleFavorite, workspaces }
 }
 
 type OutputActions = ReturnType<typeof useOutputActions>
@@ -530,7 +519,7 @@ function InputActions({ a }: { a: OutputActions }) {
 }
 
 function LibraryActions({ a }: { a: OutputActions }) {
-  const { activeWorkspace, browsingUploads, confirmDelete, file, handleDelete, handleMove, moving, setShowMoveMenu, showMoveMenu, toggleFavorite, workspaces } = a
+  const { activeWorkspace, browsingUploads, file, handleMove, moving, setConfirmDelete, setShowMoveMenu, showMoveMenu, t, toggleFavorite, workspaces } = a
   return (
     <>
         <button
@@ -581,16 +570,12 @@ function LibraryActions({ a }: { a: OutputActions }) {
         )}
         {!browsingUploads && (
         <button
-          onClick={handleDelete}
-          className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${
-            confirmDelete
-              ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-              : 'hover:bg-bg-hover text-text-secondary hover:text-red-400'
-          }`}
-          title={confirmDelete ? 'Click again to confirm delete' : 'Delete output'}
+          onClick={() => setConfirmDelete(true)}
+          className="p-1.5 rounded-lg transition-colors hover:bg-bg-hover text-text-secondary hover:text-red-400"
+          title={t('deleteOutput.button')}
+          aria-label={t('deleteOutput.button')}
         >
           <Trash2 size={13} />
-          {confirmDelete && <span className="text-[11px] font-medium">Delete?</span>}
         </button>
         )}
     </>
@@ -601,7 +586,7 @@ function LibraryActions({ a }: { a: OutputActions }) {
  *  dialog so all three gallery views expose the same options. */
 export function OutputActionBar({ variant = 'card', ...props }: OutputActionProps & { variant?: 'card' | 'dialog' }) {
   const a = useOutputActions(props)
-  const { file, nsfwMode, saveRecipeFromOutput, setShowExtraInfo, setShowSaveRecipe, showExtraInfo, showSaveRecipe } = a
+  const { confirmDelete, file, handleDelete, nsfwMode, saveRecipeFromOutput, setConfirmDelete, setShowExtraInfo, setShowSaveRecipe, showExtraInfo, showSaveRecipe, t } = a
   return (
     <>
     <div data-testid="output-actions" className={variant === 'card' ? CARD_BAR : DIALOG_BAR} onClick={e => e.stopPropagation()}>
@@ -624,6 +609,15 @@ export function OutputActionBar({ variant = 'card', ...props }: OutputActionProp
       <VideoExtraInfoDialog
         name={file.name}
         onClose={() => setShowExtraInfo(false)}
+      />
+    )}
+    {confirmDelete && (
+      <ConfirmDialog
+        title={t('deleteOutput.title')}
+        message={t('deleteOutput.message', { name: file.name })}
+        confirmLabel={t('deleteOutput.confirm')}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => void handleDelete()}
       />
     )}
     </>

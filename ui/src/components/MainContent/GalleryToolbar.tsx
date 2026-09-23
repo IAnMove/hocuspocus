@@ -3,6 +3,7 @@ import { CheckCheck, CheckSquare, FolderInput, Heart, HeartOff, History, Loader2
 import { useUiTranslation } from '../../i18n'
 import { GalleryViewSwitcher } from './GalleryViewSwitcher'
 import { MediaMoveDialog } from './MediaMoveDialog'
+import { ConfirmDialog } from '../common/ConfirmDialog'
 import type { GalleryBatchAction } from './galleryBatch'
 
 const iconButton = 'flex h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-text-secondary transition-colors hover:bg-white/[0.07] hover:text-text-primary disabled:opacity-40'
@@ -44,15 +45,14 @@ export function GalleryToolbar({
         <button type="button" className={iconButton} onClick={() => onAction({ kind: 'favorite', favorite: true })} disabled={none} title={t('selection.favorite')} aria-label={t('selection.favorite')}><Heart size={16} /></button>
         <button type="button" className={iconButton} onClick={() => onAction({ kind: 'favorite', favorite: false })} disabled={none} title={t('selection.unfavorite')} aria-label={t('selection.unfavorite')}><HeartOff size={16} /></button>
         <button type="button" className={iconButton} onClick={() => setMoving(true)} disabled={none} title={t('selection.move')} aria-label={t('selection.move')}><FolderInput size={16} /></button>
-        {confirmDelete ? (
-          <button type="button" className={`${iconButton} bg-red-600/90 text-white hover:bg-red-600`} disabled={none}
-            onClick={() => { setConfirmDelete(false); onAction({ kind: 'delete' }) }} onBlur={() => setConfirmDelete(false)}>
-            <Trash2 size={15} /><span className="text-xs">{t('selection.confirmDelete', { count: picked })}</span>
-          </button>
-        ) : (
-          <button type="button" className={`${iconButton} hover:text-red-400`} onClick={() => setConfirmDelete(true)} disabled={none} title={t('selection.delete')} aria-label={t('selection.delete')}><Trash2 size={16} /></button>
-        )}
+        <button type="button" className={`${iconButton} hover:text-red-400`} onClick={() => setConfirmDelete(true)} disabled={none} title={t('selection.delete')} aria-label={t('selection.delete')}><Trash2 size={16} /></button>
         <button type="button" className={iconButton} onClick={onDone} disabled={busy} title={t('selection.done')} aria-label={t('selection.done')}><X size={17} /></button>
+        {confirmDelete && <ConfirmDialog
+          title={t('selection.confirmDeleteTitle', { count: picked })}
+          message={t('selection.confirmDelete', { count: picked })}
+          confirmLabel={t('selection.confirmDeleteAction')}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => { setConfirmDelete(false); onAction({ kind: 'delete' }) }} />}
         {moving && <MediaMoveDialog workspaces={moveTargets} onClose={() => setMoving(false)}
           onMove={workspace => { setMoving(false); onAction({ kind: 'move', workspace }) }} />}
       </div>

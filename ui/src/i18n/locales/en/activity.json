@@ -237,6 +237,15 @@
     "confirmDelete_other": "Delete {{count}} items? This cannot be undone.",
     "done": "Done",
     "working": "Working…",
-    "failed": "Some items could not be updated: {{names}}"
+    "failed": "Some items could not be updated: {{names}}",
+    "confirmDeleteTitle_one": "Delete {{count}} output?",
+    "confirmDeleteTitle_other": "Delete {{count}} outputs?",
+    "confirmDeleteAction": "Delete"
+  },
+  "deleteOutput": {
+    "title": "Delete this output?",
+    "message": "“{{name}}” will be deleted. This cannot be undone.",
+    "confirm": "Delete",
+    "button": "Delete output"
   }
 }
