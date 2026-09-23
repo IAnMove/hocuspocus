@@ -1389,6 +1389,10 @@
     "pixel-glow-tide": {
       "title": "Glowing tide",
       "description": "A night beach where every wave glows blue as it breaks: bands of bioluminescent surf roll in across the wet sand by colour cycling, under a moon mirrored in the sea."
+    },
+    "pixel-lantern-festival": {
+      "title": "Lantern festival",
+      "description": "Hundreds of paper lanterns rise slowly from a still lake at dusk, swaying as they climb and flickering warm, near ones faster than far ones, all mirrored in the water."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1650,7 +1654,8 @@
       "pixel-tulips": "Tulip fields",
       "pixel-alley": "Neon alley",
       "pixel-castle": "Castle",
-      "pixel-beach": "Beach"
+      "pixel-beach": "Beach",
+      "pixel-lanterns": "Lantern lake"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

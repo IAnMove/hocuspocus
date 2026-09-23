@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -7,7 +7,7 @@ export type LayerSpec = {
   z: number; width: number; height: number; bottom: number; texture: [number, number]
   sky?: boolean
   /** Meters per second the plane travels along x, looping over `loop` meters. */
-  drift?: { speed: number; loop: number; offset?: number; /** Meters it bobs up and down. */ bob?: number }
+  drift?: { speed: number; loop: number; offset?: number; /** Meters it bobs up and down. */ bob?: number; /** Travels up instead of across, swaying. */ rise?: boolean }
   /** Where it stands across x (meters) and how it is turned about y, for walls. */
   x?: number
   turn?: number
@@ -25,6 +25,9 @@ const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: 
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
 const NEAR: Omit<LayerSpec, 'paint'> = { z: -37, width: 110, height: 7, bottom: -1, texture: [720, 46] }
 const far = { body: INDEX.far, rim: INDEX.farRim }
+/** Lantern flocks: depth, plane width and height, rise speed, lantern count. */
+const LANTERNS: [number, number, number, number, number][] = [[-40, 70, 26, .35, 60], [-28, 44, 18, .5, 34], [-18, 26, 12, .7, 18], [-10, 14, 8, .9, 8]]
+
 /** The Ferris wheel's hub height and radius, meters (centred on x = 0). */
 const WHEEL = { y: 8.6, radius: 7.2 }
 
@@ -211,6 +214,17 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     sky(scene), range(scene), hills(scene, true),
     // The shore lies just above the sea, its waterline toward the horizon.
     { z: 6.5, width: 64, height: 10, bottom: .03, floor: true, texture: [512, 110], paint: (w, h) => paintBeach(w, h, scene.seed) },
+  ] }),
+  'pixel-lanterns': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene), hills(scene, true),
+    // Flocks of lanterns at four depths rise at their own pace, the near ones faster.
+    // Two copies of each flock, half a cycle apart, so the sky is never empty.
+    ...LANTERNS.flatMap(([z, width, height, speed, count], i) => [0, 1].map(copy => ({
+      z: z + copy * .1, width, height, bottom: 0, texture: [Math.round(width * 8), Math.round(height * 8)] as [number, number],
+      drift: { speed, loop: height * 2, offset: i * 7 + copy * height, bob: width * .02, rise: true },
+      paint: (w: number, h: number) => paintLanterns(w, h, scene.seed + i * 17 + copy * 5, count),
+    }))),
+    ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

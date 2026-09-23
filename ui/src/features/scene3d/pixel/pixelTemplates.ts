@@ -114,6 +114,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  'pixel-lantern-festival': ['pixel-lanterns', { palettes: ['dusk', 'midnight'], hold: 12, meteors: 0 }],
   'pixel-glow-tide': ['pixel-beach', { palettes: ['midnight', 'harbor'], hold: 12, meteors: .5 }],
   'pixel-castle-fireworks': ['pixel-castle', { palettes: ['midnight', 'harbor'], hold: 10, meteors: 0 }],
   'pixel-neon-alley': ['pixel-alley', { palettes: ['neon', 'vapor'], hold: 10, meteors: 0 }],

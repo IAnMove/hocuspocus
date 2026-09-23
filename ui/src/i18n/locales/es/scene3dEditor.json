@@ -1389,6 +1389,10 @@
     "pixel-glow-tide": {
       "title": "Marea luminosa",
       "description": "Una playa nocturna donde cada ola brilla azul al romper: franjas de espuma bioluminiscente llegan sobre la arena mojada con ciclo de color, bajo una luna reflejada en el mar."
+    },
+    "pixel-lantern-festival": {
+      "title": "Festival de farolillos",
+      "description": "Cientos de farolillos de papel suben despacio desde un lago en calma al anochecer, balanceándose y titilando cálidos, los cercanos más rápidos que los lejanos, todos reflejados en el agua."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1650,7 +1654,8 @@
       "pixel-tulips": "Campos de tulipanes",
       "pixel-alley": "Callejón de neón",
       "pixel-castle": "Castillo",
-      "pixel-beach": "Playa"
+      "pixel-beach": "Playa",
+      "pixel-lanterns": "Lago de farolillos"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

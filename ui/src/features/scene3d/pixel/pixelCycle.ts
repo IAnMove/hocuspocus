@@ -59,6 +59,11 @@ const CYCLERS: Cycler[] = [
     const crest = Math.pow(1 - pulse(k, INDEX.waveSteps, t, .35), 3)
     return mixHex(mixHex(p.water, p.near[0], .3), mixHex('#5affea', '#ffffff', crest * .3), crest)
   } },
+  // Paper lanterns: warm, each slot flickering on its own clock.
+  { start: INDEX.flame, steps: INDEX.flameSteps, color: (p, t, k) => {
+    const flicker = .75 + .25 * Math.sin(t * (7 + k * 2.3) + k) * Math.sin(t * (2.1 + k) + k * 3)
+    return mixHex(mixHex('#c8401a', '#ffb04a', flicker), p.light.color, .12)
+  } },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]

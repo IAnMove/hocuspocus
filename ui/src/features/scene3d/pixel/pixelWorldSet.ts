@@ -23,7 +23,7 @@ export function isPixelDressing(kind: unknown): kind is PixelDressing {
 type PixelRuntime = {
   kind: PixelDressing; key: string; palette: DataTexture; bytes: Uint8Array
   skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; sky: [number, number]
-  movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; y: number }[]
+  movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; rise?: boolean; y: number }[]
   fireworks?: boolean
   spinners: { mesh: Mesh; speed: number }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
@@ -295,8 +295,11 @@ function hemisphere(scene: Scene) {
 function moveParts(runtime: PixelRuntime, seconds: number) {
   // Travelling planes follow the scene clock, so scrubbing and export agree.
   for (const mover of runtime.movers) {
-    mover.mesh.position.x = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
-    if (mover.bob) mover.mesh.position.y = mover.y + Math.sin(seconds * .6 + (mover.offset ?? 0)) * mover.bob
+    const along = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
+    const sway = mover.bob ? Math.sin(seconds * .6 + (mover.offset ?? 0)) * mover.bob : 0
+    if (mover.rise) { mover.mesh.position.y = mover.y + along + mover.loop / 2; mover.mesh.position.x = sway; continue }
+    mover.mesh.position.x = along
+    if (mover.bob) mover.mesh.position.y = mover.y + sway
   }
   for (const spinner of runtime.spinners) spinner.mesh.rotation.z = seconds * spinner.speed
   for (const { mesh, orbit } of runtime.orbiters) {

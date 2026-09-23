@@ -354,3 +354,20 @@ test('glowing tide: a beach on the floor whose waves roll in by cycling', () => 
   const floor = (root as Group).children.find(child => child.rotation.x === -Math.PI / 2 && child.position.y > 0)
   assert.ok(floor && floor.position.y < .1, 'the beach lies just above the sea')
 })
+
+test('lantern festival: flocks rise on the clock and never leave the sky empty', () => {
+  const plan = worldPlan('pixel-lanterns', resolvePixelScene('pixel-lanterns', undefined))
+  const flocks = plan.layers.filter(layer => layer.drift?.rise)
+  assert.equal(flocks.length, 8)
+  const root = pixelWorldGroup('pixel-lanterns'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-lantern-festival').pixelWorld!
+  const near = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.filter(child => child.position.z === -10 || child.position.z === -9.9).map(child => child.position.y) }
+  const [a0] = near(1), [a1] = near(2)
+  assert.ok(a1 > a0, 'lanterns rise')
+  for (let t = 0; t < 40; t += 1.3) {
+    const heights = near(t)
+    assert.ok(heights.some(y => y - 4 < 6), `a near flock is in view at ${t}s`)
+  }
+  const flames = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.dusk, seconds); return Array.from(bytes.subarray(188 * 4, 192 * 4)).join() }
+  assert.notEqual(flames(0), flames(.3), 'flames flicker')
+})

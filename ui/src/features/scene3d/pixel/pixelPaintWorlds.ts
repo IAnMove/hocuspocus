@@ -789,3 +789,18 @@ export function paintBeach(width: number, height: number, seed: number): Indexed
   }
   return beach
 }
+
+/** A flock of paper sky lanterns scattered over a plane: rounded bodies
+ *  lit from inside in the flame slots, a brighter core near the base. */
+export function paintLanterns(width: number, height: number, seed: number, count: number): IndexedLayer {
+  const sky = layer(width, height)
+  for (let l = 0; l < count; l++) {
+    const cx = Math.floor(fxRandom(seed, l) * (width - 6)) + 3, cy = Math.floor(fxRandom(seed, l + 400) * (height - 8)) + 4
+    const size = 2 + Math.floor(fxRandom(seed, l + 800) * 3), flame = INDEX.flame + (l % INDEX.flameSteps)
+    for (let y = -size; y <= size; y++) for (let x = -size + 1; x < size; x++) {
+      if (Math.abs(x) + Math.max(0, -y) * .4 > size) continue
+      set(sky, cx + x, cy + y, y >= size - 1 && Math.abs(x) < 2 ? INDEX.lamp : flame)
+    }
+  }
+  return sky
+}
