@@ -55,15 +55,25 @@ function mergePublishedSongs(
   preferred: StoryMusicCandidate[] | undefined,
   other: StoryMusicCandidate[] | undefined,
 ): StoryMusicCandidate[] | undefined {
-  if (!preferred || !other?.length) return preferred
+  if (!other?.length) return preferred
+  const preferredList = preferred || []
+  const preferredIds = new Set(preferredList.map(item => item.id))
   const otherById = new Map(other.map(item => [item.id, item]))
   let changed = false
-  const next = preferred.map(candidate => {
+  const next = preferredList.map(candidate => {
     const merged = preferPublishedSong(candidate, otherById.get(candidate.id))
     if (merged !== candidate) changed = true
     return merged
   })
-  return changed ? next : preferred
+  // Same-id pending↔ready is not enough: a stale tab never loaded the extra
+  // song-… row, so walking only the winner drops a ready sibling on sync.
+  for (const candidate of other) {
+    if (preferredIds.has(candidate.id) || !isPublishedSong(candidate)) continue
+    next.push(candidate)
+    changed = true
+  }
+  if (!changed) return preferred
+  return next
 }
 
 /** Keep a published song row when the other copy still has the empty reservation. */
@@ -81,6 +91,13 @@ function mergePublishedProjectMusic(winner: StoryProject, other: StoryProject): 
     }
     return cue
   })
+  const winnerCueIds = new Set(cues.map(cue => cue.id))
+  for (const cue of otherMusic.cues || []) {
+    if (winnerCueIds.has(cue.id)) continue
+    if (!(cue.candidates || []).some(isPublishedSong)) continue
+    cues.push(cue)
+    changed = true
+  }
   const candidates = mergePublishedSongs(winnerMusic.candidates, otherMusic.candidates)
   if (candidates && candidates !== winnerMusic.candidates) changed = true
   if (!changed) return winner
