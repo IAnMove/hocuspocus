@@ -33221,6 +33221,9 @@ _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
 _MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
     os.path.dirname(_app_dir), "cache", "media-thumbnails"
 )
+from services.media_dimensions import configure as _configure_media_facts, note_preview as _note_media_preview
+
+_configure_media_facts(_MEDIA_THUMBNAIL_CACHE_DIR)
 
 
 def _resolve_output_file(filename: str, workspace: str | None = None) -> str | None:
@@ -33323,7 +33326,6 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         raw_entries = cached_snapshot["raw_entries"]
         sidecar_cache = cached_snapshot["sidecar_cache"]
         clip_groups = cached_snapshot["clip_groups"]
-        dimensions = cached_snapshot.get("dimensions", {})
     else:
         raw_entries = []
         for name in os.listdir(out_dir):
@@ -33408,8 +33410,6 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         for info in clip_groups.values():
             if info["highest_index"] >= info["total"] - 1:
                 info["has_final"] = True
-        from services.media_dimensions import listing_dimensions
-        dimensions = listing_dimensions(raw_entries, sidecar_cache)
 
         with _output_scan_cache_lock:
             if len(_output_scan_cache) >= 16 and out_dir not in _output_scan_cache:
@@ -33424,10 +33424,10 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 "raw_entries": raw_entries,
                 "sidecar_cache": sidecar_cache,
                 "clip_groups": clip_groups,
-                "dimensions": dimensions,
             }
 
     # Second pass: build the file list using the cached sidecar data.
+    from services.media_dimensions import listing_fields as media_listing_fields
     files = []
     for name, filepath, ext, mtime in raw_entries:
         is_scene = name.endswith(".scene.json")
@@ -33468,7 +33468,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             "created_at": mtime,
             "completed_at": metadata_completed_at or mtime,
             "completion_time_source": "metadata" if metadata_completed_at else "file",
-            **dimensions.get(name, {}),
+            **media_listing_fields(ftype, filepath, size, mtime, cached.get("resolution")),
             "url": f"/api/v1/file/{name}{workspace_suffix}",
             "thumbnail_url": (
                 f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png{workspace_suffix}"
@@ -33588,6 +33588,8 @@ def serve_output_thumbnail(filename: str, workspace: str | None = None, size: st
         is_video = extension in video_extensions
         thumbnail = (ensure_fitted_thumbnail(source, _MEDIA_THUMBNAIL_CACHE_DIR, is_video=is_video, size=size)
                      if size else ensure_media_thumbnail(source, _MEDIA_THUMBNAIL_CACHE_DIR, is_video=is_video))
+        if size:
+            _note_media_preview(source, thumbnail)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not create thumbnail: {exc}") from exc
     return FileResponse(

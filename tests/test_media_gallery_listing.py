@@ -1,4 +1,4 @@
-"""Gallery listing dimensions and aspect-preserving previews."""
+"""Gallery listing facts (size, colour) and aspect-preserving previews."""
 
 from __future__ import annotations
 
@@ -6,14 +6,62 @@ import json
 import os
 import shutil
 import subprocess
+import time
+from collections import OrderedDict
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
-from app.services import media_dimensions
-from app.services.media_dimensions import image_header_size, listing_dimensions, parse_resolution
-from app.services.media_thumbnails import ensure_fitted_thumbnail
+from services import media_dimensions
+from services.media_dimensions import (
+    FACTS_FILENAME,
+    average_color,
+    image_header_size,
+    listing_dimensions,
+    listing_fields,
+    parse_resolution,
+    probe_video_size,
+    prune_thumbnail_cache,
+)
+from services.media_thumbnails import ensure_fitted_thumbnail
 from tests.test_output_completion_time import list_test_outputs
+
+_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+
+
+@pytest.fixture(autouse=True)
+def isolated_facts(monkeypatch):
+    """Each test gets an empty, unconfigured facts store and no live worker."""
+    monkeypatch.setattr(media_dimensions, "_facts", OrderedDict())
+    monkeypatch.setattr(media_dimensions, "_queue", OrderedDict())
+    monkeypatch.setattr(media_dimensions, "_cache_dir", None)
+    monkeypatch.setattr(media_dimensions, "_worker", None)
+    monkeypatch.setattr(media_dimensions, "_dirty", False)
+
+
+def _wait_for(predicate, timeout=30.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _near(color, expected, tolerance=4):
+    """Average colours pass through lossy previews; compare channel by channel."""
+    assert color and color.startswith("#") and len(color) == 7, color
+    pairs = zip(bytes.fromhex(color[1:]), bytes.fromhex(expected[1:]))
+    return all(abs(a - b) <= tolerance for a, b in pairs)
+
+
+def _video(path, size="360x640", seconds="0.3"):
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=royalblue:s={size}:d={seconds}",
+         "-pix_fmt", "yuv420p", str(path)],
+        check=True, capture_output=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -38,8 +86,10 @@ def test_image_header_size_follows_file_versions(tmp_path):
 def test_listing_prefers_real_image_size_and_uses_sidecars_for_video(tmp_path):
     still = tmp_path / "edit.png"
     Image.new("RGB", (640, 960)).save(still)
+    (tmp_path / "clip.mp4").write_bytes(b"video")
+    (tmp_path / "unknown.mp4").write_bytes(b"video")
     entries = [
-        ("edit.png", str(still), ".png", 0.0),
+        ("edit.png", str(still), ".png", os.path.getmtime(still)),
         ("clip.mp4", str(tmp_path / "clip.mp4"), ".mp4", 0.0),
         ("unknown.mp4", str(tmp_path / "unknown.mp4"), ".mp4", 0.0),
         ("song.mp3", str(tmp_path / "song.mp3"), ".mp3", 0.0),
@@ -66,6 +116,105 @@ def test_output_list_exposes_dimensions(tmp_path):
     assert (outputs["portrait.png"]["width"], outputs["portrait.png"]["height"]) == (480, 1600)
     assert (outputs["clip.mp4"]["width"], outputs["clip.mp4"]["height"]) == (1280, 720)
     assert "width" not in outputs["song.mp3"]
+    assert "color" not in outputs["portrait.png"]
+
+
+def test_facts_persist_across_restarts_without_reading_headers(tmp_path, monkeypatch):
+    still = tmp_path / "still.png"
+    Image.new("RGB", (300, 900)).save(still)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    media_dimensions.configure(str(cache))
+    assert image_header_size(str(still)) == (300, 900)
+    media_dimensions.save_facts(force=True)
+    assert json.loads((cache / FACTS_FILENAME).read_text(encoding="utf-8"))
+
+    # A new process: empty memory, the same cache directory, and no PIL.
+    monkeypatch.setattr(media_dimensions, "_facts", OrderedDict())
+    monkeypatch.setattr(media_dimensions, "_cache_dir", None)
+    media_dimensions.configure(str(cache))
+    monkeypatch.setattr(Image, "open", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("header re-read")))
+    assert image_header_size(str(still)) == (300, 900)
+
+
+def test_average_color_ignores_transparent_pixels(tmp_path):
+    cutout = Image.new("RGBA", (40, 40), (0, 0, 255, 0))
+    cutout.paste((200, 20, 20, 255), (10, 10, 30, 30))
+    cutout.save(tmp_path / "cutout.png")
+    assert _near(average_color(str(tmp_path / "cutout.png")), "#c81414")
+    Image.new("RGBA", (40, 40), (0, 0, 0, 0)).save(tmp_path / "empty.png")
+    assert average_color(str(tmp_path / "empty.png")) == ""
+    assert average_color(str(tmp_path / "missing.png")) == ""
+
+
+def test_probe_honours_rotation(monkeypatch):
+    payload = {"streams": [{"width": 1920, "height": 1080, "side_data_list": [{"rotation": -90}]}]}
+    monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: SimpleNamespace(stdout=json.dumps(payload)))
+    assert probe_video_size("clip.mp4") == (1080, 1920)
+    payload["streams"][0] = {"width": 1280, "height": 720, "tags": {"rotate": "180"}}
+    assert probe_video_size("clip.mp4") == (1280, 720)
+    payload["streams"] = []
+    assert probe_video_size("clip.mp4") is None
+
+
+@pytest.mark.skipif(not _FFMPEG, reason="ffmpeg and ffprobe are required for the background worker")
+def test_worker_probes_videos_and_colours_previews(tmp_path):
+    video = tmp_path / "portrait.mp4"
+    _video(video)
+    still = tmp_path / "red.png"
+    Image.new("RGB", (800, 400), (220, 30, 30)).save(still)
+    media_dimensions.configure(str(tmp_path / "cache"))
+
+    size = os.path.getsize(video)
+    mtime = os.path.getmtime(video)
+    # The first listing knows nothing about the video and schedules it.
+    assert listing_fields("video", str(video), size, mtime) == {}
+    listing_fields("image", str(still), os.path.getsize(still), os.path.getmtime(still))
+    assert _wait_for(lambda: listing_fields("video", str(video), size, mtime).get("color")
+                     and listing_fields("image", str(still), os.path.getsize(still), os.path.getmtime(still)).get("color"))
+
+    video_fields = listing_fields("video", str(video), size, mtime)
+    assert (video_fields["width"], video_fields["height"]) == (360, 640)
+    assert video_fields["color"].startswith("#")
+    image_fields = listing_fields("image", str(still), os.path.getsize(still), os.path.getmtime(still))
+    assert (image_fields["width"], image_fields["height"]) == (800, 400)
+    assert _near(image_fields["color"], "#dc1e1e")
+    assert _wait_for(lambda: (tmp_path / "cache" / FACTS_FILENAME).exists())
+
+
+def test_note_preview_records_colour_once(tmp_path):
+    still = tmp_path / "green.png"
+    Image.new("RGB", (200, 100), (10, 180, 40)).save(still)
+    preview = ensure_fitted_thumbnail(str(still), str(tmp_path / "cache"), is_video=False, size="sm")
+    media_dimensions.note_preview(str(still), preview)
+    fields = listing_fields("image", str(still), os.path.getsize(still), os.path.getmtime(still))
+    assert _near(fields["color"], "#0ab428")
+
+
+def test_prune_removes_least_recently_used_previews(tmp_path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / FACTS_FILENAME).write_text("{}", encoding="utf-8")
+    now = time.time()
+    for index in range(10):
+        path = cache / f"{index:02d}-fit320.webp"
+        path.write_bytes(b"x" * 1000)
+        os.utime(path, (now - (10 - index) * 3600, now - (10 - index) * 3600))
+    assert prune_thumbnail_cache(str(cache), max_bytes=100_000) == 0
+    removed = prune_thumbnail_cache(str(cache), max_bytes=5_000)
+    remaining = sorted(path.name for path in cache.iterdir())
+    assert removed == 6
+    assert remaining == [f"{index:02d}-fit320.webp" for index in range(6, 10)] + [FACTS_FILENAME]
+
+
+def test_cache_hits_mark_previews_recently_used(tmp_path):
+    source = tmp_path / "tiny.png"
+    Image.new("RGB", (120, 90)).save(source)
+    preview = ensure_fitted_thumbnail(str(source), str(tmp_path / "c"), is_video=False, size="sm")
+    old = time.time() - 3 * 86_400
+    os.utime(preview, (old, old))
+    ensure_fitted_thumbnail(str(source), str(tmp_path / "c"), is_video=False, size="sm")
+    assert os.stat(preview).st_atime > old + 86_400
 
 
 def test_fitted_still_keeps_aspect_and_transparency(tmp_path):
@@ -98,25 +247,11 @@ def test_fitted_still_never_upscales_and_rejects_unknown_sizes(tmp_path):
         ensure_fitted_thumbnail(str(source), str(tmp_path / "c"), is_video=False, size="xl")
 
 
-@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is required for video previews")
+@pytest.mark.skipif(not _FFMPEG, reason="ffmpeg is required for video previews")
 def test_fitted_video_frame_keeps_portrait_aspect(tmp_path):
     source = tmp_path / "portrait.mp4"
-    subprocess.run(
-        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=royalblue:s=360x640:d=0.3",
-         "-pix_fmt", "yuv420p", str(source)],
-        check=True, capture_output=True,
-    )
+    _video(source)
     preview_path = ensure_fitted_thumbnail(str(source), str(tmp_path / "cache"), is_video=True, size="sm")
     assert preview_path.endswith(".jpg")
     with Image.open(preview_path) as preview:
         assert preview.size == (180, 320)
-
-
-def test_header_cache_is_bounded(monkeypatch, tmp_path):
-    monkeypatch.setattr(media_dimensions, "_CACHE_LIMIT", 2)
-    monkeypatch.setattr(media_dimensions, "_header_cache", {})
-    for index in range(3):
-        path = tmp_path / f"{index}.png"
-        Image.new("RGB", (10 + index, 10)).save(path)
-        assert image_header_size(str(path)) == (10 + index, 10)
-    assert len(media_dimensions._header_cache) <= 2

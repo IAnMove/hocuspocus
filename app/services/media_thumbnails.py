@@ -6,6 +6,7 @@ import hashlib
 import os
 import subprocess
 import threading
+import time
 import uuid
 
 
@@ -20,6 +21,22 @@ _thumbnail_generation_slots = threading.Semaphore(2)
 def _lock_for(key: str) -> threading.Lock:
     with _thumbnail_locks_guard:
         return _thumbnail_locks.setdefault(key, threading.Lock())
+
+
+def _cached(destination: str) -> bool:
+    """True for a usable cached preview; marks it recently used for LRU pruning."""
+    try:
+        stat = os.stat(destination)
+    except OSError:
+        return False
+    if stat.st_size <= 0:
+        return False
+    if time.time() - stat.st_atime > 86_400:
+        try:
+            os.utime(destination, (time.time(), stat.st_mtime))
+        except OSError:
+            pass
+    return True
 
 
 def thumbnail_cache_key(source: str) -> str:
@@ -42,7 +59,7 @@ def ensure_media_thumbnail(
     key = thumbnail_cache_key(source)
     os.makedirs(cache_dir, exist_ok=True)
     destination = os.path.join(cache_dir, f"{key}-{width}x{height}.jpg")
-    if os.path.isfile(destination) and os.path.getsize(destination) > 0:
+    if _cached(destination):
         return destination
 
     with _lock_for(destination):
@@ -144,7 +161,7 @@ def ensure_fitted_thumbnail(source: str, cache_dir: str, *, is_video: bool, size
     os.makedirs(cache_dir, exist_ok=True)
     suffix = ".jpg" if is_video else ".webp"
     destination = os.path.join(cache_dir, f"{key}-fit{limit}{suffix}")
-    if os.path.isfile(destination) and os.path.getsize(destination) > 0:
+    if _cached(destination):
         return destination
 
     def write_still(path: str) -> None:
