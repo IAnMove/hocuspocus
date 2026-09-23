@@ -6,6 +6,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { ENERGY_NOISE } from '../sceneFx/energyShaders'
+import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { GpuWorld } from './gpu'
 import type { Scene3DDocument } from './types'
 import { cinematicReflectorVisible } from './cinematicSettings'
@@ -132,8 +133,15 @@ export class CinematicRuntime {
     const glowing = (doc.worldSfx ?? []).filter(cue => seconds >= cue.start && seconds < cue.end && cue.kind !== 'smoke').slice(0, 3)
     this.lights.forEach((light, i) => {
       const cue = glowing[i], gpu = cue && world.worldSfx?.get(cue.id)
-      light.intensity = cue ? Math.min(9, cue.intensity * (cue.kind === 'lightning' ? 6 : 2)) * (.8 + .2 * Math.sin(seconds * 31) ** 2) : 0
-      if (cue && gpu) { light.color.set(cue.color); light.position.copy(gpu.root.userData.gizmoAt ?? gpu.root.position); light.position.y += .3 }
+      // A strike lights the scene only while its channel is lit.
+      const bolt = cue?.kind === 'lightning'
+      light.intensity = !cue ? 0 : bolt ? Math.min(90, lightningGlow(cue, seconds) * 45) : Math.min(9, cue.intensity * 2) * (.8 + .2 * Math.sin(seconds * 31) ** 2)
+      light.distance = bolt ? 18 : 7
+      if (cue && gpu) {
+        light.color.set(cue.color)
+        // A bolt lights the ground it strikes, not the cloud it leaves.
+        light.position.copy(gpu.root.userData.strikeAt ?? gpu.root.userData.gizmoAt ?? gpu.root.position); light.position.y += bolt ? 1.2 : .3
+      }
     })
   }
   render(doc = this.document) {

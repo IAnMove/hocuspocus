@@ -1,8 +1,9 @@
-import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Points, SphereGeometry } from 'three'
+import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Points, SphereGeometry } from 'three'
 import { energyMaterial, softSparkMaterial, type EnergySurface } from './energyShaders'
 import { fxRandom } from './types'
 import type { WorldSfxKind } from './world'
 import { buildPackedEffect } from './worldPack'
+import { buildLightning } from './lightningMesh'
 
 function surface(kind: EnergySurface, color: string, width: number, height = width, billboard = false) {
   return new Mesh(new PlaneGeometry(width, height), energyMaterial(kind, color, billboard))
@@ -69,27 +70,15 @@ function beam(color: string, laser: boolean) {
   root.add(shaft)
   return root
 }
-function boltSegment(color: string) {
-  const segment = new Group()
-  for (const [radius, power] of [[.009, 4], [.027, .55]]) {
-    const material = new MeshBasicMaterial({ color: new Color(color).multiplyScalar(power), transparent: true,
-      depthWrite: false, blending: AdditiveBlending })
-    material.userData.energyBaseColor = material.color.clone()
-    segment.add(new Mesh(new CylinderGeometry(radius, radius, 1, 5), material))
-  }
-  return segment
-}
-function lightning(color: string) {
+/** Puffs that rise, swell and thin out on a loop: a column of smoke. */
+function plume(color: string) {
   const root = new Group()
-  for (let i = 0; i < 24; i++) {
-    const segment = boltSegment(color)
-    segment.userData.kind = 'bolt'
-    root.add(segment)
-  }
-  for (let i = 0; i < 8; i++) {
-    const segment = boltSegment(color)
-    segment.userData.kind = 'branch'
-    root.add(segment)
+  for (let i = 0; i < 9; i++) {
+    const puff = surface('mist', color, 1.3, 1.3, true)
+    puff.userData.kind = 'puff'
+    puff.userData.seedOffset = i * 7
+    puff.userData.phase = i / 9
+    root.add(puff)
   }
   return root
 }
@@ -151,14 +140,14 @@ export function buildEnergyEffect(kind: WorldSfxKind, color: string) {
     case 'summoning_gate': return portal(color, true)
     case 'magic_circle': return circle(color)
     case 'shockwave': return circle(color, true)
-    case 'lightning': return lightning(color)
+    case 'lightning': return buildLightning(color)
     case 'energy_beam': return beam(color, false)
     case 'laser': return beam(color, true)
     case 'energy_orb': return orb(color)
     case 'anime_aura': return aura(color)
     case 'arcane_missiles': return missiles(color)
-    case 'smoke': return mist(color)
-    case 'sparks': { const root = new Group(); root.add(sparks(color, 'rise', .45, 144)); return root }
+    case 'smoke': return plume(color)
+    case 'sparks': { const root = new Group(); const spray = sparks(color, 'fountain', .45, 220); spray.material = softSparkMaterial(color, .03); root.add(spray); return root }
     case 'explosion': return explosion(color)
     default: return buildPackedEffect(kind, color) ?? new Group()
   }

@@ -23,7 +23,7 @@ void main() {
   gl_Position=projectionMatrix*center;
 }`
 
-export type EnergySurface = 'portal' | 'circle' | 'beam' | 'orb' | 'aura' | 'shock' | 'mist' | 'fireball' | 'flash' | 'blastRing' | 'fire' | 'shield' | 'tornado' | 'splash' | 'ice' | 'hole' | 'portalGlass'
+export type EnergySurface = 'portal' | 'circle' | 'beam' | 'orb' | 'aura' | 'shock' | 'mist' | 'fireball' | 'flash' | 'blastRing' | 'fire' | 'tornado' | 'splash' | 'ice' | 'hole' | 'portalGlass'
 const BODIES: Record<EnergySurface, string> = {
   portal: `
     vec2 p=(vUv-.5)*2.; float r=length(p), a=atan(p.y,p.x);
@@ -103,31 +103,34 @@ const BODIES: Record<EnergySurface, string> = {
     float fade=(1.-uProgress)*step(.18,n+.35);
     gl_FragColor=vec4(uColor*(band*2.6+grit*1.4)*uPower,(band*.7+grit)*fade*uPower);`,
   fire: `
-    vec2 p=vUv; float n=fbm(vec2(p.x*9., p.y*6.-uTime*2.4)+uSeed);
-    float n2=fbm(vec2(p.x*14.+uTime, p.y*8.-uTime*3.1));
-    float edge=pow(max(0.,1.-abs(p.x-.5)*2.15),1.35);
-    float flame=smoothstep(.18,.78,n)*edge*(1.-smoothstep(.12,.98,p.y));
-    float tongues=pow(n2,2.2)*edge*smoothstep(.95,.25,p.y);
-    float core=exp(-pow((p.x-.5)*6.,2.))*smoothstep(.9,.2,p.y);
-    vec3 hot=mix(uColor,vec3(1.,.55,.08),tongues);
-    hot=mix(hot,vec3(1.,.9,.45),core*.7);
-    float card=1.-smoothstep(.46,.5,abs(p.x-.5));
-    gl_FragColor=vec4(hot*(flame*2.4+tongues*3.+core*4.)*uPower,(flame*.75+tongues*.5+core)*card*uPower);`,
-  shield: `
-    vec2 p=(vUv-.5)*2.; float r=length(p);
-    float n=fbm(p*4.+uTime*.3+uSeed);
-    float fres=pow(max(0.,1.-r),1.4);
-    float hex=pow(abs(sin(p.x*18.)*sin(p.y*16.)),12.)*smoothstep(1.,.35,r);
-    float rim=exp(-abs(r-.86)*28.);
-    float alpha=(fres*.18+rim*.85+hex*.25)*uPower;
-    gl_FragColor=vec4(mix(uColor,vec3(.7,.95,1.),rim)*(1.4+hex*2.)*uPower,alpha);`,
+    vec2 p=vUv; float y=p.y, x=p.x-.5;
+    float n1=fbm(vec2(x*3.5+uSeed, y*2.2-uTime*1.9));
+    float n2=fbm(vec2(x*7.+uSeed*2., y*5.-uTime*3.4));
+    x+=(n1-.5)*.3*y;
+    float w=.3*(1.-y*.82)+.02;
+    float body=1.-abs(x)/w;
+    // Noise eats the flame from the top down, splitting it into tongues.
+    float f=(body*1.15-y*.5-n2*.95*(.25+y))*smoothstep(0.,.07,y);
+    float heat=clamp(f*1.25,0.,1.);
+    float alpha=smoothstep(0.,.1,f);
+    vec3 color=mix(vec3(.55,.06,.01),uColor,smoothstep(.0,.35,heat));
+    color=mix(color,vec3(1.,.74,.2),smoothstep(.35,.7,heat));
+    color=mix(color,vec3(1.,.96,.82),smoothstep(.75,1.,heat));
+    gl_FragColor=vec4(color*(.35+heat*.85)*alpha*uPower,alpha*uPower);`,
   tornado: `
-    vec2 p=vUv-.5; float x=p.x*2., y=p.y+.5;
-    float spin=fbm(vec2(x*6.+uTime*2.2, y*4.));
-    float funnel=pow(max(0.,1.-abs(x)/(0.18+y*.7)),1.4);
-    float dust=pow(spin,1.6)*funnel;
-    float card=smoothstep(.5,.38,abs(p.x));
-    gl_FragColor=vec4(uColor*(funnel*.7+dust*1.8)*uPower,(funnel*.28+dust*.55)*card*uPower);`,
+    vec2 p=vUv; float y=p.y, x=p.x-.5;
+    float sway=sin(y*3.1+uTime*1.3)*.06*y;
+    float radius=mix(.05,.42,pow(y,1.35));
+    float rel=(x-sway)/radius;
+    float body=1.-smoothstep(.72,1.,abs(rel));
+    float swirl=fbm(vec2(rel*2.2-uTime*3.2+y*5., y*7.-uTime*.6)+uSeed);
+    float bands=.55+.45*sin(rel*5.5+y*24.-uTime*9.+swirl*4.);
+    float edgeLight=smoothstep(.35,1.,abs(rel))*body;
+    float fadeY=smoothstep(0.,.06,y)*(1.-smoothstep(.9,1.,y));
+    float alpha=body*fadeY*(.28+swirl*.45)*(.6+bands*.4);
+    float debris=pow(fbm(vec2(x*18.+uTime*2.,y*10.)),4.)*(1.-smoothstep(0.,.25,y))*3.;
+    vec3 color=mix(uColor*.42,uColor*1.05,bands*.6+edgeLight*.5);
+    gl_FragColor=vec4(color*uPower,clamp(alpha+debris*.4,0.,.92)*uPower);`,
   splash: `
     vec2 p=(vUv-.5)*2.; float r=length(p), a=atan(p.y,p.x);
     float n=fbm(vec2(a*4., r*6.-uTime)+uSeed);
@@ -167,21 +170,52 @@ export function energyMaterial(kind: EnergySurface, color: string, billboard = f
     fragmentShader: `varying vec2 vUv; uniform float uTime,uPower,uSeed,uProgress;
       uniform vec3 uColor; ${ENERGY_NOISE} void main() { ${BODIES[kind]} }`,
     transparent: true, depthWrite: false, side: DoubleSide,
-    ...(kind === 'mist' || kind === 'portalGlass' || kind === 'hole' ? {} : { blending: AdditiveBlending }),
+    ...(kind === 'mist' || kind === 'portalGlass' || kind === 'hole' || kind === 'tornado' ? {} : { blending: AdditiveBlending }),
   })
 }
 
-export function softSparkMaterial(color: string, size = .045) {
+/** Dome shield lit by its silhouette, so it reads as a bubble from any side. */
+export function shieldMaterial(color: string) {
+  return new ShaderMaterial({
+    name: 'cinematic-shield',
+    uniforms: { uTime: { value: 0 }, uPower: { value: 1 }, uSeed: { value: 1 }, uProgress: { value: 0 }, uColor: { value: new Color(color) } },
+    vertexShader: `varying vec3 vNormal, vView; varying vec3 vLocal;
+      void main() { vLocal=position; vec4 p=modelViewMatrix*vec4(position,1.);
+        vNormal=normalize(normalMatrix*normal); vView=normalize(-p.xyz); gl_Position=projectionMatrix*p; }`,
+    fragmentShader: `varying vec3 vNormal, vView, vLocal; uniform float uTime,uPower,uSeed,uProgress; uniform vec3 uColor; ${ENERGY_NOISE}
+      void main() {
+        float facing=abs(dot(normalize(vNormal),normalize(vView)));
+        float rim=pow(1.-facing,2.6);
+        vec2 cell=vec2(atan(vLocal.z,vLocal.x)*3.2, vLocal.y*6.);
+        vec2 hexa=abs(fract(cell+vec2(0.,floor(cell.x)*.5))-.5);
+        float grid=smoothstep(.43,.49,max(hexa.x*1.15+hexa.y*.6,hexa.y*1.2));
+        float ripple=pow(.5+.5*sin(vLocal.y*14.-uTime*4.+fbm(vLocal.xz*3.+uSeed)*3.),6.);
+        float rise=smoothstep(0.,.35,uProgress*6.);
+        float alpha=(rim*.85+grid*.07+ripple*.08*rim)*uPower*rise;
+        gl_FragColor=vec4(mix(uColor,vec3(.85,.97,1.),rim*.6)*(1.+grid*.5)*uPower,alpha);
+      }`,
+    transparent: true, depthWrite: false, side: DoubleSide, blending: AdditiveBlending,
+  })
+}
+
+export type SparkStyle = 'spark' | 'streak' | 'flake'
+
+/** Round glowing sparks, thin falling streaks (rain) or soft unlit flakes. */
+export function softSparkMaterial(color: string, size = .045, style: SparkStyle = 'spark') {
+  const shape = style === 'streak'
+    ? 'max(0.,1.-abs(q.x)*24.)*pow(max(0.,1.-abs(q.y)*2.),.7)*.45'
+    : style === 'flake' ? 'smoothstep(.5,.2,length(q))*.8' : 'pow(max(0.,1.-length(q)*2.),2.)'
+  const gain = style === 'spark' ? '3.' : style === 'streak' ? '1.2' : '.9'
   return new ShaderMaterial({
     name: 'cinematic-sparks',
     uniforms: { uColor: { value: new Color(color) }, uSize: { value: size }, uPower: { value: 1 } },
     vertexShader: `uniform float uSize;
       void main() { vec4 p=modelViewMatrix*vec4(position,1.);
-      gl_PointSize=clamp(uSize*700./max(.1,-p.z),1.,24.);
+      gl_PointSize=clamp(uSize*700./max(.1,-p.z),1.,${style === 'streak' ? 30 : 24}.);
       gl_Position=projectionMatrix*p; }`,
     fragmentShader: `uniform vec3 uColor; uniform float uPower;
-      void main() { float a=pow(max(0.,1.-length(gl_PointCoord-.5)*2.),2.);
-      gl_FragColor=vec4(uColor*3.*uPower,a*uPower); }`,
-    transparent: true, depthWrite: false, blending: AdditiveBlending,
+      void main() { vec2 q=gl_PointCoord-.5; float a=${shape};
+      gl_FragColor=vec4(uColor*${gain}*uPower,a*uPower); }`,
+    transparent: true, depthWrite: false, ...(style === 'flake' ? {} : { blending: AdditiveBlending }),
   })
 }

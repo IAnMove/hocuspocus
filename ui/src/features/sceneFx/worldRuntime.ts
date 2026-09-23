@@ -1,5 +1,6 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Points, Scene, ShaderMaterial, Vector3, VideoTexture } from 'three'
 import { buildEnergyEffect } from './energyObjects'
+import { poseLightning } from './lightningMesh'
 import { bindPortalMedia, type PortalMediaRuntime } from './portalMediaRuntime'
 import { worldSfxAtTime } from './worldMotion'
 import { fxRandom } from './types'
@@ -91,31 +92,7 @@ function poseAura(root: Group, cue: WorldSfx, origin: Vector3, slots: readonly W
 
 function poseBeam(root: Group, cue: WorldSfx, from: Vector3, to: Vector3, seconds: number) {
   const radial = cue.kind === 'laser' ? 0.55 * cue.scale : cue.scale
-  if (cue.kind === 'lightning') {
-    const kids = root.children.filter(child => child.userData.kind === 'bolt')
-    const hops = kids.length
-    const seed = cue.seed + Math.floor(Math.max(0, seconds - cue.start) * 12)
-    const path = [from.clone()]
-    let prev = from
-    for (let i = 0; i < hops; i++) {
-      const t = (i + 1) / hops
-      const dest = i === hops - 1 ? to : from.clone().lerp(to, t)
-      if (i < hops - 1) {
-        dest.x += (fxRandom(seed, i) - 0.5) * 0.32 * cue.scale
-        dest.y += (fxRandom(seed, i + 9) - 0.5) * 0.18 * cue.scale
-        dest.z += (fxRandom(seed, i + 17) - 0.5) * 0.32 * cue.scale
-      }
-      orientBetween(kids[i], prev, dest, 0.8 * radial)
-      prev = dest
-      path.push(dest.clone())
-    }
-    root.children.filter(child => child.userData.kind === 'branch').forEach((child, i) => {
-      const origin = path[2 + i * 2]
-      const tip = origin.clone().add(new Vector3((fxRandom(seed, i + 70) - .5) * 1.2, -.3, (fxRandom(seed, i + 90) - .5) * .8).multiplyScalar(cue.scale))
-      orientBetween(child, origin, tip, radial * .42)
-    })
-    return
-  }
+  if (cue.kind === 'lightning') { poseLightning(root, cue, from, to, seconds); return }
   const shaft = root.children.find(child => child.userData.kind === 'beam')
   if (shaft) orientBetween(shaft, from, to, radial)
 }
@@ -191,6 +168,14 @@ function animateParticles(child: Points, cue: WorldSfx, local: number, span: num
       const expand = Math.pow(p, 0.36) * (3.8 + cue.intensity * 1.4)
       const drag = 1 - p * 0.28
       position.setXYZ(i, bx * expand * drag, by * expand * drag - p * p * 1.7, bz * expand * drag)
+    } else if (child.userData.kind === 'fountain') {
+      // Ballistic sparks: launched from the base, pulled down, relaunched.
+      const period = .7 + fxRandom(cue.seed, i + 300) * .6
+      const life = ((local + fxRandom(cue.seed, i + 400) * period) % period) / period
+      const speed = 1.6 + fxRandom(cue.seed, i + 500) * 1.4 * cue.intensity
+      const t = life * period
+      const y = speed * t - 4.2 * t * t
+      position.setXYZ(i, bx * t * 1.4, y < 0 || life > .92 ? -40 : y, bz * t * 1.4)
     } else if (child.userData.kind === 'orb') {
       const spin = local * 1.4
       const cos = Math.cos(spin), sin = Math.sin(spin)
@@ -204,10 +189,19 @@ function animateParticles(child: Points, cue: WorldSfx, local: number, span: num
   position.needsUpdate = true
 }
 
+function animatePuff(child: Mesh, cue: WorldSfx, local: number) {
+  const life = (local * .16 + child.userData.phase) % 1
+  child.position.set(Math.sin(life * 4 + child.userData.seedOffset) * .18 + life * .35, .15 + life * 2.6, 0)
+  child.scale.setScalar(.45 + life * 1.5)
+  const material = child.material as ShaderMaterial
+  if (material.uniforms?.uPower) material.uniforms.uPower.value = cue.intensity * Math.sin(life * Math.PI) * 1.3
+}
+
 function animate(root: Group, cue: WorldSfx, seconds: number) {
   const local = Math.max(0, seconds - cue.start)
   const span = Math.max(.001, cue.end - cue.start)
   root.traverse(child => {
+    if (child instanceof Mesh && child.userData.kind === 'puff') { animateMaterials(child, cue, local, span); animatePuff(child, cue, local); return }
     if (child instanceof Mesh || child instanceof Points) animateMaterials(child, cue, local, span)
     if (cue.kind === 'explosion' && child.userData.kind === 'plume') {
       const p = Math.min(1, local / span)

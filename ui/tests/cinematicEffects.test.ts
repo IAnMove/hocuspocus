@@ -38,13 +38,16 @@ test('all spatial kinds seek deterministically, lightning responds to intensity 
   const cues = parseWorldSfx(WORLD_SFX_KINDS.map((kind, i) => ({ id: String(i), kind, start: 1, end: 4, seed: i })))
   syncWorldSfx(scene, nodes, cues, 2, [])
   const lightning = [...nodes.values()].find(n => n.kind === 'lightning').root
-  const bolt = lightning.children.find((c: Mesh) => c.userData.kind === 'bolt').children[0]
-  const before = bolt.material.color.clone()
-  syncWorldSfx(scene, nodes, cues.map(c => ({ ...c, intensity: c.intensity / 2 })), 2, []); assert.ok(bolt.material.color.r < before.r)
-  syncWorldSfx(scene, nodes, cues, 2, []); assert.deepEqual(bolt.material.color, before)
-  const path = lightning.children.map((c: Mesh) => c.position.toArray())
-  syncWorldSfx(scene, nodes, cues, 3, []); syncWorldSfx(scene, nodes, cues, 2, [])
-  assert.deepEqual(lightning.children.map((c: Mesh) => c.position.toArray()), path)
+  const bolt = lightning.children.find((c: Mesh) => c.userData.kind === 'bolt')
+  const brightness = () => bolt.material.uniforms.uBright.value
+  // 2 s into a 1..4 s cue sits between strikes; seek to a lit return stroke.
+  const lit = cues.map(c => ({ ...c, start: 1.9 }))
+  syncWorldSfx(scene, nodes, lit, 2, []); const before = brightness(); assert.ok(before > 0)
+  syncWorldSfx(scene, nodes, lit.map(c => ({ ...c, intensity: c.intensity / 2 })), 2, []); assert.ok(brightness() < before)
+  syncWorldSfx(scene, nodes, lit, 2, []); assert.equal(brightness(), before)
+  const path = Array.from(bolt.geometry.getAttribute('aStart').array)
+  syncWorldSfx(scene, nodes, lit, 3, []); syncWorldSfx(scene, nodes, lit, 2, [])
+  assert.deepEqual(Array.from(bolt.geometry.getAttribute('aStart').array), path)
   syncWorldSfx(scene, nodes, cues, 0, []); assert.ok([...nodes.values()].every(n => !n.root.visible))
   syncWorldSfx(scene, nodes, [], 0, []); assert.equal(nodes.size, 0); assert.equal(scene.children.length, 0)
 })
