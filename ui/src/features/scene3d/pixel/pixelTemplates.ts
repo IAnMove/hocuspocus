@@ -95,6 +95,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  'pixel-cherry-garden': ['pixel-garden', { palettes: ['sakura', 'midnight'], hold: 10, meteors: .2 }],
   'pixel-drive-in': ['pixel-drivein', { palettes: ['midnight', 'vapor'], hold: 10, meteors: .5, screenGlow: 1.6 }],
   'pixel-volcano': ['pixel-volcano', { palettes: ['eclipse', 'dusk'], hold: 9, meteors: .3 }],
   'pixel-storm-lake': ['pixel-lake', { palettes: ['storm'], hold: 20, meteors: 0,
@@ -126,6 +127,8 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   const doc = pixelDocument(id, dressing, pixel, id === 'pixel-storm-lake' ? 18 : 24)
   if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
+  if (id === 'pixel-cherry-garden') doc.worldSfx = parseWorldSfx([{ id: 'petals', kind: 'snow', start: 0, end: 24, position: { x: 0, y: -.5, z: 1 },
+    scale: 3.4, intensity: .7, color: '#ffc2dc', seed: 5, sound: true, volume: .12 }])
   if (id === 'pixel-drive-in') {
     // The big screen plays your recording; its light washes over cars and sand.
     const screen: Scene3DSlot = { id: 'drive-in-screen', slot: 'prop', media: 'screen', position: [0, 0, -14], rotationY: 0, scale: 1, sourceUrl: '', clip: null,

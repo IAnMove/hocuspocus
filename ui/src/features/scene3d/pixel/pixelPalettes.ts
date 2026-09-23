@@ -74,6 +74,12 @@ export const PIXEL_PALETTES = {
     aurora: '#70ffd0', auroraAmount: .5, meteor: '#ffffff', windows: '#fff4c8',
     light: { color: '#dff0ff', intensity: 1.8 }, ambient: { sky: '#8ab4dc', ground: '#1a2c44', intensity: .9 },
   },
+  sakura: {
+    sky: ['#2a2250', '#b86a9a', '#ffc6b0'], moon: '#fff4ea', stars: '#ffe6f0',
+    far: ['#5a4a7a', '#f0c0d8'], near: ['#3a2a4a', '#b07a9a'], trees: '#24162a', water: '#6a4a7a',
+    aurora: '#ffb0e0', auroraAmount: 0, meteor: '#fff0f6', windows: '#ffcf8a',
+    light: { color: '#ffd0dc', intensity: 1.4 }, ambient: { sky: '#b07aa0', ground: '#2a1a30', intensity: .9 },
+  },
   alien: {
     sky: ['#0a0620', '#1f2a5c', '#3fb8a8'], moon: '#f0b47a', stars: '#bff6ff',
     far: ['#2a1650', '#c86aff'], near: ['#160a30', '#7a3cc0'], trees: '#0a0418', water: '#123048',

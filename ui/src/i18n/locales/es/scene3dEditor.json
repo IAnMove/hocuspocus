@@ -1345,6 +1345,10 @@
     "pixel-drive-in": {
       "title": "Autocine",
       "description": "Un autocine en el desierto bajo las estrellas: una pantalla enorme reproduce tu grabación, las filas de coches encienden sus luces de freno y la luz de la película baña coches, arena y mesetas."
+    },
+    "pixel-cherry-garden": {
+      "title": "Jardín de cerezos",
+      "description": "Cerezos en flor alrededor de un estanque en calma, una pagoda con ventanas encendidas bajo un pico nevado, faroles de piedra brillando y pétalos cayendo mientras el crepúsculo rosa se vuelve noche."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1577,7 +1581,8 @@
       "forest": "Bosque",
       "harbor": "Puerto",
       "dusk": "Crepúsculo",
-      "alien": "Alienígena"
+      "alien": "Alienígena",
+      "sakura": "Sakura"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1589,7 +1594,8 @@
       "pixel-forest": "Bosque",
       "pixel-viaduct": "Viaducto",
       "pixel-volcano": "Volcán",
-      "pixel-drivein": "Autocine"
+      "pixel-drivein": "Autocine",
+      "pixel-garden": "Jardín de cerezos"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

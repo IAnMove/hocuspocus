@@ -17,6 +17,7 @@ export const INDEX = {
   band: 92, bandSteps: 4, ring: 96, ringShade: 97,
   lava: 100, lavaSteps: 8,
   tail: 108,
+  blossom: 110,
 } as const
 
 export type IndexedLayer = { width: number; height: number; data: Uint8Array; /** A light source painted in, in texels (the lighthouse lamp). */ lamp?: [number, number] }

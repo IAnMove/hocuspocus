@@ -239,3 +239,68 @@ export function paintCars(width: number, height: number, spec: { seed: number; c
   }
   return cars
 }
+
+/** A cherry tree: a dark forked trunk under a cloud of blossom, lit on the
+ *  side facing the sun or moon. */
+function paintBlossomTree(target: IndexedLayer, x: number, ground: number, size: number, seed: number, lightFrom: number) {
+  const trunk = Math.round(size * 1.1)
+  for (let y = 0; y < trunk; y++) {
+    const lean = Math.round(Math.sin(y * .25 + seed) * 1.5)
+    set(target, x + lean, ground - y, INDEX.trees); set(target, x + lean + 1, ground - y, INDEX.trees)
+  }
+  const litSide = x / target.width < lightFrom ? 1 : -1
+  for (let blob = 0; blob < 7; blob++) {
+    const bx = x + (fxRandom(seed, blob) - .5) * size * 2.2, by = ground - trunk - (fxRandom(seed, blob + 10) - .3) * size * .9
+    const r = size * (.45 + fxRandom(seed, blob + 20) * .35)
+    for (let y = Math.floor(by - r); y <= by + r; y++) for (let px = Math.floor(bx - r); px <= bx + r; px++) {
+      const d = Math.hypot(px - bx, y - by) / r
+      if (d > 1 || (d > .75 && bayer(px, y) > (1 - d) * 4)) continue
+      const light = ((px - bx) * litSide - (y - by)) / r
+      set(target, px, y, light > .45 ? INDEX.blossom + 1 : light < -.35 ? INDEX.blossom + 2 : INDEX.blossom)
+    }
+  }
+}
+
+/** A pagoda of stacked tiers with upturned eaves and lit windows. */
+function paintPagoda(target: IndexedLayer, x: number, ground: number, tiers: number, tone: Tone) {
+  let y = ground, width = 26
+  for (let tier = 0; tier < tiers; tier++, width -= 4) {
+    const wall = 7, half = Math.round(width / 2) - 3
+    for (let dy = 0; dy < wall; dy++) for (let dx = -half; dx <= half; dx++) {
+      const window = dy > 1 && dy < 5 && Math.abs(dx) < half - 1 && (dx + 16) % 4 < 2
+      set(target, x + dx, y - dy, window ? INDEX.window + ((dx + tier) & 7) : tone.body)
+    }
+    y -= wall
+    for (let dy = 0; dy < 4; dy++) for (let dx = -half - 5 + dy; dx <= half + 5 - dy; dx++) set(target, x + dx, y - dy, dy === 3 ? tone.rim : INDEX.trees)
+    set(target, x - half - 6, y, INDEX.trees); set(target, x + half + 6, y, INDEX.trees)
+    y -= 4
+  }
+  for (let dy = 0; dy < 8; dy++) set(target, x, y - dy, tone.rim)
+}
+
+/** A stone lantern whose light sits in a window slot. */
+function paintLantern(target: IndexedLayer, x: number, ground: number, slot: number) {
+  for (let dy = 0; dy < 5; dy++) set(target, x, ground - dy, INDEX.trees)
+  for (let dx = -2; dx <= 2; dx++) { set(target, x + dx, ground - 5, INDEX.trees); set(target, x + dx, ground - 9, INDEX.trees) }
+  for (let dy = 6; dy <= 8; dy++) for (let dx = -1; dx <= 1; dx++) set(target, x + dx, ground - dy, INDEX.window + slot)
+  for (let dx = -3; dx <= 3; dx++) set(target, x + dx, ground - 10, INDEX.trees)
+}
+
+/** A garden shore: a low bank with blossom trees, and optionally a pagoda
+ *  and stone lanterns. */
+export function paintGarden(width: number, height: number, spec: Tone & { seed: number; trees: number; pagoda: boolean; lanterns: number; size: number }): IndexedLayer {
+  const garden = layer(width, height)
+  const bank = ridge(spec.seed, width, height * .86, height * .05, 1, height * .06)
+  for (let x = 0; x < width; x++) for (let y = bank[x]; y < height; y++) set(garden, x, y, y === bank[x] ? spec.rim : spec.body)
+  if (spec.pagoda) paintPagoda(garden, Math.round(width * .32), bank[Math.round(width * .32)], 4, spec)
+  for (let t = 0; t < spec.trees; t++) {
+    const x = Math.round(width * (.05 + .9 * (t + fxRandom(spec.seed, t)) / spec.trees))
+    if (spec.pagoda && Math.abs(x - width * .32) < 22) continue
+    paintBlossomTree(garden, x, bank[x], spec.size * (.8 + fxRandom(spec.seed, t + 40) * .5), spec.seed + t * 13, spec.lightFrom)
+  }
+  for (let l = 0; l < spec.lanterns; l++) {
+    const x = Math.round(width * (.12 + .76 * (l + .5) / spec.lanterns))
+    paintLantern(garden, x, bank[x], l % INDEX.windowSteps)
+  }
+  return garden
+}

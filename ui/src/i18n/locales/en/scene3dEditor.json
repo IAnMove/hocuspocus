@@ -1345,6 +1345,10 @@
     "pixel-drive-in": {
       "title": "Drive-in",
       "description": "A desert drive-in under the stars: a huge screen plays your recording, rows of parked cars flash their brake lights, and the film light washes over the cars, sand and mesas."
+    },
+    "pixel-cherry-garden": {
+      "title": "Cherry garden",
+      "description": "Blossoming cherry trees round a still pond, a pagoda with lit windows under a snowy peak, stone lanterns glowing and petals drifting down as the pink dusk turns to night."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1577,7 +1581,8 @@
       "forest": "Forest",
       "harbor": "Harbour",
       "dusk": "Dusk",
-      "alien": "Alien"
+      "alien": "Alien",
+      "sakura": "Sakura"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1589,7 +1594,8 @@
       "pixel-forest": "Forest",
       "pixel-viaduct": "Viaduct",
       "pixel-volcano": "Volcano",
-      "pixel-drivein": "Drive-in"
+      "pixel-drivein": "Drive-in",
+      "pixel-garden": "Cherry garden"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

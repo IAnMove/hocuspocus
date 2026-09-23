@@ -200,3 +200,15 @@ test('drive-in: the big screen plays the recording and its light tints the world
   assert.ok(parseInt(tinted.water.slice(1, 3), 16) > parseInt(PIXEL_PALETTES.midnight.water.slice(1, 3), 16))
   assert.equal(tintPalette(PIXEL_PALETTES.midnight, '#ff0000', 0), PIXEL_PALETTES.midnight)
 })
+
+test('cherry garden: blossom, a lit pagoda, lanterns and drifting petals', () => {
+  const plan = worldPlan('pixel-garden', resolvePixelScene('pixel-garden', undefined))
+  const shore = plan.layers.find(layer => layer.z === -30)!.paint(736, 96)
+  const used = new Set(shore.data)
+  assert.ok([110, 111, 112].every(slot => used.has(slot)), 'blossom is lit and shaded')
+  assert.ok([...used].some(slot => slot >= 64 && slot < 72), 'pagoda windows glow')
+  const pond = plan.layers.find(layer => layer.z === -9)!.paint(360, 50)
+  assert.ok([...new Set(pond.data)].some(slot => slot >= 64 && slot < 72), 'stone lanterns glow')
+  const doc = applyScene3DTemplate('pixel-cherry-garden')
+  assert.equal(doc.worldSfx?.[0].kind, 'snow'); assert.equal(doc.worldSfx?.[0].color, '#ffc2dc')
+})

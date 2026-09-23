@@ -70,6 +70,10 @@ export function writePalette(bytes: Uint8Array, palette: PixelPalette, seconds: 
     writeColor(bytes, INDEX.sand + step, t < .6 ? mixHex(mixHex(palette.sky[2], palette.water, .45), palette.water, t / .6) : mixHex(palette.water, palette.near[0], (t - .6) * .6))
   }
   writeColor(bytes, INDEX.lamp, palette.windows)
+  // Blossom keeps its pink in any mood, drawn slightly towards the land's light.
+  writeColor(bytes, INDEX.blossom, mixHex('#f4a2c6', palette.near[1], .22))
+  writeColor(bytes, INDEX.blossom + 1, mixHex('#ffd8e8', palette.moon, .2))
+  writeColor(bytes, INDEX.blossom + 2, mixHex('#b05a86', palette.near[0], .35))
   writeColor(bytes, INDEX.ring, mixHex(palette.moon, palette.stars, .35))
   writeColor(bytes, INDEX.ringShade, mixHex(palette.moon, palette.sky[1], .6))
   writeCycling(bytes, palette, seconds)

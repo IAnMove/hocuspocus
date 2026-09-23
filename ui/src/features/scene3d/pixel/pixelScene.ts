@@ -2,7 +2,7 @@
  *  moon hangs (and so where the light comes from), how tall and rough the
  *  ranges are, how much snow, trees, stars, water ripple and city light. */
 
-export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein'
+export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden'
 export type PixelBody = 'moon' | 'sun' | 'planet' | 'none'
 export type MeteorDirection = 'left' | 'right' | 'both'
 
@@ -50,6 +50,7 @@ export const PIXEL_SCENE_DEFAULTS: Record<PixelWorldKind, PixelScene> = {
   'pixel-viaduct': { ...BASE, seed: 58, bodyX: .25, bodyY: .62, bodySize: .9, mountains: .4, hills: .45, trees: .6, stars: .7, ripple: .55 },
   'pixel-volcano': { ...BASE, seed: 73, bodyX: .12, bodyY: .72, bodySize: .8, mountains: .5, hills: .35, trees: .35, stars: .5, ripple: .6, reeds: false },
   'pixel-drivein': { ...BASE, seed: 17, bodyX: .1, bodyY: .78, bodySize: .7, mountains: .3, hills: .3, trees: 0, stars: .8, ripple: 0, reeds: false },
+  'pixel-garden': { ...BASE, seed: 88, bodyX: .72, bodyY: .5, bodySize: 1.2, crescent: .08, mountains: .7, roughness: .15, snow: .8, trees: .6, stars: .35, ripple: .35, reeds: false },
   'pixel-forest': { ...BASE, seed: 131, bodyX: .5, bodyY: .72, bodySize: .8, mountains: .45, trees: 1, hills: .8, stars: .55, ripple: .3 },
 }
 
