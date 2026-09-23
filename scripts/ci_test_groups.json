@@ -86,6 +86,7 @@
         "tests/test_music_model_contract.py",
         "tests/test_operation_logging.py",
         "tests/test_output_completion_time.py",
+        "tests/test_output_delete_workspace.py",
         "tests/test_output_move_security.py",
         "tests/test_pass2_descriptor_canonicalize.py",
         "tests/test_pass3_storyboard_skip.py",

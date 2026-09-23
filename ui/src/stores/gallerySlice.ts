@@ -646,7 +646,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     const workspaceEpoch = _workspaceRequestEpoch
 
     try {
-      await api.deleteOutput(output.name)
+      await api.deleteOutput(output.name, workspace)
       if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
       // Remove from local state
       const allOutputs = get().outputs.filter(o => o.name !== output.name)
