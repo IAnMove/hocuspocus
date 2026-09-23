@@ -1,0 +1,628 @@
+{
+  "version": 1,
+  "units": "meters",
+  "up": "y",
+  "width": 720,
+  "height": 1280,
+  "fps": 24,
+  "duration": 5,
+  "templateId": "topdown-dragon-portals",
+  "camera": {
+    "family": "fixed",
+    "frameFormat": "portrait",
+    "eye": [
+      0,
+      0,
+      10
+    ],
+    "look": [
+      0,
+      0,
+      0
+    ],
+    "fov": 49
+  },
+  "environment": {
+    "floorStyle": "none",
+    "platform": false,
+    "reflectiveFloor": false,
+    "bloom": 0.025,
+    "floorColor": "#061923"
+  },
+  "light": {
+    "kind": "directional",
+    "direction": [
+      0,
+      -1,
+      -1
+    ],
+    "intensity": 1,
+    "color": "#ffffff"
+  },
+  "slots": [
+    {
+      "id": "distant-gorge",
+      "slot": "background",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/topdown-cliff-flight/canyon.jpg",
+      "position": [
+        0,
+        -15.5,
+        -12
+      ],
+      "scale": 17.5,
+      "rotationY": 0,
+      "imageLook": {
+        "unlit": true,
+        "grounded": false
+      },
+      "motion": {
+        "to": [
+          0,
+          -19.5,
+          -12
+        ],
+        "easing": "linear",
+        "faceTravel": false
+      }
+    },
+    {
+      "id": "left-cliff",
+      "slot": "prop",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/topdown-cliff-flight/cliff-left.jpg",
+      "position": [
+        -2.1,
+        -9.5,
+        -5
+      ],
+      "scale": 12,
+      "rotationY": 0,
+      "imageLook": {
+        "unlit": true,
+        "grounded": false,
+        "windows": [
+          [
+            [
+              0.53,
+              0
+            ],
+            [
+              0.54,
+              0.035
+            ],
+            [
+              0.52,
+              0.055
+            ],
+            [
+              0.57,
+              0.08
+            ],
+            [
+              0.57,
+              0.11
+            ],
+            [
+              0.55,
+              0.15
+            ],
+            [
+              0.51,
+              0.18
+            ],
+            [
+              0.49,
+              0.22
+            ],
+            [
+              0.47,
+              0.25
+            ],
+            [
+              0.46,
+              0.28
+            ],
+            [
+              0.43,
+              0.31
+            ],
+            [
+              0.43,
+              0.35
+            ],
+            [
+              0.42,
+              0.38
+            ],
+            [
+              0.44,
+              0.41
+            ],
+            [
+              0.45,
+              0.45
+            ],
+            [
+              0.43,
+              0.48
+            ],
+            [
+              0.41,
+              0.52
+            ],
+            [
+              0.4,
+              0.56
+            ],
+            [
+              0.39,
+              0.59
+            ],
+            [
+              0.37,
+              0.63
+            ],
+            [
+              0.37,
+              0.67
+            ],
+            [
+              0.39,
+              0.7
+            ],
+            [
+              0.47,
+              0.74
+            ],
+            [
+              0.54,
+              0.77
+            ],
+            [
+              0.57,
+              0.8
+            ],
+            [
+              0.53,
+              0.83
+            ],
+            [
+              0.49,
+              0.86
+            ],
+            [
+              0.48,
+              0.9
+            ],
+            [
+              0.49,
+              0.94
+            ],
+            [
+              0.48,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ]
+        ]
+      },
+      "motion": {
+        "to": [
+          -2.1,
+          -14.5,
+          -5
+        ],
+        "easing": "linear",
+        "faceTravel": false
+      }
+    },
+    {
+      "id": "right-cliff",
+      "slot": "prop",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/topdown-cliff-flight/cliff-right.jpg",
+      "position": [
+        2.1,
+        -8.2,
+        -4
+      ],
+      "scale": 11.2,
+      "rotationY": 0,
+      "imageLook": {
+        "unlit": true,
+        "grounded": false,
+        "windows": [
+          [
+            [
+              0,
+              0
+            ],
+            [
+              0.38,
+              0
+            ],
+            [
+              0.38,
+              0.04
+            ],
+            [
+              0.43,
+              0.07
+            ],
+            [
+              0.44,
+              0.1
+            ],
+            [
+              0.45,
+              0.13
+            ],
+            [
+              0.49,
+              0.16
+            ],
+            [
+              0.54,
+              0.2
+            ],
+            [
+              0.55,
+              0.24
+            ],
+            [
+              0.53,
+              0.28
+            ],
+            [
+              0.51,
+              0.31
+            ],
+            [
+              0.48,
+              0.34
+            ],
+            [
+              0.49,
+              0.37
+            ],
+            [
+              0.47,
+              0.4
+            ],
+            [
+              0.48,
+              0.44
+            ],
+            [
+              0.5,
+              0.48
+            ],
+            [
+              0.51,
+              0.52
+            ],
+            [
+              0.54,
+              0.56
+            ],
+            [
+              0.54,
+              0.6
+            ],
+            [
+              0.53,
+              0.64
+            ],
+            [
+              0.5,
+              0.68
+            ],
+            [
+              0.49,
+              0.72
+            ],
+            [
+              0.48,
+              0.76
+            ],
+            [
+              0.46,
+              0.8
+            ],
+            [
+              0.45,
+              0.84
+            ],
+            [
+              0.44,
+              0.88
+            ],
+            [
+              0.43,
+              0.92
+            ],
+            [
+              0.41,
+              0.96
+            ],
+            [
+              0.4,
+              1
+            ],
+            [
+              0,
+              1
+            ]
+          ]
+        ]
+      },
+      "motion": {
+        "to": [
+          2.1,
+          -14.2,
+          -4
+        ],
+        "easing": "linear",
+        "faceTravel": false
+      }
+    },
+    {
+      "id": "dragon-knight",
+      "slot": "subject_1",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/topdown-cliff-flight/dragon.jpg",
+      "position": [
+        0,
+        -1.88,
+        1
+      ],
+      "scale": 1.48,
+      "rotationY": 0,
+      "imageLook": {
+        "unlit": true
+      },
+      "motion": {
+        "to": [
+          0,
+          -0.9299999999999999,
+          1
+        ],
+        "faceTravel": false,
+        "easing": "linear"
+      },
+      "screen": {
+        "sourceUrl": "/examples/topdown-dragon-portals/dragon-flight.webm",
+        "media": "video",
+        "mode": "mesh",
+        "targetMesh": "SCREEN_CONTENT",
+        "anchor": "",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "pitch": 0,
+        "yaw": 0,
+        "roll": 0,
+        "width": 2,
+        "height": 2,
+        "style": "frameless",
+        "fit": "contain",
+        "start": 0,
+        "speed": 1,
+        "loop": false,
+        "flipY": false,
+        "transparent": true
+      }
+    }
+  ],
+  "effects": [],
+  "worldSfx": [
+    {
+      "id": "mist",
+      "kind": "fog",
+      "start": 0,
+      "end": 5,
+      "color": "#ffab47",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": -0.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": 3,
+      "intensity": 0.025,
+      "seed": 916177,
+      "sound": false,
+      "volume": 0
+    },
+    {
+      "id": "dust",
+      "kind": "dust",
+      "start": 0,
+      "end": 5,
+      "color": "#ffab47",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 2
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": 3,
+      "intensity": 0.04,
+      "seed": 916177,
+      "sound": false,
+      "volume": 0
+    },
+    {
+      "id": "destination-gate",
+      "kind": "media_portal",
+      "start": 1.4000000000000001,
+      "end": 5,
+      "color": "#ffab47",
+      "position": {
+        "x": 0.8,
+        "y": 2.3,
+        "z": 2.4
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": 0,
+      "intensity": 0.9,
+      "seed": 916177,
+      "sound": false,
+      "volume": 0,
+      "sourceUrl": "/examples/topdown-dragon-portals/ember-rift.jpg",
+      "mediaProjection": "screen",
+      "mediaPlayback": {
+        "start": 0,
+        "speed": 1,
+        "loop": false
+      },
+      "motion": [
+        {
+          "time": 1.4000000000000001,
+          "position": {
+            "x": 0.8,
+            "y": 2.3,
+            "z": 2.4
+          },
+          "rotation": {
+            "x": 35,
+            "y": 40,
+            "z": -80
+          },
+          "scale": 0,
+          "easing": "smooth"
+        },
+        {
+          "time": 2.3000000000000003,
+          "position": {
+            "x": 0.3,
+            "y": 1.9,
+            "z": 2.4
+          },
+          "rotation": {
+            "x": 25,
+            "y": 20,
+            "z": -25
+          },
+          "scale": 1.6,
+          "easing": "smooth"
+        },
+        {
+          "time": 3.15,
+          "position": {
+            "x": 0,
+            "y": 1.1,
+            "z": 2.4
+          },
+          "rotation": {
+            "x": 12,
+            "y": 5,
+            "z": 0
+          },
+          "scale": 2.7,
+          "easing": "smooth"
+        },
+        {
+          "time": 4.050000000000001,
+          "position": {
+            "x": 0,
+            "y": 0.3,
+            "z": 2.4
+          },
+          "rotation": {
+            "x": 3,
+            "y": 0,
+            "z": 5
+          },
+          "scale": 5.1,
+          "easing": "smooth"
+        },
+        {
+          "time": 4.9,
+          "position": {
+            "x": 0,
+            "y": 0,
+            "z": 2.4
+          },
+          "rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "scale": 12,
+          "easing": "smooth"
+        }
+      ]
+    },
+    {
+      "id": "crossing-burst",
+      "kind": "explosion",
+      "start": 3.2,
+      "end": 3.8000000000000003,
+      "color": "#ffab47",
+      "position": {
+        "x": 0,
+        "y": 1,
+        "z": 3.2
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": 2.3,
+      "intensity": 1.1,
+      "seed": 916177,
+      "sound": false,
+      "volume": 0
+    },
+    {
+      "id": "crossing-sparks",
+      "kind": "sparks",
+      "start": 3,
+      "end": 4.4,
+      "color": "#ffab47",
+      "position": {
+        "x": 0,
+        "y": 1,
+        "z": 3
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": 2,
+      "intensity": 1,
+      "seed": 916177,
+      "sound": false,
+      "volume": 0
+    }
+  ]
+}

@@ -369,6 +369,14 @@
     "stage": "Stage"
   },
   "template": {
+    "topdown-dragon-portals": {
+      "title": "Dark Fantasy · The dragon's portal",
+      "description": "An animated transparent dragon enters a rotating 3D portal that reveals another realm and expands with sparks. Editable layers and timing."
+    },
+    "topdown-cliff-flight": {
+      "title": "Dark Fantasy · Flight over the abyss",
+      "description": "An overhead dragon glides between separate cliff layers with depth, mist and particles. Fixed portrait camera and four editable layers."
+    },
     "dark-cathedral": {
       "title": "Dark Fantasy · Eclipse cathedral",
       "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."

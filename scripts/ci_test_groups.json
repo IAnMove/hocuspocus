@@ -179,6 +179,7 @@
         "tests/test_character_speech_definition.py",
         "tests/test_ci_shards.py",
         "tests/test_code_health.py",
+        "tests/test_core_mcp.py",
         "tests/test_core_runtime.py",
         "tests/test_core_series_assembly.py",
         "tests/test_custom_character_voice.py",

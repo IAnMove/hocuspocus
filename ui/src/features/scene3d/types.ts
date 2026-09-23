@@ -26,6 +26,8 @@ export type Scene3DCameraFamily =
 export type Scene3DSlotId = 'subject_1' | 'subject_2' | 'background' | 'prop'
 
 export const SCENE3D_TEMPLATE_IDS = [
+  'topdown-dragon-portals',
+  'topdown-cliff-flight',
   ...SPEECH_TEMPLATE_IDS,
   'two-shot',
   'product-orbit',

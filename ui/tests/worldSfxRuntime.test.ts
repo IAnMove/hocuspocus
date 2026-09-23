@@ -7,6 +7,26 @@ import { slotPoseAtTime } from '../src/features/scene3d/performance.ts'
 import { worldSfxDuelDocument } from '../src/features/sceneFx/worldDemo'
 import { transformPatch } from '../src/features/scene3d/transformGizmo.ts'
 
+test('subtle fog intensity survives parsing and reaches every mist material', () => {
+  for (const intensity of [0, 0.025]) {
+    const cues = parseWorldSfx([{ id: 'mist', kind: 'fog', start: 0, end: 30, intensity }])
+    assert.equal(cues[0].intensity, intensity)
+    const scene = new Scene()
+    const nodes = new Map()
+    syncWorldSfx(scene, nodes, cues, 1, [])
+    let checked = 0
+    nodes.get('mist').root.traverse((child: Object3D) => {
+      const material = (child as unknown as { material?: { uniforms?: { uPower?: { value: number } } } }).material
+      if (material?.uniforms?.uPower) {
+        assert.equal(material.uniforms.uPower.value, intensity)
+        checked += 1
+      }
+    })
+    assert.ok(checked > 0)
+    syncWorldSfx(scene, nodes, [], 1, [])
+  }
+})
+
 test('world SFX occupy the scene graph and hide outside their window', () => {
   const scene = new Scene()
   const nodes = new Map()

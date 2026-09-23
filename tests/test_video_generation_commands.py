@@ -99,7 +99,9 @@ def _video_app(service, tmp_path):
     app = FastAPI()
     app.include_router(create_image_generation_commands_router(service))
     app.include_router(create_wangp_mcp_router(
-        handlers=image_command_handlers(service),
+        # MCP advertises only tools it can dispatch; production wires the
+        # legacy ``generate`` handler, whose schema this test also checks.
+        handlers={**image_command_handlers(service), "generate": lambda _arguments: {"queued": True}},
         command_operations=image_command_catalog(
             [service.operations["generation.video"].catalog],
         ),

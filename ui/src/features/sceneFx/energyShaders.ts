@@ -66,7 +66,7 @@ const BODIES: Record<EnergySurface, string> = {
     float fade=1.-uProgress;
     gl_FragColor=vec4(uColor*(band*3.+dust)*uPower,(band+dust)*fade*uPower);`,
   mist: `
-    vec2 p=vUv-.5; float edge=1.-smoothstep(.12,.52,length(p));
+    vec2 p=vUv-.5; float edge=1.-smoothstep(.12,.48,length(p));
     float n=fbm(vUv*5.+vec2(uTime*.12+uSeed,uTime*-.075));
     float alpha=smoothstep(.28,.74,n)*edge*.55;
     float light=fbm(vUv*7.+n+uTime*.04);
