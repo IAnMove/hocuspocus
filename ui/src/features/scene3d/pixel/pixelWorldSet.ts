@@ -125,6 +125,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
   const mesh = new Mesh(new PlaneGeometry(spec.width, spec.height), material)
   mesh.position.set(spec.x ?? 0, spec.bottom + spec.height / 2, spec.z)
   if (spec.turn) mesh.rotation.y = spec.turn
+  if (spec.floor) { mesh.rotation.x = -Math.PI / 2; mesh.position.y = spec.bottom }
   const hubs = painted.hubs
   const lamp = painted.lamp && [
     (painted.lamp[0] / width - .5) * spec.width, spec.bottom + (1 - painted.lamp[1] / height) * spec.height, spec.z + .4,

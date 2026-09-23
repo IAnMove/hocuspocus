@@ -1385,6 +1385,10 @@
     "pixel-castle-fireworks": {
       "title": "Fuegos en el castillo",
       "description": "Un castillo sobre su colina con ventanas encendidas y estandartes mientras los fuegos artificiales suben y estallan en anillos de chispas que caen y se apagan, cada estallido reflejado en el lago."
+    },
+    "pixel-glow-tide": {
+      "title": "Marea luminosa",
+      "description": "Una playa nocturna donde cada ola brilla azul al romper: franjas de espuma bioluminiscente llegan sobre la arena mojada con ciclo de color, bajo una luna reflejada en el mar."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1645,7 +1649,8 @@
       "pixel-orbit": "Órbita",
       "pixel-tulips": "Campos de tulipanes",
       "pixel-alley": "Callejón de neón",
-      "pixel-castle": "Castillo"
+      "pixel-castle": "Castillo",
+      "pixel-beach": "Playa"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

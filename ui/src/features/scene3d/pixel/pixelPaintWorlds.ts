@@ -768,3 +768,24 @@ export function paintCastle(width: number, height: number, spec: Tone & { seed: 
   towers.forEach(([x, w, tall], i) => paintCastleTower(castle, x, hill[x], w, Math.round(height * tall), spec, INDEX.balloon + (i % 3)))
   return castle
 }
+
+/** A beach laid on the floor, the water's edge at the top (far) row: wavy
+ *  bands of surf in the cycling wave slots, so each wave rolls in toward
+ *  the viewer and glows, then wet and dry sand. */
+export function paintBeach(width: number, height: number, seed: number): IndexedLayer {
+  const beach = layer(width, height)
+  const surf = Math.round(height * .6)
+  for (let x = 0; x < width; x++) {
+    const edge = Math.sin(x * .05 + seed) * 3 + Math.sin(x * .13) * 1.5
+    for (let y = 0; y < height; y++) {
+      const depth = y - edge
+      if (depth < surf) {
+        const band = Math.floor(depth / (surf / INDEX.waveSteps))
+        const crest = (depth % (surf / INDEX.waveSteps)) < 3.5 + Math.sin(x * .3 + band) * 1.2
+        // Wet sand between crests is dark and glassy.
+        set(beach, x, y, crest || bayer(x, y) < .18 ? INDEX.wave + Math.max(0, Math.min(INDEX.waveSteps - 1, band)) : INDEX.near)
+      } else set(beach, x, y, bayer(x, y) < .35 + (depth - surf) / (height - surf) * .4 ? INDEX.farRim : INDEX.far)
+    }
+  }
+  return beach
+}

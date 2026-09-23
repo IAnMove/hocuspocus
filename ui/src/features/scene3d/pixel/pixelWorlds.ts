@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -11,6 +11,8 @@ export type LayerSpec = {
   /** Where it stands across x (meters) and how it is turned about y, for walls. */
   x?: number
   turn?: number
+  /** Lies flat on the ground instead of standing, centred at `z`. */
+  floor?: boolean
   /** Radians per second it turns about its own centre. */
   spin?: number
   /** Goes round a centre (x, y) at `radius`, staying upright, like a gondola. */
@@ -204,6 +206,11 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     sky(scene), range(scene),
     { z: -26, width: 56, height: 17, bottom: -.8, texture: [448, 136], paint: (w, h) => paintCastle(w, h, { body: INDEX.near, rim: INDEX.farRim, seed: scene.seed + 4, lightFrom: bodySkyX(scene) }) },
     ...reeds(scene),
+  ] }),
+  'pixel-beach': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene), hills(scene, true),
+    // The shore lies just above the sea, its waterline toward the horizon.
+    { z: 6.5, width: 64, height: 10, bottom: .03, floor: true, texture: [512, 110], paint: (w, h) => paintBeach(w, h, scene.seed) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

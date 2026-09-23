@@ -1385,6 +1385,10 @@
     "pixel-castle-fireworks": {
       "title": "Castle fireworks",
       "description": "A castle on its hill with lit windows and banners while fireworks rise and burst in rings of embers that sag and fade, every burst mirrored in the lake below."
+    },
+    "pixel-glow-tide": {
+      "title": "Glowing tide",
+      "description": "A night beach where every wave glows blue as it breaks: bands of bioluminescent surf roll in across the wet sand by colour cycling, under a moon mirrored in the sea."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1645,7 +1649,8 @@
       "pixel-orbit": "Orbit",
       "pixel-tulips": "Tulip fields",
       "pixel-alley": "Neon alley",
-      "pixel-castle": "Castle"
+      "pixel-castle": "Castle",
+      "pixel-beach": "Beach"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

@@ -341,3 +341,16 @@ test('castle fireworks: bursts follow the clock, fade and only burst where asked
   assert.ok([...new Set(castle.data)].some(slot => slot >= 64 && slot < 72), 'lit windows')
   assert.ok([124, 125, 126].some(slot => castle.data.includes(slot)), 'banners fly')
 })
+
+test('glowing tide: a beach on the floor whose waves roll in by cycling', () => {
+  const plan = worldPlan('pixel-beach', resolvePixelScene('pixel-beach', undefined))
+  const shore = plan.layers.find(layer => layer.floor)!
+  const sand = shore.paint(...shore.texture)
+  assert.ok([180, 181, 182, 183, 184, 185, 186, 187].filter(slot => sand.data.includes(slot)).length >= 6, 'surf bands in the wave slots')
+  const waves = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.midnight, seconds); return Array.from(bytes.subarray(180 * 4, 188 * 4)).join() }
+  assert.notEqual(waves(0), waves(1))
+  const root = pixelWorldGroup('pixel-beach'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-glow-tide').pixelWorld!, 1, 720)
+  const floor = (root as Group).children.find(child => child.rotation.x === -Math.PI / 2 && child.position.y > 0)
+  assert.ok(floor && floor.position.y < .1, 'the beach lies just above the sea')
+})

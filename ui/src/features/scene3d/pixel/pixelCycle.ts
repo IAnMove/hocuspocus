@@ -53,6 +53,12 @@ const CYCLERS: Cycler[] = [
     const buzz = Math.sin(t * (13 + k * 7)) * Math.sin(t * (.9 + k * .4) + k) > .82
     return buzz ? mixHex(p.near[0], tube, .25) : mixHex(tube, '#ffffff', .15)
   } },
+  // Waves roll in: a bright crest walks from the water's edge toward the viewer,
+  // glowing with the tide's bioluminescence as it breaks.
+  { start: INDEX.wave, steps: INDEX.waveSteps, color: (p, t, k) => {
+    const crest = Math.pow(1 - pulse(k, INDEX.waveSteps, t, .35), 3)
+    return mixHex(mixHex(p.water, p.near[0], .3), mixHex('#5affea', '#ffffff', crest * .3), crest)
+  } },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]
