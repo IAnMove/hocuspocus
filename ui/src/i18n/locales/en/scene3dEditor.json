@@ -1401,6 +1401,10 @@
     "pixel-night-express": {
       "title": "Night express",
       "description": "The view from a moving train: mountains glide by slowly, pine hills faster and telegraph poles flash past the window, all mirrored in a lake, while the moon keeps pace and dusk turns to an aurora night."
+    },
+    "pixel-whole-day": {
+      "title": "A whole day",
+      "description": "A time-lapse over a lake: the sun rises in the east, arcs across the sky and sets in the west, then the moon follows, while the light turns from dawn to day, sunset and night and falls on actors from wherever the sun or moon stands."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1665,7 +1669,8 @@
       "pixel-beach": "Beach",
       "pixel-lanterns": "Lantern lake",
       "pixel-window": "Window",
-      "pixel-express": "Train window"
+      "pixel-express": "Train window",
+      "pixel-daycycle": "Day cycle"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

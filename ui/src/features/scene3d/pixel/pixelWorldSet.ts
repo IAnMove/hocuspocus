@@ -28,6 +28,7 @@ type PixelRuntime = {
   spinners: { mesh: Mesh; speed: number }[]
   scrollers: { material: ShaderMaterial; speed: number }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
+  celestials: Mesh[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
@@ -251,7 +252,7 @@ function clear(root: Object3D) {
  *  layout (not the lighting) changes. */
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -268,6 +269,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
     if (spec.spin) runtime.spinners.push({ mesh, speed: spec.spin })
     if (spec.scroll) runtime.scrollers.push({ material: mesh.material as ShaderMaterial, speed: spec.scroll })
     if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
+    if (spec.celestial) runtime.celestials.push(mesh)
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
     if (hubs) sailsOn(spec, hubs, runtime.palette, runtime, root)
@@ -284,7 +286,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], movers: [], spinners: [], orbiters: [], scrollers: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -309,7 +311,7 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
     const angle = orbit.phase + seconds * orbit.speed
     // Gondolas hang below their pivot on the rim and never tilt.
     mesh.position.x = orbit.x + Math.cos(angle) * orbit.radius
-    mesh.position.y = orbit.y + Math.sin(angle) * orbit.radius - .7
+    mesh.position.y = orbit.y + Math.sin(angle) * (orbit.ry ?? orbit.radius) - (orbit.drop ?? 0)
   }
 }
 
@@ -359,7 +361,9 @@ export function paintPixelWorld(dressing: Object3D | null, scene: Scene, dir: { 
   const layout = runtime && dressing ? syncSet(dressing, runtime, pixel, palette, seconds, frameHeight) : undefined
   dir.color.set(palette.light.color)
   dir.intensity = palette.light.intensity
-  if (layout && layout.body !== 'none') dir.position.set(...bodyDirection(layout)).multiplyScalar(6)
+  const highest = runtime?.celestials.reduce<Mesh | undefined>((best, mesh) => !best || mesh.position.y > best.position.y ? mesh : best, undefined)
+  if (highest) dir.position.set(highest.position.x, Math.max(1, highest.position.y), 40).normalize().multiplyScalar(6)
+  else if (layout && layout.body !== 'none') dir.position.set(...bodyDirection(layout)).multiplyScalar(6)
   const ambient = hemisphere(scene)
   if (ambient) {
     ambient.color.set(palette.ambient.sky)

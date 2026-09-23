@@ -1401,6 +1401,10 @@
     "pixel-night-express": {
       "title": "Expreso nocturno",
       "description": "La vista desde un tren en marcha: las montañas pasan despacio, las colinas de pinos más rápido y los postes del telégrafo cruzan veloces la ventana, todo reflejado en un lago, mientras la luna acompaña y el crepúsculo se vuelve noche de aurora."
+    },
+    "pixel-whole-day": {
+      "title": "Un día entero",
+      "description": "Un time-lapse sobre un lago: el sol sale por el este, cruza el cielo en arco y se pone por el oeste, luego le sigue la luna, mientras la luz pasa del amanecer al día, el atardecer y la noche y cae sobre los personajes desde donde estén el sol o la luna."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1665,7 +1669,8 @@
       "pixel-beach": "Playa",
       "pixel-lanterns": "Lago de farolillos",
       "pixel-window": "Ventana",
-      "pixel-express": "Ventana del tren"
+      "pixel-express": "Ventana del tren",
+      "pixel-daycycle": "Ciclo del día"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

@@ -399,3 +399,19 @@ test('night express: layers slide by at parallax speeds and wrap without a seam'
   assert.notDeepEqual(scroll(1), scroll(2))
   assert.deepEqual(scroll(1), scroll(1))
 })
+
+test('a whole day: the sun and moon cross the sky and the light follows the higher one', () => {
+  const root = pixelWorldGroup('pixel-daycycle'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-whole-day').pixelWorld!
+  const at = (seconds: number) => {
+    paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)
+    const [sun, moon] = (root as Group).children.filter(child => child.position.z === -60)
+    return { sun: sun.position.clone(), moon: moon.position.clone(), light: dir.position.clone() }
+  }
+  const dawn = at(1.5), noon = at(6), dusk = at(10.5), night = at(18)
+  assert.ok(dawn.sun.x < 0 && dusk.sun.x > 0, 'the sun rises on one side and sets on the other')
+  assert.ok(noon.sun.y > dawn.sun.y && noon.sun.y > dusk.sun.y, 'highest at noon')
+  assert.ok(night.moon.y > night.sun.y, 'the moon rules the night')
+  assert.ok(Math.sign(dawn.light.x) === Math.sign(dawn.sun.x) && Math.sign(night.light.x) === Math.sign(night.moon.x || 1e-9) || night.moon.x === 0, 'light comes from the higher body')
+  assert.deepEqual(at(6).sun.toArray(), noon.sun.toArray())
+})

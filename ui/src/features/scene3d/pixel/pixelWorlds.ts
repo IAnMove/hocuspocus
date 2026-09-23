@@ -1,4 +1,4 @@
-import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
+import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
 import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
@@ -18,7 +18,9 @@ export type LayerSpec = {
   /** Radians per second it turns about its own centre. */
   spin?: number
   /** Goes round a centre (x, y) at `radius`, staying upright, like a gondola. */
-  orbit?: { x: number; y: number; radius: number; speed: number; phase: number }
+  orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number }
+  /** The sun or moon on its arc: the key light follows whichever is higher. */
+  celestial?: 'sun' | 'moon'
   paint: (w: number, h: number) => IndexedLayer
 }
 export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean }
@@ -27,6 +29,9 @@ const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: 
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
 const NEAR: Omit<LayerSpec, 'paint'> = { z: -37, width: 110, height: 7, bottom: -1, texture: [720, 46] }
 const far = { body: INDEX.far, rim: INDEX.farRim }
+/** A day in the day-cycle world lasts as long as its template's clip. */
+export const DAY_SECONDS = 24
+
 /** Lantern flocks: depth, plane width and height, rise speed, lantern count. */
 const LANTERNS: [number, number, number, number, number][] = [[-40, 70, 26, .35, 60], [-28, 44, 18, .5, 34], [-18, 26, 12, .7, 18], [-10, 14, 8, .9, 8]]
 
@@ -162,7 +167,7 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { z: -22, width: WHEEL.radius * 2.15, height: WHEEL.radius * 2.15, bottom: WHEEL.y - WHEEL.radius * 1.075, texture: [104, 104], spin: -.12, paint: w => paintWheel(w, { body: INDEX.far, rim: INDEX.farRim }) },
     ...Array.from({ length: 8 }, (_, i) => ({
       z: -21.8, width: 1.4, height: 1.4, bottom: 0, texture: [14, 14] as [number, number],
-      orbit: { x: 0, y: WHEEL.y, radius: WHEEL.radius, speed: -.12, phase: i / 8 * Math.PI * 2 },
+      orbit: { x: 0, y: WHEEL.y, radius: WHEEL.radius, speed: -.12, phase: i / 8 * Math.PI * 2, drop: .7 },
       paint: (w: number, h: number) => paintCabin(w, h, INDEX.balloon + (i % 3)),
     })),
     { z: -16, width: 44, height: 3.2, bottom: -.2, texture: [300, 22], paint: (w, h) => paintTents(w, h, scene.seed + 5, 6) },
@@ -240,6 +245,15 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { ...NEAR, z: -30, height: 8, texture: [720, 64], scroll: 18, paint: (w, h) => paintLoopRange(w, h, { ...near, seed: scene.seed + 2, lightFrom: bodySkyX(scene), base: h * .72, amp: h * .12, trees: scene.trees }) },
     { z: -7, width: 22, height: 6, bottom: -.3, texture: [480, 130], scroll: 150, paint: (w, h) => paintPoles(w, h, 160) },
     { z: 6, width: 5.4, height: 3.1, bottom: .15, texture: [324, 186], paint: (w, h) => paintCarriage(w, h) },
+  ] }),
+  'pixel-daycycle': scene => ({ ground: 'water', layers: [
+    sky({ ...scene, body: 'none' }), range(scene), hills(scene, true), ...reeds(scene),
+    // One full turn per day: the sun rises in the east as the moon sets.
+    ...(['sun', 'moon'] as const).map((kind, i) => ({
+      z: -60, width: 24, height: 24, bottom: 0, texture: [96, 96] as [number, number], celestial: kind,
+      orbit: { x: 0, y: -1, radius: 46, ry: 25, speed: -Math.PI * 2 / DAY_SECONDS, phase: Math.PI - i * Math.PI },
+      paint: (w: number, h: number) => { const disc = layer(w, h); paintMoon(disc, scene.seed, { kind, x: .5, y: .5, radius: kind === 'sun' ? 11 : 9, crescent: kind === 'sun' ? 0 : scene.crescent }); return disc },
+    })),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

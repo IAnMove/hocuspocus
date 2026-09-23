@@ -2,7 +2,7 @@
  *  moon hangs (and so where the light comes from), how tall and rough the
  *  ranges are, how much snow, trees, stars, water ripple and city light. */
 
-export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express'
+export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle'
 export type PixelBody = 'moon' | 'sun' | 'planet' | 'none'
 export type MeteorDirection = 'left' | 'right' | 'both'
 
@@ -64,6 +64,7 @@ export const PIXEL_SCENE_DEFAULTS: Record<PixelWorldKind, PixelScene> = {
   'pixel-lanterns': { ...BASE, seed: 18, bodyX: .8, bodyY: .5, bodySize: .8, crescent: .6, mountains: .45, roughness: .4, hills: .45, trees: .8, stars: .6, ripple: .15, reeds: true },
   'pixel-window': { ...BASE, seed: 51, bodyX: .7, bodyY: .6, bodySize: .8, crescent: .4, mountains: .2, trees: 0, hills: .2, stars: .35, reeds: false, city: .75, windows: .6, ripple: .5 },
   'pixel-express': { ...BASE, seed: 144, bodyX: .6, bodyY: .62, bodySize: .9, crescent: .2, mountains: .6, trees: .8, stars: .6, reeds: false, ripple: .4 },
+  'pixel-daycycle': { ...BASE, seed: 240, crescent: .15, mountains: .55, roughness: .45, hills: .5, trees: .7, stars: .3, ripple: .35, reeds: true },
   'pixel-forest': { ...BASE, seed: 131, bodyX: .5, bodyY: .72, bodySize: .8, mountains: .45, trees: 1, hills: .8, stars: .55, ripple: .3 },
 }
 

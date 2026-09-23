@@ -114,6 +114,8 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
+  'pixel-whole-day': ['pixel-daycycle', { palettes: ['dawn', 'jungle', 'sunset', 'midnight'], hold: 6, meteors: .3 }],
   'pixel-night-express': ['pixel-express', { palettes: ['dusk', 'midnight', 'aurora'], hold: 9, meteors: .5 }],
   'pixel-rainy-window': ['pixel-window', { palettes: ['harbor', 'storm'], hold: 12, meteors: 0 }],
   'pixel-lantern-festival': ['pixel-lanterns', { palettes: ['dusk', 'midnight'], hold: 12, meteors: 0 }],

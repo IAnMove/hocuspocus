@@ -115,7 +115,7 @@ function bodyPixel(seed: number, body: SkyBody, x: number, y: number, dx: number
   return 0
 }
 
-function paintMoon(sky: IndexedLayer, seed: number, body: SkyBody) {
+export function paintMoon(sky: IndexedLayer, seed: number, body: SkyBody) {
   const cx = body.x * sky.width, cy = body.y * sky.height, reach = body.radius * (body.kind === 'sun' ? 3.8 : body.kind === 'planet' ? 2.3 : 3)
   for (let y = Math.floor(cy - reach); y <= cy + reach; y++) for (let x = Math.floor(cx - reach); x <= cx + reach; x++) {
     const index = bodyPixel(seed, body, x, y, x + .5 - cx, y + .5 - cy)
