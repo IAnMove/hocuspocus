@@ -24,6 +24,8 @@ type PixelRuntime = {
   kind: PixelDressing; key: string; palette: DataTexture; bytes: Uint8Array
   skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; sky: [number, number]
   movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; y: number }[]
+  spinners: { mesh: Mesh; speed: number }[]
+  orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
@@ -202,7 +204,7 @@ function clear(root: Object3D) {
  *  layout (not the lighting) changes. */
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.movers = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -215,6 +217,8 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
     const { mesh, lamp } = layerMesh(spec, runtime.palette)
     if (spec.sky) runtime.skies.push(mesh.material as ShaderMaterial)
     if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y })
+    if (spec.spin) runtime.spinners.push({ mesh, speed: spec.spin })
+    if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
   }
@@ -228,7 +232,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], movers: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], movers: [], spinners: [], orbiters: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -262,6 +266,13 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
   for (const mover of runtime.movers) {
     mover.mesh.position.x = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
     if (mover.bob) mover.mesh.position.y = mover.y + Math.sin(seconds * .6 + (mover.offset ?? 0)) * mover.bob
+  }
+  for (const spinner of runtime.spinners) spinner.mesh.rotation.z = seconds * spinner.speed
+  for (const { mesh, orbit } of runtime.orbiters) {
+    const angle = orbit.phase + seconds * orbit.speed
+    // Gondolas hang below their pivot on the rim and never tilt.
+    mesh.position.x = orbit.x + Math.cos(angle) * orbit.radius
+    mesh.position.y = orbit.y + Math.sin(angle) * orbit.radius - .7
   }
   if (runtime.beam) {
     runtime.beam.rotation.y = seconds * .9

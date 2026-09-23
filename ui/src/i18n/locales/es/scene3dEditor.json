@@ -1357,6 +1357,10 @@
     "pixel-balloons": {
       "title": "Globos al amanecer",
       "description": "Globos aerostáticos flotan sobre un valle con niebla mientras sale el sol, los cercanos grandes y lentos, los lejanos pequeños, todos reflejados en el lago mientras el amanecer se calienta hacia el atardecer."
+    },
+    "pixel-night-fair": {
+      "title": "Feria nocturna",
+      "description": "Una noria gira sobre el puerto, sus bombillas se persiguen con ciclo de color mientras las góndolas cuelgan rectas, las carpas a rayas brillan bajo guirnaldas de luces y toda la feria titila en el agua."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1607,7 +1611,8 @@
       "pixel-drivein": "Autocine",
       "pixel-garden": "Jardín de cerezos",
       "pixel-reef": "Arrecife",
-      "pixel-valley": "Valle"
+      "pixel-valley": "Valle",
+      "pixel-fair": "Feria nocturna"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

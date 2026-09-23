@@ -386,3 +386,79 @@ export function paintBalloon(width: number, height: number, spec: { colors: [num
   for (let y = basketTop; y < height; y++) for (let x = Math.round(cx - neck); x <= cx + neck; x++) set(balloon, x, y, INDEX.trees)
   return balloon
 }
+
+function bulb(target: IndexedLayer, x: number, y: number, slot: number) {
+  for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) set(target, Math.round(x) + dx, Math.round(y) + dy, slot)
+}
+
+/** A Ferris wheel's turning part: rim, spokes and bulbs in the chase slots. */
+export function paintWheel(size: number, spec: { body: number; rim: number }): IndexedLayer {
+  const wheel = layer(size, size)
+  const c = (size - 1) / 2, r = size / 2 - 2
+  for (let a = 0; a < 720; a++) {
+    const t = a / 720 * Math.PI * 2
+    for (const k of [0, 1]) set(wheel, Math.round(c + Math.cos(t) * (r - k)), Math.round(c + Math.sin(t) * (r - k)), k ? spec.body : spec.rim)
+    set(wheel, Math.round(c + Math.cos(t) * r * .55), Math.round(c + Math.sin(t) * r * .55), spec.body)
+  }
+  for (let s = 0; s < 12; s++) {
+    const t = s / 12 * Math.PI * 2
+    for (let d = 0; d < r; d++) set(wheel, Math.round(c + Math.cos(t) * d), Math.round(c + Math.sin(t) * d), spec.body)
+    for (let d = 7; d < r - 2; d += 7) bulb(wheel, c + Math.cos(t) * d, c + Math.sin(t) * d, INDEX.bulb + ((d / 7 + s) % INDEX.bulbSteps))
+  }
+  for (let b = 0; b < 32; b++) {
+    const t = b / 32 * Math.PI * 2
+    bulb(wheel, c + Math.cos(t) * r, c + Math.sin(t) * r, INDEX.bulb + (b % INDEX.bulbSteps))
+  }
+  for (let y = -2; y <= 2; y++) for (let x = -2; x <= 2; x++) set(wheel, Math.round(c + x), Math.round(c + y), spec.rim)
+  return wheel
+}
+
+/** The wheel's A-frame stand, from the hub down to the ground. */
+export function paintStand(width: number, height: number, spec: { body: number; rim: number }): IndexedLayer {
+  const stand = layer(width, height)
+  const hub = [Math.round(width / 2), 2] as const
+  for (const foot of [Math.round(width * .12), Math.round(width * .88)]) {
+    for (let y = hub[1]; y < height; y++) {
+      const x = Math.round(hub[0] + (foot - hub[0]) * (y - hub[1]) / (height - hub[1]))
+      set(stand, x, y, spec.rim); set(stand, x + 1, y, spec.body)
+    }
+  }
+  for (let x = Math.round(width * .2); x < width * .8; x++) set(stand, x, Math.round(height * .7), spec.body)
+  return stand
+}
+
+/** A gondola that hangs from the rim, in balloon cloth colours. */
+export function paintCabin(width: number, height: number, cloth: number): IndexedLayer {
+  const cabin = layer(width, height)
+  const c = Math.round(width / 2)
+  for (let y = 0; y < 3; y++) set(cabin, c, y, INDEX.trees)
+  for (let y = 3; y < height - 1; y++) for (let x = 2; x < width - 2; x++) {
+    const window = y > 5 && y < height - 4 && x > 3 && x < width - 4
+    set(cabin, x, y, y === 3 ? INDEX.trees : window ? INDEX.window + (x & 7) : cloth)
+  }
+  return cabin
+}
+
+/** Striped fair tents with strings of bulbs slung between them. */
+export function paintTents(width: number, height: number, seed: number, count: number): IndexedLayer {
+  const tents = layer(width, height)
+  const ground = height - 1, tops: [number, number][] = []
+  for (let t = 0; t < count; t++) {
+    const cx = Math.round(width * (t + .5) / count + (fxRandom(seed, t) - .5) * 10), w = 28 + Math.round(fxRandom(seed, t + 9) * 14), h = Math.round(height * (.5 + fxRandom(seed, t + 19) * .25))
+    const peak = ground - h
+    for (let y = peak; y <= ground; y++) {
+      const half = y < peak + h * .5 ? (y - peak) / (h * .5) * w / 2 : w / 2 - 2
+      for (let x = Math.round(cx - half); x <= cx + half; x++) set(tents, x, y, Math.floor((x - cx + 40) / 3) % 2 ? INDEX.balloon : INDEX.balloon + 3)
+    }
+    for (let y = peak - 3; y < peak; y++) set(tents, cx, y, INDEX.trees)
+    tops.push([cx, peak - 3])
+  }
+  for (let i = 1; i < tops.length; i++) {
+    const [x0, y0] = tops[i - 1], [x1, y1] = tops[i]
+    for (let x = x0; x <= x1; x++) {
+      const t = (x - x0) / Math.max(1, x1 - x0), y = Math.round(y0 + (y1 - y0) * t + Math.sin(t * Math.PI) * 5)
+      if ((x - x0) % 4 === 0) bulb(tents, x, y, INDEX.bulb + ((x >> 2) % INDEX.bulbSteps)); else set(tents, x, y, INDEX.trees)
+    }
+  }
+  return tents
+}

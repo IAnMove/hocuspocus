@@ -243,3 +243,20 @@ test('balloons at dawn: several balloons drift at different depths and bob', () 
   assert.notDeepEqual(heights(0), heights(2), 'balloons bob')
   assert.deepEqual(heights(1), heights(1))
 })
+
+test('night fair: the wheel turns, gondolas stay upright and bulbs chase', () => {
+  const root = pixelWorldGroup('pixel-fair'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-night-fair').pixelWorld!
+  const at = (seconds: number) => {
+    paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)
+    const children = (root as Group).children
+    return { wheel: children.find(child => child.position.z === -22)!.rotation.z, cabins: children.filter(child => child.position.z === -21.8) }
+  }
+  const early = at(1), wheel0 = early.wheel, cabin0 = early.cabins[0].position.clone()
+  const later = at(5)
+  assert.notEqual(later.wheel, wheel0, 'the wheel turns')
+  assert.notDeepEqual(later.cabins[0].position.toArray(), cabin0.toArray(), 'gondolas go round')
+  assert.ok(later.cabins.every(cabin => cabin.rotation.z === 0), 'gondolas never tilt')
+  const bulbs = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.harbor, seconds); return Array.from(bytes.subarray(130 * 4, 138 * 4)).join() }
+  assert.notEqual(bulbs(0), bulbs(.2), 'the marquee chases')
+})

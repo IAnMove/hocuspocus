@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -8,6 +8,10 @@ export type LayerSpec = {
   sky?: boolean
   /** Meters per second the plane travels along x, looping over `loop` meters. */
   drift?: { speed: number; loop: number; offset?: number; /** Meters it bobs up and down. */ bob?: number }
+  /** Radians per second it turns about its own centre. */
+  spin?: number
+  /** Goes round a centre (x, y) at `radius`, staying upright, like a gondola. */
+  orbit?: { x: number; y: number; radius: number; speed: number; phase: number }
   paint: (w: number, h: number) => IndexedLayer
 }
 export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand'; /** Height of the floor, meters. */ groundY?: number }
@@ -16,6 +20,9 @@ const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: 
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
 const NEAR: Omit<LayerSpec, 'paint'> = { z: -37, width: 110, height: 7, bottom: -1, texture: [720, 46] }
 const far = { body: INDEX.far, rim: INDEX.farRim }
+/** The Ferris wheel's hub height and radius, meters (centred on x = 0). */
+const WHEEL = { y: 8.6, radius: 7.2 }
+
 /** Balloons: depth, size, height, drift speed, start and two cloth colours. */
 const BALLOONS: [number, number, number, number, number, number, number][] = [
   [-40, 5, 11, .5, 60, 0, 3], [-30, 3.6, 6.5, .7, 88, 2, 3], [-22, 2.6, 8.5, .9, 52, 1, 0], [-14, 1.9, 4.6, 1.1, 70, 3, 2], [-34, 3, 14, .6, 104, 1, 3],
@@ -133,6 +140,19 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       drift: { speed, loop: 150, offset, bob: size * .08 },
       paint: (w: number, h: number) => paintBalloon(w, h, { colors: [INDEX.balloon + a, INDEX.balloon + b] as [number, number], lightFrom: bodySkyX(scene) }),
     })),
+    ...reeds(scene),
+  ] }),
+  'pixel-fair': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene),
+    { z: -44, width: 124, height: 16, bottom: -1, texture: [700, 90], paint: (w, h) => paintSkyline(w, h, { ...far, seed: scene.seed + 11, lightFrom: bodySkyX(scene), tall: scene.city, windows: scene.windows * .6 }) },
+    { z: -22.2, width: 12, height: 9.6, bottom: -.3, texture: [80, 64], paint: (w, h) => paintStand(w, h, { body: INDEX.far, rim: INDEX.farRim }) },
+    { z: -22, width: WHEEL.radius * 2.15, height: WHEEL.radius * 2.15, bottom: WHEEL.y - WHEEL.radius * 1.075, texture: [104, 104], spin: -.12, paint: w => paintWheel(w, { body: INDEX.far, rim: INDEX.farRim }) },
+    ...Array.from({ length: 8 }, (_, i) => ({
+      z: -21.8, width: 1.4, height: 1.4, bottom: 0, texture: [14, 14] as [number, number],
+      orbit: { x: 0, y: WHEEL.y, radius: WHEEL.radius, speed: -.12, phase: i / 8 * Math.PI * 2 },
+      paint: (w: number, h: number) => paintCabin(w, h, INDEX.balloon + (i % 3)),
+    })),
+    { z: -16, width: 44, height: 3.2, bottom: -.2, texture: [300, 22], paint: (w, h) => paintTents(w, h, scene.seed + 5, 6) },
     ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [

@@ -38,6 +38,12 @@ function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number)
     const shimmer = .5 + .5 * Math.sin(seconds * 2.4 - ray * Math.PI / 4)
     writeColor(bytes, INDEX.ray + ray, mixHex(palette.sky[1], palette.moon, .25 + shimmer * .5))
   }
+  for (let bulb = 0; bulb < INDEX.bulbSteps; bulb++) {
+    // Marquee chase: every fourth bulb is lit and the lit ones march round.
+    const lit = (bulb - Math.floor(seconds * 6)) % 4 === 0
+    const hue = bulb % 2 ? palette.windows : '#ff5a8a'
+    writeColor(bytes, INDEX.bulb + bulb, lit ? mixHex(hue, '#ffffff', .25) : mixHex(palette.near[0], hue, .35))
+  }
   for (let tail = 0; tail < 2; tail++) {
     // Now and then a driver touches the brake.
     const brake = Math.sin(seconds * (.7 + tail * .3) + tail * 2) > .92
