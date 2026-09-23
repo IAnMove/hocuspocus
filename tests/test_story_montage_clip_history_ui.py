@@ -6,7 +6,8 @@ from tests.api_client_source import api_client_source
 ROOT = Path(__file__).resolve().parents[1]
 TIMELINE = ROOT / "ui" / "src" / "features" / "stories" / "StoryProductionTimeline.tsx"
 HANDOFF = ROOT / "ui" / "src" / "features" / "stories" / "directorClipHandoff.ts"
-MEDIA = ROOT / "ui" / "src" / "components" / "MainContent" / "MediaFeedItem.tsx"
+# Output actions live in the bar shared by the one-up card and the details dialog.
+MEDIA = ROOT / "ui" / "src" / "components" / "MainContent" / "OutputActionBar.tsx"
 MAIN = ROOT / "ui" / "src" / "components" / "MainContent" / "MainContent.tsx"
 
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"

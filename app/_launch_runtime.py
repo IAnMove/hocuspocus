@@ -33221,6 +33221,9 @@ _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
 _MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
     os.path.dirname(_app_dir), "cache", "media-thumbnails"
 )
+from services.media_dimensions import configure as _configure_media_facts, note_preview as _note_media_preview
+
+_configure_media_facts(_MEDIA_THUMBNAIL_CACHE_DIR)
 
 
 def _resolve_output_file(filename: str, workspace: str | None = None) -> str | None:
@@ -33231,7 +33234,7 @@ def _resolve_output_file(filename: str, workspace: str | None = None) -> str | N
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = ""):
+def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = ""):
     """List generated output files (newest first) from the active workspace.
 
     Supports pagination via limit/offset query params.
@@ -33383,6 +33386,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 "mode": meta.get("generation_mode"),
                 "edit_sub_mode": params.get("edit_sub_mode"),
                 "multi_clip_info": params.get("multi_clip_info"),
+                "resolution": params.get("resolution"),
                 "result_kind": classify_output_result_kind(name, params, meta),
                 "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
                 # Output sidecars are written only after the generated asset
@@ -33423,6 +33427,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             }
 
     # Second pass: build the file list using the cached sidecar data.
+    from services.media_dimensions import listing_fields as media_listing_fields
     files = []
     for name, filepath, ext, mtime in raw_entries:
         is_scene = name.endswith(".scene.json")
@@ -33463,6 +33468,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             "created_at": mtime,
             "completed_at": metadata_completed_at or mtime,
             "completion_time_source": "metadata" if metadata_completed_at else "file",
+            **media_listing_fields(ftype, filepath, size, mtime, cached.get("resolution")),
             "url": f"/api/v1/file/{name}{workspace_suffix}",
             "thumbnail_url": (
                 f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png{workspace_suffix}"
@@ -33477,6 +33483,11 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
 
     if media_type:
         files = [item for item in files if item["type"] == media_type]
+    # Ordered before paging so every page follows the gallery's chosen order.
+    if order == "oldest":
+        files.reverse()
+    elif order == "favorites":
+        files.sort(key=lambda item: not item["favorite"])
 
     wanted_kind = str(result_kind or "").strip()
     if wanted_kind:
@@ -33549,7 +33560,12 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         # Combine index results with filename fallback (in case index missed
         # a file that was created between index builds)
         query_lower = search.lower()
-        files = [f for f in files if f["name"] in matching_names or query_lower in f["name"].lower()]
+        # The index is keyed by sidecar stem ("clip" for clip.mp4 and
+        # clip.meta.json); comparing full names never matched a prompt.
+        files = [
+            f for f in files
+            if os.path.splitext(f["name"])[0] in matching_names or query_lower in f["name"].lower()
+        ]
         return {"outputs": files, "total": len(files)}
 
     total = len(files)
@@ -33558,17 +33574,25 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
     return {"outputs": files, "total": total}
 
 
-@api.get("/api/v1/outputs/thumbnail/{filename:path}")
-def serve_output_thumbnail(filename: str, workspace: str | None = None):
-    """Lazily create one small static preview for an image or video output."""
-    from services.media_thumbnails import ensure_media_thumbnail
-
+def _resolve_gallery_file(filename: str, workspace: str | None = None) -> str | None:
+    """An output in ``workspace``, or an upload for the virtual Uploads view."""
     if workspace == "__uploads__":
         source = _safe_join(os.path.join(os.getcwd(), "uploads"), filename)
-        if source and not os.path.isfile(source):
-            source = None
-    else:
-        source = _resolve_output_file(filename, workspace)
+        return source if source and os.path.isfile(source) else None
+    return _resolve_output_file(filename, workspace)
+
+
+from routers.output_facts import create_output_facts_router  # noqa: E402
+
+api.include_router(create_output_facts_router(_resolve_gallery_file))
+
+
+@api.get("/api/v1/outputs/thumbnail/{filename:path}")
+def serve_output_thumbnail(filename: str, workspace: str | None = None, size: str | None = None):
+    """Lazily create one small static preview for an image or video output."""
+    from services.media_thumbnails import FITTED_THUMBNAIL_SIZES, ensure_fitted_thumbnail, ensure_media_thumbnail
+
+    source = _resolve_gallery_file(filename, workspace)
     if not source:
         raise HTTPException(status_code=404, detail="Output not found")
     extension = os.path.splitext(source)[1].lower()
@@ -33576,17 +33600,19 @@ def serve_output_thumbnail(filename: str, workspace: str | None = None):
     video_extensions = {".mp4", ".webm", ".gif", ".mov", ".mkv", ".avi", ".m4v"}
     if extension not in image_extensions | video_extensions:
         raise HTTPException(status_code=400, detail="This output has no media thumbnail")
+    if size is not None and size not in FITTED_THUMBNAIL_SIZES:
+        raise HTTPException(status_code=400, detail="Unknown thumbnail size")
     try:
-        thumbnail = ensure_media_thumbnail(
-            source,
-            _MEDIA_THUMBNAIL_CACHE_DIR,
-            is_video=extension in video_extensions,
-        )
+        is_video = extension in video_extensions
+        thumbnail = (ensure_fitted_thumbnail(source, _MEDIA_THUMBNAIL_CACHE_DIR, is_video=is_video, size=size)
+                     if size else ensure_media_thumbnail(source, _MEDIA_THUMBNAIL_CACHE_DIR, is_video=is_video))
+        if size:
+            _note_media_preview(source, thumbnail)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not create thumbnail: {exc}") from exc
     return FileResponse(
         thumbnail,
-        media_type="image/jpeg",
+        media_type="image/webp" if thumbnail.endswith(".webp") else "image/jpeg",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
 
@@ -36777,7 +36803,8 @@ def run_server():
     install_quiet_access_filter()
 
     try:
-        uvicorn.run(api, host=host, port=port)
+        from services.server_lifecycle import run_until_stopped
+        run_until_stopped(api, host=host, port=port)
     except OSError as e:
         # The probe above narrows this to a genuine race (port taken in the
         # window between probe and uvicorn's own bind). Still fail loudly and

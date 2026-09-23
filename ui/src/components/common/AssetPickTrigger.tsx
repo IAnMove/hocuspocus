@@ -25,7 +25,7 @@ export function AssetPickTrigger({
     <div className="block text-[9px] text-text-muted">
       {label}
       <div className="mt-0.5 flex w-full items-center gap-2 rounded border border-border bg-bg-primary px-1.5 py-1 text-left text-[10px] text-text-primary">
-        {selected?.type === 'image' && preview ? <ImagePreview image={selected} className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-bg-active">
+        {selected?.type === 'image' && preview ? <ImagePreview image={{ ...selected, type: 'image' }} className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-bg-active">
           <img src={preview} alt={selected.name} className="h-full w-full object-contain" />
         </ImagePreview> : <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-bg-active">
           {preview ? <img src={preview} alt="" className="h-full w-full object-cover" /> : <FolderOpen size={14} className="text-text-muted" />}

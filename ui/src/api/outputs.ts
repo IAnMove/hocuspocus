@@ -25,6 +25,11 @@ export interface ApiOutput {
   url: string
   /** Small static preview for image/video cards and saved 3D/scene assets. */
   thumbnail_url?: string | null
+  /** Pixel size, when known: image headers, or the video's recorded resolution. */
+  width?: number
+  height?: number
+  /** Average colour of the preview (`#rrggbb`), painted while it loads. */
+  color?: string
   /** Edit-mode sub-classification (retake / inpaint / outpaint / restyle /
    *  edit_anything). Field added as a recovery stub after a git
    *  filter-repo reset wiped the original Stream C/D work that
@@ -53,6 +58,23 @@ export async function moveOutput(name: string, workspace: string): Promise<void>
   }
 }
 
+// --- Media facts ---
+
+/** Sizes and average colours the server has worked out since the list was
+ *  loaded, for outputs that were still missing them. */
+export type OutputFacts = Record<string, { width?: number; height?: number; color?: string }>
+
+export async function fetchOutputFacts(names: string[], workspace?: string, signal?: AbortSignal): Promise<OutputFacts> {
+  const res = await fetch(`${BASE}/api/v1/outputs/facts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ names, ...(workspace ? { workspace } : {}) }),
+    signal,
+  })
+  if (!res.ok) throw new Error(`Output facts: HTTP ${res.status}`)
+  return ((await res.json()) as { facts?: OutputFacts }).facts ?? {}
+}
+
 // --- Favorites ---
 
 export async function toggleFavorite(name: string): Promise<{ name: string; favorite: boolean }> {
@@ -63,7 +85,10 @@ export async function toggleFavorite(name: string): Promise<{ name: string; favo
 
 // --- Outputs ---
 
-export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; editsOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; resultKind?: ApiOutput['result_kind']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
+/** Server-side order of the gallery listing, applied before paging. */
+export type GalleryOrder = 'newest' | 'oldest' | 'favorites'
+
+export async function fetchOutputs(limit = 0, offset = 0, opts?: { order?: GalleryOrder; favoritesOnly?: boolean; multiclipOnly?: boolean; editsOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; resultKind?: ApiOutput['result_kind']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
   const params = new URLSearchParams()
   if (limit > 0) params.set('limit', String(limit))
   if (offset > 0) params.set('offset', String(offset))
@@ -75,6 +100,7 @@ export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly
   // "__uploads__" browses the uploads folder (virtual Uploads view)
   if (opts?.workspace) params.set('workspace', opts.workspace)
   if (opts?.mediaType) params.set('media_type', opts.mediaType)
+  if (opts?.order && opts.order !== 'newest') params.set('order', opts.order)
   const qs = params.toString()
   const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`, { cache: 'no-store', signal: opts?.signal })
   if (!res.ok) throw new Error('Failed to fetch outputs')
@@ -201,7 +227,7 @@ export async function fetchOutputMetadata(
     const timer = setTimeout(() => controller.abort(), PER_ATTEMPT_MS)
     try {
       const res = await fetch(url, { signal: controller.signal })
-      if (!res.ok) return { source: 'none', params: null }
+      if (!res.ok) throw new Error(`Failed to load output metadata (HTTP ${res.status})`)
       return await res.json()
     } catch (e) {
       lastErr = e

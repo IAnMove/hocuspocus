@@ -213,8 +213,59 @@
     "label": "Gallery layout",
     "feed": "One at a time",
     "grid": "Grid",
-    "masonry": "Mosaic"
+    "masonry": "Mosaic",
+    "history": "History",
+    "select": "Select",
+    "density": "Grid size",
+    "today": "Today",
+    "yesterday": "Yesterday"
   },
   "referenceImages": "Reference images",
-  "referenceImage": "Reference {{n}}"
+  "referenceImage": "Reference {{n}}",
+  "moveOutput": {
+    "title": "Move to workspace",
+    "empty": "No other workspaces"
+  },
+  "selection": {
+    "count_one": "{{count}} selected",
+    "count_other": "{{count}} selected",
+    "none": "Tap items to select them",
+    "all": "Select all",
+    "favorite": "Favorite",
+    "unfavorite": "Remove favorite",
+    "move": "Move",
+    "delete": "Delete",
+    "confirmDelete_one": "Delete {{count}} item? This cannot be undone.",
+    "confirmDelete_other": "Delete {{count}} items? This cannot be undone.",
+    "done": "Done",
+    "working": "Working…",
+    "failed": "Some items could not be updated: {{names}}",
+    "confirmDeleteTitle_one": "Delete {{count}} output?",
+    "confirmDeleteTitle_other": "Delete {{count}} outputs?",
+    "confirmDeleteAction": "Delete",
+    "compare": "Compare the two images"
+  },
+  "deleteOutput": {
+    "title": "Delete this output?",
+    "message": "“{{name}}” will be deleted. This cannot be undone.",
+    "confirm": "Delete",
+    "button": "Delete output"
+  },
+  "order": {
+    "label": "Order",
+    "newest": "Newest first",
+    "oldest": "Oldest first",
+    "favorites": "Favourites first"
+  },
+  "gallerySearch": {
+    "open": "Search",
+    "label": "Search prompts, models and modes",
+    "placeholder": "Search prompts, models…",
+    "clear": "Clear search",
+    "close": "Close search",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "noResults": "No results for “{{query}}”",
+    "noResultsHint": "Words match as you type and accents do not matter."
+  }
 }

@@ -324,7 +324,7 @@ test('Extra info chrome and the Assets inspector use the activity catalog', asyn
   const fs = await import('node:fs/promises')
   const files = [
     '../src/components/MainContent/VideoExtraInfoDialog.tsx',
-    '../src/components/MainContent/MediaFeedItem.tsx',
+    '../src/components/MainContent/OutputActionBar.tsx',
     '../src/components/MainContent/VideoInfoBar.tsx',
     '../src/features/assets/AssetsPanel.tsx',
   ]

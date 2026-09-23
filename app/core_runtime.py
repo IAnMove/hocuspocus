@@ -673,8 +673,6 @@ else:
 
 
 def run_server() -> None:
-    import uvicorn
-
     report_identity()
     snapshot = platform_capabilities()
     print("[HocusPocus] capabilities")
@@ -691,7 +689,8 @@ def run_server() -> None:
         host = os.environ.get("SERVER_NAME", "127.0.0.1")
     display_host = "127.0.0.1" if host == "0.0.0.0" else host
     print(f"HocusPocus Lab UI: http://{display_host}:{port}/")
-    uvicorn.run(api, host=host, port=port)
+    from services.server_lifecycle import run_until_stopped
+    run_until_stopped(api, host=host, port=port)
 
 
 if __name__ == "__main__":

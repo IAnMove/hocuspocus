@@ -26,7 +26,7 @@ def load_list_outputs(namespace: dict):
     exec(compile(module, str(LAUNCH), "exec"), namespace)
 
 
-def list_test_outputs(tmp_path, **kwargs):
+def list_test_outputs(tmp_path, favorites=(), **kwargs):
     namespace = {
         "os": os,
         "re": re,
@@ -37,7 +37,7 @@ def list_test_outputs(tmp_path, **kwargs):
         "Response": object,
         "wgp": SimpleNamespace(server_config={"save_path": str(tmp_path)}),
         "_workspace_dir": lambda workspace=None: str(tmp_path),
-        "_load_favorites": lambda: set(),
+        "_load_favorites": lambda: set(favorites),
         "_output_scan_cache": {},
         "_output_scan_cache_lock": threading.Lock(),
         "_OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS": 5.0,

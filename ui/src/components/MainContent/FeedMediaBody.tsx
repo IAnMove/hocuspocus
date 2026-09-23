@@ -1,21 +1,26 @@
-import React, { useCallback, type ReactNode, type RefObject, type SyntheticEvent } from 'react'
+import React, { useState, type ReactNode, type RefObject } from 'react'
 import { BookOpen, Box, Film, Play } from 'lucide-react'
 import { getFileUrl } from '../../api/client'
 import type { OutputFile } from '../../types'
 import { ImagePreview } from '../common/ImagePreview'
 
-const MEDIA_FIT = 'mx-auto block h-auto w-auto max-w-full object-contain'
+// The card's media box has a fixed height; every preview is contained in it.
+const MEDIA_FIT = 'block h-full w-full object-contain'
 
 type FeedMediaBodyProps = {
   file: OutputFile
   workspace?: string
   isActive: boolean
-  maxMediaHeight?: number
+  /** Aspect-preserving preview for images and videos; saved scenes, comics
+   *  and 3D models pass their own preview image. */
+  previewUrl: string | null
   videoReady: boolean
   videoRef: RefObject<HTMLVideoElement | null>
+  videoTime?: number
+  onVideoTimeChange?: (seconds: number) => void
   onPlay: () => void
-  onIntrinsicSize: (width: number, height: number) => void
-  onImageLoad: (event: SyntheticEvent<HTMLImageElement>) => void
+  /** Open the gallery's details dialog for this item. */
+  onOpenDetails: () => void
   isScene: boolean
   isComic: boolean
   isModel3d: boolean
@@ -27,68 +32,20 @@ type FeedMediaBodyProps = {
   retryImage: (url: string) => ReactNode
 }
 
-function FeedVideoPreview({
-  file, isActive, maxHeight, videoReady, videoRef, onPlay, onIntrinsicSize, onImageLoad,
-}: {
-  file: OutputFile
-  isActive: boolean
-  maxHeight?: { maxHeight: number }
-  videoReady: boolean
-  videoRef: RefObject<HTMLVideoElement | null>
-  onPlay: () => void
-  onIntrinsicSize: (width: number, height: number) => void
-  onImageLoad: (event: SyntheticEvent<HTMLImageElement>) => void
+function FeedVideoPreview({ file, workspace, previewUrl, videoTime, onVideoTimeChange, onOpenDetails }: {
+  file: OutputFile; workspace?: string; previewUrl: string | null; videoTime?: number; onVideoTimeChange?: (seconds: number) => void; onOpenDetails: () => void
 }) {
-  const play = useCallback((event: SyntheticEvent<HTMLButtonElement>) => {
-    event.stopPropagation()
-    onPlay()
-  }, [onPlay])
-  if (videoReady) {
-    return (
-      <video
-        ref={videoRef}
-        key={file.url}
-        src={file.url}
-        controls
-        loop
-        autoPlay
-        preload="metadata"
-        poster={file.thumbnail_url || undefined}
-        className={MEDIA_FIT}
-        style={maxHeight}
-        muted={!isActive}
-        onLoadedMetadata={event => {
-          const video = event.currentTarget
-          onIntrinsicSize(video.videoWidth, video.videoHeight)
-        }}
-      />
-    )
-  }
   return (
-    <div className="relative mx-auto inline-block max-w-full">
-      {file.thumbnail_url ? (
-        <img
-          src={file.thumbnail_url}
-          alt={file.name}
-          className={MEDIA_FIT}
-          style={maxHeight}
-          loading="lazy"
-          decoding="async"
-          onLoad={onImageLoad}
-        />
+    <ImagePreview image={{ ...file, type: 'video', workspace_id: workspace }} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} onOpenDialog={onOpenDetails} className="relative block h-full w-full cursor-zoom-in">
+      {previewUrl ? (
+        <PlaceholderImage src={previewUrl} alt={file.name} color={file.color} />
       ) : (
-        <div className="flex h-48 w-full items-center justify-center text-text-muted"><Film size={32} /></div>
+        <span className="flex h-full w-full items-center justify-center text-text-muted"><Film size={32} /></span>
       )}
-      <button
-        type="button"
-        onClick={play}
-        className="absolute left-1/2 top-1/2 z-10 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-xl transition-transform hover:scale-105 hover:bg-black/85"
-        aria-label={`Play ${file.name}`}
-        title="Load and play video"
-      >
+      <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-xl">
         <Play size={24} className="ml-1" />
-      </button>
-    </div>
+      </span>
+    </ImagePreview>
   )
 }
 
@@ -146,49 +103,44 @@ function FeedModel3dPreview({
   )
 }
 
+/** Paints the output's average colour until its preview has decoded. */
+function PlaceholderImage({ src, alt, color }: { src: string; alt: string; color?: string }) {
+  const [loaded, setLoaded] = useState<string | null>(null)
+  return <img src={src} alt={alt} className="h-full w-full object-contain" loading="lazy" decoding="async"
+    style={loaded === src || !color ? undefined : { backgroundColor: color }} onLoad={() => setLoaded(src)} />
+}
+
 export function FeedMediaBody(props: FeedMediaBodyProps) {
   return <React.Fragment>{renderFeedMedia(props)}</React.Fragment>
 }
 
 function renderFeedMedia({
-  file, isActive, maxMediaHeight, videoReady, videoRef, onPlay, onIntrinsicSize, onImageLoad,
+  file, isActive, previewUrl,
   isScene, isComic, isModel3d, canPreviewModel3d, isRigged, riggedClips, activeClip, setActiveClip,
-  retryImage, workspace,
+  retryImage, workspace, videoTime, onVideoTimeChange, onOpenDetails,
 }: FeedMediaBodyProps) {
-  const maxHeight = maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }
   if (file.type === 'video') {
-    return (
-      <FeedVideoPreview
-        file={file}
-        isActive={isActive}
-        maxHeight={maxHeight}
-        videoReady={videoReady}
-        videoRef={videoRef}
-        onPlay={onPlay}
-        onIntrinsicSize={onIntrinsicSize}
-        onImageLoad={onImageLoad}
-      />
-    )
+    return <FeedVideoPreview file={file} workspace={workspace} previewUrl={previewUrl} videoTime={videoTime} onVideoTimeChange={onVideoTimeChange} onOpenDetails={onOpenDetails} />
   }
   if (file.type === 'audio') {
     return (
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex w-full min-w-0 flex-col items-center gap-4 px-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-active">
           <Play size={24} className="text-text-muted" />
         </div>
-        <p className="mb-2 text-xs text-text-muted">{file.name}</p>
-        <audio key={file.url} src={file.url} controls className="w-64" />
+        <p className="mb-2 max-w-full truncate text-xs text-text-muted" title={file.name}>{file.name}</p>
+        <audio key={file.url} src={file.url} controls className="w-64 max-w-full" />
       </div>
     )
   }
   if (isScene) {
     return file.thumbnail_url
-      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} style={maxHeight} onLoad={onImageLoad} />
+      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} loading="lazy" decoding="async" />
       : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
   }
   if (isComic) {
     return file.thumbnail_url
-      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} style={maxHeight} onLoad={onImageLoad} />
+      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} loading="lazy" decoding="async" />
       : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
   }
   if (isModel3d) {
@@ -204,7 +156,7 @@ function renderFeedMedia({
       />
     )
   }
-  return <ImagePreview image={{ ...file, workspace_id: workspace }} className="block max-w-full cursor-zoom-in">
-    {retryImage(isActive ? file.url : (file.thumbnail_url || file.url))}
+  return <ImagePreview image={{ ...file, type: 'image', workspace_id: workspace }} onOpenDialog={onOpenDetails} className="block h-full w-full cursor-zoom-in">
+    {retryImage(previewUrl || file.url)}
   </ImagePreview>
 }

@@ -1685,6 +1685,12 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   /** Gallery layout preference — see gallerySlice. */
   galleryView: GalleryView
   setGalleryView: (view: GalleryView) => void
+  galleryGridColumns: number | null
+  setGalleryGridColumns: (columns: number | null) => void
+  galleryOrder: import('../api/outputs').GalleryOrder
+  setGalleryOrder: (order: import('../api/outputs').GalleryOrder) => void
+  mobileHistoryOpen: boolean
+  setMobileHistoryOpen: (open: boolean) => void
   outputSearchQuery: string
   galleryFeedAtTop: boolean
   galleryRefreshPending: boolean
@@ -1700,6 +1706,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   loadMoreOutputs: () => Promise<void>
   refreshOutputs: () => Promise<void>
   toggleFavorite: (name: string) => Promise<void>
+  mergeOutputFacts: (facts: import('../api/outputs').OutputFacts) => number
 
   // Output metadata (lazy-loaded for selected output)
   selectedOutputMeta: OutputMetadata | null

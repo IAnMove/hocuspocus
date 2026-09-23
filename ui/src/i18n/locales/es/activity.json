@@ -213,8 +213,59 @@
     "label": "Disposición de la galería",
     "feed": "De una en una",
     "grid": "Rejilla",
-    "masonry": "Mosaico"
+    "masonry": "Mosaico",
+    "history": "Historial",
+    "select": "Seleccionar",
+    "density": "Tamaño de la rejilla",
+    "today": "Hoy",
+    "yesterday": "Ayer"
   },
   "referenceImages": "Imágenes de referencia",
-  "referenceImage": "Referencia {{n}}"
+  "referenceImage": "Referencia {{n}}",
+  "moveOutput": {
+    "title": "Mover a otro espacio de trabajo",
+    "empty": "No hay otros espacios de trabajo"
+  },
+  "selection": {
+    "count_one": "{{count}} seleccionado",
+    "count_other": "{{count}} seleccionados",
+    "none": "Toca elementos para seleccionarlos",
+    "all": "Seleccionar todo",
+    "favorite": "Favorito",
+    "unfavorite": "Quitar favorito",
+    "move": "Mover",
+    "delete": "Borrar",
+    "confirmDelete_one": "¿Borrar {{count}} elemento? No se puede deshacer.",
+    "confirmDelete_other": "¿Borrar {{count}} elementos? No se puede deshacer.",
+    "done": "Listo",
+    "working": "Procesando…",
+    "failed": "Algunos elementos no se pudieron actualizar: {{names}}",
+    "confirmDeleteTitle_one": "¿Borrar {{count}} elemento?",
+    "confirmDeleteTitle_other": "¿Borrar {{count}} elementos?",
+    "confirmDeleteAction": "Borrar",
+    "compare": "Comparar las dos imágenes"
+  },
+  "deleteOutput": {
+    "title": "¿Borrar este elemento?",
+    "message": "Se borrará «{{name}}». No se puede deshacer.",
+    "confirm": "Borrar",
+    "button": "Borrar elemento"
+  },
+  "order": {
+    "label": "Orden",
+    "newest": "Más recientes",
+    "oldest": "Más antiguos",
+    "favorites": "Favoritos primero"
+  },
+  "gallerySearch": {
+    "open": "Buscar",
+    "label": "Buscar en prompts, modelos y modos",
+    "placeholder": "Buscar en prompts, modelos…",
+    "clear": "Limpiar búsqueda",
+    "close": "Cerrar búsqueda",
+    "results_one": "{{count}} resultado",
+    "results_other": "{{count}} resultados",
+    "noResults": "Sin resultados para «{{query}}»",
+    "noResultsHint": "Las palabras coinciden mientras escribes y las tildes dan igual."
+  }
 }
