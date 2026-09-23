@@ -2,7 +2,7 @@
  *  moon hangs (and so where the light comes from), how tall and rough the
  *  ranges are, how much snow, trees, stars, water ripple and city light. */
 
-export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley'
+export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle'
 export type PixelBody = 'moon' | 'sun' | 'planet' | 'none'
 export type MeteorDirection = 'left' | 'right' | 'both'
 
@@ -59,6 +59,7 @@ export const PIXEL_SCENE_DEFAULTS: Record<PixelWorldKind, PixelScene> = {
   'pixel-orbit': { ...BASE, seed: 404, bodyX: .82, bodyY: .8, bodySize: 1.3, crescent: .55, mountains: .5, stars: 1, reeds: false, ripple: 0, trees: 0 },
   'pixel-tulips': { ...BASE, seed: 55, body: 'sun', bodyX: .7, bodyY: .22, bodySize: 1.5, crescent: 0, mountains: .12, roughness: .2, hills: .3, trees: .5, stars: .1, ripple: 0, reeds: false },
   'pixel-alley': { ...BASE, seed: 313, body: 'none', stars: .15, ripple: .35, reeds: false, city: .8, windows: .5 },
+  'pixel-castle': { ...BASE, seed: 77, bodyX: .12, bodyY: .7, bodySize: .7, crescent: .5, mountains: .35, roughness: .5, hills: .3, trees: .5, stars: .55, ripple: .4, reeds: true },
   'pixel-forest': { ...BASE, seed: 131, bodyX: .5, bodyY: .72, bodySize: .8, mountains: .45, trees: 1, hills: .8, stars: .55, ripple: .3 },
 }
 
@@ -70,6 +71,9 @@ export function isPixelWorldKind(kind: unknown): kind is PixelWorldKind {
 const unit = (value: unknown, fallback: number, min = 0, max = 1) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback
 
+const BODIES: PixelBody[] = ['moon', 'sun', 'planet', 'none']
+const DIRECTIONS: MeteorDirection[] = ['left', 'right', 'both']
+
 /** The authored changes over a world's defaults; unknown keys are dropped. */
 export function parsePixelScene(raw: unknown): Partial<PixelScene> | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
@@ -79,8 +83,8 @@ export function parsePixelScene(raw: unknown): Partial<PixelScene> | undefined {
   }
   if ('bodySize' in value) out.bodySize = unit(value.bodySize, 1, .4, 2.5)
   if ('seed' in value) out.seed = Math.round(unit(value.seed, BASE.seed, 1, 999999))
-  if (value.body === 'moon' || value.body === 'sun' || value.body === 'planet' || value.body === 'none') out.body = value.body
-  if (value.meteorDirection === 'left' || value.meteorDirection === 'right' || value.meteorDirection === 'both') out.meteorDirection = value.meteorDirection
+  if (BODIES.includes(value.body as PixelBody)) out.body = value.body as PixelBody
+  if (DIRECTIONS.includes(value.meteorDirection as MeteorDirection)) out.meteorDirection = value.meteorDirection as MeteorDirection
   if (typeof value.reeds === 'boolean') out.reeds = value.reeds
   return Object.keys(out).length ? out : undefined
 }

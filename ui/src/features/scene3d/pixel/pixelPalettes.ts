@@ -217,14 +217,12 @@ export function parsePaletteOverrides(raw: unknown): PaletteOverrides | undefine
 export function paletteWith(id: PixelPaletteId, colors: PaletteColors | undefined): PixelPalette {
   const base = PIXEL_PALETTES[id]
   if (!colors) return base
+  const pick = (key: typeof PALETTE_COLOR_KEYS[number]) => colors[key] ?? paletteColor(base, key)
   return {
     ...base,
-    sky: [colors.sky0 ?? base.sky[0], colors.sky1 ?? base.sky[1], colors.sky2 ?? base.sky[2]],
-    far: [colors.far0 ?? base.far[0], colors.far1 ?? base.far[1]],
-    near: [colors.near0 ?? base.near[0], colors.near1 ?? base.near[1]],
-    moon: colors.moon ?? base.moon, stars: colors.stars ?? base.stars, trees: colors.trees ?? base.trees,
-    water: colors.water ?? base.water, aurora: colors.aurora ?? base.aurora, windows: colors.windows ?? base.windows,
-    light: { ...base.light, color: colors.light ?? base.light.color },
+    sky: [pick('sky0'), pick('sky1'), pick('sky2')], far: [pick('far0'), pick('far1')], near: [pick('near0'), pick('near1')],
+    moon: pick('moon'), stars: pick('stars'), trees: pick('trees'), water: pick('water'), aurora: pick('aurora'), windows: pick('windows'),
+    light: { ...base.light, color: pick('light') },
   }
 }
 

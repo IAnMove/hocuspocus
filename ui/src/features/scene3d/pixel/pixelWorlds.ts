@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -17,7 +17,7 @@ export type LayerSpec = {
   orbit?: { x: number; y: number; radius: number; speed: number; phase: number }
   paint: (w: number, h: number) => IndexedLayer
 }
-export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number }
+export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -199,6 +199,11 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     // The street's two walls run away from the camera on either side.
     { z: -14, x: -4.2, turn: Math.PI / 2, width: 46, height: 15, bottom: -.2, texture: [460, 150], paint: (w, h) => paintFacade(w, h, { ...near, seed: scene.seed + 21, lightFrom: .9 }) },
     { z: -14, x: 4.2, turn: -Math.PI / 2, width: 46, height: 15, bottom: -.2, texture: [460, 150], paint: (w, h) => paintFacade(w, h, { ...near, seed: scene.seed + 22, lightFrom: .1 }) },
+  ] }),
+  'pixel-castle': scene => ({ ground: 'water', fireworks: true, layers: [
+    sky(scene), range(scene),
+    { z: -26, width: 56, height: 17, bottom: -.8, texture: [448, 136], paint: (w, h) => paintCastle(w, h, { body: INDEX.near, rim: INDEX.farRim, seed: scene.seed + 4, lightFrom: bodySkyX(scene) }) },
+    ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

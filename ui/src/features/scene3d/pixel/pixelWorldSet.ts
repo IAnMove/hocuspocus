@@ -9,7 +9,7 @@ import { flashPalette, paletteAt, tintPalette, type PixelPalette } from './pixel
 import type { ScreenLight } from './screenGlow'
 import { paintField, paintSails, paintSand } from './pixelPaintWorlds'
 import type { IndexedLayer } from './pixelPaint'
-import { meteorsAt, writePalette } from './pixelCycle'
+import { fireworksAt, meteorsAt, writePalette } from './pixelCycle'
 import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { bodyDirection, isPixelWorldKind, PIXEL_WORLD_KINDS, resolvePixelScene, type PixelScene, type PixelWorldKind } from './pixelScene'
 import { worldPlan, type LayerSpec } from './pixelWorlds'
@@ -24,6 +24,7 @@ type PixelRuntime = {
   kind: PixelDressing; key: string; palette: DataTexture; bytes: Uint8Array
   skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; sky: [number, number]
   movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; y: number }[]
+  fireworks?: boolean
   spinners: { mesh: Mesh; speed: number }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
 }
@@ -31,7 +32,7 @@ type PixelRuntime = {
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
 const LAYER_FRAGMENT = `varying vec2 vUv;
   uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase;
-  uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3];
+  uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
     return (i==0.?0.:i==1.?8.:i==2.?2.:i==3.?10.:i==4.?12.:i==5.?4.:i==6.?14.:i==7.?6.:i==8.?3.:i==9.?11.:i==10.?1.:i==11.?9.:i==12.?15.:i==13.?7.:i==14.?13.:5.)/16.; }
@@ -46,6 +47,27 @@ const LAYER_FRAGMENT = `varying vec2 vUv;
     float amount=uAurora*curtain*rays*wave;
     float level=floor(min(1.,amount*2.2)*4.+bayer4(cell))/4.;
     return uAuroraColor*level*.8;
+  }
+  // Fireworks: a rising spark, then a ring of embers that spreads, sags
+  // under gravity and fades, stippled on the pixel grid.
+  vec3 fireworks(vec2 cell){
+    vec3 add=vec3(0.);
+    for(int i=0;i<4;i++){
+      vec4 b=uBursts[i]; if(b.z<=0.) continue;
+      vec2 d=cell+.5-b.xy;
+      if(b.z<.15){ float rise=b.z/.15; float y=mix(uRes.y,b.y,rise);
+        if(abs(d.x)<1.&&abs(cell.y-y)<3.) add+=vec3(1.,.9,.7)*(1.-abs(cell.y-y)/3.); continue; }
+      float age=(b.z-.15)/.85, radius=38.*(1.-pow(1.-age,2.2));
+      d.y-=age*age*14.;
+      float dist=length(d), angle=atan(d.y,d.x);
+      float spoke=step(.6,fract(angle*28./6.2832+b.w*.37));
+      float ring=1.-smoothstep(0.,2.2+age*2.,abs(dist-radius));
+      float trail=(1.-smoothstep(0.,radius*.7,radius-dist))*step(dist,radius)*.35;
+      float glow=(ring+trail)*spoke*(1.-age);
+      if(bayer4(cell)>glow*1.3) continue;
+      add+=mix(uBurstColors[i],vec3(1.),ring*(1.-age)*.4)*glow*1.5;
+    }
+    return add;
   }
   vec3 meteors(vec2 cell){
     vec3 add=vec3(0.);
@@ -69,7 +91,7 @@ const LAYER_FRAGMENT = `varying vec2 vUv;
     float index=floor(texture2D(uIndex,uv).r*255.+.5);
     if(index<.5) discard;
     vec3 color=texture2D(uPalette,vec2((index+.5)/256.,.5)).rgb;
-    if(uSky>.5) color+=aurora(vec2(cell.x,uRes.y-1.-cell.y))+meteors(vec2(cell.x,uRes.y-1.-cell.y));
+    if(uSky>.5) color+=aurora(vec2(cell.x,uRes.y-1.-cell.y))+meteors(vec2(cell.x,uRes.y-1.-cell.y))+fireworks(vec2(cell.x,uRes.y-1.-cell.y));
     gl_FragColor=vec4(color,1.);
     #include <colorspace_fragment>
   }`
@@ -96,6 +118,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
       uHorizon: { value: height }, uAuroraBase: { value: .34 }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
+      uBursts: { value: [0, 1, 2, 3].map(() => new Vector4(0, 0, 0, 0)) }, uBurstColors: { value: [0, 1, 2, 3].map(() => new Color()) },
     },
     vertexShader: LAYER_VERTEX, fragmentShader: LAYER_FRAGMENT, depthWrite: true,
   })
@@ -235,6 +258,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
     return
   }
   const plan = worldPlan(runtime.kind, scene)
+  runtime.fireworks = plan.fireworks
   for (const spec of plan.layers) {
     const { mesh, lamp, hubs } = layerMesh(spec, runtime.palette)
     if (spec.sky) runtime.skies.push(mesh.material as ShaderMaterial)
@@ -266,28 +290,8 @@ function hemisphere(scene: Scene) {
   return scene.children.find((child): child is HemisphereLight => child instanceof HemisphereLight)
 }
 
-function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, palette: PixelPalette, seconds: number, frameHeight: number) {
-  const scene = isPixelWorldKind(runtime.kind) ? resolvePixelScene(runtime.kind, pixel.scene) : resolvePixelScene('pixel-lake', undefined)
-  const key = runtime.kind + JSON.stringify(scene)
-  if (runtime.key !== key) { build(dressing, runtime, scene); runtime.key = key }
-  writePalette(runtime.bytes, palette, seconds)
-  runtime.palette.needsUpdate = true
-  const meteors = meteorsAt(seconds, pixel.meteors, runtime.sky, 5, scene.meteorDirection)
-  for (const sky of runtime.skies) {
-    sky.uniforms.uTime.value = seconds
-    // No aurora hangs in open space.
-    sky.uniforms.uAurora.value = runtime.kind === 'pixel-orbit' ? 0 : palette.auroraAmount
-    sky.uniforms.uAuroraBase.value = .54 - .4 * scene.auroraHeight
-    sky.uniforms.uAuroraColor.value.set(palette.aurora)
-    sky.uniforms.uMeteorColor.value.set(palette.meteor)
-    sky.uniforms.uMeteors.value = meteors
-  }
-  if (runtime.water) {
-    runtime.water.uniforms.uTime.value = seconds
-    runtime.water.uniforms.uWater.value.set(palette.water)
-    runtime.water.uniforms.uCell.value = Math.max(1, pixel.pixelSize * frameHeight / 720)
-    runtime.water.uniforms.uCalm.value = runtime.kind === 'pixel-gallery' ? .85 : 1 - Math.min(1, scene.ripple * 1.25)
-  }
+/** Everything that travels, spins or orbits, on the scene clock. */
+function moveParts(runtime: PixelRuntime, seconds: number) {
   // Travelling planes follow the scene clock, so scrubbing and export agree.
   for (const mover of runtime.movers) {
     mover.mesh.position.x = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
@@ -300,6 +304,34 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
     mesh.position.x = orbit.x + Math.cos(angle) * orbit.radius
     mesh.position.y = orbit.y + Math.sin(angle) * orbit.radius - .7
   }
+}
+
+function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, palette: PixelPalette, seconds: number, frameHeight: number) {
+  const scene = isPixelWorldKind(runtime.kind) ? resolvePixelScene(runtime.kind, pixel.scene) : resolvePixelScene('pixel-lake', undefined)
+  const key = runtime.kind + JSON.stringify(scene)
+  if (runtime.key !== key) { build(dressing, runtime, scene); runtime.key = key }
+  writePalette(runtime.bytes, palette, seconds)
+  runtime.palette.needsUpdate = true
+  const meteors = meteorsAt(seconds, pixel.meteors, runtime.sky, 5, scene.meteorDirection)
+  const bursts = fireworksAt(runtime.fireworks ? seconds : -1, runtime.sky, scene.seed)
+  for (const sky of runtime.skies) {
+    sky.uniforms.uTime.value = seconds
+    // No aurora hangs in open space.
+    sky.uniforms.uAurora.value = runtime.kind === 'pixel-orbit' || runtime.fireworks ? 0 : palette.auroraAmount
+    sky.uniforms.uAuroraBase.value = .54 - .4 * scene.auroraHeight
+    sky.uniforms.uAuroraColor.value.set(palette.aurora)
+    sky.uniforms.uMeteorColor.value.set(palette.meteor)
+    sky.uniforms.uMeteors.value = meteors
+    sky.uniforms.uBursts.value = bursts.map(burst => burst.at)
+    bursts.forEach((burst, i) => sky.uniforms.uBurstColors.value[i].set(burst.color))
+  }
+  if (runtime.water) {
+    runtime.water.uniforms.uTime.value = seconds
+    runtime.water.uniforms.uWater.value.set(palette.water)
+    runtime.water.uniforms.uCell.value = Math.max(1, pixel.pixelSize * frameHeight / 720)
+    runtime.water.uniforms.uCalm.value = runtime.kind === 'pixel-gallery' ? .85 : 1 - Math.min(1, scene.ripple * 1.25)
+  }
+  moveParts(runtime, seconds)
   if (runtime.beam) {
     runtime.beam.rotation.y = seconds * .9
     const material = (runtime.beam.children[0].children[0] as Mesh).material as ShaderMaterial

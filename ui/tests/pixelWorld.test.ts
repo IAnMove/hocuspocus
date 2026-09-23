@@ -6,7 +6,7 @@ import { parseMediaScreen } from '../src/features/scene3d/mediaScreen'
 import { paletteAt, PIXEL_PALETTES } from '../src/features/scene3d/pixel/pixelPalettes'
 import { parsePixelWorld } from '../src/features/scene3d/pixel/pixelWorld'
 import { INDEX, paintRange, paintSky, ridge } from '../src/features/scene3d/pixel/pixelPaint'
-import { meteorsAt, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
+import { fireworksAt, meteorsAt, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
@@ -326,4 +326,18 @@ test('neon alley: two walls run along the street and the neon buzzes', () => {
   assert.equal(turned.length, 2, 'the wall planes are turned to line the street')
   const tubes = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.neon, seconds); return Array.from(bytes.subarray(176 * 4, 180 * 4)).join() }
   assert.ok(new Set([0, .5, 1.1, 2.3, 3.7, 5.2, 7.9].map(tubes)).size > 1, 'tubes flicker')
+})
+
+test('castle fireworks: bursts follow the clock, fade and only burst where asked', () => {
+  const plan = worldPlan('pixel-castle', resolvePixelScene('pixel-castle', undefined))
+  assert.equal(plan.fireworks, true)
+  assert.equal(worldPlan('pixel-lake', resolvePixelScene('pixel-lake', undefined)).fireworks, undefined)
+  assert.deepEqual(fireworksAt(4.2, [700, 214]).map(b => b.at.toArray()), fireworksAt(4.2, [700, 214]).map(b => b.at.toArray()))
+  assert.ok(fireworksAt(-1, [700, 214]).every(b => b.at.z === 0), 'none without a show')
+  let seen = 0
+  for (let t = 0; t < 20; t += .5) for (const b of fireworksAt(t, [700, 214])) if (b.at.z > 0) { seen++; assert.ok(b.at.z < 1 && b.at.y > 0 && b.at.y < 214) }
+  assert.ok(seen > 15, 'a steady show')
+  const castle = plan.layers.find(layer => layer.z === -26)!.paint(448, 136)
+  assert.ok([...new Set(castle.data)].some(slot => slot >= 64 && slot < 72), 'lit windows')
+  assert.ok([124, 125, 126].some(slot => castle.data.includes(slot)), 'banners fly')
 })

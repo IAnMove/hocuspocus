@@ -1,4 +1,4 @@
-export const PIXEL_TEMPLATE_IDS = ['pixel-tv-wall', 'pixel-moon-lake', 'pixel-tv-lake', 'pixel-aurora-peaks', 'pixel-neon-city', 'pixel-desert-sun', 'pixel-lighthouse', 'pixel-firefly-forest', 'pixel-planet-rise', 'pixel-night-train', 'pixel-storm-lake', 'pixel-volcano', 'pixel-drive-in', 'pixel-cherry-garden', 'pixel-coral-reef', 'pixel-balloons', 'pixel-night-fair', 'pixel-snow-village', 'pixel-waterfall', 'pixel-orbit', 'pixel-tulip-fields', 'pixel-neon-alley'] as const
+export const PIXEL_TEMPLATE_IDS = ['pixel-tv-wall', 'pixel-moon-lake', 'pixel-tv-lake', 'pixel-aurora-peaks', 'pixel-neon-city', 'pixel-desert-sun', 'pixel-lighthouse', 'pixel-firefly-forest', 'pixel-planet-rise', 'pixel-night-train', 'pixel-storm-lake', 'pixel-volcano', 'pixel-drive-in', 'pixel-cherry-garden', 'pixel-coral-reef', 'pixel-balloons', 'pixel-night-fair', 'pixel-snow-village', 'pixel-waterfall', 'pixel-orbit', 'pixel-tulip-fields', 'pixel-neon-alley', 'pixel-castle-fireworks'] as const
 export type PixelTemplateId = typeof PIXEL_TEMPLATE_IDS[number]
 
 export function isPixelTemplate(id: string): id is PixelTemplateId {

@@ -121,3 +121,23 @@ export function meteorsAt(seconds: number, rate: number, sky: [number, number], 
   }
   return out
 }
+
+const BURST_LIFE = 1.9
+const BURST_COLORS = ['#ff5a6a', '#ffd25a', '#6affd0', '#b48aff', '#ff9ae0', '#8ad4ff']
+
+/** Fireworks on a seeded schedule: [x, y, age 0..1, seed] in sky texels
+ *  (y down from the top) and a colour each. Negative time means none. */
+export function fireworksAt(seconds: number, sky: [number, number], seed = 3) {
+  const out = [0, 1, 2, 3].map(() => ({ at: new Vector4(0, 0, 0, 0), color: '#ffffff' }))
+  if (seconds < 0) return out
+  let at = .3, slot = 0
+  for (let k = 0; at <= seconds && k < 4000; k++) {
+    const age = (seconds - at) / BURST_LIFE
+    if (age >= 0 && age < 1 && slot < 4) {
+      out[slot].at.set(sky[0] * (.3 + fxRandom(seed, k * 3) * .4), sky[1] * (.4 + fxRandom(seed, k * 3 + 1) * .2), Math.max(.001, age), fxRandom(seed, k * 3 + 2) * 100)
+      out[slot++].color = BURST_COLORS[Math.floor(fxRandom(seed, k + 500) * BURST_COLORS.length)]
+    }
+    at += .3 + fxRandom(seed, k + 900) * .8
+  }
+  return out
+}

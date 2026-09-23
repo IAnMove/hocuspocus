@@ -719,8 +719,9 @@ export function paintFacade(width: number, height: number, spec: Tone & { seed: 
   for (let x = 0, b = 0; x < width; b++) {
     const w = 30 + Math.floor(fxRandom(spec.seed, b) * 40), top = Math.round(height * (.05 + fxRandom(spec.seed, b + 30) * .3))
     const tone = b % 2 ? spec.body : INDEX.far
+    const isWindow = (dx: number, y: number) => y < height - 14 && (dx % 7) > 1 && (dx % 7) < 5 && ((y - top) % 9) > 2 && ((y - top) % 9) < 7
     for (let y = top; y < height; y++) for (let dx = 0; dx < w; dx++) {
-      const window = y < height - 14 && (dx % 7) > 1 && (dx % 7) < 5 && ((y - top) % 9) > 2 && ((y - top) % 9) < 7
+      const window = isWindow(dx, y)
       // Each window is lit or dark as a whole, in its own cycling slot.
       const pane = Math.floor(dx / 7) * 131 + Math.floor((y - top) / 9) + x * 7
       set(wall, x + dx, y, window ? (fxRandom(spec.seed, pane) > .5 ? INDEX.window + (pane & 7) : INDEX.trees) : dx === 0 ? spec.rim : tone)
@@ -731,4 +732,39 @@ export function paintFacade(width: number, height: number, spec: Tone & { seed: 
     x += w
   }
   return wall
+}
+
+function paintCastleTower(target: IndexedLayer, cx: number, base: number, width: number, tall: number, tone: Tone, flag: number) {
+  const half = Math.floor(width / 2), top = base - tall, lit = cx / target.width < tone.lightFrom ? half : -half
+  const isWindow = (dx: number, y: number) => (y - top) % 8 === 4 && Math.abs(dx) <= Math.max(1, half - 2) && dx % 3 !== 0 && y < base - 5
+  for (let y = top; y <= base; y++) for (let dx = -half; dx <= half; dx++) {
+    set(target, cx + dx, y, isWindow(dx, y) ? INDEX.window + ((cx + y) & 7) : dx === lit ? tone.rim : tone.body)
+  }
+  const roof = half + 2
+  for (let r = 0; r <= roof * 1.6; r++) {
+    const w = Math.round(roof - r / 1.6)
+    for (let dx = -w; dx <= w; dx++) set(target, cx + dx, top - r, dx === (lit > 0 ? w : -w) ? tone.rim : INDEX.trees)
+  }
+  const pole = top - Math.round(roof * 1.6) - 1
+  for (let y = pole - 5; y <= pole; y++) set(target, cx, y, INDEX.trees)
+  for (let dx = 1; dx <= 4; dx++) for (let y = pole - 5; y < pole - 5 + (dx < 3 ? 3 : 2); y++) set(target, cx + dx, y, flag)
+}
+
+/** A castle on its hill: a curtain wall with battlements and a gate, towers
+ *  with conical roofs and banners, and windows lit in the cycling slots. */
+export function paintCastle(width: number, height: number, spec: Tone & { seed: number }): IndexedLayer {
+  const castle = layer(width, height)
+  // A rounded hill rising to the castle, dark against the lit stonework.
+  const hill = Array.from({ length: width }, (_, x) => Math.round(height * (.72 + .26 * ((x - width / 2) / (width / 2)) ** 2)))
+  for (let x = 0; x < width; x++) for (let y = hill[x]; y < height; y++) set(castle, x, y, y - hill[x] < 1 ? spec.rim : INDEX.trees)
+  const cx = Math.round(width / 2), wallTop = hill[cx] - Math.round(height * .22), left = cx - Math.round(width * .2), right = cx + Math.round(width * .2)
+  for (let x = left; x <= right; x++) {
+    for (let y = wallTop; y <= hill[x]; y++) set(castle, x, y, spec.body)
+    if ((x - left) % 6 < 3) for (let y = wallTop - 3; y < wallTop; y++) set(castle, x, y, spec.body)
+    set(castle, x, wallTop, spec.rim)
+  }
+  for (let y = hill[cx] - 10; y <= hill[cx]; y++) for (let dx = -3; dx <= 3; dx++) if (Math.hypot(dx, (y - hill[cx] + 7) * .8) < 4 || y > hill[cx] - 7) set(castle, cx + dx, y, INDEX.window + 2)
+  const towers: [number, number, number][] = [[left, 9, .42], [right, 9, .4], [cx - 14, 11, .58], [cx + 16, 7, .5], [cx, 13, .7]]
+  towers.forEach(([x, w, tall], i) => paintCastleTower(castle, x, hill[x], w, Math.round(height * tall), spec, INDEX.balloon + (i % 3)))
+  return castle
 }
