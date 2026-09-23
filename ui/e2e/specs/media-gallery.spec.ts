@@ -729,6 +729,54 @@ test.describe('Media gallery viewer and tools', () => {
     }
   })
 
+  test('grid and mosaic group outputs by day and follow the chosen order', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const session = await bootMixedGallery(page)
+    const now = Math.floor(Date.now() / 1000)
+    const day = 86_400
+    const dated = MIXED.slice(0, 12).map((file, index) => ({
+      ...file,
+      created_at: now - (index < 4 ? 60 * index : index < 8 ? day + 60 * index : 3 * day + 60 * index),
+      completed_at: undefined,
+      favorite: index === 9,
+    }))
+    const orders: string[] = []
+    await page.route('**/api/v1/outputs?*', route => {
+      const order = new URL(route.request().url()).searchParams.get('order') || 'newest'
+      orders.push(order)
+      const listed = order === 'oldest' ? [...dated].reverse()
+        : order === 'favorites' ? [...dated].sort((a, b) => Number(b.favorite) - Number(a.favorite)) : dated
+      return route.fulfill({ json: { outputs: listed, total: listed.length } })
+    })
+    try {
+      const feed = page.getByTestId('media-feed')
+      await page.getByRole('tab', { name: 'Images', exact: true }).click()
+      await page.getByRole('tab', { name: 'All', exact: true }).click()
+      await chooseView(page, 'Grid')
+      const headings = feed.getByRole('heading', { level: 3 })
+      await expect(headings).toHaveText(['Today', 'Yesterday', /\w+day, \w+ \d+/])
+      await expect(headings.nth(0)).toBeInViewport()
+      await chooseView(page, 'Mosaic')
+      await expect(headings).toHaveCount(3)
+      await chooseView(page, 'One at a time')
+      await expect(headings).toHaveCount(0)
+
+      await chooseView(page, 'Grid')
+      await page.getByRole('combobox', { name: 'Order' }).selectOption('oldest')
+      await expect.poll(() => orders.at(-1)).toBe('oldest')
+      await expect(headings).toHaveText([/\w+day, \w+ \d+/, 'Yesterday', 'Today'])
+      await expect(feed.locator('[data-gallery-index="0"]')).toContainText(dated.at(-1)!.name)
+      await page.getByRole('combobox', { name: 'Order' }).selectOption('favorites')
+      await expect.poll(() => orders.at(-1)).toBe('favorites')
+      await expect(feed.locator('[data-gallery-index="0"]')).toContainText(dated[9].name)
+      await expect(headings).toHaveCount(0)
+      // The choice persists for the next session.
+      expect(await page.evaluate(() => localStorage.getItem('hocuspocus_gallery_order'))).toBe('favorites')
+    } finally {
+      await closeApp(page, session)
+    }
+  })
+
   test('deleting from the dialog steps to the next output', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     const deleted: string[] = []

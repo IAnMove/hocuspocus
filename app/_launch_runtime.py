@@ -33234,7 +33234,7 @@ def _resolve_output_file(filename: str, workspace: str | None = None) -> str | N
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = ""):
+def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = ""):
     """List generated output files (newest first) from the active workspace.
 
     Supports pagination via limit/offset query params.
@@ -33483,6 +33483,11 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
 
     if media_type:
         files = [item for item in files if item["type"] == media_type]
+    # Ordered before paging so every page follows the gallery's chosen order.
+    if order == "oldest":
+        files.reverse()
+    elif order == "favorites":
+        files.sort(key=lambda item: not item["favorite"])
 
     wanted_kind = str(result_kind or "").strip()
     if wanted_kind:

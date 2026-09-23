@@ -85,7 +85,10 @@ export async function toggleFavorite(name: string): Promise<{ name: string; favo
 
 // --- Outputs ---
 
-export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; editsOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; resultKind?: ApiOutput['result_kind']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
+/** Server-side order of the gallery listing, applied before paging. */
+export type GalleryOrder = 'newest' | 'oldest' | 'favorites'
+
+export async function fetchOutputs(limit = 0, offset = 0, opts?: { order?: GalleryOrder; favoritesOnly?: boolean; multiclipOnly?: boolean; editsOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; resultKind?: ApiOutput['result_kind']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
   const params = new URLSearchParams()
   if (limit > 0) params.set('limit', String(limit))
   if (offset > 0) params.set('offset', String(offset))
@@ -97,6 +100,7 @@ export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly
   // "__uploads__" browses the uploads folder (virtual Uploads view)
   if (opts?.workspace) params.set('workspace', opts.workspace)
   if (opts?.mediaType) params.set('media_type', opts.mediaType)
+  if (opts?.order && opts.order !== 'newest') params.set('order', opts.order)
   const qs = params.toString()
   const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`, { cache: 'no-store', signal: opts?.signal })
   if (!res.ok) throw new Error('Failed to fetch outputs')

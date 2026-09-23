@@ -216,7 +216,9 @@
     "masonry": "Mosaic",
     "history": "History",
     "select": "Select",
-    "density": "Grid size"
+    "density": "Grid size",
+    "today": "Today",
+    "yesterday": "Yesterday"
   },
   "referenceImages": "Reference images",
   "referenceImage": "Reference {{n}}",
@@ -248,5 +250,11 @@
     "message": "“{{name}}” will be deleted. This cannot be undone.",
     "confirm": "Delete",
     "button": "Delete output"
+  },
+  "order": {
+    "label": "Order",
+    "newest": "Newest first",
+    "oldest": "Oldest first",
+    "favorites": "Favourites first"
   }
 }

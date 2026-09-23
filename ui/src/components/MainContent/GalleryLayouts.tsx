@@ -26,6 +26,15 @@ export default function GalleryLayouts({
   for (let row = range.first; row <= range.last; row++) {
     const block = layout.blocks[row]
     if (!block) continue
+    if (block.header) {
+      cells.push(
+        <h3 key={`day:${block.top}`} className="absolute inset-x-0 flex items-end truncate px-1 pb-1.5 text-xs font-semibold text-text-secondary"
+          style={{ top: block.top, height: block.height }}>
+          {block.header}
+        </h3>
+      )
+      continue
+    }
     for (const cell of block.cells) {
       const file = outputs[cell.index]
       if (!file) continue

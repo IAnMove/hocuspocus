@@ -18,7 +18,19 @@ export interface GalleryBlock {
   top: number
   height: number
   cells: GalleryCell[]
+  /** A day heading row in grid and mosaic; it holds no cells. */
+  header?: string
 }
+
+/** A run of the list that starts a new heading, e.g. one day's outputs. */
+export interface GallerySection {
+  start: number
+  label: string
+}
+
+type Row = { height: number; cells: GalleryCell[]; header?: string }
+
+export const SECTION_HEADER_HEIGHT = 34
 
 export interface GalleryLayout {
   view: GalleryLayoutView
@@ -79,14 +91,14 @@ export function feedCardHeight(file: SizedOutput, width: number, viewportHeight:
   return feedMediaHeight(file, width, viewportHeight) + FEED_INFO_BAR_HEIGHT + FEED_CARD_BORDER
 }
 
-function stack(view: GalleryLayoutView, width: number, rows: Array<{ height: number; cells: GalleryCell[] }>, count: number, variant = ''): GalleryLayout {
+function stack(view: GalleryLayoutView, width: number, rows: Row[], count: number, variant = ''): GalleryLayout {
   const gap = galleryGap(view, width)
   const blocks: GalleryBlock[] = []
   const blockOf = new Array<number>(count)
   let top = 0
   for (const row of rows) {
     for (const cell of row.cells) blockOf[cell.index] = blocks.length
-    blocks.push({ top, height: row.height, cells: row.cells })
+    blocks.push({ top, height: row.height, cells: row.cells, ...(row.header ? { header: row.header } : {}) })
     top += row.height + gap
   }
   return { view, width, shape: `${view}:${width}:${variant}`, blocks, height: blocks.length ? top - gap : 0, blockOf }
@@ -109,29 +121,29 @@ export function gridColumns(width: number, preferred?: number | null): number {
   return Math.max(1, Math.floor((width + gap) / (minTile + gap)))
 }
 
-function gridLayout(outputs: SizedOutput[], width: number, viewportHeight: number, preferred?: number | null): GalleryLayout {
+function gridRows(outputs: SizedOutput[], width: number, viewportHeight: number, preferred: number | null | undefined, base: number): Row[] {
   const gap = galleryGap('grid', width)
   const columns = gridColumns(width, preferred)
   const tile = Math.max(1, Math.floor((width - gap * (columns - 1)) / columns))
   const height = Math.min(tile, Math.max(MIN_MEDIA_HEIGHT, Math.floor(viewportHeight)))
-  const rows: Array<{ height: number; cells: GalleryCell[] }> = []
+  const rows: Row[] = []
   for (let start = 0; start < outputs.length; start += columns) {
     const cells: GalleryCell[] = []
     for (let column = 0; column < columns && start + column < outputs.length; column++) {
-      cells.push({ index: start + column, left: column * (tile + gap), width: tile, height })
+      cells.push({ index: base + start + column, left: column * (tile + gap), width: tile, height })
     }
     rows.push({ height, cells })
   }
-  return stack('grid', width, rows, outputs.length, String(columns))
+  return rows
 }
 
 /** Justified rows: every item keeps its aspect, each full row spans the width
  *  exactly, and the last row stays at the target height instead of stretching. */
-function masonryLayout(outputs: SizedOutput[], width: number, viewportHeight: number): GalleryLayout {
+function masonryRows(outputs: SizedOutput[], width: number, viewportHeight: number, base: number): Row[] {
   const gap = galleryGap('masonry', width)
   const target = width < PHONE_WIDTH ? 150 : 220
   const maxHeight = Math.max(MIN_MEDIA_HEIGHT, Math.min(Math.round(target * 1.6), Math.floor(viewportHeight)))
-  const rows: Array<{ height: number; cells: GalleryCell[] }> = []
+  const rows: Row[] = []
   let pending: number[] = []
   let aspectSum = 0
 
@@ -142,7 +154,7 @@ function masonryLayout(outputs: SizedOutput[], width: number, viewportHeight: nu
       const exact = mosaicAspect(outputs[index]) * height
       const left = Math.round(x)
       const right = Math.round(x + exact)
-      cells.push({ index, left, width: Math.max(1, right - left), height })
+      cells.push({ index: base + index, left, width: Math.max(1, right - left), height })
       x += exact + gap
     }
     // Absorb rounding so a justified row ends exactly on the right edge.
@@ -176,7 +188,27 @@ function masonryLayout(outputs: SizedOutput[], width: number, viewportHeight: nu
     const usable = width - gap * (pending.length - 1)
     place(pending, Math.max(1, Math.min(target, maxHeight, Math.floor(usable / aspectSum))), false)
   }
-  return stack('masonry', width, rows, outputs.length)
+  return rows
+}
+
+/** Grid or mosaic rows, restarted under a heading for each section. */
+function sectionedLayout(
+  view: 'grid' | 'masonry', outputs: SizedOutput[], width: number, viewportHeight: number,
+  gridPreference: number | null | undefined, sections: GallerySection[],
+): GalleryLayout {
+  const runs = sections.length ? sections : [{ start: 0, label: '' }]
+  const rows: Row[] = []
+  runs.forEach((section, at) => {
+    const end = at + 1 < runs.length ? runs[at + 1].start : outputs.length
+    if (end <= section.start) return
+    if (section.label) rows.push({ height: SECTION_HEADER_HEIGHT, cells: [], header: section.label })
+    const slice = outputs.slice(section.start, end)
+    rows.push(...(view === 'grid'
+      ? gridRows(slice, width, viewportHeight, gridPreference, section.start)
+      : masonryRows(slice, width, viewportHeight, section.start)))
+  })
+  const columns = view === 'grid' ? String(gridColumns(width, gridPreference)) : ''
+  return stack(view, width, rows, outputs.length, `${columns}|${runs.map(section => section.start).join('.')}`)
 }
 
 export function buildGalleryLayout(
@@ -184,12 +216,11 @@ export function buildGalleryLayout(
   outputs: SizedOutput[],
   width: number,
   viewportHeight: number,
-  options: { gridColumns?: number | null } = {},
+  options: { gridColumns?: number | null; sections?: GallerySection[] } = {},
 ): GalleryLayout {
   const usableWidth = Math.max(1, Math.floor(width))
-  if (view === 'grid') return gridLayout(outputs, usableWidth, viewportHeight, options.gridColumns)
-  if (view === 'masonry') return masonryLayout(outputs, usableWidth, viewportHeight)
-  return feedLayout(outputs, usableWidth, viewportHeight)
+  if (view === 'feed') return feedLayout(outputs, usableWidth, viewportHeight)
+  return sectionedLayout(view, outputs, usableWidth, viewportHeight, options.gridColumns, options.sections ?? [])
 }
 
 /** First block whose bottom edge is below `offset`. */
@@ -230,7 +261,10 @@ export interface GalleryAnchor {
 
 export function anchorAt(layout: GalleryLayout, outputs: Pick<OutputFile, 'name'>[], offset: number): GalleryAnchor | null {
   if (!layout.blocks.length) return null
-  const block = layout.blocks[blockAt(layout, offset)]
+  // A heading is not an item: anchor to the first row below it.
+  let at = blockAt(layout, offset)
+  while (!layout.blocks[at].cells.length && at + 1 < layout.blocks.length) at += 1
+  const block = layout.blocks[at]
   const cell = block.cells[0]
   const file = cell && outputs[cell.index]
   return file ? { name: file.name, within: Math.max(0, offset - block.top) } : null
@@ -263,7 +297,10 @@ export function neighborIndex(layout: GalleryLayout, index: number, direction: G
   if (direction === 'left') return Math.max(0, current - 1)
   if (direction === 'right') return Math.min(count - 1, current + 1)
   const row = layout.blockOf[current]
-  const target = layout.blocks[row + (direction === 'down' ? 1 : -1)]
+  const step = direction === 'down' ? 1 : -1
+  let targetRow = row + step
+  while (layout.blocks[targetRow] && !layout.blocks[targetRow].cells.length) targetRow += step
+  const target = layout.blocks[targetRow]
   if (!target) return current
   const cell = layout.blocks[row].cells.find(item => item.index === current)
   const center = cell ? cell.left + cell.width / 2 : 0

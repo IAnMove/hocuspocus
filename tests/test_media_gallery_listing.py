@@ -255,3 +255,15 @@ def test_fitted_video_frame_keeps_portrait_aspect(tmp_path):
     assert preview_path.endswith(".jpg")
     with Image.open(preview_path) as preview:
         assert preview.size == (180, 320)
+
+
+def test_listing_order_applies_before_paging(tmp_path):
+    for index, name in enumerate(["old.png", "mid.png", "new.png"]):
+        Image.new("RGB", (8, 8)).save(tmp_path / name)
+        os.utime(tmp_path / name, (1_000 + index, 1_000 + index))
+    names = lambda **kwargs: [item["name"] for item in list_test_outputs(tmp_path, **kwargs)]
+    assert names() == ["new.png", "mid.png", "old.png"]
+    assert names(order="oldest") == ["old.png", "mid.png", "new.png"]
+    assert names(order="oldest", limit=2, offset=1) == ["mid.png", "new.png"]
+    assert names(order="unknown") == ["new.png", "mid.png", "old.png"]
+    assert names(order="favorites", favorites={"old.png"}) == ["old.png", "new.png", "mid.png"]

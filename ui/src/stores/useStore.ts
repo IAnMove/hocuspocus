@@ -1687,6 +1687,8 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   setGalleryView: (view: GalleryView) => void
   galleryGridColumns: number | null
   setGalleryGridColumns: (columns: number | null) => void
+  galleryOrder: import('../api/outputs').GalleryOrder
+  setGalleryOrder: (order: import('../api/outputs').GalleryOrder) => void
   mobileHistoryOpen: boolean
   setMobileHistoryOpen: (open: boolean) => void
   outputSearchQuery: string

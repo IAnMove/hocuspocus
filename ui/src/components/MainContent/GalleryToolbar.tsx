@@ -5,6 +5,8 @@ import { GalleryViewSwitcher } from './GalleryViewSwitcher'
 import { MediaMoveDialog } from './MediaMoveDialog'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import type { GalleryBatchAction } from './galleryBatch'
+import { useStore } from '../../stores/useStore'
+import type { GalleryOrder } from '../../api/outputs'
 
 const iconButton = 'flex h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-text-secondary transition-colors hover:bg-white/[0.07] hover:text-text-primary disabled:opacity-40'
 
@@ -32,6 +34,8 @@ export function GalleryToolbar({
   onCompare?: () => void
 }) {
   const { t } = useUiTranslation('activity')
+  const order = useStore(s => s.galleryOrder)
+  const setOrder = useStore(s => s.setGalleryOrder)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [moving, setMoving] = useState(false)
 
@@ -74,7 +78,13 @@ export function GalleryToolbar({
           <CheckSquare size={16} /><span className="text-xs">{t('view.select')}</span>
         </button>
       )}
-      <div className="ml-auto"><GalleryViewSwitcher /></div>
+      <select aria-label={t('order.label')} title={t('order.label')} value={order} onChange={event => setOrder(event.target.value as GalleryOrder)}
+        className="ml-auto h-10 min-w-0 max-w-[9.5rem] shrink rounded-md border border-border/70 bg-bg-secondary px-2 text-xs text-text-secondary">
+        <option value="newest">{t('order.newest')}</option>
+        <option value="oldest">{t('order.oldest')}</option>
+        <option value="favorites">{t('order.favorites')}</option>
+      </select>
+      <GalleryViewSwitcher />
     </div>
   )
 }

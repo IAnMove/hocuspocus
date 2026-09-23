@@ -216,7 +216,9 @@
     "masonry": "Mosaico",
     "history": "Historial",
     "select": "Seleccionar",
-    "density": "Tamaño de la rejilla"
+    "density": "Tamaño de la rejilla",
+    "today": "Hoy",
+    "yesterday": "Ayer"
   },
   "referenceImages": "Imágenes de referencia",
   "referenceImage": "Referencia {{n}}",
@@ -248,5 +250,11 @@
     "message": "Se borrará «{{name}}». No se puede deshacer.",
     "confirm": "Borrar",
     "button": "Borrar elemento"
+  },
+  "order": {
+    "label": "Orden",
+    "newest": "Más recientes",
+    "oldest": "Más antiguos",
+    "favorites": "Favoritos primero"
   }
 }

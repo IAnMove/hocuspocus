@@ -8,6 +8,7 @@ import { useGallerySelection } from './useGallerySelection'
 import { useGalleryKeyboard } from './useGalleryKeyboard'
 import { useGridPinch } from './useGridPinch'
 import { useLiveMediaFacts } from './useLiveMediaFacts'
+import { daySections } from './galleryDays'
 import { galleryPositionKey, readGalleryPosition, writeGalleryPosition } from './galleryPositions'
 import type { DetailVideoTime, GalleryDetail } from './GalleryDetailsDialog'
 import { GALLERY_GRID_COLUMN_RANGE } from '../../stores/gallerySlice'
@@ -306,7 +307,7 @@ function PipelinePlaceholder() {
 }
 
 export function MainContent() {
-  const { t: tActivity } = useUiTranslation('activity')
+  const { t: tActivity, i18n } = useUiTranslation('activity')
   const outputs = useStore(s => s.filteredOutputs())
   const outputsLoading = useStore(s => s.outputsLoading)
   const jobs = useStore(s => s.jobs)
@@ -366,9 +367,16 @@ export function MainContent() {
     return () => window.clearTimeout(timer)
   }, [])
 
+  // Grid and mosaic group outputs under a heading per day, except when
+  // favourites come first and dates would interleave.
+  const galleryOrder = useStore(s => s.galleryOrder)
+  const sections = useMemo(() => (galleryView === 'feed' || galleryOrder === 'favorites'
+    ? []
+    : daySections(outputs, i18n.language, { today: tActivity('view.today'), yesterday: tActivity('view.yesterday') })),
+  [galleryView, galleryOrder, outputs, i18n.language, tActivity])
   const layout = useMemo(
-    () => buildGalleryLayout(galleryView, outputs, viewport.width, viewport.height, { gridColumns: galleryGridColumns }),
-    [galleryView, outputs, viewport.width, viewport.height, galleryGridColumns],
+    () => buildGalleryLayout(galleryView, outputs, viewport.width, viewport.height, { gridColumns: galleryGridColumns, sections }),
+    [galleryView, outputs, viewport.width, viewport.height, galleryGridColumns, sections],
   )
   const layoutRef = useRef<GalleryLayout>(layout)
   const outputsRef = useRef(outputs)

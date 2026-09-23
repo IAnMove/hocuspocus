@@ -9,6 +9,17 @@ const GALLERY_VIEW_KEY = 'hocuspocus_gallery_view'
 const GALLERY_VIEWS: readonly GalleryView[] = ['feed', 'grid', 'masonry']
 
 const GALLERY_GRID_COLUMNS_KEY = 'hocuspocus_gallery_grid_columns'
+const GALLERY_ORDER_KEY = 'hocuspocus_gallery_order'
+const GALLERY_ORDERS: readonly api.GalleryOrder[] = ['newest', 'oldest', 'favorites']
+
+function readStoredGalleryOrder(): api.GalleryOrder {
+  try {
+    const stored = localStorage.getItem(GALLERY_ORDER_KEY)
+    return GALLERY_ORDERS.includes(stored as api.GalleryOrder) ? stored as api.GalleryOrder : 'newest'
+  } catch {
+    return 'newest'
+  }
+}
 export const GALLERY_GRID_COLUMN_RANGE = [2, 6] as const
 
 function readStoredGridColumns(): number | null {
@@ -50,6 +61,9 @@ export type GallerySlice = {
   /** Phone grid columns chosen with a pinch; null follows the screen width. */
   galleryGridColumns: number | null
   setGalleryGridColumns: (columns: number | null) => void
+  /** Listing order, applied by the server so paging follows it. */
+  galleryOrder: api.GalleryOrder
+  setGalleryOrder: (order: api.GalleryOrder) => void
   /** The phone history panel, opened from the gallery toolbar. */
   mobileHistoryOpen: boolean
   setMobileHistoryOpen: (open: boolean) => void
@@ -361,6 +375,13 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
       else localStorage.setItem(GALLERY_GRID_COLUMNS_KEY, String(next))
     } catch { /* private browsing */ }
   },
+  galleryOrder: readStoredGalleryOrder(),
+  setGalleryOrder: (order) => {
+    if (get().galleryOrder === order) return
+    set({ galleryOrder: order, selectedOutput: 0 })
+    try { localStorage.setItem(GALLERY_ORDER_KEY, order) } catch { /* private browsing */ }
+    void get().loadOutputs()
+  },
   mobileHistoryOpen: false,
   setMobileHistoryOpen: (open) => set({ mobileHistoryOpen: open }),
   outputSearchQuery: '',
@@ -431,6 +452,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     try {
       const { outputs: apiOutputs, total } = query.useServerList
         ? await api.fetchOutputs(query.resultKind || query.favoritesOnly || query.multiclipOnly || query.editsOnly || query.search ? 0 : PAGE_SIZE, 0, {
+            order: get().galleryOrder,
             favoritesOnly: query.favoritesOnly,
             multiclipOnly: query.multiclipOnly,
             editsOnly: query.editsOnly,
@@ -440,7 +462,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
             workspace,
             signal: request.controller.signal,
           })
-        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace, signal: request.controller.signal })
+        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace, order: get().galleryOrder, signal: request.controller.signal })
       if (!_isCurrentOutputRequest(get, request)) return
       const outputs: OutputFile[] = apiOutputs.map(toOutputFile)
       const previousName = get().filteredOutputs()[get().selectedOutput]?.name
@@ -471,6 +493,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
       const query = galleryListQuery(get().mediaFilter, get().outputSearchQuery)
       const { outputs: apiOutputs, total: newTotal } = await api.fetchOutputs(PAGE_SIZE, current.length, {
         workspace,
+        order: get().galleryOrder,
         mediaType: query.mediaType,
         resultKind: query.resultKind,
         favoritesOnly: query.favoritesOnly,
@@ -502,6 +525,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     try {
       // Only fetch first page — new outputs appear at the top (newest first)
       const { outputs: apiOutputs, total } = await api.fetchOutputs(50, 0, {
+        order: get().galleryOrder,
         workspace,
         mediaType: query.mediaType,
         resultKind: query.resultKind,
