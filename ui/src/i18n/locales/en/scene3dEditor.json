@@ -1333,6 +1333,10 @@
     "pixel-night-train": {
       "title": "Midnight train",
       "description": "A lit night train crosses a stone viaduct over a moonlit lake, its windows glowing on the water, as midnight slowly turns to dawn."
+    },
+    "pixel-storm-lake": {
+      "title": "Storm on the lake",
+      "description": "Rain lashes a dark pixel lake while lightning strikes the far ranges; every bolt lights the whole painted world for an instant and its thunder rolls in on cue."
     }
   },
   "gallerySearch": "Search the catalog",

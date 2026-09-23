@@ -10,7 +10,7 @@ import { meteorsAt, writePalette } from '../src/features/scene3d/pixel/pixelCycl
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
-import { paletteWith, parsePaletteOverrides } from '../src/features/scene3d/pixel/pixelPalettes'
+import { flashPalette, paletteWith, parsePaletteOverrides } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3 } from 'three'
 import { addTv, applyScreenToAllTvs } from '../src/features/scene3d/pixel/pixelEdits'
 import { PIXEL_TEMPLATE_IDS } from '../src/features/scene3d/pixel/pixelTemplateIds'
@@ -158,3 +158,20 @@ test('the night train rides the viaduct on the scene clock', () => {
   assert.ok(later > early, 'the train moves along the deck')
   assert.equal(trainX(2), early, 'seeking back puts it where it was')
 })
+
+test('storm on the lake: every strike thunders and flashes the painted world', () => {
+  const doc = applyScene3DTemplate('pixel-storm-lake')
+  const bolts = doc.worldSfx!.filter(cue => cue.kind === 'lightning')
+  assert.ok(bolts.length >= 4 && bolts.every(cue => cue.sound), 'strikes come with thunder')
+  assert.ok(doc.worldSfx!.some(cue => cue.kind === 'rain' && cue.sound))
+  const calm = PIXEL_PALETTES.storm, lit = flashPalette(calm, 1.5)
+  assert.ok(hexLum(lit.sky[0]) > hexLum(calm.sky[0]) + .15)
+  assert.equal(flashPalette(calm, 0), calm)
+  const reopened = parseScene3DDocument(JSON.parse(JSON.stringify(doc)))!
+  assert.equal(reopened.worldSfx?.length, doc.worldSfx?.length)
+})
+
+function hexLum(hex: string) {
+  const value = parseInt(hex.slice(1), 16)
+  return ((value >> 16 & 255) + (value >> 8 & 255) + (value & 255)) / 765
+}

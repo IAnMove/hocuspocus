@@ -1333,6 +1333,10 @@
     "pixel-night-train": {
       "title": "Tren de medianoche",
       "description": "Un tren iluminado cruza un viaducto de piedra sobre un lago de luna, con sus ventanas brillando en el agua, mientras la medianoche se vuelve amanecer."
+    },
+    "pixel-storm-lake": {
+      "title": "Tormenta en el lago",
+      "description": "La lluvia azota un lago pixel oscuro mientras los rayos caen sobre las cordilleras; cada rayo ilumina todo el mundo pintado un instante y su trueno llega a tiempo."
     }
   },
   "gallerySearch": "Buscar en el catálogo",

@@ -106,5 +106,6 @@ export function poseLightning(root: Group, cue: WorldSfx, from: Vector3, to: Vec
 
 /** Scene light a lightning cue throws at `seconds`, 0 between strikes. */
 export function lightningGlow(cue: Pick<WorldSfx, 'seed' | 'start' | 'end' | 'intensity'>, seconds: number) {
+  if (seconds < cue.start || seconds >= cue.end) return 0
   return strikeState(cue.seed, Math.max(0, seconds - cue.start), Math.max(.001, cue.end - cue.start)).brightness * cue.intensity
 }

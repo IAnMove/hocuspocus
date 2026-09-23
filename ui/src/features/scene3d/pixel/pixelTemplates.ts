@@ -5,6 +5,7 @@ import { fxRandom } from '../../sceneFx/types'
 import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { isPixelTemplate, PIXEL_TEMPLATE_IDS } from './pixelTemplateIds'
 import type { Scene3DTemplate } from '../templates'
+import { parseWorldSfx } from '../../sceneFx/world'
 
 /** The recording every TV starts with; replace it on one TV or all of them. */
 export const PIXEL_TV_CLIP = '/examples/moving-cutouts/skate-neon.mp4'
@@ -62,6 +63,19 @@ function pixelDocument(id: string, dressing: Scene3DDocument['dressing'], pixel:
   return doc
 }
 
+/** Rain around the camera and single strikes on the far ranges, each with
+ *  its thunder; the painted world flashes with every strike. */
+function stormCues() {
+  const strikes: [number, number, number][] = [[1.4, -14, 11], [4.9, 9, 23], [8.2, -4, 37], [11.6, 17, 41], [14.8, -22, 53]]
+  return parseWorldSfx([
+    { id: 'storm-rain', kind: 'rain', start: 0, end: 18, position: { x: 0, y: -1, z: 3 }, scale: 4.2, intensity: 1, color: '#9fb4d8', seed: 7, sound: true, volume: .35 },
+    ...strikes.map(([at, x, seed], i) => ({
+      id: `storm-bolt-${i + 1}`, kind: 'lightning', start: at, end: at + 1.1, seed, sound: true, volume: .55, intensity: 1.4, scale: 3.2, color: '#d8e4ff',
+      position: { x, y: 24, z: -44 }, targetPosition: { x: x + 3, y: 2, z: -40 },
+    })),
+  ])
+}
+
 /** Landscapes: a painted world and the moods its light moves through. */
 const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wall' | 'pixel-tv-lake'>, [Scene3DDocument['dressing'], Partial<PixelWorld>]> = {
   'pixel-moon-lake': ['pixel-lake', { palettes: ['midnight', 'aurora', 'dawn', 'sunset'], hold: 6, meteors: .6 }],
@@ -70,6 +84,8 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
   'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+  'pixel-storm-lake': ['pixel-lake', { palettes: ['storm'], hold: 20, meteors: 0,
+    scene: { body: 'none', stars: 0, mountains: .62, roughness: .6, trees: .9, ripple: 1, reeds: true } }],
   'pixel-night-train': ['pixel-viaduct', { palettes: ['midnight', 'dawn'], hold: 9, meteors: .4 }],
   'pixel-planet-rise': ['pixel-peaks', { palettes: ['alien', 'vapor'], hold: 8, meteors: .5,
     scene: { body: 'planet', bodyX: .62, bodyY: .5, bodySize: 2.1, crescent: .35, mountains: .55, roughness: .95, snow: 0, hills: .4, stars: .8, reeds: false, ripple: .35 } }],
@@ -94,7 +110,8 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
     return doc
   }
   const [dressing, pixel] = LANDSCAPES[id]
-  const doc = pixelDocument(id, dressing, pixel, 24)
+  const doc = pixelDocument(id, dressing, pixel, id === 'pixel-storm-lake' ? 18 : 24)
+  if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
   doc.camera = { family: 'establishment', eye: [0, 1.6, 8], look: [0, 3.2, -40], fov: 45 }
   return doc
 }

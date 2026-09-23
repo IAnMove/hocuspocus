@@ -137,6 +137,15 @@ export function mixPalettes(a: PixelPalette, b: PixelPalette, t: number): PixelP
   }
 }
 
+/** A lightning flash lights the painted world for an instant: every
+ *  surface washes toward the bolt's cold white. */
+export function flashPalette(palette: PixelPalette, flash: number): PixelPalette {
+  if (flash <= .01) return palette
+  const white = { ...palette, sky: ['#dfe6ff', '#dfe6ff', '#dfe6ff'] as [string, string, string], far: ['#c8d2f0', '#ffffff'] as [string, string],
+    near: ['#a8b4d8', '#e8eeff'] as [string, string], trees: '#6a7494', water: '#b8c4e8' }
+  return mixPalettes(palette, white, Math.min(.45, flash * .3))
+}
+
 /** Colours a user changed on one mood; everything else keeps the preset. */
 export type PaletteColors = {
   sky0?: string; sky1?: string; sky2?: string; moon?: string; stars?: string; far0?: string; far1?: string
