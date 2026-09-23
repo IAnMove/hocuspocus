@@ -77,5 +77,9 @@
     "duplicate_generation": "A generation was already requested in this turn.",
     "request_policy": "The action was excluded or replaced while checking your request and context.",
     "visual_evidence_only": "The attached media was analyzed; that analysis did not authorize this action."
-  }
+  },
+  "stopResponse": "Discard response",
+  "responseDiscarded": "Response discarded. Its proposed actions will not run. The LLM request may still finish in the background.",
+  "controlError": "Could not apply this control: {{message}}",
+  "openSection": "Open section"
 }

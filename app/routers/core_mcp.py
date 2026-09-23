@@ -1,77 +1,84 @@
-"""MCP surface for the core/remote profile: advertise reads, 409 local engines."""
+"""Read-only MCP adapter for core, using the application's canonical catalogs."""
 from __future__ import annotations
 
+import json
+import inspect
 import secrets
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from routers.system_capabilities import require_capability_http
-from routers.wangp_mcp import PROTOCOL, tool_definitions
+from routers.wangp_mcp import PROTOCOL, mcp_payload_response, tool_definitions
+from services.wangp_agent_adapters import application_endpoint, asset_catalog_handler
 
 LOCAL_MUTATIONS = frozenset({"generate", "recast", "upscale"})
-READ_TOOLS = frozenset({"models", "processors", "status", "assets", "collections"})
 
 
-def _tool_name(body: dict) -> str:
-    name = str(body.get("method") or body.get("name") or "")
-    params = body.get("params") if isinstance(body.get("params"), dict) else body
+def _tool_name(body):
+    name = body.get("method") or body.get("name") or ""
+    params = body.get("params")
     if isinstance(params, dict) and params.get("name"):
-        name = str(params.get("name") or name)
-    if name == "tools/call" and isinstance(body.get("params"), dict):
-        name = str(body["params"].get("name") or name)
+        name = params["name"]
     return name
 
 
-def _read_result(name: str, arguments: dict) -> dict:
-    from services import core_workspace as core
-
-    if name == "models":
-        return {"models": []}
-    if name == "processors":
-        return {"processors": []}
-    if name == "status":
-        return {"jobs": [], "job_id": arguments.get("job_id")}
-    if name == "assets":
-        listed = core.list_outputs(str(arguments.get("workspace") or "") or "")
-        return {"assets": listed.get("outputs") or [], "total": listed.get("total") or 0}
-    if name == "collections":
-        return {"collections": []}
-    raise HTTPException(status_code=400, detail="Unknown MCP tool")
+def _read_handlers(api):
+    handlers = {
+        "models": lambda arguments: {"models": []},
+        "processors": lambda arguments: {"processors": []},
+        "status": lambda arguments: {"jobs": [], "job_id": arguments.get("job_id")},
+    }
+    for name, path in (("assets", "/api/v1/assets"), ("collections", "/api/v1/workspace-collections")):
+        try:
+            endpoint = application_endpoint(api, path, "GET")
+        except StopIteration:
+            continue
+        handlers[name] = asset_catalog_handler(endpoint) if name == "assets" else lambda arguments, endpoint=endpoint: endpoint()
+    return handlers
 
 
-def _jsonrpc(body: dict) -> dict:
-    request_id = body.get("id")
-    method = body.get("method")
-    if method == "initialize":
-        result = {
-            "protocolVersion": PROTOCOL,
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "hocuspocus-core", "version": "1"},
-            "instructions": "Local NVIDIA engines are hidden. Use remote MiniMax/Meshy tools and filesystem reads.",
-        }
-    elif method == "ping":
-        result = {}
-    elif method == "tools/list":
-        tools = [
-            tool for tool in tool_definitions(READ_TOOLS, command_operations=[])
-            if tool["name"] not in LOCAL_MUTATIONS
-        ]
-        result = {"tools": tools}
-    elif method == "tools/call":
-        params = body.get("params") or {}
-        name = str(params.get("name") or "")
-        arguments = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
-        if name in LOCAL_MUTATIONS:
-            require_capability_http("wangp_local")
-        value = _read_result(name, arguments)
-        result = {
-            "content": [{"type": "text", "text": str(value)}],
-            "isError": False,
-        }
-    else:
-        return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "Method not found"}}
-    return {"jsonrpc": "2.0", "id": request_id, "result": result}
+def _call_tool(params, handlers):
+    if not isinstance(params, dict):
+        raise ValueError("Tool call params must be an object")
+    name, arguments = params.get("name"), params.get("arguments", {})
+    if not isinstance(name, str) or name not in handlers or not isinstance(arguments, dict):
+        raise ValueError("Unknown tool or invalid arguments")
+    if name == "status" and (not isinstance(arguments.get("job_id"), str) or not arguments["job_id"]):
+        raise ValueError("job_id is required")
+    return handlers[name](arguments)
+
+
+async def _dispatch(body, handlers):
+    if not isinstance(body, dict) or body.get("jsonrpc") != "2.0":
+        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid request"}}
+    if "id" not in body:
+        return None
+    request_id, method = body["id"], body.get("method")
+    try:
+        if method == "initialize":
+            result = {
+                "protocolVersion": PROTOCOL, "capabilities": {"tools": {}},
+                "serverInfo": {"name": "hocuspocus-core", "version": "1"},
+                "instructions": "This profile exposes read-only tools. Use canonical asset IDs and paginate with limit and offset.",
+            }
+        elif method == "ping":
+            result = {}
+        elif method == "tools/list":
+            result = {"tools": tool_definitions(handlers, command_operations=[])}
+        elif method == "tools/call":
+            value = _call_tool(body.get("params", {}), handlers)
+            if inspect.isawaitable(value):
+                value = await value
+            result = {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}], "isError": False}
+        else:
+            return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "Method not found"}}
+        return {"jsonrpc": "2.0", "id": request_id, "result": result}
+    except (ValueError, KeyError, TypeError, HTTPException) as error:
+        detail = error.detail if isinstance(error, HTTPException) else str(error)
+        return {"jsonrpc": "2.0", "id": request_id, "result": {
+            "isError": True, "content": [{"type": "text", "text": str(detail)}],
+        }}
 
 
 def _require_mcp_bearer(request: Request, token: str) -> None:
@@ -89,20 +96,29 @@ def create_core_mcp_router(access) -> APIRouter:
 
     @router.post("/api/v1/wangp/mcp", include_in_schema=False)
     @router.post("/api/v1/mcp")
-    async def wangp_mcp(request: Request):
+    async def mcp(request: Request):
         _require_mcp_bearer(request, access.token())
-        body = await request.json()
-        if isinstance(body, dict) and body.get("jsonrpc") == "2.0":
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}, status_code=400)
+        handlers = _read_handlers(request.app)
+        # Preserve old direct requests and their capability-specific HTTP 409.
+        if isinstance(body, dict) and "jsonrpc" not in body:
+            params = body.get("params", body)
+            name = _tool_name(body)
+            if isinstance(name, str) and name in LOCAL_MUTATIONS:
+                require_capability_http("wangp_local")
             try:
-                return JSONResponse(_jsonrpc(body))
-            except HTTPException:
-                raise
-        name = _tool_name(body if isinstance(body, dict) else {})
-        if name in LOCAL_MUTATIONS:
-            require_capability_http("wangp_local")
-        if name in READ_TOOLS:
-            arguments = body.get("params") if isinstance(body, dict) and isinstance(body.get("params"), dict) else {}
-            return _read_result(name, arguments if isinstance(arguments, dict) else {})
-        raise HTTPException(status_code=400, detail="Unknown MCP tool")
+                value = _call_tool({"name": name, "arguments": params}, handlers)
+                return await value if inspect.isawaitable(value) else value
+            except ValueError as error:
+                raise HTTPException(400, str(error)) from error
+        return await mcp_payload_response(body, lambda message: _dispatch(message, handlers))
+
+    @router.get("/api/v1/wangp/mcp", include_in_schema=False)
+    @router.get("/api/v1/mcp")
+    async def no_stream():
+        return Response(status_code=405, headers={"Allow": "POST"})
 
     return router

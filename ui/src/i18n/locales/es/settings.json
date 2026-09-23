@@ -390,6 +390,16 @@
     "access": "El token permite las operaciones disponibles de lectura, edición y generación de esta instalación. El alcance de red es el de la app: localhost desde este equipo o la URL local de la app desde otro. Este interruptor no abre puertos del router ni publica la app en internet.",
     "use": "Conserva los identificadores de los trabajos y consulta su estado. Reintenta con el mismo ID de intención; usa otro para una generación nueva. Las herramientas de escenas devuelven documentos editables: preparar una escena no exporta el vídeo. Desactiva MCP para revocar el acceso al instante.",
     "failed": "No se pudieron leer o actualizar los ajustes MCP. Abre la app desde su dirección local y reintenta.",
-    "copyFailed": "No se pudo copiar el token. Selecciona y copia el campo manualmente."
+    "copyFailed": "No se pudo copiar el token. Selecciona y copia el campo manualmente.",
+    "showToken": "Mostrar token",
+    "hideToken": "Ocultar token",
+    "copied": "Token copiado.",
+    "check": "Comprobar conexión",
+    "checking": "Comprobando…",
+    "profile": "Perfil del servidor: {{profile}}",
+    "unknownProfile": "Desconocido",
+    "connected": "{{server}} · protocolo {{protocol}} · {{count}} herramientas",
+    "authVerified": "Autenticación y catálogo comprobados. No se ejecutó ninguna herramienta.",
+    "tokenUnavailable": "Perfil comprobado. No se verificaron la autenticación ni las herramientas porque esta sesión de Ajustes no dispone de un token activo."
   }
 }
