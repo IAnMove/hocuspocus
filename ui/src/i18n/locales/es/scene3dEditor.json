@@ -1309,6 +1309,22 @@
     "pixel-aurora-peaks": {
       "title": "Picos de aurora",
       "description": "Montañas pixel nevadas sobre un lago helado bajo cortinas de aurora; la luz pasa del verde polar al día helado y vuelve a la noche."
+    },
+    "pixel-neon-city": {
+      "title": "Puerto de neón",
+      "description": "Una silueta de ciudad pixel sobre agua oscura: las ventanas se encienden y apagan con ciclo de color y la ciudad se refleja en el puerto mientras la noche se vuelve neón."
+    },
+    "pixel-desert-sun": {
+      "title": "Sol del desierto",
+      "description": "Mesetas y dunas bajo un sol enorme a franjas; la arena brilla del crepúsculo al atardecer y se enfría en una noche estrellada."
+    },
+    "pixel-lighthouse": {
+      "title": "Faro",
+      "description": "Un acantilado con un faro cuyo haz barre la noche sobre un mar picado, de la tormenta a la luz de luna y el amanecer."
+    },
+    "pixel-firefly-forest": {
+      "title": "Bosque de luciérnagas",
+      "description": "Pinos altos alrededor de un lago del bosque, con luciérnagas que laten entre los árboles y los juncos, bajo una aurora verde."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1537,14 +1553,74 @@
       "storm": "Tormenta",
       "eclipse": "Eclipse",
       "vapor": "Vapor",
-      "polar": "Polar"
+      "polar": "Polar",
+      "forest": "Bosque",
+      "harbor": "Puerto",
+      "dusk": "Crepúsculo"
     },
     "set": {
       "pixel-lake": "Lago de luna",
       "pixel-peaks": "Picos nevados",
-      "pixel-gallery": "Galería oscura"
+      "pixel-gallery": "Galería oscura",
+      "pixel-city": "Ciudad de neón",
+      "pixel-desert": "Desierto",
+      "pixel-coast": "Acantilado",
+      "pixel-forest": "Bosque"
     },
     "addTv": "Añadir televisor",
-    "tvs": "{{count}} televisores"
+    "tvs": "{{count}} televisores",
+    "scene": {
+      "title": "Elementos del mundo",
+      "reimagine": "Reimaginar",
+      "reimagineHelp": "Pinta el mismo mundo con otra disposición de crestas, árboles, estrellas y edificios.",
+      "body": "Sol o luna",
+      "bodyKind": {
+        "moon": "Luna",
+        "sun": "Sol",
+        "none": "Ninguno"
+      },
+      "bodyX": "Posición en el cielo",
+      "bodyY": "Altura en el cielo",
+      "bodySize": "Tamaño",
+      "crescent": "Fase de la luna",
+      "mountains": "Montañas",
+      "roughness": "Aspereza",
+      "snow": "Nieve",
+      "hills": "Colinas y dunas",
+      "trees": "Árboles",
+      "stars": "Estrellas",
+      "auroraHeight": "Altura de la aurora",
+      "reeds": "Juncos en primer plano",
+      "ripple": "Oleaje",
+      "meteorDirection": "Las estrellas fugaces caen",
+      "meteor": {
+        "both": "A ambos lados",
+        "left": "Hacia la izquierda",
+        "right": "Hacia la derecha"
+      },
+      "city": "Rascacielos",
+      "windows": "Ventanas encendidas",
+      "lightHelp": "La luz principal viene del sol o la luna: muévelo para iluminar personajes y televisores desde ese lado.",
+      "reset": "Volver al mundo original"
+    },
+    "colors": {
+      "title": "Colores",
+      "mood": "Ambiente a recolorear",
+      "reset": "Restablecer este ambiente",
+      "sky0": "Cielo alto",
+      "sky1": "Cielo medio",
+      "sky2": "Horizonte",
+      "moon": "Sol o luna",
+      "stars": "Estrellas",
+      "far0": "Cordillera lejana",
+      "far1": "Luz de la cordillera",
+      "near0": "Tierra cercana",
+      "near1": "Luz cercana",
+      "trees": "Árboles y siluetas",
+      "water": "Agua o arena",
+      "aurora": "Aurora",
+      "windows": "Ventanas y faroles",
+      "light": "Luz sobre personajes"
+    }
   }
 }

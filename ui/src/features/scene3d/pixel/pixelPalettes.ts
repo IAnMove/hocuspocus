@@ -18,6 +18,8 @@ export type PixelPalette = {
   /** 0..1: how strongly curtains of light hang in the sky. */
   auroraAmount: number
   meteor: string
+  /** Lit windows, lamps and fireflies. */
+  windows: string
   /** Key light and ambient for 3D actors and props in the world. */
   light: { color: string; intensity: number }
   ambient: { sky: string; ground: string; intensity: number }
@@ -27,50 +29,68 @@ export const PIXEL_PALETTES = {
   midnight: {
     sky: ['#0b0d24', '#1d1b46', '#3a3165'], moon: '#f1ecc8', stars: '#d9d5ff',
     far: ['#26244d', '#6c69a8'], near: ['#17163a', '#3d3a73'], trees: '#0c0c22', water: '#121433',
-    aurora: '#3fe0b0', auroraAmount: .35, meteor: '#ffd9b0',
+    aurora: '#3fe0b0', auroraAmount: .35, meteor: '#ffd9b0', windows: '#ffd98a',
     light: { color: '#b9b4ff', intensity: .9 }, ambient: { sky: '#3a3470', ground: '#0c0c1c', intensity: .7 },
   },
   aurora: {
     sky: ['#040c1c', '#0e2a3c', '#1d4c58'], moon: '#e6fff4', stars: '#c9fff0',
     far: ['#10283a', '#3c8c8a'], near: ['#0a1a28', '#23545c'], trees: '#050d16', water: '#0a1c28',
-    aurora: '#54ffbe', auroraAmount: 1, meteor: '#d6fff0',
+    aurora: '#54ffbe', auroraAmount: 1, meteor: '#d6fff0', windows: '#c8ffe4',
     light: { color: '#8fffd8', intensity: 1 }, ambient: { sky: '#1f6a64', ground: '#06121a', intensity: .75 },
   },
   dawn: {
     sky: ['#2b2b5e', '#9b5c8e', '#f3a58c'], moon: '#fff6e2', stars: '#ffe6f0',
     far: ['#6c4a7c', '#f0a0a0'], near: ['#402c58', '#a86a88'], trees: '#221632', water: '#5a3c6c',
-    aurora: '#ffb0d0', auroraAmount: .1, meteor: '#fff2d0',
+    aurora: '#ffb0d0', auroraAmount: .1, meteor: '#fff2d0', windows: '#ffe2b0',
     light: { color: '#ffc4a8', intensity: 1.6 }, ambient: { sky: '#b07aa0', ground: '#2a1a30', intensity: .9 },
   },
   sunset: {
     sky: ['#3a1c4c', '#c04a50', '#ffb050'], moon: '#fff0c0', stars: '#ffd8a0',
     far: ['#7a2c48', '#ff8a5c'], near: ['#4a1a3a', '#b04a4a'], trees: '#240c1c', water: '#6a2438',
-    aurora: '#ff9060', auroraAmount: 0, meteor: '#ffe8a0',
+    aurora: '#ff9060', auroraAmount: 0, meteor: '#ffe8a0', windows: '#ffd070',
     light: { color: '#ffa060', intensity: 2 }, ambient: { sky: '#c0605a', ground: '#2a0c16', intensity: .9 },
   },
   storm: {
     sky: ['#07090f', '#161c28', '#2c3444'], moon: '#c8d4e4', stars: '#8090a8',
     far: ['#1a2230', '#46546c'], near: ['#0f141e', '#2a3444'], trees: '#06080c', water: '#0e141e',
-    aurora: '#8aa8ff', auroraAmount: 0, meteor: '#e0e8ff',
+    aurora: '#8aa8ff', auroraAmount: 0, meteor: '#e0e8ff', windows: '#ffe7a8',
     light: { color: '#9aaccc', intensity: .7 }, ambient: { sky: '#2c3648', ground: '#06080c', intensity: .6 },
   },
   eclipse: {
     sky: ['#12030a', '#3c0a1c', '#7a1c24'], moon: '#ff6a3c', stars: '#ffb0a0',
     far: ['#3a0c1c', '#c0303c'], near: ['#20060e', '#6a1424'], trees: '#0e0206', water: '#2a0610',
-    aurora: '#ff4060', auroraAmount: .45, meteor: '#ffc080',
+    aurora: '#ff4060', auroraAmount: .45, meteor: '#ffc080', windows: '#ff9a5a',
     light: { color: '#ff5a40', intensity: 1.2 }, ambient: { sky: '#6a1420', ground: '#0e0206', intensity: .7 },
   },
   vapor: {
     sky: ['#12062c', '#4c1a6c', '#ff5aa8'], moon: '#fff0ff', stars: '#a0f0ff',
     far: ['#2c0c54', '#ff60c0'], near: ['#1c0840', '#5c2ca0'], trees: '#0c0420', water: '#1c0a3c',
-    aurora: '#40f0ff', auroraAmount: .6, meteor: '#b0ffff',
+    aurora: '#40f0ff', auroraAmount: .6, meteor: '#b0ffff', windows: '#7ff6ff',
     light: { color: '#ff80e0', intensity: 1.4 }, ambient: { sky: '#6a2ca0', ground: '#10062a', intensity: .8 },
   },
   polar: {
     sky: ['#0c1a34', '#3a6a9c', '#b8e0f4'], moon: '#ffffff', stars: '#e0f4ff',
     far: ['#5a7ca4', '#f0f8ff'], near: ['#2c4a70', '#a8c8e4'], trees: '#12223a', water: '#2a4c70',
-    aurora: '#70ffd0', auroraAmount: .5, meteor: '#ffffff',
+    aurora: '#70ffd0', auroraAmount: .5, meteor: '#ffffff', windows: '#fff4c8',
     light: { color: '#dff0ff', intensity: 1.8 }, ambient: { sky: '#8ab4dc', ground: '#1a2c44', intensity: .9 },
+  },
+  forest: {
+    sky: ['#050d12', '#10262a', '#27493f'], moon: '#f0f6d8', stars: '#d8ffe0',
+    far: ['#12302c', '#4f8a6a'], near: ['#0a1c18', '#2c5a44'], trees: '#030a08', water: '#0c1e1c',
+    aurora: '#9cff8a', auroraAmount: .15, meteor: '#e8ffd0', windows: '#e8ff7a',
+    light: { color: '#b8ffcc', intensity: .9 }, ambient: { sky: '#2c5a48', ground: '#040a08', intensity: .7 },
+  },
+  harbor: {
+    sky: ['#070b1a', '#1c2548', '#6a4a5a'], moon: '#ffe8c4', stars: '#c8d4ff',
+    far: ['#121a34', '#44507c'], near: ['#0a0f22', '#2a3258'], trees: '#05070f', water: '#0c1226',
+    aurora: '#6ae0ff', auroraAmount: 0, meteor: '#fff0d0', windows: '#ffc460',
+    light: { color: '#ffcf9a', intensity: 1 }, ambient: { sky: '#3a3f6a', ground: '#07091a', intensity: .75 },
+  },
+  dusk: {
+    sky: ['#1c1036', '#8a3c6a', '#ff9a4a'], moon: '#fff2b0', stars: '#ffd8e8',
+    far: ['#6a2c52', '#ff9a6a'], near: ['#a04a3a', '#ffc27a'], trees: '#2a0c1c', water: '#c8704a',
+    aurora: '#ff80a0', auroraAmount: 0, meteor: '#fff0c0', windows: '#ffe07a',
+    light: { color: '#ffb070', intensity: 2 }, ambient: { sky: '#b05a6a', ground: '#3a1420', intensity: .9 },
   },
 } satisfies Record<string, PixelPalette>
 
@@ -105,22 +125,72 @@ export function mixPalettes(a: PixelPalette, b: PixelPalette, t: number): PixelP
     far: [mix(a.far[0], b.far[0]), mix(a.far[1], b.far[1])],
     near: [mix(a.near[0], b.near[0]), mix(a.near[1], b.near[1])],
     trees: mix(a.trees, b.trees), water: mix(a.water, b.water),
-    aurora: mix(a.aurora, b.aurora), auroraAmount: lerp(a.auroraAmount, b.auroraAmount), meteor: mix(a.meteor, b.meteor),
+    aurora: mix(a.aurora, b.aurora), auroraAmount: lerp(a.auroraAmount, b.auroraAmount), meteor: mix(a.meteor, b.meteor), windows: mix(a.windows, b.windows),
     light: { color: mix(a.light.color, b.light.color), intensity: lerp(a.light.intensity, b.light.intensity) },
     ambient: { sky: mix(a.ambient.sky, b.ambient.sky), ground: mix(a.ambient.ground, b.ambient.ground), intensity: lerp(a.ambient.intensity, b.ambient.intensity) },
   }
 }
 
+/** Colours a user changed on one mood; everything else keeps the preset. */
+export type PaletteColors = {
+  sky0?: string; sky1?: string; sky2?: string; moon?: string; stars?: string; far0?: string; far1?: string
+  near0?: string; near1?: string; trees?: string; water?: string; aurora?: string; windows?: string; light?: string
+}
+export type PaletteOverrides = Partial<Record<PixelPaletteId, PaletteColors>>
+export const PALETTE_COLOR_KEYS = ['sky0', 'sky1', 'sky2', 'moon', 'stars', 'far0', 'far1', 'near0', 'near1', 'trees', 'water', 'aurora', 'windows', 'light'] as const
+
+const HEX = /^#[\da-f]{6}$/i
+
+export function parsePaletteOverrides(raw: unknown): PaletteOverrides | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: PaletteOverrides = {}
+  for (const [id, colors] of Object.entries(raw as Record<string, unknown>)) {
+    if (!isPixelPaletteId(id) || !colors || typeof colors !== 'object') continue
+    const kept = Object.fromEntries(PALETTE_COLOR_KEYS.flatMap(key => {
+      const value = (colors as Record<string, unknown>)[key]
+      return typeof value === 'string' && HEX.test(value) ? [[key, value.toLowerCase()]] : []
+    })) as PaletteColors
+    if (Object.keys(kept).length) out[id] = kept
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+/** A preset with the user's colours laid over it. */
+export function paletteWith(id: PixelPaletteId, colors: PaletteColors | undefined): PixelPalette {
+  const base = PIXEL_PALETTES[id]
+  if (!colors) return base
+  return {
+    ...base,
+    sky: [colors.sky0 ?? base.sky[0], colors.sky1 ?? base.sky[1], colors.sky2 ?? base.sky[2]],
+    far: [colors.far0 ?? base.far[0], colors.far1 ?? base.far[1]],
+    near: [colors.near0 ?? base.near[0], colors.near1 ?? base.near[1]],
+    moon: colors.moon ?? base.moon, stars: colors.stars ?? base.stars, trees: colors.trees ?? base.trees,
+    water: colors.water ?? base.water, aurora: colors.aurora ?? base.aurora, windows: colors.windows ?? base.windows,
+    light: { ...base.light, color: colors.light ?? base.light.color },
+  }
+}
+
+/** The colour of one editable slot in a palette, for the colour pickers. */
+export function paletteColor(palette: PixelPalette, key: typeof PALETTE_COLOR_KEYS[number]): string {
+  const pairs: Record<typeof PALETTE_COLOR_KEYS[number], string> = {
+    sky0: palette.sky[0], sky1: palette.sky[1], sky2: palette.sky[2], moon: palette.moon, stars: palette.stars,
+    far0: palette.far[0], far1: palette.far[1], near0: palette.near[0], near1: palette.near[1], trees: palette.trees,
+    water: palette.water, aurora: palette.aurora, windows: palette.windows, light: palette.light.color,
+  }
+  return pairs[key]
+}
+
 /** The mood at `seconds`: each palette holds, then glides into the next,
  *  looping over the program. */
-export function paletteAt(program: readonly PixelPaletteId[], hold: number, seconds: number): PixelPalette {
+export function paletteAt(program: readonly PixelPaletteId[], hold: number, seconds: number, overrides?: PaletteOverrides): PixelPalette {
   const list = program.length ? program : ['midnight' as const]
-  if (list.length === 1) return PIXEL_PALETTES[list[0]]
+  const mood = (id: PixelPaletteId) => paletteWith(id, overrides?.[id])
+  if (list.length === 1) return mood(list[0])
   const step = Math.max(.5, hold)
   const position = Math.max(0, seconds) / step
   const index = Math.floor(position) % list.length
   const local = position - Math.floor(position)
   // Hold for the first 40% of a step, then ease into the next mood.
   const t = local < .4 ? 0 : (1 - Math.cos((local - .4) / .6 * Math.PI)) / 2
-  return mixPalettes(PIXEL_PALETTES[list[index]], PIXEL_PALETTES[list[(index + 1) % list.length]], t)
+  return mixPalettes(mood(list[index]), mood(list[(index + 1) % list.length]), t)
 }

@@ -1309,6 +1309,22 @@
     "pixel-aurora-peaks": {
       "title": "Aurora peaks",
       "description": "Snowy pixel mountains rise out of a frozen lake under curtains of aurora; the light slides from polar green to icy day and back to night."
+    },
+    "pixel-neon-city": {
+      "title": "Neon harbour",
+      "description": "A pixel skyline over dark water: windows switch on and off by colour cycling and the whole city glows back from the harbour as the night turns neon."
+    },
+    "pixel-desert-sun": {
+      "title": "Desert sun",
+      "description": "Mesas and dunes under a huge striped sun; the sand glows from dusk to sunset and cools into a starry desert night."
+    },
+    "pixel-lighthouse": {
+      "title": "Lighthouse",
+      "description": "A sea cliff with a lighthouse whose beam sweeps the night over choppy water, from storm to moonlight and dawn."
+    },
+    "pixel-firefly-forest": {
+      "title": "Firefly forest",
+      "description": "Tall pines around a forest lake, fireflies pulsing among the trees and in the reeds, under a green aurora."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1537,14 +1553,74 @@
       "storm": "Storm",
       "eclipse": "Eclipse",
       "vapor": "Vapor",
-      "polar": "Polar"
+      "polar": "Polar",
+      "forest": "Forest",
+      "harbor": "Harbour",
+      "dusk": "Dusk"
     },
     "set": {
       "pixel-lake": "Moon lake",
       "pixel-peaks": "Snow peaks",
-      "pixel-gallery": "Dark gallery"
+      "pixel-gallery": "Dark gallery",
+      "pixel-city": "Neon city",
+      "pixel-desert": "Desert",
+      "pixel-coast": "Sea cliff",
+      "pixel-forest": "Forest"
     },
     "addTv": "Add TV",
-    "tvs": "{{count}} TVs"
+    "tvs": "{{count}} TVs",
+    "scene": {
+      "title": "World elements",
+      "reimagine": "Reimagine",
+      "reimagineHelp": "Paints the same world with a new layout of ridges, trees, stars and buildings.",
+      "body": "Sun or moon",
+      "bodyKind": {
+        "moon": "Moon",
+        "sun": "Sun",
+        "none": "None"
+      },
+      "bodyX": "Position across the sky",
+      "bodyY": "Height in the sky",
+      "bodySize": "Size",
+      "crescent": "Moon phase",
+      "mountains": "Mountains",
+      "roughness": "Roughness",
+      "snow": "Snow",
+      "hills": "Hills and dunes",
+      "trees": "Trees",
+      "stars": "Stars",
+      "auroraHeight": "Aurora height",
+      "reeds": "Reeds in the foreground",
+      "ripple": "Water waves",
+      "meteorDirection": "Shooting stars fall",
+      "meteor": {
+        "both": "Both ways",
+        "left": "To the left",
+        "right": "To the right"
+      },
+      "city": "Skyline",
+      "windows": "Lit windows",
+      "lightHelp": "The key light comes from the sun or moon: move it to relight actors and TVs from that side.",
+      "reset": "Back to the world as designed"
+    },
+    "colors": {
+      "title": "Colours",
+      "mood": "Mood to recolour",
+      "reset": "Reset this mood",
+      "sky0": "Sky top",
+      "sky1": "Sky middle",
+      "sky2": "Horizon",
+      "moon": "Sun or moon",
+      "stars": "Stars",
+      "far0": "Distant range",
+      "far1": "Range light",
+      "near0": "Near land",
+      "near1": "Near light",
+      "trees": "Trees and silhouettes",
+      "water": "Water or sand",
+      "aurora": "Aurora",
+      "windows": "Windows and lamps",
+      "light": "Light on actors"
+    }
   }
 }

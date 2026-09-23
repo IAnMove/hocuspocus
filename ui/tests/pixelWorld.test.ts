@@ -6,7 +6,12 @@ import { parseMediaScreen } from '../src/features/scene3d/mediaScreen'
 import { paletteAt, PIXEL_PALETTES } from '../src/features/scene3d/pixel/pixelPalettes'
 import { parsePixelWorld } from '../src/features/scene3d/pixel/pixelWorld'
 import { INDEX, paintRange, paintSky, ridge } from '../src/features/scene3d/pixel/pixelPaint'
-import { meteorsAt, writePalette } from '../src/features/scene3d/pixel/pixelWorldSet'
+import { meteorsAt, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
+import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
+import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
+import { worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
+import { paletteWith, parsePaletteOverrides } from '../src/features/scene3d/pixel/pixelPalettes'
+import { Color, Group, Scene, Vector3 } from 'three'
 import { addTv, applyScreenToAllTvs } from '../src/features/scene3d/pixel/pixelEdits'
 import { PIXEL_TEMPLATE_IDS } from '../src/features/scene3d/pixel/pixelTemplateIds'
 
@@ -77,4 +82,55 @@ test('TVs: CRT screens keep their tube colour, share one recording and can be ad
   assert.equal(more.slots.length, shared.slots.length + 1)
   assert.equal(more.slots.at(-1)!.screen!.sourceUrl, '/api/v1/file/mine.mp4?workspace=w')
   assert.equal(new Set(more.slots.map(slot => slot.id)).size, more.slots.length)
+})
+
+test('every world paints its planes from a layout that can be reimagined', () => {
+  for (const kind of PIXEL_WORLD_KINDS) {
+    const scene = resolvePixelScene(kind, undefined)
+    const plan = worldPlan(kind, scene)
+    assert.ok(plan.layers.some(layer => layer.sky), kind)
+    const sky = plan.layers.find(layer => layer.sky)!
+    const first = sky.paint(...sky.texture).data
+    assert.deepEqual(first, sky.paint(...sky.texture).data, `${kind} is deterministic`)
+    const other = worldPlan(kind, { ...scene, seed: scene.seed + 1 }).layers.find(layer => layer.sky)!
+    assert.notDeepEqual(first, other.paint(...other.texture).data, `${kind} reimagines with a new seed`)
+  }
+  const coast = worldPlan('pixel-coast', resolvePixelScene('pixel-coast', undefined)).layers.find(layer => layer.z === -28)!
+  assert.ok(coast.paint(...coast.texture).lamp, 'the lighthouse reports its lamp for the beam')
+  assert.equal(worldPlan('pixel-desert', resolvePixelScene('pixel-desert', undefined)).ground, 'sand')
+})
+
+test('scene changes are bounded, and moving the moon moves the light', () => {
+  assert.deepEqual(parsePixelScene({ bodyX: 4, bodySize: 9, body: 'sun', seed: -3, junk: 1, meteorDirection: 'up' }), { bodyX: 1, bodySize: 2.5, body: 'sun', seed: 1 })
+  assert.equal(parsePixelScene({}), undefined)
+  const left = bodyDirection({ bodyX: .1, bodyY: .5 }), right = bodyDirection({ bodyX: .9, bodyY: .5 })
+  assert.ok(left[0] < 0 && right[0] > 0)
+  assert.ok(bodyDirection({ bodyX: .5, bodyY: .9 })[1] > bodyDirection({ bodyX: .5, bodyY: .1 })[1])
+  const root = pixelWorldGroup('pixel-lake'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = { ...applyScene3DTemplate('pixel-moon-lake').pixelWorld!, scene: { bodyX: .1 } }
+  paintPixelWorld(root, new Scene(), dir, pixel, 1, 720)
+  assert.ok(dir.position.x < 0, 'the key light comes from the moon on the left')
+  assert.ok((root as Group).children.length >= 4, 'the planes are painted on the first frame')
+})
+
+test('a mood can be recoloured and survives save and reopen', () => {
+  const colors = parsePaletteOverrides({ midnight: { sky0: '#FF0000', moon: 'red', junk: '#00ff00' }, nope: { sky0: '#000000' } })
+  assert.deepEqual(colors, { midnight: { sky0: '#ff0000' } })
+  assert.equal(paletteWith('midnight', colors!.midnight).sky[0], '#ff0000')
+  assert.equal(paletteWith('midnight', colors!.midnight).sky[1], PIXEL_PALETTES.midnight.sky[1])
+  const doc = applyScene3DTemplate('pixel-neon-city')
+  doc.pixelWorld = { ...doc.pixelWorld!, colors, scene: { windows: .9, city: .3 } }
+  const reopened = parseScene3DDocument(JSON.parse(JSON.stringify(doc)))!
+  assert.deepEqual(reopened.pixelWorld?.colors, colors)
+  assert.deepEqual(reopened.pixelWorld?.scene, { windows: .9, city: .3 })
+  assert.equal(paletteAt(['midnight'], 5, 1, colors).sky[0], '#ff0000')
+})
+
+test('city windows switch on and off by cycling, fireflies pulse', () => {
+  const at = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.harbor, seconds); return bytes }
+  const slots = (bytes: Uint8Array, from: number) => Array.from(bytes.subarray(from * 4, (from + 8) * 4))
+  const changed = [0, 3, 7, 12, 20].map(at)
+  assert.ok(new Set(changed.map(bytes => slots(bytes, 64).join())).size > 1, 'windows change over time')
+  assert.ok(new Set(changed.map(bytes => slots(bytes, 72).join())).size > 1, 'fireflies pulse')
+  assert.deepEqual(meteorsAt(40, 1, [700, 214], 5, 'left').filter(m => m.w > 0).every(m => Math.cos(m.z) < 0), true)
 })

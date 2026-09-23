@@ -1,0 +1,91 @@
+/** What a pixel world is made of, so it can be reimagined: where the sun or
+ *  moon hangs (and so where the light comes from), how tall and rough the
+ *  ranges are, how much snow, trees, stars, water ripple and city light. */
+
+export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest'
+export type PixelBody = 'moon' | 'sun' | 'none'
+export type MeteorDirection = 'left' | 'right' | 'both'
+
+export type PixelScene = {
+  /** Layout of ridges, trees, stars and buildings; change it to reimagine. */
+  seed: number
+  body: PixelBody
+  /** Across the sky, 0 left to 1 right. The light comes from here. */
+  bodyX: number
+  /** From the horizon (0) to high in the sky (1). */
+  bodyY: number
+  /** 0.4 small to 2.5 huge. */
+  bodySize: number
+  /** Moon phase shadow, 0 full to 1 thin crescent. */
+  crescent: number
+  mountains: number
+  roughness: number
+  snow: number
+  hills: number
+  trees: number
+  stars: number
+  auroraHeight: number
+  reeds: boolean
+  /** Water waves, 0 mirror calm to 1 choppy. */
+  ripple: number
+  meteorDirection: MeteorDirection
+  /** Skyline height and density (city worlds). */
+  city: number
+  /** Share of lit windows (city worlds). */
+  windows: number
+}
+
+const BASE: PixelScene = {
+  seed: 97, body: 'moon', bodyX: .65, bodyY: .46, bodySize: 1, crescent: .25,
+  mountains: .5, roughness: .45, snow: 0, hills: .5, trees: .7, stars: .6, auroraHeight: .5,
+  reeds: true, ripple: .5, meteorDirection: 'both', city: 0, windows: 0,
+}
+
+export const PIXEL_SCENE_DEFAULTS: Record<PixelWorldKind, PixelScene> = {
+  'pixel-lake': BASE,
+  'pixel-peaks': { ...BASE, seed: 311, bodyX: .27, bodyY: .7, mountains: .8, roughness: .5, snow: .6, trees: 0, stars: .5, ripple: .22 },
+  'pixel-city': { ...BASE, seed: 41, bodyX: .83, bodyY: .45, bodySize: .8, mountains: .25, trees: 0, hills: .2, stars: .3, reeds: false, city: .7, windows: .55, ripple: .45 },
+  'pixel-desert': { ...BASE, seed: 23, body: 'sun', bodyX: .37, bodyY: .16, bodySize: 1.9, crescent: 0, mountains: .35, roughness: .2, trees: 0, hills: .6, stars: .25, reeds: false, ripple: 0 },
+  'pixel-coast': { ...BASE, seed: 67, bodyX: .13, bodyY: .55, mountains: .15, roughness: .3, trees: .15, hills: .7, stars: .45, reeds: false, ripple: .85 },
+  'pixel-forest': { ...BASE, seed: 131, bodyX: .5, bodyY: .72, bodySize: .8, mountains: .45, trees: 1, hills: .8, stars: .55, ripple: .3 },
+}
+
+export const PIXEL_WORLD_KINDS = Object.keys(PIXEL_SCENE_DEFAULTS) as PixelWorldKind[]
+export function isPixelWorldKind(kind: unknown): kind is PixelWorldKind {
+  return typeof kind === 'string' && kind in PIXEL_SCENE_DEFAULTS
+}
+
+const unit = (value: unknown, fallback: number, min = 0, max = 1) =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback
+
+/** The authored changes over a world's defaults; unknown keys are dropped. */
+export function parsePixelScene(raw: unknown): Partial<PixelScene> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const value = raw as Record<string, unknown>, out: Partial<PixelScene> = {}
+  for (const key of ['bodyX', 'bodyY', 'crescent', 'mountains', 'roughness', 'snow', 'hills', 'trees', 'stars', 'auroraHeight', 'ripple', 'city', 'windows'] as const) {
+    if (key in value) out[key] = unit(value[key], BASE[key])
+  }
+  if ('bodySize' in value) out.bodySize = unit(value.bodySize, 1, .4, 2.5)
+  if ('seed' in value) out.seed = Math.round(unit(value.seed, BASE.seed, 1, 999999))
+  if (value.body === 'moon' || value.body === 'sun' || value.body === 'none') out.body = value.body
+  if (value.meteorDirection === 'left' || value.meteorDirection === 'right' || value.meteorDirection === 'both') out.meteorDirection = value.meteorDirection
+  if (typeof value.reeds === 'boolean') out.reeds = value.reeds
+  return Object.keys(out).length ? out : undefined
+}
+
+/** Where the sun or moon sits across the painted sky, which is wider than
+ *  the view: 0..1 spans the part the camera sees. */
+export function bodySkyX(scene: Pick<PixelScene, 'bodyX'>) {
+  return .2 + .6 * scene.bodyX
+}
+
+export function resolvePixelScene(kind: PixelWorldKind, authored: Partial<PixelScene> | undefined): PixelScene {
+  return { ...PIXEL_SCENE_DEFAULTS[kind], ...authored }
+}
+
+/** Where the sun or moon hangs, as a direction from the viewer: its light
+ *  falls from there onto actors and props. */
+export function bodyDirection(scene: Pick<PixelScene, 'bodyX' | 'bodyY'>): [number, number, number] {
+  const azimuth = (scene.bodyX - .5) * 1.7, elevation = .1 + scene.bodyY * 1.05
+  return [Math.sin(azimuth) * Math.cos(elevation), Math.sin(elevation), -Math.cos(azimuth) * Math.cos(elevation)]
+}

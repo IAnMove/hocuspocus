@@ -12,7 +12,7 @@ export const PIXEL_TV_CLIP = '/examples/moving-cutouts/skate-neon.mp4'
 export const PIXEL_TEMPLATES: Scene3DTemplate[] = PIXEL_TEMPLATE_IDS.map(id => ({
   id, camera: 'establishment', duration: id === 'pixel-tv-wall' ? 10 : 24,
   // Landscapes start empty: a placeholder actor would stand in the lake.
-  slots: id === 'pixel-moon-lake' || id === 'pixel-aurora-peaks' ? [] : ['prop'],
+  slots: id === 'pixel-tv-wall' || id === 'pixel-tv-lake' ? ['prop'] : [],
   tags: ['pixel', 'animated'],
 }))
 export const PIXEL_CATEGORIES = Object.fromEntries(PIXEL_TEMPLATE_IDS.map(id => [id, 'cinema'])) as Record<typeof PIXEL_TEMPLATE_IDS[number], 'cinema'>
@@ -62,6 +62,16 @@ function pixelDocument(id: string, dressing: Scene3DDocument['dressing'], pixel:
   return doc
 }
 
+/** Landscapes: a painted world and the moods its light moves through. */
+const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wall' | 'pixel-tv-lake'>, [Scene3DDocument['dressing'], Partial<PixelWorld>]> = {
+  'pixel-moon-lake': ['pixel-lake', { palettes: ['midnight', 'aurora', 'dawn', 'sunset'], hold: 6, meteors: .6 }],
+  'pixel-aurora-peaks': ['pixel-peaks', { palettes: ['aurora', 'polar', 'midnight'], hold: 7, meteors: .3 }],
+  'pixel-neon-city': ['pixel-city', { palettes: ['harbor', 'vapor', 'eclipse'], hold: 6, meteors: .3 }],
+  'pixel-desert-sun': ['pixel-desert', { palettes: ['dusk', 'sunset', 'midnight'], hold: 7, meteors: .4 }],
+  'pixel-lighthouse': ['pixel-coast', { palettes: ['storm', 'midnight', 'dawn'], hold: 6, meteors: .3 }],
+  'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
+}
+
 export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   if (!isPixelTemplate(id)) return null
   if (id === 'pixel-tv-wall') {
@@ -80,10 +90,8 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
     doc.camera = { family: 'establishment', eye: [0, 1.4, 6.5], look: [0, 1.6, -30], fov: 48 }
     return doc
   }
-  const peaks = id === 'pixel-aurora-peaks'
-  const doc = pixelDocument(id, peaks ? 'pixel-peaks' : 'pixel-lake', peaks
-    ? { palettes: ['aurora', 'polar', 'midnight'], hold: 7, meteors: .3 }
-    : { palettes: ['midnight', 'aurora', 'dawn', 'sunset'], hold: 6, meteors: .6 }, 24)
+  const [dressing, pixel] = LANDSCAPES[id]
+  const doc = pixelDocument(id, dressing, pixel, 24)
   doc.camera = { family: 'establishment', eye: [0, 1.6, 8], look: [0, 3.2, -40], fov: 45 }
   return doc
 }

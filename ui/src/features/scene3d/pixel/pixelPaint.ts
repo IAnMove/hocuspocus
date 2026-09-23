@@ -6,22 +6,26 @@ import { fxRandom } from '../../sceneFx/types'
 export const INDEX = {
   sky: 1, skySteps: 16,
   star: 20, starSteps: 8,
-  moon: 30, moonShade: 31, haloInner: 32, haloOuter: 33,
+  moon: 30, moonShade: 31, haloInner: 32, haloOuter: 33, moonDark: 34,
   far: 40, farRim: 41, farShade: 42,
   near: 50, nearRim: 51,
   trees: 60,
+  window: 64, windowSteps: 8,
+  firefly: 72, fireflySteps: 8,
+  sand: 80, sandSteps: 8,
+  lamp: 90,
 } as const
 
-export type IndexedLayer = { width: number; height: number; data: Uint8Array }
+export type IndexedLayer = { width: number; height: number; data: Uint8Array; /** A light source painted in, in texels (the lighthouse lamp). */ lamp?: [number, number] }
 
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 export const bayer = (x: number, y: number) => BAYER[(y & 3) * 4 + (x & 3)] / 16
 
-function layer(width: number, height: number): IndexedLayer {
+export function layer(width: number, height: number): IndexedLayer {
   return { width, height, data: new Uint8Array(width * height) }
 }
 
-function set(target: IndexedLayer, x: number, y: number, index: number) {
+export function set(target: IndexedLayer, x: number, y: number, index: number) {
   if (x < 0 || y < 0 || x >= target.width || y >= target.height) return
   target.data[y * target.width + x] = index
 }
@@ -44,7 +48,8 @@ export function ridge(seed: number, width: number, base: number, rough: number, 
   return heights.slice(0, width).map(value => Math.max(2, Math.round(value)))
 }
 
-export type SkySpec = { seed: number; moon: { x: number; y: number; radius: number } | null; horizonRow: number; stars: number }
+export type SkyBody = { x: number; y: number; radius: number; kind: 'moon' | 'sun'; crescent: number }
+export type SkySpec = { seed: number; moon: SkyBody | null; horizonRow: number; stars: number }
 
 function paintStars(sky: IndexedLayer, spec: SkySpec) {
   for (let i = 0; i < spec.stars; i++) {
@@ -56,20 +61,36 @@ function paintStars(sky: IndexedLayer, spec: SkySpec) {
   }
 }
 
-function moonPixel(seed: number, x: number, y: number, d: number, dx: number, r: number) {
-  if (d <= r) {
-    const crater = fxRandom(seed + 77, Math.floor(x / 3) * 131 + Math.floor(y / 3)) > .78 && d < r - 1.5
-    return crater || dx > r * .45 ? INDEX.moonShade : INDEX.moon
+/** Moon: craters and a phase shadow cast by a second disc. */
+function moonDisc(seed: number, body: SkyBody, x: number, y: number, dx: number, dy: number) {
+  const r = body.radius, offset = r * (2 - 1.7 * body.crescent)
+  if (Math.hypot(dx - offset, dy) < r) return INDEX.moonDark
+  const crater = fxRandom(seed + 77, Math.floor(x / 3) * 131 + Math.floor(y / 3)) > .78 && Math.hypot(dx, dy) < r - 1.5
+  return crater ? INDEX.moonShade : INDEX.moon
+}
+
+/** Sun: a solid disc cut by widening bands in its lower half, retro style. */
+function sunDisc(body: SkyBody, dy: number) {
+  const below = dy / body.radius
+  if (below > .1) {
+    const band = Math.floor(below * 7)
+    if ((dy + body.radius * .1) % Math.max(2, Math.round(body.radius / 4)) < band * .45) return 0
   }
-  if (d <= r * 1.7 && bayer(x, y) < 1 - (d - r) / (r * .7)) return INDEX.haloInner
-  if (d <= r * 2.8 && bayer(x, y) < (1 - (d - r * 1.7) / (r * 1.1)) * .55) return INDEX.haloOuter
+  return INDEX.moon
+}
+
+function bodyPixel(seed: number, body: SkyBody, x: number, y: number, dx: number, dy: number) {
+  const r = body.radius, d = Math.hypot(dx, dy), halo = body.kind === 'sun' ? 1.5 : 1
+  if (d <= r) return body.kind === 'sun' ? sunDisc(body, dy) : moonDisc(seed, body, x, y, dx, dy)
+  if (d <= r * (1 + .7 * halo) && bayer(x, y) < 1 - (d - r) / (r * .7 * halo)) return INDEX.haloInner
+  if (d <= r * (1 + 1.8 * halo) && bayer(x, y) < (1 - (d - r * (1 + .7 * halo)) / (r * 1.1 * halo)) * .55) return INDEX.haloOuter
   return 0
 }
 
-function paintMoon(sky: IndexedLayer, seed: number, moon: NonNullable<SkySpec['moon']>) {
-  const cx = moon.x * sky.width, cy = moon.y * sky.height, r = moon.radius
-  for (let y = Math.floor(cy - r * 3); y <= cy + r * 3; y++) for (let x = Math.floor(cx - r * 3); x <= cx + r * 3; x++) {
-    const index = moonPixel(seed, x, y, Math.hypot(x + .5 - cx, y + .5 - cy), x - cx, r)
+function paintMoon(sky: IndexedLayer, seed: number, body: SkyBody) {
+  const cx = body.x * sky.width, cy = body.y * sky.height, reach = body.radius * (body.kind === 'sun' ? 3.8 : 3)
+  for (let y = Math.floor(cy - reach); y <= cy + reach; y++) for (let x = Math.floor(cx - reach); x <= cx + reach; x++) {
+    const index = bodyPixel(seed, body, x, y, x + .5 - cx, y + .5 - cy)
     if (index) set(sky, x, y, index)
   }
 }
@@ -86,7 +107,7 @@ export function paintSky(width: number, height: number, spec: SkySpec): IndexedL
   return sky
 }
 
-export type RangeSpec = { seed: number; base: number; rough: number; peaks: number; peakLift?: number; snow?: number; body: number; rim: number; shade?: number; lightFrom: number; trees?: boolean; mist?: boolean }
+export type RangeSpec = { seed: number; base: number; rough: number; peaks: number; peakLift?: number; snow?: number; treeDensity?: number; body: number; rim: number; shade?: number; lightFrom: number; trees?: boolean; mist?: boolean }
 
 /** How far each column rises above the valleys around it, in rows. */
 function prominence(top: number[], reach: number) {
@@ -142,19 +163,19 @@ export function paintRange(width: number, height: number, spec: RangeSpec): Inde
     for (let y = Math.max(0, top[x]); y < height; y++) set(range, x, y, rangePixel(spec, top, rise, x, y, height))
     paintRim(range, spec, top, x)
   }
-  if (spec.trees) paintPines(range, top, spec.seed)
+  if (spec.trees) paintPines(range, top, spec.seed, spec.treeDensity)
   else paintStreaks(range, spec, top)
   return range
 }
 
 /** A dark line of conifers standing on the ridge. */
-function paintPines(target: IndexedLayer, top: number[], seed: number) {
+export function paintPines(target: IndexedLayer, top: number[], seed: number, density = .82, scale = 1, tone: number = INDEX.trees) {
   for (let x = 0; x < target.width; x += 1 + Math.floor(fxRandom(seed, x + 7000) * 3)) {
-    if (fxRandom(seed, x + 8000) < .18) continue
-    const tall = 4 + Math.floor(fxRandom(seed, x + 9000) * 9)
+    if (fxRandom(seed, x + 8000) > density) continue
+    const tall = Math.round((4 + Math.floor(fxRandom(seed, x + 9000) * 9)) * scale)
     for (let row = 0; row < tall; row++) {
       const half = Math.floor((row / tall) * (tall * .32) + (row % 3 === 2 ? 1 : 0))
-      for (let dx = -half; dx <= half; dx++) set(target, x + dx, top[x] - tall + row + 2, INDEX.trees)
+      for (let dx = -half; dx <= half; dx++) set(target, x + dx, top[x] - tall + row + 2, tone)
     }
   }
 }
