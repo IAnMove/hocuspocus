@@ -1373,6 +1373,10 @@
     "pixel-orbit": {
       "title": "Orbit",
       "description": "High above a planet: its curved horizon glows with atmosphere, city lights dot the night side, nebula clouds breathe among dense stars and a space station and tumbling asteroids drift by."
+    },
+    "pixel-tulip-fields": {
+      "title": "Tulip fields",
+      "description": "Rows of red, yellow, pink and violet tulips run to the horizon in true perspective while windmills turn their sails against a sunset that fades through dusk to dawn."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1629,7 +1633,8 @@
       "pixel-fair": "Night fair",
       "pixel-village": "Snowy village",
       "pixel-falls": "Waterfall",
-      "pixel-orbit": "Orbit"
+      "pixel-orbit": "Orbit",
+      "pixel-tulips": "Tulip fields"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

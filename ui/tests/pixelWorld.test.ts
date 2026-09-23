@@ -299,3 +299,17 @@ test('orbit: no ground, a curved planet limb, nebula behind the stars and drifti
   paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-orbit').pixelWorld!, 1, 720)
   assert.ok(!(root as Group).children.some(child => child.type === 'Mesh' && child.rotation.x === -Math.PI / 2), 'no floor under open space')
 })
+
+test('tulip fields: a flower floor in perspective and sails turning on the mills', () => {
+  const plan = worldPlan('pixel-tulips', resolvePixelScene('pixel-tulips', undefined))
+  assert.equal(plan.ground, 'field')
+  const mills = plan.layers.find(layer => layer.z === -28)!
+  assert.equal(mills.paint(...mills.texture).hubs?.length, 3)
+  const root = pixelWorldGroup('pixel-tulips'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-tulip-fields').pixelWorld!
+  const sails = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.filter(child => Math.abs(child.position.z + 27.7) < .01).map(child => child.rotation.z) }
+  const early = sails(1), later = sails(4)
+  assert.equal(early.length, 3)
+  assert.ok(early.every((angle, i) => angle !== later[i]), 'every mill turns')
+  assert.ok((root as Group).children.some(child => child.rotation.x === -Math.PI / 2), 'the field lies on the floor')
+})

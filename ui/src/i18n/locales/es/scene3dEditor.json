@@ -1373,6 +1373,10 @@
     "pixel-orbit": {
       "title": "Órbita",
       "description": "Muy por encima de un planeta: su horizonte curvo brilla con la atmósfera, las luces de las ciudades salpican el lado nocturno, las nebulosas respiran entre estrellas densas y una estación espacial y asteroides pasan a la deriva."
+    },
+    "pixel-tulip-fields": {
+      "title": "Campos de tulipanes",
+      "description": "Hileras de tulipanes rojos, amarillos, rosas y violetas corren hasta el horizonte en perspectiva real mientras los molinos giran sus aspas ante un atardecer que pasa al crepúsculo y al alba."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1629,7 +1633,8 @@
       "pixel-fair": "Feria nocturna",
       "pixel-village": "Aldea nevada",
       "pixel-falls": "Cascada",
-      "pixel-orbit": "Órbita"
+      "pixel-orbit": "Órbita",
+      "pixel-tulips": "Campos de tulipanes"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

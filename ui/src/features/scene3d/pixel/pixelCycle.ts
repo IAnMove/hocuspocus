@@ -54,6 +54,7 @@ const CYCLERS: Cycler[] = [
 function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number) {
   for (const cycler of CYCLERS) for (let k = 0; k < cycler.steps; k++) writeColor(bytes, cycler.start + k, cycler.color(palette, seconds, k))
   writeColor(bytes, INDEX.fallWater, mixHex(mixHex(palette.water, palette.far[1], .4), mixHex(palette.sky[2], '#ffffff', .55), .45))
+  ;['#e8384a', '#f5c542', '#f07ab0', '#8a5ad8'].forEach((bloom, row) => writeColor(bytes, INDEX.tulip + row, mixHex(bloom, palette.light.color, .2)))
   ;['#ff6a6a', '#ffb45a', '#fff27a', '#7aff9a', '#7ab4ff'].forEach((hue, band) => writeColor(bytes, INDEX.rainbow + band, mixHex(palette.far[0], hue, .55)))
 }
 

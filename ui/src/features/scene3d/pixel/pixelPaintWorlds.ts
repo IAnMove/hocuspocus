@@ -640,3 +640,58 @@ export function paintAsteroid(width: number, height: number, seed: number): Inde
   }
   return rock
 }
+
+/** A flower field for the floor: rows of tulips in four colours between
+ *  strips of green, sharp up close and hazing into the distance. */
+export function paintField(width: number, height: number, seed: number): IndexedLayer {
+  const field = layer(width, height)
+  for (let y = 0; y < height; y++) {
+    const far = 1 - y / height
+    for (let x = 0; x < width; x++) {
+      const row = Math.floor(x / 6), inRow = x % 6
+      if (far > .55 && bayer(x, y) < (far - .55) * 2.2) { set(field, x, y, INDEX.sand + Math.floor((1 - far) * 4)); continue }
+      const soil = inRow >= 4
+      const bloom = !soil && fxRandom(seed, x * 131 + (y >> 1)) > .25
+      set(field, x, y, soil ? INDEX.trees : bloom ? INDEX.tulip + (row % 4) : INDEX.near)
+    }
+  }
+  return field
+}
+
+/** Windmills: tapered towers with a cap; their hubs are reported so the
+ *  world can turn sails on them. */
+export function paintWindmills(width: number, height: number, spec: Tone & { seed: number; count: number }): IndexedLayer {
+  const mills = layer(width, height)
+  const hubs: [number, number][] = []
+  const ground = ridge(spec.seed, width, height * .9, height * .03, 1, height * .04)
+  for (let x = 0; x < width; x++) for (let y = ground[x]; y < height; y++) set(mills, x, y, spec.body)
+  for (let m = 0; m < spec.count; m++) {
+    const cx = Math.round(width * (.15 + .7 * (m + fxRandom(spec.seed, m) * .5) / spec.count)), base = ground[cx]
+    const tall = Math.round(height * (.38 + fxRandom(spec.seed, m + 9) * .22)), top = base - tall
+    for (let y = top; y < base; y++) {
+      const half = Math.round(3 + (y - top) / tall * 5)
+      for (let dx = -half; dx <= half; dx++) set(mills, cx + dx, y, dx === (cx / width < spec.lightFrom ? half : -half) ? spec.rim : spec.body)
+      if ((y - top) % 9 === 5) set(mills, cx, y, INDEX.window + (m & 7))
+    }
+    for (let r = 0; r < 5; r++) for (let dx = -3 + Math.floor(r / 2); dx <= 3 - Math.floor(r / 2); dx++) set(mills, cx + dx, top - 1 - r, INDEX.trees)
+    hubs.push([cx, top - 3])
+  }
+  return Object.assign(mills, { hubs })
+}
+
+/** Four lattice sails round a hub, to be turned by the world. */
+export function paintSails(size: number): IndexedLayer {
+  const sails = layer(size, size)
+  const c = (size - 1) / 2
+  for (let arm = 0; arm < 4; arm++) {
+    const t = arm * Math.PI / 2, ux = Math.cos(t), uy = Math.sin(t)
+    for (let d = 1; d < c; d++) {
+      set(sails, Math.round(c + ux * d), Math.round(c + uy * d), INDEX.trees)
+      if (d > c * .25) for (let w = 1; w <= 3; w++) {
+        const x = Math.round(c + ux * d - uy * w), y = Math.round(c + uy * d + ux * w)
+        set(sails, x, y, (d + w) % 3 === 0 ? INDEX.trees : INDEX.balloon + 3)
+      }
+    }
+  }
+  return sails
+}

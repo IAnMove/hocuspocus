@@ -1,5 +1,5 @@
 import { INDEX, layer, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -14,7 +14,7 @@ export type LayerSpec = {
   orbit?: { x: number; y: number; radius: number; speed: number; phase: number }
   paint: (w: number, h: number) => IndexedLayer
 }
-export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand' | 'none'; /** Height of the floor, meters. */ groundY?: number }
+export type WorldPlan = { layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -186,6 +186,10 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       })),
     ] }
   },
+  'pixel-tulips': scene => ({ ground: 'field', layers: [
+    sky(scene), range(scene), hills(scene, true),
+    { z: -28, width: 80, height: 12, bottom: -.6, texture: [640, 96], paint: (w, h) => paintWindmills(w, h, { ...near, seed: scene.seed + 4, lightFrom: bodySkyX(scene), count: 3 }) },
+  ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

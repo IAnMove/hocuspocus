@@ -7,7 +7,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js'
 import { ENERGY_NOISE } from '../../sceneFx/energyShaders'
 import { flashPalette, paletteAt, tintPalette, type PixelPalette } from './pixelPalettes'
 import type { ScreenLight } from './screenGlow'
-import { paintSand } from './pixelPaintWorlds'
+import { paintField, paintSails, paintSand } from './pixelPaintWorlds'
 import type { IndexedLayer } from './pixelPaint'
 import { meteorsAt, writePalette } from './pixelCycle'
 import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
@@ -101,10 +101,11 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
   })
   const mesh = new Mesh(new PlaneGeometry(spec.width, spec.height), material)
   mesh.position.set(0, spec.bottom + spec.height / 2, spec.z)
+  const hubs = painted.hubs
   const lamp = painted.lamp && [
     (painted.lamp[0] / width - .5) * spec.width, spec.bottom + (1 - painted.lamp[1] / height) * spec.height, spec.z + .4,
   ] as [number, number, number]
-  return { mesh, lamp }
+  return { mesh, lamp, hubs }
 }
 
 /** Lake water: the real scene mirrored, broken into rippling pixel rows,
@@ -143,6 +144,26 @@ function sandFloor(palette: DataTexture, y = 0) {
   mesh.rotation.x = -Math.PI / 2
   mesh.position.set(0, y, -11)
   return mesh
+}
+
+/** A flower field floor whose rows run away from the camera. */
+function fieldFloor(palette: DataTexture) {
+  const { mesh } = layerMesh({ z: 0, width: 150, height: 54, bottom: 0, texture: [750, 216], paint: (w, h) => paintField(w, h, 11) }, palette)
+  mesh.rotation.x = -Math.PI / 2
+  mesh.position.set(0, 0, -11)
+  return mesh
+}
+
+/** Sails on each hub a painter reports; each mill turns at its own pace. */
+function sailsOn(spec: LayerSpec, hubs: [number, number][], palette: DataTexture, runtime: PixelRuntime, root: Object3D) {
+  const [width, height] = spec.texture
+  hubs.forEach(([hx, hy], i) => {
+    const size = spec.height * .5
+    const { mesh } = layerMesh({ z: spec.z + .3, width: size, height: size, bottom: 0, texture: [48, 48], paint: w => paintSails(w) }, palette)
+    mesh.position.set((hx / width - .5) * spec.width, spec.bottom + (1 - hy / height) * spec.height, spec.z + .3)
+    runtime.spinners.push({ mesh, speed: -(.35 + i * .12) })
+    root.add(mesh)
+  })
 }
 
 /** The lighthouse beam: two crossed light blades that sweep round the lamp. */
@@ -214,15 +235,17 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   }
   const plan = worldPlan(runtime.kind, scene)
   for (const spec of plan.layers) {
-    const { mesh, lamp } = layerMesh(spec, runtime.palette)
+    const { mesh, lamp, hubs } = layerMesh(spec, runtime.palette)
     if (spec.sky) runtime.skies.push(mesh.material as ShaderMaterial)
     if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y })
     if (spec.spin) runtime.spinners.push({ mesh, speed: spec.spin })
     if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
+    if (hubs) sailsOn(spec, hubs, runtime.palette, runtime, root)
   }
   if (plan.ground === 'none') return
+  if (plan.ground === 'field') { root.add(fieldFloor(runtime.palette)); return }
   if (plan.ground === 'sand') { root.add(sandFloor(runtime.palette, plan.groundY)); return }
   const lake = water(150, 54, -11)
   runtime.water = lake.material as ShaderMaterial
