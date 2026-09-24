@@ -26,6 +26,7 @@ type PixelRuntime = {
   movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; rise?: boolean; y: number }[]
   fireworks?: boolean
   clearSky?: boolean
+  rain?: number
   spinners: { mesh: Mesh; speed: number }[]
   scrollers: { material: ShaderMaterial; speed: number; axis: 'uScroll' | 'uScrollY' }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
@@ -144,11 +145,24 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
 function water(width: number, depth: number, z: number) {
   const reflectorShader = (Reflector as unknown as { ReflectorShader: { uniforms: Record<string, { value: unknown }>; vertexShader: string } }).ReflectorShader
   const shader = {
-    uniforms: { ...reflectorShader.uniforms, uTime: { value: 0 }, uWater: { value: new Color('#121433') }, uCell: { value: 3 }, uCalm: { value: 0 } },
+    uniforms: { ...reflectorShader.uniforms, uTime: { value: 0 }, uWater: { value: new Color('#121433') }, uCell: { value: 3 }, uCalm: { value: 0 }, uRain: { value: 0 } },
     vertexShader: reflectorShader.vertexShader.replace('varying vec4 vUv;', 'varying vec4 vUv; varying vec3 vWorld;')
       .replace('vUv = textureMatrix', 'vWorld=(modelMatrix*vec4(position,1.)).xyz; vUv = textureMatrix'),
-    fragmentShader: `uniform vec3 color; uniform sampler2D tDiffuse; uniform float uTime, uCell, uCalm; uniform vec3 uWater;
+    fragmentShader: `uniform vec3 color; uniform sampler2D tDiffuse; uniform float uTime, uCell, uCalm, uRain; uniform vec3 uWater;
       varying vec4 vUv; varying vec3 vWorld; ${ENERGY_NOISE}
+      // Raindrop rings: each cell of the lake gets a drop on its own clock
+      // whose ring spreads and fades, drawn as a crisp pixel line.
+      float ripples(vec2 p){
+        float ring=0.;
+        for(int k=0;k<2;k++){
+          vec2 q=p*(1.6+float(k)*.9)+float(k)*7.3, cell=floor(q);
+          float seed=hash(cell), age=fract(uTime*(.7+seed*.5)+seed*9.);
+          vec2 centre=cell+.5+(vec2(hash(cell+3.1),hash(cell+7.7))-.5)*.6;
+          float d=length((q-centre)*vec2(1.,2.2)), r=age*.48;
+          ring+=(1.-age)*step(abs(d-r),.045+age*.02);
+        }
+        return min(ring,1.);
+      }
       void main(){
         float row=floor(gl_FragCoord.y/uCell);
         float wobble=(noise2(vec2(row*.37,uTime*.9))-.5)*.016*(1.-uCalm);
@@ -159,6 +173,7 @@ function water(width: number, depth: number, z: number) {
         float near=smoothstep(-6.,12.,vWorld.z);
         vec3 c=mix(uWater,reflected*vec3(.72,.76,.92),mix(.62,.35,near));
         c+=reflected*smoothstep(.35,.9,lum)*dash*(1.-uCalm*.8)*.9;
+        if(uRain>0.) c=mix(c,mix(uWater,vec3(1.),.45)+reflected*.25,ripples(vWorld.xz)*uRain*.6*smoothstep(-34.,-6.,vWorld.z));
         gl_FragColor=vec4(c,1.);
         #include <colorspace_fragment>
       }`,
@@ -302,6 +317,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   const plan = worldPlan(runtime.kind, scene)
   runtime.fireworks = plan.fireworks
   runtime.clearSky = plan.clearSky
+  runtime.rain = plan.rain
   for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
   for (const spec of plan.layers) {
     const { mesh, lamp, hubs } = layerMesh(spec, runtime.palette)
@@ -390,6 +406,7 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
     runtime.water.uniforms.uTime.value = seconds
     runtime.water.uniforms.uWater.value.set(palette.water)
     runtime.water.uniforms.uCell.value = Math.max(1, pixel.pixelSize * frameHeight / 720)
+    runtime.water.uniforms.uRain.value = runtime.rain ?? 0
     runtime.water.uniforms.uCalm.value = runtime.kind === 'pixel-gallery' ? .85 : 1 - Math.min(1, scene.ripple * 1.25)
   }
   moveParts(runtime, seconds)

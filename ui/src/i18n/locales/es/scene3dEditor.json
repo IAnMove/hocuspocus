@@ -1429,6 +1429,10 @@
     "pixel-synthwave": {
       "title": "Synthwave",
       "description": "Una cuadrícula de neón infinita avanza hacia ti y late a 120 BPM bajo un enorme sol a franjas, con montañas de borde neón y siluetas de palmeras, del rosa vapor a la noche de neón."
+    },
+    "pixel-monsoon": {
+      "title": "Monzón",
+      "description": "Una lluvia cálida cae sobre un lago tropical: cada gota que llega abre en el agua anillos de píxeles que se extienden, las palmeras y los juncos aguantan el aguacero y de vez en cuando un relámpago brilla tras las colinas mientras la tormenta se abre al verde."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1702,7 +1706,8 @@
       "pixel-cathedral": "Catedral",
       "pixel-koi": "Estanque de carpas",
       "pixel-caravan": "Caravana",
-      "pixel-synthwave": "Synthwave"
+      "pixel-synthwave": "Synthwave",
+      "pixel-monsoon": "Monzón"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

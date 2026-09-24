@@ -89,13 +89,11 @@ test('every world paints its planes from a layout that can be reimagined', () =>
   for (const kind of PIXEL_WORLD_KINDS) {
     const scene = resolvePixelScene(kind, undefined)
     const plan = worldPlan(kind, scene)
-    // Interiors have no sky; their seeded plane is the floor.
-    const pick = (layers: typeof plan.layers) => layers.find(layer => layer.sky) ?? layers.find(layer => layer.floor)!
-    const sky = pick(plan.layers)
-    const first = sky.paint(...sky.texture).data
-    assert.deepEqual(first, sky.paint(...sky.texture).data, `${kind} is deterministic`)
-    const other = pick(worldPlan(kind, { ...scene, seed: scene.seed + 1 }).layers)
-    assert.notDeepEqual(first, other.paint(...other.texture).data, `${kind} reimagines with a new seed`)
+    // The whole world's painting, every plane in turn.
+    const paint = (layers: typeof plan.layers) => layers.map(layer => Array.from(layer.paint(...layer.texture).data).join('')).join('|')
+    const first = paint(plan.layers)
+    assert.equal(first, paint(plan.layers), `${kind} is deterministic`)
+    assert.notEqual(first, paint(worldPlan(kind, { ...scene, seed: scene.seed + 1 }).layers), `${kind} reimagines with a new seed`)
   }
   const coast = worldPlan('pixel-coast', resolvePixelScene('pixel-coast', undefined)).layers.find(layer => layer.z === -28)!
   assert.ok(coast.paint(...coast.texture).lamp, 'the lighthouse reports its lamp for the beam')
@@ -501,4 +499,18 @@ test('synthwave: the grid flows toward the lens and pulses on the beat', () => {
   const beat = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.vapor, seconds); return bytes[234 * 4] + bytes[234 * 4 + 1] + bytes[234 * 4 + 2] }
   assert.ok(beat(2) > beat(2.3), 'brightest on the beat')
   assert.equal(beat(2), beat(2.5), 'every half second at 120 BPM')
+})
+
+test('monsoon: raindrops ring the lake while it pours', () => {
+  const plan = worldPlan('pixel-monsoon', resolvePixelScene('pixel-monsoon', undefined))
+  assert.equal(plan.rain, 1)
+  const root = pixelWorldGroup('pixel-monsoon'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-monsoon').pixelWorld!, 1, 720)
+  const lake = (root as Group).children.find(child => (child as Mesh).material?.uniforms?.uRain) as Mesh
+  assert.equal(lake.material.uniforms.uRain.value, 1)
+  const calm = pixelWorldGroup('pixel-lake')
+  paintPixelWorld(calm, new Scene(), dir, applyScene3DTemplate('pixel-moon-lake').pixelWorld!, 1, 720)
+  assert.equal(((calm as Group).children.find(child => (child as Mesh).material?.uniforms?.uRain) as Mesh).material.uniforms.uRain.value, 0, 'other lakes stay calm')
+  const cues = applyScene3DTemplate('pixel-monsoon').worldSfx!
+  assert.ok(cues.some(cue => cue.kind === 'rain' && cue.sound) && cues.some(cue => cue.kind === 'lightning'))
 })

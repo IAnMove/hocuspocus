@@ -116,6 +116,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-monsoon': ['pixel-monsoon', { palettes: ['storm', 'jungle'], hold: 12, meteors: 0 }],
   'pixel-synthwave': ['pixel-synthwave', { palettes: ['vapor', 'neon'], hold: 10, meteors: .4 }],
   'pixel-moon-caravan': ['pixel-caravan', { palettes: ['dusk', 'midnight'], hold: 12, meteors: .4 }],
   'pixel-koi-pond': ['pixel-koi', { palettes: ['jungle', 'midnight'], hold: 12, meteors: 0 }],
@@ -157,6 +158,7 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   'pixel-planet-rise': { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 },
   // A long lens: the moon looms and the caravan fills its disc.
   'pixel-moon-caravan': { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.5, -40], fov: 20 },
+  'pixel-monsoon': { family: 'establishment', eye: [0, 1.1, 9], look: [0, 1.8, -40], fov: 50 },
   'pixel-synthwave': { family: 'fixed', eye: [0, 2.2, 9], look: [0, 3, -40], fov: 52 },
   // Looking down on the pond from above.
   'pixel-koi-pond': { family: 'fixed', eye: [0, 13.5, 3.2], look: [0, 0, 0], fov: 50 },
@@ -178,6 +180,8 @@ const rain = (id: string, color: string, z: number, seed: number) =>
 /** Effects each landscape plays over its world. */
 const CUES: Partial<Record<Landscape, () => ReturnType<typeof parseWorldSfx>>> = {
   'pixel-storm-lake': stormCues,
+  // Warm heavy rain, and now and then lightning beyond the hills.
+  'pixel-monsoon': () => parseWorldSfx([rain('monsoon-rain', '#b8c8d8', 2, 31), ...stormCues().filter(cue => cue.kind === 'lightning').slice(0, 2).map(cue => ({ ...cue, intensity: .9, start: cue.start + 5, end: cue.end + 5 }))]),
   'pixel-volcano': eruptionCues,
   'pixel-snow-village': villageCues,
   'pixel-koi-pond': () => parseWorldSfx([drift('petals', '#ffc2dc', .4, { position: { x: 0, y: 1, z: 0 }, seed: 71 })]),

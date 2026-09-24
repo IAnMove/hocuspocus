@@ -30,7 +30,7 @@ export type LayerSpec = {
 }
 /** A shaft of coloured light from a window to the floor, in meters. */
 export type Beam = { from: [number, number, number]; to: [number, number, number]; width: number; hue: number }
-export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean; /** No aurora ever hangs here. */ clearSky?: boolean }
+export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean; /** No aurora ever hangs here. */ clearSky?: boolean; /** Raindrops ring the water, 0..1. */ rain?: number }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -335,6 +335,11 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     // The grid runs from the horizon to the lens and flows toward it.
     { z: -20, width: 150, height: 60, bottom: 0, floor: true, texture: [600, 240], scrollY: 30, paint: (w, h) => paintGrid(w, h, 20) },
     { z: -6, width: 26, height: 9, bottom: 0, texture: [520, 180], paint: (w, h) => paintPalms(w, h, scene.seed) },
+  ] }),
+  'pixel-monsoon': scene => ({ ground: 'water', rain: 1, layers: [
+    sky(scene), range(scene), hills(scene, true),
+    { z: -9, width: 26, height: 9, bottom: -.2, texture: [520, 180], paint: (w, h) => paintPalms(w, h, scene.seed) },
+    ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

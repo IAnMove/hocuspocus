@@ -1429,6 +1429,10 @@
     "pixel-synthwave": {
       "title": "Synthwave",
       "description": "An endless neon grid flows toward you and pulses to a 120 BPM beat under a huge striped sun, with neon-rimmed mountains and palm silhouettes, from vapor pink to neon night."
+    },
+    "pixel-monsoon": {
+      "title": "Monsoon",
+      "description": "Warm rain pours over a tropical lake: every drop that lands rings the water in spreading pixel ripples, palms and reeds stand in the downpour, and now and then lightning flares beyond the hills as the storm clears to green."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1702,7 +1706,8 @@
       "pixel-cathedral": "Cathedral",
       "pixel-koi": "Koi pond",
       "pixel-caravan": "Caravan",
-      "pixel-synthwave": "Synthwave"
+      "pixel-synthwave": "Synthwave",
+      "pixel-monsoon": "Monsoon"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",
