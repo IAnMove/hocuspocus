@@ -89,7 +89,7 @@ function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: b
   return { attachedPlane, target, previous, canvas, context, texture, material }
 }
 
-type SharedVideo = { url: string; video: HTMLVideoElement; users: number; ready: Promise<void>; busy: boolean; waiting: (() => void)[]; pooled: boolean }
+type SharedVideo = { url: string; video: HTMLVideoElement; users: number; ready: Promise<void>; busy: boolean; waiting: (() => void)[]; pooled: boolean; sought?: number }
 const sharedVideos = new Map<string, SharedVideo>()
 
 /** TVs showing the same clip share one decoder: a wall of TVs in sync costs
@@ -220,19 +220,22 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
       while (!abort.signal.aborted && (pending || settled !== desired)) {
         if (!pending) pending = (async () => {
           while (!abort.signal.aborted && settled !== desired) {
-            const target = desired
             await exclusive(shared!, async () => {
-              if (Number.isFinite(target) && Math.abs(video.currentTime - target) > .0005) {
+              // Read desired here: waiters must follow the latest clock, not the
+              // time they queued with, or a wall of TVs keeps seeking backwards.
+              const target = desired
+              if (Number.isFinite(target) && shared.sought !== target && Math.abs(video.currentTime - target) > .0005) {
                 try {
                   const sought = waitMedia(video, 'seeked', abort.signal, target); video.currentTime = target; await sought
                 } catch (error) {
                   if (abort.signal.aborted) throw error instanceof Error ? error : new Error(String(error))
                 }
               }
+              if (Number.isFinite(target)) shared.sought = target
               // Another screen may already have brought the decoder here.
               if (shown !== target) { paint(); shown = target }
+              settled = Number.isFinite(target) ? target : 0
             })
-            settled = Number.isFinite(target) ? target : 0
           }
         })().catch(error => { runtime.error = error instanceof Error ? error : new Error(String(error)); throw runtime.error }).finally(() => { pending = null })
         await pending
