@@ -698,8 +698,9 @@ export async function fetchCanonicalImageReferences(references: unknown[]): Prom
     body: JSON.stringify({ references }),
   })
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { detail?: { message?: string } }
-    throw new Error(body.detail?.message || i18n.t('studio:commands.referenceFailed'))
+    const body = await response.json().catch(() => ({})) as { detail?: string | { message?: string } }
+    const detail = typeof body.detail === 'string' ? body.detail : body.detail?.message
+    throw new Error(detail || i18n.t('studio:commands.referenceFailed'))
   }
   const result = await response.json() as { references?: unknown }
   if (!Array.isArray(result.references) || result.references.some(value => typeof value !== 'string')) {
@@ -715,7 +716,7 @@ export async function prepareStudioImageCommand(
   referenceErrors: string[] = [],
   localImageFiles?: ReadonlyMap<string, File>,
 ): Promise<{ command: StudioImageGenerationCommand; params: Record<string, unknown> }> {
-  if (referenceErrors.length) throw new Error(i18n.t('studio:commands.referenceFailed'))
+  if (referenceErrors.length) throw new Error(`${i18n.t('studio:commands.referenceFailed')}: ${referenceErrors.join('; ')}`)
   const snapshot = JSON.parse(stableSerialize(params)) as Record<string, unknown>
   translateLegacyImageGuides(snapshot)
   await materializeLocalEditFields(snapshot, MEDIA_FIELDS, localImageFiles)

@@ -30,6 +30,18 @@ from tests.test_output_completion_time import list_test_outputs
 _FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 
 
+def test_listing_only_reads_media_facts_for_the_requested_page(tmp_path, monkeypatch):
+    for index in range(12):
+        Image.new("RGB", (8, 8)).save(tmp_path / f"image-{index}.png")
+    inspected = []
+    monkeypatch.setattr(media_dimensions, "listing_fields", lambda kind, path, *args: (
+        inspected.append(os.path.basename(path)) or {"width": 8, "height": 8}
+    ))
+    outputs = list_test_outputs(tmp_path, limit=3, offset=2)
+    assert len(outputs) == 3
+    assert inspected == [item["name"] for item in outputs]
+
+
 @pytest.fixture(autouse=True)
 def isolated_facts(monkeypatch):
     """Each test gets an empty, unconfigured facts store and no live worker."""

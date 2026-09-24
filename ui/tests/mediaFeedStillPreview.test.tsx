@@ -54,6 +54,42 @@ function imageFile(overrides: Record<string, unknown> = {}) {
 
 const ROW = { top: 240, height: 424, mediaHeight: 320 }
 
+test('a failed image tile retries its saved request and prevents duplicate clicks', async () => {
+  const { render, fireEvent, cleanup, act } = await import('@testing-library/react')
+  const { JobPlaceholder } = await import('../src/components/MainContent/MainContent.tsx')
+  let retries = 0, dismissed = 0
+  let release!: () => void
+  const job = { id: 'failure', status: 'failed' as const, progress: 0, step: 0, totalSteps: 0,
+    phase: '', message: 'Failed', outputFiles: [], error: 'Image decoder error',
+    retry: () => { retries++; return new Promise<void>(resolve => { release = resolve }) } }
+  try {
+    const view = render(<JobPlaceholder job={job} onStop={() => undefined} onDismiss={() => { dismissed++ }} />)
+    assert.match(view.container.textContent || '', /Image decoder error/)
+    const button = view.getByRole('button', { name: /Retry|Reintentar/i })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    assert.equal(retries, 1)
+    assert.equal(dismissed, 0)
+    await act(async () => { release(); await Promise.resolve() })
+    assert.equal(dismissed, 1)
+  } finally { cleanup() }
+})
+
+test('a changed thumbnail recovers from a prior error without fetching the original', async () => {
+  const { render, fireEvent, cleanup } = await import('@testing-library/react')
+  const { GalleryTile } = await import('../src/components/MainContent/GalleryTile.tsx')
+  const props = { workspace: 'default', index: 0, active: false, cover: true, top: 0, left: 0,
+    width: 160, height: 160, selecting: false, picked: false,
+    onOpen: () => undefined, onOpenDetails: () => undefined, onPick: () => undefined, onLongPress: () => undefined }
+  try {
+    const view = render(<GalleryTile {...props} file={imageFile({ thumbnail_url: '/api/v1/outputs/thumbnail/portrait.png?v=1' })} />)
+    fireEvent.error(view.container.querySelector('img')!)
+    assert.equal(view.container.querySelector('img'), null)
+    view.rerender(<GalleryTile {...props} file={imageFile({ thumbnail_url: '/api/v1/outputs/thumbnail/portrait.png?v=2' })} />)
+    assert.match(view.container.querySelector('img')!.src, /thumbnail\/portrait.png\?v=2&size=sm/)
+  } finally { cleanup() }
+})
+
 test('image rows keep the frame the layout reserved after a portrait image decodes', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { ensureUiI18n } = await import('../src/i18n/index.ts')
