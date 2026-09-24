@@ -25,8 +25,9 @@ type PixelRuntime = {
   skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; shafts: Mesh[]; sky: [number, number]
   movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; rise?: boolean; y: number }[]
   fireworks?: boolean
+  clearSky?: boolean
   spinners: { mesh: Mesh; speed: number }[]
-  scrollers: { material: ShaderMaterial; speed: number }[]
+  scrollers: { material: ShaderMaterial; speed: number; axis: 'uScroll' | 'uScrollY' }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
   celestials: Mesh[]
   sprites: { material: ShaderMaterial; frames: DataTexture[]; fps: number }[]
@@ -34,7 +35,7 @@ type PixelRuntime = {
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
 const LAYER_FRAGMENT = `varying vec2 vUv;
-  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll;
+  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY;
   uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
@@ -90,7 +91,7 @@ const LAYER_FRAGMENT = `varying vec2 vUv;
     return add;
   }
   void main(){
-    vec2 cell=floor(vUv*uRes); cell.x=mod(cell.x+floor(uScroll),uRes.x); vec2 uv=(cell+.5)/uRes;
+    vec2 cell=floor(vUv*uRes); cell.x=mod(cell.x+floor(uScroll),uRes.x); cell.y=mod(cell.y+floor(uScrollY),uRes.y); vec2 uv=(cell+.5)/uRes;
     float index=floor(texture2D(uIndex,uv).r*255.+.5);
     if(index<.5) discard;
     vec3 color=texture2D(uPalette,vec2((index+.5)/256.,.5)).rgb;
@@ -119,7 +120,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
     uniforms: {
       uIndex: { value: indexTexture(painted) }, uPalette: { value: palette },
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
-      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
+      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
       uBursts: { value: [0, 1, 2, 3].map(() => new Vector4(0, 0, 0, 0)) }, uBurstColors: { value: [0, 1, 2, 3].map(() => new Color()) },
     },
@@ -281,7 +282,8 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.sky) runtime.skies.push(material)
   if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y })
   if (spec.spin) runtime.spinners.push({ mesh, speed: spec.spin })
-  if (spec.scroll) runtime.scrollers.push({ material, speed: spec.scroll })
+  if (spec.scroll) runtime.scrollers.push({ material, speed: spec.scroll, axis: 'uScroll' })
+  if (spec.scrollY) runtime.scrollers.push({ material, speed: spec.scrollY, axis: 'uScrollY' })
   if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
   if (spec.celestial) runtime.celestials.push(mesh)
   if (spec.frames) runtime.sprites.push({ material, frames: mesh.userData.frames, fps: spec.frames.fps })
@@ -299,6 +301,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   }
   const plan = worldPlan(runtime.kind, scene)
   runtime.fireworks = plan.fireworks
+  runtime.clearSky = plan.clearSky
   for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
   for (const spec of plan.layers) {
     const { mesh, lamp, hubs } = layerMesh(spec, runtime.palette)
@@ -360,7 +363,7 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
   // Shafts brighten with their glass as the sun moves round.
   for (const shaft of runtime.shafts) (shaft.material as ShaderMaterial).uniforms.uPower.value = .5 + .5 * Math.sin(seconds * .5 - shaft.userData.hue * 1.05)
   for (const sprite of runtime.sprites) sprite.material.uniforms.uIndex.value = sprite.frames[Math.floor(seconds * sprite.fps) % sprite.frames.length]
-  for (const scroller of runtime.scrollers) scroller.material.uniforms.uScroll.value = seconds * scroller.speed
+  for (const scroller of runtime.scrollers) scroller.material.uniforms[scroller.axis].value = seconds * scroller.speed
   for (const { mesh, orbit } of runtime.orbiters) placeOrbiter(mesh, orbit, seconds)
 }
 
@@ -375,7 +378,7 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
   for (const sky of runtime.skies) {
     sky.uniforms.uTime.value = seconds
     // No aurora hangs in open space.
-    sky.uniforms.uAurora.value = runtime.kind === 'pixel-orbit' || runtime.kind === 'pixel-eclipse' || runtime.fireworks ? 0 : palette.auroraAmount
+    sky.uniforms.uAurora.value = runtime.clearSky || runtime.fireworks ? 0 : palette.auroraAmount
     sky.uniforms.uAuroraBase.value = .54 - .4 * scene.auroraHeight
     sky.uniforms.uAuroraColor.value.set(palette.aurora)
     sky.uniforms.uMeteorColor.value.set(palette.meteor)

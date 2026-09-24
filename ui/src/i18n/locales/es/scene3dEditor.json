@@ -1425,6 +1425,10 @@
     "pixel-moon-caravan": {
       "title": "Caravana bajo la luna",
       "description": "Una caravana de camellos cruza las dunas a contraluz de una luna gigante que sale, las patas avanzando fotograma a fotograma mientras un guía abre el camino y el crepúsculo se vuelve noche estrellada del desierto."
+    },
+    "pixel-synthwave": {
+      "title": "Synthwave",
+      "description": "Una cuadrícula de neón infinita avanza hacia ti y late a 120 BPM bajo un enorme sol a franjas, con montañas de borde neón y siluetas de palmeras, del rosa vapor a la noche de neón."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1697,7 +1701,8 @@
       "pixel-seasons": "Estaciones",
       "pixel-cathedral": "Catedral",
       "pixel-koi": "Estanque de carpas",
-      "pixel-caravan": "Caravana"
+      "pixel-caravan": "Caravana",
+      "pixel-synthwave": "Synthwave"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

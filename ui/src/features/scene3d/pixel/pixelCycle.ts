@@ -97,6 +97,8 @@ const CYCLERS: Cycler[] = [
   { start: INDEX.snowNear, steps: 4, color: (p, t, k) => snowCover(t) > (k + .5) / 4 ? mixHex('#f4f8ff', p.light.color, .2) : p.near[0] },
   // Stained glass: each hue glows brighter in turn as the sun moves round.
   { start: INDEX.glass, steps: INDEX.glassSteps, color: (_p, t, k) => mixHex(mixHex(GLASS[k], '#000000', .45), mixHex(GLASS[k], '#ffffff', .2), .5 + .5 * Math.sin(t * .5 - k * 1.05)) },
+  // The grid pulses to a 120 BPM beat: a flash on each beat that decays.
+  { start: INDEX.grid, steps: 2, color: (p, t, k) => mixHex(mixHex(p.trees, p.aurora, .4), mixHex(p.far[1], '#ffffff', .25), (.55 + .45 * Math.exp(-((t * 2) % 1) * 5)) * (k ? .5 : 1)) },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]

@@ -1127,3 +1127,36 @@ export function paintCaravan(width: number, height: number, frame: number, frame
   ;[0, 1, 2].forEach(i => paintCamel(caravan, width - 60 - i * 62, ground, phase + i * .33, i === 1))
   return caravan
 }
+
+/** A neon grid floor that tiles both ways: bright lines in the beat slot
+ *  with a dithered glow either side, on near-black ground. */
+export function paintGrid(width: number, height: number, cell: number): IndexedLayer {
+  const grid = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const dx = Math.min(x % cell, cell - x % cell), dy = Math.min(y % cell, cell - y % cell), d = Math.min(dx, dy)
+    set(grid, x, y, d === 0 ? INDEX.grid : d === 1 && bayer(x, y) < .5 ? INDEX.grid + 1 : INDEX.trees)
+  }
+  return grid
+}
+
+/** Palm silhouettes leaning in from both edges. */
+export function paintPalms(width: number, height: number, seed: number): IndexedLayer {
+  const palms = layer(width, height)
+  ;[[.06, 1], [.14, .75], [.9, -1], [.97, -.8]].forEach(([at, lean], p) => {
+    const base = Math.round(width * at), tall = height * (.6 + fxRandom(seed, p) * .3)
+    let x = base, y = height - 1
+    for (let s = 0; s < tall; s++, y--) {
+      x = base + lean * (s / tall) ** 2 * tall * .35
+      for (let w = -2; w <= 2; w++) set(palms, Math.round(x) + w, y, INDEX.trees)
+    }
+    for (let f = 0; f < 7; f++) {
+      const angle = Math.PI * (1.05 + f * .15) + lean * .2, length = height * (.16 + fxRandom(seed, p * 9 + f) * .08)
+      for (let d = 0; d < length; d++) {
+        const droop = (d / length) ** 2 * length * .5
+        const thick = Math.max(1, Math.round(4 * (1 - d / length)))
+        for (let k = 0; k < thick; k++) set(palms, Math.round(x + Math.cos(angle) * d), Math.round(y + Math.sin(angle) * d * .6 + droop + k), INDEX.trees)
+      }
+    }
+  })
+  return palms
+}

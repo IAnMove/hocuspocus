@@ -116,6 +116,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-synthwave': ['pixel-synthwave', { palettes: ['vapor', 'neon'], hold: 10, meteors: .4 }],
   'pixel-moon-caravan': ['pixel-caravan', { palettes: ['dusk', 'midnight'], hold: 12, meteors: .4 }],
   'pixel-koi-pond': ['pixel-koi', { palettes: ['jungle', 'midnight'], hold: 12, meteors: 0 }],
   'pixel-cathedral': ['pixel-cathedral', { palettes: ['nave'], hold: 20, meteors: 0 }],
@@ -156,6 +157,7 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   'pixel-planet-rise': { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 },
   // A long lens: the moon looms and the caravan fills its disc.
   'pixel-moon-caravan': { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.5, -40], fov: 20 },
+  'pixel-synthwave': { family: 'fixed', eye: [0, 2.2, 9], look: [0, 3, -40], fov: 52 },
   // Looking down on the pond from above.
   'pixel-koi-pond': { family: 'fixed', eye: [0, 13.5, 3.2], look: [0, 0, 0], fov: 50 },
   'pixel-cathedral': { family: 'establishment', eye: [0, 1.7, 8], look: [0, 6, -20], fov: 56 },

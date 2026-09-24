@@ -488,3 +488,17 @@ test('moon caravan: the camels walk frame by frame as the caravan crosses', () =
   assert.notEqual(a.texture, b.texture, 'and steps to the next frame')
   assert.equal(state(1).texture, a.texture, 'frames follow the clock')
 })
+
+test('synthwave: the grid flows toward the lens and pulses on the beat', () => {
+  const plan = worldPlan('pixel-synthwave', resolvePixelScene('pixel-synthwave', undefined))
+  assert.equal(plan.clearSky, true)
+  const grid = plan.layers.find(layer => layer.scrollY)!
+  assert.ok(grid.floor && grid.texture[1] % 20 === 0, 'a floor that tiles along its depth')
+  const root = pixelWorldGroup('pixel-synthwave'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-synthwave').pixelWorld!
+  const flow = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return ((root as Group).children.find(child => child.rotation.x === -Math.PI / 2) as Mesh).material.uniforms.uScrollY.value }
+  assert.ok(flow(2) > flow(1))
+  const beat = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.vapor, seconds); return bytes[234 * 4] + bytes[234 * 4 + 1] + bytes[234 * 4 + 2] }
+  assert.ok(beat(2) > beat(2.3), 'brightest on the beat')
+  assert.equal(beat(2), beat(2.5), 'every half second at 120 BPM')
+})

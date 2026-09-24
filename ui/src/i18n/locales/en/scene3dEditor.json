@@ -1425,6 +1425,10 @@
     "pixel-moon-caravan": {
       "title": "Moon caravan",
       "description": "A camel caravan crosses the dunes in silhouette against a giant rising moon, legs stepping frame by frame as a guide leads the way, while dusk deepens to a starry desert night."
+    },
+    "pixel-synthwave": {
+      "title": "Synthwave",
+      "description": "An endless neon grid flows toward you and pulses to a 120 BPM beat under a huge striped sun, with neon-rimmed mountains and palm silhouettes, from vapor pink to neon night."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1697,7 +1701,8 @@
       "pixel-seasons": "Seasons",
       "pixel-cathedral": "Cathedral",
       "pixel-koi": "Koi pond",
-      "pixel-caravan": "Caravan"
+      "pixel-caravan": "Caravan",
+      "pixel-synthwave": "Synthwave"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

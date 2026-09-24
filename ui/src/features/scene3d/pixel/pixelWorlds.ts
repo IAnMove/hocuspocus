@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -13,6 +13,8 @@ export type LayerSpec = {
   turn?: number
   /** Texels per second its painting slides past, wrapping (painted to loop). */
   scroll?: number
+  /** The same along its height: a floor flowing toward the camera. */
+  scrollY?: number
   /** Lies flat on the ground instead of standing, centred at `z`. */
   floor?: boolean
   /** Radians per second it turns about its own centre. */
@@ -28,7 +30,7 @@ export type LayerSpec = {
 }
 /** A shaft of coloured light from a window to the floor, in meters. */
 export type Beam = { from: [number, number, number]; to: [number, number, number]; width: number; hue: number }
-export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean }
+export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean; /** No aurora ever hangs here. */ clearSky?: boolean }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -210,7 +212,7 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
   ] }),
   'pixel-orbit': scene => {
     const stars = sky(scene)
-    return { ground: 'none', layers: [
+    return { ground: 'none', clearSky: true, layers: [
       { ...stars, bottom: -30, height: 82, texture: [700, 336], paint: (w, h) => paintNebula(stars.paint(w, h), scene.seed) },
       { z: -40, width: 150, height: 30, bottom: -24, texture: [700, 140], paint: (w, h) => paintPlanetLimb(w, h, { seed: scene.seed + 3, curve: 1.6 + scene.mountains * 3, lightFrom: bodySkyX(scene) }) },
       { z: -24, width: 15, height: 6, bottom: 5, texture: [120, 48], drift: { speed: .45, loop: 70, offset: 30, bob: .25 }, paint: (w, h) => paintStation(w, h, scene.seed) },
@@ -284,7 +286,7 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       return plate
     }
     const plate = { width: 24, height: 24, bottom: ECLIPSE.y - 12, texture: [96, 96] as [number, number] }
-    return { ...desert, layers: [...desert.layers,
+    return { ...desert, clearSky: true, layers: [...desert.layers,
       { ...plate, z: -60, paint: disc('sun') },
       // The moon slides across the sun on the clock, darkest at mid-clip.
       { ...plate, z: -59.5, drift: { speed: ECLIPSE.speed, loop: 200, offset: ECLIPSE.start + 100 }, paint: disc('moon') },
@@ -327,6 +329,12 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { z: -24, width: 90, height: 4, bottom: -.6, texture: [900, 40], paint: (w, h) => paintLoopRange(w, h, { ...near, seed: scene.seed + 2, lightFrom: bodySkyX(scene), base: h * .4, amp: h * .06, trees: 0 }) },
     { z: -24.2, width: 14, height: 2.2, bottom: 1.75, texture: [280, 44], frames: { count: 4, fps: 5 },
       drift: { speed: .6, loop: 60, offset: 23.5 }, paint: (w, h, frame = 0) => paintCaravan(w, h, frame, 4) },
+  ] }),
+  'pixel-synthwave': scene => ({ ground: 'none', clearSky: true, layers: [
+    sky(scene), range(scene),
+    // The grid runs from the horizon to the lens and flows toward it.
+    { z: -20, width: 150, height: 60, bottom: 0, floor: true, texture: [600, 240], scrollY: 30, paint: (w, h) => paintGrid(w, h, 20) },
+    { z: -6, width: 26, height: 9, bottom: 0, texture: [520, 180], paint: (w, h) => paintPalms(w, h, scene.seed) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
