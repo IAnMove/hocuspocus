@@ -99,6 +99,11 @@ const CYCLERS: Cycler[] = [
   { start: INDEX.glass, steps: INDEX.glassSteps, color: (_p, t, k) => mixHex(mixHex(GLASS[k], '#000000', .45), mixHex(GLASS[k], '#ffffff', .2), .5 + .5 * Math.sin(t * .5 - k * 1.05)) },
   // The grid pulses to a 120 BPM beat: a flash on each beat that decays.
   { start: INDEX.grid, steps: 2, color: (p, t, k) => mixHex(mixHex(p.trees, p.aurora, .4), mixHex(p.far[1], '#ffffff', .25), (.55 + .45 * Math.exp(-((t * 2) % 1) * 5)) * (k ? .5 : 1)) },
+  // Crystals: a wave of light walks across them, cyan into violet.
+  { start: INDEX.crystal, steps: INDEX.crystalSteps, color: (p, t, k) => {
+    const glow = Math.pow(1 - pulse(k, INDEX.crystalSteps, t, .22), 3)
+    return mixHex(mixHex(p.far[0], '#3a2a8a', .5), mixHex('#7af0ff', '#e8b0ff', .5 + .5 * Math.sin(t * .3 + k)), .25 + glow * .75)
+  } },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]

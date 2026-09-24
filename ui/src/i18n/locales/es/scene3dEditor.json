@@ -1441,6 +1441,10 @@
     "pixel-night-launch": {
       "title": "Lanzamiento nocturno",
       "description": "Un cohete espera junto a su torre en una costa bajo la luna; en el encendido los motores estallan en luz, el humo hierve y el cohete despega, ganando velocidad mientras su luz baña la orilla y se apaga poco a poco hacia el amanecer."
+    },
+    "pixel-crystal-cave": {
+      "title": "Cueva de cristal",
+      "description": "Desde la boca de una cueva llena de estalactitas, un lago subterráneo escondido brilla con cristales cuya luz recorre los grupos en oleadas, toda la gruta respirando su brillo cian y violeta mientras las gotas rizan el agua quieta."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1681,7 +1685,8 @@
       "cosmos": "Cosmos",
       "neon": "Neón",
       "noon": "Mediodía",
-      "nave": "Nave"
+      "nave": "Nave",
+      "grotto": "Gruta"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1717,7 +1722,8 @@
       "pixel-synthwave": "Synthwave",
       "pixel-monsoon": "Monzón",
       "pixel-marsh": "Marisma",
-      "pixel-launch": "Base de lanzamiento"
+      "pixel-launch": "Base de lanzamiento",
+      "pixel-grotto": "Gruta"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

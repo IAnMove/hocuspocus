@@ -27,6 +27,7 @@ type PixelRuntime = {
   fireworks?: boolean
   clearSky?: boolean
   rain?: number
+  pulse?: string
   spinners: { mesh: Mesh; speed: number }[]
   scrollers: { material: ShaderMaterial; speed: number; axis: 'uScroll' | 'uScrollY' }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
@@ -320,6 +321,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   runtime.fireworks = plan.fireworks
   runtime.clearSky = plan.clearSky
   runtime.rain = plan.rain
+  runtime.pulse = plan.pulse
   for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
   for (const spec of plan.layers) {
     const { mesh, lamp, hubs } = layerMesh(spec, runtime.palette)
@@ -426,13 +428,14 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
   return scene
 }
 
-/** During an eclipse the day turns to night as the moon covers the sun. */
-function eclipsed(runtime: PixelRuntime | undefined, mood: PixelPalette, seconds: number) {
-  const shade = runtime?.kind === 'pixel-eclipse' ? eclipseShade(seconds) : 0
-  // A launch washes the coast in the engines' light.
-  const glow = runtime?.kind === 'pixel-launch' ? launchGlow(seconds) : 0
-  const lit = glow ? tintPalette(mood, '#ffb070', glow * 2.2) : mood
-  return shade ? mixPalettes(lit, PIXEL_PALETTES.midnight, shade) : lit
+/** World-wide light events on the mood: an eclipse darkens the day, a
+ *  launch washes the coast in engine light, a grotto breathes its glow. */
+function worldLight(runtime: PixelRuntime | undefined, mood: PixelPalette, seconds: number) {
+  if (!runtime) return mood
+  if (runtime.kind === 'pixel-eclipse') return mixPalettes(mood, PIXEL_PALETTES.midnight, eclipseShade(seconds))
+  if (runtime.kind === 'pixel-launch') return tintPalette(mood, '#ffb070', launchGlow(seconds) * 2.2)
+  if (runtime.pulse) return tintPalette(mood, runtime.pulse, .35 + .35 * Math.sin(seconds * .8))
+  return mood
 }
 
 /** Relight the world for `seconds`: palette, sky motion, water and lights.
@@ -442,7 +445,7 @@ export function paintPixelWorld(dressing: Object3D | null, scene: Scene, dir: { 
   if (!authored && !runtime) return null
   // A pixel set without authored lighting still needs a palette to show.
   const pixel = authored ?? defaultPixelWorld()
-  const mood = eclipsed(runtime, paletteAt(pixel.palettes, pixel.hold, seconds, pixel.colors), seconds)
+  const mood = worldLight(runtime, paletteAt(pixel.palettes, pixel.hold, seconds, pixel.colors), seconds)
   const palette = flashPalette(screens ? tintPalette(mood, screens.color, screens.amount) : mood, flash)
   const layout = runtime && dressing ? syncSet(dressing, runtime, pixel, palette, seconds, frameHeight) : undefined
   dir.color.set(palette.light.color)

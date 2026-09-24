@@ -33,6 +33,7 @@ export const INDEX = {
   glass: 222, glassSteps: 6,
   pad: 228, pond: 231,
   grid: 234,
+  crystal: 236, crystalSteps: 8,
 } as const
 
 export type IndexedLayer = { width: number; height: number; data: Uint8Array; /** A light source painted in, in texels (the lighthouse lamp). */ lamp?: [number, number]; /** Where sails turn, in texels (windmill hubs). */ hubs?: [number, number][] }

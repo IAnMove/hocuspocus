@@ -1441,6 +1441,10 @@
     "pixel-night-launch": {
       "title": "Night launch",
       "description": "A rocket waits beside its lattice tower on a moonlit coast; at ignition the engines flare, smoke boils up and the rocket lifts off, gathering speed as it climbs while its light washes over the shore and slowly fades toward dawn."
+    },
+    "pixel-crystal-cave": {
+      "title": "Crystal cave",
+      "description": "From the mouth of a cave hung with stalactites, a hidden underground lake glows with crystals whose light sweeps from cluster to cluster in waves, the whole grotto breathing their cyan-violet glow while drips ring the still water."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1681,7 +1685,8 @@
       "cosmos": "Cosmos",
       "neon": "Neon",
       "noon": "Noon",
-      "nave": "Nave"
+      "nave": "Nave",
+      "grotto": "Grotto"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1717,7 +1722,8 @@
       "pixel-synthwave": "Synthwave",
       "pixel-monsoon": "Monsoon",
       "pixel-marsh": "Marsh",
-      "pixel-launch": "Launch site"
+      "pixel-launch": "Launch site",
+      "pixel-grotto": "Grotto"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

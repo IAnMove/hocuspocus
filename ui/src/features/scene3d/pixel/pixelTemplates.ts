@@ -127,6 +127,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-crystal-cave': ['pixel-grotto', { palettes: ['grotto'], hold: 20, meteors: 0 }],
   'pixel-night-launch': ['pixel-launch', { palettes: ['midnight', 'dawn'], hold: 12, meteors: .3 }],
   'pixel-murmuration': ['pixel-marsh', { palettes: ['sunset', 'dusk'], hold: 12, meteors: 0 }],
   'pixel-monsoon': ['pixel-monsoon', { palettes: ['storm', 'jungle'], hold: 12, meteors: 0 }],
@@ -171,6 +172,7 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   'pixel-planet-rise': { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 },
   // A long lens: the moon looms and the caravan fills its disc.
   'pixel-moon-caravan': { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.5, -40], fov: 20 },
+  'pixel-crystal-cave': { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.2, -30], fov: 55 },
   'pixel-night-launch': { family: 'fixed', eye: [0, 1.5, 9], look: [3, 7.5, -30], fov: 38 },
   'pixel-murmuration': { family: 'establishment', eye: [0, 1.3, 9], look: [0, 4.5, -40], fov: 50 },
   'pixel-monsoon': { family: 'establishment', eye: [0, 1.1, 9], look: [0, 1.8, -40], fov: 50 },

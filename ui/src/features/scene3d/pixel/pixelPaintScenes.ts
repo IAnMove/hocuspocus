@@ -431,3 +431,64 @@ export function paintExhaust(width: number, height: number, seed: number): Index
   }
   return flame
 }
+
+/** A cluster of crystal shards growing from a point, up (1) or down (-1),
+ *  each in the crystal slot of where it stands so a glow can sweep across. */
+function crystals(target: IndexedLayer, x: number, y: number, size: number, way: number, seed: number) {
+  for (let s = 0; s < 3 + Math.floor(fxRandom(seed, 1) * 4); s++) {
+    const lean = (fxRandom(seed, s + 10) - .5) * 1.2, tall = size * (.5 + fxRandom(seed, s + 20) * .8), half = 1 + Math.floor(size * .12)
+    for (let d = 0; d < tall; d++) {
+      const w = Math.max(0, Math.round(half * (1 - d / tall)))
+      for (let k = -w; k <= w; k++) {
+        const px = Math.round(x + lean * d * .5 + k), slot = INDEX.crystal + ((px >> 4) % INDEX.crystalSteps)
+        set(target, px, Math.round(y - way * d), k === w ? INDEX.lamp : slot)
+      }
+    }
+  }
+}
+
+function rock(target: IndexedLayer, x: number, y: number, seed: number) {
+  set(target, x, y, fxRandom(seed, (x >> 2) * 131 + (y >> 2)) > .55 ? INDEX.near : INDEX.far)
+}
+
+/** The cave's mouth close to the lens: rock all round a ragged opening,
+ *  stalactites hanging into it and crystals on its lower lip. */
+export function paintCaveMouth(width: number, height: number, seed: number): IndexedLayer {
+  const mouth = layer(width, height)
+  const cx = width / 2, cy = height * .52
+  const open = (x: number, y: number) => {
+    const a = Math.atan2(y - cy, x - cx), edge = 1 + (fxRandom(seed, Math.floor((a + 4) * 12)) - .5) * .12
+    return Math.hypot((x - cx) / (width * .3), (y - cy) / (height * .36)) < edge
+  }
+  // The mouth is in shadow: near-black rock with a faint lit rim.
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (!open(x, y)) set(mouth, x, y, open(x, y - 2) || open(x - 2, y) || open(x + 2, y) ? INDEX.far : INDEX.trees)
+  for (let x = Math.round(width * .15); x < width * .85; x += 3 + Math.floor(fxRandom(seed, x) * 6)) {
+    let y = 0
+    while (y < height && !open(x, y)) y++
+    const length = 4 + fxRandom(seed, x + 99) * height * .16
+    for (let d = 0; d < length; d++) for (let k = -Math.floor((1 - d / length) * 2); k <= Math.floor((1 - d / length) * 2); k++) set(mouth, x + k, y + d, INDEX.trees)
+  }
+  for (let c = 0; c < 7; c++) {
+    const x = Math.round(width * (.26 + c * .08)), y = Math.round(height * .88 - Math.abs(c - 3) * height * .02)
+    crystals(mouth, x, y, height * (.1 + fxRandom(seed, c + 300) * .1), 1, seed + c)
+  }
+  return mouth
+}
+
+/** The far wall of the grotto: rough rock, stalagmites and hanging
+ *  stalactites, and crystal clusters glowing from floor and ceiling. */
+export function paintGrotto(width: number, height: number, seed: number): IndexedLayer {
+  const wall = layer(width, height)
+  // Lit from the crystals below, the rock fades into darkness toward the vault.
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const light = y / height
+    if (bayer(x, y) > light * 1.3) set(wall, x, y, INDEX.trees)
+    else rock(wall, x, y, seed + 7)
+  }
+  for (let c = 0; c < width / 26; c++) {
+    const x = Math.round((c + fxRandom(seed, c)) * 26)
+    crystals(wall, x, height - 2, height * (.08 + fxRandom(seed, c + 50) * .14), 1, seed + c * 3)
+    if (fxRandom(seed, c + 90) > .5) crystals(wall, x + 11, 1, height * .08, -1, seed + c * 5)
+  }
+  return wall
+}

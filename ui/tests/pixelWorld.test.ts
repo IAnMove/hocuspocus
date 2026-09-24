@@ -543,3 +543,19 @@ test('night launch: one liftoff that gathers speed, lit by the engines', () => {
   assert.ok(launchGlow(6) > launchGlow(12) && launchGlow(12) > 0, 'the light fades as it climbs')
   assert.ok(applyScene3DTemplate('pixel-night-launch').worldSfx!.some(cue => cue.kind === 'smoke' && cue.sound))
 })
+
+test('crystal cave: a glow sweeps the crystals and the grotto breathes their light', () => {
+  const plan = worldPlan('pixel-grotto', resolvePixelScene('pixel-grotto', undefined))
+  assert.ok(plan.pulse && plan.rain! > 0, 'a breathing glow and drips on the water')
+  const wall = plan.layers.find(layer => layer.z === -26)!.paint(512, 208)
+  assert.ok([236, 237, 238, 239, 240, 241, 242, 243].filter(slot => wall.data.includes(slot)).length >= 6, 'crystals span the glow slots')
+  const mouth = plan.layers.find(layer => layer.z === 5.6)!.paint(360, 210)
+  assert.notEqual(mouth.data[0], 0, 'rock frames the view')
+  assert.equal(mouth.data[105 * 360 + 180], 0, 'the mouth opens onto the grotto')
+  const crystal = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.grotto, seconds); return Array.from(bytes.subarray(236 * 4, 244 * 4)).join() }
+  assert.notEqual(crystal(0), crystal(1.5))
+  const root = pixelWorldGroup('pixel-grotto'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-crystal-cave').pixelWorld!
+  const light = (seconds: number) => paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)!.far[0]
+  assert.notEqual(light(2), light(6), 'the grotto breathes the crystals\' light')
+})
