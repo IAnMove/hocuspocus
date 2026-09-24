@@ -1517,6 +1517,10 @@
     "pixel-hockney-pool": {
       "title": "Piscina al sol",
       "description": "Inspirado en Hockney: una casa rosa de tejado plano, dos palmeras altas meciéndose y una piscina cuyo fondo baila con una red de luz, mientras el día luminoso de California se vuelve tarde."
+    },
+    "pixel-metaphysical-square": {
+      "title": "Plaza metafísica",
+      "description": "Inspirado en De Chirico: un sol bajo cruza tras una arcada, una estatua y una chimenea alta, y sus largas sombras, con los arcos incluidos, giran despacio sobre la plaza vacía."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1815,7 +1819,8 @@
       "pixel-empire": "Imperio de las luces",
       "pixel-startrails": "Lago de estelas",
       "pixel-wheat": "Campo de trigo",
-      "pixel-pool": "Piscina de Hockney"
+      "pixel-pool": "Piscina de Hockney",
+      "pixel-piazza": "Plaza metafísica"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

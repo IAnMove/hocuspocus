@@ -1,6 +1,6 @@
 import { fxRandom } from '../../sceneFx/types'
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintLanternBearer, paintStreetlamp, paintHouse, paintStarTrails, paintGlowTent, paintWheat, paintModernHouse, paintPool, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc, paintJellyfish } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintLanternBearer, paintStreetlamp, paintHouse, paintStarTrails, paintGlowTent, paintWheat, paintModernHouse, paintPool, paintPiazza, paintBackWall, paintSquare, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc, paintJellyfish } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 import type { PixelPaletteId } from './pixelPalettes'
 
@@ -27,6 +27,8 @@ export type LayerSpec = {
   orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number; /** Circles on the ground (y is then z), facing where it goes. */ flat?: boolean; /** Circles this earlier orbiting layer (by `id`) instead of a fixed point. */ around?: string; /** Keeps its own facing instead of turning along its path. */ upright?: boolean }
   /** A name other layers can orbit around. */
   id?: string
+  /** A floor that catches the shadow of the plane with this `id`, cast from the sun. */
+  shadowOf?: string
   /** Sunlight through water: a moving net of caustics over the pool slots. */
   caustics?: boolean
   /** Bend in the wind: how many texels the top row leans at a gust's peak. */
@@ -556,6 +558,17 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     sky(scene), range(scene), hills(scene, true),
     { ...VILLAGE, z: -20, width: 40, bottom: -.6, paint: (w, h) => paintVillage(w, h, { ...near, seed: scene.seed + 6, lightFrom: bodySkyX(scene), houses: 2 }) },
     ...reeds(scene),
+  ] }),
+  // After De Chirico: a low sun crosses behind an arcade, a statue and a
+  // tower, and their long shadows swing across the empty square.
+  'pixel-piazza': scene => ({ ground: 'none', clearSky: true, layers: [
+    sky({ ...scene, body: 'none' }), range(scene),
+    { z: -60, width: 20, height: 20, bottom: 0, texture: [80, 80], celestial: 'sun',
+      orbit: { x: 0, y: 6, radius: 44, ry: 18, speed: -.045, phase: 2.1 },
+      paint: (w, h) => { const disc = layer(w, h); paintMoon(disc, scene.seed, { kind: 'sun', x: .5, y: .5, radius: 9, crescent: 0 }); return disc } },
+    { z: -14.4, x: -9.6, width: 10.4, height: 5, bottom: 0, texture: [110, 50], paint: (w, h) => paintBackWall(w, h) },
+    { z: -14, id: 'piazza', width: 30, height: 10, bottom: 0, texture: [300, 100], paint: (w, h) => paintPiazza(w, h) },
+    { z: -12, width: 60, height: 48, bottom: .02, floor: true, shadowOf: 'piazza', texture: [300, 240], paint: (w, h) => paintSquare(w, h) },
   ] }),
   // After Hockney: a flat pink house, two tall palms and a pool whose floor
   // swims with caustics as the California day turns to evening.

@@ -129,6 +129,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
   // Storm, clearing, a green afternoon, then a warm evening.
   // A day passes as the city is built: dawn, day, evening and a lit night.
+  'pixel-metaphysical-square': ['pixel-piazza', { palettes: ['sunset', 'dusk'], hold: 12, meteors: 0 }],
   'pixel-hockney-pool': ['pixel-pool', { palettes: ['noon', 'sunset'], hold: 12, meteors: 0 }],
   'pixel-wheat-wind': ['pixel-wheat', { palettes: ['sunset', 'dusk'], hold: 12, meteors: 0 }],
   'pixel-star-trails': ['pixel-startrails', { palettes: ['midnight'], hold: 24, meteors: .5 }],
@@ -196,6 +197,8 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   // than the far peaks, showing the world's depth.
   'pixel-orrery': { family: 'fixed', eye: [0, 22, 9], look: [0, 0, .5], fov: 56 },
   // Close on the shore, so the walker crosses the frame with the light.
+  // High over the square, so the shadows stretch toward us.
+  'pixel-metaphysical-square': { family: 'fixed', eye: [2, 4.5, 10], look: [0, 1.5, -14], fov: 52 },
   // From the terrace, looking down the pool to the house.
   'pixel-hockney-pool': { family: 'fixed', eye: [0, 3.4, 8], look: [0, 1, -14], fov: 50 },
   'pixel-wheat-wind': { family: 'fixed', eye: [0, 1.1, 4], look: [0, 1.6, -30], fov: 50 },

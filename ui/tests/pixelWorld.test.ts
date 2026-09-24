@@ -790,3 +790,19 @@ test('pool in the sun: caustics play only over the water, on the scene clock', (
   const floor = (root as Group).children.map(child => (child as Mesh).material?.uniforms).find(uniforms => uniforms?.uCaustic?.value > 0)!
   assert.equal(floor.uTime.value, 4.25)
 })
+
+test('metaphysical square: the floor samples the arcade for its shadow and follows the moving sun', () => {
+  const root = pixelWorldGroup('pixel-piazza'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-metaphysical-square').pixelWorld!
+  const sun = (seconds: number) => {
+    paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)
+    const meshes = (root as Group).children as Mesh[]
+    const floor = meshes.find(mesh => mesh.material?.uniforms?.uShadow?.value === 1)!
+    const caster = meshes.find(mesh => mesh.material?.uniforms?.uIndex?.value === floor.material.uniforms.uCaster.value)
+    assert.ok(caster && caster !== floor, 'the shadow comes from the arcade plane')
+    return (floor.material.uniforms.uSunDir.value as Vector3).clone()
+  }
+  const morning = sun(1), evening = sun(22)
+  assert.ok(morning.z < 0 && morning.y > 0, 'the sun stands low behind the square')
+  assert.ok(morning.x < 0 && evening.x > 0, 'it crosses from left to right, so the shadows swing')
+})

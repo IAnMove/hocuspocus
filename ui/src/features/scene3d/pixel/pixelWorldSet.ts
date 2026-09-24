@@ -46,13 +46,14 @@ type PixelRuntime = {
   carry?: WorldPlan['carry']
   carrier?: Mesh
   lit: ShaderMaterial[]
+  shadows: { material: ShaderMaterial; caster: Mesh; spec: LayerSpec }[]
   /** Palettes for planes that keep their own mood whatever the world's program. */
   moods: Map<PixelPaletteId, ReturnType<typeof newPalette>>
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; varying vec3 vWorld; void main(){ vUv=uv; vWorld=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
 const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
-  uniform sampler2D uIndex, uPalette, uOrder; uniform float uReveal; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze, uSway, uCaustic; uniform vec3 uHazeColor, uCarryColor; uniform vec4 uCarry;
+  uniform sampler2D uIndex, uPalette, uOrder, uCaster; uniform vec4 uCasterBox; uniform vec3 uSunDir; uniform float uCasterZ, uShadow; uniform float uReveal; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze, uSway, uCaustic; uniform vec3 uHazeColor, uCarryColor; uniform vec4 uCarry;
   uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
@@ -129,6 +130,13 @@ const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
     vec3 color=texture2D(uPalette,vec2((index+.5)/256.,.5)).rgb;
     // Bent stalks show their paler undersides: a sheen runs with the gust.
     if(uSway>0.) color*=1.+.3*floor(gust*cell.y/uRes.y*3.+bayer4(cell))/3.;
+    // A cast shadow: follow the ray from this spot toward the sun back to the
+    // caster's plane, and darken if it lands on one of the caster's texels.
+    if(uShadow>0.&&uSunDir.z<-.01&&uSunDir.y>.01){
+      vec3 hit=vWorld+uSunDir*(uCasterZ-vWorld.z)/uSunDir.z;
+      vec2 at=vec2((hit.x-uCasterBox.x)/uCasterBox.z+.5,(hit.y-uCasterBox.y)/uCasterBox.w);
+      if(vWorld.z>uCasterZ&&at.x>0.&&at.x<1.&&at.y>0.&&at.y<1.&&texture2D(uCaster,at).r>0.) color=color*vec3(.42,.44,.58);
+    }
     // Caustics: the sun through the rippling surface draws a moving net of
     // light on the pool floor, stepped like everything else.
     if(uCaustic>0.&&index>=43.&&index<=46.){
@@ -173,7 +181,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
       uIndex: { value: indexTexture(painted) }, uPalette: { value: palette }, uReveal: { value: 2 },
       uOrder: { value: painted.order ? indexTexture({ ...painted, data: painted.order }) : null },
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
-      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uSway: { value: spec.sway ?? 0 }, uCaustic: { value: spec.caustics ? 1 : 0 }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uCarry: { value: new Vector4(0, 0, 0, 0) }, uCarryColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
+      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uSway: { value: spec.sway ?? 0 }, uCaustic: { value: spec.caustics ? 1 : 0 }, uShadow: { value: 0 }, uCaster: { value: null }, uCasterBox: { value: new Vector4(0, 0, 1, 1) }, uCasterZ: { value: 0 }, uSunDir: { value: new Vector3(0, 1, 0) }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uCarry: { value: new Vector4(0, 0, 0, 0) }, uCarryColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
       uBursts: { value: [0, 1, 2, 3].map(() => new Vector4(0, 0, 0, 0)) }, uBurstColors: { value: [0, 1, 2, 3].map(() => new Color()) },
     },
@@ -360,7 +368,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.scroll) runtime.scrollers.push({ material, speed: spec.scroll, axis: 'uScroll' })
   if (spec.scrollY) runtime.scrollers.push({ material, speed: spec.scrollY, axis: 'uScrollY' })
   if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit, id: spec.id })
-  if (spec.celestial) runtime.celestials.push(mesh)
+  if (spec.celestial) { mesh.userData.celestial = spec.celestial; runtime.celestials.push(mesh) }
   if (spec.shimmer || spec.sway || spec.caustics) runtime.shimmers.push(material)
   if (spec.grow) runtime.growers.push({ material, grow: spec.grow })
   if (spec.reveal) runtime.revealers.push({ material, reveal: spec.reveal })
@@ -376,7 +384,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
 
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.swingers = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []; runtime.growers = []; runtime.hazers = []; runtime.revealers = []; runtime.lit = []; runtime.carrier = undefined
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.swingers = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []; runtime.growers = []; runtime.hazers = []; runtime.revealers = []; runtime.lit = []; runtime.shadows = []; runtime.carrier = undefined
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -394,13 +402,16 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   runtime.carry = plan.carry
   runtime.lake = undefined
   for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
+  const placed: [LayerSpec, Mesh][] = []
   for (const spec of plan.layers) {
     const { mesh, lamp, hubs } = layerMesh(spec, spec.mood ? moodPalette(runtime, spec.mood) : runtime.palette)
     track(runtime, spec, mesh)
+    placed.push([spec, mesh])
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
     if (hubs) sailsOn(spec, hubs, runtime.palette, runtime, root)
   }
+  linkShadows(runtime, placed)
   if (plan.ground === 'none') return
   if (plan.ground === 'field') { root.add(fieldFloor(runtime.palette)); return }
   if (plan.ground === 'sand') { root.add(sandFloor(runtime.palette, plan.groundY)); return }
@@ -414,7 +425,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [], hazers: [], revealers: [], lit: [], moods: new Map() }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [], hazers: [], revealers: [], lit: [], shadows: [], moods: new Map() }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -463,6 +474,31 @@ function fadeParts(runtime: PixelRuntime, seconds: number, palette: PixelPalette
     material.uniforms.uDissolve.value = dissolve.appear ? 1.001 - t * 1.002 : t * 1.001
   }
   for (const { material } of runtime.hazers) material.uniforms.uHazeColor.value.set(mixHex(palette.sky[2], '#e8eef6', .6))
+}
+
+/** Floors that catch another plane's shadow sample its painted texels. */
+function linkShadows(runtime: PixelRuntime, placed: [LayerSpec, Mesh][]) {
+  for (const [spec, mesh] of placed) {
+    const caster = spec.shadowOf && placed.find(([other]) => other.id === spec.shadowOf)
+    if (!caster) continue
+    const material = mesh.material as ShaderMaterial
+    material.uniforms.uCaster.value = (caster[1].material as ShaderMaterial).uniforms.uIndex.value
+    material.uniforms.uShadow.value = 1
+    runtime.shadows.push({ material, caster: caster[1], spec: caster[0] })
+  }
+}
+
+/** Shadows swing with the sun: the ray toward it is taken from each caster. */
+function castShadows(runtime: PixelRuntime) {
+  const sun = runtime.celestials.find(body => body.userData.celestial === 'sun')
+  if (!sun || !runtime.shadows.length) return
+  const towards = sun.getWorldPosition(new Vector3())
+  for (const { material, caster, spec } of runtime.shadows) {
+    const centre = caster.getWorldPosition(new Vector3())
+    material.uniforms.uCasterBox.value.set(centre.x, centre.y - spec.height / 2, spec.width, spec.height)
+    material.uniforms.uCasterZ.value = centre.z
+    material.uniforms.uSunDir.value.copy(towards).sub(centre).normalize()
+  }
 }
 
 /** Light from a lamp that walks with one of the planes, flickering a little. */
@@ -534,6 +570,7 @@ function syncSet(runtime: PixelRuntime, scene: PixelScene, pixel: PixelWorld, pa
   }
   moveParts(runtime, seconds)
   carryLight(runtime, seconds)
+  castShadows(runtime)
   if (runtime.beam) {
     runtime.beam.rotation.y = seconds * .9
     const material = (runtime.beam.children[0].children[0] as Mesh).material as ShaderMaterial

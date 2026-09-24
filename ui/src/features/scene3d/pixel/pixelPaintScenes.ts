@@ -339,6 +339,49 @@ export function paintLanternBearer(width: number, height: number, frame: number,
   return bearer
 }
 
+/** De Chirico's square, all on one plane so it can cast one shadow: an
+ *  arcade whose arches are open to the light, a statue on its plinth and a
+ *  tall factory chimney. */
+export function paintPiazza(width: number, height: number): IndexedLayer {
+  const piazza = layer(width, height)
+  const block = (x0: number, x1: number, y0: number, y1: number, index: number) => { for (let y = Math.round(y0); y < y1; y++) for (let x = Math.round(x0); x < x1; x++) set(piazza, x, y, index) }
+  // The arcade: a long block, its lower storey pierced by round arches.
+  const top = height * .5, bays = 5, bay = width * .38 / bays
+  block(0, width * .38, top, height, INDEX.far)
+  block(0, width * .38, top, top + 2, INDEX.farRim)
+  for (let b = 0; b < bays; b++) {
+    const cx = (b + .5) * bay, half = bay * .32, spring = height * .72
+    for (let y = Math.round(spring - half); y < height; y++) for (let x = Math.round(cx - half); x < cx + half; x++) {
+      if (y >= spring || Math.hypot(x - cx, y - spring) < half) set(piazza, x, y, 0)
+    }
+  }
+  // The statue: a plinth and a reclining figure's silhouette.
+  const sx = width * .6
+  block(sx - 10, sx + 10, height - 20, height, INDEX.farShade)
+  block(sx - 12, sx + 12, height - 22, height - 19, INDEX.farRim)
+  block(sx - 4, sx + 4, height - 44, height - 22, INDEX.trees)
+  block(sx - 7, sx + 7, height - 40, height - 36, INDEX.trees)
+  block(sx - 3, sx + 3, height - 51, height - 44, INDEX.trees)
+  // The chimney: tall, slightly tapering, with a band near the top.
+  const cx = width * .86
+  for (let y = Math.round(height * .08); y < height; y++) { const half = 3 + (y / height) * 2; block(cx - half, cx + half, y, y + 1, y === Math.round(height * .16) ? INDEX.farRim : INDEX.far) }
+  return piazza
+}
+
+/** The shadowed inside of the arcade, seen through its arches. */
+export function paintBackWall(width: number, height: number): IndexedLayer {
+  const wall = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) set(wall, x, y, bayer(x, y) < .3 ? INDEX.farShade : INDEX.trees)
+  return wall
+}
+
+/** An empty square of warm, sunbaked paving. */
+export function paintSquare(width: number, height: number): IndexedLayer {
+  const square = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) set(square, x, y, INDEX.sand + (bayer(x, y) < .2 + (y / height) * .3 ? 5 : 4))
+  return square
+}
+
 /** A flat-roofed house in the sun: one long wall, a band of glass
  *  reflecting the sky and a slim overhang. */
 export function paintModernHouse(width: number, height: number): IndexedLayer {

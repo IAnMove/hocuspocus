@@ -1517,6 +1517,10 @@
     "pixel-hockney-pool": {
       "title": "Pool in the sun",
       "description": "After Hockney: a flat pink house, two tall palms swaying and a pool whose floor swims with a moving net of caustics, as the bright California day turns to evening."
+    },
+    "pixel-metaphysical-square": {
+      "title": "Metaphysical square",
+      "description": "After De Chirico: a low sun crosses behind an arcade, a statue and a tall chimney, and their long shadows — arches and all — swing slowly across the empty square."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1815,7 +1819,8 @@
       "pixel-empire": "Empire of light",
       "pixel-startrails": "Star-trail lake",
       "pixel-wheat": "Wheat field",
-      "pixel-pool": "Hockney pool"
+      "pixel-pool": "Hockney pool",
+      "pixel-piazza": "Metaphysical square"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",
