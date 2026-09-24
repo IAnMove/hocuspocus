@@ -1493,6 +1493,10 @@
     "pixel-jellyfish": {
       "title": "Medusas",
       "description": "En el mar profundo, medusas luminosas suben a su propio ritmo, cada campana se contrae y se relaja con cada impulso mientras sus tentáculos ondulan detrás, la luz recorre sus cuerpos y la nieve marina cae junto al arrecife."
+    },
+    "pixel-blizzard": {
+      "title": "Ventisca",
+      "description": "Un paso nevado con una cabaña iluminada: la ventisca se espesa hasta que los picos lejanos desaparecen en el blanco y los pinos cercanos se difuminan, solo brillan las ventanas de la cabaña, y luego la tormenta amaina y vuelven las montañas."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1785,7 +1789,8 @@
       "pixel-orrery": "Planetario",
       "pixel-rainbow": "Valle del arcoíris",
       "pixel-risingcity": "Ciudad que crece",
-      "pixel-abyss": "Mar profundo"
+      "pixel-abyss": "Mar profundo",
+      "pixel-blizzard": "Paso de ventisca"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

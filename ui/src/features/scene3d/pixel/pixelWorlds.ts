@@ -45,7 +45,7 @@ export type LayerSpec = {
 }
 /** A shaft of coloured light from a window to the floor, in meters. */
 export type Beam = { from: [number, number, number]; to: [number, number, number]; width: number; hue: number }
-export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean; /** No aurora ever hangs here. */ clearSky?: boolean; /** Raindrops ring the water, 0..1. */ rain?: number; /** The world's light breathes in this colour. */ pulse?: string; /** The water rises and falls between `low` and `high` meters over `period` seconds. */ tide?: { low: number; high: number; period: number } }
+export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean; /** No aurora ever hangs here. */ clearSky?: boolean; /** Raindrops ring the water, 0..1. */ rain?: number; /** The world's light breathes in this colour. */ pulse?: string; /** The water rises and falls between `low` and `high` meters over `period` seconds. */ tide?: { low: number; high: number; period: number }; /** A storm's haze swells from `from`, peaks at `peak` and clears by `to` seconds. */ haze?: { from: number; peak: number; to: number } }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -105,6 +105,13 @@ const ORRERY: [number, number, number, number][] = [[2.8, .8, INDEX.balloon + 1,
 
 /** Jellyfish: depth, across, size, rise speed, start. */
 const JELLIES: [number, number, number, number, number][] = [[-20, -7, 5, .5, 6], [-14, 5, 3.6, .6, 16], [-9, -2, 2.6, .7, 24], [-6, 3.5, 1.8, .8, 11], [-26, 12, 5.5, .4, 20], [-5, -3.5, 1.4, .9, 2]]
+
+/** How thick a storm's haze is at `seconds`, 0 to 1. */
+export function hazeAt(haze: NonNullable<WorldPlan['haze']>, seconds: number) {
+  if (seconds <= haze.from || seconds >= haze.to) return 0
+  const t = seconds < haze.peak ? (seconds - haze.from) / (haze.peak - haze.from) : (haze.to - seconds) / (haze.to - haze.peak)
+  return t * t * (3 - 2 * t)
+}
 
 /** A day in the day-cycle world lasts as long as its template's clip. */
 export const DAY_SECONDS = 24
@@ -536,6 +543,11 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       })),
     ] }
   },
+  'pixel-blizzard': scene => ({ ground: 'water', clearSky: true, haze: { from: 3, peak: 12, to: 21 }, layers: [
+    sky(scene), range(scene), hills(scene, true),
+    { ...VILLAGE, z: -20, width: 40, bottom: -.6, paint: (w, h) => paintVillage(w, h, { ...near, seed: scene.seed + 6, lightFrom: bodySkyX(scene), houses: 2 }) },
+    ...reeds(scene),
+  ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

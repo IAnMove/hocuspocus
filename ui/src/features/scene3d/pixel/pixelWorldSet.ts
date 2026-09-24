@@ -9,10 +9,10 @@ import { flashPalette, mixPalettes, paletteAt, PIXEL_PALETTES, tintPalette, type
 import type { ScreenLight } from './screenGlow'
 import { paintField, paintSails, paintSand } from './pixelPaintWorlds'
 import type { IndexedLayer } from './pixelPaint'
-import { fireworksAt, GLASS, meteorsAt, writePalette } from './pixelCycle'
+import { fireworksAt, GLASS, meteorsAt, mixHex, writePalette } from './pixelCycle'
 import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { bodyDirection, isPixelWorldKind, PIXEL_WORLD_KINDS, resolvePixelScene, type PixelScene, type PixelWorldKind } from './pixelScene'
-import { eclipseShade, launchGlow, tideLevel, worldPlan, type Beam, type LayerSpec, type WorldPlan } from './pixelWorlds'
+import { eclipseShade, hazeAt, launchGlow, tideLevel, worldPlan, type Beam, type LayerSpec, type WorldPlan } from './pixelWorlds'
 
 export type PixelDressing = PixelWorldKind | 'pixel-gallery'
 export const PIXEL_DRESSINGS: readonly PixelDressing[] = [...PIXEL_WORLD_KINDS, 'pixel-gallery']
@@ -29,6 +29,7 @@ type PixelRuntime = {
   rain?: number
   pulse?: string
   tide?: WorldPlan['tide']
+  haze?: WorldPlan['haze']
   lake?: Object3D
   spinners: { mesh: Mesh; speed: number }[]
   swingers: { mesh: Mesh; swing: NonNullable<LayerSpec['swing']> }[]
@@ -40,11 +41,12 @@ type PixelRuntime = {
   dissolvers: { material: ShaderMaterial; dissolve: NonNullable<LayerSpec['dissolve']> }[]
   shimmers: ShaderMaterial[]
   growers: { material: ShaderMaterial; grow: NonNullable<LayerSpec['grow']> }[]
+  hazers: { material: ShaderMaterial; depth: number }[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
 const LAYER_FRAGMENT = `varying vec2 vUv;
-  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow;
+  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze; uniform vec3 uHazeColor;
   uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
@@ -110,6 +112,10 @@ const LAYER_FRAGMENT = `varying vec2 vUv;
     // Growing: only what lies below the rising line is built yet.
     if(cell.y/uRes.y>uGrow*1.03+(bayer4(cell)-.5)*.03) discard;
     vec3 color=texture2D(uPalette,vec2((index+.5)/256.,.5)).rgb;
+    // Haze: distance fades toward the storm's colour in dithered steps;
+    // lit windows and lamps still burn through it.
+    bool lit=(index>=64.&&index<=71.)||index==90.;
+    if(uHaze>0.&&!lit) color=mix(color,uHazeColor,floor(uHaze*4.+bayer4(cell))/4.);
     if(uSky>.5) color+=aurora(vec2(cell.x,uRes.y-1.-cell.y))+meteors(vec2(cell.x,uRes.y-1.-cell.y))+fireworks(vec2(cell.x,uRes.y-1.-cell.y));
     gl_FragColor=vec4(color,1.);
     #include <colorspace_fragment>
@@ -135,7 +141,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
     uniforms: {
       uIndex: { value: indexTexture(painted) }, uPalette: { value: palette },
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
-      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uGrow: { value: 2 }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
+      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
       uBursts: { value: [0, 1, 2, 3].map(() => new Vector4(0, 0, 0, 0)) }, uBurstColors: { value: [0, 1, 2, 3].map(() => new Color()) },
     },
@@ -318,6 +324,8 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.celestial) runtime.celestials.push(mesh)
   if (spec.shimmer) runtime.shimmers.push(material)
   if (spec.grow) runtime.growers.push({ material, grow: spec.grow })
+  // The farther the plane, the sooner the haze swallows it.
+  if (runtime.haze) runtime.hazers.push({ material, depth: Math.max(0, Math.min(1, -spec.z / 55)) })
   if (spec.dissolve) runtime.dissolvers.push({ material, dissolve: spec.dissolve })
   if (spec.launch) runtime.launchers.push({ mesh, y: mesh.position.y, launch: spec.launch })
   if (spec.frames) runtime.sprites.push({ material, frames: mesh.userData.frames, fps: spec.frames.fps })
@@ -325,7 +333,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
 
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.swingers = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []; runtime.growers = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.swingers = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []; runtime.growers = []; runtime.hazers = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -339,6 +347,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   runtime.rain = plan.rain
   runtime.pulse = plan.pulse
   runtime.tide = plan.tide
+  runtime.haze = plan.haze
   runtime.lake = undefined
   for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
   for (const spec of plan.layers) {
@@ -361,7 +370,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [], hazers: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -409,6 +418,7 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
     if (launch.ignite) mesh.visible = seconds >= launch.at - 1.2
   }
   for (const material of runtime.shimmers) material.uniforms.uTime.value = seconds
+  if (runtime.haze) for (const { material, depth } of runtime.hazers) material.uniforms.uHaze.value = Math.min(1, hazeAt(runtime.haze, seconds) * (.25 + depth * 1.1))
   for (const { material, grow } of runtime.growers) material.uniforms.uGrow.value = Math.max(0, Math.min(1, (seconds - grow.from) / (grow.to - grow.from)))
   for (const { material, dissolve } of runtime.dissolvers) {
     const t = Math.max(0, Math.min(1, (seconds - dissolve.from) / (dissolve.to - dissolve.from)))
@@ -437,6 +447,7 @@ function ensureBuilt(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorl
 
 function syncSet(runtime: PixelRuntime, scene: PixelScene, pixel: PixelWorld, palette: PixelPalette, seconds: number, frameHeight: number) {
   writePalette(runtime.bytes, palette, seconds)
+  for (const { material } of runtime.hazers) material.uniforms.uHazeColor.value.set(mixHex(palette.sky[2], '#e8eef6', .6))
   runtime.palette.needsUpdate = true
   const meteors = meteorsAt(seconds, pixel.meteors, runtime.sky, 5, scene.meteorDirection)
   const bursts = fireworksAt(runtime.fireworks ? seconds : -1, runtime.sky, scene.seed)

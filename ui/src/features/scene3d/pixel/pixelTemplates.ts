@@ -129,6 +129,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
   // Storm, clearing, a green afternoon, then a warm evening.
   // A day passes as the city is built: dawn, day, evening and a lit night.
+  'pixel-blizzard': ['pixel-blizzard', { palettes: ['polar', 'storm', 'polar'], hold: 8, meteors: 0 }],
   'pixel-jellyfish': ['pixel-abyss', { palettes: ['grotto'], hold: 20, meteors: 0 }],
   'pixel-city-rising': ['pixel-risingcity', { palettes: ['dawn', 'jungle', 'sunset', 'harbor'], hold: 6, meteors: .3 }],
   'pixel-after-storm': ['pixel-rainbow', { palettes: ['storm', 'jungle', 'jungle', 'sunset'], hold: 6, meteors: 0 }],
@@ -223,6 +224,8 @@ const rain = (id: string, color: string, z: number, seed: number) =>
 /** Effects each landscape plays over its world. */
 const CUES: Partial<Record<Landscape, () => ReturnType<typeof parseWorldSfx>>> = {
   'pixel-storm-lake': stormCues,
+  // Snow driving harder as the whiteout thickens, then easing.
+  'pixel-blizzard': () => parseWorldSfx([drift('light-snow', '#f4f8ff', .5, { seed: 91 }), drift('driving-snow', '#ffffff', 1.4, { start: 5, end: 19, scale: 4.2, seed: 92, sound: true, volume: .3 })]),
   // Marine snow drifting down through the dark water.
   'pixel-jellyfish': () => parseWorldSfx([drift('marine-snow', '#c8e8ff', .5, { scale: 4, seed: 83 })]),
   // Rain and two strikes early, then the storm passes.

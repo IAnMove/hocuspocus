@@ -10,7 +10,7 @@ import { INDEX, paintRange, paintSky, ridge } from '../src/features/scene3d/pixe
 import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
-import { eclipseShade, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
+import { eclipseShade, hazeAt, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
 import { paintJellyfish, paintLoopRange, paintMurmuration, paintText } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { layer } from '../src/features/scene3d/pixel/pixelPaint'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
@@ -714,4 +714,17 @@ test('jellyfish: bells pulse frame by frame and each rises in its own lane', () 
   paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-jellyfish').pixelWorld!, 3, 720)
   const lanes = (root as Group).children.filter(child => child.userData.frames).map(child => Math.round(child.position.x))
   assert.ok(new Set(lanes).size >= 5, 'they keep their places across the water')
+})
+
+test('blizzard: the storm swallows far planes first and clears again', () => {
+  const haze = worldPlan('pixel-blizzard', resolvePixelScene('pixel-blizzard', undefined)).haze!
+  assert.equal(hazeAt(haze, 1), 0)
+  assert.equal(hazeAt(haze, haze.peak), 1)
+  assert.equal(hazeAt(haze, haze.to + 1), 0, 'the mountains come back')
+  const root = pixelWorldGroup('pixel-blizzard'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-blizzard').pixelWorld!
+  const thickness = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => ({ z: child.position.z, haze: (child as Mesh).material?.uniforms?.uHaze?.value as number | undefined })).filter(item => item.haze !== undefined).sort((a, b) => a.z - b.z) }
+  const peak = thickness(haze.peak)
+  assert.ok(peak[0].haze! > peak[peak.length - 1].haze!, 'the far range fades before the near reeds')
+  assert.ok(thickness(1).every(item => item.haze === 0), 'a clear morning first')
 })

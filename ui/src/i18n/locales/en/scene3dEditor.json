@@ -1493,6 +1493,10 @@
     "pixel-jellyfish": {
       "title": "Jellyfish",
       "description": "In the deep sea, glowing jellyfish rise at their own pace, each bell squeezing and relaxing with every stroke as its tentacles ripple behind, light sweeping through their bodies while marine snow drifts down past the reef."
+    },
+    "pixel-blizzard": {
+      "title": "Blizzard",
+      "description": "A snowbound pass with a lone lit cabin: a blizzard thickens until the far peaks vanish into white and the near pines blur, only the cabin windows glowing through, then the storm eases and the mountains come back."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1785,7 +1789,8 @@
       "pixel-orrery": "Orrery",
       "pixel-rainbow": "Rainbow valley",
       "pixel-risingcity": "Rising city",
-      "pixel-abyss": "Deep sea"
+      "pixel-abyss": "Deep sea",
+      "pixel-blizzard": "Blizzard pass"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",
