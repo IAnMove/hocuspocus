@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -25,6 +25,9 @@ export type LayerSpec = {
   celestial?: 'sun' | 'moon'
   /** Paints frame `frame` of `frames` when the layer is a sprite animation. */
   paint: (w: number, h: number, frame?: number) => IndexedLayer
+  /** Lifts off once at `at` seconds and climbs with `accel` m/s²; an
+   *  `ignite` layer (the flame) only shows from just before liftoff. */
+  launch?: { at: number; accel: number; ignite?: boolean }
   /** A sprite animation: this many frames, shown at `fps`. */
   frames?: { count: number; fps: number }
 }
@@ -50,6 +53,17 @@ export function eclipseShade(seconds: number) {
 
 /** Koi: path radii, speed (radians/s, sign is the way round), start and length. */
 const KOI: [number, number, number, number, number][] = [[4.6, 3.1, .35, 0, 1.3], [3.4, 2.4, -.45, 1.7, 1.1], [2.2, 1.6, .6, 3.2, .9], [4, 2.2, -.3, 4.4, 1.2], [1.4, 1.2, -.7, .9, .8], [3, 2.8, .4, 5.3, 1]]
+
+/** The launch: where the rocket stands, when it lifts off and how hard. */
+export const LAUNCH = { x: 4, pad: .3, at: 6, accel: 1.6 }
+
+/** How brightly the engines light the coast at `seconds`: they flare at
+ *  ignition, blaze at liftoff and fade as the rocket climbs away. */
+export function launchGlow(seconds: number) {
+  const since = seconds - LAUNCH.at
+  if (since < -1.2) return 0
+  return Math.min(1, (since + 1.2) / .5) * Math.exp(-Math.max(0, since) * .3)
+}
 
 /** A day in the day-cycle world lasts as long as its template's clip. */
 export const DAY_SECONDS = 24
@@ -347,6 +361,13 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { z: -42, width: 56, height: 20, bottom: 7, texture: [420, 150], frames: { count: 24, fps: 8 },
       drift: { speed: .7, loop: 120, offset: 54, bob: 1.2 }, paint: (w, h, frame = 0) => paintMurmuration(w, h, frame, 24, scene.seed, 2600) },
     ...reeds(scene),
+  ] }),
+  'pixel-launch': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene),
+    { ...NEAR, z: -31, paint: (w, h) => paintRange(w, h, { ...near, seed: scene.seed + 2, lightFrom: bodySkyX(scene), base: h * .8, rough: h * .08, peaks: 1, peakLift: h * .1 }) },
+    { z: -30, x: LAUNCH.x + 2.2, width: 7, height: 14, bottom: -.3, texture: [120, 240], paint: (w, h) => paintLaunchTower(w, h) },
+    { z: -29.8, x: LAUNCH.x, width: 1.4, height: 9, bottom: LAUNCH.pad, texture: [28, 180], launch: { at: LAUNCH.at, accel: LAUNCH.accel }, paint: (w, h) => paintRocket(w, h) },
+    { z: -29.7, x: LAUNCH.x, width: 1.6, height: 3.4, bottom: LAUNCH.pad - 3.2, texture: [32, 68], launch: { at: LAUNCH.at, accel: LAUNCH.accel, ignite: true }, paint: (w, h) => paintExhaust(w, h, scene.seed) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

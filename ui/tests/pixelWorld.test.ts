@@ -9,7 +9,7 @@ import { INDEX, paintRange, paintSky, ridge } from '../src/features/scene3d/pixe
 import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
-import { eclipseShade, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
+import { eclipseShade, launchGlow, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
 import { paintLoopRange, paintMurmuration } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3, type Mesh } from 'three'
@@ -524,4 +524,22 @@ test('murmuration: the flock changes shape frame by frame and loops seamlessly',
   assert.ok(painted > 1500, 'thousands of birds')
   const plan = worldPlan('pixel-marsh', resolvePixelScene('pixel-marsh', undefined))
   assert.equal(plan.layers.find(layer => layer.frames)?.frames?.count, 24)
+})
+
+test('night launch: one liftoff that gathers speed, lit by the engines', () => {
+  const root = pixelWorldGroup('pixel-launch'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-night-launch').pixelWorld!
+  const at = (seconds: number) => {
+    paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)
+    const [rocket, flame] = (root as Group).children.filter(child => child.position.z === -29.8 || child.position.z === -29.7)
+    return { y: rocket.position.y, flame: flame.visible }
+  }
+  const still = at(3), lift = at(7), later = at(9), latest = at(11)
+  assert.equal(at(1).y, still.y, 'it waits on the pad')
+  assert.equal(still.flame, false)
+  assert.ok(lift.flame && lift.y > still.y, 'lift-off with the engines lit')
+  assert.ok(latest.y - later.y > later.y - lift.y, 'gathering speed')
+  assert.equal(launchGlow(2), 0)
+  assert.ok(launchGlow(6) > launchGlow(12) && launchGlow(12) > 0, 'the light fades as it climbs')
+  assert.ok(applyScene3DTemplate('pixel-night-launch').worldSfx!.some(cue => cue.kind === 'smoke' && cue.sound))
 })

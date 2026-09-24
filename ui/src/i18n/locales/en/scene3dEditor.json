@@ -1437,6 +1437,10 @@
     "pixel-murmuration": {
       "title": "Murmuration",
       "description": "At sunset over a reed marsh, thousands of starlings wheel as one: the flock swells, folds and twists into ever-changing shapes as it drifts across the sky and its shadow crosses the still water."
+    },
+    "pixel-night-launch": {
+      "title": "Night launch",
+      "description": "A rocket waits beside its lattice tower on a moonlit coast; at ignition the engines flare, smoke boils up and the rocket lifts off, gathering speed as it climbs while its light washes over the shore and slowly fades toward dawn."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1712,7 +1716,8 @@
       "pixel-caravan": "Caravan",
       "pixel-synthwave": "Synthwave",
       "pixel-monsoon": "Monsoon",
-      "pixel-marsh": "Marsh"
+      "pixel-marsh": "Marsh",
+      "pixel-launch": "Launch site"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

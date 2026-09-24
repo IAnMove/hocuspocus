@@ -6,7 +6,7 @@ import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { isPixelTemplate, PIXEL_TEMPLATE_IDS } from './pixelTemplateIds'
 import type { Scene3DTemplate } from '../templates'
 import { parseWorldSfx } from '../../sceneFx/world'
-import { VILLAGE, VOLCANO_CENTER } from './pixelWorlds'
+import { LAUNCH, VILLAGE, VOLCANO_CENTER } from './pixelWorlds'
 import { paintVillage } from './pixelPaintWorlds'
 import { INDEX } from './pixelPaint'
 import { PIXEL_SCENE_DEFAULTS } from './pixelScene'
@@ -93,6 +93,17 @@ function villageCues() {
   ])
 }
 
+/** Ignition: a shockwave and a boiling cloud of smoke and sparks at the pad,
+ *  with the rumble and crackle of the engines. */
+function launchCues() {
+  const pad = { x: LAUNCH.x * (30 / 39), y: 0, z: -29 }
+  return parseWorldSfx([
+    { id: 'ignition', kind: 'shockwave', start: LAUNCH.at - 1.2, end: LAUNCH.at + 2, position: pad, scale: 6, intensity: 1.2, color: '#ffd8a0', seed: 7, sound: true, volume: .45 },
+    { id: 'plume', kind: 'smoke', start: LAUNCH.at - 1, end: 20, position: pad, scale: 9, intensity: 1.5, color: '#d8d0c8', seed: 11, sound: true, volume: .35 },
+    { id: 'sparks', kind: 'sparks', start: LAUNCH.at - 1, end: LAUNCH.at + 5, position: pad, scale: 3, intensity: 1.4, color: '#ffc070', seed: 13, sound: true, volume: .25 },
+  ])
+}
+
 /** Rain around the camera and single strikes on the far ranges, each with
  *  its thunder; the painted world flashes with every strike. */
 function stormCues() {
@@ -116,6 +127,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-night-launch': ['pixel-launch', { palettes: ['midnight', 'dawn'], hold: 12, meteors: .3 }],
   'pixel-murmuration': ['pixel-marsh', { palettes: ['sunset', 'dusk'], hold: 12, meteors: 0 }],
   'pixel-monsoon': ['pixel-monsoon', { palettes: ['storm', 'jungle'], hold: 12, meteors: 0 }],
   'pixel-synthwave': ['pixel-synthwave', { palettes: ['vapor', 'neon'], hold: 10, meteors: .4 }],
@@ -159,6 +171,7 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   'pixel-planet-rise': { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 },
   // A long lens: the moon looms and the caravan fills its disc.
   'pixel-moon-caravan': { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.5, -40], fov: 20 },
+  'pixel-night-launch': { family: 'fixed', eye: [0, 1.5, 9], look: [3, 7.5, -30], fov: 38 },
   'pixel-murmuration': { family: 'establishment', eye: [0, 1.3, 9], look: [0, 4.5, -40], fov: 50 },
   'pixel-monsoon': { family: 'establishment', eye: [0, 1.1, 9], look: [0, 1.8, -40], fov: 50 },
   'pixel-synthwave': { family: 'fixed', eye: [0, 2.2, 9], look: [0, 3, -40], fov: 52 },
@@ -182,6 +195,7 @@ const rain = (id: string, color: string, z: number, seed: number) =>
 /** Effects each landscape plays over its world. */
 const CUES: Partial<Record<Landscape, () => ReturnType<typeof parseWorldSfx>>> = {
   'pixel-storm-lake': stormCues,
+  'pixel-night-launch': launchCues,
   // Warm heavy rain, and now and then lightning beyond the hills.
   'pixel-monsoon': () => parseWorldSfx([rain('monsoon-rain', '#b8c8d8', 2, 31), ...stormCues().filter(cue => cue.kind === 'lightning').slice(0, 2).map(cue => ({ ...cue, intensity: .9, start: cue.start + 5, end: cue.end + 5 }))]),
   'pixel-volcano': eruptionCues,

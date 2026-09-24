@@ -1182,3 +1182,53 @@ export function paintMurmuration(width: number, height: number, frame: number, f
   }
   return flock
 }
+
+/** A launch tower: an open lattice with crossbeams, arms and blinking lights. */
+export function paintLaunchTower(width: number, height: number): IndexedLayer {
+  const tower = layer(width, height)
+  const x0 = Math.round(width * .15), x1 = Math.round(width * .45)
+  for (let y = Math.round(height * .08); y < height; y++) {
+    set(tower, x0, y, INDEX.farRim); set(tower, x1, y, INDEX.farRim)
+    const bay = (y % 16) / 16
+    set(tower, Math.round(x0 + (x1 - x0) * bay), y, INDEX.farRim); set(tower, Math.round(x1 - (x1 - x0) * bay), y, INDEX.farRim)
+    if (y % 16 === 0) for (let x = x0; x <= x1; x++) set(tower, x, y, INDEX.farRim)
+    if (y % 48 === 20) { for (let x = x1; x < width * .62; x++) set(tower, x, y, INDEX.farRim); set(tower, x0, y - 1, INDEX.window + (y & 7)) }
+  }
+  for (let x = 0; x < width; x++) for (let y = height - 6; y < height; y++) set(tower, x, y, INDEX.near)
+  set(tower, Math.round((x0 + x1) / 2), Math.round(height * .07), INDEX.tail)
+  return tower
+}
+
+/** A rocket standing on its pad: stages, fins and a red nose. */
+export function paintRocket(width: number, height: number): IndexedLayer {
+  const rocket = layer(width, height)
+  const cx = (width - 1) / 2, half = width * .22, nose = height * .16
+  for (let y = 0; y < height; y++) {
+    const w = y < nose ? half * Math.sqrt(y / nose) : half
+    for (let x = Math.round(cx - w); x <= cx + w; x++) {
+      const stage = y > nose && (Math.round(y - nose) % Math.round(height * .28)) < 2
+      const lit = x > cx + w * .35
+      set(rocket, x, y, y < nose * .7 ? INDEX.balloon : stage ? INDEX.trees : lit ? INDEX.moon : INDEX.balloon + 3)
+    }
+  }
+  for (const side of [-1, 1]) for (let y = Math.round(height * .8); y < height; y++) {
+    const spread = (y - height * .8) / (height * .2) * width * .26
+    for (let d = 0; d <= spread; d++) set(rocket, Math.round(cx + side * (half + d)), y, INDEX.balloon)
+  }
+  return rocket
+}
+
+/** The engines' flame: a flickering cone in the flame slots over a white core. */
+export function paintExhaust(width: number, height: number, seed: number): IndexedLayer {
+  const flame = layer(width, height)
+  const cx = (width - 1) / 2
+  for (let y = 0; y < height; y++) {
+    const t = y / height, w = width * .5 * (.35 + t * .65) * (1 - t * .3)
+    for (let x = Math.round(cx - w); x <= cx + w; x++) {
+      const core = Math.abs(x - cx) < w * .35 && t < .55
+      if (!core && bayer(x, y) > 1.05 - t) continue
+      set(flame, x, y, core ? INDEX.lamp : INDEX.flame + ((x + y + seed) & 3))
+    }
+  }
+  return flame
+}

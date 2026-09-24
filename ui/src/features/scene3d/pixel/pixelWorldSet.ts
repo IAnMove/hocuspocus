@@ -12,7 +12,7 @@ import type { IndexedLayer } from './pixelPaint'
 import { fireworksAt, GLASS, meteorsAt, writePalette } from './pixelCycle'
 import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { bodyDirection, isPixelWorldKind, PIXEL_WORLD_KINDS, resolvePixelScene, type PixelScene, type PixelWorldKind } from './pixelScene'
-import { eclipseShade, worldPlan, type Beam, type LayerSpec } from './pixelWorlds'
+import { eclipseShade, launchGlow, worldPlan, type Beam, type LayerSpec } from './pixelWorlds'
 
 export type PixelDressing = PixelWorldKind | 'pixel-gallery'
 export const PIXEL_DRESSINGS: readonly PixelDressing[] = [...PIXEL_WORLD_KINDS, 'pixel-gallery']
@@ -32,6 +32,7 @@ type PixelRuntime = {
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
   celestials: Mesh[]
   sprites: { material: ShaderMaterial; frames: DataTexture[]; fps: number }[]
+  launchers: { mesh: Mesh; y: number; launch: NonNullable<LayerSpec['launch']> }[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
@@ -301,12 +302,13 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.scrollY) runtime.scrollers.push({ material, speed: spec.scrollY, axis: 'uScrollY' })
   if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
   if (spec.celestial) runtime.celestials.push(mesh)
+  if (spec.launch) runtime.launchers.push({ mesh, y: mesh.position.y, launch: spec.launch })
   if (spec.frames) runtime.sprites.push({ material, frames: mesh.userData.frames, fps: spec.frames.fps })
 }
 
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -338,7 +340,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [], sprites: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -375,6 +377,12 @@ function placeOrbiter(mesh: Mesh, orbit: NonNullable<LayerSpec['orbit']>, second
 function moveParts(runtime: PixelRuntime, seconds: number) {
   // Travelling planes follow the scene clock, so scrubbing and export agree.
   for (const mover of runtime.movers) placeMover(mover, seconds)
+  for (const { mesh, y, launch } of runtime.launchers) {
+    // One liftoff, gathering speed; the flame lights just before it.
+    const since = Math.max(0, seconds - launch.at)
+    mesh.position.y = y + Math.min(400, .5 * launch.accel * since * since)
+    if (launch.ignite) mesh.visible = seconds >= launch.at - 1.2
+  }
   for (const spinner of runtime.spinners) spinner.mesh.rotation.z = seconds * spinner.speed
   // Shafts brighten with their glass as the sun moves round.
   for (const shaft of runtime.shafts) (shaft.material as ShaderMaterial).uniforms.uPower.value = .5 + .5 * Math.sin(seconds * .5 - shaft.userData.hue * 1.05)
@@ -421,7 +429,10 @@ function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, p
 /** During an eclipse the day turns to night as the moon covers the sun. */
 function eclipsed(runtime: PixelRuntime | undefined, mood: PixelPalette, seconds: number) {
   const shade = runtime?.kind === 'pixel-eclipse' ? eclipseShade(seconds) : 0
-  return shade ? mixPalettes(mood, PIXEL_PALETTES.midnight, shade) : mood
+  // A launch washes the coast in the engines' light.
+  const glow = runtime?.kind === 'pixel-launch' ? launchGlow(seconds) : 0
+  const lit = glow ? tintPalette(mood, '#ffb070', glow * 2.2) : mood
+  return shade ? mixPalettes(lit, PIXEL_PALETTES.midnight, shade) : lit
 }
 
 /** Relight the world for `seconds`: palette, sky motion, water and lights.
