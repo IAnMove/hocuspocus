@@ -1433,6 +1433,10 @@
     "pixel-monsoon": {
       "title": "Monsoon",
       "description": "Warm rain pours over a tropical lake: every drop that lands rings the water in spreading pixel ripples, palms and reeds stand in the downpour, and now and then lightning flares beyond the hills as the storm clears to green."
+    },
+    "pixel-murmuration": {
+      "title": "Murmuration",
+      "description": "At sunset over a reed marsh, thousands of starlings wheel as one: the flock swells, folds and twists into ever-changing shapes as it drifts across the sky and its shadow crosses the still water."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1707,7 +1711,8 @@
       "pixel-koi": "Koi pond",
       "pixel-caravan": "Caravan",
       "pixel-synthwave": "Synthwave",
-      "pixel-monsoon": "Monsoon"
+      "pixel-monsoon": "Monsoon",
+      "pixel-marsh": "Marsh"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

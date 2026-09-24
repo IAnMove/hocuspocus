@@ -1433,6 +1433,10 @@
     "pixel-monsoon": {
       "title": "Monzón",
       "description": "Una lluvia cálida cae sobre un lago tropical: cada gota que llega abre en el agua anillos de píxeles que se extienden, las palmeras y los juncos aguantan el aguacero y de vez en cuando un relámpago brilla tras las colinas mientras la tormenta se abre al verde."
+    },
+    "pixel-murmuration": {
+      "title": "Murmuración",
+      "description": "Al atardecer sobre una marisma de juncos, miles de estorninos giran como uno solo: la bandada se hincha, se pliega y se retuerce en formas siempre nuevas mientras cruza el cielo y se refleja en el agua quieta."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1707,7 +1711,8 @@
       "pixel-koi": "Estanque de carpas",
       "pixel-caravan": "Caravana",
       "pixel-synthwave": "Synthwave",
-      "pixel-monsoon": "Monzón"
+      "pixel-monsoon": "Monzón",
+      "pixel-marsh": "Marisma"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

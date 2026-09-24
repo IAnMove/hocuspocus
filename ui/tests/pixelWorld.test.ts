@@ -10,7 +10,7 @@ import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { eclipseShade, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
-import { paintLoopRange } from '../src/features/scene3d/pixel/pixelPaintWorlds'
+import { paintLoopRange, paintMurmuration } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3, type Mesh } from 'three'
 import { addTv, applyScreenToAllTvs } from '../src/features/scene3d/pixel/pixelEdits'
@@ -513,4 +513,15 @@ test('monsoon: raindrops ring the lake while it pours', () => {
   assert.equal(((calm as Group).children.find(child => (child as Mesh).material?.uniforms?.uRain) as Mesh).material.uniforms.uRain.value, 0, 'other lakes stay calm')
   const cues = applyScene3DTemplate('pixel-monsoon').worldSfx!
   assert.ok(cues.some(cue => cue.kind === 'rain' && cue.sound) && cues.some(cue => cue.kind === 'lightning'))
+})
+
+test('murmuration: the flock changes shape frame by frame and loops seamlessly', () => {
+  const frame = (k: number) => paintMurmuration(420, 150, k, 24, 3, 2600).data
+  const bounds = (data: Uint8Array) => { const xs: number[] = []; data.forEach((v, i) => { if (v) xs.push(i % 420) }); return [Math.min(...xs), Math.max(...xs)] }
+  assert.notDeepEqual(bounds(frame(0)), bounds(frame(6)), 'the shape changes')
+  assert.deepEqual(frame(24), frame(0), 'the last step meets the first')
+  const painted = frame(3).filter(Boolean).length
+  assert.ok(painted > 1500, 'thousands of birds')
+  const plan = worldPlan('pixel-marsh', resolvePixelScene('pixel-marsh', undefined))
+  assert.equal(plan.layers.find(layer => layer.frames)?.frames?.count, 24)
 })

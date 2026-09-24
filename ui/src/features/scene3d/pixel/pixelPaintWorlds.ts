@@ -1160,3 +1160,25 @@ export function paintPalms(width: number, height: number, seed: number): Indexed
   })
   return palms
 }
+
+/** One frame of a starling murmuration: every bird holds a place in the
+ *  flock, and the flock's shape swells, folds and twists around a loop, so
+ *  frame `frames` meets frame 0 again. */
+export function paintMurmuration(width: number, height: number, frame: number, frames: number, seed: number, birds: number): IndexedLayer {
+  const flock = layer(width, height)
+  const phase = frame / frames * Math.PI * 2
+  for (let b = 0; b < birds; b++) {
+    const angle = fxRandom(seed, b) * Math.PI * 2, reach = Math.sqrt(fxRandom(seed, b + 5000))
+    let u = Math.cos(angle) * reach, v = Math.sin(angle) * reach
+    // Swell and squeeze, a travelling fold, and a slow twist.
+    u *= 1 + .35 * Math.sin(phase + v * 2.2)
+    v *= .55 + .25 * Math.cos(phase * 2 + u * 1.7)
+    v += .35 * Math.sin(u * 2.6 + phase) * (1 - Math.abs(u) * .4)
+    const twist = .5 * Math.sin(phase + reach * 3)
+    const x = u * Math.cos(twist) - v * Math.sin(twist), y = u * Math.sin(twist) + v * Math.cos(twist)
+    const px = Math.round(width / 2 + x * width * .4), py = Math.round(height / 2 + y * height * .7)
+    set(flock, px, py, INDEX.trees)
+    if (fxRandom(seed, b + 9000) > .7) set(flock, px + 1, py, INDEX.trees)
+  }
+  return flock
+}

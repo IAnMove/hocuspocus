@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -339,6 +339,13 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
   'pixel-monsoon': scene => ({ ground: 'water', rain: 1, layers: [
     sky(scene), range(scene), hills(scene, true),
     { z: -9, width: 26, height: 9, bottom: -.2, texture: [520, 180], paint: (w, h) => paintPalms(w, h, scene.seed) },
+    ...reeds(scene),
+  ] }),
+  'pixel-marsh': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene), hills(scene, true),
+    // Thousands of starlings, drifting slowly across as the flock folds.
+    { z: -42, width: 56, height: 20, bottom: 7, texture: [420, 150], frames: { count: 24, fps: 8 },
+      drift: { speed: .7, loop: 120, offset: 54, bob: 1.2 }, paint: (w, h, frame = 0) => paintMurmuration(w, h, frame, 24, scene.seed, 2600) },
     ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
