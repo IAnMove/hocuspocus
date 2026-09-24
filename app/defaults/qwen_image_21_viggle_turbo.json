@@ -1,0 +1,41 @@
+{
+    "model": {
+        "name": "Qwen Image 2.1 Viggle Turbo v0.2.1 · 6 Steps",
+        "architecture": "qwen_image_21",
+        "description": "Viggle's six-step distilled Qwen Image 2.1 for text-to-image and instruction editing with up to three input images. INT8 ConvRot base plus the official rank-256 LoRA at runtime. Preview release; complex edits may be less faithful than the 40-step base.",
+        "selector_help": "Uses the official v0.2.1 six-step sigma schedule, CFG 1 and LoRA strength 1. The base transformer, text encoder and VAE are shared with Qwen Image 2.1 INT8; first use downloads an additional ~1.4 GB adapter. Start at 1K. 2K, RGBA and masked edits are not validated by Viggle. Do not stack another acceleration LoRA. Non-commercial Qwen Research License.",
+        "URLs": [
+            "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_int8_convrot.safetensors"
+        ],
+        "preload_URLs": "qwen_image_21",
+        "loras": [
+            "https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo/resolve/b77064be8b3f0b1a13c6a212067cb3d281c60c84/Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r256.safetensors"
+        ],
+        "loras_multipliers": [1.0],
+        "qwen21_viggle_turbo": true,
+        "lock_inference_steps": true,
+        "inference_steps_min": 6,
+        "inference_steps_max": 6,
+        "lock_guidance_scale": true,
+        "no_negative_prompt": true,
+        "license_name": "Qwen Research License",
+        "license_url": "https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo/blob/b77064be8b3f0b1a13c6a212067cb3d281c60c84/LICENSE",
+        "resource_requirements": {
+            "vram_gb": 16,
+            "ram_gb": 32,
+            "storage_gb": 20,
+            "platform": "NVIDIA CUDA",
+            "backend": "INT8 ConvRot + unmerged LoRA",
+            "tier": "experimental",
+            "note": "Reuses the Qwen 2.1 base files; adapter adds memory overhead. Use encoder offload on 24 GB GPUs."
+        },
+        "attention": {"<89": "sdpa"},
+        "image_outputs": true
+    },
+    "prompt": "A small ceramic robot watering a fern on a sunny windowsill",
+    "resolution": "1024x1024",
+    "num_inference_steps": 6,
+    "guidance_scale": 1,
+    "negative_prompt": "",
+    "batch_size": 1
+}

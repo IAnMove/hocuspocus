@@ -129,6 +129,13 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
   // Storm, clearing, a green afternoon, then a warm evening.
   // A day passes as the city is built: dawn, day, evening and a lit night.
+  'pixel-metaphysical-square': ['pixel-piazza', { palettes: ['sunset', 'dusk'], hold: 12, meteors: 0 }],
+  'pixel-hockney-pool': ['pixel-pool', { palettes: ['noon', 'sunset'], hold: 12, meteors: 0 }],
+  'pixel-wheat-wind': ['pixel-wheat', { palettes: ['sunset', 'dusk'], hold: 12, meteors: 0 }],
+  'pixel-star-trails': ['pixel-startrails', { palettes: ['midnight'], hold: 24, meteors: .5 }],
+  'pixel-empire-of-light': ['pixel-empire', { palettes: ['midnight'], hold: 20, meteors: 0 }],
+  'pixel-lantern-walk': ['pixel-lantern', { palettes: ['midnight', 'forest', 'midnight'], hold: 10, meteors: .3 }],
+  'pixel-blizzard': ['pixel-blizzard', { palettes: ['polar', 'storm', 'polar'], hold: 8, meteors: 0 }],
   'pixel-jellyfish': ['pixel-abyss', { palettes: ['grotto'], hold: 20, meteors: 0 }],
   'pixel-city-rising': ['pixel-risingcity', { palettes: ['dawn', 'jungle', 'sunset', 'harbor'], hold: 6, meteors: .3 }],
   'pixel-after-storm': ['pixel-rainbow', { palettes: ['storm', 'jungle', 'jungle', 'sunset'], hold: 6, meteors: 0 }],
@@ -189,6 +196,14 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   // The camera glides round a point down the fjord: the walls slide by faster
   // than the far peaks, showing the world's depth.
   'pixel-orrery': { family: 'fixed', eye: [0, 22, 9], look: [0, 0, .5], fov: 56 },
+  // Close on the shore, so the walker crosses the frame with the light.
+  // High over the square, so the shadows stretch toward us.
+  'pixel-metaphysical-square': { family: 'fixed', eye: [2, 4.5, 10], look: [0, 1.5, -14], fov: 52 },
+  // From the terrace, looking down the pool to the house.
+  'pixel-hockney-pool': { family: 'fixed', eye: [0, 3.4, 8], look: [0, 1, -14], fov: 50 },
+  'pixel-wheat-wind': { family: 'fixed', eye: [0, 1.1, 4], look: [0, 1.6, -30], fov: 50 },
+  'pixel-empire-of-light': { family: 'fixed', eye: [0, 2.4, 2], look: [0, 4.2, -20], fov: 52 },
+  'pixel-lantern-walk': { family: 'fixed', eye: [0, 1.3, -2], look: [0, 1.2, -14], fov: 40 },
   'pixel-clockwork': { family: 'fixed', eye: [0, 5.8, 3], look: [0, 5.8, -10], fov: 58 },
   'pixel-fjord': { family: 'orbit', eye: [0, 1.6, 8], look: [0, 4, -16], fov: 52, orbitRadius: 24, orbitHeight: -2.4, orbitTurns: .07 },
   'pixel-cloud-shadows': { family: 'fixed', eye: [0, 5, 14], look: [0, 3, -40], fov: 50 },
@@ -223,7 +238,12 @@ const rain = (id: string, color: string, z: number, seed: number) =>
 /** Effects each landscape plays over its world. */
 const CUES: Partial<Record<Landscape, () => ReturnType<typeof parseWorldSfx>>> = {
   'pixel-storm-lake': stormCues,
+  // Snow driving harder as the whiteout thickens, then easing.
+  'pixel-blizzard': () => parseWorldSfx([drift('light-snow', '#f4f8ff', .5, { seed: 91 }), drift('driving-snow', '#ffffff', 1.4, { start: 5, end: 19, scale: 4.2, seed: 92, sound: true, volume: .3 })]),
   // Marine snow drifting down through the dark water.
+  'pixel-lantern-walk': () => parseWorldSfx([drift('moths', '#ffd89a', .25, { scale: 1.6, seed: 97 })]),
+  // Chaff lifted off the field, and the wind itself.
+  'pixel-wheat-wind': () => parseWorldSfx([drift('chaff', '#f2d48a', .35, { scale: 2.6, seed: 57, sound: true, volume: .12 })]),
   'pixel-jellyfish': () => parseWorldSfx([drift('marine-snow', '#c8e8ff', .5, { scale: 4, seed: 83 })]),
   // Rain and two strikes early, then the storm passes.
   'pixel-after-storm': () => parseWorldSfx([{ ...rain('passing-rain', '#a8b8d0', 2, 37), end: 8 }, ...stormCues().filter(cue => cue.kind === 'lightning').slice(0, 2)]),

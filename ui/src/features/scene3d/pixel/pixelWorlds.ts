@@ -1,7 +1,8 @@
 import { fxRandom } from '../../sceneFx/types'
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc, paintJellyfish } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintLanternBearer, paintStreetlamp, paintHouse, paintStarTrails, paintGlowTent, paintWheat, paintModernHouse, paintPool, paintPiazza, paintBackWall, paintSquare, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc, paintJellyfish } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
+import type { PixelPaletteId } from './pixelPalettes'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
 export type LayerSpec = {
@@ -26,6 +27,16 @@ export type LayerSpec = {
   orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number; /** Circles on the ground (y is then z), facing where it goes. */ flat?: boolean; /** Circles this earlier orbiting layer (by `id`) instead of a fixed point. */ around?: string; /** Keeps its own facing instead of turning along its path. */ upright?: boolean }
   /** A name other layers can orbit around. */
   id?: string
+  /** A floor that catches the shadow of the plane with this `id`, cast from the sun. */
+  shadowOf?: string
+  /** Sunlight through water: a moving net of caustics over the pool slots. */
+  caustics?: boolean
+  /** Bend in the wind: how many texels the top row leans at a gust's peak. */
+  sway?: number
+  /** Trace the plane in over `from`..`to` seconds, texel by texel in its painted order. */
+  reveal?: { from: number; to: number }
+  /** Keep this plane in one palette mood (a daylight sky over a night street). */
+  mood?: PixelPaletteId
   /** The sun or moon on its arc: the key light follows whichever is higher. */
   celestial?: 'sun' | 'moon'
   /** Paints frame `frame` of `frames` when the layer is a sprite animation. */
@@ -45,7 +56,7 @@ export type LayerSpec = {
 }
 /** A shaft of coloured light from a window to the floor, in meters. */
 export type Beam = { from: [number, number, number]; to: [number, number, number]; width: number; hue: number }
-export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean; /** No aurora ever hangs here. */ clearSky?: boolean; /** Raindrops ring the water, 0..1. */ rain?: number; /** The world's light breathes in this colour. */ pulse?: string; /** The water rises and falls between `low` and `high` meters over `period` seconds. */ tide?: { low: number; high: number; period: number } }
+export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean; /** No aurora ever hangs here. */ clearSky?: boolean; /** Raindrops ring the water, 0..1. */ rain?: number; /** The world's light breathes in this colour. */ pulse?: string; /** The water rises and falls between `low` and `high` meters over `period` seconds. */ tide?: { low: number; high: number; period: number }; /** A storm's haze swells from `from`, peaks at `peak` and clears by `to` seconds. */ haze?: { from: number; peak: number; to: number }; /** A lamp carried by the plane with this `id`, `dx`/`dy` meters from its middle, lighting everything within `radius`. */ carry?: { id: string; dx: number; dy: number; radius: number; color: string } }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -105,6 +116,13 @@ const ORRERY: [number, number, number, number][] = [[2.8, .8, INDEX.balloon + 1,
 
 /** Jellyfish: depth, across, size, rise speed, start. */
 const JELLIES: [number, number, number, number, number][] = [[-20, -7, 5, .5, 6], [-14, 5, 3.6, .6, 16], [-9, -2, 2.6, .7, 24], [-6, 3.5, 1.8, .8, 11], [-26, 12, 5.5, .4, 20], [-5, -3.5, 1.4, .9, 2]]
+
+/** How thick a storm's haze is at `seconds`, 0 to 1. */
+export function hazeAt(haze: NonNullable<WorldPlan['haze']>, seconds: number) {
+  if (seconds <= haze.from || seconds >= haze.to) return 0
+  const t = seconds < haze.peak ? (seconds - haze.from) / (haze.peak - haze.from) : (haze.to - seconds) / (haze.to - haze.peak)
+  return t * t * (3 - 2 * t)
+}
 
 /** A day in the day-cycle world lasts as long as its template's clip. */
 export const DAY_SECONDS = 24
@@ -536,6 +554,70 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       })),
     ] }
   },
+  'pixel-blizzard': scene => ({ ground: 'water', clearSky: true, haze: { from: 3, peak: 12, to: 21 }, layers: [
+    sky(scene), range(scene), hills(scene, true),
+    { ...VILLAGE, z: -20, width: 40, bottom: -.6, paint: (w, h) => paintVillage(w, h, { ...near, seed: scene.seed + 6, lightFrom: bodySkyX(scene), houses: 2 }) },
+    ...reeds(scene),
+  ] }),
+  // After De Chirico: a low sun crosses behind an arcade, a statue and a
+  // tower, and their long shadows swing across the empty square.
+  'pixel-piazza': scene => ({ ground: 'none', clearSky: true, layers: [
+    sky({ ...scene, body: 'none' }), range(scene),
+    { z: -60, width: 20, height: 20, bottom: 0, texture: [80, 80], celestial: 'sun',
+      orbit: { x: 0, y: 6, radius: 44, ry: 18, speed: -.045, phase: 2.1 },
+      paint: (w, h) => { const disc = layer(w, h); paintMoon(disc, scene.seed, { kind: 'sun', x: .5, y: .5, radius: 9, crescent: 0 }); return disc } },
+    { z: -14.4, x: -9.6, width: 10.4, height: 5, bottom: 0, texture: [110, 50], paint: (w, h) => paintBackWall(w, h) },
+    { z: -14, id: 'piazza', width: 30, height: 10, bottom: 0, texture: [300, 100], paint: (w, h) => paintPiazza(w, h) },
+    { z: -12, width: 60, height: 48, bottom: .02, floor: true, shadowOf: 'piazza', texture: [300, 240], paint: (w, h) => paintSquare(w, h) },
+  ] }),
+  // After Hockney: a flat pink house, two tall palms and a pool whose floor
+  // swims with caustics as the California day turns to evening.
+  'pixel-pool': scene => ({ ground: 'none', clearSky: true, layers: [
+    sky(scene), range(scene),
+    { z: -22, width: 60, height: 12, bottom: -1, texture: [480, 96], paint: (w, h) => paintPalms(w, h, scene.seed), sway: 5 },
+    { z: -16, width: 18, height: 5, bottom: 0, texture: [180, 50], paint: (w, h) => paintModernHouse(w, h) },
+    { z: -2, width: 40, height: 28, bottom: 0, floor: true, caustics: true, texture: [400, 280], paint: (w, h) => paintPool(w, h) },
+  ] }),
+  // A wheat field at the end of the day: gusts roll across it in waves,
+  // bending the ears and running a pale sheen over the gold.
+  'pixel-wheat': scene => ({ ground: 'none', clearSky: true, layers: [
+    sky(scene), range(scene),
+    { z: -50, width: 140, height: 22, bottom: 10, texture: [560, 88], scroll: -.8, paint: (w, h) => paintClouds(w, h, scene.seed, [[80, 50, 22], [260, 38, 30], [430, 60, 20]]) },
+    { z: -30, width: 110, height: 3, bottom: -1, texture: [880, 24], sway: 2, paint: (w, h) => paintWheat(w, h, scene.seed + 1, 0) },
+    { z: -20, width: 80, height: 3.2, bottom: -1.2, texture: [800, 32], sway: 3, paint: (w, h) => paintWheat(w, h, scene.seed + 2, .004) },
+    { z: -12, x: 5.5, width: 1.6, height: 7, bottom: -1, texture: [56, 260], sway: 4, paint: (w, h) => paintCypress(w, h) },
+    { z: -11, width: 46, height: 3.4, bottom: -2, texture: [690, 51], sway: 5, paint: (w, h) => paintWheat(w, h, scene.seed + 3, .008) },
+    // Tall stalks close to the lens fill the foreground and swing the most.
+    { z: -2, width: 14, height: 2.6, bottom: -1.8, texture: [420, 72], sway: 10, paint: (w, h) => paintWheat(w, h, scene.seed + 4, .012) },
+  ] }),
+  // A long exposure: the stars trace arcs around the pole over the whole
+  // shot, doubled in the still lake, above a tent lit from inside.
+  'pixel-startrails': scene => ({ ground: 'water', clearSky: true, layers: [
+    sky(scene),
+    { ...SKY, sky: false, z: SKY.z + .5, reveal: { from: .5, to: 21 }, paint: (w, h) => paintStarTrails(w, h, scene.seed, bodySkyX(scene), .95 - .35 * scene.bodyY, Math.round(300 + scene.stars * 500)) },
+    range(scene), hills(scene, true),
+    { z: -16, x: -3, width: 3, height: 1.75, bottom: -.05, texture: [24, 14], paint: (w, h) => paintGlowTent(w, h) },
+    ...reeds(scene),
+  ] }),
+  // After Magritte's Empire of Light: a bright daytime sky with white clouds
+  // over a house by a pond where it is already night and one lamp is lit.
+  'pixel-empire': scene => ({ ground: 'water', clearSky: true, carry: { id: 'streetlamp', dx: 0, dy: 1.6, radius: 6, color: '#ffd27a' }, layers: [
+    { ...sky(scene), mood: 'noon' },
+    { z: -50, width: 140, height: 24, bottom: 9, texture: [560, 96], scroll: -1.2, mood: 'noon', paint: (w, h) => paintClouds(w, h, scene.seed, [[60, 60, 26], [200, 44, 34], [340, 70, 24], [470, 52, 30]]) },
+    { z: -24, width: 70, height: 13, bottom: -.5, texture: [420, 78], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills, density: scene.trees, body: INDEX.near }) },
+    { z: -17, width: 7, height: 6.5, bottom: -.2, texture: [70, 65], paint: (w, h) => paintHouse(w, h, scene.seed) },
+    { z: -15.5, id: 'streetlamp', x: 5.2, width: 1, height: 4, bottom: -.1, texture: [12, 48], paint: (w, h) => paintStreetlamp(w, h) },
+  ] }),
+  'pixel-lantern': scene => ({ ground: 'water', clearSky: true, carry: { id: 'bearer', dx: .3, dy: -.2, radius: 3.4, color: '#ffae4a' }, layers: [
+    sky(scene), range(scene),
+    { z: -34, width: 110, height: 11, bottom: -1, texture: [640, 64], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },
+    { z: -16, width: 80, height: 9, bottom: -.2, texture: [640, 72], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 6, tall: scene.hills, density: scene.trees, body: INDEX.near }) },
+    // A low bank at the water's edge, and one walker with a lantern along it.
+    { z: -14, width: 90, height: .8, bottom: -.3, texture: [900, 8], paint: (w, h) => paintLoopRange(w, h, { ...near, seed: scene.seed + 2, lightFrom: bodySkyX(scene), base: h * .5, amp: h * .15, trees: 0 }) },
+    { z: -14.1, id: 'bearer', width: 1, height: 1.6, bottom: .15, texture: [20, 32], frames: { count: 4, fps: 4 },
+      drift: { speed: .55, loop: 44, offset: 17 }, paint: (w, h, frame = 0) => paintLanternBearer(w, h, frame, 4) },
+    ...reeds(scene, 40),
+  ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

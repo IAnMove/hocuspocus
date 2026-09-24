@@ -327,6 +327,191 @@ export function paintCaravan(width: number, height: number, frame: number, frame
   return caravan
 }
 
+/** A walker holding a lantern out ahead, one frame of the walk; the lamp
+ *  sways a pixel with each step. */
+export function paintLanternBearer(width: number, height: number, frame: number, frames: number): IndexedLayer {
+  const bearer = layer(width, height)
+  const phase = frame / frames, ground = height - 1, cx = Math.round(width * .4)
+  paintWalker(bearer, cx, ground, phase)
+  const hx = cx + 6 + Math.round(Math.sin(phase * Math.PI * 2)), hy = ground - 12
+  for (let y = ground - 16; y < hy; y++) set(bearer, hx, y, INDEX.trees)
+  for (let y = hy; y < hy + 3; y++) for (let x = hx - 1; x <= hx + 1; x++) set(bearer, x, y, INDEX.lamp)
+  return bearer
+}
+
+/** De Chirico's square, all on one plane so it can cast one shadow: an
+ *  arcade whose arches are open to the light, a statue on its plinth and a
+ *  tall factory chimney. */
+export function paintPiazza(width: number, height: number): IndexedLayer {
+  const piazza = layer(width, height)
+  const block = (x0: number, x1: number, y0: number, y1: number, index: number) => { for (let y = Math.round(y0); y < y1; y++) for (let x = Math.round(x0); x < x1; x++) set(piazza, x, y, index) }
+  // The arcade: a long block, its lower storey pierced by round arches.
+  const top = height * .5, bays = 5, bay = width * .38 / bays
+  block(0, width * .38, top, height, INDEX.far)
+  block(0, width * .38, top, top + 2, INDEX.farRim)
+  for (let b = 0; b < bays; b++) {
+    const cx = (b + .5) * bay, half = bay * .32, spring = height * .72
+    for (let y = Math.round(spring - half); y < height; y++) for (let x = Math.round(cx - half); x < cx + half; x++) {
+      if (y >= spring || Math.hypot(x - cx, y - spring) < half) set(piazza, x, y, 0)
+    }
+  }
+  // The statue: a plinth and a reclining figure's silhouette.
+  const sx = width * .6
+  block(sx - 10, sx + 10, height - 20, height, INDEX.farShade)
+  block(sx - 12, sx + 12, height - 22, height - 19, INDEX.farRim)
+  block(sx - 4, sx + 4, height - 44, height - 22, INDEX.trees)
+  block(sx - 7, sx + 7, height - 40, height - 36, INDEX.trees)
+  block(sx - 3, sx + 3, height - 51, height - 44, INDEX.trees)
+  // The chimney: tall, slightly tapering, with a band near the top.
+  const cx = width * .86
+  for (let y = Math.round(height * .08); y < height; y++) { const half = 3 + (y / height) * 2; block(cx - half, cx + half, y, y + 1, y === Math.round(height * .16) ? INDEX.farRim : INDEX.far) }
+  return piazza
+}
+
+/** The shadowed inside of the arcade, seen through its arches. */
+export function paintBackWall(width: number, height: number): IndexedLayer {
+  const wall = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) set(wall, x, y, bayer(x, y) < .3 ? INDEX.farShade : INDEX.trees)
+  return wall
+}
+
+/** An empty square of warm, sunbaked paving. */
+export function paintSquare(width: number, height: number): IndexedLayer {
+  const square = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) set(square, x, y, INDEX.sand + (bayer(x, y) < .2 + (y / height) * .3 ? 5 : 4))
+  return square
+}
+
+/** A flat-roofed house in the sun: one long wall, a band of glass
+ *  reflecting the sky and a slim overhang. */
+export function paintModernHouse(width: number, height: number): IndexedLayer {
+  const house = layer(width, height)
+  const top = Math.round(height * .14)
+  for (let y = top; y < height; y++) for (let x = 0; x < width; x++) set(house, x, y, INDEX.far)
+  for (let x = 0; x < width; x++) for (let y = top - 3; y < top; y++) set(house, x, y, INDEX.farRim)
+  for (let x = 0; x < width; x++) set(house, x, top, INDEX.farShade)
+  const glassTop = Math.round(height * .36), glassBottom = Math.round(height * .82), left = Math.round(width * .3), right = Math.round(width * .92)
+  for (let y = glassTop; y < glassBottom; y++) for (let x = left; x < right; x++) {
+    const mullion = (x - left) % 22 === 0 || x === right - 1 || y === glassTop || y === glassBottom - 1
+    set(house, x, y, mullion ? INDEX.farRim : INDEX.sky + 4 + Math.round(((y - glassTop) / (glassBottom - glassTop)) * 8))
+  }
+  for (let y = glassTop + 4; y < height; y++) for (let x = Math.round(width * .1); x < width * .18; x++) set(house, x, y, INDEX.farShade)
+  return house
+}
+
+/** A pool on a pale stone deck, seen from above: blue deepening toward the
+ *  far end, the coping and a diving board. */
+export function paintPool(width: number, height: number): IndexedLayer {
+  const pool = layer(width, height)
+  const box = { left: Math.round(width * .3), right: Math.round(width * .7), far: Math.round(height * .12), near: Math.round(height * .62) }
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) set(pool, x, y, poolTexel(x, y, box))
+  const board = Math.round((box.left + box.right) / 2)
+  for (let y = box.near - 16; y < box.near + 10; y++) for (let x = board - 3; x <= board + 3; x++) set(pool, x, y, x === board + 3 ? INDEX.farShade : INDEX.coping)
+  return pool
+}
+
+/** Water deepening toward the far end, the coping round it, deck beyond. */
+function poolTexel(x: number, y: number, { left, right, far, near }: Record<'left' | 'right' | 'far' | 'near', number>) {
+  if (x >= left && x < right && y >= far && y < near) return INDEX.pool + 3 - Math.min(3, Math.floor((near - y) / (near - far) * 3 + bayer(x, y)))
+  if (x >= left - 3 && x < right + 3 && y >= far - 3 && y < near + 3) return INDEX.coping
+  return bayer(x, y) < .25 ? INDEX.sand + 1 : INDEX.sand
+}
+
+/** A band of ripe wheat: stalks from the bottom, ears catching the light
+ *  at the top, a ragged skyline of heads and the odd poppy. */
+export function paintWheat(width: number, height: number, seed: number, poppies: number): IndexedLayer {
+  const wheat = layer(width, height)
+  for (let x = 0; x < width; x++) {
+    const top = Math.round(height * (.08 + .22 * fxRandom(seed, x) + .1 * Math.sin(x * .02 + seed)))
+    for (let y = Math.max(0, top); y < height; y++) {
+      const depth = (y - top) / (height - top), ear = y - top < height * .14
+      const tone = ear ? (bayer(x, y) < .6 ? 3 : 2) : depth < .5 ? (bayer(x, y) < .7 - depth ? 2 : 1) : (bayer(x, y) < 1.2 - depth * 1.2 ? 1 : 0)
+      set(wheat, x, y, INDEX.wheat + tone)
+    }
+    if (fxRandom(seed, x + 5000) < poppies) for (let d = 0; d < 3; d++) set(wheat, x + (d % 2), top + 1 + (d >> 1), INDEX.tulip)
+  }
+  return wheat
+}
+
+/** Star trails round a pole at (`poleX`, `poleY`) as fractions of the
+ *  sky: every star sweeps the same angle, and `order` says when each
+ *  texel of its arc is traced, so the exposure builds up over the shot. */
+export function paintStarTrails(width: number, height: number, seed: number, poleX: number, poleY: number, count: number): IndexedLayer {
+  const trails = layer(width, height)
+  trails.order = new Uint8Array(width * height)
+  const cx = width * poleX, cy = height * poleY, reach = Math.hypot(width, height), sweep = Math.PI * .55
+  for (let s = 0; s < count; s++) {
+    const radius = 3 + Math.sqrt(fxRandom(seed, s)) * reach * .8, start = fxRandom(seed, s + 900) * Math.PI * 2
+    const slot = INDEX.star + Math.floor(fxRandom(seed, s + 1800) * 8)
+    for (let step = 0, steps = Math.ceil(sweep * radius * 1.4); step <= steps; step++) {
+      const angle = start + sweep * step / steps
+      const x = Math.round(cx + Math.cos(angle) * radius), y = Math.round(cy - Math.sin(angle) * radius)
+      if (x < 0 || y < 0 || x >= width || y >= height) continue
+      const at = y * width + x, when = 1 + Math.round(step / steps * 254)
+      if (!trails.data[at] || when < trails.order[at]) { trails.data[at] = slot; trails.order[at] = when }
+    }
+  }
+  set(trails, Math.round(cx), Math.round(cy), INDEX.moon)
+  trails.order[Math.round(cy) * width + Math.round(cx)] = 1
+  return trails
+}
+
+/** A small ridge tent glowing from inside, its door flap open. */
+export function paintGlowTent(width: number, height: number): IndexedLayer {
+  const tent = layer(width, height)
+  const mid = width / 2
+  for (let y = 1; y < height; y++) {
+    const half = (y / height) * mid
+    for (let x = Math.round(mid - half); x <= Math.round(mid + half); x++) {
+      const edge = x <= Math.round(mid - half) || x >= Math.round(mid + half) || y === height - 1
+      const door = y > height * .45 && Math.abs(x - mid - 1) < (y - height * .45) * .45
+      set(tent, x, y, edge ? INDEX.trees : door ? INDEX.lamp : INDEX.window)
+    }
+  }
+  for (let x = Math.round(mid) - 1; x <= Math.round(mid) + 1; x++) set(tent, x, 0, INDEX.trees)
+  return tent
+}
+
+/** A tall house front: a steep roof with a chimney, rows of shuttered
+ *  windows (some lit) and a door, grey against the trees. */
+export function paintHouse(width: number, height: number, seed: number): IndexedLayer {
+  const house = layer(width, height)
+  const left = Math.round(width * .08), right = Math.round(width * .92), eaves = Math.round(height * .3), mid = width / 2
+  for (let y = 0; y < height; y++) for (let x = left - 2; x <= right + 2; x++) {
+    const reach = (y / eaves) * (mid - left + 2), roof = y < eaves && Math.abs(x - mid) <= reach
+    if (roof) set(house, x, y, Math.abs(x - mid) >= reach - 1 ? INDEX.farRim : INDEX.far)
+    else if (y >= eaves && x >= left && x <= right) set(house, x, y, INDEX.far)
+  }
+  for (let y = Math.round(eaves * .2); y < eaves * .6; y++) for (let x = Math.round(width * .68); x < width * .76; x++) set(house, x, y, INDEX.far)
+  paintHouseWindows(house, left, right, eaves, seed)
+  const door = Math.round(left + (right - left) * 1.5 / 4)
+  for (let y = height - Math.round(height * .2); y < height; y++) for (let x = door - 3; x <= door + 3; x++) set(house, x, y, INDEX.trees)
+  return house
+}
+
+/** Two rows of shuttered windows, about half of them lit. */
+function paintHouseWindows(house: IndexedLayer, left: number, right: number, eaves: number, seed: number) {
+  const cols = 4, ww = Math.round(house.width * .09), wh = Math.round(house.height * .13)
+  for (let r = 0; r < 2; r++) for (let c = 0; c < cols; c++) {
+    if (r === 1 && c === 1) continue
+    const x0 = Math.round(left + (right - left) * (c + .5) / cols - ww / 2), y0 = Math.round(eaves + house.height * (.1 + r * .26))
+    const pane = fxRandom(seed, r * 5 + c) < .6 ? INDEX.window + (r * cols + c) % 8 : INDEX.trees
+    for (let y = y0; y < y0 + wh; y++) for (let x = x0; x < x0 + ww; x++) set(house, x, y, pane)
+    for (let y = y0 - 1; y <= y0 + wh; y++) { set(house, x0 - 2, y, INDEX.trees); set(house, x0 + ww + 1, y, INDEX.trees) }
+  }
+}
+
+/** An old street lamp: a slim post, a curled arm and a glass lantern. */
+export function paintStreetlamp(width: number, height: number): IndexedLayer {
+  const lamp = layer(width, height)
+  const c = Math.round(width / 2)
+  for (let y = 8; y < height; y++) for (let w = -1; w <= (y > height - 5 ? 1 : 0); w++) set(lamp, c + w, y, INDEX.trees)
+  for (let x = c - 3; x <= c + 3; x++) { set(lamp, x, 1, INDEX.trees); set(lamp, x, 7, INDEX.trees) }
+  for (let y = 2; y < 7; y++) for (let x = c - 2; x <= c + 2; x++) set(lamp, x, y, Math.abs(x - c) === 2 ? INDEX.trees : INDEX.lamp)
+  set(lamp, c, 0, INDEX.trees)
+  return lamp
+}
+
 /** A neon grid floor that tiles both ways: bright lines in the beat slot
  *  with a dithered glow either side, on near-black ground. */
 export function paintGrid(width: number, height: number, cell: number): IndexedLayer {

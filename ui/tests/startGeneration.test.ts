@@ -371,3 +371,68 @@ test('cancel polling uses the admitted job id from the receipt', async () => {
   assert.equal(jobs[0].id, 'job-cancel-intent')
   assert.equal(jobs[0].taskId, 'task-cancel-intent')
 })
+
+test('the queue tile appears synchronously while preparation is blocked', async () => {
+  const intent = snapshotStudioImageIntent(imageSource({ llmStatus: { loaded: true } }))
+  const { jobs, sent, ports } = recordingPorts()
+  let release!: () => void
+  const work = startStudioImageGeneration(intent, { ...ports,
+    unloadLlm: () => new Promise(resolve => { release = resolve }),
+  })
+  assert.equal(jobs.length, 1)
+  assert.equal(jobs[0].status, 'queued')
+  assert.equal(sent.length, 0)
+  release()
+  await work
+  assert.equal(jobs.length, 1)
+})
+
+test('retry after an uncertain POST replays the exact command without uploading again', async () => {
+  const intent = snapshotStudioImageIntent(imageSource({ params: { image_guide: '/api/v1/uploads/source.png' } }))
+  const { jobs, ports } = recordingPorts()
+  let resolutions = 0
+  const commands: unknown[] = []
+  await startStudioImageGeneration(intent, { ...ports,
+    resolveReferences: async refs => { resolutions++; return refs.map(String) },
+    send: async command => {
+      commands.push(command)
+      if (commands.length === 1) throw new Error('Connection lost')
+      return receiptFor(command)
+    },
+  }, undefined, { actor: 'user', commandId: 'uncertain-request' })
+  assert.equal(jobs[0].error, 'Connection lost')
+  const retry = jobs[0].retry as () => Promise<unknown>
+  await Promise.all([retry(), retry()])
+  assert.equal(commands.length, 2)
+  assert.deepEqual(commands[0], commands[1])
+  assert.equal(resolutions, 1)
+})
+
+test('retry of an admitted job keeps the frozen settings with a new command ID', async () => {
+  const source = imageSource()
+  const intent = snapshotStudioImageIntent(source)
+  const { jobs, sent, ports } = recordingPorts()
+  await startStudioImageGeneration(intent, ports, undefined, { actor: 'user', commandId: 'first-attempt' })
+  source.params.prompt = 'Changed after submit'
+  await (jobs[0].retry as () => Promise<unknown>)()
+  assert.equal(sent.length, 2)
+  assert.notEqual(sent[0].intent_id, sent[1].intent_id)
+  assert.equal(sent[1].input.params.prompt, LITERAL_PROMPT)
+})
+
+test('upload failures keep their reason and can be retried', async () => {
+  const intent = snapshotStudioImageIntent(imageSource({ imageRefType: 'I',
+    imageRefs: [new File(['image'], 'reference.png', { type: 'image/png' })] }))
+  const { jobs, ports, sent } = recordingPorts()
+  let fail = true
+  await startStudioImageGeneration(intent, { ...ports, uploadImage: async file => {
+    if (fail) throw new Error('Upload rejected: disk full')
+    return ports.uploadImage(file)
+  } })
+  assert.equal(jobs.length, 1)
+  assert.match(String(jobs[0].error), /disk full/)
+  assert.equal(sent.length, 0)
+  fail = false
+  await (jobs[0].retry as () => Promise<unknown>)()
+  assert.equal(sent.length, 1)
+})

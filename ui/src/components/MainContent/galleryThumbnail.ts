@@ -14,7 +14,10 @@ export function galleryThumbnailUrl(
   size: GalleryThumbnailSize,
 ): string | null {
   if (file.type !== 'image' && file.type !== 'video') return file.thumbnail_url || null
-  const base = file.thumbnail_url || getOutputThumbnailUrl(file.name, workspace)
+  // Old/imported metadata can advertise the original as its thumbnail.
+  // Only the thumbnail endpoint guarantees a bounded image payload.
+  const base = file.thumbnail_url?.includes('/api/v1/outputs/thumbnail/')
+    ? file.thumbnail_url : getOutputThumbnailUrl(file.name, workspace)
   return `${base}${base.includes('?') ? '&' : '?'}size=${size}`
 }
 

@@ -1493,6 +1493,34 @@
     "pixel-jellyfish": {
       "title": "Medusas",
       "description": "En el mar profundo, medusas luminosas suben a su propio ritmo, cada campana se contrae y se relaja con cada impulso mientras sus tentáculos ondulan detrás, la luz recorre sus cuerpos y la nieve marina cae junto al arrecife."
+    },
+    "pixel-blizzard": {
+      "title": "Ventisca",
+      "description": "Un paso nevado con una cabaña iluminada: la ventisca se espesa hasta que los picos lejanos desaparecen en el blanco y los pinos cercanos se difuminan, solo brillan las ventanas de la cabaña, y luego la tormenta amaina y vuelven las montañas."
+    },
+    "pixel-lantern-walk": {
+      "title": "Paseo con farol",
+      "description": "Un bosque oscuro junto al lago de noche: alguien camina por la orilla con un farol, y los pinos, la ribera y los juncos se encienden cálidos a su paso y vuelven a la sombra."
+    },
+    "pixel-empire-of-light": {
+      "title": "El imperio de las luces",
+      "description": "Inspirado en Magritte: un cielo azul de día con nubes blancas sobre una casa junto a un estanque donde ya es de noche, con las ventanas encendidas y una sola farola iluminando los árboles oscuros."
+    },
+    "pixel-star-trails": {
+      "title": "Estelas de estrellas",
+      "description": "Una larga exposición sobre un lago de montaña: las estrellas trazan poco a poco sus arcos alrededor de la estrella polar mientras avanza el plano, duplicadas en el agua quieta, sobre una tienda iluminada por dentro."
+    },
+    "pixel-wheat-wind": {
+      "title": "Trigo al viento",
+      "description": "Un campo de trigo dorado al atardecer con un ciprés solitario: las rachas lo recorren en olas, doblando las espigas y dejando un brillo pálido sobre el oro, mientras pasan las nubes."
+    },
+    "pixel-hockney-pool": {
+      "title": "Piscina al sol",
+      "description": "Inspirado en Hockney: una casa rosa de tejado plano, dos palmeras altas meciéndose y una piscina cuyo fondo baila con una red de luz, mientras el día luminoso de California se vuelve tarde."
+    },
+    "pixel-metaphysical-square": {
+      "title": "Plaza metafísica",
+      "description": "Inspirado en De Chirico: un sol bajo cruza tras una arcada, una estatua y una chimenea alta, y sus largas sombras, con los arcos incluidos, giran despacio sobre la plaza vacía."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1785,7 +1813,14 @@
       "pixel-orrery": "Planetario",
       "pixel-rainbow": "Valle del arcoíris",
       "pixel-risingcity": "Ciudad que crece",
-      "pixel-abyss": "Mar profundo"
+      "pixel-abyss": "Mar profundo",
+      "pixel-blizzard": "Paso de ventisca",
+      "pixel-lantern": "Orilla del farol",
+      "pixel-empire": "Imperio de las luces",
+      "pixel-startrails": "Lago de estelas",
+      "pixel-wheat": "Campo de trigo",
+      "pixel-pool": "Piscina de Hockney",
+      "pixel-piazza": "Plaza metafísica"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

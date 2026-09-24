@@ -10,8 +10,8 @@ import { INDEX, paintRange, paintSky, ridge } from '../src/features/scene3d/pixe
 import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
-import { eclipseShade, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
-import { paintJellyfish, paintLoopRange, paintMurmuration, paintText } from '../src/features/scene3d/pixel/pixelPaintWorlds'
+import { eclipseShade, hazeAt, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
+import { paintJellyfish, paintLoopRange, paintMurmuration, paintPool, paintStarTrails, paintText, paintWheat } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { layer } from '../src/features/scene3d/pixel/pixelPaint'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3, type Mesh } from 'three'
@@ -714,4 +714,95 @@ test('jellyfish: bells pulse frame by frame and each rises in its own lane', () 
   paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-jellyfish').pixelWorld!, 3, 720)
   const lanes = (root as Group).children.filter(child => child.userData.frames).map(child => Math.round(child.position.x))
   assert.ok(new Set(lanes).size >= 5, 'they keep their places across the water')
+})
+
+test('blizzard: the storm swallows far planes first and clears again', () => {
+  const haze = worldPlan('pixel-blizzard', resolvePixelScene('pixel-blizzard', undefined)).haze!
+  assert.equal(hazeAt(haze, 1), 0)
+  assert.equal(hazeAt(haze, haze.peak), 1)
+  assert.equal(hazeAt(haze, haze.to + 1), 0, 'the mountains come back')
+  const root = pixelWorldGroup('pixel-blizzard'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-blizzard').pixelWorld!
+  const thickness = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => ({ z: child.position.z, haze: (child as Mesh).material?.uniforms?.uHaze?.value as number | undefined })).filter(item => item.haze !== undefined).sort((a, b) => a.z - b.z) }
+  const peak = thickness(haze.peak)
+  assert.ok(peak[0].haze! > peak[peak.length - 1].haze!, 'the far range fades before the near reeds')
+  assert.ok(thickness(1).every(item => item.haze === 0), 'a clear morning first')
+})
+
+test('lantern walk: the lamp travels with its bearer and lights the other planes, not the bearer', () => {
+  const root = pixelWorldGroup('pixel-lantern'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-lantern-walk').pixelWorld!
+  const lamps = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms?.uCarry?.value as { x: number; w: number } | undefined).filter(value => value !== undefined) }
+  const early = lamps(2).filter(lamp => lamp.w > 0).map(lamp => lamp.x), later = lamps(12).filter(lamp => lamp.w > 0).map(lamp => lamp.x)
+  assert.ok(early.length > 3, 'the wood, bank and reeds catch the light')
+  assert.ok(later[0] - early[0] > 4, 'the light walks along the shore')
+  const bearer = (root as Group).getObjectsByProperty('type', 'Mesh').find(mesh => mesh.userData.frames) as Mesh
+  assert.equal((bearer.material as { uniforms: { uCarry: { value: { w: number } } } }).uniforms.uCarry.value.w, 0, 'the bearer stays a silhouette')
+})
+
+test('empire of light: the sky keeps its daylight palette while the street below is night', () => {
+  const root = pixelWorldGroup('pixel-empire'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-empire-of-light').pixelWorld!, 5, 720)
+  const planes = (root as Group).children.filter(child => (child as Mesh).material?.uniforms?.uPalette).sort((a, b) => a.position.z - b.position.z)
+  const palette = (plane: typeof planes[number]) => (plane as Mesh).material.uniforms.uPalette.value as { image: { data: Uint8Array } }
+  const sky = palette(planes[0]), street = palette(planes[planes.length - 1])
+  assert.notEqual(sky, street, 'two palettes at once')
+  const brightness = (texture: typeof sky, slot: number) => texture.image.data[slot * 4] + texture.image.data[slot * 4 + 1] + texture.image.data[slot * 4 + 2]
+  assert.ok(brightness(sky, INDEX.sky + 4) > brightness(street, INDEX.sky + 4) * 2, 'daylight blue over a night street')
+})
+
+test('star trails: every star sweeps the same arc round the pole and is traced in over the shot', () => {
+  const trails = paintStarTrails(200, 120, 7, .5, .5, 60)
+  const drawn = [...trails.data.keys()].filter(at => trails.data[at])
+  assert.ok(drawn.length > 600, 'long arcs, not dots')
+  assert.ok(drawn.every(at => trails.order![at] >= 1), 'every texel knows when it appears')
+  const first = drawn.filter(at => trails.order![at] < 20).length, last = drawn.filter(at => trails.order![at] > 235).length
+  assert.ok(first > 0 && last > 0, 'traced from start to end')
+  const root = pixelWorldGroup('pixel-startrails'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-star-trails').pixelWorld!
+  const exposure = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms?.uReveal?.value as number).filter(value => value <= 1) }
+  assert.deepEqual(exposure(0), [0])
+  assert.ok(exposure(10)[0] > .3 && exposure(10)[0] < .7, 'half traced')
+  assert.deepEqual(exposure(23), [1])
+})
+
+test('wheat in the wind: nearer stalks lean further, all on the one scene clock', () => {
+  const wheat = paintWheat(200, 40, 3, .02)
+  assert.ok(wheat.data.every(index => index === 0 || (index >= INDEX.wheat && index < INDEX.wheat + 4) || index === INDEX.tulip), 'gold and poppies only')
+  assert.ok(wheat.data.some(index => index === INDEX.tulip), 'the odd poppy')
+  const plan = worldPlan('pixel-wheat', resolvePixelScene('pixel-wheat', undefined))
+  const swaying = plan.layers.filter(layer => layer.sway).sort((a, b) => a.z - b.z)
+  assert.ok(swaying.length >= 4 && swaying[swaying.length - 1].sway! > swaying[0].sway!, 'the front bends the most')
+  const root = pixelWorldGroup('pixel-wheat'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-wheat-wind').pixelWorld!, 7.5, 720)
+  const clocks = (root as Group).children.map(child => (child as Mesh).material?.uniforms).filter(uniforms => uniforms?.uSway?.value > 0).map(uniforms => uniforms.uTime.value)
+  assert.deepEqual(new Set(clocks), new Set([7.5]), 'gusts follow the scene clock, so export matches the preview')
+})
+
+test('pool in the sun: caustics play only over the water, on the scene clock', () => {
+  const pool = paintPool(100, 70)
+  const water = pool.data.filter(index => index >= INDEX.pool && index < INDEX.pool + INDEX.poolSteps).length
+  assert.ok(water > 1000 && pool.data.includes(INDEX.coping), 'blue water inside a stone rim')
+  const plan = worldPlan('pixel-pool', resolvePixelScene('pixel-pool', undefined))
+  assert.deepEqual(plan.layers.filter(layer => layer.caustics).map(layer => layer.floor), [true], 'one lit pool floor')
+  const root = pixelWorldGroup('pixel-pool'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-hockney-pool').pixelWorld!, 4.25, 720)
+  const floor = (root as Group).children.map(child => (child as Mesh).material?.uniforms).find(uniforms => uniforms?.uCaustic?.value > 0)!
+  assert.equal(floor.uTime.value, 4.25)
+})
+
+test('metaphysical square: the floor samples the arcade for its shadow and follows the moving sun', () => {
+  const root = pixelWorldGroup('pixel-piazza'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-metaphysical-square').pixelWorld!
+  const sun = (seconds: number) => {
+    paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)
+    const meshes = (root as Group).children as Mesh[]
+    const floor = meshes.find(mesh => mesh.material?.uniforms?.uShadow?.value === 1)!
+    const caster = meshes.find(mesh => mesh.material?.uniforms?.uIndex?.value === floor.material.uniforms.uCaster.value)
+    assert.ok(caster && caster !== floor, 'the shadow comes from the arcade plane')
+    return (floor.material.uniforms.uSunDir.value as Vector3).clone()
+  }
+  const morning = sun(1), evening = sun(22)
+  assert.ok(morning.z < 0 && morning.y > 0, 'the sun stands low behind the square')
+  assert.ok(morning.x < 0 && evening.x > 0, 'it crosses from left to right, so the shadows swing')
 })
