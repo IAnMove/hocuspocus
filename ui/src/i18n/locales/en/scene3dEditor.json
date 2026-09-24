@@ -1449,6 +1449,10 @@
     "pixel-starry-night": {
       "title": "Starry night",
       "description": "A tribute to the painter's night: spiral swirls turn across a deep blue sky, stars pulse in rings of light, a crescent moon glows over the sleeping village and a cypress rises like a dark flame."
+    },
+    "pixel-mist-rising": {
+      "title": "Mist rising",
+      "description": "At dawn, ridge after ridge stands in banks of mist; as the sun climbs the mist burns off in dithered steps, the nearest bank first and the farthest last, until the whole valley is clear and green."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1729,7 +1733,8 @@
       "pixel-marsh": "Marsh",
       "pixel-launch": "Launch site",
       "pixel-grotto": "Grotto",
-      "pixel-starry": "Starry night"
+      "pixel-starry": "Starry night",
+      "pixel-dawnmist": "Misty ridges"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

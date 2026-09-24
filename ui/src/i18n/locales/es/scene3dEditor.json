@@ -1449,6 +1449,10 @@
     "pixel-starry-night": {
       "title": "Noche estrellada",
       "description": "Un homenaje a la noche del pintor: remolinos en espiral giran por un cielo azul profundo, las estrellas laten en anillos de luz, una luna creciente brilla sobre el pueblo dormido y un ciprés se alza como una llama oscura."
+    },
+    "pixel-mist-rising": {
+      "title": "Niebla que se levanta",
+      "description": "Al amanecer, cresta tras cresta aparecen entre bancos de niebla; a medida que sube el sol la niebla se disuelve en pasos tramados, primero el banco más cercano y el más lejano al final, hasta que todo el valle queda claro y verde."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1729,7 +1733,8 @@
       "pixel-marsh": "Marisma",
       "pixel-launch": "Base de lanzamiento",
       "pixel-grotto": "Gruta",
-      "pixel-starry": "Noche estrellada"
+      "pixel-starry": "Noche estrellada",
+      "pixel-dawnmist": "Crestas con niebla"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

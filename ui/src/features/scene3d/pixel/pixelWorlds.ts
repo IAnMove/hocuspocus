@@ -28,6 +28,9 @@ export type LayerSpec = {
   /** Lifts off once at `at` seconds and climbs with `accel` m/s²; an
    *  `ignite` layer (the flame) only shows from just before liftoff. */
   launch?: { at: number; accel: number; ignite?: boolean }
+  /** Dissolves away in dithered steps between `from` and `to` seconds (or
+   *  appears, with `appear`). */
+  dissolve?: { from: number; to: number; appear?: boolean }
   /** A sprite animation: this many frames, shown at `fps`. */
   frames?: { count: number; fps: number }
 }
@@ -64,6 +67,9 @@ export function launchGlow(seconds: number) {
   if (since < -1.2) return 0
   return Math.min(1, (since + 1.2) / .5) * Math.exp(-Math.max(0, since) * .3)
 }
+
+/** Mist ridges: depth, height, ridge base, and when their mist burns off. */
+const MIST_RIDGES: [number, number, number, number, number][] = [[-40, 14, .45, 9, 18], [-32, 10, .5, 6, 14], [-24, 7, .55, 3, 10]]
 
 /** A day in the day-cycle world lasts as long as its template's clip. */
 export const DAY_SECONDS = 24
@@ -386,6 +392,18 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       { z: 2.4, x: -2.4, width: 1.5, height: 7, bottom: -1.2, texture: [56, 260], paint: (w, h) => paintCypress(w, h) },
     ] }
   },
+  'pixel-dawnmist': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene),
+    // Ridges one behind another, a bank of mist between each; the sun burns
+    // the nearest bank off first and the farthest last.
+    ...MIST_RIDGES.flatMap(([z, height, base, from, to], i) => [
+      { z: z + 2.5, width: 200 - i * 40, height: height * .55, bottom: -1, texture: [640, 40] as [number, number], dissolve: { from, to },
+        paint: (w: number, h: number) => paintMist(w, h, scene.seed + i * 7, 1) },
+      { z, width: 140 - i * 20, height, bottom: -1, texture: [700, Math.round(height * 6)] as [number, number],
+        paint: (w: number, h: number) => paintLoopRange(w, h, { body: [INDEX.far, INDEX.near, INDEX.trees][i], rim: [INDEX.farRim, INDEX.nearRim, INDEX.near][i], seed: scene.seed + 20 + i, lightFrom: bodySkyX(scene), base: h * base, amp: h * .22, trees: i ? scene.trees : 0 }) },
+    ]),
+    ...reeds(scene),
+  ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

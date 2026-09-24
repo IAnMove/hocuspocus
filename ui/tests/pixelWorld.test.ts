@@ -570,3 +570,16 @@ test('starry night: spiral swirls turn by cycling and stars pulse in rings', () 
   assert.notEqual(swirl(0), swirl(.6), 'the swirls turn')
   assert.ok(plan.layers.some(layer => layer.texture[1] > layer.texture[0] * 3), 'a tall cypress')
 })
+
+test('mist rising: banks dissolve in dithered steps, nearest first', () => {
+  const plan = worldPlan('pixel-dawnmist', resolvePixelScene('pixel-dawnmist', undefined))
+  const banks = plan.layers.filter(layer => layer.dissolve).sort((a, b) => b.z - a.z)
+  assert.equal(banks.length, 3)
+  assert.ok(banks[0].dissolve!.to < banks[2].dissolve!.to, 'the nearest bank burns off first')
+  const root = pixelWorldGroup('pixel-dawnmist'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-mist-rising').pixelWorld!
+  const dissolved = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms?.uDissolve?.value ?? 0).filter(value => value > 0) }
+  assert.equal(dissolved(1).length, 0, 'thick mist at first light')
+  assert.ok(dissolved(8).some(value => value > 0 && value < 1), 'thinning mid-morning')
+  assert.ok(dissolved(19).filter(value => value > 1).length === 3, 'gone by the end')
+})
