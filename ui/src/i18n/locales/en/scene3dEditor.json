@@ -1453,6 +1453,10 @@
     "pixel-mist-rising": {
       "title": "Mist rising",
       "description": "At dawn, ridge after ridge stands in banks of mist; as the sun climbs the mist burns off in dithered steps, the nearest bank first and the farthest last, until the whole valley is clear and green."
+    },
+    "pixel-roadside-motel": {
+      "title": "Roadside motel",
+      "description": "A desert motel at night: its tall neon sign spells M-O-T-E-L letter by letter, flashes and starts again, an arrow of bulbs chases toward the office, VACANCY buzzes and the rooms glow under the stars."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1734,7 +1738,8 @@
       "pixel-launch": "Launch site",
       "pixel-grotto": "Grotto",
       "pixel-starry": "Starry night",
-      "pixel-dawnmist": "Misty ridges"
+      "pixel-dawnmist": "Misty ridges",
+      "pixel-motel": "Motel"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

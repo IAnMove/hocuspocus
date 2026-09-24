@@ -540,3 +540,46 @@ export function paintCypress(width: number, height: number): IndexedLayer {
   }
   return tree
 }
+
+/** A 5x7 pixel font, just the letters the motel needs. */
+const GLYPHS: Record<string, string[]> = {
+  M: ['10001', '11011', '10101', '10101', '10001', '10001', '10001'],
+  O: ['01110', '10001', '10001', '10001', '10001', '10001', '01110'],
+  T: ['11111', '00100', '00100', '00100', '00100', '00100', '00100'],
+  E: ['11111', '10000', '10000', '11110', '10000', '10000', '11111'],
+  L: ['10000', '10000', '10000', '10000', '10000', '10000', '11111'],
+  V: ['10001', '10001', '10001', '10001', '01010', '01010', '00100'],
+  A: ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
+  C: ['01110', '10001', '10000', '10000', '10000', '10001', '01110'],
+  N: ['10001', '11001', '10101', '10011', '10001', '10001', '10001'],
+  Y: ['10001', '10001', '01010', '00100', '00100', '00100', '00100'],
+}
+
+/** Write `text` at (x, y) in `scale`-pixel blocks, letter i in slot(i). */
+export function paintText(target: IndexedLayer, text: string, x: number, y: number, scale: number, slot: (i: number) => number) {
+  ;[...text].forEach((char, i) => GLYPHS[char]?.forEach((row, r) => [...row].forEach((bit, c) => {
+    if (bit !== '1') return
+    for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++) set(target, x + (i * 6 + c) * scale + dx, y + r * scale + dy, slot(i))
+  })))
+}
+
+/** A roadside motel at night: a long low block of doors and lit windows,
+ *  and a tall sign whose letters light one by one, a chasing arrow and a
+ *  flickering VACANCY. */
+export function paintMotel(width: number, height: number): IndexedLayer {
+  const motel = layer(width, height)
+  const roof = Math.round(height * .62), x0 = Math.round(width * .32)
+  for (let y = roof; y < height; y++) for (let x = x0; x < width - 8; x++) {
+    const unit = (x - x0) % 22, door = unit > 3 && unit < 8 && y > roof + 7, window = unit > 11 && unit < 18 && y > roof + 7 && y < roof + 14
+    set(motel, x, y, y < roof + 3 ? INDEX.nearRim : door ? INDEX.trees : window ? INDEX.window + ((x - x0) / 22 & 7) : INDEX.near)
+  }
+  const post = Math.round(width * .14)
+  for (let y = Math.round(height * .12); y < height; y++) for (let dx = 0; dx < 3; dx++) set(motel, post + dx, y, INDEX.trees)
+  // The sign board, its letters and the arrow of bulbs pointing to the office.
+  const bx = post - 31, by = Math.round(height * .08)
+  for (let y = by; y < by + 30; y++) for (let x = bx; x < bx + 68; x++) set(motel, x, y, y === by || y === by + 29 || x === bx || x === bx + 67 ? INDEX.neon + 1 : INDEX.trees)
+  paintText(motel, 'MOTEL', bx + 5, by + 8, 2, i => INDEX.sign + i)
+  for (let k = 0; k < 12; k++) set(motel, bx + 68 + k * 3, by + 33 + Math.round(k * 1.4), INDEX.bulb + (k % INDEX.bulbSteps))
+  paintText(motel, 'VACANCY', bx + 6, by + 36, 1, () => INDEX.sign + 5)
+  return motel
+}

@@ -1453,6 +1453,10 @@
     "pixel-mist-rising": {
       "title": "Niebla que se levanta",
       "description": "Al amanecer, cresta tras cresta aparecen entre bancos de niebla; a medida que sube el sol la niebla se disuelve en pasos tramados, primero el banco más cercano y el más lejano al final, hasta que todo el valle queda claro y verde."
+    },
+    "pixel-roadside-motel": {
+      "title": "Motel de carretera",
+      "description": "Un motel del desierto de noche: su alto rótulo de neón escribe M-O-T-E-L letra a letra, parpadea y vuelve a empezar, una flecha de bombillas corre hacia la recepción, VACANCY zumba y las habitaciones brillan bajo las estrellas."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1734,7 +1738,8 @@
       "pixel-launch": "Base de lanzamiento",
       "pixel-grotto": "Gruta",
       "pixel-starry": "Noche estrellada",
-      "pixel-dawnmist": "Crestas con niebla"
+      "pixel-dawnmist": "Crestas con niebla",
+      "pixel-motel": "Motel"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

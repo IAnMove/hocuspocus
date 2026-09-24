@@ -40,6 +40,15 @@ export function snowCover(seconds: number) {
 /** Glass hues: ruby, sapphire, emerald, gold, amethyst, amber. */
 export const GLASS = ['#d82a3a', '#2a5ad8', '#2aa860', '#f0c030', '#9a3ad0', '#f07a20']
 
+/** Letter `k` of a five-letter sign at `t` in a 6 s cycle: letters come on
+ *  one by one, the word holds, flashes twice, then goes dark. */
+function spelled(t: number, k: number) {
+  const c = ((t % 6) + 6) % 6
+  if (c < 3) return c >= k * .5
+  if (c < 4.6) return true
+  return c < 5.4 && Math.floor((c - 4.6) / .2) % 2 === 0
+}
+
 type Cycler = { start: number; steps: number; color: (palette: PixelPalette, seconds: number, k: number) => string }
 const pulse = (k: number, steps: number, seconds: number, speed: number) => ((k / steps - seconds * speed) % 1 + 1) % 1
 
@@ -108,6 +117,13 @@ const CYCLERS: Cycler[] = [
   { start: INDEX.swirl, steps: 8, color: (p, t, k) => mixHex(mixHex(p.sky[0], p.far[1], .55), mixHex(p.moon, p.aurora, .4), Math.pow(1 - pulse(k, 8, t, .45), 2)) },
   // Star halos pulse outward ring by ring.
   { start: INDEX.halo, steps: 3, color: (p, t, k) => mixHex(p.sky[1], p.moon, (.7 - k * .22) * (.7 + .3 * Math.sin(t * 2 - k))) },
+  // A neon sign spells itself out letter by letter, flashes, then starts over;
+  // the VACANCY line buzzes on and off.
+  { start: INDEX.sign, steps: 6, color: (p, t, k) => {
+    const lit = k === 5 ? Math.sin(t * 17) * Math.sin(t * 1.3) < .55 : spelled(t, k)
+    const tube = k === 5 ? '#6affb4' : '#ff4a8a'
+    return lit ? mixHex(tube, '#ffffff', .2) : mixHex(p.trees, tube, .18)
+  } },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]

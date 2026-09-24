@@ -10,7 +10,8 @@ import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { eclipseShade, launchGlow, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
-import { paintLoopRange, paintMurmuration } from '../src/features/scene3d/pixel/pixelPaintWorlds'
+import { paintLoopRange, paintMurmuration, paintText } from '../src/features/scene3d/pixel/pixelPaintWorlds'
+import { layer } from '../src/features/scene3d/pixel/pixelPaint'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3, type Mesh } from 'three'
 import { addTv, applyScreenToAllTvs } from '../src/features/scene3d/pixel/pixelEdits'
@@ -582,4 +583,17 @@ test('mist rising: banks dissolve in dithered steps, nearest first', () => {
   assert.equal(dissolved(1).length, 0, 'thick mist at first light')
   assert.ok(dissolved(8).some(value => value > 0 && value < 1), 'thinning mid-morning')
   assert.ok(dissolved(19).filter(value => value > 1).length === 3, 'gone by the end')
+})
+
+test('roadside motel: the sign spells itself out letter by letter', () => {
+  const board = layer(40, 10)
+  paintText(board, 'MOTEL', 1, 1, 1, i => 164 + i)
+  assert.deepEqual([164, 165, 166, 167, 168].map(slot => board.data.includes(slot)), [true, true, true, true, true], 'each letter in its own slot')
+  const lit = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.midnight, seconds); return [0, 1, 2, 3, 4].map(k => bytes[(164 + k) * 4]) }
+  const early = lit(.6), full = lit(3.5)
+  assert.ok(early[0] > early[4], 'the first letter is on before the last')
+  assert.ok(full.every(value => value === full[0]), 'then the whole word is lit')
+  const plan = worldPlan('pixel-motel', resolvePixelScene('pixel-motel', undefined))
+  const motel = plan.layers.find(layer => layer.z === -16)!.paint(340, 90)
+  assert.ok([164, 165, 166, 167, 168, 169].every(slot => motel.data.includes(slot)), 'MOTEL and VACANCY on the sign')
 })
