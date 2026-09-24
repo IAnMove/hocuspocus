@@ -52,7 +52,7 @@ type PixelRuntime = {
 
 const LAYER_VERTEX = `varying vec2 vUv; varying vec3 vWorld; void main(){ vUv=uv; vWorld=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
 const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
-  uniform sampler2D uIndex, uPalette, uOrder; uniform float uReveal; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze; uniform vec3 uHazeColor, uCarryColor; uniform vec4 uCarry;
+  uniform sampler2D uIndex, uPalette, uOrder; uniform float uReveal; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze, uSway; uniform vec3 uHazeColor, uCarryColor; uniform vec4 uCarry;
   uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
@@ -109,6 +109,13 @@ const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
   }
   void main(){
     vec2 cell=floor(vUv*uRes); cell.x=mod(cell.x+floor(uScroll),uRes.x); cell.y=mod(cell.y+floor(uScrollY),uRes.y);
+    // Wind: gusts roll across in world space, bending the tops of the stalks
+    // (the texture's upper rows) while their roots stay put.
+    float gust=0.;
+    if(uSway>0.){
+      gust=pow(.5+.5*sin(vWorld.x*.3+vWorld.z*.25-uTime*2.1),3.)*.8+.2*(.5+.5*sin(vWorld.x*1.3-uTime*3.7));
+      cell.x=mod(cell.x+floor(uSway*gust*cell.y/uRes.y+.5),uRes.x);
+    }
     // Heat haze: rows slide sideways by a wavering amount.
     if(uShimmer>0.) cell.x=mod(cell.x+floor(sin(cell.y*.45+uTime*4.)*uShimmer*(1.-cell.y/uRes.y)+.5),uRes.x); vec2 uv=(cell+.5)/uRes;
     float index=floor(texture2D(uIndex,uv).r*255.+.5);
@@ -120,6 +127,8 @@ const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
     // Growing: only what lies below the rising line is built yet.
     if(cell.y/uRes.y>uGrow*1.03+(bayer4(cell)-.5)*.03) discard;
     vec3 color=texture2D(uPalette,vec2((index+.5)/256.,.5)).rgb;
+    // Bent stalks show their paler undersides: a sheen runs with the gust.
+    if(uSway>0.) color*=1.+.3*floor(gust*cell.y/uRes.y*3.+bayer4(cell))/3.;
     // Haze: distance fades toward the storm's colour in dithered steps;
     // lit windows and lamps still burn through it.
     bool lit=(index>=64.&&index<=71.)||index==90.;
@@ -156,7 +165,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
       uIndex: { value: indexTexture(painted) }, uPalette: { value: palette }, uReveal: { value: 2 },
       uOrder: { value: painted.order ? indexTexture({ ...painted, data: painted.order }) : null },
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
-      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uCarry: { value: new Vector4(0, 0, 0, 0) }, uCarryColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
+      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uSway: { value: spec.sway ?? 0 }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uCarry: { value: new Vector4(0, 0, 0, 0) }, uCarryColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
       uBursts: { value: [0, 1, 2, 3].map(() => new Vector4(0, 0, 0, 0)) }, uBurstColors: { value: [0, 1, 2, 3].map(() => new Color()) },
     },
@@ -344,7 +353,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.scrollY) runtime.scrollers.push({ material, speed: spec.scrollY, axis: 'uScrollY' })
   if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit, id: spec.id })
   if (spec.celestial) runtime.celestials.push(mesh)
-  if (spec.shimmer) runtime.shimmers.push(material)
+  if (spec.shimmer || spec.sway) runtime.shimmers.push(material)
   if (spec.grow) runtime.growers.push({ material, grow: spec.grow })
   if (spec.reveal) runtime.revealers.push({ material, reveal: spec.reveal })
   // The farther the plane, the sooner the haze swallows it.

@@ -134,6 +134,8 @@ function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number)
   ;['#2a1a1c', '#6a3a26', '#3a2218', '#5a1e2a', '#3a6a3c', '#e8d8b8'].forEach((tone, i) => writeColor(bytes, INDEX.room + i, mixHex(tone, palette.near[0], .15)))
   writeColor(bytes, INDEX.fallWater, mixHex(mixHex(palette.water, palette.far[1], .4), mixHex(palette.sky[2], '#ffffff', .55), .45))
   ;['#e8384a', '#f5c542', '#f07ab0', '#8a5ad8'].forEach((bloom, row) => writeColor(bytes, INDEX.tulip + row, mixHex(bloom, palette.light.color, .2)))
+  // Ripe wheat, shadowed stalks to sunlit ears, lit by the hour.
+  ;['#5a3e18', '#a87a2a', '#dcaa46', '#f6dc8a'].forEach((tone, step) => writeColor(bytes, INDEX.wheat + step, mixHex(mixHex(tone, palette.near[0], .25 - step * .06), palette.light.color, .22)))
   ;['#ff6a6a', '#ffb45a', '#fff27a', '#7aff9a', '#7ab4ff'].forEach((hue, band) => writeColor(bytes, INDEX.rainbow + band, mixHex(palette.far[0], hue, .55)))
 }
 

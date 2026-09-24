@@ -11,7 +11,7 @@ import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { eclipseShade, hazeAt, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
-import { paintJellyfish, paintLoopRange, paintMurmuration, paintStarTrails, paintText } from '../src/features/scene3d/pixel/pixelPaintWorlds'
+import { paintJellyfish, paintLoopRange, paintMurmuration, paintStarTrails, paintText, paintWheat } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { layer } from '../src/features/scene3d/pixel/pixelPaint'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3, type Mesh } from 'three'
@@ -764,4 +764,17 @@ test('star trails: every star sweeps the same arc round the pole and is traced i
   assert.deepEqual(exposure(0), [0])
   assert.ok(exposure(10)[0] > .3 && exposure(10)[0] < .7, 'half traced')
   assert.deepEqual(exposure(23), [1])
+})
+
+test('wheat in the wind: nearer stalks lean further, all on the one scene clock', () => {
+  const wheat = paintWheat(200, 40, 3, .02)
+  assert.ok(wheat.data.every(index => index === 0 || (index >= INDEX.wheat && index < INDEX.wheat + 4) || index === INDEX.tulip), 'gold and poppies only')
+  assert.ok(wheat.data.some(index => index === INDEX.tulip), 'the odd poppy')
+  const plan = worldPlan('pixel-wheat', resolvePixelScene('pixel-wheat', undefined))
+  const swaying = plan.layers.filter(layer => layer.sway).sort((a, b) => a.z - b.z)
+  assert.ok(swaying.length >= 4 && swaying[swaying.length - 1].sway! > swaying[0].sway!, 'the front bends the most')
+  const root = pixelWorldGroup('pixel-wheat'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-wheat-wind').pixelWorld!, 7.5, 720)
+  const clocks = (root as Group).children.map(child => (child as Mesh).material?.uniforms).filter(uniforms => uniforms?.uSway?.value > 0).map(uniforms => uniforms.uTime.value)
+  assert.deepEqual(new Set(clocks), new Set([7.5]), 'gusts follow the scene clock, so export matches the preview')
 })

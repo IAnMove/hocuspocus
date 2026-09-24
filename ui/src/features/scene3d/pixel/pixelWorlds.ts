@@ -1,6 +1,6 @@
 import { fxRandom } from '../../sceneFx/types'
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintLanternBearer, paintStreetlamp, paintHouse, paintStarTrails, paintGlowTent, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc, paintJellyfish } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintLanternBearer, paintStreetlamp, paintHouse, paintStarTrails, paintGlowTent, paintWheat, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc, paintJellyfish } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 import type { PixelPaletteId } from './pixelPalettes'
 
@@ -27,6 +27,8 @@ export type LayerSpec = {
   orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number; /** Circles on the ground (y is then z), facing where it goes. */ flat?: boolean; /** Circles this earlier orbiting layer (by `id`) instead of a fixed point. */ around?: string; /** Keeps its own facing instead of turning along its path. */ upright?: boolean }
   /** A name other layers can orbit around. */
   id?: string
+  /** Bend in the wind: how many texels the top row leans at a gust's peak. */
+  sway?: number
   /** Trace the plane in over `from`..`to` seconds, texel by texel in its painted order. */
   reveal?: { from: number; to: number }
   /** Keep this plane in one palette mood (a daylight sky over a night street). */
@@ -552,6 +554,18 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     sky(scene), range(scene), hills(scene, true),
     { ...VILLAGE, z: -20, width: 40, bottom: -.6, paint: (w, h) => paintVillage(w, h, { ...near, seed: scene.seed + 6, lightFrom: bodySkyX(scene), houses: 2 }) },
     ...reeds(scene),
+  ] }),
+  // A wheat field at the end of the day: gusts roll across it in waves,
+  // bending the ears and running a pale sheen over the gold.
+  'pixel-wheat': scene => ({ ground: 'none', clearSky: true, layers: [
+    sky(scene), range(scene),
+    { z: -50, width: 140, height: 22, bottom: 10, texture: [560, 88], scroll: -.8, paint: (w, h) => paintClouds(w, h, scene.seed, [[80, 50, 22], [260, 38, 30], [430, 60, 20]]) },
+    { z: -30, width: 110, height: 3, bottom: -1, texture: [880, 24], sway: 2, paint: (w, h) => paintWheat(w, h, scene.seed + 1, 0) },
+    { z: -20, width: 80, height: 3.2, bottom: -1.2, texture: [800, 32], sway: 3, paint: (w, h) => paintWheat(w, h, scene.seed + 2, .004) },
+    { z: -12, x: 5.5, width: 1.6, height: 7, bottom: -1, texture: [56, 260], sway: 4, paint: (w, h) => paintCypress(w, h) },
+    { z: -11, width: 46, height: 3.4, bottom: -2, texture: [690, 51], sway: 5, paint: (w, h) => paintWheat(w, h, scene.seed + 3, .008) },
+    // Tall stalks close to the lens fill the foreground and swing the most.
+    { z: -2, width: 14, height: 2.6, bottom: -1.8, texture: [420, 72], sway: 10, paint: (w, h) => paintWheat(w, h, scene.seed + 4, .012) },
   ] }),
   // A long exposure: the stars trace arcs around the pole over the whole
   // shot, doubled in the still lake, above a tent lit from inside.

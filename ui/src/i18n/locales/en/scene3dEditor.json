@@ -1509,6 +1509,10 @@
     "pixel-star-trails": {
       "title": "Star trails",
       "description": "A long exposure over a mountain lake: the stars slowly trace their arcs around the pole star as the shot goes on, doubled in the still water, above a lone tent lit from inside."
+    },
+    "pixel-wheat-wind": {
+      "title": "Wheat in the wind",
+      "description": "A golden wheat field at sunset with a lone cypress: gusts roll across it in waves, bending the ears and running a pale sheen over the gold, while clouds drift by."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1805,7 +1809,8 @@
       "pixel-blizzard": "Blizzard pass",
       "pixel-lantern": "Lantern shore",
       "pixel-empire": "Empire of light",
-      "pixel-startrails": "Star-trail lake"
+      "pixel-startrails": "Star-trail lake",
+      "pixel-wheat": "Wheat field"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

@@ -339,6 +339,22 @@ export function paintLanternBearer(width: number, height: number, frame: number,
   return bearer
 }
 
+/** A band of ripe wheat: stalks from the bottom, ears catching the light
+ *  at the top, a ragged skyline of heads and the odd poppy. */
+export function paintWheat(width: number, height: number, seed: number, poppies: number): IndexedLayer {
+  const wheat = layer(width, height)
+  for (let x = 0; x < width; x++) {
+    const top = Math.round(height * (.08 + .22 * fxRandom(seed, x) + .1 * Math.sin(x * .02 + seed)))
+    for (let y = Math.max(0, top); y < height; y++) {
+      const depth = (y - top) / (height - top), ear = y - top < height * .14
+      const tone = ear ? (bayer(x, y) < .6 ? 3 : 2) : depth < .5 ? (bayer(x, y) < .7 - depth ? 2 : 1) : (bayer(x, y) < 1.2 - depth * 1.2 ? 1 : 0)
+      set(wheat, x, y, INDEX.wheat + tone)
+    }
+    if (fxRandom(seed, x + 5000) < poppies) for (let d = 0; d < 3; d++) set(wheat, x + (d % 2), top + 1 + (d >> 1), INDEX.tulip)
+  }
+  return wheat
+}
+
 /** Star trails round a pole at (`poleX`, `poleY`) as fractions of the
  *  sky: every star sweeps the same angle, and `order` says when each
  *  texel of its arc is traced, so the exposure builds up over the shot. */
