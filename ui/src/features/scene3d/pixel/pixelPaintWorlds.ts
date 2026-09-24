@@ -1078,3 +1078,52 @@ export function paintKoi(width: number, height: number, variant: number): Indexe
   for (const dy of [-1, 1]) set(koi, Math.round(width * .6), Math.round(cy + dy * (cy + .5)), patch)
   return koi
 }
+
+function blob(target: IndexedLayer, cx: number, cy: number, rx: number, ry: number) {
+  for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+    if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) set(target, x, y, INDEX.trees)
+  }
+}
+
+function stroke(target: IndexedLayer, x0: number, y0: number, x1: number, y1: number, width: number) {
+  const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0))
+  for (let i = 0; i <= steps; i++) {
+    const t = i / Math.max(1, steps)
+    for (let w = 0; w < width; w++) set(target, Math.round(x0 + (x1 - x0) * t) + w, Math.round(y0 + (y1 - y0) * t), INDEX.trees)
+  }
+}
+
+/** One camel facing right, mid-stride for `phase` (0..1). */
+function paintCamel(target: IndexedLayer, cx: number, ground: number, phase: number, rider: boolean) {
+  const back = ground - 24
+  blob(target, cx, back + 6, 13, 7)
+  blob(target, cx - 2, back - 1, 6, 6)
+  stroke(target, cx + 10, back + 4, cx + 18, back - 7, 3)
+  blob(target, cx + 21, back - 8, 4, 2.5)
+  stroke(target, cx - 13, back + 3, cx - 15, back + 12, 1)
+  ;[-9, -5, 5, 9].forEach((x, leg) => {
+    const swing = Math.sin((phase + leg * .25 + (leg > 1 ? .5 : 0)) * Math.PI * 2) * 3
+    stroke(target, cx + x, back + 11, cx + x + swing * .4, ground - 8, 2)
+    stroke(target, cx + x + swing * .4, ground - 8, cx + x + swing, ground, 2)
+  })
+  if (rider) { blob(target, cx - 2, back - 11, 3, 5); blob(target, cx - 2, back - 17, 2.2, 2.2) }
+}
+
+/** A person walking ahead, leading the caravan. */
+function paintWalker(target: IndexedLayer, cx: number, ground: number, phase: number) {
+  blob(target, cx, ground - 26, 2.4, 2.4)
+  stroke(target, cx, ground - 23, cx, ground - 12, 3)
+  const swing = Math.sin(phase * Math.PI * 2) * 4
+  stroke(target, cx + 1, ground - 12, cx + 1 + swing, ground, 2)
+  stroke(target, cx + 1, ground - 12, cx + 1 - swing, ground, 2)
+  stroke(target, cx + 1, ground - 21, cx + 6, ground - 16, 1)
+}
+
+/** A camel caravan in silhouette, one frame of its walk. */
+export function paintCaravan(width: number, height: number, frame: number, frames: number): IndexedLayer {
+  const caravan = layer(width, height)
+  const phase = frame / frames, ground = height - 1
+  paintWalker(caravan, width - 16, ground, phase)
+  ;[0, 1, 2].forEach(i => paintCamel(caravan, width - 60 - i * 62, ground, phase + i * .33, i === 1))
+  return caravan
+}

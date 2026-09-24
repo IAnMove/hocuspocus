@@ -29,6 +29,7 @@ type PixelRuntime = {
   scrollers: { material: ShaderMaterial; speed: number }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
   celestials: Mesh[]
+  sprites: { material: ShaderMaterial; frames: DataTexture[]; fps: number }[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
@@ -112,7 +113,7 @@ function indexTexture(layer: IndexedLayer) {
 
 function layerMesh(spec: LayerSpec, palette: DataTexture) {
   const [width, height] = spec.texture
-  const painted = spec.paint(width, height)
+  const painted = spec.paint(width, height, 0)
   const material = new ShaderMaterial({
     name: 'pixel-world-layer',
     uniforms: {
@@ -126,6 +127,8 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
   })
   const mesh = new Mesh(new PlaneGeometry(spec.width, spec.height), material)
   mesh.position.set(spec.x ?? 0, spec.bottom + spec.height / 2, spec.z)
+  // Sprite animations keep every frame's texture and swap between them.
+  if (spec.frames) mesh.userData.frames = [material.uniforms.uIndex.value, ...Array.from({ length: spec.frames.count - 1 }, (_, k) => indexTexture(spec.paint(width, height, k + 1)))]
   if (spec.turn) mesh.rotation.y = spec.turn
   if (spec.floor) { mesh.rotation.x = -Math.PI / 2; mesh.position.y = spec.bottom }
   const hubs = painted.hubs
@@ -262,6 +265,7 @@ function clear(root: Object3D) {
       if (!(node instanceof Mesh)) return
       node.geometry.dispose()
       const material = node.material as ShaderMaterial
+      for (const frame of (node.userData.frames ?? []) as DataTexture[]) frame.dispose()
       material.uniforms?.uIndex?.value?.dispose?.()
       material.dispose()
     })
@@ -273,7 +277,7 @@ function clear(root: Object3D) {
  *  layout (not the lighting) changes. */
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -292,6 +296,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
     if (spec.scroll) runtime.scrollers.push({ material: mesh.material as ShaderMaterial, speed: spec.scroll })
     if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
     if (spec.celestial) runtime.celestials.push(mesh)
+    if (spec.frames) runtime.sprites.push({ material: mesh.material as ShaderMaterial, frames: mesh.userData.frames, fps: spec.frames.fps })
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
     if (hubs) sailsOn(spec, hubs, runtime.palette, runtime, root)
@@ -308,7 +313,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [], sprites: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -330,6 +335,7 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
   for (const spinner of runtime.spinners) spinner.mesh.rotation.z = seconds * spinner.speed
   // Shafts brighten with their glass as the sun moves round.
   for (const shaft of runtime.shafts) (shaft.material as ShaderMaterial).uniforms.uPower.value = .5 + .5 * Math.sin(seconds * .5 - shaft.userData.hue * 1.05)
+  for (const sprite of runtime.sprites) sprite.material.uniforms.uIndex.value = sprite.frames[Math.floor(seconds * sprite.fps) % sprite.frames.length]
   for (const scroller of runtime.scrollers) scroller.material.uniforms.uScroll.value = seconds * scroller.speed
   for (const { mesh, orbit } of runtime.orbiters) {
     const angle = orbit.phase + seconds * orbit.speed

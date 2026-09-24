@@ -116,6 +116,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-moon-caravan': ['pixel-caravan', { palettes: ['dusk', 'midnight'], hold: 12, meteors: .4 }],
   'pixel-koi-pond': ['pixel-koi', { palettes: ['jungle', 'midnight'], hold: 12, meteors: 0 }],
   'pixel-cathedral': ['pixel-cathedral', { palettes: ['nave'], hold: 20, meteors: 0 }],
   'pixel-four-seasons': ['pixel-seasons', { palettes: ['dawn', 'jungle', 'sunset', 'polar'], hold: 6, meteors: 0 }],
@@ -191,6 +192,8 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   // the planet looked up to, the reef from below in the light.
   if (id === 'pixel-storm-lake') doc.camera = { family: 'establishment', eye: [0, 1.2, 9], look: [0, 3.6, -40], fov: 50 }
   if (id === 'pixel-planet-rise') doc.camera = { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 }
+  // A long lens: the moon looms and the caravan fills its disc.
+  if (id === 'pixel-moon-caravan') doc.camera = { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.5, -40], fov: 20 }
   // Looking down on the pond from above.
   if (id === 'pixel-koi-pond') doc.camera = { family: 'fixed', eye: [0, 13.5, 3.2], look: [0, 0, 0], fov: 50 }
   if (id === 'pixel-cathedral') doc.camera = { family: 'establishment', eye: [0, 1.7, 8], look: [0, 6, -20], fov: 56 }

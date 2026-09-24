@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -21,7 +21,10 @@ export type LayerSpec = {
   orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number; /** Circles on the ground (y is then z), facing where it goes. */ flat?: boolean }
   /** The sun or moon on its arc: the key light follows whichever is higher. */
   celestial?: 'sun' | 'moon'
-  paint: (w: number, h: number) => IndexedLayer
+  /** Paints frame `frame` of `frames` when the layer is a sprite animation. */
+  paint: (w: number, h: number, frame?: number) => IndexedLayer
+  /** A sprite animation: this many frames, shown at `fps`. */
+  frames?: { count: number; fps: number }
 }
 /** A shaft of coloured light from a window to the floor, in meters. */
 export type Beam = { from: [number, number, number]; to: [number, number, number]; width: number; hue: number }
@@ -316,6 +319,14 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       paint: (w: number, h: number) => paintKoi(w, h, i),
     })),
     { z: 0, width: 32, height: 22, bottom: .05, floor: true, texture: [512, 352], paint: (w, h) => paintLilies(w, h, scene.seed + 5, Math.round(6 + scene.trees * 8)) },
+  ] }),
+  'pixel-caravan': scene => ({ ground: 'sand', layers: [
+    sky(scene),
+    { ...FAR, paint: (w, h) => paintMesas(w, h, { ...far, seed: scene.seed + 1, lightFrom: bodySkyX(scene), tall: .1 + scene.mountains * .3, count: 3 }) },
+    // A long dune crest, and the caravan walking along it against the moon.
+    { z: -24, width: 90, height: 4, bottom: -.6, texture: [900, 40], paint: (w, h) => paintLoopRange(w, h, { ...near, seed: scene.seed + 2, lightFrom: bodySkyX(scene), base: h * .4, amp: h * .06, trees: 0 }) },
+    { z: -24.2, width: 14, height: 2.2, bottom: 1.75, texture: [280, 44], frames: { count: 4, fps: 5 },
+      drift: { speed: .6, loop: 60, offset: 23.5 }, paint: (w, h, frame = 0) => paintCaravan(w, h, frame, 4) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

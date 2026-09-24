@@ -470,3 +470,21 @@ test('koi pond: seen from above, koi circle on the ground plane facing where the
   const travel = Math.atan2(-(b.at.z - a.at.z), b.at.x - a.at.x)
   assert.ok(Math.abs(Math.atan2(Math.sin(travel - a.heading), Math.cos(travel - a.heading))) < .2, 'each koi faces where it swims')
 })
+
+test('moon caravan: the camels walk frame by frame as the caravan crosses', () => {
+  const plan = worldPlan('pixel-caravan', resolvePixelScene('pixel-caravan', undefined))
+  const caravan = plan.layers.find(layer => layer.frames)!
+  const frames = [0, 1, 2, 3].map(frame => Array.from(caravan.paint(...caravan.texture, frame).data).join(''))
+  assert.equal(new Set(frames).size, 4, 'four distinct steps')
+  const root = pixelWorldGroup('pixel-caravan'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-moon-caravan').pixelWorld!
+  const state = (seconds: number) => {
+    paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)
+    const mesh = (root as Group).children.find(child => child.userData.frames) as Mesh
+    return { x: mesh.position.x, texture: mesh.material.uniforms.uIndex.value }
+  }
+  const a = state(1), b = state(1.25)
+  assert.ok(b.x > a.x, 'the caravan advances')
+  assert.notEqual(a.texture, b.texture, 'and steps to the next frame')
+  assert.equal(state(1).texture, a.texture, 'frames follow the clock')
+})
