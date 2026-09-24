@@ -35563,7 +35563,7 @@ async def move_output(name: str, request: Request):
     if target_ws != "default" and not _re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', target_ws):
         raise HTTPException(status_code=400, detail="Invalid workspace name")
 
-    src_dir = _workspace_dir()
+    src_dir = _workspace_dir(body.get("source_workspace") or None)
     dst_dir = _workspace_dir(target_ws)
     if os.path.realpath(src_dir) == os.path.realpath(dst_dir):
         raise HTTPException(status_code=400, detail="Already in that workspace")
@@ -35640,7 +35640,7 @@ async def move_output(name: str, request: Request):
 
 
 @api.delete("/api/v1/outputs/{name}")
-def delete_output(name: str):
+def delete_output(name: str, workspace: str | None = None):
     """Delete an output file and its sidecar metadata.
 
     Uses safe_delete() which handles Windows file-lock edge cases:
@@ -35652,12 +35652,16 @@ def delete_output(name: str):
         3. As a last resort returns {"deleted": False, "reason": "locked"}
            — but with share-delete on the serve side this is now nearly
            impossible to reach in normal use.
+
+    ``workspace`` is the folder the gallery was listing. Without it the
+    active workspace is used, which is wrong if another tab switched
+    folders while a batch delete was still in flight.
     """
     import gc
     from services.win_safe_files import safe_delete
-    out_dir = _workspace_dir()
-    filepath = os.path.join(out_dir, name)
-    if not os.path.isfile(filepath):
+    out_dir = _workspace_dir(workspace)
+    filepath = _safe_join(out_dir, name)
+    if filepath is None or not os.path.isfile(filepath):
         return {"deleted": name}
 
     # Hint the GC to drop any lingering references (e.g. PIL image

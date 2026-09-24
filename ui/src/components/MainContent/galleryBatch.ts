@@ -1,4 +1,5 @@
 import { deleteOutput, moveOutput, toggleFavorite } from '../../api/outputs'
+import { galleryWorkspaceName } from '../../stores/gallerySlice'
 import { useStore } from '../../stores/useStore'
 import type { OutputFile } from '../../types'
 
@@ -44,10 +45,21 @@ export async function runGalleryBatch(action: GalleryBatchAction, files: OutputF
     return { failed }
   }
 
+  const sourceWorkspace = galleryWorkspaceName(useStore.getState())
   const names = files.map(file => file.name)
-  const failed = await eachLimited(names, name => (action.kind === 'delete' ? deleteOutput(name) : moveOutput(name, action.workspace)))
+  const failed = await eachLimited(names, name => (
+    action.kind === 'delete'
+      ? deleteOutput(name, sourceWorkspace)
+      : moveOutput(name, action.workspace, sourceWorkspace)
+  ))
   const removed = new Set(names.filter(name => !failed.includes(name)))
+  // A workspace switch (this tab or another) replaced the list. The files
+  // were still removed from the folder we listed; do not rewrite the new list.
+  if (galleryWorkspaceName(useStore.getState()) !== sourceWorkspace) {
+    return { failed }
+  }
   useStore.setState(state => {
+    if (galleryWorkspaceName(state) !== sourceWorkspace) return state
     const outputs = state.outputs.filter(file => !removed.has(file.name))
     return {
       outputs,

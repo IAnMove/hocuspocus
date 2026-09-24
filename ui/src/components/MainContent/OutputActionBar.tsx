@@ -8,6 +8,7 @@ import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { MediaMoveDialog } from './MediaMoveDialog'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { useUiTranslation } from '../../i18n'
+import { galleryWorkspaceName } from '../../stores/gallerySlice'
 import { useStore } from '../../stores/useStore'
 import { fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, selectPipelineClipVideo } from '../../api/client'
 import type { OutputFile } from '../../types'
@@ -231,10 +232,11 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
     setMoving(true)
     setShowMoveMenu(false)
     try {
-      await moveOutput(file.name, targetWs)
+      await moveOutput(file.name, targetWs, outputWorkspace)
       onBeforeRemove?.()
       // Immediately remove from local state (source may still exist during deferred cleanup)
       const store = useStore.getState()
+      if (galleryWorkspaceName(store) !== outputWorkspace) return
       const filtered = store.outputs.filter(o => o.name !== file.name)
       useStore.setState({ outputs: filtered, selectedOutput: Math.min(store.selectedOutput, Math.max(0, filtered.length - 1)) })
     } catch (e) {
