@@ -360,16 +360,18 @@ export function paintModernHouse(width: number, height: number): IndexedLayer {
  *  far end, the coping and a diving board. */
 export function paintPool(width: number, height: number): IndexedLayer {
   const pool = layer(width, height)
-  const left = Math.round(width * .3), right = Math.round(width * .7), far = Math.round(height * .12), near = Math.round(height * .62)
-  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const inside = x >= left && x < right && y >= far && y < near
-    const rim = !inside && x >= left - 3 && x < right + 3 && y >= far - 3 && y < near + 3
-    const depth = inside ? 3 - Math.min(3, Math.floor((near - y) / (near - far) * 3 + bayer(x, y))) : 0
-    set(pool, x, y, inside ? INDEX.pool + depth : rim ? INDEX.coping : bayer(x, y) < .25 ? INDEX.sand + 1 : INDEX.sand)
-  }
-  const board = Math.round((left + right) / 2)
-  for (let y = near - 16; y < near + 10; y++) for (let x = board - 3; x <= board + 3; x++) set(pool, x, y, x === board + 3 ? INDEX.farShade : INDEX.coping)
+  const box = { left: Math.round(width * .3), right: Math.round(width * .7), far: Math.round(height * .12), near: Math.round(height * .62) }
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) set(pool, x, y, poolTexel(x, y, box))
+  const board = Math.round((box.left + box.right) / 2)
+  for (let y = box.near - 16; y < box.near + 10; y++) for (let x = board - 3; x <= board + 3; x++) set(pool, x, y, x === board + 3 ? INDEX.farShade : INDEX.coping)
   return pool
+}
+
+/** Water deepening toward the far end, the coping round it, deck beyond. */
+function poolTexel(x: number, y: number, { left, right, far, near }: Record<'left' | 'right' | 'far' | 'near', number>) {
+  if (x >= left && x < right && y >= far && y < near) return INDEX.pool + 3 - Math.min(3, Math.floor((near - y) / (near - far) * 3 + bayer(x, y)))
+  if (x >= left - 3 && x < right + 3 && y >= far - 3 && y < near + 3) return INDEX.coping
+  return bayer(x, y) < .25 ? INDEX.sand + 1 : INDEX.sand
 }
 
 /** A band of ripe wheat: stalks from the bottom, ears catching the light
