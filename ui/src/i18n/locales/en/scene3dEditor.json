@@ -1457,6 +1457,10 @@
     "pixel-roadside-motel": {
       "title": "Roadside motel",
       "description": "A desert motel at night: its tall neon sign spells M-O-T-E-L letter by letter, flashes and starts again, an arrow of bulbs chases toward the office, VACANCY buzzes and the rooms glow under the stars."
+    },
+    "pixel-tidal-abbey": {
+      "title": "Tidal abbey",
+      "description": "An abbey on its rock, reached by a stone causeway at low tide; as the sun sets the tide comes in over the causeway and cuts the island off, then ebbs again under the night sky."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1739,7 +1743,8 @@
       "pixel-grotto": "Grotto",
       "pixel-starry": "Starry night",
       "pixel-dawnmist": "Misty ridges",
-      "pixel-motel": "Motel"
+      "pixel-motel": "Motel",
+      "pixel-tidal": "Tidal island"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

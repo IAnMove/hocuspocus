@@ -36,7 +36,7 @@ export type LayerSpec = {
 }
 /** A shaft of coloured light from a window to the floor, in meters. */
 export type Beam = { from: [number, number, number]; to: [number, number, number]; width: number; hue: number }
-export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean; /** No aurora ever hangs here. */ clearSky?: boolean; /** Raindrops ring the water, 0..1. */ rain?: number; /** The world's light breathes in this colour. */ pulse?: string }
+export type WorldPlan = { beams?: Beam[]; layers: LayerSpec[]; ground: 'water' | 'sand' | 'field' | 'none'; /** Height of the floor, meters. */ groundY?: number; /** Fireworks burst in the sky. */ fireworks?: boolean; /** No aurora ever hangs here. */ clearSky?: boolean; /** Raindrops ring the water, 0..1. */ rain?: number; /** The world's light breathes in this colour. */ pulse?: string; /** The water rises and falls between `low` and `high` meters over `period` seconds. */ tide?: { low: number; high: number; period: number } }
 
 const SKY: Omit<LayerSpec, 'paint'> = { z: -62, width: 170, height: 52, bottom: -4, texture: [700, 214], sky: true }
 const FAR: Omit<LayerSpec, 'paint'> = { z: -46, width: 130, height: 30, bottom: -1.5, texture: [680, 157] }
@@ -70,6 +70,11 @@ export function launchGlow(seconds: number) {
 
 /** Mist ridges: depth, height, ridge base, and when their mist burns off. */
 const MIST_RIDGES: [number, number, number, number, number][] = [[-40, 14, .45, 9, 18], [-32, 10, .5, 6, 14], [-24, 7, .55, 3, 10]]
+
+/** The water level at `seconds`: low at the start, high tide mid-period. */
+export function tideLevel(tide: NonNullable<WorldPlan['tide']>, seconds: number) {
+  return tide.low + (tide.high - tide.low) * (.5 - .5 * Math.cos(seconds / tide.period * Math.PI * 2))
+}
 
 /** A day in the day-cycle world lasts as long as its template's clip. */
 export const DAY_SECONDS = 24
@@ -409,6 +414,13 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { ...FAR, paint: (w, h) => paintMesas(w, h, { ...far, seed: scene.seed + 1, lightFrom: bodySkyX(scene), tall: .1 + scene.mountains * .3, count: 4 }) },
     { z: -16, width: 34, height: 9, bottom: -.1, texture: [340, 90], paint: (w, h) => paintMotel(w, h) },
     { z: -6, width: 14, height: 1.3, bottom: 0, texture: [224, 21], paint: (w, h) => paintCars(w, h, { seed: scene.seed + 4, count: 5, body: INDEX.trees, rim: INDEX.near }) },
+  ] }),
+  'pixel-tidal': scene => ({ ground: 'water', tide: { low: -.6, high: .45, period: 24 }, layers: [
+    sky(scene), range(scene),
+    // The abbey on its rock, and the stone causeway the tide covers.
+    { z: -24, width: 30, height: 15, bottom: -1.2, texture: [300, 150], paint: (w, h) => paintCastle(w, h, { body: INDEX.near, rim: INDEX.farRim, seed: scene.seed + 4, lightFrom: bodySkyX(scene) }) },
+    { z: -7, width: 2.2, height: 30, bottom: 0, floor: true, texture: [22, 300], paint: (w, h) => paintFlagstones(w, h, scene.seed) },
+    ...reeds(scene),
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

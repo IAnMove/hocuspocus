@@ -12,7 +12,7 @@ import type { IndexedLayer } from './pixelPaint'
 import { fireworksAt, GLASS, meteorsAt, writePalette } from './pixelCycle'
 import { defaultPixelWorld, type PixelWorld } from './pixelWorld'
 import { bodyDirection, isPixelWorldKind, PIXEL_WORLD_KINDS, resolvePixelScene, type PixelScene, type PixelWorldKind } from './pixelScene'
-import { eclipseShade, launchGlow, worldPlan, type Beam, type LayerSpec } from './pixelWorlds'
+import { eclipseShade, launchGlow, tideLevel, worldPlan, type Beam, type LayerSpec, type WorldPlan } from './pixelWorlds'
 
 export type PixelDressing = PixelWorldKind | 'pixel-gallery'
 export const PIXEL_DRESSINGS: readonly PixelDressing[] = [...PIXEL_WORLD_KINDS, 'pixel-gallery']
@@ -28,6 +28,8 @@ type PixelRuntime = {
   clearSky?: boolean
   rain?: number
   pulse?: string
+  tide?: WorldPlan['tide']
+  lake?: Object3D
   spinners: { mesh: Mesh; speed: number }[]
   scrollers: { material: ShaderMaterial; speed: number; axis: 'uScroll' | 'uScrollY' }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
@@ -326,6 +328,8 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   runtime.clearSky = plan.clearSky
   runtime.rain = plan.rain
   runtime.pulse = plan.pulse
+  runtime.tide = plan.tide
+  runtime.lake = undefined
   for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
   for (const spec of plan.layers) {
     const { mesh, lamp, hubs } = layerMesh(spec, runtime.palette)
@@ -339,6 +343,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   if (plan.ground === 'sand') { root.add(sandFloor(runtime.palette, plan.groundY)); return }
   const lake = water(150, 54, -11)
   runtime.water = lake.material as ShaderMaterial
+  runtime.lake = lake
   root.add(lake)
 }
 
@@ -393,6 +398,8 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
     const t = Math.max(0, Math.min(1, (seconds - dissolve.from) / (dissolve.to - dissolve.from)))
     material.uniforms.uDissolve.value = dissolve.appear ? 1.001 - t : t * 1.001
   }
+  // The tide lifts the whole lake, covering whatever lies low.
+  if (runtime.lake && runtime.tide) runtime.lake.position.y = tideLevel(runtime.tide, seconds)
   for (const spinner of runtime.spinners) spinner.mesh.rotation.z = seconds * spinner.speed
   // Shafts brighten with their glass as the sun moves round.
   for (const shaft of runtime.shafts) (shaft.material as ShaderMaterial).uniforms.uPower.value = .5 + .5 * Math.sin(seconds * .5 - shaft.userData.hue * 1.05)

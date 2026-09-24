@@ -9,7 +9,7 @@ import { INDEX, paintRange, paintSky, ridge } from '../src/features/scene3d/pixe
 import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
-import { eclipseShade, launchGlow, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
+import { eclipseShade, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
 import { paintLoopRange, paintMurmuration, paintText } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { layer } from '../src/features/scene3d/pixel/pixelPaint'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
@@ -596,4 +596,17 @@ test('roadside motel: the sign spells itself out letter by letter', () => {
   const plan = worldPlan('pixel-motel', resolvePixelScene('pixel-motel', undefined))
   const motel = plan.layers.find(layer => layer.z === -16)!.paint(340, 90)
   assert.ok([164, 165, 166, 167, 168, 169].every(slot => motel.data.includes(slot)), 'MOTEL and VACANCY on the sign')
+})
+
+test('tidal abbey: the tide rises over the causeway and ebbs again', () => {
+  const plan = worldPlan('pixel-tidal', resolvePixelScene('pixel-tidal', undefined))
+  const tide = plan.tide!
+  assert.equal(tideLevel(tide, 0), tide.low)
+  assert.ok(Math.abs(tideLevel(tide, 12) - tide.high) < 1e-9, 'high tide at mid-clip')
+  const causeway = plan.layers.find(layer => layer.floor)!
+  assert.ok(tide.low < causeway.bottom && causeway.bottom < tide.high, 'the causeway is dry at low tide and drowned at high tide')
+  const root = pixelWorldGroup('pixel-tidal'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-tidal-abbey').pixelWorld!
+  const level = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.find(child => child.position.z === -11)!.position.y }
+  assert.ok(level(12) > level(2) && level(22) < level(12))
 })
