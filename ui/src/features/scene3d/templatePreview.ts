@@ -1,5 +1,5 @@
 import { applyScene3DTemplate } from './templates.ts'
-import { syncDressing } from './dressing.ts'
+import { dropDressing, syncDressing } from './dressing.ts'
 import {
   applyLight,
   createWorld,
@@ -10,11 +10,14 @@ import {
   setWorldSize,
   type GpuWorld,
 } from './gpu.ts'
-import type { Scene3DLight, Scene3DSlot, Scene3DTemplateId } from './types.ts'
+import { createPixelWorldCache, isPixelDressing } from './pixel/pixelWorldSet'
+import type { Scene3DDressing, Scene3DLight, Scene3DSlot, Scene3DTemplateId } from './types.ts'
 
 const WIDTH = 320
 const HEIGHT = 180
+const PREVIEW_SLOT_CAP = 8
 const FALLBACK_LIGHT: Scene3DLight = { kind: 'directional', direction: [-0.5, -1, -0.3], intensity: 1.6, color: '#fff0d9' }
+const previewPixels = createPixelWorldCache(8)
 
 type Watcher = { id: Scene3DTemplateId; canvas: HTMLCanvasElement }
 
@@ -25,7 +28,27 @@ let raf = 0
 let cursor = 0
 
 function visibleSlots(slots: readonly Scene3DSlot[]) {
-  return slots.filter(slot => !(slot.media === 'image' && !slot.sourceUrl))
+  return slots.filter(slot => !(slot.media === 'image' && !slot.sourceUrl)).slice(0, PREVIEW_SLOT_CAP)
+}
+
+function attachPreviewDressing(pack: GpuWorld, kind: Scene3DDressing | undefined) {
+  const key = kind ?? 'none'
+  if (lastDressing === key) return
+  if (pack.dressing?.userData.pixelWorld) {
+    pack.scene.remove(pack.dressing)
+    pack.dressing = null
+  } else {
+    dropDressing(pack)
+  }
+  lastDressing = key
+  if (isPixelDressing(kind)) {
+    pack.dressing = previewPixels.take(kind)
+    pack.scene.add(pack.dressing)
+    pack.floor.visible = false
+    pack.floor.position.y = -80
+    return
+  }
+  syncDressing(pack, kind)
 }
 
 function ensure(): GpuWorld | null {
@@ -64,11 +87,7 @@ function tick(now: number) {
   cursor++
   const doc = applyScene3DTemplate(watcher.id)
   const slots = visibleSlots(doc.slots)
-  const dressingKey = doc.dressing ?? 'none'
-  if (lastDressing !== dressingKey) {
-    syncDressing(pack, doc.dressing)
-    lastDressing = dressingKey
-  }
+  attachPreviewDressing(pack, doc.dressing)
   applyLight(pack.dir, doc.light)
   pruneSlots(pack, slots)
   for (const slot of slots) {
