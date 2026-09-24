@@ -1469,6 +1469,10 @@
     "pixel-cloud-shadows": {
       "title": "Sombras de nubes",
       "description": "Una tarde soleada sobre prados abiertos: nubes esponjosas cruzan el cielo y sus sombras tramadas se deslizan por la hierba y las flores debajo de ellas, hasta que la luz se vuelve dorada al atardecer."
+    },
+    "pixel-fjord": {
+      "title": "Fiordo",
+      "description": "La cámara se desliza entre las paredes verticales de un fiordo bajo la aurora: los acantilados cercanos pasan más rápido que los picos nevados del fondo, revelando la profundidad del mundo pintado, todo reflejado en el agua quieta."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1754,7 +1758,8 @@
       "pixel-motel": "Motel",
       "pixel-tidal": "Isla de marea",
       "pixel-mirage": "Espejismo",
-      "pixel-meadow": "Prado"
+      "pixel-meadow": "Prado",
+      "pixel-fjord": "Fiordo"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

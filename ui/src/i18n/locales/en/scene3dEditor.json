@@ -1469,6 +1469,10 @@
     "pixel-cloud-shadows": {
       "title": "Cloud shadows",
       "description": "A sunny afternoon over wide meadows: puffy clouds drift across the sky and their dithered shadows glide over the grass and flowers beneath them, until the light turns gold at sunset."
+    },
+    "pixel-fjord": {
+      "title": "Fjord",
+      "description": "The camera glides between the sheer walls of a fjord under the aurora: the near cliffs slide past faster than the snowy peaks at its end, revealing the depth of the painted world, all mirrored in the still water."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1754,7 +1758,8 @@
       "pixel-motel": "Motel",
       "pixel-tidal": "Tidal island",
       "pixel-mirage": "Mirage",
-      "pixel-meadow": "Meadow"
+      "pixel-meadow": "Meadow",
+      "pixel-fjord": "Fjord"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

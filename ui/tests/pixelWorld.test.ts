@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { parseScene3DDocument } from '../src/features/scene3d/document'
+import { cameraEyeAtTime } from '../src/features/scene3d/camera'
 import { applyScene3DTemplate, SCENE3D_TEMPLATES } from '../src/features/scene3d/templates'
 import { parseMediaScreen } from '../src/features/scene3d/mediaScreen'
 import { paletteAt, PIXEL_PALETTES } from '../src/features/scene3d/pixel/pixelPalettes'
@@ -633,4 +634,14 @@ test('cloud shadows: clouds and their shadows slide across together and wrap', (
   const pixel = applyScene3DTemplate('pixel-cloud-shadows').pixelWorld!
   const slide = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms?.uScroll?.value ?? 0).filter(Boolean) }
   assert.notDeepEqual(slide(1), slide(4))
+})
+
+test('fjord: the camera glides between the walls, revealing the depth', () => {
+  const doc = applyScene3DTemplate('pixel-fjord')
+  assert.equal(doc.camera.family, 'orbit')
+  const start = cameraEyeAtTime(doc.camera, 0, doc.duration), end = cameraEyeAtTime(doc.camera, doc.duration, doc.duration)
+  assert.ok(Math.hypot(end[0] - start[0], end[2] - start[2]) > 4, 'a real move, not a still')
+  const walls = worldPlan('pixel-fjord', resolvePixelScene('pixel-fjord', undefined)).layers.filter(layer => layer.turn)
+  assert.equal(walls.length, 2)
+  for (const eye of [start, end]) assert.ok(walls.every(wall => Math.abs(eye[0]) < Math.abs(wall.x!)), 'the camera stays between the walls')
 })

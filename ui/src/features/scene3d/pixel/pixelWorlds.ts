@@ -445,6 +445,15 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       { z: -10, width: 120, height: 48, bottom: .04, floor: true, texture: [480, 192], scroll: -6, paint: (w, h) => paintCloudShadows(w, h, shadows) },
     ] }
   },
+  'pixel-fjord': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene),
+    // Sheer walls either side, running away from the camera down the fjord.
+    ...([-1, 1] as const).map(side => ({
+      z: -20, x: side * 16, turn: -side * Math.PI / 2, width: 90, height: 15, bottom: -1, texture: [720, 120] as [number, number],
+      paint: (w: number, h: number) => paintRange(w, h, { body: INDEX.near, rim: INDEX.nearRim, shade: INDEX.farShade, seed: scene.seed + 30 + side, lightFrom: side < 0 ? .9 : .1,
+        base: h * .55, rough: h * .2, peaks: 5, peakLift: h * .4, snow: scene.snow * h * .35 }),
+    })),
+  ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },
