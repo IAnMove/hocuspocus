@@ -14,8 +14,10 @@ export function applyScreenToAllTvs(document: Scene3DDocument, sourceId: string)
   }
 }
 
-/** A new CRT beside the others, playing what the first TV plays. */
+/** A new CRT beside the others, playing what the first TV plays.
+ *  The document cap is 64 slots; crossing it makes save/reload reject the scene. */
 export function addTv(document: Scene3DDocument): Scene3DDocument {
+  if (document.slots.length >= 64) return document
   const screens = document.slots.filter(slot => slot.media === 'screen')
   const taken = new Set(document.slots.map(slot => slot.id))
   let n = screens.length + 1

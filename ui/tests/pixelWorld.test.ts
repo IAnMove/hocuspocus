@@ -87,6 +87,18 @@ test('TVs: CRT screens keep their tube colour, share one recording and can be ad
   assert.equal(new Set(more.slots.map(slot => slot.id)).size, more.slots.length)
 })
 
+test('adding TVs stops at 64 slots so the scene still saves and reopens', () => {
+  const wall = applyScene3DTemplate('pixel-tv-wall')
+  assert.ok(wall.slots.length < 64)
+  let scene = wall
+  for (let i = wall.slots.length; i < 70; i++) scene = addTv(scene)
+  assert.equal(scene.slots.length, 64)
+  assert.equal(addTv(scene), scene)
+  assert.ok(parseScene3DDocument(JSON.parse(JSON.stringify(scene))))
+  const overflow = { ...scene, slots: [...scene.slots, { ...scene.slots[0], id: 'overflow-tv' }] }
+  assert.equal(parseScene3DDocument(JSON.parse(JSON.stringify(overflow))), null)
+})
+
 test('every world paints its planes from a layout that can be reimagined', () => {
   for (const kind of PIXEL_WORLD_KINDS) {
     const scene = resolvePixelScene(kind, undefined)
