@@ -129,6 +129,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
   // Storm, clearing, a green afternoon, then a warm evening.
   // A day passes as the city is built: dawn, day, evening and a lit night.
+  'pixel-hockney-pool': ['pixel-pool', { palettes: ['noon', 'sunset'], hold: 12, meteors: 0 }],
   'pixel-wheat-wind': ['pixel-wheat', { palettes: ['sunset', 'dusk'], hold: 12, meteors: 0 }],
   'pixel-star-trails': ['pixel-startrails', { palettes: ['midnight'], hold: 24, meteors: .5 }],
   'pixel-empire-of-light': ['pixel-empire', { palettes: ['midnight'], hold: 20, meteors: 0 }],
@@ -195,6 +196,8 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   // than the far peaks, showing the world's depth.
   'pixel-orrery': { family: 'fixed', eye: [0, 22, 9], look: [0, 0, .5], fov: 56 },
   // Close on the shore, so the walker crosses the frame with the light.
+  // From the terrace, looking down the pool to the house.
+  'pixel-hockney-pool': { family: 'fixed', eye: [0, 3.4, 8], look: [0, 1, -14], fov: 50 },
   'pixel-wheat-wind': { family: 'fixed', eye: [0, 1.1, 4], look: [0, 1.6, -30], fov: 50 },
   'pixel-empire-of-light': { family: 'fixed', eye: [0, 2.4, 2], look: [0, 4.2, -20], fov: 52 },
   'pixel-lantern-walk': { family: 'fixed', eye: [0, 1.3, -2], look: [0, 1.2, -14], fov: 40 },

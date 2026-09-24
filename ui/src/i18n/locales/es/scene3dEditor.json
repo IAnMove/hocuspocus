@@ -1513,6 +1513,10 @@
     "pixel-wheat-wind": {
       "title": "Trigo al viento",
       "description": "Un campo de trigo dorado al atardecer con un ciprés solitario: las rachas lo recorren en olas, doblando las espigas y dejando un brillo pálido sobre el oro, mientras pasan las nubes."
+    },
+    "pixel-hockney-pool": {
+      "title": "Piscina al sol",
+      "description": "Inspirado en Hockney: una casa rosa de tejado plano, dos palmeras altas meciéndose y una piscina cuyo fondo baila con una red de luz, mientras el día luminoso de California se vuelve tarde."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1810,7 +1814,8 @@
       "pixel-lantern": "Orilla del farol",
       "pixel-empire": "Imperio de las luces",
       "pixel-startrails": "Lago de estelas",
-      "pixel-wheat": "Campo de trigo"
+      "pixel-wheat": "Campo de trigo",
+      "pixel-pool": "Piscina de Hockney"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

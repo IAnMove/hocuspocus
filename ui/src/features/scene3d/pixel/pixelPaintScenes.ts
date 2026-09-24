@@ -339,6 +339,39 @@ export function paintLanternBearer(width: number, height: number, frame: number,
   return bearer
 }
 
+/** A flat-roofed house in the sun: one long wall, a band of glass
+ *  reflecting the sky and a slim overhang. */
+export function paintModernHouse(width: number, height: number): IndexedLayer {
+  const house = layer(width, height)
+  const top = Math.round(height * .14)
+  for (let y = top; y < height; y++) for (let x = 0; x < width; x++) set(house, x, y, INDEX.far)
+  for (let x = 0; x < width; x++) for (let y = top - 3; y < top; y++) set(house, x, y, INDEX.farRim)
+  for (let x = 0; x < width; x++) set(house, x, top, INDEX.farShade)
+  const glassTop = Math.round(height * .36), glassBottom = Math.round(height * .82), left = Math.round(width * .3), right = Math.round(width * .92)
+  for (let y = glassTop; y < glassBottom; y++) for (let x = left; x < right; x++) {
+    const mullion = (x - left) % 22 === 0 || x === right - 1 || y === glassTop || y === glassBottom - 1
+    set(house, x, y, mullion ? INDEX.farRim : INDEX.sky + 4 + Math.round(((y - glassTop) / (glassBottom - glassTop)) * 8))
+  }
+  for (let y = glassTop + 4; y < height; y++) for (let x = Math.round(width * .1); x < width * .18; x++) set(house, x, y, INDEX.farShade)
+  return house
+}
+
+/** A pool on a pale stone deck, seen from above: blue deepening toward the
+ *  far end, the coping and a diving board. */
+export function paintPool(width: number, height: number): IndexedLayer {
+  const pool = layer(width, height)
+  const left = Math.round(width * .3), right = Math.round(width * .7), far = Math.round(height * .12), near = Math.round(height * .62)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const inside = x >= left && x < right && y >= far && y < near
+    const rim = !inside && x >= left - 3 && x < right + 3 && y >= far - 3 && y < near + 3
+    const depth = inside ? 3 - Math.min(3, Math.floor((near - y) / (near - far) * 3 + bayer(x, y))) : 0
+    set(pool, x, y, inside ? INDEX.pool + depth : rim ? INDEX.coping : bayer(x, y) < .25 ? INDEX.sand + 1 : INDEX.sand)
+  }
+  const board = Math.round((left + right) / 2)
+  for (let y = near - 16; y < near + 10; y++) for (let x = board - 3; x <= board + 3; x++) set(pool, x, y, x === board + 3 ? INDEX.farShade : INDEX.coping)
+  return pool
+}
+
 /** A band of ripe wheat: stalks from the bottom, ears catching the light
  *  at the top, a ragged skyline of heads and the odd poppy. */
 export function paintWheat(width: number, height: number, seed: number, poppies: number): IndexedLayer {

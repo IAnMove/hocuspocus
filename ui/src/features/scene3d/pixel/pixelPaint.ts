@@ -7,7 +7,7 @@ export const INDEX = {
   sky: 1, skySteps: 16,
   star: 20, starSteps: 8,
   moon: 30, moonShade: 31, haloInner: 32, haloOuter: 33, moonDark: 34,
-  far: 40, farRim: 41, farShade: 42,
+  far: 40, farRim: 41, farShade: 42, pool: 43, poolSteps: 4, coping: 47,
   near: 50, nearRim: 51, wheat: 52,
   trees: 60,
   window: 64, windowSteps: 8,

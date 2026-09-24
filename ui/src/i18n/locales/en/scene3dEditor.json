@@ -1513,6 +1513,10 @@
     "pixel-wheat-wind": {
       "title": "Wheat in the wind",
       "description": "A golden wheat field at sunset with a lone cypress: gusts roll across it in waves, bending the ears and running a pale sheen over the gold, while clouds drift by."
+    },
+    "pixel-hockney-pool": {
+      "title": "Pool in the sun",
+      "description": "After Hockney: a flat pink house, two tall palms swaying and a pool whose floor swims with a moving net of caustics, as the bright California day turns to evening."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1810,7 +1814,8 @@
       "pixel-lantern": "Lantern shore",
       "pixel-empire": "Empire of light",
       "pixel-startrails": "Star-trail lake",
-      "pixel-wheat": "Wheat field"
+      "pixel-wheat": "Wheat field",
+      "pixel-pool": "Hockney pool"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

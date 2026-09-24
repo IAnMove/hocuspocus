@@ -11,7 +11,7 @@ import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { eclipseShade, hazeAt, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
-import { paintJellyfish, paintLoopRange, paintMurmuration, paintStarTrails, paintText, paintWheat } from '../src/features/scene3d/pixel/pixelPaintWorlds'
+import { paintJellyfish, paintLoopRange, paintMurmuration, paintPool, paintStarTrails, paintText, paintWheat } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { layer } from '../src/features/scene3d/pixel/pixelPaint'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3, type Mesh } from 'three'
@@ -777,4 +777,16 @@ test('wheat in the wind: nearer stalks lean further, all on the one scene clock'
   paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-wheat-wind').pixelWorld!, 7.5, 720)
   const clocks = (root as Group).children.map(child => (child as Mesh).material?.uniforms).filter(uniforms => uniforms?.uSway?.value > 0).map(uniforms => uniforms.uTime.value)
   assert.deepEqual(new Set(clocks), new Set([7.5]), 'gusts follow the scene clock, so export matches the preview')
+})
+
+test('pool in the sun: caustics play only over the water, on the scene clock', () => {
+  const pool = paintPool(100, 70)
+  const water = pool.data.filter(index => index >= INDEX.pool && index < INDEX.pool + INDEX.poolSteps).length
+  assert.ok(water > 1000 && pool.data.includes(INDEX.coping), 'blue water inside a stone rim')
+  const plan = worldPlan('pixel-pool', resolvePixelScene('pixel-pool', undefined))
+  assert.deepEqual(plan.layers.filter(layer => layer.caustics).map(layer => layer.floor), [true], 'one lit pool floor')
+  const root = pixelWorldGroup('pixel-pool'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-hockney-pool').pixelWorld!, 4.25, 720)
+  const floor = (root as Group).children.map(child => (child as Mesh).material?.uniforms).find(uniforms => uniforms?.uCaustic?.value > 0)!
+  assert.equal(floor.uTime.value, 4.25)
 })

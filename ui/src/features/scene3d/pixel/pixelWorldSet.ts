@@ -52,7 +52,7 @@ type PixelRuntime = {
 
 const LAYER_VERTEX = `varying vec2 vUv; varying vec3 vWorld; void main(){ vUv=uv; vWorld=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
 const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
-  uniform sampler2D uIndex, uPalette, uOrder; uniform float uReveal; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze, uSway; uniform vec3 uHazeColor, uCarryColor; uniform vec4 uCarry;
+  uniform sampler2D uIndex, uPalette, uOrder; uniform float uReveal; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze, uSway, uCaustic; uniform vec3 uHazeColor, uCarryColor; uniform vec4 uCarry;
   uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
@@ -129,6 +129,14 @@ const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
     vec3 color=texture2D(uPalette,vec2((index+.5)/256.,.5)).rgb;
     // Bent stalks show their paler undersides: a sheen runs with the gust.
     if(uSway>0.) color*=1.+.3*floor(gust*cell.y/uRes.y*3.+bayer4(cell))/3.;
+    // Caustics: the sun through the rippling surface draws a moving net of
+    // light on the pool floor, stepped like everything else.
+    if(uCaustic>0.&&index>=43.&&index<=46.){
+      vec2 p=vWorld.xz*1.6;
+      p+=vec2(sin(p.y*.9+uTime*.9),cos(p.x*.8-uTime*.7))*.7;
+      float net=1.-clamp(abs(sin(p.x*1.7+uTime*.4)+sin(p.y*1.9-uTime*.5))*1.8,0.,1.);
+      color=mix(color,vec3(.9,1.,1.),floor(net*net*3.+bayer4(cell))/3.*.55*uCaustic);
+    }
     // Haze: distance fades toward the storm's colour in dithered steps;
     // lit windows and lamps still burn through it.
     bool lit=(index>=64.&&index<=71.)||index==90.;
@@ -165,7 +173,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
       uIndex: { value: indexTexture(painted) }, uPalette: { value: palette }, uReveal: { value: 2 },
       uOrder: { value: painted.order ? indexTexture({ ...painted, data: painted.order }) : null },
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
-      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uSway: { value: spec.sway ?? 0 }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uCarry: { value: new Vector4(0, 0, 0, 0) }, uCarryColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
+      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uSway: { value: spec.sway ?? 0 }, uCaustic: { value: spec.caustics ? 1 : 0 }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uCarry: { value: new Vector4(0, 0, 0, 0) }, uCarryColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
       uBursts: { value: [0, 1, 2, 3].map(() => new Vector4(0, 0, 0, 0)) }, uBurstColors: { value: [0, 1, 2, 3].map(() => new Color()) },
     },
@@ -353,7 +361,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.scrollY) runtime.scrollers.push({ material, speed: spec.scrollY, axis: 'uScrollY' })
   if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit, id: spec.id })
   if (spec.celestial) runtime.celestials.push(mesh)
-  if (spec.shimmer || spec.sway) runtime.shimmers.push(material)
+  if (spec.shimmer || spec.sway || spec.caustics) runtime.shimmers.push(material)
   if (spec.grow) runtime.growers.push({ material, grow: spec.grow })
   if (spec.reveal) runtime.revealers.push({ material, reveal: spec.reveal })
   // The farther the plane, the sooner the haze swallows it.
