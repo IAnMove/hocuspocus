@@ -2,7 +2,7 @@ import {
   BufferAttribute, BufferGeometry, CircleGeometry, Color, Vector2, DoubleSide, Group, Mesh,
   PlaneGeometry, Points, ShaderMaterial, SphereGeometry,
 } from 'three'
-import { energyMaterial, ENERGY_NOISE, softSparkMaterial } from './energyShaders'
+import { energyMaterial, ENERGY_NOISE, shieldMaterial, softSparkMaterial, type SparkStyle } from './energyShaders'
 import { fxRandom } from './types'
 import type { WorldSfxKind } from './world'
 
@@ -10,7 +10,7 @@ function sheet(kind: Parameters<typeof energyMaterial>[0], color: string, w: num
   return new Mesh(new PlaneGeometry(w, h), energyMaterial(kind, color, billboard))
 }
 
-function volumePoints(color: string, mode: string, count: number, spread: number, height: number, size: number) {
+function volumePoints(color: string, mode: string, count: number, spread: number, height: number, size: number, style: SparkStyle = 'spark') {
   const data = new Float32Array(count * 3)
   for (let i = 0; i < count; i++) {
     data.set([
@@ -22,7 +22,7 @@ function volumePoints(color: string, mode: string, count: number, spread: number
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(data, 3))
   geometry.setAttribute('base', new BufferAttribute(data.slice(), 3))
-  const points = new Points(geometry, softSparkMaterial(color, size))
+  const points = new Points(geometry, softSparkMaterial(color, size, style))
   points.userData.kind = mode
   return points
 }
@@ -35,7 +35,7 @@ function fire(color: string) {
     tongue.position.set((i - 1) * 0.08, 0.55, (i - 1) * 0.05)
     root.add(tongue)
   }
-  root.add(volumePoints('#ffcc77', 'rise', 90, 0.55, 0.2, 0.04))
+  root.add(volumePoints('#ffcc77', 'rise', 40, 0.35, 0.2, 0.022))
   return root
 }
 
@@ -50,17 +50,25 @@ function weather(kind: 'rain' | 'snow' | 'dust' | 'fog', color: string) {
     }
     return root
   }
-  const count = kind === 'rain' ? 520 : kind === 'snow' ? 280 : 180
-  const size = kind === 'rain' ? 0.09 : kind === 'snow' ? 0.07 : 0.07
-  const points = volumePoints(color, kind === 'dust' ? 'drift' : 'fall', count, kind === 'dust' ? 2.6 : 3.4, 3.4, size)
+  const count = kind === 'rain' ? 900 : kind === 'snow' ? 360 : 160
+  const size = kind === 'rain' ? 0.1 : kind === 'snow' ? 0.035 : 0.05
+  const points = volumePoints(color, kind === 'dust' ? 'drift' : 'fall', count, kind === 'dust' ? 2.6 : 3.8, 3.4, size, kind === 'rain' ? 'streak' : kind === 'snow' ? 'flake' : 'spark')
   root.add(points)
-  if (kind === 'dust') root.add(sheet('mist', color, 3, 1.2, true))
+  if (kind === 'dust') {
+    // Low rolling banks rather than one flat card.
+    for (let i = 0; i < 5; i++) {
+      const bank = sheet('mist', color, 2.2, .9, true)
+      bank.position.set((i - 2) * .55, .28 + (i % 2) * .12, (i % 3 - 1) * .35)
+      bank.userData.seedOffset = i * 5
+      root.add(bank)
+    }
+  }
   return root
 }
 
 function shield(color: string) {
   const root = new Group()
-  const dome = new Mesh(new SphereGeometry(1, 32, 24), energyMaterial('shield', color))
+  const dome = new Mesh(new SphereGeometry(1, 48, 32), shieldMaterial(color))
   dome.userData.kind = 'shield'
   root.add(dome)
   return root

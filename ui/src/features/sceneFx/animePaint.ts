@@ -1,18 +1,6 @@
 import { fxRandom } from './types'
 import { glow, ring, star, strokeEnergy, TAU, type FxPainter } from './energyBrush'
 
-const storm: FxPainter = (ctx, cue, time, progress) => {
-  ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = Math.min(1, progress * 10, (1 - progress) * 8)
-  glow(ctx, cue.color, .6, .2)
-  const tick = Math.floor(time * 12)
-  for (let branch = 0; branch < Math.round(8 * cue.intensity); branch++) {
-    ctx.save(); ctx.rotate(branch * TAU / 8 + .1 * Math.sin(time)); ctx.beginPath(); ctx.moveTo(0, 0)
-    for (let i = 1; i <= 12; i++) ctx.lineTo((fxRandom(cue.seed + tick, i + branch * 20) - .5) * .12, -i * .043)
-    strokeEnergy(ctx, cue.color, .006)
-    ctx.beginPath(); ctx.moveTo(0, -.27); ctx.lineTo(.08, -.33); ctx.lineTo(.12, -.47); strokeEnergy(ctx, cue.color, .003); ctx.restore()
-  }
-  glow(ctx, cue.color, .14)
-}
 const aura: FxPainter = (ctx, cue, time, progress) => {
   ctx.globalAlpha = Math.min(1, progress * 6, (1 - progress) * 5); ctx.globalCompositeOperation = 'screen'
   ctx.save(); ctx.scale(.65, 1.05); glow(ctx, cue.color, .55, .3)
@@ -71,4 +59,4 @@ const impact: FxPainter = (ctx, cue, _time, progress) => {
   }
   ctx.fillStyle = '#ffffff'; star(ctx, 0, 0, .11 * (1 - progress)); ctx.strokeStyle = cue.color; ring(ctx, reach * .6, .016 * (1 - progress))
 }
-export const animePainters: Record<string, FxPainter> = { lightning_storm: storm, anime_aura: aura, energy_orb: orb, energy_beam: beam, sword_slash: slash, manga_impact: impact }
+export const animePainters: Record<string, FxPainter> = { anime_aura: aura, energy_orb: orb, energy_beam: beam, sword_slash: slash, manga_impact: impact }

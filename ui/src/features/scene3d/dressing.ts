@@ -17,6 +17,7 @@ import { actionGroup, applyActionAtmosphere, isActionDressing } from './actionSe
 import { clearDrive } from './driveMotion.ts'
 import type { GpuWorld } from './gpu.ts'
 import type { Scene3DDressing } from './types.ts'
+import { isPixelDressing, pixelWorldGroup } from './pixel/pixelWorldSet'
 
 export function dropDressing(world: GpuWorld) {
   if (!world.dressing) return
@@ -75,7 +76,7 @@ export function syncDressing(
   dropDressing(world)
   clearDrive(world)
   applyActionAtmosphere(world.scene, kind)
-  world.floor.visible = kind !== 'space' && kind !== 'treadmill' && kind !== 'cafe' && !isDriveDressing(kind) && !isActionDressing(kind)
+  world.floor.visible = kind !== 'space' && kind !== 'treadmill' && kind !== 'cafe' && !isDriveDressing(kind) && !isActionDressing(kind) && !isPixelDressing(kind)
   world.floor.position.y = world.floor.visible ? 0 : -80
   if (kind === 'street') world.dressing = streetGroup()
   if (kind === 'retro-lab' || kind === 'observatory' || kind === 'broadcast-plaza') world.dressing = mediaSet(kind)
@@ -83,6 +84,7 @@ export function syncDressing(
   if (kind === 'chase-street') world.dressing = chaseGroup()
   if (kind === 'citadel') world.dressing = citadelGroup()
   if (kind === 'space') world.dressing = spaceGroup()
+  if (isPixelDressing(kind)) world.dressing = pixelWorldGroup(kind)
   if (isActionDressing(kind)) world.dressing = actionGroup(kind)
   if (kind === 'cafe') world.dressing = cafeGroup(maps?.cafe ?? { facade: null, floor: null, back: null })
   if (isDriveDressing(kind)) {

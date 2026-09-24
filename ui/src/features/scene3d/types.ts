@@ -4,6 +4,7 @@ import { CREATIVE_TEMPLATE_IDS } from './creativeTemplateIds'
 import { SPEECH_TEMPLATE_IDS } from './speech/templateIds'
 import type { Scene3DSpeech, Scene3DSoundtrack } from './speech/types'
 import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
+import { PIXEL_TEMPLATE_IDS } from './pixel/pixelTemplateIds'
 
 export type Vec3 = readonly [number, number, number]
 
@@ -74,6 +75,7 @@ export const SCENE3D_TEMPLATE_IDS = [
   ...DARK_FANTASY_IDS,
   ...CREATIVE_TEMPLATE_IDS,
   ...MEDIA_TEMPLATE_IDS,
+  ...PIXEL_TEMPLATE_IDS,
   'reflective-stage',
   'character-materialization',
   'blast-stage',
@@ -150,7 +152,7 @@ export type Scene3DLoop = {
   speed: number
 }
 
-export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino'
+export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino' | 'pixel-lake' | 'pixel-peaks' | 'pixel-gallery' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza'
 
 export type Scene3DSourceRef = {
   workspaceId: string
@@ -232,6 +234,8 @@ export type Scene3DDocument = {
   /** Stable review number, baked into exported frames when present. */
   clipNumber?: number
   sfx?: import('../sceneFx/types').SceneFx[]
+  /** Palette-cycled lighting and the pixel-art look over the whole frame. */
+  pixelWorld?: import('./pixel/pixelWorld').PixelWorld
   /** Spatial effects in world meters. Screen overlays stay on `sfx`. */
   worldSfx?: import('../sceneFx/world').WorldSfx[]
   texts?: import('../../lib/kineticText').KineticText[]

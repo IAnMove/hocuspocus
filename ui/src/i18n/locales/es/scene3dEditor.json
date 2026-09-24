@@ -350,7 +350,8 @@
     "psx": "PSX",
     "creative": "Creativas",
     "perspective": "Perspectivas",
-    "animated": "Fondos vivos"
+    "animated": "Fondos vivos",
+    "pixel": "Mundos pixel"
   },
   "setting": {
     "sea": "Mar",
@@ -1292,6 +1293,234 @@
     "creative-motion-skate-portal": {
       "title": "El mar al otro lado",
       "description": "Personaje con filtro PSX, piedra inmóvil y un horizonte que se mueve detrás del arco."
+    },
+    "pixel-tv-wall": {
+      "title": "Muro de televisores",
+      "description": "Dos bancos de televisores CRT apilados en una galería oscura. Cada pantalla reproduce tu grabación; los tubos iluminan el suelo mojado y la sala pasa de fría a neón."
+    },
+    "pixel-moon-lake": {
+      "title": "Lago de luna",
+      "description": "Noche pixel dibujada a mano sobre un lago en calma: luna con halo, aurora, estrellas fugaces y un reflejo que ondula, pasando de medianoche a aurora, amanecer y atardecer."
+    },
+    "pixel-tv-lake": {
+      "title": "Televisores en el lago",
+      "description": "Televisores antiguos dentro de un lago pixel de noche, brillando con tu grabación y reflejados en el agua mientras el cielo pasa por neón y eclipse."
+    },
+    "pixel-aurora-peaks": {
+      "title": "Picos de aurora",
+      "description": "Montañas pixel nevadas sobre un lago helado bajo cortinas de aurora; la luz pasa del verde polar al día helado y vuelve a la noche."
+    },
+    "pixel-neon-city": {
+      "title": "Puerto de neón",
+      "description": "Una silueta de ciudad pixel sobre agua oscura: las ventanas se encienden y apagan con ciclo de color y la ciudad se refleja en el puerto mientras la noche se vuelve neón."
+    },
+    "pixel-desert-sun": {
+      "title": "Sol del desierto",
+      "description": "Mesetas y dunas bajo un sol enorme a franjas; la arena brilla del crepúsculo al atardecer y se enfría en una noche estrellada."
+    },
+    "pixel-lighthouse": {
+      "title": "Faro",
+      "description": "Un acantilado con un faro cuyo haz barre la noche sobre un mar picado, de la tormenta a la luz de luna y el amanecer."
+    },
+    "pixel-firefly-forest": {
+      "title": "Bosque de luciérnagas",
+      "description": "Pinos altos alrededor de un lago del bosque, con luciérnagas que laten entre los árboles y los juncos, bajo una aurora verde."
+    },
+    "pixel-planet-rise": {
+      "title": "Salida del planeta",
+      "description": "Un planeta con anillos se alza sobre picos alienígenas y un mar violeta; sus bandas de nubes derivan con ciclo de color mientras la luz pasa del turquesa alienígena al neón vapor."
+    },
+    "pixel-night-train": {
+      "title": "Tren de medianoche",
+      "description": "Un tren iluminado cruza un viaducto de piedra sobre un lago de luna, con sus ventanas brillando en el agua, mientras la medianoche se vuelve amanecer."
+    },
+    "pixel-storm-lake": {
+      "title": "Tormenta en el lago",
+      "description": "La lluvia azota un lago pixel oscuro mientras los rayos caen sobre las cordilleras; cada rayo ilumina todo el mundo pintado un instante y su trueno llega a tiempo."
+    },
+    "pixel-volcano": {
+      "title": "Volcán",
+      "description": "Ríos de lava bajan por un volcán con puro ciclo de color, el cráter brilla y exhala humo y ascuas, y el rojo se derrama sobre el mar bajo una luna eclipsada."
+    },
+    "pixel-drive-in": {
+      "title": "Autocine",
+      "description": "Un autocine en el desierto bajo las estrellas: una pantalla enorme reproduce tu grabación, las filas de coches encienden sus luces de freno y la luz de la película baña coches, arena y mesetas."
+    },
+    "pixel-cherry-garden": {
+      "title": "Jardín de cerezos",
+      "description": "Cerezos en flor alrededor de un estanque en calma, una pagoda con ventanas encendidas bajo un pico nevado, faroles de piedra brillando y pétalos cayendo mientras el crepúsculo rosa se vuelve noche."
+    },
+    "pixel-coral-reef": {
+      "title": "Arrecife de coral",
+      "description": "Bajo el mar: rayos de sol que titilan desde una superficie ondulante, algas sobre el coral, dos bancos de peces que se cruzan en direcciones opuestas y plancton que destella, de una laguna luminosa al azul profundo."
+    },
+    "pixel-balloons": {
+      "title": "Globos al amanecer",
+      "description": "Globos aerostáticos flotan sobre un valle con niebla mientras sale el sol, los cercanos grandes y lentos, los lejanos pequeños, todos reflejados en el lago mientras el amanecer se calienta hacia el atardecer."
+    },
+    "pixel-night-fair": {
+      "title": "Feria nocturna",
+      "description": "Una noria gira sobre el puerto, sus bombillas se persiguen con ciclo de color mientras las góndolas cuelgan rectas, las carpas a rayas brillan bajo guirnaldas de luces y toda la feria titila en el agua."
+    },
+    "pixel-snow-village": {
+      "title": "Aldea nevada",
+      "description": "Una aldea nevada al anochecer: ventanas encendidas, el campanario de la iglesia, humo saliendo de las chimeneas y patinadores deslizándose por un lago helado que lo refleja todo mientras sigue nevando."
+    },
+    "pixel-waterfall": {
+      "title": "Cascada",
+      "description": "Una cascada cae entre acantilados cubiertos de musgo con puro ciclo de color, la espuma hierve a sus pies, un arcoíris cuelga en la bruma y la luz de la selva pasa al crepúsculo y la noche."
+    },
+    "pixel-orbit": {
+      "title": "Órbita",
+      "description": "Muy por encima de un planeta: su horizonte curvo brilla con la atmósfera, las luces de las ciudades salpican el lado nocturno, las nebulosas respiran entre estrellas densas y una estación espacial y asteroides pasan a la deriva."
+    },
+    "pixel-tulip-fields": {
+      "title": "Campos de tulipanes",
+      "description": "Hileras de tulipanes rojos, amarillos, rosas y violetas corren hasta el horizonte en perspectiva real mientras los molinos giran sus aspas ante un atardecer que pasa al crepúsculo y al alba."
+    },
+    "pixel-neon-alley": {
+      "title": "Callejón de neón",
+      "description": "Una calle estrecha bajo la lluvia entre fachadas altas: ventanas encendidas, escaleras de incendios, escaparates y rótulos de neón que zumban y parpadean, todo reflejado en el suelo mojado, con la ciudad brillando al fondo."
+    },
+    "pixel-castle-fireworks": {
+      "title": "Fuegos en el castillo",
+      "description": "Un castillo sobre su colina con ventanas encendidas y estandartes mientras los fuegos artificiales suben y estallan en anillos de chispas que caen y se apagan, cada estallido reflejado en el lago."
+    },
+    "pixel-glow-tide": {
+      "title": "Marea luminosa",
+      "description": "Una playa nocturna donde cada ola brilla azul al romper: franjas de espuma bioluminiscente llegan sobre la arena mojada con ciclo de color, bajo una luna reflejada en el mar."
+    },
+    "pixel-lantern-festival": {
+      "title": "Festival de farolillos",
+      "description": "Cientos de farolillos de papel suben despacio desde un lago en calma al anochecer, balanceándose y titilando cálidos, los cercanos más rápidos que los lejanos, todos reflejados en el agua."
+    },
+    "pixel-rainy-window": {
+      "title": "Ventana con lluvia",
+      "description": "Desde una habitación a la luz de una vela, la ciudad de noche a través de una ventana: la lluvia resbala por el cristal, las cortinas enmarcan la vista y una planta y una vela reposan en el alféizar mientras brillan las luces del puerto."
+    },
+    "pixel-night-express": {
+      "title": "Expreso nocturno",
+      "description": "La vista desde un tren en marcha: las montañas pasan despacio, las colinas de pinos más rápido y los postes del telégrafo cruzan veloces la ventana, todo reflejado en un lago, mientras la luna acompaña y el crepúsculo se vuelve noche de aurora."
+    },
+    "pixel-whole-day": {
+      "title": "Un día entero",
+      "description": "Un time-lapse sobre un lago: el sol sale por el este, cruza el cielo en arco y se pone por el oeste, luego le sigue la luna, mientras la luz pasa del amanecer al día, el atardecer y la noche y cae sobre los personajes desde donde estén el sol o la luna."
+    },
+    "pixel-eclipse": {
+      "title": "Eclipse",
+      "description": "Mediodía sobre mesetas rojas: la luna se desliza sobre el sol, el desierto se oscurece como de noche en plena tarde, aparecen las estrellas y la corona solar, y el día vuelve cuando la luna sigue su camino."
+    },
+    "pixel-four-seasons": {
+      "title": "Las cuatro estaciones",
+      "description": "Un año entero sobre un lago en un solo clip: los árboles florecen rosas en primavera, se oscurecen de verde en verano, arden naranjas y rojos en otoño mientras caen las hojas, y en invierno la nieve se acumula por niveles en picos y colinas, todo con ciclo de color."
+    },
+    "pixel-cathedral": {
+      "title": "Catedral",
+      "description": "Dentro de una nave gótica: un gran rosetón y dos ventanales de vidriera brillan por turnos mientras gira el sol, haces de luz de colores caen sobre las losas y motas de polvo giran despacio en la luz."
+    },
+    "pixel-koi-pond": {
+      "title": "Estanque de carpas",
+      "description": "Mirando desde arriba un estanque de jardín: las carpas koi giran despacio bajo los nenúfares y las flores de loto, la luz del sol ondula por el fondo en una red de cáusticas y caen pétalos sobre el agua."
+    },
+    "pixel-moon-caravan": {
+      "title": "Caravana bajo la luna",
+      "description": "Una caravana de camellos cruza las dunas a contraluz de una luna gigante que sale, las patas avanzando fotograma a fotograma mientras un guía abre el camino y el crepúsculo se vuelve noche estrellada del desierto."
+    },
+    "pixel-synthwave": {
+      "title": "Synthwave",
+      "description": "Una cuadrícula de neón infinita avanza hacia ti y late a 120 BPM bajo un enorme sol a franjas, con montañas de borde neón y siluetas de palmeras, del rosa vapor a la noche de neón."
+    },
+    "pixel-monsoon": {
+      "title": "Monzón",
+      "description": "Una lluvia cálida cae sobre un lago tropical: cada gota que llega abre en el agua anillos de píxeles que se extienden, las palmeras y los juncos aguantan el aguacero y de vez en cuando un relámpago brilla tras las colinas mientras la tormenta se abre al verde."
+    },
+    "pixel-murmuration": {
+      "title": "Murmuración",
+      "description": "Al atardecer sobre una marisma de juncos, miles de estorninos giran como uno solo: la bandada se hincha, se pliega y se retuerce en formas siempre nuevas mientras cruza el cielo y se refleja en el agua quieta."
+    },
+    "pixel-night-launch": {
+      "title": "Lanzamiento nocturno",
+      "description": "Un cohete espera junto a su torre en una costa bajo la luna; en el encendido los motores estallan en luz, el humo hierve y el cohete despega, ganando velocidad mientras su luz baña la orilla y se apaga poco a poco hacia el amanecer."
+    },
+    "pixel-crystal-cave": {
+      "title": "Cueva de cristal",
+      "description": "Desde la boca de una cueva llena de estalactitas, un lago subterráneo escondido brilla con cristales cuya luz recorre los grupos en oleadas, toda la gruta respirando su brillo cian y violeta mientras las gotas rizan el agua quieta."
+    },
+    "pixel-starry-night": {
+      "title": "Noche estrellada",
+      "description": "Un homenaje a la noche del pintor: remolinos en espiral giran por un cielo azul profundo, las estrellas laten en anillos de luz, una luna creciente brilla sobre el pueblo dormido y un ciprés se alza como una llama oscura."
+    },
+    "pixel-mist-rising": {
+      "title": "Niebla que se levanta",
+      "description": "Al amanecer, cresta tras cresta aparecen entre bancos de niebla; a medida que sube el sol la niebla se disuelve en pasos tramados, primero el banco más cercano y el más lejano al final, hasta que todo el valle queda claro y verde."
+    },
+    "pixel-roadside-motel": {
+      "title": "Motel de carretera",
+      "description": "Un motel del desierto de noche: su alto rótulo de neón escribe M-O-T-E-L letra a letra, parpadea y vuelve a empezar, una flecha de bombillas corre hacia la recepción, VACANCY zumba y las habitaciones brillan bajo las estrellas."
+    },
+    "pixel-tidal-abbey": {
+      "title": "Abadía de las mareas",
+      "description": "Una abadía sobre su roca, unida por una calzada de piedra con la marea baja; mientras se pone el sol la marea sube sobre la calzada y aísla la isla, y vuelve a bajar bajo el cielo nocturno."
+    },
+    "pixel-mirage": {
+      "title": "Espejismo",
+      "description": "Una carretera recta del desierto a mediodía, con sus líneas pasando como si condujeras; la calima hace temblar las mesetas y dunas lejanas sobre un falso lago de cielo en el horizonte, y el resplandor se apaga en un atardecer rojo."
+    },
+    "pixel-cloud-shadows": {
+      "title": "Sombras de nubes",
+      "description": "Una tarde soleada sobre prados abiertos: nubes esponjosas cruzan el cielo y sus sombras tramadas se deslizan por la hierba y las flores debajo de ellas, hasta que la luz se vuelve dorada al atardecer."
+    },
+    "pixel-fjord": {
+      "title": "Fiordo",
+      "description": "La cámara se desliza entre las paredes verticales de un fiordo bajo la aurora: los acantilados cercanos pasan más rápido que los picos nevados del fondo, revelando la profundidad del mundo pintado, todo reflejado en el agua quieta."
+    },
+    "pixel-clockwork": {
+      "title": "Mecanismo de reloj",
+      "description": "Dentro de una torre del reloj: un tren de engranajes de latón gira engranado, cada uno a la velocidad que marca su tamaño y al revés que su vecino, encima una esfera da la hora y un péndulo oscila ante una pared de hierro remachada."
+    },
+    "pixel-orrery": {
+      "title": "Planetario",
+      "description": "Un sistema solar visto desde arriba: los planetas giran alrededor de un sol brillante siguiendo tenues órbitas, los interiores más rápido como en la naturaleza, un gigante con anillos entre ellos, una luna que gira en torno a su planeta mientras este gira alrededor del sol, y un cinturón de asteroides que rota despacio."
+    },
+    "pixel-after-storm": {
+      "title": "Después de la tormenta",
+      "description": "La lluvia azota el valle y los rayos caen sobre las crestas; luego la tormenta pasa, el cielo se abre a una tarde verde y luminosa y un arcoíris aparece tramado sobre las montañas, brillando hasta un atardecer cálido."
+    },
+    "pixel-city-rising": {
+      "title": "Ciudad que crece",
+      "description": "Un time-lapse de una ciudad construyéndose: desde un terreno vacío junto al agua, los barrios se alzan en oleadas, primero las torres lejanas y al final el frente marítimo, mientras pasa un día del amanecer a una noche llena de ventanas encendidas."
+    },
+    "pixel-jellyfish": {
+      "title": "Medusas",
+      "description": "En el mar profundo, medusas luminosas suben a su propio ritmo, cada campana se contrae y se relaja con cada impulso mientras sus tentáculos ondulan detrás, la luz recorre sus cuerpos y la nieve marina cae junto al arrecife."
+    },
+    "pixel-blizzard": {
+      "title": "Ventisca",
+      "description": "Un paso nevado con una cabaña iluminada: la ventisca se espesa hasta que los picos lejanos desaparecen en el blanco y los pinos cercanos se difuminan, solo brillan las ventanas de la cabaña, y luego la tormenta amaina y vuelven las montañas."
+    },
+    "pixel-lantern-walk": {
+      "title": "Paseo con farol",
+      "description": "Un bosque oscuro junto al lago de noche: alguien camina por la orilla con un farol, y los pinos, la ribera y los juncos se encienden cálidos a su paso y vuelven a la sombra."
+    },
+    "pixel-empire-of-light": {
+      "title": "El imperio de las luces",
+      "description": "Inspirado en Magritte: un cielo azul de día con nubes blancas sobre una casa junto a un estanque donde ya es de noche, con las ventanas encendidas y una sola farola iluminando los árboles oscuros."
+    },
+    "pixel-star-trails": {
+      "title": "Estelas de estrellas",
+      "description": "Una larga exposición sobre un lago de montaña: las estrellas trazan poco a poco sus arcos alrededor de la estrella polar mientras avanza el plano, duplicadas en el agua quieta, sobre una tienda iluminada por dentro."
+    },
+    "pixel-wheat-wind": {
+      "title": "Trigo al viento",
+      "description": "Un campo de trigo dorado al atardecer con un ciprés solitario: las rachas lo recorren en olas, doblando las espigas y dejando un brillo pálido sobre el oro, mientras pasan las nubes."
+    },
+    "pixel-hockney-pool": {
+      "title": "Piscina al sol",
+      "description": "Inspirado en Hockney: una casa rosa de tejado plano, dos palmeras altas meciéndose y una piscina cuyo fondo baila con una red de luz, mientras el día luminoso de California se vuelve tarde."
+    },
+    "pixel-metaphysical-square": {
+      "title": "Plaza metafísica",
+      "description": "Inspirado en De Chirico: un sol bajo cruza tras una arcada, una estatua y una chimenea alta, y sus largas sombras, con los arcos incluidos, giran despacio sobre la plaza vacía."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1401,7 +1630,11 @@
     "loopStart": "Inicio del tramo (s)",
     "loopEnd": "Final del tramo (s)",
     "timeOffset": "Tiempo acumulado entre planos (s)",
-    "loopDetailsHelp": "Ida y vuelta evita el salto al reiniciar; también invierte el movimiento. Usa el tiempo acumulado para continuar la misma animación en el siguiente plano."
+    "loopDetailsHelp": "Ida y vuelta evita el salto al reiniciar; también invierte el movimiento. Usa el tiempo acumulado para continuar la misma animación en el siguiente plano.",
+    "crt": "Televisor CRT",
+    "hue": "Tono del tubo",
+    "applyAll": "Usar en todos los televisores",
+    "applyAllDone": "Todas las pantallas reproducen ahora esta grabación"
   },
   "library": {
     "name": "Nombre de la escena",
@@ -1492,5 +1725,158 @@
   "stillnessReview": "Ver cámara fija y poses",
   "movingCutoutsReview": "Personajes en movimiento · 6 clips ↗",
   "portalRidesReview": "Ver calzada y dragón",
-  "kingdomRoadReview": "Viajes y película musical"
+  "kingdomRoadReview": "Viajes y película musical",
+  "pixelWorld": {
+    "title": "Luz pixel",
+    "enable": "Iluminación de mundo pixel",
+    "help": "El mundo está pintado con huecos de paleta: al cambiar la paleta se reilumina cada píxel, como el arte con ciclo de color.",
+    "palettes": "Programa de iluminación",
+    "add": "Añadir ambiente",
+    "remove": "Quitar {{name}}",
+    "hold": "Segundos por ambiente",
+    "meteors": "Estrellas fugaces",
+    "pixelSize": "Tamaño de píxel",
+    "levels": "Niveles de color",
+    "dither": "Tramado",
+    "screenGlow": "Luz de pantallas",
+    "setting": "Mundo",
+    "noSet": "Mantener el decorado actual",
+    "palette": {
+      "midnight": "Medianoche",
+      "aurora": "Aurora",
+      "dawn": "Amanecer",
+      "sunset": "Atardecer",
+      "storm": "Tormenta",
+      "eclipse": "Eclipse",
+      "vapor": "Vapor",
+      "polar": "Polar",
+      "forest": "Bosque",
+      "harbor": "Puerto",
+      "dusk": "Crepúsculo",
+      "alien": "Alienígena",
+      "sakura": "Sakura",
+      "abyss": "Abismo",
+      "lagoon": "Laguna",
+      "jungle": "Selva",
+      "cosmos": "Cosmos",
+      "neon": "Neón",
+      "noon": "Mediodía",
+      "nave": "Nave",
+      "grotto": "Gruta",
+      "starry": "Noche estrellada",
+      "brass": "Latón"
+    },
+    "set": {
+      "pixel-lake": "Lago de luna",
+      "pixel-peaks": "Picos nevados",
+      "pixel-gallery": "Galería oscura",
+      "pixel-city": "Ciudad de neón",
+      "pixel-desert": "Desierto",
+      "pixel-coast": "Acantilado",
+      "pixel-forest": "Bosque",
+      "pixel-viaduct": "Viaducto",
+      "pixel-volcano": "Volcán",
+      "pixel-drivein": "Autocine",
+      "pixel-garden": "Jardín de cerezos",
+      "pixel-reef": "Arrecife",
+      "pixel-valley": "Valle",
+      "pixel-fair": "Feria nocturna",
+      "pixel-village": "Aldea nevada",
+      "pixel-falls": "Cascada",
+      "pixel-orbit": "Órbita",
+      "pixel-tulips": "Campos de tulipanes",
+      "pixel-alley": "Callejón de neón",
+      "pixel-castle": "Castillo",
+      "pixel-beach": "Playa",
+      "pixel-lanterns": "Lago de farolillos",
+      "pixel-window": "Ventana",
+      "pixel-express": "Ventana del tren",
+      "pixel-daycycle": "Ciclo del día",
+      "pixel-eclipse": "Eclipse",
+      "pixel-seasons": "Estaciones",
+      "pixel-cathedral": "Catedral",
+      "pixel-koi": "Estanque de carpas",
+      "pixel-caravan": "Caravana",
+      "pixel-synthwave": "Synthwave",
+      "pixel-monsoon": "Monzón",
+      "pixel-marsh": "Marisma",
+      "pixel-launch": "Base de lanzamiento",
+      "pixel-grotto": "Gruta",
+      "pixel-starry": "Noche estrellada",
+      "pixel-dawnmist": "Crestas con niebla",
+      "pixel-motel": "Motel",
+      "pixel-tidal": "Isla de marea",
+      "pixel-mirage": "Espejismo",
+      "pixel-meadow": "Prado",
+      "pixel-fjord": "Fiordo",
+      "pixel-clockwork": "Mecanismo",
+      "pixel-orrery": "Planetario",
+      "pixel-rainbow": "Valle del arcoíris",
+      "pixel-risingcity": "Ciudad que crece",
+      "pixel-abyss": "Mar profundo",
+      "pixel-blizzard": "Paso de ventisca",
+      "pixel-lantern": "Orilla del farol",
+      "pixel-empire": "Imperio de las luces",
+      "pixel-startrails": "Lago de estelas",
+      "pixel-wheat": "Campo de trigo",
+      "pixel-pool": "Piscina de Hockney",
+      "pixel-piazza": "Plaza metafísica"
+    },
+    "addTv": "Añadir televisor",
+    "tvs": "{{count}} televisores",
+    "scene": {
+      "title": "Elementos del mundo",
+      "reimagine": "Reimaginar",
+      "reimagineHelp": "Pinta el mismo mundo con otra disposición de crestas, árboles, estrellas y edificios.",
+      "body": "Sol o luna",
+      "bodyKind": {
+        "moon": "Luna",
+        "sun": "Sol",
+        "none": "Ninguno",
+        "planet": "Planeta con anillos"
+      },
+      "bodyX": "Posición en el cielo",
+      "bodyY": "Altura en el cielo",
+      "bodySize": "Tamaño",
+      "crescent": "Fase de la luna",
+      "mountains": "Montañas",
+      "roughness": "Aspereza",
+      "snow": "Nieve",
+      "hills": "Colinas y dunas",
+      "trees": "Árboles",
+      "stars": "Estrellas",
+      "auroraHeight": "Altura de la aurora",
+      "reeds": "Juncos en primer plano",
+      "ripple": "Oleaje",
+      "meteorDirection": "Las estrellas fugaces caen",
+      "meteor": {
+        "both": "A ambos lados",
+        "left": "Hacia la izquierda",
+        "right": "Hacia la derecha"
+      },
+      "city": "Rascacielos",
+      "windows": "Ventanas encendidas",
+      "lightHelp": "La luz principal viene del sol o la luna: muévelo para iluminar personajes y televisores desde ese lado.",
+      "reset": "Volver al mundo original"
+    },
+    "colors": {
+      "title": "Colores",
+      "mood": "Ambiente a recolorear",
+      "reset": "Restablecer este ambiente",
+      "sky0": "Cielo alto",
+      "sky1": "Cielo medio",
+      "sky2": "Horizonte",
+      "moon": "Sol o luna",
+      "stars": "Estrellas",
+      "far0": "Cordillera lejana",
+      "far1": "Luz de la cordillera",
+      "near0": "Tierra cercana",
+      "near1": "Luz cercana",
+      "trees": "Árboles y siluetas",
+      "water": "Agua o arena",
+      "aurora": "Aurora",
+      "windows": "Ventanas y faroles",
+      "light": "Luz sobre personajes"
+    }
+  }
 }
