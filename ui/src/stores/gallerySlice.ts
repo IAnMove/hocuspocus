@@ -413,7 +413,9 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     set({ galleryFeedAtTop: atTop })
     if (atTop && !wasTop && get().galleryRefreshPending) {
       set({ galleryRefreshPending: false })
-      void get().loadOutputs()
+      // Keep the already-paged window. loadOutputs() always asks for the
+      // first 100 rows and would drop everything the reader had scrolled in.
+      void get().refreshOutputs()
     }
   },
   clearGalleryToast: () => set({ galleryToast: null }),
