@@ -129,6 +129,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
   // Storm, clearing, a green afternoon, then a warm evening.
   // A day passes as the city is built: dawn, day, evening and a lit night.
+  'pixel-empire-of-light': ['pixel-empire', { palettes: ['midnight'], hold: 20, meteors: 0 }],
   'pixel-lantern-walk': ['pixel-lantern', { palettes: ['midnight', 'forest', 'midnight'], hold: 10, meteors: .3 }],
   'pixel-blizzard': ['pixel-blizzard', { palettes: ['polar', 'storm', 'polar'], hold: 8, meteors: 0 }],
   'pixel-jellyfish': ['pixel-abyss', { palettes: ['grotto'], hold: 20, meteors: 0 }],
@@ -192,6 +193,7 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   // than the far peaks, showing the world's depth.
   'pixel-orrery': { family: 'fixed', eye: [0, 22, 9], look: [0, 0, .5], fov: 56 },
   // Close on the shore, so the walker crosses the frame with the light.
+  'pixel-empire-of-light': { family: 'fixed', eye: [0, 2.4, 2], look: [0, 4.2, -20], fov: 52 },
   'pixel-lantern-walk': { family: 'fixed', eye: [0, 1.3, -2], look: [0, 1.2, -14], fov: 40 },
   'pixel-clockwork': { family: 'fixed', eye: [0, 5.8, 3], look: [0, 5.8, -10], fov: 58 },
   'pixel-fjord': { family: 'orbit', eye: [0, 1.6, 8], look: [0, 4, -16], fov: 52, orbitRadius: 24, orbitHeight: -2.4, orbitTurns: .07 },

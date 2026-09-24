@@ -1501,6 +1501,10 @@
     "pixel-lantern-walk": {
       "title": "Paseo con farol",
       "description": "Un bosque oscuro junto al lago de noche: alguien camina por la orilla con un farol, y los pinos, la ribera y los juncos se encienden cálidos a su paso y vuelven a la sombra."
+    },
+    "pixel-empire-of-light": {
+      "title": "El imperio de las luces",
+      "description": "Inspirado en Magritte: un cielo azul de día con nubes blancas sobre una casa junto a un estanque donde ya es de noche, con las ventanas encendidas y una sola farola iluminando los árboles oscuros."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1795,7 +1799,8 @@
       "pixel-risingcity": "Ciudad que crece",
       "pixel-abyss": "Mar profundo",
       "pixel-blizzard": "Paso de ventisca",
-      "pixel-lantern": "Orilla del farol"
+      "pixel-lantern": "Orilla del farol",
+      "pixel-empire": "Imperio de las luces"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

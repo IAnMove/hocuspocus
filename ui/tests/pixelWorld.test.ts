@@ -739,3 +739,14 @@ test('lantern walk: the lamp travels with its bearer and lights the other planes
   const bearer = (root as Group).getObjectsByProperty('type', 'Mesh').find(mesh => mesh.userData.frames) as Mesh
   assert.equal((bearer.material as { uniforms: { uCarry: { value: { w: number } } } }).uniforms.uCarry.value.w, 0, 'the bearer stays a silhouette')
 })
+
+test('empire of light: the sky keeps its daylight palette while the street below is night', () => {
+  const root = pixelWorldGroup('pixel-empire'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-empire-of-light').pixelWorld!, 5, 720)
+  const planes = (root as Group).children.filter(child => (child as Mesh).material?.uniforms?.uPalette).sort((a, b) => a.position.z - b.position.z)
+  const palette = (plane: typeof planes[number]) => (plane as Mesh).material.uniforms.uPalette.value as { image: { data: Uint8Array } }
+  const sky = palette(planes[0]), street = palette(planes[planes.length - 1])
+  assert.notEqual(sky, street, 'two palettes at once')
+  const brightness = (texture: typeof sky, slot: number) => texture.image.data[slot * 4] + texture.image.data[slot * 4 + 1] + texture.image.data[slot * 4 + 2]
+  assert.ok(brightness(sky, INDEX.sky + 4) > brightness(street, INDEX.sky + 4) * 2, 'daylight blue over a night street')
+})

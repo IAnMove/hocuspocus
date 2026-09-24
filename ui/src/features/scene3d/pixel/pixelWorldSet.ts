@@ -5,7 +5,7 @@ import {
 } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { ENERGY_NOISE } from '../../sceneFx/energyShaders'
-import { flashPalette, mixPalettes, paletteAt, PIXEL_PALETTES, tintPalette, type PixelPalette } from './pixelPalettes'
+import { flashPalette, mixPalettes, paletteAt, PIXEL_PALETTES, tintPalette, type PixelPalette, type PixelPaletteId } from './pixelPalettes'
 import type { ScreenLight } from './screenGlow'
 import { paintField, paintSails, paintSand } from './pixelPaintWorlds'
 import type { IndexedLayer } from './pixelPaint'
@@ -45,6 +45,8 @@ type PixelRuntime = {
   carry?: WorldPlan['carry']
   carrier?: Mesh
   lit: ShaderMaterial[]
+  /** Palettes for planes that keep their own mood whatever the world's program. */
+  moods: Map<PixelPaletteId, ReturnType<typeof newPalette>>
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; varying vec3 vWorld; void main(){ vUv=uv; vWorld=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
@@ -294,6 +296,12 @@ function gallery(root: Group) {
   }
 }
 
+/** The palette texture for planes held in one mood, made once and reused. */
+function moodPalette(runtime: PixelRuntime, mood: PixelPaletteId) {
+  if (!runtime.moods.has(mood)) runtime.moods.set(mood, newPalette())
+  return runtime.moods.get(mood)!.palette
+}
+
 function newPalette() {
   const bytes = new Uint8Array(256 * 4)
   const palette = new DataTexture(bytes, 256, 1, RGBAFormat, UnsignedByteType)
@@ -364,7 +372,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   runtime.lake = undefined
   for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
   for (const spec of plan.layers) {
-    const { mesh, lamp, hubs } = layerMesh(spec, runtime.palette)
+    const { mesh, lamp, hubs } = layerMesh(spec, spec.mood ? moodPalette(runtime, spec.mood) : runtime.palette)
     track(runtime, spec, mesh)
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
@@ -383,7 +391,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [], hazers: [], lit: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [], hazers: [], lit: [], moods: new Map() }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -477,6 +485,7 @@ function ensureBuilt(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorl
 
 function syncSet(runtime: PixelRuntime, scene: PixelScene, pixel: PixelWorld, palette: PixelPalette, seconds: number, frameHeight: number) {
   writePalette(runtime.bytes, palette, seconds)
+  for (const [mood, held] of runtime.moods) { writePalette(held.bytes, PIXEL_PALETTES[mood], seconds); held.palette.needsUpdate = true }
   fadeParts(runtime, seconds, palette)
   runtime.palette.needsUpdate = true
   const meteors = meteorsAt(seconds, pixel.meteors, runtime.sky, 5, scene.meteorDirection)

@@ -339,6 +339,40 @@ export function paintLanternBearer(width: number, height: number, frame: number,
   return bearer
 }
 
+/** A tall house front: a steep roof with a chimney, rows of shuttered
+ *  windows (some lit) and a door, in near silhouette. */
+export function paintHouse(width: number, height: number, seed: number): IndexedLayer {
+  const house = layer(width, height)
+  const left = Math.round(width * .08), right = Math.round(width * .92), eaves = Math.round(height * .3), mid = width / 2
+  for (let y = 0; y < height; y++) for (let x = left - 2; x <= right + 2; x++) {
+    const roof = y < eaves && Math.abs(x - mid) <= (y / eaves) * (mid - left + 2)
+    if (roof || (y >= eaves && x >= left && x <= right)) set(house, x, y, roof && Math.abs(x - mid) >= (y / eaves) * (mid - left + 2) - 1 ? INDEX.farRim : INDEX.far)
+  }
+  for (let y = Math.round(eaves * .2); y < eaves * .6; y++) for (let x = Math.round(width * .68); x < width * .76; x++) set(house, x, y, INDEX.far)
+  const cols = 4, rows = 2, ww = Math.round(width * .09), wh = Math.round(height * .13)
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const x0 = Math.round(left + (right - left) * (c + .5) / cols - ww / 2), y0 = Math.round(eaves + height * (.1 + r * .26))
+    if (r === 1 && c === 1) continue
+    const lit = fxRandom(seed, r * 5 + c) < .6
+    for (let y = y0; y < y0 + wh; y++) for (let x = x0; x < x0 + ww; x++) set(house, x, y, lit ? INDEX.window + (r * cols + c) % 8 : INDEX.trees)
+    for (let y = y0 - 1; y <= y0 + wh; y++) { set(house, x0 - 2, y, INDEX.trees); set(house, x0 + ww + 1, y, INDEX.trees) }
+  }
+  const door = Math.round(left + (right - left) * 1.5 / cols)
+  for (let y = height - Math.round(height * .2); y < height; y++) for (let x = door - 3; x <= door + 3; x++) set(house, x, y, INDEX.trees)
+  return house
+}
+
+/** An old street lamp: a slim post, a curled arm and a glass lantern. */
+export function paintStreetlamp(width: number, height: number): IndexedLayer {
+  const lamp = layer(width, height)
+  const c = Math.round(width / 2)
+  for (let y = 8; y < height; y++) for (let w = -1; w <= (y > height - 5 ? 1 : 0); w++) set(lamp, c + w, y, INDEX.trees)
+  for (let x = c - 3; x <= c + 3; x++) { set(lamp, x, 1, INDEX.trees); set(lamp, x, 7, INDEX.trees) }
+  for (let y = 2; y < 7; y++) for (let x = c - 2; x <= c + 2; x++) set(lamp, x, y, Math.abs(x - c) === 2 ? INDEX.trees : INDEX.lamp)
+  set(lamp, c, 0, INDEX.trees)
+  return lamp
+}
+
 /** A neon grid floor that tiles both ways: bright lines in the beat slot
  *  with a dithered glow either side, on near-black ground. */
 export function paintGrid(width: number, height: number, cell: number): IndexedLayer {

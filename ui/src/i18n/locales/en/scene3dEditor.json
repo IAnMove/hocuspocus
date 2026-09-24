@@ -1501,6 +1501,10 @@
     "pixel-lantern-walk": {
       "title": "Lantern walk",
       "description": "A dark lakeside wood at night: one walker carries a lantern along the shore, and the pines, bank and reeds light up warm around it as it passes, then fall back into shadow."
+    },
+    "pixel-empire-of-light": {
+      "title": "Empire of light",
+      "description": "After Magritte: a bright blue daytime sky with drifting white clouds over a house by a pond where night has already fallen — lit windows and a single street lamp glowing on the dark trees."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1795,7 +1799,8 @@
       "pixel-risingcity": "Rising city",
       "pixel-abyss": "Deep sea",
       "pixel-blizzard": "Blizzard pass",
-      "pixel-lantern": "Lantern shore"
+      "pixel-lantern": "Lantern shore",
+      "pixel-empire": "Empire of light"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",
