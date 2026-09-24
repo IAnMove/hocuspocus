@@ -2,7 +2,7 @@
  *  moon hangs (and so where the light comes from), how tall and rough the
  *  ranges are, how much snow, trees, stars, water ripple and city light. */
 
-export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow'
+export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity'
 export type PixelBody = 'moon' | 'sun' | 'planet' | 'none'
 export type MeteorDirection = 'left' | 'right' | 'both'
 
@@ -86,6 +86,7 @@ export const PIXEL_SCENE_DEFAULTS: Record<PixelWorldKind, PixelScene> = {
   'pixel-orrery': { ...BASE, seed: 1543, body: 'none', stars: 1, trees: 0, reeds: false, ripple: 0 },
   // A rainbow stands opposite the sun, so the sun is behind the viewer.
   'pixel-rainbow': { ...BASE, seed: 818, body: 'none', bodyX: .5, bodyY: .45, bodySize: .9, crescent: 0, mountains: .5, roughness: .45, hills: .5, trees: .8, stars: 0, reeds: true, ripple: .35 },
+  'pixel-risingcity': { ...BASE, seed: 1871, bodyX: .8, bodyY: .5, bodySize: .8, crescent: .3, mountains: .3, trees: 0, hills: .2, stars: .4, reeds: false, city: .85, windows: .6, ripple: .4 },
   'pixel-forest': { ...BASE, seed: 131, bodyX: .5, bodyY: .72, bodySize: .8, mountains: .45, trees: 1, hills: .8, stars: .55, ripple: .3 },
 }
 

@@ -1485,6 +1485,10 @@
     "pixel-after-storm": {
       "title": "Después de la tormenta",
       "description": "La lluvia azota el valle y los rayos caen sobre las crestas; luego la tormenta pasa, el cielo se abre a una tarde verde y luminosa y un arcoíris aparece tramado sobre las montañas, brillando hasta un atardecer cálido."
+    },
+    "pixel-city-rising": {
+      "title": "Ciudad que crece",
+      "description": "Un time-lapse de una ciudad construyéndose: desde un terreno vacío junto al agua, los barrios se alzan en oleadas, primero las torres lejanas y al final el frente marítimo, mientras pasa un día del amanecer a una noche llena de ventanas encendidas."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1775,7 +1779,8 @@
       "pixel-fjord": "Fiordo",
       "pixel-clockwork": "Mecanismo",
       "pixel-orrery": "Planetario",
-      "pixel-rainbow": "Valle del arcoíris"
+      "pixel-rainbow": "Valle del arcoíris",
+      "pixel-risingcity": "Ciudad que crece"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

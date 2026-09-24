@@ -33,6 +33,8 @@ export type LayerSpec = {
   /** Lifts off once at `at` seconds and climbs with `accel` m/s²; an
    *  `ignite` layer (the flame) only shows from just before liftoff. */
   launch?: { at: number; accel: number; ignite?: boolean }
+  /** Builds up from its foot to its top between `from` and `to` seconds. */
+  grow?: { from: number; to: number }
   /** Texels its rows waver sideways in the heat, most at the bottom. */
   shimmer?: number
   /** Dissolves away in dithered steps between `from` and `to` seconds (or
@@ -509,6 +511,13 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     // Once the rain stops the rainbow comes through, dithering in.
     { z: -50, width: 110, height: 40, bottom: -3, texture: [440, 160], dissolve: { from: 9, to: 14, appear: true }, paint: (w, h) => paintRainbowArc(w, h) },
     hills(scene, true), ...reeds(scene),
+  ] }),
+  'pixel-risingcity': scene => ({ ground: 'water', layers: [
+    sky(scene), range(scene),
+    // Districts rise in waves, the far towers first, the waterfront last.
+    { z: -44, width: 124, height: 18, bottom: -1, texture: [700, 100], grow: { from: 1, to: 9 }, paint: (w, h) => paintSkyline(w, h, { ...far, seed: scene.seed + 11, lightFrom: bodySkyX(scene), tall: scene.city, windows: scene.windows * .7 }) },
+    { z: -38, width: 110, height: 13, bottom: -1, texture: [720, 86], grow: { from: 5, to: 13 }, paint: (w, h) => paintSkyline(w, h, { ...near, seed: scene.seed + 12, lightFrom: bodySkyX(scene), tall: scene.city * .8, windows: scene.windows }) },
+    { z: -32, width: 96, height: 8, bottom: -1, texture: [720, 60], grow: { from: 9, to: 16 }, paint: (w, h) => paintSkyline(w, h, { body: INDEX.trees, rim: INDEX.near, seed: scene.seed + 13, lightFrom: bodySkyX(scene), tall: scene.city * .7, windows: scene.windows }) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

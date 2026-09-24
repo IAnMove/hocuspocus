@@ -128,6 +128,8 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
   // Storm, clearing, a green afternoon, then a warm evening.
+  // A day passes as the city is built: dawn, day, evening and a lit night.
+  'pixel-city-rising': ['pixel-risingcity', { palettes: ['dawn', 'jungle', 'sunset', 'harbor'], hold: 6, meteors: .3 }],
   'pixel-after-storm': ['pixel-rainbow', { palettes: ['storm', 'jungle', 'jungle', 'sunset'], hold: 6, meteors: 0 }],
   'pixel-orrery': ['pixel-orrery', { palettes: ['cosmos'], hold: 20, meteors: 0 }],
   'pixel-clockwork': ['pixel-clockwork', { palettes: ['brass'], hold: 20, meteors: 0 }],

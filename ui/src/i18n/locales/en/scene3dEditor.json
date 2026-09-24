@@ -1485,6 +1485,10 @@
     "pixel-after-storm": {
       "title": "After the storm",
       "description": "Rain lashes the valley and lightning strikes the ridges; then the storm passes, the sky clears to a bright green afternoon and a rainbow dithers in over the mountains, glowing on into a warm evening."
+    },
+    "pixel-city-rising": {
+      "title": "City rising",
+      "description": "A time-lapse of a city being built: from empty ground by the water, districts rise in waves, the far towers first and the waterfront last, while a day passes from dawn to a night full of lit windows."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1775,7 +1779,8 @@
       "pixel-fjord": "Fjord",
       "pixel-clockwork": "Clockwork",
       "pixel-orrery": "Orrery",
-      "pixel-rainbow": "Rainbow valley"
+      "pixel-rainbow": "Rainbow valley",
+      "pixel-risingcity": "Rising city"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

@@ -693,3 +693,16 @@ test('after the storm: the rain stops and a rainbow dithers in', () => {
   assert.ok(hidden(11.5) > 0 && hidden(11.5) < 1, 'dithering in')
   assert.ok(hidden(16) <= 0, 'fully there')
 })
+
+test('city rising: districts build up from the ground in waves', () => {
+  const plan = worldPlan('pixel-risingcity', resolvePixelScene('pixel-risingcity', undefined))
+  const districts = plan.layers.filter(layer => layer.grow).sort((a, b) => a.z - b.z)
+  assert.equal(districts.length, 3)
+  assert.ok(districts[0].grow!.from < districts[2].grow!.from, 'far towers rise first')
+  const root = pixelWorldGroup('pixel-risingcity'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-city-rising').pixelWorld!
+  const built = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms?.uGrow?.value).filter(value => value !== undefined && value <= 1) }
+  assert.deepEqual(built(.5), [0, 0, 0], 'bare ground at first')
+  assert.ok(built(7).some(value => value > 0 && value < 1), 'going up')
+  assert.deepEqual(built(18), [1, 1, 1], 'the whole city stands')
+})
