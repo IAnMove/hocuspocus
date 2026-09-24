@@ -2308,6 +2308,9 @@ export const useStore = create<AppState>((set, get) => {
         prompt: '', negative_prompt: '',
         video_prompt_type: '', image_prompt_type: 'T', denoising_strength: 1, masking_strength: 1,
         ...draft.params,
+        // Drafts store the sidebar count, not repeat_generation. Re-apply it so
+        // Generate does not keep the previous intent's batch size.
+        repeat_generation: draft.outputCount,
         resolution: concreteImageResolution(draft.params.resolution || resolveResolution(state.modelOptions, 'auto', 'auto'), state.params.model_type),
       },
     })
