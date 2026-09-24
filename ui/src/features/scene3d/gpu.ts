@@ -50,6 +50,7 @@ import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLight, Scene3DSlo
 import { syncWorldSfx, type WorldSfxGpu } from '../sceneFx/worldRuntime'
 import { paintPixelWorld } from './pixel/pixelWorldSet'
 import { syncScreenGlow } from './pixel/screenGlow'
+import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { PixelPalette } from './pixel/pixelPalettes'
 
 export const CYLINDER_RADIUS = 12
@@ -410,8 +411,10 @@ function paintActor(world: GpuWorld, slot: Scene3DSlot, sceneSeconds: number) {
 
 /** Palette mood, sky motion and the light that screens throw. */
 function paintPixelLight(world: GpuWorld, document: Scene3DDocument, slots: readonly Scene3DSlot[], sceneSeconds: number) {
-  world.pixelPalette = paintPixelWorld(world.dressing, world.scene, world.dir, document.pixelWorld, sceneSeconds, world.renderer.domElement?.height ?? document.height)
-  syncScreenGlow(world.scene, slots, id => world.slots.get(id)?.screen, document.pixelWorld?.screenGlow ?? 0)
+  const screens = syncScreenGlow(world.scene, slots, id => world.slots.get(id)?.screen, document.pixelWorld?.screenGlow ?? 0)
+  // Lightning in the scene lights the painted world at the moment it strikes.
+  const flash = Math.max(0, ...(document.worldSfx ?? []).filter(cue => cue.kind === 'lightning').map(cue => lightningGlow(cue, sceneSeconds)))
+  world.pixelPalette = paintPixelWorld(world.dressing, world.scene, world.dir, document.pixelWorld, sceneSeconds, world.renderer.domElement?.height ?? document.height, flash, screens)
 }
 
 export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {

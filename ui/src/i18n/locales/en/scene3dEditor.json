@@ -1309,6 +1309,218 @@
     "pixel-aurora-peaks": {
       "title": "Aurora peaks",
       "description": "Snowy pixel mountains rise out of a frozen lake under curtains of aurora; the light slides from polar green to icy day and back to night."
+    },
+    "pixel-neon-city": {
+      "title": "Neon harbour",
+      "description": "A pixel skyline over dark water: windows switch on and off by colour cycling and the whole city glows back from the harbour as the night turns neon."
+    },
+    "pixel-desert-sun": {
+      "title": "Desert sun",
+      "description": "Mesas and dunes under a huge striped sun; the sand glows from dusk to sunset and cools into a starry desert night."
+    },
+    "pixel-lighthouse": {
+      "title": "Lighthouse",
+      "description": "A sea cliff with a lighthouse whose beam sweeps the night over choppy water, from storm to moonlight and dawn."
+    },
+    "pixel-firefly-forest": {
+      "title": "Firefly forest",
+      "description": "Tall pines around a forest lake, fireflies pulsing among the trees and in the reeds, under a green aurora."
+    },
+    "pixel-planet-rise": {
+      "title": "Planet rise",
+      "description": "A ringed planet rises over jagged alien peaks and a violet sea; its cloud bands drift by colour cycling while the light slides from alien teal to vapor neon."
+    },
+    "pixel-night-train": {
+      "title": "Midnight train",
+      "description": "A lit night train crosses a stone viaduct over a moonlit lake, its windows glowing on the water, as midnight slowly turns to dawn."
+    },
+    "pixel-storm-lake": {
+      "title": "Storm on the lake",
+      "description": "Rain lashes a dark pixel lake while lightning strikes the far ranges; every bolt lights the whole painted world for an instant and its thunder rolls in on cue."
+    },
+    "pixel-volcano": {
+      "title": "Volcano",
+      "description": "Rivers of lava run down a volcano by pure colour cycling, the crater glows and breathes smoke and embers, and the red spills across the sea under an eclipsed moon."
+    },
+    "pixel-drive-in": {
+      "title": "Drive-in",
+      "description": "A desert drive-in under the stars: a huge screen plays your recording, rows of parked cars flash their brake lights, and the film light washes over the cars, sand and mesas."
+    },
+    "pixel-cherry-garden": {
+      "title": "Cherry garden",
+      "description": "Blossoming cherry trees round a still pond, a pagoda with lit windows under a snowy peak, stone lanterns glowing and petals drifting down as the pink dusk turns to night."
+    },
+    "pixel-coral-reef": {
+      "title": "Coral reef",
+      "description": "Under the sea: shafts of sunlight shimmer down from a rippling surface, kelp sways over coral, two schools of fish cross in opposite directions and plankton glints, from a bright lagoon to the deep blue."
+    },
+    "pixel-balloons": {
+      "title": "Balloons at dawn",
+      "description": "Hot-air balloons drift and bob over a misty valley as the sun comes up, near ones large and slow, far ones small, all mirrored in the lake while dawn warms into sunset."
+    },
+    "pixel-night-fair": {
+      "title": "Night fair",
+      "description": "A Ferris wheel turns over the harbour, its bulbs chasing round by colour cycling while the gondolas hang upright, striped tents glow under strings of lights and the whole fair shimmers in the water."
+    },
+    "pixel-snow-village": {
+      "title": "Snowy village",
+      "description": "A snowed-in village at dusk: lit windows, a church steeple, smoke curling from the chimneys and skaters gliding across a frozen lake that mirrors it all as the snow keeps falling."
+    },
+    "pixel-waterfall": {
+      "title": "Waterfall",
+      "description": "A waterfall pours between mossy cliffs by pure colour cycling, foam boils at its foot, a rainbow hangs in the spray and the jungle light turns to dusk and night."
+    },
+    "pixel-orbit": {
+      "title": "Orbit",
+      "description": "High above a planet: its curved horizon glows with atmosphere, city lights dot the night side, nebula clouds breathe among dense stars and a space station and tumbling asteroids drift by."
+    },
+    "pixel-tulip-fields": {
+      "title": "Tulip fields",
+      "description": "Rows of red, yellow, pink and violet tulips run to the horizon in true perspective while windmills turn their sails against a sunset that fades through dusk to dawn."
+    },
+    "pixel-neon-alley": {
+      "title": "Neon alley",
+      "description": "A narrow street in the rain between tall façades: lit windows, fire escapes, shopfronts and neon signs that buzz and flicker, all mirrored in the wet ground, with the city glowing at the far end."
+    },
+    "pixel-castle-fireworks": {
+      "title": "Castle fireworks",
+      "description": "A castle on its hill with lit windows and banners while fireworks rise and burst in rings of embers that sag and fade, every burst mirrored in the lake below."
+    },
+    "pixel-glow-tide": {
+      "title": "Glowing tide",
+      "description": "A night beach where every wave glows blue as it breaks: bands of bioluminescent surf roll in across the wet sand by colour cycling, under a moon mirrored in the sea."
+    },
+    "pixel-lantern-festival": {
+      "title": "Lantern festival",
+      "description": "Hundreds of paper lanterns rise slowly from a still lake at dusk, swaying as they climb and flickering warm, near ones faster than far ones, all mirrored in the water."
+    },
+    "pixel-rainy-window": {
+      "title": "Rainy window",
+      "description": "From a candle-lit room, the city at night through a window: rain slides down the glass, curtains frame the view and a plant and a candle sit on the sill while the harbour lights shimmer outside."
+    },
+    "pixel-night-express": {
+      "title": "Night express",
+      "description": "The view from a moving train: mountains glide by slowly, pine hills faster and telegraph poles flash past the window, all mirrored in a lake, while the moon keeps pace and dusk turns to an aurora night."
+    },
+    "pixel-whole-day": {
+      "title": "A whole day",
+      "description": "A time-lapse over a lake: the sun rises in the east, arcs across the sky and sets in the west, then the moon follows, while the light turns from dawn to day, sunset and night and falls on actors from wherever the sun or moon stands."
+    },
+    "pixel-eclipse": {
+      "title": "Eclipse",
+      "description": "Noon over red mesas: the moon slides across the sun, the desert dims to night in mid-afternoon, stars and the sun's corona appear, then day comes back as the moon moves on."
+    },
+    "pixel-four-seasons": {
+      "title": "Four seasons",
+      "description": "A whole year over a lake in one clip: trees blossom pink in spring, deepen to green in summer, flare orange and red in autumn as leaves drift down, then snow piles up level by level on the peaks and hills in winter, all by colour cycling."
+    },
+    "pixel-cathedral": {
+      "title": "Cathedral",
+      "description": "Inside a Gothic nave: a great rose window and two lancets of stained glass glow in turn as the sun moves round, shafts of coloured light fall across the flagstones and dust motes turn slowly in the beams."
+    },
+    "pixel-koi-pond": {
+      "title": "Koi pond",
+      "description": "Looking down on a garden pond: koi circle slowly under lily pads and lotus flowers, sunlight ripples across the bottom in a net of caustics and petals drift onto the water."
+    },
+    "pixel-moon-caravan": {
+      "title": "Moon caravan",
+      "description": "A camel caravan crosses the dunes in silhouette against a giant rising moon, legs stepping frame by frame as a guide leads the way, while dusk deepens to a starry desert night."
+    },
+    "pixel-synthwave": {
+      "title": "Synthwave",
+      "description": "An endless neon grid flows toward you and pulses to a 120 BPM beat under a huge striped sun, with neon-rimmed mountains and palm silhouettes, from vapor pink to neon night."
+    },
+    "pixel-monsoon": {
+      "title": "Monsoon",
+      "description": "Warm rain pours over a tropical lake: every drop that lands rings the water in spreading pixel ripples, palms and reeds stand in the downpour, and now and then lightning flares beyond the hills as the storm clears to green."
+    },
+    "pixel-murmuration": {
+      "title": "Murmuration",
+      "description": "At sunset over a reed marsh, thousands of starlings wheel as one: the flock swells, folds and twists into ever-changing shapes as it drifts across the sky and its shadow crosses the still water."
+    },
+    "pixel-night-launch": {
+      "title": "Night launch",
+      "description": "A rocket waits beside its lattice tower on a moonlit coast; at ignition the engines flare, smoke boils up and the rocket lifts off, gathering speed as it climbs while its light washes over the shore and slowly fades toward dawn."
+    },
+    "pixel-crystal-cave": {
+      "title": "Crystal cave",
+      "description": "From the mouth of a cave hung with stalactites, a hidden underground lake glows with crystals whose light sweeps from cluster to cluster in waves, the whole grotto breathing their cyan-violet glow while drips ring the still water."
+    },
+    "pixel-starry-night": {
+      "title": "Starry night",
+      "description": "A tribute to the painter's night: spiral swirls turn across a deep blue sky, stars pulse in rings of light, a crescent moon glows over the sleeping village and a cypress rises like a dark flame."
+    },
+    "pixel-mist-rising": {
+      "title": "Mist rising",
+      "description": "At dawn, ridge after ridge stands in banks of mist; as the sun climbs the mist burns off in dithered steps, the nearest bank first and the farthest last, until the whole valley is clear and green."
+    },
+    "pixel-roadside-motel": {
+      "title": "Roadside motel",
+      "description": "A desert motel at night: its tall neon sign spells M-O-T-E-L letter by letter, flashes and starts again, an arrow of bulbs chases toward the office, VACANCY buzzes and the rooms glow under the stars."
+    },
+    "pixel-tidal-abbey": {
+      "title": "Tidal abbey",
+      "description": "An abbey on its rock, reached by a stone causeway at low tide; as the sun sets the tide comes in over the causeway and cuts the island off, then ebbs again under the night sky."
+    },
+    "pixel-mirage": {
+      "title": "Mirage",
+      "description": "A straight desert road at noon, its lines flowing past as if driving; heat haze makes the far mesas and dunes waver above a false lake of sky on the horizon, the glare fading to a red sunset."
+    },
+    "pixel-cloud-shadows": {
+      "title": "Cloud shadows",
+      "description": "A sunny afternoon over wide meadows: puffy clouds drift across the sky and their dithered shadows glide over the grass and flowers beneath them, until the light turns gold at sunset."
+    },
+    "pixel-fjord": {
+      "title": "Fjord",
+      "description": "The camera glides between the sheer walls of a fjord under the aurora: the near cliffs slide past faster than the snowy peaks at its end, revealing the depth of the painted world, all mirrored in the still water."
+    },
+    "pixel-clockwork": {
+      "title": "Clockwork",
+      "description": "Inside a clock tower: a train of brass gears turns in mesh, each at the speed its size dictates and against its neighbour, above them a clock face keeps time and a pendulum swings to and fro before a riveted iron wall."
+    },
+    "pixel-orrery": {
+      "title": "Orrery",
+      "description": "A solar system seen from above: planets circle a glowing sun along faint orbit lines, the inner ones fastest as in nature, a ringed giant among them, a moon circling its planet as the planet circles the sun, and an asteroid belt turning slowly."
+    },
+    "pixel-after-storm": {
+      "title": "After the storm",
+      "description": "Rain lashes the valley and lightning strikes the ridges; then the storm passes, the sky clears to a bright green afternoon and a rainbow dithers in over the mountains, glowing on into a warm evening."
+    },
+    "pixel-city-rising": {
+      "title": "City rising",
+      "description": "A time-lapse of a city being built: from empty ground by the water, districts rise in waves, the far towers first and the waterfront last, while a day passes from dawn to a night full of lit windows."
+    },
+    "pixel-jellyfish": {
+      "title": "Jellyfish",
+      "description": "In the deep sea, glowing jellyfish rise at their own pace, each bell squeezing and relaxing with every stroke as its tentacles ripple behind, light sweeping through their bodies while marine snow drifts down past the reef."
+    },
+    "pixel-blizzard": {
+      "title": "Blizzard",
+      "description": "A snowbound pass with a lone lit cabin: a blizzard thickens until the far peaks vanish into white and the near pines blur, only the cabin windows glowing through, then the storm eases and the mountains come back."
+    },
+    "pixel-lantern-walk": {
+      "title": "Lantern walk",
+      "description": "A dark lakeside wood at night: one walker carries a lantern along the shore, and the pines, bank and reeds light up warm around it as it passes, then fall back into shadow."
+    },
+    "pixel-empire-of-light": {
+      "title": "Empire of light",
+      "description": "After Magritte: a bright blue daytime sky with drifting white clouds over a house by a pond where night has already fallen — lit windows and a single street lamp glowing on the dark trees."
+    },
+    "pixel-star-trails": {
+      "title": "Star trails",
+      "description": "A long exposure over a mountain lake: the stars slowly trace their arcs around the pole star as the shot goes on, doubled in the still water, above a lone tent lit from inside."
+    },
+    "pixel-wheat-wind": {
+      "title": "Wheat in the wind",
+      "description": "A golden wheat field at sunset with a lone cypress: gusts roll across it in waves, bending the ears and running a pale sheen over the gold, while clouds drift by."
+    },
+    "pixel-hockney-pool": {
+      "title": "Pool in the sun",
+      "description": "After Hockney: a flat pink house, two tall palms swaying and a pool whose floor swims with a moving net of caustics, as the bright California day turns to evening."
+    },
+    "pixel-metaphysical-square": {
+      "title": "Metaphysical square",
+      "description": "After De Chirico: a low sun crosses behind an arcade, a statue and a tall chimney, and their long shadows — arches and all — swing slowly across the empty square."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1537,14 +1749,134 @@
       "storm": "Storm",
       "eclipse": "Eclipse",
       "vapor": "Vapor",
-      "polar": "Polar"
+      "polar": "Polar",
+      "forest": "Forest",
+      "harbor": "Harbour",
+      "dusk": "Dusk",
+      "alien": "Alien",
+      "sakura": "Sakura",
+      "abyss": "Abyss",
+      "lagoon": "Lagoon",
+      "jungle": "Jungle",
+      "cosmos": "Cosmos",
+      "neon": "Neon",
+      "noon": "Noon",
+      "nave": "Nave",
+      "grotto": "Grotto",
+      "starry": "Starry night",
+      "brass": "Brass"
     },
     "set": {
       "pixel-lake": "Moon lake",
       "pixel-peaks": "Snow peaks",
-      "pixel-gallery": "Dark gallery"
+      "pixel-gallery": "Dark gallery",
+      "pixel-city": "Neon city",
+      "pixel-desert": "Desert",
+      "pixel-coast": "Sea cliff",
+      "pixel-forest": "Forest",
+      "pixel-viaduct": "Viaduct",
+      "pixel-volcano": "Volcano",
+      "pixel-drivein": "Drive-in",
+      "pixel-garden": "Cherry garden",
+      "pixel-reef": "Reef",
+      "pixel-valley": "Valley",
+      "pixel-fair": "Night fair",
+      "pixel-village": "Snowy village",
+      "pixel-falls": "Waterfall",
+      "pixel-orbit": "Orbit",
+      "pixel-tulips": "Tulip fields",
+      "pixel-alley": "Neon alley",
+      "pixel-castle": "Castle",
+      "pixel-beach": "Beach",
+      "pixel-lanterns": "Lantern lake",
+      "pixel-window": "Window",
+      "pixel-express": "Train window",
+      "pixel-daycycle": "Day cycle",
+      "pixel-eclipse": "Eclipse",
+      "pixel-seasons": "Seasons",
+      "pixel-cathedral": "Cathedral",
+      "pixel-koi": "Koi pond",
+      "pixel-caravan": "Caravan",
+      "pixel-synthwave": "Synthwave",
+      "pixel-monsoon": "Monsoon",
+      "pixel-marsh": "Marsh",
+      "pixel-launch": "Launch site",
+      "pixel-grotto": "Grotto",
+      "pixel-starry": "Starry night",
+      "pixel-dawnmist": "Misty ridges",
+      "pixel-motel": "Motel",
+      "pixel-tidal": "Tidal island",
+      "pixel-mirage": "Mirage",
+      "pixel-meadow": "Meadow",
+      "pixel-fjord": "Fjord",
+      "pixel-clockwork": "Clockwork",
+      "pixel-orrery": "Orrery",
+      "pixel-rainbow": "Rainbow valley",
+      "pixel-risingcity": "Rising city",
+      "pixel-abyss": "Deep sea",
+      "pixel-blizzard": "Blizzard pass",
+      "pixel-lantern": "Lantern shore",
+      "pixel-empire": "Empire of light",
+      "pixel-startrails": "Star-trail lake",
+      "pixel-wheat": "Wheat field",
+      "pixel-pool": "Hockney pool",
+      "pixel-piazza": "Metaphysical square"
     },
     "addTv": "Add TV",
-    "tvs": "{{count}} TVs"
+    "tvs": "{{count}} TVs",
+    "scene": {
+      "title": "World elements",
+      "reimagine": "Reimagine",
+      "reimagineHelp": "Paints the same world with a new layout of ridges, trees, stars and buildings.",
+      "body": "Sun or moon",
+      "bodyKind": {
+        "moon": "Moon",
+        "sun": "Sun",
+        "none": "None",
+        "planet": "Ringed planet"
+      },
+      "bodyX": "Position across the sky",
+      "bodyY": "Height in the sky",
+      "bodySize": "Size",
+      "crescent": "Moon phase",
+      "mountains": "Mountains",
+      "roughness": "Roughness",
+      "snow": "Snow",
+      "hills": "Hills and dunes",
+      "trees": "Trees",
+      "stars": "Stars",
+      "auroraHeight": "Aurora height",
+      "reeds": "Reeds in the foreground",
+      "ripple": "Water waves",
+      "meteorDirection": "Shooting stars fall",
+      "meteor": {
+        "both": "Both ways",
+        "left": "To the left",
+        "right": "To the right"
+      },
+      "city": "Skyline",
+      "windows": "Lit windows",
+      "lightHelp": "The key light comes from the sun or moon: move it to relight actors and TVs from that side.",
+      "reset": "Back to the world as designed"
+    },
+    "colors": {
+      "title": "Colours",
+      "mood": "Mood to recolour",
+      "reset": "Reset this mood",
+      "sky0": "Sky top",
+      "sky1": "Sky middle",
+      "sky2": "Horizon",
+      "moon": "Sun or moon",
+      "stars": "Stars",
+      "far0": "Distant range",
+      "far1": "Range light",
+      "near0": "Near land",
+      "near1": "Near light",
+      "trees": "Trees and silhouettes",
+      "water": "Water or sand",
+      "aurora": "Aurora",
+      "windows": "Windows and lamps",
+      "light": "Light on actors"
+    }
   }
 }

@@ -96,6 +96,7 @@ let _workspaceListRequestEpoch = 0
 let _pendingWorkspaceTransitionEpoch: number | null = null
 let _outputRequestEpoch = 0
 let _outputAbortController: AbortController | null = null
+let _refreshAfterOutputRequest = false
 let _metadataRequestEpoch = 0
 let _metadataAbortController: AbortController | null = null
 let _foCachedOutputs: OutputFile[] = []
@@ -122,6 +123,7 @@ function _workspaceName(state: { activeWorkspace: string; browsingUploads: boole
 }
 
 function _beginWorkspaceTransition(): number {
+  _refreshAfterOutputRequest = false
   _workspaceRequestEpoch += 1
   _pendingWorkspaceTransitionEpoch = null
   _workspaceListRequestEpoch += 1
@@ -155,8 +157,13 @@ function _isCurrentOutputRequest(
     && _workspaceName(get()) === request.workspace
 }
 
-function _finishOutputRequest(request: WorkspaceOutputRequest): void {
-  if (_outputAbortController === request.controller) _outputAbortController = null
+function _finishOutputRequest(request: WorkspaceOutputRequest, refresh: () => void): void {
+  if (_outputAbortController !== request.controller) return
+  _outputAbortController = null
+  if (_refreshAfterOutputRequest) {
+    _refreshAfterOutputRequest = false
+    refresh()
+  }
 }
 
 const FILTER_PREDICATES: Partial<Record<MediaFilter, (output: OutputFile) => boolean>> = {
@@ -228,16 +235,15 @@ function mergeRefreshedOutputs(current: OutputFile[], fresh: OutputFile[]): {
 } {
   const currentNames = new Set(current.map(output => output.name))
   const newItems = fresh.filter(output => !currentNames.has(output.name))
-  const freshByName = new Map(fresh.map(output => [output.name, output]))
-  const updatedCurrent = current.map(output => {
-    const latest = freshByName.get(output.name)
-    if (!latest) return output
-    return outputSnapshotEquals(output, latest) ? output : latest
+  const currentByName = new Map(current.map(output => [output.name, output]))
+  const merged = fresh.map(latest => {
+    const output = currentByName.get(latest.name)
+    return output && outputSnapshotEquals(output, latest) ? output : latest
   })
   return {
-    merged: [...newItems, ...updatedCurrent],
+    merged,
     newItems,
-    existingChanged: updatedCurrent.some((output, index) => output !== current[index]),
+    existingChanged: merged.length !== current.length || merged.some((output, index) => output !== current[index]),
   }
 }
 
@@ -475,12 +481,13 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
       console.error('Failed to load outputs:', e)
       set({ outputsLoading: false })
     } finally {
-      _finishOutputRequest(request)
+      _finishOutputRequest(request, () => { void get().maybeRefreshGallery() })
     }
   },
 
   // Load next page of outputs (infinite scroll)
   loadMoreOutputs: async () => {
+    if (_outputAbortController) return
     const PAGE_SIZE = 100
     const current = get().outputs
     const total = get().outputsTotal
@@ -511,18 +518,23 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     } catch {
       // Silent fail
     } finally {
-      _finishOutputRequest(request)
+      _finishOutputRequest(request, () => { void get().maybeRefreshGallery() })
     }
   },
 
   // Incremental refresh: only fetch the newest items to detect new outputs during generation
   refreshOutputs: async () => {
+    // Heartbeats must not abort initial loading, paging or another refresh.
+    // Coalesce concurrent heartbeats into one trailing refresh, including a
+    // completion that arrives during the initial request.
+    if (_outputAbortController) { _refreshAfterOutputRequest = true; return }
     const workspace = _workspaceName(get())
     const request = _beginOutputRequest(workspace)
     const query = galleryListQuery(get().mediaFilter, get().outputSearchQuery)
     try {
-      // Only fetch first page — new outputs appear at the top (newest first)
-      const { outputs: apiOutputs, total } = await api.fetchOutputs(50, 0, {
+      // Reconcile the loaded window in the server's chosen order, including
+      // deletions and replacements made by another browser.
+      const { outputs: apiOutputs, total } = await api.fetchOutputs(Math.max(100, get().outputs.length), 0, {
         order: get().galleryOrder,
         workspace,
         mediaType: query.mediaType,
@@ -546,17 +558,15 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
           }
           return
         }
-        // Prepend new items (newest first), update files that were first seen
-        // while still being written, and shift selection to keep the same
-        // logical item active.
-        const sel = get().selectedOutput
-        set({ outputs: merged, outputsTotal: total, selectedOutput: sel + newItems.length })
+        const selectedName = get().filteredOutputs()[get().selectedOutput]?.name
+        const selected = computeFilteredOutputs(merged, get().mediaFilter).findIndex(file => file.name === selectedName)
+        set({ outputs: merged, outputsTotal: total, selectedOutput: Math.max(0, selected) })
       }
     } catch {
       // Silent fail for background refresh
     } finally {
       if (_isCurrentOutputRequest(get, request)) set({ outputsLoading: false })
-      _finishOutputRequest(request)
+      _finishOutputRequest(request, () => { void get().maybeRefreshGallery() })
     }
   },
 

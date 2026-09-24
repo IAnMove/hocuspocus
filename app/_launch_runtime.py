@@ -24603,7 +24603,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                         print(f"\n  [ERROR] {data}")
                         in_status_line = False
                         task_error = True
-                        update_job(job, message=f"Error: {data}")
+                        update_job(job, error=str(data), message=f"Error: {data}")
                     elif cmd == "progress":
                         job["last_progress_at"] = time.time()
                         if isinstance(data, list) and len(data) >= 2:
@@ -25416,7 +25416,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 step=0,
                 total_steps=0,
                 phase="",
-                message="Done" if success else "Generation failed",
+                message="Done" if success else (job.get("error") or "Generation failed"),
             )
             return success and job.get("status") == "completed"
 
@@ -33468,7 +33468,6 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             "created_at": mtime,
             "completed_at": metadata_completed_at or mtime,
             "completion_time_source": "metadata" if metadata_completed_at else "file",
-            **media_listing_fields(ftype, filepath, size, mtime, cached.get("resolution")),
             "url": f"/api/v1/file/{name}{workspace_suffix}",
             "thumbnail_url": (
                 f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png{workspace_suffix}"
@@ -33480,6 +33479,17 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                             else cached.get("thumbnail_url")))
             ),
         })
+
+    def listed_result(selected, total):
+        # Read image headers and schedule colour/size work only for this page,
+        # not the entire workspace on every gallery heartbeat.
+        for item in selected:
+            item.update(media_listing_fields(
+                item["type"], os.path.join(out_dir, item["name"]),
+                item["size"], item["created_at"],
+                (sidecar_cache.get(item["name"]) or {}).get("resolution"),
+            ))
+        return {"outputs": selected, "total": total}
 
     if media_type:
         files = [item for item in files if item["type"] == media_type]
@@ -33501,7 +33511,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             if item.get("type") == "video"
             and result_kind_matches_filter(item.get("result_kind"), wanted_kind)
         ]
-        return {"outputs": files, "total": len(files)}
+        return listed_result(files, len(files))
 
     # Special filters: return ALL matches, bypass pagination
     if edits_only:
@@ -33509,10 +33519,10 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             item for item in files
             if item.get("edit_sub_mode") or item.get("mode") == "avatar"
         ]
-        return {"outputs": files, "total": len(files)}
+        return listed_result(files, len(files))
     if favorites_only:
         files = [f for f in files if f["favorite"]]
-        return {"outputs": files, "total": len(files)}
+        return listed_result(files, len(files))
     if multiclip_only:
         # 1. Explicit multiclip files
         multiclips = [f for f in files if "multiclip" in f["name"].lower() and f["type"] == "video"]
@@ -33552,7 +33562,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         combined = multiclips + sw_finals
         combined.sort(key=lambda f: f["created_at"], reverse=True)
         print(f"[Multiclip] Result: {len(multiclips)} multiclips + {len(sw_finals)} sliding window finals = {len(combined)} total")
-        return {"outputs": combined, "total": len(combined)}
+        return listed_result(combined, len(combined))
     if search:
         from services.search_index import get_search_index
         idx = get_search_index()
@@ -33566,12 +33576,12 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             f for f in files
             if os.path.splitext(f["name"])[0] in matching_names or query_lower in f["name"].lower()
         ]
-        return {"outputs": files, "total": len(files)}
+        return listed_result(files, len(files))
 
     total = len(files)
     if limit > 0:
         files = files[offset:offset + limit]
-    return {"outputs": files, "total": total}
+    return listed_result(files, total)
 
 
 def _resolve_gallery_file(filename: str, workspace: str | None = None) -> str | None:

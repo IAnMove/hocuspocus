@@ -52,11 +52,17 @@ Walkthrough with screenshots: [Story → Comics → Video](docs/MAESTRO_X_STORY_
 
 **Studio** is the manual bench: pick image, video or audio, write the prompt, add references and LoRAs, generate. Outputs land in the gallery and are reusable as references, editor clips, 3D plates or comic identities.
 
+Image requests appear in the gallery queue as soon as you press Generate, while inputs upload and prepare in the background. Failed image cards show the reported error and offer **Retry**, retaining the original prompt, settings and source images while the tab remains open. An uncertain submission reuses its command ID to avoid duplicate work; retrying an acknowledged job creates a new attempt.
+
+The gallery loads bounded 320/640 px previews; opening the details dialog loads the original image. Background refreshes preserve the selected file, reconcile changes from other browsers and wait for any ongoing page load. Image dimensions and colours are prepared for the requested page rather than the entire library.
+
 | Kind | What ships in the box (among others) |
 |---|---|
 | Video | MiniMax H3 (picture + stereo audio), Wan 2.1 / 2.2, Hunyuan Video, LTX-2.3 |
 | Image | Flux 2 Klein, Qwen Image 2.1, Qwen Image Edit |
 | Audio | ACE-Step 1.5 XL (default new songs), MiniMax Music, Kugelaudio / Qwen3 TTS, MMAudio SFX |
+
+**Qwen Image 2.1 Viggle Turbo v0.2.1** is available in the image model selector for text-to-image and instruction editing with up to three input images (including the source). It reuses the Qwen 2.1 INT8 base files and downloads the pinned rank-256 adapter automatically on first use. Its six-step schedule and CFG 1 are fixed; start at 1024×1024. The LoRA runs without merging into the quantized base. This is a preview: complex edits can be less faithful, and 2K/RGBA/masked editing are not validated by its authors. [Model card and Qwen Research License](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo).
 
 **Example — MiniMax H3.** Prompt a wide night sea and add `Audio: surf, wind, a low cello`. Use **FL2VA** when you have an exact first/last frame from Story. Use **Ref2VA** when you pass up to 9 images, 3 videos and 3 audio clips as identity/mood references (`<Picture 1>`, `<Video 1>`, `<Audio 1>`).
 

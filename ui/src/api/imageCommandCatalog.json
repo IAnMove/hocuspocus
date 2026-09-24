@@ -1168,8 +1168,7 @@
               "override_profile": {
                 "anyOf": [
                   {
-                    "maxLength": 8192,
-                    "type": "string"
+                    "type": "number"
                   },
                   {
                     "type": "null"
@@ -2827,8 +2826,7 @@
             "override_profile": {
               "anyOf": [
                 {
-                  "maxLength": 8192,
-                  "type": "string"
+                  "type": "number"
                 },
                 {
                   "type": "null"

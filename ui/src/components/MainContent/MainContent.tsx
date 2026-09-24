@@ -89,7 +89,26 @@ function stripTimeSuffix(msg: string): string {
   return msg.replace(/\s*\|\s*\d+:\d+.*$/, '').trim()
 }
 
-function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop: () => void; onDismiss: () => void }) {
+export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop: () => void; onDismiss: () => void }) {
+  const { t: tCommon } = useUiTranslation('common')
+  const [retrying, setRetrying] = useState(false)
+  const [retryError, setRetryError] = useState('')
+  const retryLock = useRef(false)
+  const retry = async () => {
+    if (!job.retry || retryLock.current) return
+    retryLock.current = true
+    setRetrying(true)
+    setRetryError('')
+    try {
+      await job.retry()
+      onDismiss()
+    } catch (error) {
+      setRetryError(error instanceof Error ? error.message : String(error))
+    } finally {
+      retryLock.current = false
+      setRetrying(false)
+    }
+  }
   const hasSteps = job.totalSteps > 0
   const progressPct = hasSteps ? (job.step / job.totalSteps) * 100 : job.progress * 100
   const phase = stripTimeSuffix(job.phase || job.message)
@@ -151,7 +170,7 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
             )}
             {isFailed && (
               <p className="text-[11px] text-text-secondary mt-2 max-h-24 overflow-y-auto px-2 leading-relaxed whitespace-pre-wrap break-words">
-                {errorText}
+                {errorText}{retryError ? `\n${retryError}` : ''}
               </p>
             )}
           </div>
@@ -223,7 +242,14 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
         <div className="text-[11px] text-text-muted truncate flex-1">
           {isFailed ? 'Click × to dismiss — the tile stays so you can see what failed' : phase || 'Preparing...'}
         </div>
-        {!isFailed && (
+        {isFailed && job.retry && (
+          <button type="button" onClick={() => void retry()} disabled={retrying}
+            className="flex items-center gap-1 text-xs text-accent-blue disabled:opacity-50 shrink-0 ml-2">
+            <RefreshCw size={12} className={retrying ? 'animate-spin' : ''} />
+            {tCommon('actions.retry')}
+          </button>
+        )}
+        {!isFailed && job.id && (
           <button
             onClick={onStop}
             className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors shrink-0 ml-2"
@@ -669,7 +695,7 @@ export function MainContent() {
       <div className={`flex-1 flex min-h-0 min-w-0 overflow-hidden relative ${workspaceSurface === 'generate' ? 'flex-col xl:flex-row' : 'flex-row'}`}>
         <Suspense fallback={<PanelLoadingFallback />}>
         {workspaceSurface === 'generate' && (
-          <div className="flex min-h-0 w-full shrink-0 flex-col border-b border-border xl:h-full xl:max-w-xl xl:border-b-0 xl:border-r 2xl:max-w-2xl">
+          <div className="flex max-h-full min-h-0 w-full shrink-0 flex-col border-b border-border xl:h-full xl:max-w-xl xl:border-b-0 xl:border-r 2xl:max-w-2xl">
             <DirectGenerationWorkspace />
           </div>
         )}

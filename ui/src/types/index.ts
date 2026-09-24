@@ -338,6 +338,8 @@ export interface GenerationDetails {
 
 export interface GenerationJob {
   id: string
+  /** In-tab retry of the frozen image request, including its original files. */
+  retry?: () => Promise<unknown>
   /** Canonical Activity identity; distinct from the backend polling job id. */
   taskId?: string
   rootTaskId?: string
