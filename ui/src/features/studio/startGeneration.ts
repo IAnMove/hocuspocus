@@ -155,48 +155,51 @@ function placeholderJob(
   }
 }
 
-async function sendPreparedImageCommand(
-  prepared: { command: StudioImageGenerationCommand; params: Record<string, unknown> },
-  intent: StudioImageIntent,
-  ports: StudioImagePorts,
-  scheduledPrompt?: ScheduledPromptSubmission,
-  context?: GenerationSubmissionContext,
-): Promise<GenerationReceiptLike | void> {
-  const job = placeholderJob(prepared.params, intent, ports, scheduledPrompt)
-  ports.prependJob(job)
-  try {
-    const receipt = await ports.send(prepared.command, context)
-    ports.admitJob(job, receipt)
-    ports.startPolling?.(receipt.result.job_id)
-    return receipt
-  } catch (error) {
-    ports.failJob(job, error instanceof Error ? error.message : 'Generation failed')
-  }
-}
-
 async function runStudioImageGeneration(
   intent: StudioImageIntent,
   ports: StudioImagePorts,
   scheduledPrompt?: ScheduledPromptSubmission,
   context?: GenerationSubmissionContext,
+  prepared?: Awaited<ReturnType<typeof prepareStudioImageCommand>>,
 ): Promise<GenerationReceiptLike | void> {
   const prompt = String(scheduledPrompt?.prompt ?? intent.params.prompt ?? '').trim()
   if (!prompt) {
     throw new Error(i18n.t('studio:generate.addPromptHint'))
   }
-  await unloadLlmIfNeeded(intent, ports)
-  const normalized = normalizeStudioImageParams(intent, scheduledPrompt, context)
-  if (normalized.persistH3FirstFrame) ports.persistH3FirstFrame?.()
-  const errors = await resolveStudioImageMedia(intent, normalized.params, ports)
   const intentId = context?.commandId || ports.newIntentId()
+  const normalized = normalizeStudioImageParams(intent, scheduledPrompt, context)
+  const job = placeholderJob(normalized.params, intent, ports, scheduledPrompt)
+  let admitted = false
+  let retrying: Promise<GenerationReceiptLike | void> | undefined
+  job.retry = () => {
+    if (retrying) return retrying
+    // An acknowledged failed job needs a new command. An uncertain POST
+    // replays the exact command/ID so a lost response cannot duplicate work.
+    const retryContext = { ...context, actor: context?.actor ?? 'user' as const,
+      commandId: admitted ? ports.newIntentId() : intentId }
+    retrying = runStudioImageGeneration(
+      intent, ports, scheduledPrompt, retryContext, admitted ? undefined : prepared,
+    ).finally(() => { retrying = undefined })
+    return retrying
+  }
+  // Publish synchronously, before unloading a model, uploading or resolving
+  // images. Keep preparation failures on this same visible, retryable tile.
+  ports.prependJob(job)
   try {
-    const prepared = await prepareStudioImageCommand(
-      normalized.params, intentId, ports.resolveReferences, errors, intent.localImageFiles,
-    )
-    return await sendPreparedImageCommand(prepared, intent, ports, scheduledPrompt, context)
+    await unloadLlmIfNeeded(intent, ports)
+    if (normalized.persistH3FirstFrame) ports.persistH3FirstFrame?.()
+    if (!prepared) {
+      const errors = await resolveStudioImageMedia(intent, normalized.params, ports)
+      prepared = await prepareStudioImageCommand(
+        normalized.params, intentId, ports.resolveReferences, errors, intent.localImageFiles,
+      )
+    }
+    const receipt = await ports.send(prepared.command, context)
+    admitted = true
+    ports.admitJob(job, receipt)
+    ports.startPolling?.(receipt.result.job_id)
+    return receipt
   } catch (error) {
-    const job = placeholderJob(normalized.params, intent, ports, scheduledPrompt)
-    ports.prependJob(job)
     ports.failJob(job, error instanceof Error ? error.message : 'Generation failed')
   }
 }

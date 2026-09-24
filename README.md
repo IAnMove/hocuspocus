@@ -52,6 +52,10 @@ Walkthrough with screenshots: [Story → Comics → Video](docs/MAESTRO_X_STORY_
 
 **Studio** is the manual bench: pick image, video or audio, write the prompt, add references and LoRAs, generate. Outputs land in the gallery and are reusable as references, editor clips, 3D plates or comic identities.
 
+Image requests appear in the gallery queue as soon as you press Generate, while inputs upload and prepare in the background. Failed image cards show the reported error and offer **Retry**, retaining the original prompt, settings and source images while the tab remains open. An uncertain submission reuses its command ID to avoid duplicate work; retrying an acknowledged job creates a new attempt.
+
+The gallery loads bounded 320/640 px previews; opening the details dialog loads the original image. Background refreshes preserve the selected file, reconcile changes from other browsers and wait for any ongoing page load. Image dimensions and colours are prepared for the requested page rather than the entire library.
+
 | Kind | What ships in the box (among others) |
 |---|---|
 | Video | MiniMax H3 (picture + stereo audio), Wan 2.1 / 2.2, Hunyuan Video, LTX-2.3 |

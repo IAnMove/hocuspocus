@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { ImagePreview } from '../common/ImagePreview'
 import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
@@ -43,10 +43,20 @@ export const GalleryTile = memo(function GalleryTile({
   // Not every kind publishes a thumbnail — audio and some 3D outputs do not.
   // Without this the tile is a black rectangle with no way to tell an
   // unrenderable kind from a broken file.
-  const [thumbFailed, setThumbFailed] = useState(false)
-  const [loaded, setLoaded] = useState(false)
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null)
+  const [retry, setRetry] = useState({ src: '', count: 0 })
   const tag = KIND_TAG[file.type] ?? file.type.slice(0, 3).toUpperCase()
   const src = galleryThumbnailUrl(file, workspace, tileThumbnailSize(width, height))
+  const tries = retry.src === src ? retry.count : 0
+  const requestSrc = src && tries ? `${src}${src.includes('?') ? '&' : '?'}retry=${tries}` : src
+  const thumbFailed = failedSrc === requestSrc
+  const loaded = loadedSrc === requestSrc
+  useEffect(() => {
+    if (!thumbFailed || !src || tries >= 3) return
+    const timer = window.setTimeout(() => setRetry({ src, count: tries + 1 }), 800 * (tries + 1))
+    return () => window.clearTimeout(timer)
+  }, [src, tries, thumbFailed])
   const style = useMemo<CSSProperties>(() => ({ position: 'absolute', top, left, width, height }), [top, left, width, height])
   const open = useCallback(() => onOpen(index), [onOpen, index])
   const openDetails = useCallback(() => onOpenDetails(index), [onOpenDetails, index])
@@ -92,13 +102,13 @@ export const GalleryTile = memo(function GalleryTile({
         </span>
       ) : (
         <img
-          src={src}
+          src={requestSrc || undefined}
           alt=""
           loading="lazy"
           decoding="async"
           draggable={false}
-          onLoad={() => setLoaded(true)}
-          onError={() => setThumbFailed(true)}
+          onLoad={() => setLoadedSrc(requestSrc)}
+          onError={() => setFailedSrc(requestSrc)}
           className={`h-full w-full transition-opacity duration-200 [-webkit-touch-callout:none] ${cover ? 'object-cover' : 'object-contain'} ${loaded ? 'opacity-100' : 'opacity-0'}`}
         />
       )}
