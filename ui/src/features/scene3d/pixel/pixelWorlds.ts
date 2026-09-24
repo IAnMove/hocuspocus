@@ -1,6 +1,6 @@
 import { fxRandom } from '../../sceneFx/types'
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintLanternBearer, paintStreetlamp, paintHouse, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc, paintJellyfish } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintLanternBearer, paintStreetlamp, paintHouse, paintStarTrails, paintGlowTent, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc, paintJellyfish } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 import type { PixelPaletteId } from './pixelPalettes'
 
@@ -27,6 +27,8 @@ export type LayerSpec = {
   orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number; /** Circles on the ground (y is then z), facing where it goes. */ flat?: boolean; /** Circles this earlier orbiting layer (by `id`) instead of a fixed point. */ around?: string; /** Keeps its own facing instead of turning along its path. */ upright?: boolean }
   /** A name other layers can orbit around. */
   id?: string
+  /** Trace the plane in over `from`..`to` seconds, texel by texel in its painted order. */
+  reveal?: { from: number; to: number }
   /** Keep this plane in one palette mood (a daylight sky over a night street). */
   mood?: PixelPaletteId
   /** The sun or moon on its arc: the key light follows whichever is higher. */
@@ -549,6 +551,15 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
   'pixel-blizzard': scene => ({ ground: 'water', clearSky: true, haze: { from: 3, peak: 12, to: 21 }, layers: [
     sky(scene), range(scene), hills(scene, true),
     { ...VILLAGE, z: -20, width: 40, bottom: -.6, paint: (w, h) => paintVillage(w, h, { ...near, seed: scene.seed + 6, lightFrom: bodySkyX(scene), houses: 2 }) },
+    ...reeds(scene),
+  ] }),
+  // A long exposure: the stars trace arcs around the pole over the whole
+  // shot, doubled in the still lake, above a tent lit from inside.
+  'pixel-startrails': scene => ({ ground: 'water', clearSky: true, layers: [
+    sky(scene),
+    { ...SKY, sky: false, z: SKY.z + .5, reveal: { from: .5, to: 21 }, paint: (w, h) => paintStarTrails(w, h, scene.seed, bodySkyX(scene), .95 - .35 * scene.bodyY, Math.round(300 + scene.stars * 500)) },
+    range(scene), hills(scene, true),
+    { z: -16, x: -3, width: 3, height: 1.75, bottom: -.05, texture: [24, 14], paint: (w, h) => paintGlowTent(w, h) },
     ...reeds(scene),
   ] }),
   // After Magritte's Empire of Light: a bright daytime sky with white clouds

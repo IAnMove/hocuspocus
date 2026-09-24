@@ -339,6 +339,45 @@ export function paintLanternBearer(width: number, height: number, frame: number,
   return bearer
 }
 
+/** Star trails round a pole at (`poleX`, `poleY`) as fractions of the
+ *  sky: every star sweeps the same angle, and `order` says when each
+ *  texel of its arc is traced, so the exposure builds up over the shot. */
+export function paintStarTrails(width: number, height: number, seed: number, poleX: number, poleY: number, count: number): IndexedLayer {
+  const trails = layer(width, height)
+  trails.order = new Uint8Array(width * height)
+  const cx = width * poleX, cy = height * poleY, reach = Math.hypot(width, height), sweep = Math.PI * .55
+  for (let s = 0; s < count; s++) {
+    const radius = 3 + Math.sqrt(fxRandom(seed, s)) * reach * .8, start = fxRandom(seed, s + 900) * Math.PI * 2
+    const slot = INDEX.star + Math.floor(fxRandom(seed, s + 1800) * 8)
+    for (let step = 0, steps = Math.ceil(sweep * radius * 1.4); step <= steps; step++) {
+      const angle = start + sweep * step / steps
+      const x = Math.round(cx + Math.cos(angle) * radius), y = Math.round(cy - Math.sin(angle) * radius)
+      if (x < 0 || y < 0 || x >= width || y >= height) continue
+      const at = y * width + x, when = 1 + Math.round(step / steps * 254)
+      if (!trails.data[at] || when < trails.order[at]) { trails.data[at] = slot; trails.order[at] = when }
+    }
+  }
+  set(trails, Math.round(cx), Math.round(cy), INDEX.moon)
+  trails.order[Math.round(cy) * width + Math.round(cx)] = 1
+  return trails
+}
+
+/** A small ridge tent glowing from inside, its door flap open. */
+export function paintGlowTent(width: number, height: number): IndexedLayer {
+  const tent = layer(width, height)
+  const mid = width / 2
+  for (let y = 1; y < height; y++) {
+    const half = (y / height) * mid
+    for (let x = Math.round(mid - half); x <= Math.round(mid + half); x++) {
+      const edge = x <= Math.round(mid - half) || x >= Math.round(mid + half) || y === height - 1
+      const door = y > height * .45 && Math.abs(x - mid - 1) < (y - height * .45) * .45
+      set(tent, x, y, edge ? INDEX.trees : door ? INDEX.lamp : INDEX.window)
+    }
+  }
+  for (let x = Math.round(mid) - 1; x <= Math.round(mid) + 1; x++) set(tent, x, 0, INDEX.trees)
+  return tent
+}
+
 /** A tall house front: a steep roof with a chimney, rows of shuttered
  *  windows (some lit) and a door, grey against the trees. */
 export function paintHouse(width: number, height: number, seed: number): IndexedLayer {

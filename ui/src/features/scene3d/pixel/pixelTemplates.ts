@@ -129,6 +129,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
   // Storm, clearing, a green afternoon, then a warm evening.
   // A day passes as the city is built: dawn, day, evening and a lit night.
+  'pixel-star-trails': ['pixel-startrails', { palettes: ['midnight'], hold: 24, meteors: .5 }],
   'pixel-empire-of-light': ['pixel-empire', { palettes: ['midnight'], hold: 20, meteors: 0 }],
   'pixel-lantern-walk': ['pixel-lantern', { palettes: ['midnight', 'forest', 'midnight'], hold: 10, meteors: .3 }],
   'pixel-blizzard': ['pixel-blizzard', { palettes: ['polar', 'storm', 'polar'], hold: 8, meteors: 0 }],

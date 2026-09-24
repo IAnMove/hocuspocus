@@ -1505,6 +1505,10 @@
     "pixel-empire-of-light": {
       "title": "El imperio de las luces",
       "description": "Inspirado en Magritte: un cielo azul de día con nubes blancas sobre una casa junto a un estanque donde ya es de noche, con las ventanas encendidas y una sola farola iluminando los árboles oscuros."
+    },
+    "pixel-star-trails": {
+      "title": "Estelas de estrellas",
+      "description": "Una larga exposición sobre un lago de montaña: las estrellas trazan poco a poco sus arcos alrededor de la estrella polar mientras avanza el plano, duplicadas en el agua quieta, sobre una tienda iluminada por dentro."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1800,7 +1804,8 @@
       "pixel-abyss": "Mar profundo",
       "pixel-blizzard": "Paso de ventisca",
       "pixel-lantern": "Orilla del farol",
-      "pixel-empire": "Imperio de las luces"
+      "pixel-empire": "Imperio de las luces",
+      "pixel-startrails": "Lago de estelas"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

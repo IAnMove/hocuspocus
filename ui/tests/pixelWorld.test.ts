@@ -11,7 +11,7 @@ import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { eclipseShade, hazeAt, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
-import { paintJellyfish, paintLoopRange, paintMurmuration, paintText } from '../src/features/scene3d/pixel/pixelPaintWorlds'
+import { paintJellyfish, paintLoopRange, paintMurmuration, paintStarTrails, paintText } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { layer } from '../src/features/scene3d/pixel/pixelPaint'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3, type Mesh } from 'three'
@@ -749,4 +749,19 @@ test('empire of light: the sky keeps its daylight palette while the street below
   assert.notEqual(sky, street, 'two palettes at once')
   const brightness = (texture: typeof sky, slot: number) => texture.image.data[slot * 4] + texture.image.data[slot * 4 + 1] + texture.image.data[slot * 4 + 2]
   assert.ok(brightness(sky, INDEX.sky + 4) > brightness(street, INDEX.sky + 4) * 2, 'daylight blue over a night street')
+})
+
+test('star trails: every star sweeps the same arc round the pole and is traced in over the shot', () => {
+  const trails = paintStarTrails(200, 120, 7, .5, .5, 60)
+  const drawn = [...trails.data.keys()].filter(at => trails.data[at])
+  assert.ok(drawn.length > 600, 'long arcs, not dots')
+  assert.ok(drawn.every(at => trails.order![at] >= 1), 'every texel knows when it appears')
+  const first = drawn.filter(at => trails.order![at] < 20).length, last = drawn.filter(at => trails.order![at] > 235).length
+  assert.ok(first > 0 && last > 0, 'traced from start to end')
+  const root = pixelWorldGroup('pixel-startrails'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-star-trails').pixelWorld!
+  const exposure = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms?.uReveal?.value as number).filter(value => value <= 1) }
+  assert.deepEqual(exposure(0), [0])
+  assert.ok(exposure(10)[0] > .3 && exposure(10)[0] < .7, 'half traced')
+  assert.deepEqual(exposure(23), [1])
 })

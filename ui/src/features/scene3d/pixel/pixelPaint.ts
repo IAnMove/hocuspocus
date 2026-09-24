@@ -39,7 +39,7 @@ export const INDEX = {
   sign: 164,
 } as const
 
-export type IndexedLayer = { width: number; height: number; data: Uint8Array; /** A light source painted in, in texels (the lighthouse lamp). */ lamp?: [number, number]; /** Where sails turn, in texels (windmill hubs). */ hubs?: [number, number][] }
+export type IndexedLayer = { width: number; height: number; data: Uint8Array; /** A light source painted in, in texels (the lighthouse lamp). */ lamp?: [number, number]; /** Where sails turn, in texels (windmill hubs). */ hubs?: [number, number][]; /** When each texel appears over a `reveal`, 1 (first) to 255 (last). */ order?: Uint8Array }
 
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 export const bayer = (x: number, y: number) => BAYER[(y & 3) * 4 + (x & 3)] / 16

@@ -42,6 +42,7 @@ type PixelRuntime = {
   shimmers: ShaderMaterial[]
   growers: { material: ShaderMaterial; grow: NonNullable<LayerSpec['grow']> }[]
   hazers: { material: ShaderMaterial; depth: number }[]
+  revealers: { material: ShaderMaterial; reveal: NonNullable<LayerSpec['reveal']> }[]
   carry?: WorldPlan['carry']
   carrier?: Mesh
   lit: ShaderMaterial[]
@@ -51,7 +52,7 @@ type PixelRuntime = {
 
 const LAYER_VERTEX = `varying vec2 vUv; varying vec3 vWorld; void main(){ vUv=uv; vWorld=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
 const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
-  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze; uniform vec3 uHazeColor, uCarryColor; uniform vec4 uCarry;
+  uniform sampler2D uIndex, uPalette, uOrder; uniform float uReveal; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze; uniform vec3 uHazeColor, uCarryColor; uniform vec4 uCarry;
   uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
@@ -112,6 +113,8 @@ const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
     if(uShimmer>0.) cell.x=mod(cell.x+floor(sin(cell.y*.45+uTime*4.)*uShimmer*(1.-cell.y/uRes.y)+.5),uRes.x); vec2 uv=(cell+.5)/uRes;
     float index=floor(texture2D(uIndex,uv).r*255.+.5);
     if(index<.5) discard;
+    // A reveal: each texel waits for its own moment (a trail being traced).
+    if(uReveal<1.5&&(texture2D(uOrder,uv).r*255.-1.)/254.>uReveal) discard;
     // A dithered dissolve: pixels drop out in Bayer order as it rises.
     if(bayer4(cell)<uDissolve) discard;
     // Growing: only what lies below the rising line is built yet.
@@ -150,7 +153,8 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
   const material = new ShaderMaterial({
     name: 'pixel-world-layer',
     uniforms: {
-      uIndex: { value: indexTexture(painted) }, uPalette: { value: palette },
+      uIndex: { value: indexTexture(painted) }, uPalette: { value: palette }, uReveal: { value: 2 },
+      uOrder: { value: painted.order ? indexTexture({ ...painted, data: painted.order }) : null },
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
       uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uCarry: { value: new Vector4(0, 0, 0, 0) }, uCarryColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
@@ -320,6 +324,7 @@ function clear(root: Object3D) {
       const material = node.material as ShaderMaterial
       for (const frame of (node.userData.frames ?? []) as DataTexture[]) frame.dispose()
       material.uniforms?.uIndex?.value?.dispose?.()
+      material.uniforms?.uOrder?.value?.dispose?.()
       material.dispose()
     })
     if (child instanceof Reflector) child.dispose()
@@ -341,6 +346,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.celestial) runtime.celestials.push(mesh)
   if (spec.shimmer) runtime.shimmers.push(material)
   if (spec.grow) runtime.growers.push({ material, grow: spec.grow })
+  if (spec.reveal) runtime.revealers.push({ material, reveal: spec.reveal })
   // The farther the plane, the sooner the haze swallows it.
   if (runtime.haze) runtime.hazers.push({ material, depth: Math.max(0, Math.min(1, -spec.z / 55)) })
   // Whoever carries the lamp stays a silhouette against its light.
@@ -353,7 +359,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
 
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.swingers = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []; runtime.growers = []; runtime.hazers = []; runtime.lit = []; runtime.carrier = undefined
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.swingers = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []; runtime.growers = []; runtime.hazers = []; runtime.revealers = []; runtime.lit = []; runtime.carrier = undefined
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -391,7 +397,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [], hazers: [], lit: [], moods: new Map() }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [], hazers: [], revealers: [], lit: [], moods: new Map() }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -432,6 +438,7 @@ function placeOrbiter(mesh: Mesh, orbit: NonNullable<LayerSpec['orbit']>, second
 function fadeParts(runtime: PixelRuntime, seconds: number, palette: PixelPalette) {
   for (const material of runtime.shimmers) material.uniforms.uTime.value = seconds
   if (runtime.haze) for (const { material, depth } of runtime.hazers) material.uniforms.uHaze.value = Math.min(1, hazeAt(runtime.haze, seconds) * (.25 + depth * 1.1))
+  for (const { material, reveal } of runtime.revealers) material.uniforms.uReveal.value = Math.max(0, Math.min(1, (seconds - reveal.from) / (reveal.to - reveal.from)))
   for (const { material, grow } of runtime.growers) material.uniforms.uGrow.value = Math.max(0, Math.min(1, (seconds - grow.from) / (grow.to - grow.from)))
   for (const { material, dissolve } of runtime.dissolvers) {
     const t = Math.max(0, Math.min(1, (seconds - dissolve.from) / (dissolve.to - dissolve.from)))
