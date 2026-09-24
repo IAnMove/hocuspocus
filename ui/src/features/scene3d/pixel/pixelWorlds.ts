@@ -1,6 +1,6 @@
 import { fxRandom } from '../../sceneFx/types'
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc, paintJellyfish } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -102,6 +102,9 @@ function clockworkGears(seed: number): LayerSpec[] {
 
 /** Orrery planets: orbit radius (m), size, colour slot (-1 ringed), start angle. */
 const ORRERY: [number, number, number, number][] = [[2.8, .8, INDEX.balloon + 1, .4], [4.3, 1.1, INDEX.balloon, 2.1], [6, 1.3, INDEX.balloon + 2, 4], [10.5, 3.6, -1, 1.2], [13, 1.6, INDEX.balloon + 3, 5.4]]
+
+/** Jellyfish: depth, across, size, rise speed, start. */
+const JELLIES: [number, number, number, number, number][] = [[-20, -7, 5, .5, 6], [-14, 5, 3.6, .6, 16], [-9, -2, 2.6, .7, 24], [-6, 3.5, 1.8, .8, 11], [-26, 12, 5.5, .4, 20], [-5, -3.5, 1.4, .9, 2]]
 
 /** A day in the day-cycle world lasts as long as its template's clip. */
 export const DAY_SECONDS = 24
@@ -519,6 +522,20 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { z: -38, width: 110, height: 13, bottom: -1, texture: [720, 86], grow: { from: 5, to: 13 }, paint: (w, h) => paintSkyline(w, h, { ...near, seed: scene.seed + 12, lightFrom: bodySkyX(scene), tall: scene.city * .8, windows: scene.windows }) },
     { z: -32, width: 96, height: 8, bottom: -1, texture: [720, 60], grow: { from: 9, to: 16 }, paint: (w, h) => paintSkyline(w, h, { body: INDEX.trees, rim: INDEX.near, seed: scene.seed + 13, lightFrom: bodySkyX(scene), tall: scene.city * .7, windows: scene.windows }) },
   ] }),
+  'pixel-abyss': scene => {
+    const water = sky(scene)
+    return { ground: 'sand', groundY: -2.6, clearSky: true, layers: [
+      // Too deep for sunlight: only the dark column and drifting plankton.
+      water,
+      { ...FAR, bottom: -2.8, height: 20, paint: (w, h) => paintReef(w, h, { ...far, seed: scene.seed + 1, lightFrom: .5, kelp: .4, tall: .5 }) },
+      // Jellyfish at several depths, pulsing as they rise and drift.
+      ...JELLIES.map(([z, x, size, speed, offset], i) => ({
+        z, x, width: size, height: size * 1.8, bottom: 0, texture: [40, 72] as [number, number], frames: { count: 8, fps: 5 + i % 3 },
+        drift: { speed, loop: 30, offset, bob: size * .3, rise: true },
+        paint: (w: number, h: number, frame = 0) => paintJellyfish(w, h, (frame + i * 3) % 8, 8),
+      })),
+    ] }
+  },
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

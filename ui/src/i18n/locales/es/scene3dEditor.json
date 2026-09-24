@@ -1489,6 +1489,10 @@
     "pixel-city-rising": {
       "title": "Ciudad que crece",
       "description": "Un time-lapse de una ciudad construyéndose: desde un terreno vacío junto al agua, los barrios se alzan en oleadas, primero las torres lejanas y al final el frente marítimo, mientras pasa un día del amanecer a una noche llena de ventanas encendidas."
+    },
+    "pixel-jellyfish": {
+      "title": "Medusas",
+      "description": "En el mar profundo, medusas luminosas suben a su propio ritmo, cada campana se contrae y se relaja con cada impulso mientras sus tentáculos ondulan detrás, la luz recorre sus cuerpos y la nieve marina cae junto al arrecife."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1780,7 +1784,8 @@
       "pixel-clockwork": "Mecanismo",
       "pixel-orrery": "Planetario",
       "pixel-rainbow": "Valle del arcoíris",
-      "pixel-risingcity": "Ciudad que crece"
+      "pixel-risingcity": "Ciudad que crece",
+      "pixel-abyss": "Mar profundo"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

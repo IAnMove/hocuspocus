@@ -11,7 +11,7 @@ import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features
 import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { eclipseShade, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
-import { paintLoopRange, paintMurmuration, paintText } from '../src/features/scene3d/pixel/pixelPaintWorlds'
+import { paintJellyfish, paintLoopRange, paintMurmuration, paintText } from '../src/features/scene3d/pixel/pixelPaintWorlds'
 import { layer } from '../src/features/scene3d/pixel/pixelPaint'
 import { flashPalette, paletteWith, parsePaletteOverrides, tintPalette } from '../src/features/scene3d/pixel/pixelPalettes'
 import { Color, Group, Scene, Vector3, type Mesh } from 'three'
@@ -705,4 +705,13 @@ test('city rising: districts build up from the ground in waves', () => {
   assert.deepEqual(built(.5), [0, 0, 0], 'bare ground at first')
   assert.ok(built(7).some(value => value > 0 && value < 1), 'going up')
   assert.deepEqual(built(18), [1, 1, 1], 'the whole city stands')
+})
+
+test('jellyfish: bells pulse frame by frame and each rises in its own lane', () => {
+  const width = (frame: number) => { const data = paintJellyfish(40, 72, frame, 8).data; let widest = 0; for (let y = 0; y < 30; y++) { let n = 0; for (let x = 0; x < 40; x++) if (data[y * 40 + x]) n++; widest = Math.max(widest, n) } return widest }
+  assert.notEqual(width(2), width(6), 'the bell squeezes and relaxes')
+  const root = pixelWorldGroup('pixel-abyss'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, new Scene(), dir, applyScene3DTemplate('pixel-jellyfish').pixelWorld!, 3, 720)
+  const lanes = (root as Group).children.filter(child => child.userData.frames).map(child => Math.round(child.position.x))
+  assert.ok(new Set(lanes).size >= 5, 'they keep their places across the water')
 })

@@ -129,6 +129,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
   // Storm, clearing, a green afternoon, then a warm evening.
   // A day passes as the city is built: dawn, day, evening and a lit night.
+  'pixel-jellyfish': ['pixel-abyss', { palettes: ['grotto'], hold: 20, meteors: 0 }],
   'pixel-city-rising': ['pixel-risingcity', { palettes: ['dawn', 'jungle', 'sunset', 'harbor'], hold: 6, meteors: .3 }],
   'pixel-after-storm': ['pixel-rainbow', { palettes: ['storm', 'jungle', 'jungle', 'sunset'], hold: 6, meteors: 0 }],
   'pixel-orrery': ['pixel-orrery', { palettes: ['cosmos'], hold: 20, meteors: 0 }],
@@ -208,6 +209,7 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   'pixel-rainy-window': { family: 'fixed', eye: [0, 1.7, 8.4], look: [0, 1.95, -40], fov: 50 },
   'pixel-glow-tide': { family: 'establishment', eye: [0, 1.5, 10.5], look: [0, 2.2, -40], fov: 48 },
   'pixel-neon-alley': { family: 'establishment', eye: [0, 1.7, 8], look: [0, 3.4, -30], fov: 56 },
+  'pixel-jellyfish': { family: 'establishment', eye: [0, 1, 8], look: [0, 8, -30], fov: 56 },
   // Underwater the camera sits low and looks up into the light.
   'pixel-coral-reef': { family: 'establishment', eye: [0, .9, 8], look: [0, 6, -40], fov: 50 },
 }
@@ -221,6 +223,8 @@ const rain = (id: string, color: string, z: number, seed: number) =>
 /** Effects each landscape plays over its world. */
 const CUES: Partial<Record<Landscape, () => ReturnType<typeof parseWorldSfx>>> = {
   'pixel-storm-lake': stormCues,
+  // Marine snow drifting down through the dark water.
+  'pixel-jellyfish': () => parseWorldSfx([drift('marine-snow', '#c8e8ff', .5, { scale: 4, seed: 83 })]),
   // Rain and two strikes early, then the storm passes.
   'pixel-after-storm': () => parseWorldSfx([{ ...rain('passing-rain', '#a8b8d0', 2, 37), end: 8 }, ...stormCues().filter(cue => cue.kind === 'lightning').slice(0, 2)]),
   'pixel-night-launch': launchCues,

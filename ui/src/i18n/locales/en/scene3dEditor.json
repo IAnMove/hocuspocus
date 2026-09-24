@@ -1489,6 +1489,10 @@
     "pixel-city-rising": {
       "title": "City rising",
       "description": "A time-lapse of a city being built: from empty ground by the water, districts rise in waves, the far towers first and the waterfront last, while a day passes from dawn to a night full of lit windows."
+    },
+    "pixel-jellyfish": {
+      "title": "Jellyfish",
+      "description": "In the deep sea, glowing jellyfish rise at their own pace, each bell squeezing and relaxing with every stroke as its tentacles ripple behind, light sweeping through their bodies while marine snow drifts down past the reef."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1780,7 +1784,8 @@
       "pixel-clockwork": "Clockwork",
       "pixel-orrery": "Orrery",
       "pixel-rainbow": "Rainbow valley",
-      "pixel-risingcity": "Rising city"
+      "pixel-risingcity": "Rising city",
+      "pixel-abyss": "Deep sea"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

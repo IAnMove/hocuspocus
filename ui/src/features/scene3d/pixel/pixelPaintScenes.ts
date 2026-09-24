@@ -739,3 +739,28 @@ export function paintRainbowArc(width: number, height: number): IndexedLayer {
   }
   return arc
 }
+
+/** One frame of a pulsing jellyfish: the bell squeezes narrow and tall on
+ *  the stroke and relaxes wide and flat, its tentacles rippling behind,
+ *  all in the glow slots so light runs through it. */
+export function paintJellyfish(width: number, height: number, frame: number, frames: number): IndexedLayer {
+  const jelly = layer(width, height)
+  const phase = frame / frames * Math.PI * 2, squeeze = .5 + .5 * Math.sin(phase)
+  const cx = width / 2, top = height * .08, bellW = width * (.46 - squeeze * .12), bellH = height * (.24 + squeeze * .08)
+  for (let y = 0; y < bellH; y++) {
+    const half = bellW * Math.sqrt(Math.max(0, 1 - ((bellH - y) / bellH) ** 2))
+    for (let x = Math.round(cx - half); x <= cx + half; x++) {
+      const rim = y > bellH - 2 || Math.abs(x - cx) > half - 1.5
+      set(jelly, x, Math.round(top + y), rim ? INDEX.lamp : INDEX.crystal + ((x >> 2) & 7))
+    }
+  }
+  const foot = top + bellH
+  for (let t = 0; t < 7; t++) {
+    const x0 = cx - bellW * .8 + t * bellW * .27, length = height * (.45 + ((t * 37) % 5) * .06)
+    for (let d = 0; d < length; d++) {
+      const x = Math.round(x0 + Math.sin(d * .18 - phase * 1.5 + t) * (2 + d * .06))
+      set(jelly, x, Math.round(foot + d), INDEX.crystal + ((Math.round(foot + d) >> 2) & 7))
+    }
+  }
+  return jelly
+}

@@ -23,7 +23,7 @@ export function isPixelDressing(kind: unknown): kind is PixelDressing {
 type PixelRuntime = {
   kind: PixelDressing; key: string; palette: DataTexture; bytes: Uint8Array
   skies: ShaderMaterial[]; water?: ShaderMaterial; beam?: Group; shafts: Mesh[]; sky: [number, number]
-  movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; rise?: boolean; y: number }[]
+  movers: { mesh: Mesh; speed: number; loop: number; offset?: number; bob?: number; rise?: boolean; y: number; x: number }[]
   fireworks?: boolean
   clearSky?: boolean
   rain?: number
@@ -309,7 +309,7 @@ function clear(root: Object3D) {
 function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   const material = mesh.material as ShaderMaterial
   if (spec.sky) runtime.skies.push(material)
-  if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y })
+  if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y, x: mesh.position.x })
   if (spec.spin) runtime.spinners.push({ mesh, speed: spec.spin })
   if (spec.swing) runtime.swingers.push({ mesh, swing: spec.swing })
   if (spec.scroll) runtime.scrollers.push({ material, speed: spec.scroll, axis: 'uScroll' })
@@ -375,7 +375,8 @@ type Mover = PixelRuntime['movers'][number]
 function placeMover(mover: Mover, seconds: number) {
   const along = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
   const sway = mover.bob ? Math.sin(seconds * .6 + (mover.offset ?? 0)) * mover.bob : 0
-  if (mover.rise) { mover.mesh.position.y = mover.y + along + mover.loop / 2; mover.mesh.position.x = sway; return }
+  // Rising keeps its place across and sways about it.
+  if (mover.rise) { mover.mesh.position.y = mover.y + along + mover.loop / 2; mover.mesh.position.x = mover.x + sway; return }
   mover.mesh.position.x = along
   if (mover.bob) mover.mesh.position.y = mover.y + sway
 }
