@@ -515,6 +515,18 @@
     "incompatible": "Este modelo no admite este flujo. Elige uno de los modos disponibles u otro modelo.",
     "changeModel": "Elige un modelo compatible"
   },
+  "imageBatch": {
+    "title": "Lote de imágenes",
+    "promptMode": "Modo del prompt",
+    "whole": "Texto completo",
+    "lines": "Un prompt por línea",
+    "enable": "Editar varias imágenes por separado",
+    "count": "Se encolarán {{count}} generaciones.",
+    "hint": "Cada imagen × prompt produce una salida con el lienzo y ajustes seleccionados. En modo por líneas se omiten las vacías.",
+    "limit": "Selecciona entre 1 y {{count}} combinaciones de imagen y prompt.",
+    "noMask": "Quita la máscara antes de editar en lote; una misma máscara no se puede aplicar con seguridad a imágenes distintas.",
+    "failed": "Han fallado {{count}} de {{total}} envíos. Reintenta sus tarjetas fallidas; los demás se han encolado."
+  },
   "imageActions": {
     "loadSettings": "Cargar ajustes",
     "edit": "Editar esta imagen",

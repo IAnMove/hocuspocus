@@ -72,6 +72,7 @@ export type StudioImageIntent = {
 }
 
 export type StudioImageIntentSource = {
+  imageBatch?: import('./imageBatch').ImageBatchSettings
   generationMode: string
   imageStudioIntent?: import('./imageStudioIntent').ImageStudioIntent
   activeWorkspace?: string

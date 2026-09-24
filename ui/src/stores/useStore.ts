@@ -1180,6 +1180,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   imageStudioIntent: import('../features/studio/imageStudioIntent').ImageStudioIntent
   setImageStudioIntent: (intent: import('../features/studio/imageStudioIntent').ImageStudioIntent) => void
   resetImageStudio: () => void
+  imageBatch?: import('../features/studio/imageBatch').ImageBatchSettings
   editSubMode: import('../types').EditSubMode
   setEditSubMode: (mode: import('../types').EditSubMode, recastEngine?: 'scail' | 'viggle') => void
   // Edit mode state (persists across sub-mode switches)
@@ -2322,10 +2323,11 @@ export const useStore = create<AppState>((set, get) => {
       for (const draft of drafts) {
         forgetLocalImage(String(draft.params.image_guide || ''))
         forgetLocalImage(String(draft.params.image_mask || ''))
+        for (const item of draft.imageBatch?.sources || []) forgetLocalImage(item.url)
       }
     })
     state.setImageStudioIntent('chooser')
-    set({ imageStudioDrafts: {} })
+    set({ imageStudioDrafts: {}, imageBatch: undefined })
   },
   editSubMode: 'retake' as import('../types').EditSubMode,
   setEditSubMode: (mode: import('../types').EditSubMode, recastEngine?: 'scail' | 'viggle') => {

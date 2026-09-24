@@ -515,6 +515,18 @@
     "incompatible": "This model does not support this workflow. Choose an available workflow or another model.",
     "changeModel": "Choose a compatible model"
   },
+  "imageBatch": {
+    "title": "Image batch",
+    "promptMode": "Prompt mode",
+    "whole": "Whole text",
+    "lines": "One prompt per line",
+    "enable": "Edit multiple images separately",
+    "count": "{{count}} generations will be queued.",
+    "hint": "Each image × prompt produces one output using the selected canvas and settings. Empty lines are skipped in per-line mode.",
+    "limit": "Select between 1 and {{count}} image/prompt combinations.",
+    "noMask": "Remove the edit mask before batch editing; one mask cannot safely apply to different images.",
+    "failed": "{{count}} of {{total}} submissions failed. Retry their failed cards; the others were queued."
+  },
   "imageActions": {
     "loadSettings": "Load settings",
     "edit": "Edit this image",

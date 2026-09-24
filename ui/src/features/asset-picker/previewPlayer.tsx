@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Play } from 'lucide-react'
+import { ImagePreview } from '../../components/common/ImagePreview'
 import { useUiTranslation } from '../../i18n'
 import type { PickerItem } from './types.ts'
 import {
@@ -111,7 +112,9 @@ function PreviewPlayerBody({
       : <p className="p-2 text-center text-[10px] text-text-muted">{t('explorer.selectHint')}</p>
   }
   if (item.kind === 'image') {
-    return <img src={item.url} alt={t('explorer.previewAria', { name: item.filename })} className="h-full w-full object-contain" onError={() => setFailed(true)} />
+    return <ImagePreview image={{ name: item.filename, url: item.url, workspace_id: item.ref.workspaceId, size: item.sizeBytes }} className="h-full w-full">
+      <img src={item.thumbnailUrl.replace(/([?&])size=sm\b/, '$1size=md')} alt={t('explorer.previewAria', { name: item.filename })} className="h-full w-full object-contain" decoding="async" onError={() => setFailed(true)} />
+    </ImagePreview>
   }
   if (!armed) {
     return (

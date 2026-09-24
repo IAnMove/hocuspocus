@@ -31,6 +31,23 @@ function collectRequests(page: Parameters<typeof gotoApp>[0], pathname: string):
   return requests
 }
 
+test('library uses thumbnails until the original is explicitly enlarged', async ({ page }) => {
+  const session = await gotoApp(page)
+  const originals = collectRequests(page, '/api/v1/file/hero.png')
+  try {
+    await openBackgroundRemovalTools(page)
+    await page.getByRole('button', { name: 'From HocusPocus' }).click()
+    const explorer = page.getByRole('dialog').filter({ has: page.getByTestId('asset-explorer') })
+    const card = explorer.locator('button[title="hero.png"]')
+    await expect(card.locator('img')).toHaveAttribute('src', /thumbnail.*size=sm/)
+    await card.click()
+    await expect(explorer.getByRole('img', { name: 'Preview of hero.png' })).toHaveAttribute('src', /thumbnail.*size=md/)
+    expect(originals).toHaveLength(0)
+    await explorer.getByRole('button', { name: /Enlarge/ }).click()
+    await expect.poll(() => originals.length).toBeGreaterThan(0)
+  } finally { await closeApp(page, session) }
+})
+
 test('runs Remove Background from direct Tools and exposes the derived asset', async ({ page }) => {
   const session = await gotoApp(page)
   const submissions = collectRequests(page, '/api/v1/tools/remove-background')
