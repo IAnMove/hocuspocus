@@ -680,3 +680,16 @@ test('orrery: inner planets run faster and a moon circles its moving planet', ()
   }
   assert.ok(at(3).host.distanceTo(at(0).host) > .1, 'while the planet itself moves on')
 })
+
+test('after the storm: the rain stops and a rainbow dithers in', () => {
+  const doc = applyScene3DTemplate('pixel-after-storm')
+  const rainCue = doc.worldSfx!.find(cue => cue.kind === 'rain')!
+  const arc = worldPlan('pixel-rainbow', resolvePixelScene('pixel-rainbow', undefined)).layers.find(layer => layer.dissolve?.appear)!
+  assert.ok(rainCue.end <= arc.dissolve!.from, 'the rainbow comes after the rain')
+  assert.equal(resolvePixelScene('pixel-rainbow', undefined).body, 'none', 'no sun in front of the rainbow')
+  const root = pixelWorldGroup('pixel-rainbow'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const hidden = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, doc.pixelWorld!, seconds, 720); return ((root as Group).children.find(child => child.position.z === -50 && (child as Mesh).material?.uniforms?.uDissolve) as Mesh).material.uniforms.uDissolve.value }
+  assert.ok(hidden(4) > 1, 'no rainbow in the storm')
+  assert.ok(hidden(11.5) > 0 && hidden(11.5) < 1, 'dithering in')
+  assert.ok(hidden(16) <= 0, 'fully there')
+})

@@ -406,7 +406,8 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
   for (const material of runtime.shimmers) material.uniforms.uTime.value = seconds
   for (const { material, dissolve } of runtime.dissolvers) {
     const t = Math.max(0, Math.min(1, (seconds - dissolve.from) / (dissolve.to - dissolve.from)))
-    material.uniforms.uDissolve.value = dissolve.appear ? 1.001 - t : t * 1.001
+    // Just past 0 and 1 at the ends, so no Bayer step is left half-drawn.
+    material.uniforms.uDissolve.value = dissolve.appear ? 1.001 - t * 1.002 : t * 1.001
   }
   // The tide lifts the whole lake, covering whatever lies low.
   if (runtime.lake && runtime.tide) runtime.lake.position.y = tideLevel(runtime.tide, seconds)

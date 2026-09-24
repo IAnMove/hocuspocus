@@ -1,6 +1,6 @@
 import { fxRandom } from '../../sceneFx/types'
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits, paintRainbowArc } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -504,6 +504,12 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       { z: 0, width: .5, height: .5, bottom: .03, floor: true, texture: [10, 10], orbit: { x: 0, y: 0, radius: 1.3, speed: 1.4, phase: 0, flat: true, upright: true, around: 'planet-2' }, paint: w => paintPlanetDisc(w, INDEX.balloon + 3) },
     ] }
   },
+  'pixel-rainbow': scene => ({ ground: 'water', clearSky: true, layers: [
+    sky(scene), range(scene),
+    // Once the rain stops the rainbow comes through, dithering in.
+    { z: -50, width: 110, height: 40, bottom: -3, texture: [440, 160], dissolve: { from: 9, to: 14, appear: true }, paint: (w, h) => paintRainbowArc(w, h) },
+    hills(scene, true), ...reeds(scene),
+  ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

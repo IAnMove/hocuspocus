@@ -127,6 +127,8 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  // Storm, clearing, a green afternoon, then a warm evening.
+  'pixel-after-storm': ['pixel-rainbow', { palettes: ['storm', 'jungle', 'jungle', 'sunset'], hold: 6, meteors: 0 }],
   'pixel-orrery': ['pixel-orrery', { palettes: ['cosmos'], hold: 20, meteors: 0 }],
   'pixel-clockwork': ['pixel-clockwork', { palettes: ['brass'], hold: 20, meteors: 0 }],
   'pixel-fjord': ['pixel-fjord', { palettes: ['aurora', 'polar'], hold: 12, meteors: .4 }],
@@ -217,6 +219,8 @@ const rain = (id: string, color: string, z: number, seed: number) =>
 /** Effects each landscape plays over its world. */
 const CUES: Partial<Record<Landscape, () => ReturnType<typeof parseWorldSfx>>> = {
   'pixel-storm-lake': stormCues,
+  // Rain and two strikes early, then the storm passes.
+  'pixel-after-storm': () => parseWorldSfx([{ ...rain('passing-rain', '#a8b8d0', 2, 37), end: 8 }, ...stormCues().filter(cue => cue.kind === 'lightning').slice(0, 2)]),
   'pixel-night-launch': launchCues,
   // Warm heavy rain, and now and then lightning beyond the hills.
   'pixel-monsoon': () => parseWorldSfx([rain('monsoon-rain', '#b8c8d8', 2, 31), ...stormCues().filter(cue => cue.kind === 'lightning').slice(0, 2).map(cue => ({ ...cue, intensity: .9, start: cue.start + 5, end: cue.end + 5 }))]),

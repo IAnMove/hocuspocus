@@ -725,3 +725,17 @@ export function paintOrbits(size: number, radii: number[], belt: [number, number
   }
   return orbits
 }
+
+/** A rainbow arcing across its plane: five bands, the outer ones slightly
+ *  dithered so it fades into the sky at its edges and feet. */
+export function paintRainbowArc(width: number, height: number): IndexedLayer {
+  const arc = layer(width, height)
+  const cx = width / 2, cy = height * 1.05, outer = width * .46, band = width * .018
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const d = outer - Math.hypot(x - cx, (y - cy) * 1.35)
+    if (d < 0 || d >= band * 5) continue
+    const fade = Math.min(1, (height - y) / (height * .25) + .25)
+    if (bayer(x, y) < .85 * fade) set(arc, x, y, INDEX.rainbow + Math.floor(d / band))
+  }
+  return arc
+}

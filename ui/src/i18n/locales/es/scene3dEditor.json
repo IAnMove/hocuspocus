@@ -1481,6 +1481,10 @@
     "pixel-orrery": {
       "title": "Planetario",
       "description": "Un sistema solar visto desde arriba: los planetas giran alrededor de un sol brillante siguiendo tenues órbitas, los interiores más rápido como en la naturaleza, un gigante con anillos entre ellos, una luna que gira en torno a su planeta mientras este gira alrededor del sol, y un cinturón de asteroides que rota despacio."
+    },
+    "pixel-after-storm": {
+      "title": "Después de la tormenta",
+      "description": "La lluvia azota el valle y los rayos caen sobre las crestas; luego la tormenta pasa, el cielo se abre a una tarde verde y luminosa y un arcoíris aparece tramado sobre las montañas, brillando hasta un atardecer cálido."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1770,7 +1774,8 @@
       "pixel-meadow": "Prado",
       "pixel-fjord": "Fiordo",
       "pixel-clockwork": "Mecanismo",
-      "pixel-orrery": "Planetario"
+      "pixel-orrery": "Planetario",
+      "pixel-rainbow": "Valle del arcoíris"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

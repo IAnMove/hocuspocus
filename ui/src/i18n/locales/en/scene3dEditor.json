@@ -1481,6 +1481,10 @@
     "pixel-orrery": {
       "title": "Orrery",
       "description": "A solar system seen from above: planets circle a glowing sun along faint orbit lines, the inner ones fastest as in nature, a ringed giant among them, a moon circling its planet as the planet circles the sun, and an asteroid belt turning slowly."
+    },
+    "pixel-after-storm": {
+      "title": "After the storm",
+      "description": "Rain lashes the valley and lightning strikes the ridges; then the storm passes, the sky clears to a bright green afternoon and a rainbow dithers in over the mountains, glowing on into a warm evening."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1770,7 +1774,8 @@
       "pixel-meadow": "Meadow",
       "pixel-fjord": "Fjord",
       "pixel-clockwork": "Clockwork",
-      "pixel-orrery": "Orrery"
+      "pixel-orrery": "Orrery",
+      "pixel-rainbow": "Rainbow valley"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",
