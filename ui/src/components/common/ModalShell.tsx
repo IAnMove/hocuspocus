@@ -119,6 +119,8 @@ export function ModalShell({
     >
       {children}
     </div>,
-    document.body,
+    // In real fullscreen only the fullscreen element's subtree is drawn, so a
+    // dialog opened there (the expanded 3D editor) must live inside it.
+    document.fullscreenElement ?? document.body,
   )
 }

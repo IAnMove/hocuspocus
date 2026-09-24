@@ -75,7 +75,7 @@ export function Scene3DUserTemplates({ document, disabled, selectedId, onApply }
     </div>
     {note && <p role="status" className="mt-2 text-xs text-text-secondary">{note}</p>}
     {error && <p role="alert" className="mt-2 text-xs text-red-300">{error}</p>}
-    <div className="mt-3 grid max-h-56 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+    <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-2">
       {templates.map(pack => <article key={pack.id} className={`rounded-lg border p-3 ${selectedId === pack.id ? 'border-cyan-300 bg-cyan-300/10' : 'border-border bg-bg-primary'}`}>
         <button type="button" disabled={disabled} data-testid={`world3d-user-template-${pack.id}`} aria-label={pack.title} aria-pressed={selectedId === pack.id}
           onClick={() => onApply(pack)} className="block w-full text-left disabled:opacity-40">

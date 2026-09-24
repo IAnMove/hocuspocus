@@ -1878,5 +1878,16 @@
       "windows": "Windows and lamps",
       "light": "Light on actors"
     }
+  },
+  "shotLibrary": {
+    "change": "Change shot",
+    "use": "Use this shot",
+    "cancel": "Cancel",
+    "close": "Close the shot library",
+    "examples": "Examples",
+    "recent": "Recent",
+    "current": "Current",
+    "pickOne": "Pick a shot to see it here.",
+    "hint": "Double-click or press Enter to use a shot straight away"
   }
 }
