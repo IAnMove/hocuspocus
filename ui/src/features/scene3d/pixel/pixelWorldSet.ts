@@ -393,10 +393,15 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
   for (const { mesh, orbit } of runtime.orbiters) placeOrbiter(mesh, orbit, seconds)
 }
 
-function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, palette: PixelPalette, seconds: number, frameHeight: number) {
+/** Paint the world's planes for its current layout, if that changed. */
+function ensureBuilt(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld) {
   const scene = isPixelWorldKind(runtime.kind) ? resolvePixelScene(runtime.kind, pixel.scene) : resolvePixelScene('pixel-lake', undefined)
   const key = runtime.kind + JSON.stringify(scene)
   if (runtime.key !== key) { build(dressing, runtime, scene); runtime.key = key }
+  return scene
+}
+
+function syncSet(runtime: PixelRuntime, scene: PixelScene, pixel: PixelWorld, palette: PixelPalette, seconds: number, frameHeight: number) {
   writePalette(runtime.bytes, palette, seconds)
   runtime.palette.needsUpdate = true
   const meteors = meteorsAt(seconds, pixel.meteors, runtime.sky, 5, scene.meteorDirection)
@@ -445,9 +450,11 @@ export function paintPixelWorld(dressing: Object3D | null, scene: Scene, dir: { 
   if (!authored && !runtime) return null
   // A pixel set without authored lighting still needs a palette to show.
   const pixel = authored ?? defaultPixelWorld()
+  // Build first, so the world's own light events count from the first frame.
+  const built = runtime && dressing ? ensureBuilt(dressing, runtime, pixel) : undefined
   const mood = worldLight(runtime, paletteAt(pixel.palettes, pixel.hold, seconds, pixel.colors), seconds)
   const palette = flashPalette(screens ? tintPalette(mood, screens.color, screens.amount) : mood, flash)
-  const layout = runtime && dressing ? syncSet(dressing, runtime, pixel, palette, seconds, frameHeight) : undefined
+  const layout = runtime && built ? syncSet(runtime, built, pixel, palette, seconds, frameHeight) : undefined
   dir.color.set(palette.light.color)
   dir.intensity = palette.light.intensity
   const highest = runtime?.celestials.reduce<Mesh | undefined>((best, mesh) => !best || mesh.position.y > best.position.y ? mesh : best, undefined)
