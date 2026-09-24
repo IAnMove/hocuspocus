@@ -695,7 +695,7 @@ export function MainContent() {
       <div className={`flex-1 flex min-h-0 min-w-0 overflow-hidden relative ${workspaceSurface === 'generate' ? 'flex-col xl:flex-row' : 'flex-row'}`}>
         <Suspense fallback={<PanelLoadingFallback />}>
         {workspaceSurface === 'generate' && (
-          <div className="flex min-h-0 w-full shrink-0 flex-col border-b border-border xl:h-full xl:max-w-xl xl:border-b-0 xl:border-r 2xl:max-w-2xl">
+          <div className="flex max-h-full min-h-0 w-full shrink-0 flex-col border-b border-border xl:h-full xl:max-w-xl xl:border-b-0 xl:border-r 2xl:max-w-2xl">
             <DirectGenerationWorkspace />
           </div>
         )}
