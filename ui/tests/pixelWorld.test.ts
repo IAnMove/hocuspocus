@@ -559,3 +559,14 @@ test('crystal cave: a glow sweeps the crystals and the grotto breathes their lig
   const light = (seconds: number) => paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)!.far[0]
   assert.notEqual(light(2), light(6), 'the grotto breathes the crystals\' light')
 })
+
+test('starry night: spiral swirls turn by cycling and stars pulse in rings', () => {
+  const plan = worldPlan('pixel-starry', resolvePixelScene('pixel-starry', undefined))
+  assert.equal(plan.clearSky, true)
+  const sky = plan.layers.find(layer => layer.sky)!.paint(700, 214)
+  assert.equal([244, 245, 246, 247, 248, 249, 250, 251].filter(slot => sky.data.includes(slot)).length, 8, 'spirals span all swirl slots')
+  assert.ok([252, 253, 254].every(slot => sky.data.includes(slot)), 'stars wear rings')
+  const swirl = (seconds: number) => { const bytes = new Uint8Array(1024); writePalette(bytes, PIXEL_PALETTES.starry, seconds); return Array.from(bytes.subarray(244 * 4, 252 * 4)).join() }
+  assert.notEqual(swirl(0), swirl(.6), 'the swirls turn')
+  assert.ok(plan.layers.some(layer => layer.texture[1] > layer.texture[0] * 3), 'a tall cypress')
+})

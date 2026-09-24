@@ -1445,6 +1445,10 @@
     "pixel-crystal-cave": {
       "title": "Cueva de cristal",
       "description": "Desde la boca de una cueva llena de estalactitas, un lago subterráneo escondido brilla con cristales cuya luz recorre los grupos en oleadas, toda la gruta respirando su brillo cian y violeta mientras las gotas rizan el agua quieta."
+    },
+    "pixel-starry-night": {
+      "title": "Noche estrellada",
+      "description": "Un homenaje a la noche del pintor: remolinos en espiral giran por un cielo azul profundo, las estrellas laten en anillos de luz, una luna creciente brilla sobre el pueblo dormido y un ciprés se alza como una llama oscura."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1686,7 +1690,8 @@
       "neon": "Neón",
       "noon": "Mediodía",
       "nave": "Nave",
-      "grotto": "Gruta"
+      "grotto": "Gruta",
+      "starry": "Noche estrellada"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1723,7 +1728,8 @@
       "pixel-monsoon": "Monzón",
       "pixel-marsh": "Marisma",
       "pixel-launch": "Base de lanzamiento",
-      "pixel-grotto": "Gruta"
+      "pixel-grotto": "Gruta",
+      "pixel-starry": "Noche estrellada"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

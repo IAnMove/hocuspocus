@@ -492,3 +492,51 @@ export function paintGrotto(width: number, height: number, seed: number): Indexe
   }
   return wall
 }
+
+/** A swirling sky over the painted one: spiral bands around a few vortices
+ *  and long wind currents between them, in the swirl slots so cycling turns
+ *  the spirals; stars wear rings in the halo slots. */
+export function paintSwirls(sky: IndexedLayer, seed: number) {
+  const vortices = [[.3, .28, 70], [.62, .18, 50], [.82, .36, 40]].map(([x, y, r]) => [x * sky.width, y * sky.height, r] as const)
+  for (let y = 0; y < sky.height * .8; y++) for (let x = 0; x < sky.width; x++) {
+    let band = -1
+    for (const [vx, vy, r] of vortices) {
+      const d = Math.hypot(x - vx, (y - vy) * 1.6)
+      if (d > r) continue
+      const spiral = Math.atan2((y - vy) * 1.6, x - vx) / (Math.PI * 2) * 8 + d / 7
+      if (bayer(x, y) < .75 - d / r * .3) band = Math.floor(((spiral % 8) + 8) % 8)
+    }
+    if (band < 0) {
+      // Wind: long wavy streaks flowing across the rest of the sky.
+      const flow = y / 6 + Math.sin(x / 40 + seed + y / 30) * 2.5
+      if ((flow % 1) < .45 && bayer(x, y) < .6) band = Math.floor(((x / 24 + flow) % 8 + 8) % 8)
+    }
+    if (band >= 0) set(sky, x, y, INDEX.swirl + band)
+  }
+  for (let s = 0; s < 11; s++) {
+    const sx = fxRandom(seed, s) * sky.width, sy = (.05 + fxRandom(seed, s + 40) * .45) * sky.height, r = 5 + fxRandom(seed, s + 80) * 6
+    for (let y = Math.floor(sy - r * 1.6); y <= sy + r * 1.6; y++) for (let x = Math.floor(sx - r * 1.6); x <= sx + r * 1.6; x++) {
+      const d = Math.hypot(x - sx, y - sy) / r
+      if (d < .35) set(sky, x, y, INDEX.moon)
+      else if (d < 1.6 && bayer(x, y) < 1.1 - d * .6) set(sky, x, y, INDEX.halo + Math.min(2, Math.floor(d * 2)))
+    }
+  }
+  return sky
+}
+
+/** A cypress like a dark flame, its flickering outline in the swirl slots. */
+export function paintCypress(width: number, height: number): IndexedLayer {
+  const tree = layer(width, height)
+  const cx = width / 2
+  for (let y = 0; y < height; y++) {
+    const t = y / height, half = width * .45 * Math.sin(Math.min(1, t * 1.25) * Math.PI * .5) * (1 - t * .2)
+    const sway = Math.sin(t * 9) * width * .06 * (1 - t)
+    for (let x = Math.round(cx + sway - half); x <= cx + sway + half; x++) {
+      const edge = Math.abs(x - cx - sway) > half - 2
+      // Long wavering strokes rising up the tree, like brushed flames.
+      const flame = Math.sin((x - cx - sway) * .9 + Math.sin(y * .09) * 2.5) > .55
+      set(tree, x, y, edge || flame ? INDEX.swirl + ((y >> 3) & 7) : INDEX.trees)
+    }
+  }
+  return tree
+}

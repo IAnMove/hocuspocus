@@ -104,6 +104,10 @@ const CYCLERS: Cycler[] = [
     const glow = Math.pow(1 - pulse(k, INDEX.crystalSteps, t, .22), 3)
     return mixHex(mixHex(p.far[0], '#3a2a8a', .5), mixHex('#7af0ff', '#e8b0ff', .5 + .5 * Math.sin(t * .3 + k)), .25 + glow * .75)
   } },
+  // Painted swirls: a light band travels round every spiral, so they turn.
+  { start: INDEX.swirl, steps: 8, color: (p, t, k) => mixHex(mixHex(p.sky[0], p.far[1], .55), mixHex(p.moon, p.aurora, .4), Math.pow(1 - pulse(k, 8, t, .45), 2)) },
+  // Star halos pulse outward ring by ring.
+  { start: INDEX.halo, steps: 3, color: (p, t, k) => mixHex(p.sky[1], p.moon, (.7 - k * .22) * (.7 + .3 * Math.sin(t * 2 - k))) },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]

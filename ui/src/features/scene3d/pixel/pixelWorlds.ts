@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -373,6 +373,19 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { z: -26, width: 64, height: 26, bottom: -1, texture: [512, 208], paint: (w, h) => paintGrotto(w, h, scene.seed) },
     { z: 5.6, width: 7.2, height: 4.2, bottom: -.4, texture: [360, 210], paint: (w, h) => paintCaveMouth(w, h, scene.seed + 3) },
   ] }),
+  'pixel-starry': scene => {
+    const heavens = sky(scene)
+    return { ground: 'sand', clearSky: true, layers: [
+      { ...heavens, paint: (w, h) => paintSwirls(heavens.paint(w, h), scene.seed) },
+      { ...FAR, paint: range(scene).paint },
+      { ...VILLAGE, z: -30, bottom: -2, paint: (w, h) => paintVillage(w, h, { ...near, seed: scene.seed + 6, lightFrom: .8, houses: 8 }) },
+      // Rolling hills in front, and the cypress rising from beyond the frame.
+      { z: -14, width: 64, height: 5, bottom: -2.4, texture: [640, 50], paint: (w, h) => paintLoopRange(w, h, { ...near, seed: scene.seed + 8, lightFrom: .8, base: h * .45, amp: h * .2, trees: .35 }) },
+      // A near hillside fills the foreground; the cypress grows from it.
+      { z: 2, width: 22, height: 3.2, bottom: -1.7, texture: [440, 64], paint: (w, h) => paintLoopRange(w, h, { body: INDEX.trees, rim: INDEX.nearRim, seed: scene.seed + 9, lightFrom: .8, base: h * .35, amp: h * .12, trees: .5 }) },
+      { z: 2.4, x: -2.4, width: 1.5, height: 7, bottom: -1.2, texture: [56, 260], paint: (w, h) => paintCypress(w, h) },
+    ] }
+  },
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },

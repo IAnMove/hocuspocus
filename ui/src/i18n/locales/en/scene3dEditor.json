@@ -1445,6 +1445,10 @@
     "pixel-crystal-cave": {
       "title": "Crystal cave",
       "description": "From the mouth of a cave hung with stalactites, a hidden underground lake glows with crystals whose light sweeps from cluster to cluster in waves, the whole grotto breathing their cyan-violet glow while drips ring the still water."
+    },
+    "pixel-starry-night": {
+      "title": "Starry night",
+      "description": "A tribute to the painter's night: spiral swirls turn across a deep blue sky, stars pulse in rings of light, a crescent moon glows over the sleeping village and a cypress rises like a dark flame."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1686,7 +1690,8 @@
       "neon": "Neon",
       "noon": "Noon",
       "nave": "Nave",
-      "grotto": "Grotto"
+      "grotto": "Grotto",
+      "starry": "Starry night"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1723,7 +1728,8 @@
       "pixel-monsoon": "Monsoon",
       "pixel-marsh": "Marsh",
       "pixel-launch": "Launch site",
-      "pixel-grotto": "Grotto"
+      "pixel-grotto": "Grotto",
+      "pixel-starry": "Starry night"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

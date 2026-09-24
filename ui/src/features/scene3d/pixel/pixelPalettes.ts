@@ -86,6 +86,12 @@ export const PIXEL_PALETTES = {
     aurora: '#aaffee', auroraAmount: 0, meteor: '#ffffff', windows: '#fff0b0',
     light: { color: '#c8fff4', intensity: 1.6 }, ambient: { sky: '#5ad0d0', ground: '#0a3a4a', intensity: 1 },
   },
+  starry: {
+    sky: ['#0a1a4a', '#1e3a8a', '#3a5aa8'], moon: '#fff2a0', stars: '#fff8c0',
+    far: ['#1a2a5a', '#6a8ad8'], near: ['#14204a', '#3a5aa0'], trees: '#081228', water: '#10204a',
+    aurora: '#f8e080', auroraAmount: 0, meteor: '#ffffff', windows: '#ffd060',
+    light: { color: '#c8d8ff', intensity: 1.1 }, ambient: { sky: '#3a5aa8', ground: '#0a1430', intensity: .8 },
+  },
   grotto: {
     sky: ['#05060c', '#0a0c18', '#10142a'], moon: '#dffcff', stars: '#8affff',
     far: ['#161a2a', '#3a4a6a'], near: ['#0e1120', '#2a3858'], trees: '#05060a', water: '#0a1a2a',
