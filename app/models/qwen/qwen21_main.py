@@ -21,6 +21,8 @@ _TRANSFORMER_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "qwen_i
 _VAE_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "qwen_image_21_vae.json")
 _VAE_FILENAME = "qwen_image_2.1_vae_bf16.safetensors"
 _TEXT_ENCODER_FOLDER = "Qwen3-VL-8B-Instruct"
+# Viggle v0.2.1 raw sigma nodes; the pipeline applies resolution shifting.
+_VIGGLE_TURBO_SIGMAS = (1.0, 0.9375, 0.875, 0.75, 0.5, 0.25)
 
 
 def _remap_qwen3vl_comfy_keys(state_dict):
@@ -62,6 +64,7 @@ class model_factory:
         VAE_upsampling=None,
     ):
         model_def = model_def or {}
+        self.viggle_turbo = bool(model_def.get("qwen21_viggle_turbo"))
         transformer_filename = model_filename[0]
         text_encoder_folder = model_def.get("text_encoder_folder") or _TEXT_ENCODER_FOLDER
         tokenizer_path = fl.locate_folder(text_encoder_folder)
@@ -133,7 +136,7 @@ class model_factory:
             max_shift=0.9,
             num_train_timesteps=1000,
             shift=1.0,
-            shift_terminal=0.02,
+            shift_terminal=None if self.viggle_turbo else 0.02,
             stochastic_sampling=False,
             time_shift_type="exponential",
             use_beta_sigmas=False,
@@ -182,6 +185,9 @@ class model_factory:
         outpainting_dims=None,
         **kwargs,
     ):
+        turbo = getattr(self, "viggle_turbo", False)
+        if turbo and (sampling_steps != 6 or guide_scale != 1):
+            raise ValueError("Qwen Image 2.1 Viggle Turbo requires 6 steps and CFG 1.")
         if n_prompt is None or len(n_prompt) == 0:
             n_prompt = " "
 
@@ -195,6 +201,8 @@ class model_factory:
             )
 
         if input_ref_images:
+            if turbo and len(input_ref_images) > 3:
+                raise ValueError("Qwen Image 2.1 Viggle Turbo accepts at most 3 input images, including the edit source.")
             if "K" in (video_prompt_type or "") and input_ref_images:
                 ref_w, ref_h = input_ref_images[0].size
                 height, width = calculate_new_dimensions(height, width, ref_h, ref_w, fit_into_canvas, block_size=32)
@@ -215,6 +223,7 @@ class model_factory:
             width=width,
             height=height,
             num_inference_steps=sampling_steps,
+            sigmas=list(_VIGGLE_TURBO_SIGMAS) if turbo else None,
             num_images_per_prompt=batch_size,
             true_cfg_scale=guide_scale,
             callback=callback,

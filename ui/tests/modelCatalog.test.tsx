@@ -36,6 +36,7 @@ test('classifies distilled, quantized, compact and edit variants from the model 
   assert.equal(detectVariant({ model_type: 'viggle_animate', name: 'Viggle-Animate Pruned 20B' }), 'pruned')
   assert.equal(detectVariant({ model_type: 'unirig', tool_only: true }), 'tool')
   assert.equal(detectVariant({ model_type: 'minimax_h3_fused_turbo' }), 'fast')
+  assert.equal(detectVariant({ model_type: 'qwen_image_21_viggle_turbo', architecture: 'qwen_image_21' }), 'fast')
 })
 
 test('explains what each model does instead of listing only the name', () => {
@@ -56,6 +57,9 @@ test('explains what each model does instead of listing only the name', () => {
   }), 'imageEdit')
   assert.equal(detectCapability({
     model_type: 'qwen_image_21_gguf_q4_k', architecture: 'qwen_image_21', family: 'qwen',
+  }), 'imageEdit')
+  assert.equal(detectCapability({
+    model_type: 'qwen_image_21_viggle_turbo', architecture: 'qwen_image_21', family: 'qwen',
   }), 'imageEdit')
   assert.equal(detectCapability({
     model_type: 'ace_step_v1_5_xl', architecture: 'ace_step_v1_5_xl', family: 'tts',
