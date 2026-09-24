@@ -1,7 +1,7 @@
 import {
   AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, Group, HemisphereLight, Mesh, MeshStandardMaterial, NearestFilter, NoColorSpace,
-  PlaneGeometry, RedFormat, RGBAFormat, SRGBColorSpace, ShaderMaterial, UnsignedByteType, Vector2, Vector4,
-  type Object3D, type Scene, type Vector3,
+  PlaneGeometry, RedFormat, RGBAFormat, SRGBColorSpace, ShaderMaterial, UnsignedByteType, Vector2, Vector3, Vector4,
+  type Object3D, type Scene,
 } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { ENERGY_NOISE } from '../../sceneFx/energyShaders'
@@ -42,11 +42,14 @@ type PixelRuntime = {
   shimmers: ShaderMaterial[]
   growers: { material: ShaderMaterial; grow: NonNullable<LayerSpec['grow']> }[]
   hazers: { material: ShaderMaterial; depth: number }[]
+  carry?: WorldPlan['carry']
+  carrier?: Mesh
+  lit: ShaderMaterial[]
 }
 
-const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
-const LAYER_FRAGMENT = `varying vec2 vUv;
-  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze; uniform vec3 uHazeColor;
+const LAYER_VERTEX = `varying vec2 vUv; varying vec3 vWorld; void main(){ vUv=uv; vWorld=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
+const LAYER_FRAGMENT = `varying vec2 vUv; varying vec3 vWorld;
+  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer, uGrow, uHaze; uniform vec3 uHazeColor, uCarryColor; uniform vec4 uCarry;
   uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
@@ -116,6 +119,12 @@ const LAYER_FRAGMENT = `varying vec2 vUv;
     // lit windows and lamps still burn through it.
     bool lit=(index>=64.&&index<=71.)||index==90.;
     if(uHaze>0.&&!lit) color=mix(color,uHazeColor,floor(uHaze*4.+bayer4(cell))/4.);
+    // A carried lamp lights what is near it in dithered rings, whichever plane it is on.
+    if(uCarry.w>0.){
+      float near=clamp(1.-length((vWorld-uCarry.xyz)*vec3(1.,1.,.5))/uCarry.w,0.,1.);
+      float glow=floor(near*near*5.+bayer4(cell))/5.;
+      color=color*(1.+glow*.9)+uCarryColor*glow*.4;
+    }
     if(uSky>.5) color+=aurora(vec2(cell.x,uRes.y-1.-cell.y))+meteors(vec2(cell.x,uRes.y-1.-cell.y))+fireworks(vec2(cell.x,uRes.y-1.-cell.y));
     gl_FragColor=vec4(color,1.);
     #include <colorspace_fragment>
@@ -141,7 +150,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
     uniforms: {
       uIndex: { value: indexTexture(painted) }, uPalette: { value: palette },
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
-      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
+      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uGrow: { value: 2 }, uHaze: { value: 0 }, uHazeColor: { value: new Color() }, uCarry: { value: new Vector4(0, 0, 0, 0) }, uCarryColor: { value: new Color() }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
       uBursts: { value: [0, 1, 2, 3].map(() => new Vector4(0, 0, 0, 0)) }, uBurstColors: { value: [0, 1, 2, 3].map(() => new Color()) },
     },
@@ -326,6 +335,9 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.grow) runtime.growers.push({ material, grow: spec.grow })
   // The farther the plane, the sooner the haze swallows it.
   if (runtime.haze) runtime.hazers.push({ material, depth: Math.max(0, Math.min(1, -spec.z / 55)) })
+  // Whoever carries the lamp stays a silhouette against its light.
+  if (runtime.carry && spec.id === runtime.carry.id) runtime.carrier = mesh
+  else if (runtime.carry) runtime.lit.push(material)
   if (spec.dissolve) runtime.dissolvers.push({ material, dissolve: spec.dissolve })
   if (spec.launch) runtime.launchers.push({ mesh, y: mesh.position.y, launch: spec.launch })
   if (spec.frames) runtime.sprites.push({ material, frames: mesh.userData.frames, fps: spec.frames.fps })
@@ -333,7 +345,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
 
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.swingers = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []; runtime.growers = []; runtime.hazers = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.swingers = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []; runtime.growers = []; runtime.hazers = []; runtime.lit = []; runtime.carrier = undefined
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -348,6 +360,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   runtime.pulse = plan.pulse
   runtime.tide = plan.tide
   runtime.haze = plan.haze
+  runtime.carry = plan.carry
   runtime.lake = undefined
   for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
   for (const spec of plan.layers) {
@@ -370,7 +383,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [], hazers: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [], growers: [], hazers: [], lit: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -418,6 +431,18 @@ function fadeParts(runtime: PixelRuntime, seconds: number, palette: PixelPalette
     material.uniforms.uDissolve.value = dissolve.appear ? 1.001 - t * 1.002 : t * 1.001
   }
   for (const { material } of runtime.hazers) material.uniforms.uHazeColor.value.set(mixHex(palette.sky[2], '#e8eef6', .6))
+}
+
+/** Light from a lamp that walks with one of the planes, flickering a little. */
+function carryLight(runtime: PixelRuntime, seconds: number) {
+  const { carry, carrier } = runtime
+  if (!carry || !carrier) return
+  const lamp = carrier.getWorldPosition(new Vector3()).add(new Vector3(carry.dx, carry.dy, .1))
+  const radius = carry.radius * (1 + .04 * Math.sin(seconds * 11) + .03 * Math.sin(seconds * 23.7))
+  for (const material of runtime.lit) {
+    material.uniforms.uCarry.value.set(lamp.x, lamp.y, lamp.z, radius)
+    material.uniforms.uCarryColor.value.set(carry.color)
+  }
 }
 
 /** Everything that travels, spins or orbits, on the scene clock. */
@@ -475,6 +500,7 @@ function syncSet(runtime: PixelRuntime, scene: PixelScene, pixel: PixelWorld, pa
     runtime.water.uniforms.uCalm.value = runtime.kind === 'pixel-gallery' ? .85 : 1 - Math.min(1, scene.ripple * 1.25)
   }
   moveParts(runtime, seconds)
+  carryLight(runtime, seconds)
   if (runtime.beam) {
     runtime.beam.rotation.y = seconds * .9
     const material = (runtime.beam.children[0].children[0] as Mesh).material as ShaderMaterial

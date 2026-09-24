@@ -728,3 +728,14 @@ test('blizzard: the storm swallows far planes first and clears again', () => {
   assert.ok(peak[0].haze! > peak[peak.length - 1].haze!, 'the far range fades before the near reeds')
   assert.ok(thickness(1).every(item => item.haze === 0), 'a clear morning first')
 })
+
+test('lantern walk: the lamp travels with its bearer and lights the other planes, not the bearer', () => {
+  const root = pixelWorldGroup('pixel-lantern'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-lantern-walk').pixelWorld!
+  const lamps = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms?.uCarry?.value as { x: number; w: number } | undefined).filter(value => value !== undefined) }
+  const early = lamps(2).filter(lamp => lamp.w > 0).map(lamp => lamp.x), later = lamps(12).filter(lamp => lamp.w > 0).map(lamp => lamp.x)
+  assert.ok(early.length > 3, 'the wood, bank and reeds catch the light')
+  assert.ok(later[0] - early[0] > 4, 'the light walks along the shore')
+  const bearer = (root as Group).getObjectsByProperty('type', 'Mesh').find(mesh => mesh.userData.frames) as Mesh
+  assert.equal((bearer.material as { uniforms: { uCarry: { value: { w: number } } } }).uniforms.uCarry.value.w, 0, 'the bearer stays a silhouette')
+})

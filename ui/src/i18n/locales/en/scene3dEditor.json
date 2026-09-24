@@ -1497,6 +1497,10 @@
     "pixel-blizzard": {
       "title": "Blizzard",
       "description": "A snowbound pass with a lone lit cabin: a blizzard thickens until the far peaks vanish into white and the near pines blur, only the cabin windows glowing through, then the storm eases and the mountains come back."
+    },
+    "pixel-lantern-walk": {
+      "title": "Lantern walk",
+      "description": "A dark lakeside wood at night: one walker carries a lantern along the shore, and the pines, bank and reeds light up warm around it as it passes, then fall back into shadow."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1790,7 +1794,8 @@
       "pixel-rainbow": "Rainbow valley",
       "pixel-risingcity": "Rising city",
       "pixel-abyss": "Deep sea",
-      "pixel-blizzard": "Blizzard pass"
+      "pixel-blizzard": "Blizzard pass",
+      "pixel-lantern": "Lantern shore"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

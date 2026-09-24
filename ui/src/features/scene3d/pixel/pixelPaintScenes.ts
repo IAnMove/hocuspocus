@@ -327,6 +327,18 @@ export function paintCaravan(width: number, height: number, frame: number, frame
   return caravan
 }
 
+/** A walker holding a lantern out ahead, one frame of the walk; the lamp
+ *  sways a pixel with each step. */
+export function paintLanternBearer(width: number, height: number, frame: number, frames: number): IndexedLayer {
+  const bearer = layer(width, height)
+  const phase = frame / frames, ground = height - 1, cx = Math.round(width * .4)
+  paintWalker(bearer, cx, ground, phase)
+  const hx = cx + 6 + Math.round(Math.sin(phase * Math.PI * 2)), hy = ground - 12
+  for (let y = ground - 16; y < hy; y++) set(bearer, hx, y, INDEX.trees)
+  for (let y = hy; y < hy + 3; y++) for (let x = hx - 1; x <= hx + 1; x++) set(bearer, x, y, INDEX.lamp)
+  return bearer
+}
+
 /** A neon grid floor that tiles both ways: bright lines in the beat slot
  *  with a dithered glow either side, on near-black ground. */
 export function paintGrid(width: number, height: number, cell: number): IndexedLayer {

@@ -1497,6 +1497,10 @@
     "pixel-blizzard": {
       "title": "Ventisca",
       "description": "Un paso nevado con una cabaña iluminada: la ventisca se espesa hasta que los picos lejanos desaparecen en el blanco y los pinos cercanos se difuminan, solo brillan las ventanas de la cabaña, y luego la tormenta amaina y vuelven las montañas."
+    },
+    "pixel-lantern-walk": {
+      "title": "Paseo con farol",
+      "description": "Un bosque oscuro junto al lago de noche: alguien camina por la orilla con un farol, y los pinos, la ribera y los juncos se encienden cálidos a su paso y vuelven a la sombra."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1790,7 +1794,8 @@
       "pixel-rainbow": "Valle del arcoíris",
       "pixel-risingcity": "Ciudad que crece",
       "pixel-abyss": "Mar profundo",
-      "pixel-blizzard": "Paso de ventisca"
+      "pixel-blizzard": "Paso de ventisca",
+      "pixel-lantern": "Orilla del farol"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",
