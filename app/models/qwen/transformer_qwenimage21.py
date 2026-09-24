@@ -765,6 +765,10 @@ class QwenImage21Transformer2DModel(
     _repeated_blocks = ["QwenImage21TransformerBlock"]
     _skip_keys = ["kv_cache"]
 
+    def preprocess_loras(self, model_type, state_dict):
+        from .qwen21_lora import fuse_qwen21_lora_projections
+        return fuse_qwen21_lora_projections(state_dict)
+
     @register_to_config
     def __init__(
         self,

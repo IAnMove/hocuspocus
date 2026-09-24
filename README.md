@@ -58,6 +58,8 @@ Walkthrough with screenshots: [Story → Comics → Video](docs/MAESTRO_X_STORY_
 | Image | Flux 2 Klein, Qwen Image 2.1, Qwen Image Edit |
 | Audio | ACE-Step 1.5 XL (default new songs), MiniMax Music, Kugelaudio / Qwen3 TTS, MMAudio SFX |
 
+**Qwen Image 2.1 Viggle Turbo v0.2.1** is available in the image model selector for text-to-image and instruction editing with up to three input images (including the source). It reuses the Qwen 2.1 INT8 base files and downloads the pinned rank-256 adapter automatically on first use. Its six-step schedule and CFG 1 are fixed; start at 1024×1024. The LoRA runs without merging into the quantized base. This is a preview: complex edits can be less faithful, and 2K/RGBA/masked editing are not validated by its authors. [Model card and Qwen Research License](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo).
+
 **Example — MiniMax H3.** Prompt a wide night sea and add `Audio: surf, wind, a low cello`. Use **FL2VA** when you have an exact first/last frame from Story. Use **Ref2VA** when you pass up to 9 images, 3 videos and 3 audio clips as identity/mood references (`<Picture 1>`, `<Video 1>`, `<Audio 1>`).
 
 ### Steal a look from a real H3 style library

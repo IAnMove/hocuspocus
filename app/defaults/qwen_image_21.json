@@ -3,7 +3,7 @@
         "name": "Qwen Image 2.1 INT8 ConvRot 7B",
         "architecture": "qwen_image_21",
         "description": "Recommended for RTX 4090 24 GB. Official Comfy INT8 ConvRot of Qwen-Image 2.1: unified text-to-image and edit (up to 10 refs, native 2K, RGBA). DiT 7.3 GB + Qwen3-VL-8B INT8 9.4 GB + VAE 0.68 GB. 40 steps, CFG 1. License: Qwen Research License.",
-        "selector_help": "Best default on a 4090. INT8 ConvRot is the ComfyUI template pin: quality stays close to BF16 and the stack fits 24 GB with the encoder offloaded (SGLang measured ~22.7 GiB and ~19 s at 1024). Native 2048 works; drop to 1024 if VRAM spikes with many references. No Lightning/Nunchaku distill exists for 2.1 yet. First download about 18 GB.",
+        "selector_help": "Best default on a 4090. INT8 ConvRot is the ComfyUI template pin: quality stays close to BF16 and the stack fits 24 GB with the encoder offloaded (SGLang measured ~22.7 GiB and ~19 s at 1024). Native 2048 works; drop to 1024 if VRAM spikes with many references. For six-step generation, choose the separate Viggle Turbo variant. First download about 18 GB.",
         "URLs": [
             "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_int8_convrot.safetensors"
         ],
