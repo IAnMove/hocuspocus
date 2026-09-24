@@ -583,3 +583,16 @@ export function paintMotel(width: number, height: number): IndexedLayer {
   paintText(motel, 'VACANCY', bx + 6, by + 36, 1, () => INDEX.sign + 5)
   return motel
 }
+
+/** A straight desert road laid on the floor: dark asphalt, pale edges and a
+ *  dashed centre line, tiling along its length so it can flow. */
+export function paintRoad(width: number, height: number): IndexedLayer {
+  const road = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const edge = x < 2 || x >= width - 2, centre = Math.abs(x - width / 2) < 1 && y % 24 < 12
+    // Sparse grit in the asphalt, not a regular pattern.
+    const grit = ((x * 7919 + y * 104729) % 31) === 0
+    set(road, x, y, edge || centre ? INDEX.farRim : grit ? INDEX.near : INDEX.trees)
+  }
+  return road
+}

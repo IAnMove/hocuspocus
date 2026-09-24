@@ -1461,6 +1461,10 @@
     "pixel-tidal-abbey": {
       "title": "Tidal abbey",
       "description": "An abbey on its rock, reached by a stone causeway at low tide; as the sun sets the tide comes in over the causeway and cuts the island off, then ebbs again under the night sky."
+    },
+    "pixel-mirage": {
+      "title": "Mirage",
+      "description": "A straight desert road at noon, its lines flowing past as if driving; heat haze makes the far mesas and dunes waver above a false lake of sky on the horizon, the glare fading to a red sunset."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1744,7 +1748,8 @@
       "pixel-starry": "Starry night",
       "pixel-dawnmist": "Misty ridges",
       "pixel-motel": "Motel",
-      "pixel-tidal": "Tidal island"
+      "pixel-tidal": "Tidal island",
+      "pixel-mirage": "Mirage"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

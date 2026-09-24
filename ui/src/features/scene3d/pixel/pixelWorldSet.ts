@@ -37,11 +37,12 @@ type PixelRuntime = {
   sprites: { material: ShaderMaterial; frames: DataTexture[]; fps: number }[]
   launchers: { mesh: Mesh; y: number; launch: NonNullable<LayerSpec['launch']> }[]
   dissolvers: { material: ShaderMaterial; dissolve: NonNullable<LayerSpec['dissolve']> }[]
+  shimmers: ShaderMaterial[]
 }
 
 const LAYER_VERTEX = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`
 const LAYER_FRAGMENT = `varying vec2 vUv;
-  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve;
+  uniform sampler2D uIndex, uPalette; uniform vec2 uRes; uniform float uTime, uAurora, uSky, uHorizon, uAuroraBase, uScroll, uScrollY, uDissolve, uShimmer;
   uniform vec3 uAuroraColor, uMeteorColor; uniform vec4 uMeteors[3]; uniform vec4 uBursts[4]; uniform vec3 uBurstColors[4];
   ${ENERGY_NOISE}
   float bayer4(vec2 p){ vec2 q=mod(p,4.); float i=q.y*4.+q.x;
@@ -97,7 +98,9 @@ const LAYER_FRAGMENT = `varying vec2 vUv;
     return add;
   }
   void main(){
-    vec2 cell=floor(vUv*uRes); cell.x=mod(cell.x+floor(uScroll),uRes.x); cell.y=mod(cell.y+floor(uScrollY),uRes.y); vec2 uv=(cell+.5)/uRes;
+    vec2 cell=floor(vUv*uRes); cell.x=mod(cell.x+floor(uScroll),uRes.x); cell.y=mod(cell.y+floor(uScrollY),uRes.y);
+    // Heat haze: rows slide sideways by a wavering amount.
+    if(uShimmer>0.) cell.x=mod(cell.x+floor(sin(cell.y*.45+uTime*4.)*uShimmer*(1.-cell.y/uRes.y)+.5),uRes.x); vec2 uv=(cell+.5)/uRes;
     float index=floor(texture2D(uIndex,uv).r*255.+.5);
     if(index<.5) discard;
     // A dithered dissolve: pixels drop out in Bayer order as it rises.
@@ -128,7 +131,7 @@ function layerMesh(spec: LayerSpec, palette: DataTexture) {
     uniforms: {
       uIndex: { value: indexTexture(painted) }, uPalette: { value: palette },
       uRes: { value: new Vector2(width, height) }, uTime: { value: 0 }, uAurora: { value: 0 }, uSky: { value: spec.sky ? 1 : 0 },
-      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
+      uHorizon: { value: height }, uAuroraBase: { value: .34 }, uScroll: { value: 0 }, uScrollY: { value: 0 }, uDissolve: { value: 0 }, uShimmer: { value: spec.shimmer ?? 0 }, uAuroraColor: { value: new Color() }, uMeteorColor: { value: new Color() },
       uMeteors: { value: [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)] },
       uBursts: { value: [0, 1, 2, 3].map(() => new Vector4(0, 0, 0, 0)) }, uBurstColors: { value: [0, 1, 2, 3].map(() => new Color()) },
     },
@@ -308,6 +311,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.scrollY) runtime.scrollers.push({ material, speed: spec.scrollY, axis: 'uScrollY' })
   if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
   if (spec.celestial) runtime.celestials.push(mesh)
+  if (spec.shimmer) runtime.shimmers.push(material)
   if (spec.dissolve) runtime.dissolvers.push({ material, dissolve: spec.dissolve })
   if (spec.launch) runtime.launchers.push({ mesh, y: mesh.position.y, launch: spec.launch })
   if (spec.frames) runtime.sprites.push({ material, frames: mesh.userData.frames, fps: spec.frames.fps })
@@ -315,7 +319,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
 
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -351,7 +355,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -394,6 +398,7 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
     mesh.position.y = y + Math.min(400, .5 * launch.accel * since * since)
     if (launch.ignite) mesh.visible = seconds >= launch.at - 1.2
   }
+  for (const material of runtime.shimmers) material.uniforms.uTime.value = seconds
   for (const { material, dissolve } of runtime.dissolvers) {
     const t = Math.max(0, Math.min(1, (seconds - dissolve.from) / (dissolve.to - dissolve.from)))
     material.uniforms.uDissolve.value = dissolve.appear ? 1.001 - t : t * 1.001

@@ -610,3 +610,14 @@ test('tidal abbey: the tide rises over the causeway and ebbs again', () => {
   const level = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.find(child => child.position.z === -11)!.position.y }
   assert.ok(level(12) > level(2) && level(22) < level(12))
 })
+
+test('mirage: heat haze makes far layers waver and the road flows toward the lens', () => {
+  const plan = worldPlan('pixel-mirage', resolvePixelScene('pixel-mirage', undefined))
+  assert.ok(plan.layers.filter(layer => layer.shimmer).length >= 2, 'far layers shimmer')
+  const road = plan.layers.find(layer => layer.scrollY)!
+  assert.ok(road.floor && road.texture[1] % 24 === 0, 'dashes tile along the road')
+  const root = pixelWorldGroup('pixel-mirage'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-mirage').pixelWorld!
+  const haze = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms).filter(u => u?.uShimmer?.value > 0).map(u => u.uTime.value) }
+  assert.deepEqual(haze(3), [3, 3], 'the haze follows the clock')
+})

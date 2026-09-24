@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -28,6 +28,8 @@ export type LayerSpec = {
   /** Lifts off once at `at` seconds and climbs with `accel` m/s²; an
    *  `ignite` layer (the flame) only shows from just before liftoff. */
   launch?: { at: number; accel: number; ignite?: boolean }
+  /** Texels its rows waver sideways in the heat, most at the bottom. */
+  shimmer?: number
   /** Dissolves away in dithered steps between `from` and `to` seconds (or
    *  appears, with `appear`). */
   dissolve?: { from: number; to: number; appear?: boolean }
@@ -421,6 +423,15 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { z: -24, width: 30, height: 15, bottom: -1.2, texture: [300, 150], paint: (w, h) => paintCastle(w, h, { body: INDEX.near, rim: INDEX.farRim, seed: scene.seed + 4, lightFrom: bodySkyX(scene) }) },
     { z: -7, width: 2.2, height: 30, bottom: 0, floor: true, texture: [22, 300], paint: (w, h) => paintFlagstones(w, h, scene.seed) },
     ...reeds(scene),
+  ] }),
+  'pixel-mirage': scene => ({ ground: 'water', clearSky: true, layers: [
+    sky(scene),
+    // Heat haze makes the far mesas and dunes waver above a false lake.
+    { ...FAR, shimmer: 3, paint: (w, h) => paintMesas(w, h, { ...far, seed: scene.seed + 1, lightFrom: bodySkyX(scene), tall: .15 + scene.mountains * .4, count: 4 }) },
+    { z: -30, width: 96, height: 4, bottom: -.6, texture: [720, 30], shimmer: 2, paint: (w, h) => paintDunes(w, h, { ...near, seed: scene.seed + 2, lightFrom: bodySkyX(scene), tall: .3 + scene.hills * .5 }) },
+    // The road runs from under the camera to the horizon, its lines flowing past.
+    { z: -24, width: 5, height: 64, bottom: .03, floor: true, texture: [40, 528], scrollY: -60, paint: (w, h) => paintRoad(w, h) },
+    { z: 4, width: 20, height: 12, bottom: .02, floor: true, texture: [200, 120], paint: (w, h) => paintSand(w, h, scene.seed) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

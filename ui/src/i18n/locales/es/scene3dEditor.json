@@ -1461,6 +1461,10 @@
     "pixel-tidal-abbey": {
       "title": "Abadía de las mareas",
       "description": "Una abadía sobre su roca, unida por una calzada de piedra con la marea baja; mientras se pone el sol la marea sube sobre la calzada y aísla la isla, y vuelve a bajar bajo el cielo nocturno."
+    },
+    "pixel-mirage": {
+      "title": "Espejismo",
+      "description": "Una carretera recta del desierto a mediodía, con sus líneas pasando como si condujeras; la calima hace temblar las mesetas y dunas lejanas sobre un falso lago de cielo en el horizonte, y el resplandor se apaga en un atardecer rojo."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1744,7 +1748,8 @@
       "pixel-starry": "Noche estrellada",
       "pixel-dawnmist": "Crestas con niebla",
       "pixel-motel": "Motel",
-      "pixel-tidal": "Isla de marea"
+      "pixel-tidal": "Isla de marea",
+      "pixel-mirage": "Espejismo"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",
