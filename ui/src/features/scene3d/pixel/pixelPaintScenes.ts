@@ -596,3 +596,43 @@ export function paintRoad(width: number, height: number): IndexedLayer {
   }
   return road
 }
+
+/** Puffy fair-weather clouds: round billows with a lit top and a shaded
+ *  base, placed at the given centres (in texels). */
+export function paintClouds(width: number, height: number, seed: number, centres: [number, number, number][]): IndexedLayer {
+  const sky = layer(width, height)
+  centres.forEach(([cx, cy, size], c) => {
+    for (let b = 0; b < 6; b++) {
+      const bx = cx + (fxRandom(seed, c * 9 + b) - .5) * size * 1.6, by = cy - fxRandom(seed, c * 9 + b + 50) * size * .4, r = size * (.35 + fxRandom(seed, c * 9 + b + 90) * .3)
+      for (let y = Math.floor(by - r); y <= by + r; y++) for (let x = Math.floor(bx - r); x <= bx + r; x++) {
+        if (y > cy + size * .15 || Math.hypot(x - bx, y - by) > r) continue
+        set(sky, x, y, y > cy - size * .05 ? INDEX.haloOuter : y < by - r * .3 ? INDEX.moon : INDEX.haloInner)
+      }
+    }
+  })
+  return sky
+}
+
+/** A meadow on the floor: rows of grass tones with a scatter of flowers. */
+export function paintMeadow(width: number, height: number, seed: number): IndexedLayer {
+  const meadow = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    // Gentle swells of lighter grass, dithered in gradually.
+    const swell = (Math.sin(x * .03 + seed) + Math.sin(y * .05 + x * .012) + 2) / 4
+    const flower = fxRandom(seed, x * 977 + y) > .993
+    set(meadow, x, y, flower ? INDEX.tulip + ((x + y) & 3) : bayer(x, y) < swell * .7 ? INDEX.nearRim : INDEX.near)
+  }
+  return meadow
+}
+
+/** The clouds' shadows for the floor: dithered dark patches (empty around
+ *  them), at the same centres so they travel under their clouds. */
+export function paintCloudShadows(width: number, height: number, centres: [number, number, number][]): IndexedLayer {
+  const shade = layer(width, height)
+  for (const [cx, cy, size] of centres) for (let y = Math.floor(cy - size); y <= cy + size; y++) for (let x = Math.floor(cx - size * 1.4); x <= cx + size * 1.4; x++) {
+    const d = Math.hypot((x - cx) / 1.4, y - cy) / size
+    // Soft-edged, and half-dithered so the grass shows through the shade.
+    if (d < 1 && bayer(x, y) < .35 + (1 - d) * .2) set(shade, ((x % width) + width) % width, y, INDEX.trees)
+  }
+  return shade
+}

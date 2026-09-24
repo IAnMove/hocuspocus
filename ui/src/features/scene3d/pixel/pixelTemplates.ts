@@ -127,6 +127,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-cloud-shadows': ['pixel-meadow', { palettes: ['jungle', 'sunset'], hold: 12, meteors: 0 }],
   'pixel-mirage': ['pixel-mirage', { palettes: ['noon', 'sunset'], hold: 12, meteors: 0 }],
   'pixel-tidal-abbey': ['pixel-tidal', { palettes: ['sunset', 'midnight'], hold: 12, meteors: .3 }],
   'pixel-roadside-motel': ['pixel-motel', { palettes: ['midnight', 'dusk'], hold: 12, meteors: .5, screenGlow: 0 }],
@@ -177,6 +178,7 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   'pixel-planet-rise': { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 },
   // A long lens: the moon looms and the caravan fills its disc.
   'pixel-moon-caravan': { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.5, -40], fov: 20 },
+  'pixel-cloud-shadows': { family: 'fixed', eye: [0, 5, 14], look: [0, 3, -40], fov: 50 },
   'pixel-mirage': { family: 'fixed', eye: [0, 1.3, 9], look: [0, 1.6, -40], fov: 50 },
   'pixel-tidal-abbey': { family: 'fixed', eye: [0, 1.6, 9], look: [0, 2.6, -30], fov: 46 },
   'pixel-roadside-motel': { family: 'fixed', eye: [-2.5, 1.4, 0], look: [-4, 3.4, -16], fov: 52 },

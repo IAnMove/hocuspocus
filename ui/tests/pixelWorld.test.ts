@@ -621,3 +621,16 @@ test('mirage: heat haze makes far layers waver and the road flows toward the len
   const haze = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms).filter(u => u?.uShimmer?.value > 0).map(u => u.uTime.value) }
   assert.deepEqual(haze(3), [3, 3], 'the haze follows the clock')
 })
+
+test('cloud shadows: clouds and their shadows slide across together and wrap', () => {
+  const plan = worldPlan('pixel-meadow', resolvePixelScene('pixel-meadow', undefined))
+  const clouds = plan.layers.find(layer => layer.z === -40)!, shade = plan.layers.find(layer => layer.floor && layer.scroll)!
+  assert.ok(clouds.scroll! < 0 && shade.scroll! < 0, 'both drift the same way')
+  const shadow = shade.paint(...shade.texture)
+  const covered = shadow.data.filter(Boolean).length / shadow.data.length
+  assert.ok(covered > .03 && covered < .4, 'patches of shade, not a blanket')
+  const root = pixelWorldGroup('pixel-meadow'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-cloud-shadows').pixelWorld!
+  const slide = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.map(child => (child as Mesh).material?.uniforms?.uScroll?.value ?? 0).filter(Boolean) }
+  assert.notDeepEqual(slide(1), slide(4))
+})

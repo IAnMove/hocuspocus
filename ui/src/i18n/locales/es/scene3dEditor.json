@@ -1465,6 +1465,10 @@
     "pixel-mirage": {
       "title": "Espejismo",
       "description": "Una carretera recta del desierto a mediodía, con sus líneas pasando como si condujeras; la calima hace temblar las mesetas y dunas lejanas sobre un falso lago de cielo en el horizonte, y el resplandor se apaga en un atardecer rojo."
+    },
+    "pixel-cloud-shadows": {
+      "title": "Sombras de nubes",
+      "description": "Una tarde soleada sobre prados abiertos: nubes esponjosas cruzan el cielo y sus sombras tramadas se deslizan por la hierba y las flores debajo de ellas, hasta que la luz se vuelve dorada al atardecer."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1749,7 +1753,8 @@
       "pixel-dawnmist": "Crestas con niebla",
       "pixel-motel": "Motel",
       "pixel-tidal": "Isla de marea",
-      "pixel-mirage": "Espejismo"
+      "pixel-mirage": "Espejismo",
+      "pixel-meadow": "Prado"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

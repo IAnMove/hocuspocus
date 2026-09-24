@@ -1465,6 +1465,10 @@
     "pixel-mirage": {
       "title": "Mirage",
       "description": "A straight desert road at noon, its lines flowing past as if driving; heat haze makes the far mesas and dunes waver above a false lake of sky on the horizon, the glare fading to a red sunset."
+    },
+    "pixel-cloud-shadows": {
+      "title": "Cloud shadows",
+      "description": "A sunny afternoon over wide meadows: puffy clouds drift across the sky and their dithered shadows glide over the grass and flowers beneath them, until the light turns gold at sunset."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1749,7 +1753,8 @@
       "pixel-dawnmist": "Misty ridges",
       "pixel-motel": "Motel",
       "pixel-tidal": "Tidal island",
-      "pixel-mirage": "Mirage"
+      "pixel-mirage": "Mirage",
+      "pixel-meadow": "Meadow"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

@@ -1,5 +1,5 @@
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -433,6 +433,18 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     { z: -24, width: 5, height: 64, bottom: .03, floor: true, texture: [40, 528], scrollY: -60, paint: (w, h) => paintRoad(w, h) },
     { z: 4, width: 20, height: 12, bottom: .02, floor: true, texture: [200, 120], paint: (w, h) => paintSand(w, h, scene.seed) },
   ] }),
+  'pixel-meadow': scene => {
+    // Clouds slide across the sky and their shadows across the meadow at the
+    // same pace (4 texels per meter), both wrapping seamlessly.
+    const clouds: [number, number, number][] = [[50, 58, 24], [170, 40, 32], [300, 66, 22], [410, 48, 28]]
+    const shadows: [number, number, number][] = [[40, 30, 26], [140, 110, 34], [250, 60, 28], [360, 150, 36], [440, 90, 22]]
+    return { ground: 'none', clearSky: true, layers: [
+      sky(scene), range(scene),
+      { z: -40, width: 120, height: 20, bottom: 6, texture: [480, 96], scroll: -3, paint: (w, h) => paintClouds(w, h, scene.seed, clouds) },
+      { z: -10, width: 120, height: 60, bottom: 0, floor: true, texture: [960, 480], paint: (w, h) => paintMeadow(w, h, scene.seed) },
+      { z: -10, width: 120, height: 48, bottom: .04, floor: true, texture: [480, 192], scroll: -6, paint: (w, h) => paintCloudShadows(w, h, shadows) },
+    ] }
+  },
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },
