@@ -1473,6 +1473,10 @@
     "pixel-fjord": {
       "title": "Fiordo",
       "description": "La cámara se desliza entre las paredes verticales de un fiordo bajo la aurora: los acantilados cercanos pasan más rápido que los picos nevados del fondo, revelando la profundidad del mundo pintado, todo reflejado en el agua quieta."
+    },
+    "pixel-clockwork": {
+      "title": "Mecanismo de reloj",
+      "description": "Dentro de una torre del reloj: un tren de engranajes de latón gira engranado, cada uno a la velocidad que marca su tamaño y al revés que su vecino, encima una esfera da la hora y un péndulo oscila ante una pared de hierro remachada."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1715,7 +1719,8 @@
       "noon": "Mediodía",
       "nave": "Nave",
       "grotto": "Gruta",
-      "starry": "Noche estrellada"
+      "starry": "Noche estrellada",
+      "brass": "Latón"
     },
     "set": {
       "pixel-lake": "Lago de luna",
@@ -1759,7 +1764,8 @@
       "pixel-tidal": "Isla de marea",
       "pixel-mirage": "Espejismo",
       "pixel-meadow": "Prado",
-      "pixel-fjord": "Fiordo"
+      "pixel-fjord": "Fiordo",
+      "pixel-clockwork": "Mecanismo"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

@@ -1473,6 +1473,10 @@
     "pixel-fjord": {
       "title": "Fjord",
       "description": "The camera glides between the sheer walls of a fjord under the aurora: the near cliffs slide past faster than the snowy peaks at its end, revealing the depth of the painted world, all mirrored in the still water."
+    },
+    "pixel-clockwork": {
+      "title": "Clockwork",
+      "description": "Inside a clock tower: a train of brass gears turns in mesh, each at the speed its size dictates and against its neighbour, above them a clock face keeps time and a pendulum swings to and fro before a riveted iron wall."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1715,7 +1719,8 @@
       "noon": "Noon",
       "nave": "Nave",
       "grotto": "Grotto",
-      "starry": "Starry night"
+      "starry": "Starry night",
+      "brass": "Brass"
     },
     "set": {
       "pixel-lake": "Moon lake",
@@ -1759,7 +1764,8 @@
       "pixel-tidal": "Tidal island",
       "pixel-mirage": "Mirage",
       "pixel-meadow": "Meadow",
-      "pixel-fjord": "Fjord"
+      "pixel-fjord": "Fjord",
+      "pixel-clockwork": "Clockwork"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

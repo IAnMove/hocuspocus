@@ -636,3 +636,65 @@ export function paintCloudShadows(width: number, height: number, centres: [numbe
   }
   return shade
 }
+
+/** A brass gear filling its square plane: teeth round the rim, spokes and
+ *  a hub, lit on its upper edge. */
+export function paintGear(size: number, teeth: number): IndexedLayer {
+  const gear = layer(size, size)
+  const c = (size - 1) / 2, root = size * .42, tip = size * .49
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - c, y - c), a = Math.atan2(y - c, x - c)
+    const tooth = Math.cos(a * teeth) > .15
+    if (d > (tooth ? tip : root)) continue
+    const spoke = d > size * .16 && d < root - size * .07 && Math.abs(Math.sin(a * 3)) > .28
+    if (spoke) continue
+    const lit = y < c - d * .4
+    set(gear, x, y, d < size * .06 ? INDEX.trees : d > root - size * .07 || d < size * .16 ? (lit ? INDEX.nearRim : INDEX.near) : INDEX.far)
+  }
+  return gear
+}
+
+/** A clock face with its twelve marks (the hands are separate planes). */
+export function paintClockFace(size: number): IndexedLayer {
+  const face = layer(size, size)
+  const c = (size - 1) / 2
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - c, y - c) / (size / 2)
+    if (d > 1) continue
+    const a = Math.atan2(y - c, x - c), mark = d > .8 && d < .92 && Math.abs(Math.sin(a * 6)) < (Math.abs(Math.cos(a * 3)) > .9 ? .12 : .06)
+    set(face, x, y, d > .95 ? INDEX.nearRim : mark ? INDEX.trees : INDEX.moon)
+  }
+  return face
+}
+
+/** A clock hand pointing up from the plane's centre. */
+export function paintHand(width: number, height: number, length: number): IndexedLayer {
+  const hand = layer(width, height)
+  const cx = Math.floor(width / 2), cy = Math.floor(height / 2)
+  for (let y = cy - Math.round(length * height / 2); y <= cy + 2; y++) for (let dx = -1; dx <= 1; dx++) set(hand, cx + dx, y, INDEX.trees)
+  return hand
+}
+
+/** A pendulum hanging from the plane's centre: rod and a round bob. */
+export function paintPendulum(width: number, height: number): IndexedLayer {
+  const pendulum = layer(width, height)
+  const cx = Math.floor(width / 2), bob = Math.round(height * .9), r = width * .3
+  for (let y = Math.floor(height / 2); y < bob; y++) set(pendulum, cx, y, INDEX.near)
+  for (let y = Math.floor(bob - r); y <= bob + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+    const d = Math.hypot(x - cx, y - bob) / r
+    if (d <= 1) set(pendulum, x, y, d > .8 ? INDEX.near : x < cx && y < bob ? INDEX.moon : INDEX.nearRim)
+  }
+  return pendulum
+}
+
+/** A dark riveted iron wall behind the works. */
+export function paintIronWall(width: number, height: number, seed = 1): IndexedLayer {
+  const wall = layer(width, height)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const seam = x % 48 === 0 || y % 32 === 0, rivet = (x % 48 === 4 || x % 48 === 44) && y % 8 === 4
+    // Patches of rust and wear, different on every wall.
+    const wear = fxRandom(seed, (x >> 3) * 131 + (y >> 3)) > .82 && bayer(x, y) < .4
+    set(wall, x, y, seam ? INDEX.trees : rivet || wear ? INDEX.far : bayer(x, y) < .12 ? INDEX.far : INDEX.trees)
+  }
+  return wall
+}

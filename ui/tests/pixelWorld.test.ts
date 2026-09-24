@@ -645,3 +645,19 @@ test('fjord: the camera glides between the walls, revealing the depth', () => {
   assert.equal(walls.length, 2)
   for (const eye of [start, end]) assert.ok(walls.every(wall => Math.abs(eye[0]) < Math.abs(wall.x!)), 'the camera stays between the walls')
 })
+
+test('clockwork: meshed gears turn against each other and the pendulum swings', () => {
+  const plan = worldPlan('pixel-clockwork', resolvePixelScene('pixel-clockwork', undefined))
+  const gears = plan.layers.filter(layer => layer.spin && layer.width > 1.5 && layer.texture[0] === layer.texture[1] && layer.z <= -9.95)
+  assert.ok(gears.length >= 8)
+  gears.slice(1).forEach((gear, i) => {
+    const prev = gears[i]
+    assert.ok(Math.sign(gear.spin!) !== Math.sign(prev.spin!), 'neighbours turn opposite ways')
+    assert.ok(Math.abs(Math.abs(gear.spin! * gear.width) - Math.abs(prev.spin! * prev.width)) < 1e-9, 'rim speeds match, so teeth mesh')
+  })
+  const root = pixelWorldGroup('pixel-clockwork'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-clockwork').pixelWorld!
+  const angle = (seconds: number) => { paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720); return (root as Group).children.find(child => child.position.z === -9.6)!.rotation.z }
+  assert.ok(angle(.5) > .3 && angle(1.5) < -.3, 'swings one way then the other')
+  assert.ok(Math.abs(angle(2)) < 1e-9, 'back through the middle each period')
+})

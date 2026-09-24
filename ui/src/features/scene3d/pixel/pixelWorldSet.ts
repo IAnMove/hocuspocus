@@ -31,6 +31,7 @@ type PixelRuntime = {
   tide?: WorldPlan['tide']
   lake?: Object3D
   spinners: { mesh: Mesh; speed: number }[]
+  swingers: { mesh: Mesh; swing: NonNullable<LayerSpec['swing']> }[]
   scrollers: { material: ShaderMaterial; speed: number; axis: 'uScroll' | 'uScrollY' }[]
   orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
   celestials: Mesh[]
@@ -307,6 +308,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.sky) runtime.skies.push(material)
   if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y })
   if (spec.spin) runtime.spinners.push({ mesh, speed: spec.spin })
+  if (spec.swing) runtime.swingers.push({ mesh, swing: spec.swing })
   if (spec.scroll) runtime.scrollers.push({ material, speed: spec.scroll, axis: 'uScroll' })
   if (spec.scrollY) runtime.scrollers.push({ material, speed: spec.scrollY, axis: 'uScrollY' })
   if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
@@ -319,7 +321,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
 
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
-  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []
+  runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.swingers = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []; runtime.launchers = []; runtime.dissolvers = []; runtime.shimmers = []
   if (runtime.kind === 'pixel-gallery') {
     gallery(root as Group)
     const floor = water(26, 14, 1.5)
@@ -355,7 +357,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
  *  document's own layout. */
 export function pixelWorldGroup(kind: PixelDressing): Object3D {
   const root = new Group()
-  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [] }
+  const runtime: PixelRuntime = { kind, key: '', ...newPalette(), skies: [], sky: [700, 214], shafts: [], movers: [], spinners: [], swingers: [], orbiters: [], scrollers: [], celestials: [], sprites: [], launchers: [], dissolvers: [], shimmers: [] }
   root.userData.pixelWorld = runtime
   return root
 }
@@ -406,6 +408,7 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
   // The tide lifts the whole lake, covering whatever lies low.
   if (runtime.lake && runtime.tide) runtime.lake.position.y = tideLevel(runtime.tide, seconds)
   for (const spinner of runtime.spinners) spinner.mesh.rotation.z = seconds * spinner.speed
+  for (const { mesh, swing } of runtime.swingers) mesh.rotation.z = swing.amp * Math.sin(seconds / swing.period * Math.PI * 2)
   // Shafts brighten with their glass as the sun moves round.
   for (const shaft of runtime.shafts) (shaft.material as ShaderMaterial).uniforms.uPower.value = .5 + .5 * Math.sin(seconds * .5 - shaft.userData.hue * 1.05)
   for (const sprite of runtime.sprites) sprite.material.uniforms.uIndex.value = sprite.frames[Math.floor(seconds * sprite.fps) % sprite.frames.length]

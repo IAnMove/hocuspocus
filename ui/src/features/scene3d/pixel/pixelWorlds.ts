@@ -1,5 +1,6 @@
+import { fxRandom } from '../../sceneFx/types'
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -19,6 +20,8 @@ export type LayerSpec = {
   floor?: boolean
   /** Radians per second it turns about its own centre. */
   spin?: number
+  /** Swings about its centre: `amp` radians either way, one full swing per `period` s. */
+  swing?: { amp: number; period: number }
   /** Goes round a centre (x, y) at `radius`, staying upright, like a gondola. */
   orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number; /** Circles on the ground (y is then z), facing where it goes. */ flat?: boolean }
   /** The sun or moon on its arc: the key light follows whichever is higher. */
@@ -76,6 +79,21 @@ const MIST_RIDGES: [number, number, number, number, number][] = [[-40, 14, .45, 
 /** The water level at `seconds`: low at the start, high tide mid-period. */
 export function tideLevel(tide: NonNullable<WorldPlan['tide']>, seconds: number) {
   return tide.low + (tide.high - tide.low) * (.5 - .5 * Math.cos(seconds / tide.period * Math.PI * 2))
+}
+
+/** A train of meshed gears: each touches the last at their pitch radii and
+ *  turns the other way, at a speed set by the ratio of their teeth. */
+function clockworkGears(seed: number): LayerSpec[] {
+  const radii = [2.2, 1.2, 1.8, .9, 1.5, 1.1, 2.3, 1.3, 1.9, 1]
+  const headings = [0, -.6, .5, -.9, .4, .9, -.2, -.7, .5, .8]
+  let [x, y] = [-10.5, 4]
+  return radii.map((r, i) => {
+    // Reimagining nudges the train's path; gears still touch.
+    if (i) { const a = headings[i] + (fxRandom(seed, i) - .5) * .5; x += Math.cos(a) * (radii[i - 1] + r) * .92; y += Math.sin(a) * (radii[i - 1] + r) * .92 }
+    const teeth = Math.round(r * 10), speed = (i % 2 ? -1 : 1) * .5 * radii[0] / r
+    return { z: -10 + (i % 2) * .05, x, width: r * 2.1, height: r * 2.1, bottom: y - r * 1.05, texture: [Math.round(r * 60), Math.round(r * 60)] as [number, number],
+      spin: speed, paint: (w: number) => paintGear(w, teeth) }
+  })
 }
 
 /** A day in the day-cycle world lasts as long as its template's clip. */
@@ -453,6 +471,15 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
       paint: (w: number, h: number) => paintRange(w, h, { body: INDEX.near, rim: INDEX.nearRim, shade: INDEX.farShade, seed: scene.seed + 30 + side, lightFrom: side < 0 ? .9 : .1,
         base: h * .55, rough: h * .2, peaks: 5, peakLift: h * .4, snow: scene.snow * h * .35 }),
     })),
+  ] }),
+  'pixel-clockwork': scene => ({ ground: 'none', layers: [
+    { z: -12, width: 30, height: 18, bottom: -2, texture: [480, 288], paint: (w, h) => paintIronWall(w, h, scene.seed) },
+    ...clockworkGears(scene.seed),
+    { z: -9.5, x: 0, width: 4, height: 4, bottom: 8.2, texture: [96, 96], paint: w => paintClockFace(w) },
+    { z: -9.4, x: 0, width: 4, height: 4, bottom: 8.2, texture: [48, 48], spin: -Math.PI * 2 / 60, paint: (w, h) => paintHand(w, h, .8) },
+    { z: -9.3, x: 0, width: 4, height: 4, bottom: 8.2, texture: [48, 48], spin: -Math.PI * 2 / 720, paint: (w, h) => paintHand(w, h, .5) },
+    // The pendulum hangs from its plane's centre, so it swings about the pivot.
+    { z: -9.6, x: 0, width: 1.2, height: 8, bottom: 2.2, texture: [24, 160], swing: { amp: .32, period: 2 }, paint: (w, h) => paintPendulum(w, h) },
   ] }),
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),

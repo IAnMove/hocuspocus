@@ -2,7 +2,7 @@
  *  moon hangs (and so where the light comes from), how tall and rough the
  *  ranges are, how much snow, trees, stars, water ripple and city light. */
 
-export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord'
+export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork'
 export type PixelBody = 'moon' | 'sun' | 'planet' | 'none'
 export type MeteorDirection = 'left' | 'right' | 'both'
 
@@ -82,6 +82,7 @@ export const PIXEL_SCENE_DEFAULTS: Record<PixelWorldKind, PixelScene> = {
   'pixel-mirage': { ...BASE, seed: 90, body: 'sun', bodyX: .7, bodyY: .72, bodySize: .8, crescent: 0, mountains: .4, roughness: .3, hills: .5, trees: 0, stars: 0, reeds: false, ripple: .1 },
   'pixel-meadow': { ...BASE, seed: 12, body: 'sun', bodyX: .8, bodyY: .7, bodySize: .8, crescent: 0, mountains: .5, roughness: .4, hills: .4, trees: .6, stars: 0, reeds: false, ripple: 0 },
   'pixel-fjord': { ...BASE, seed: 870, bodyX: .55, bodyY: .7, bodySize: .8, crescent: .3, mountains: .8, roughness: .5, snow: .7, hills: .3, trees: .6, stars: .7, reeds: false, ripple: .25, auroraHeight: .7 },
+  'pixel-clockwork': { ...BASE, seed: 1700, body: 'none', stars: 0, trees: 0, reeds: false, ripple: 0 },
   'pixel-forest': { ...BASE, seed: 131, bodyX: .5, bodyY: .72, bodySize: .8, mountains: .45, trees: 1, hills: .8, stars: .55, ripple: .3 },
 }
 
