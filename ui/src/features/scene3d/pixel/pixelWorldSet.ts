@@ -275,6 +275,18 @@ function clear(root: Object3D) {
 
 /** Paint the world's planes for this layout; runs again only when the
  *  layout (not the lighting) changes. */
+/** Keep hold of whatever about this plane moves with the clock. */
+function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
+  const material = mesh.material as ShaderMaterial
+  if (spec.sky) runtime.skies.push(material)
+  if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y })
+  if (spec.spin) runtime.spinners.push({ mesh, speed: spec.spin })
+  if (spec.scroll) runtime.scrollers.push({ material, speed: spec.scroll })
+  if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
+  if (spec.celestial) runtime.celestials.push(mesh)
+  if (spec.frames) runtime.sprites.push({ material, frames: mesh.userData.frames, fps: spec.frames.fps })
+}
+
 function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   clear(root)
   runtime.skies = []; runtime.water = undefined; runtime.beam = undefined; runtime.shafts = []; runtime.movers = []; runtime.spinners = []; runtime.orbiters = []; runtime.scrollers = []; runtime.celestials = []; runtime.sprites = []
@@ -290,13 +302,7 @@ function build(root: Object3D, runtime: PixelRuntime, scene: PixelScene) {
   for (const beam of plan.beams ?? []) { const shaft = lightShaft(beam); runtime.shafts.push(shaft); root.add(shaft) }
   for (const spec of plan.layers) {
     const { mesh, lamp, hubs } = layerMesh(spec, runtime.palette)
-    if (spec.sky) runtime.skies.push(mesh.material as ShaderMaterial)
-    if (spec.drift) runtime.movers.push({ mesh, ...spec.drift, y: mesh.position.y })
-    if (spec.spin) runtime.spinners.push({ mesh, speed: spec.spin })
-    if (spec.scroll) runtime.scrollers.push({ material: mesh.material as ShaderMaterial, speed: spec.scroll })
-    if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
-    if (spec.celestial) runtime.celestials.push(mesh)
-    if (spec.frames) runtime.sprites.push({ material: mesh.material as ShaderMaterial, frames: mesh.userData.frames, fps: spec.frames.fps })
+    track(runtime, spec, mesh)
     root.add(mesh)
     if (lamp) { runtime.beam = lighthouseBeam(lamp); root.add(runtime.beam) }
     if (hubs) sailsOn(spec, hubs, runtime.palette, runtime, root)
@@ -322,33 +328,40 @@ function hemisphere(scene: Scene) {
   return scene.children.find((child): child is HemisphereLight => child instanceof HemisphereLight)
 }
 
+type Mover = PixelRuntime['movers'][number]
+
+function placeMover(mover: Mover, seconds: number) {
+  const along = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
+  const sway = mover.bob ? Math.sin(seconds * .6 + (mover.offset ?? 0)) * mover.bob : 0
+  if (mover.rise) { mover.mesh.position.y = mover.y + along + mover.loop / 2; mover.mesh.position.x = sway; return }
+  mover.mesh.position.x = along
+  if (mover.bob) mover.mesh.position.y = mover.y + sway
+}
+
+function placeOrbiter(mesh: Mesh, orbit: NonNullable<LayerSpec['orbit']>, seconds: number) {
+  const angle = orbit.phase + seconds * orbit.speed, ry = orbit.ry ?? orbit.radius
+  mesh.position.x = orbit.x + Math.cos(angle) * orbit.radius
+  if (orbit.flat) {
+    // Swimming on the ground plane: turn to face the way it goes.
+    const way = Math.sign(orbit.speed)
+    mesh.position.z = orbit.y + Math.sin(angle) * ry
+    mesh.rotation.z = Math.atan2(-Math.cos(angle) * ry * way, -Math.sin(angle) * orbit.radius * way)
+    return
+  }
+  // Gondolas hang below their pivot on the rim and never tilt.
+  mesh.position.y = orbit.y + Math.sin(angle) * ry - (orbit.drop ?? 0)
+}
+
 /** Everything that travels, spins or orbits, on the scene clock. */
 function moveParts(runtime: PixelRuntime, seconds: number) {
   // Travelling planes follow the scene clock, so scrubbing and export agree.
-  for (const mover of runtime.movers) {
-    const along = -mover.loop / 2 + (((seconds * mover.speed + (mover.offset ?? 0)) % mover.loop) + mover.loop) % mover.loop
-    const sway = mover.bob ? Math.sin(seconds * .6 + (mover.offset ?? 0)) * mover.bob : 0
-    if (mover.rise) { mover.mesh.position.y = mover.y + along + mover.loop / 2; mover.mesh.position.x = sway; continue }
-    mover.mesh.position.x = along
-    if (mover.bob) mover.mesh.position.y = mover.y + sway
-  }
+  for (const mover of runtime.movers) placeMover(mover, seconds)
   for (const spinner of runtime.spinners) spinner.mesh.rotation.z = seconds * spinner.speed
   // Shafts brighten with their glass as the sun moves round.
   for (const shaft of runtime.shafts) (shaft.material as ShaderMaterial).uniforms.uPower.value = .5 + .5 * Math.sin(seconds * .5 - shaft.userData.hue * 1.05)
   for (const sprite of runtime.sprites) sprite.material.uniforms.uIndex.value = sprite.frames[Math.floor(seconds * sprite.fps) % sprite.frames.length]
   for (const scroller of runtime.scrollers) scroller.material.uniforms.uScroll.value = seconds * scroller.speed
-  for (const { mesh, orbit } of runtime.orbiters) {
-    const angle = orbit.phase + seconds * orbit.speed
-    // Gondolas hang below their pivot on the rim and never tilt.
-    mesh.position.x = orbit.x + Math.cos(angle) * orbit.radius
-    if (orbit.flat) {
-      // Swimming on the ground plane: turn to face the way it goes.
-      mesh.position.z = orbit.y + Math.sin(angle) * (orbit.ry ?? orbit.radius)
-      mesh.rotation.z = Math.atan2(-Math.cos(angle) * (orbit.ry ?? orbit.radius) * Math.sign(orbit.speed), -Math.sin(angle) * orbit.radius * Math.sign(orbit.speed))
-      continue
-    }
-    mesh.position.y = orbit.y + Math.sin(angle) * (orbit.ry ?? orbit.radius) - (orbit.drop ?? 0)
-  }
+  for (const { mesh, orbit } of runtime.orbiters) placeOrbiter(mesh, orbit, seconds)
 }
 
 function syncSet(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorld, palette: PixelPalette, seconds: number, frameHeight: number) {

@@ -145,6 +145,50 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
     scene: { body: 'planet', bodyX: .62, bodyY: .5, bodySize: 2.1, crescent: .35, mountains: .55, roughness: .95, snow: 0, hills: .4, stars: .8, reeds: false, ripple: .35 } }],
 }
 
+type Landscape = keyof typeof LANDSCAPES
+const DURATIONS: Partial<Record<Landscape, number>> = { 'pixel-storm-lake': 18, 'pixel-eclipse': 20 }
+
+/** Shots that differ from the standard landscape view. */
+const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
+  'pixel-drive-in': { family: 'establishment', eye: [0, 1.5, 6.5], look: [0, 3.2, -14], fov: 46 },
+  // The storm low and wide over the water, the planet looked up to.
+  'pixel-storm-lake': { family: 'establishment', eye: [0, 1.2, 9], look: [0, 3.6, -40], fov: 50 },
+  'pixel-planet-rise': { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 },
+  // A long lens: the moon looms and the caravan fills its disc.
+  'pixel-moon-caravan': { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.5, -40], fov: 20 },
+  // Looking down on the pond from above.
+  'pixel-koi-pond': { family: 'fixed', eye: [0, 13.5, 3.2], look: [0, 0, 0], fov: 50 },
+  'pixel-cathedral': { family: 'establishment', eye: [0, 1.7, 8], look: [0, 6, -20], fov: 56 },
+  'pixel-night-express': { family: 'fixed', eye: [0, 1.75, 8.4], look: [0, 2.1, -40], fov: 50 },
+  'pixel-rainy-window': { family: 'fixed', eye: [0, 1.7, 8.4], look: [0, 1.95, -40], fov: 50 },
+  'pixel-glow-tide': { family: 'establishment', eye: [0, 1.5, 10.5], look: [0, 2.2, -40], fov: 48 },
+  'pixel-neon-alley': { family: 'establishment', eye: [0, 1.7, 8], look: [0, 3.4, -30], fov: 56 },
+  // Underwater the camera sits low and looks up into the light.
+  'pixel-coral-reef': { family: 'establishment', eye: [0, .9, 8], look: [0, 6, -40], fov: 50 },
+}
+
+/** A drift of the 3D snow effect, recoloured: petals, leaves, motes or snow. */
+const drift = (id: string, color: string, intensity: number, extra: Record<string, unknown> = {}) =>
+  ({ id, kind: 'snow', start: 0, end: 24, position: { x: 0, y: -.5, z: 1 }, scale: 3.4, intensity, color, seed: 5, sound: false, volume: 0, ...extra })
+const rain = (id: string, color: string, z: number, seed: number) =>
+  ({ id, kind: 'rain', start: 0, end: 24, position: { x: 0, y: -1, z }, scale: 3.4, intensity: 1, color, seed, sound: true, volume: .3 })
+
+/** Effects each landscape plays over its world. */
+const CUES: Partial<Record<Landscape, () => ReturnType<typeof parseWorldSfx>>> = {
+  'pixel-storm-lake': stormCues,
+  'pixel-volcano': eruptionCues,
+  'pixel-snow-village': villageCues,
+  'pixel-koi-pond': () => parseWorldSfx([drift('petals', '#ffc2dc', .4, { position: { x: 0, y: 1, z: 0 }, seed: 71 })]),
+  // Dust motes turning slowly in the light.
+  'pixel-cathedral': () => parseWorldSfx([drift('motes', '#ffe0a0', .35, { position: { x: 0, y: 1, z: -6 }, scale: 2.4, seed: 61 })]),
+  // Petals in spring, leaves in autumn, snow in winter.
+  'pixel-four-seasons': () => parseWorldSfx(([['petals', 0, 6, '#ffc2dc', .7], ['leaves', 12, 18, '#e0702a', .8], ['snow', 18, 24, '#f4f8ff', 1]] as const)
+    .map(([name, start, end, color, intensity], i) => drift(`season-${name}`, color, intensity, { start, end, seed: 40 + i, sound: name === 'snow', volume: .12 }))),
+  'pixel-rainy-window': () => parseWorldSfx([rain('city-rain', '#a8b8e0', -2, 23)]),
+  'pixel-neon-alley': () => parseWorldSfx([rain('alley-rain', '#b4a8e8', 2, 19)]),
+  'pixel-cherry-garden': () => parseWorldSfx([drift('petals', '#ffc2dc', .7, { sound: true, volume: .12 })]),
+}
+
 export function pixelTemplateDocument(id: string): Scene3DDocument | null {
   if (!isPixelTemplate(id)) return null
   if (id === 'pixel-tv-wall') {
@@ -164,44 +208,14 @@ export function pixelTemplateDocument(id: string): Scene3DDocument | null {
     return doc
   }
   const [dressing, pixel] = LANDSCAPES[id]
-  const doc = pixelDocument(id, dressing, pixel, id === 'pixel-storm-lake' ? 18 : id === 'pixel-eclipse' ? 20 : 24)
-  if (id === 'pixel-storm-lake') doc.worldSfx = stormCues()
-  if (id === 'pixel-volcano') doc.worldSfx = eruptionCues()
-  if (id === 'pixel-snow-village') doc.worldSfx = villageCues()
-  if (id === 'pixel-koi-pond') doc.worldSfx = parseWorldSfx([{ id: 'petals', kind: 'snow', start: 0, end: 24, position: { x: 0, y: 1, z: 0 }, scale: 3.4, intensity: .4, color: '#ffc2dc', seed: 71, sound: false, volume: 0 }])
-  // Dust motes turning slowly in the light.
-  if (id === 'pixel-cathedral') doc.worldSfx = parseWorldSfx([{ id: 'motes', kind: 'snow', start: 0, end: 24, position: { x: 0, y: 1, z: -6 }, scale: 2.4, intensity: .35, color: '#ffe0a0', seed: 61, sound: false, volume: 0 }])
-  // Petals in spring, leaves in autumn, snow in winter (the 3D snow drift, recoloured).
-  if (id === 'pixel-four-seasons') doc.worldSfx = parseWorldSfx(([['petals', 0, 6, '#ffc2dc', .7], ['leaves', 12, 18, '#e0702a', .8], ['snow', 18, 24, '#f4f8ff', 1]] as const).map(([name, start, end, color, intensity], i) => ({
-    id: `season-${name}`, kind: 'snow', start, end, position: { x: 0, y: -.5, z: 1 }, scale: 3.4, intensity, color, seed: 40 + i, sound: name === 'snow', volume: .12,
-  })))
-  if (id === 'pixel-rainy-window') doc.worldSfx = parseWorldSfx([{ id: 'city-rain', kind: 'rain', start: 0, end: 24, position: { x: 0, y: -1, z: -2 }, scale: 3.6, intensity: 1, color: '#a8b8e0', seed: 23, sound: true, volume: .3 }])
-  if (id === 'pixel-neon-alley') doc.worldSfx = parseWorldSfx([{ id: 'alley-rain', kind: 'rain', start: 0, end: 24, position: { x: 0, y: -1, z: 2 },
-    scale: 3.2, intensity: 1, color: '#b4a8e8', seed: 19, sound: true, volume: .3 }])
-  if (id === 'pixel-cherry-garden') doc.worldSfx = parseWorldSfx([{ id: 'petals', kind: 'snow', start: 0, end: 24, position: { x: 0, y: -.5, z: 1 },
-    scale: 3.4, intensity: .7, color: '#ffc2dc', seed: 5, sound: true, volume: .12 }])
+  const doc = pixelDocument(id, dressing, pixel, DURATIONS[id] ?? 24)
+  const cues = CUES[id]?.()
+  if (cues) doc.worldSfx = cues
+  doc.camera = SHOTS[id] ?? { family: 'establishment', eye: [0, 1.6, 8], look: [0, 3.2, -40], fov: 45 }
   if (id === 'pixel-drive-in') {
     // The big screen plays your recording; its light washes over cars and sand.
-    const screen: Scene3DSlot = { id: 'drive-in-screen', slot: 'prop', media: 'screen', position: [0, 0, -14], rotationY: 0, scale: 1, sourceUrl: '', clip: null,
-      screen: { ...defaultMediaScreen(), sourceUrl: PIXEL_TV_CLIP, media: 'video', style: 'billboard', fit: 'cover', width: 11, height: 6.2 } }
-    doc.slots = [screen]
-    doc.camera = { family: 'establishment', eye: [0, 1.5, 6.5], look: [0, 3.2, -14], fov: 46 }
+    doc.slots = [{ id: 'drive-in-screen', slot: 'prop', media: 'screen', position: [0, 0, -14], rotationY: 0, scale: 1, sourceUrl: '', clip: null,
+      screen: { ...defaultMediaScreen(), sourceUrl: PIXEL_TV_CLIP, media: 'video', style: 'billboard', fit: 'cover', width: 11, height: 6.2 } }]
   }
-  doc.camera = { family: 'establishment', eye: [0, 1.6, 8], look: [0, 3.2, -40], fov: 45 }
-  // Each landscape gets its own shot: the storm low and wide over the water,
-  // the planet looked up to, the reef from below in the light.
-  if (id === 'pixel-storm-lake') doc.camera = { family: 'establishment', eye: [0, 1.2, 9], look: [0, 3.6, -40], fov: 50 }
-  if (id === 'pixel-planet-rise') doc.camera = { family: 'establishment', eye: [0, 1.8, 8], look: [0, 5, -40], fov: 44 }
-  // A long lens: the moon looms and the caravan fills its disc.
-  if (id === 'pixel-moon-caravan') doc.camera = { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.5, -40], fov: 20 }
-  // Looking down on the pond from above.
-  if (id === 'pixel-koi-pond') doc.camera = { family: 'fixed', eye: [0, 13.5, 3.2], look: [0, 0, 0], fov: 50 }
-  if (id === 'pixel-cathedral') doc.camera = { family: 'establishment', eye: [0, 1.7, 8], look: [0, 6, -20], fov: 56 }
-  if (id === 'pixel-night-express') doc.camera = { family: 'fixed', eye: [0, 1.75, 8.4], look: [0, 2.1, -40], fov: 50 }
-  if (id === 'pixel-rainy-window') doc.camera = { family: 'fixed', eye: [0, 1.7, 8.4], look: [0, 1.95, -40], fov: 50 }
-  if (id === 'pixel-glow-tide') doc.camera = { family: 'establishment', eye: [0, 1.5, 10.5], look: [0, 2.2, -40], fov: 48 }
-  if (id === 'pixel-neon-alley') doc.camera = { family: 'establishment', eye: [0, 1.7, 8], look: [0, 3.4, -30], fov: 56 }
-  // Underwater the camera sits low and looks up into the light.
-  if (id === 'pixel-coral-reef') doc.camera = { family: 'establishment', eye: [0, .9, 8], look: [0, 6, -40], fov: 50 }
   return doc
 }
