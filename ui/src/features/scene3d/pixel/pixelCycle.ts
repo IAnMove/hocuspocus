@@ -40,6 +40,15 @@ export function snowCover(seconds: number) {
 /** Glass hues: ruby, sapphire, emerald, gold, amethyst, amber. */
 export const GLASS = ['#d82a3a', '#2a5ad8', '#2aa860', '#f0c030', '#9a3ad0', '#f07a20']
 
+/** Letter `k` of a five-letter sign at `t` in a 6 s cycle: letters come on
+ *  one by one, the word holds, flashes twice, then goes dark. */
+function spelled(t: number, k: number) {
+  const c = ((t % 6) + 6) % 6
+  if (c < 3) return c >= k * .5
+  if (c < 4.6) return true
+  return c < 5.4 && Math.floor((c - 4.6) / .2) % 2 === 0
+}
+
 type Cycler = { start: number; steps: number; color: (palette: PixelPalette, seconds: number, k: number) => string }
 const pulse = (k: number, steps: number, seconds: number, speed: number) => ((k / steps - seconds * speed) % 1 + 1) % 1
 
@@ -97,6 +106,24 @@ const CYCLERS: Cycler[] = [
   { start: INDEX.snowNear, steps: 4, color: (p, t, k) => snowCover(t) > (k + .5) / 4 ? mixHex('#f4f8ff', p.light.color, .2) : p.near[0] },
   // Stained glass: each hue glows brighter in turn as the sun moves round.
   { start: INDEX.glass, steps: INDEX.glassSteps, color: (_p, t, k) => mixHex(mixHex(GLASS[k], '#000000', .45), mixHex(GLASS[k], '#ffffff', .2), .5 + .5 * Math.sin(t * .5 - k * 1.05)) },
+  // The grid pulses to a 120 BPM beat: a flash on each beat that decays.
+  { start: INDEX.grid, steps: 2, color: (p, t, k) => mixHex(mixHex(p.trees, p.aurora, .4), mixHex(p.far[1], '#ffffff', .25), (.55 + .45 * Math.exp(-((t * 2) % 1) * 5)) * (k ? .5 : 1)) },
+  // Crystals: a wave of light walks across them, cyan into violet.
+  { start: INDEX.crystal, steps: INDEX.crystalSteps, color: (p, t, k) => {
+    const glow = Math.pow(1 - pulse(k, INDEX.crystalSteps, t, .22), 3)
+    return mixHex(mixHex(p.far[0], '#3a2a8a', .5), mixHex('#7af0ff', '#e8b0ff', .5 + .5 * Math.sin(t * .3 + k)), .25 + glow * .75)
+  } },
+  // Painted swirls: a light band travels round every spiral, so they turn.
+  { start: INDEX.swirl, steps: 8, color: (p, t, k) => mixHex(mixHex(p.sky[0], p.far[1], .55), mixHex(p.moon, p.aurora, .4), Math.pow(1 - pulse(k, 8, t, .45), 2)) },
+  // Star halos pulse outward ring by ring.
+  { start: INDEX.halo, steps: 3, color: (p, t, k) => mixHex(p.sky[1], p.moon, (.7 - k * .22) * (.7 + .3 * Math.sin(t * 2 - k))) },
+  // A neon sign spells itself out letter by letter, flashes, then starts over;
+  // the VACANCY line buzzes on and off.
+  { start: INDEX.sign, steps: 6, color: (p, t, k) => {
+    const lit = k === 5 ? Math.sin(t * 17) * Math.sin(t * 1.3) < .55 : spelled(t, k)
+    const tube = k === 5 ? '#6affb4' : '#ff4a8a'
+    return lit ? mixHex(tube, '#ffffff', .2) : mixHex(p.trees, tube, .18)
+  } },
   // Fireflies pulse on and off.
   { start: INDEX.firefly, steps: INDEX.fireflySteps, color: (p, t, k) => mixHex(p.trees, p.windows, Math.pow(Math.max(0, Math.sin(t * (1.4 + k * .23) + k * 1.9)), 3)) },
 ]
@@ -107,6 +134,10 @@ function writeCycling(bytes: Uint8Array, palette: PixelPalette, seconds: number)
   ;['#2a1a1c', '#6a3a26', '#3a2218', '#5a1e2a', '#3a6a3c', '#e8d8b8'].forEach((tone, i) => writeColor(bytes, INDEX.room + i, mixHex(tone, palette.near[0], .15)))
   writeColor(bytes, INDEX.fallWater, mixHex(mixHex(palette.water, palette.far[1], .4), mixHex(palette.sky[2], '#ffffff', .55), .45))
   ;['#e8384a', '#f5c542', '#f07ab0', '#8a5ad8'].forEach((bloom, row) => writeColor(bytes, INDEX.tulip + row, mixHex(bloom, palette.light.color, .2)))
+  // A swimming pool: deep to shallow blue, and the stone coping.
+  ;['#0c4f86', '#1780b8', '#34b0da', '#8ae2f2', '#f0e8d6'].forEach((tone, step) => writeColor(bytes, INDEX.pool + step, mixHex(tone, palette.light.color, .16)))
+  // Ripe wheat, shadowed stalks to sunlit ears, lit by the hour.
+  ;['#5a3e18', '#a87a2a', '#dcaa46', '#f6dc8a'].forEach((tone, step) => writeColor(bytes, INDEX.wheat + step, mixHex(mixHex(tone, palette.near[0], .25 - step * .06), palette.light.color, .22)))
   ;['#ff6a6a', '#ffb45a', '#fff27a', '#7aff9a', '#7ab4ff'].forEach((hue, band) => writeColor(bytes, INDEX.rainbow + band, mixHex(palette.far[0], hue, .55)))
 }
 

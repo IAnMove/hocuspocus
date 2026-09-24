@@ -7,8 +7,8 @@ export const INDEX = {
   sky: 1, skySteps: 16,
   star: 20, starSteps: 8,
   moon: 30, moonShade: 31, haloInner: 32, haloOuter: 33, moonDark: 34,
-  far: 40, farRim: 41, farShade: 42,
-  near: 50, nearRim: 51,
+  far: 40, farRim: 41, farShade: 42, pool: 43, poolSteps: 4, coping: 47,
+  near: 50, nearRim: 51, wheat: 52,
   trees: 60,
   window: 64, windowSteps: 8,
   firefly: 72, fireflySteps: 8,
@@ -32,9 +32,14 @@ export const INDEX = {
   leaf: 210, snowFar: 214, snowNear: 218,
   glass: 222, glassSteps: 6,
   pad: 228, pond: 231,
+  grid: 234,
+  crystal: 236, crystalSteps: 8,
+  swirl: 244, halo: 252,
+  // Neon lettering: five letters and a VACANCY line, in a free run of slots.
+  sign: 164,
 } as const
 
-export type IndexedLayer = { width: number; height: number; data: Uint8Array; /** A light source painted in, in texels (the lighthouse lamp). */ lamp?: [number, number]; /** Where sails turn, in texels (windmill hubs). */ hubs?: [number, number][] }
+export type IndexedLayer = { width: number; height: number; data: Uint8Array; /** A light source painted in, in texels (the lighthouse lamp). */ lamp?: [number, number]; /** Where sails turn, in texels (windmill hubs). */ hubs?: [number, number][]; /** When each texel appears over a `reveal`, 1 (first) to 255 (last). */ order?: Uint8Array }
 
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 export const bayer = (x: number, y: number) => BAYER[(y & 3) * 4 + (x & 3)] / 16

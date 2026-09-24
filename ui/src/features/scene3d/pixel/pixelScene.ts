@@ -2,7 +2,7 @@
  *  moon hangs (and so where the light comes from), how tall and rough the
  *  ranges are, how much snow, trees, stars, water ripple and city light. */
 
-export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan'
+export type PixelWorldKind = 'pixel-lake' | 'pixel-peaks' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza'
 export type PixelBody = 'moon' | 'sun' | 'planet' | 'none'
 export type MeteorDirection = 'left' | 'right' | 'both'
 
@@ -70,6 +70,31 @@ export const PIXEL_SCENE_DEFAULTS: Record<PixelWorldKind, PixelScene> = {
   'pixel-cathedral': { ...BASE, seed: 700, body: 'none', stars: 0, reeds: false, ripple: 0, trees: 0 },
   'pixel-koi': { ...BASE, seed: 81, body: 'none', stars: 0, trees: .6, reeds: false, ripple: 0 },
   'pixel-caravan': { ...BASE, seed: 19, bodyX: .52, bodyY: .06, bodySize: 2.5, crescent: 0, mountains: .35, roughness: .3, trees: 0, hills: .5, stars: .7, reeds: false, ripple: 0 },
+  'pixel-synthwave': { ...BASE, seed: 1984, body: 'sun', bodyX: .5, bodyY: .42, bodySize: 2.3, crescent: 0, mountains: .3, roughness: .7, trees: 0, stars: .6, reeds: false, ripple: 0 },
+  'pixel-monsoon': { ...BASE, seed: 612, body: 'none', mountains: .5, roughness: .55, hills: .6, trees: .9, stars: 0, reeds: true, ripple: .35 },
+  'pixel-marsh': { ...BASE, seed: 333, body: 'sun', bodyX: .7, bodyY: .2, bodySize: 1.4, crescent: 0, mountains: .2, roughness: .3, hills: .3, trees: .5, stars: .3, reeds: true, ripple: .2 },
+  'pixel-launch': { ...BASE, seed: 1969, bodyX: .15, bodyY: .55, bodySize: .7, crescent: .5, mountains: .2, roughness: .3, hills: .2, trees: 0, stars: .7, reeds: false, ripple: .4 },
+  'pixel-grotto': { ...BASE, seed: 505, body: 'none', stars: 0, trees: 0, reeds: false, ripple: .1 },
+  'pixel-starry': { ...BASE, seed: 1889, bodyX: .9, bodyY: .82, bodySize: 1.1, crescent: .45, mountains: .45, roughness: .6, hills: .4, trees: .3, stars: .2, reeds: false, ripple: 0 },
+  'pixel-dawnmist': { ...BASE, seed: 707, body: 'sun', bodyX: .35, bodyY: .3, bodySize: 1.2, crescent: 0, mountains: .55, roughness: .4, hills: .5, trees: .8, stars: .1, reeds: true, ripple: .15 },
+  'pixel-motel': { ...BASE, seed: 66, bodyX: .85, bodyY: .7, bodySize: .7, crescent: .3, mountains: .3, trees: 0, stars: .8, reeds: false, ripple: 0 },
+  'pixel-tidal': { ...BASE, seed: 1066, bodyX: .75, bodyY: .3, bodySize: 1.1, crescent: .1, mountains: .25, roughness: .4, hills: .3, trees: .2, stars: .5, reeds: true, ripple: .45 },
+  'pixel-mirage': { ...BASE, seed: 90, body: 'sun', bodyX: .7, bodyY: .72, bodySize: .8, crescent: 0, mountains: .4, roughness: .3, hills: .5, trees: 0, stars: 0, reeds: false, ripple: .1 },
+  'pixel-meadow': { ...BASE, seed: 12, body: 'sun', bodyX: .8, bodyY: .7, bodySize: .8, crescent: 0, mountains: .5, roughness: .4, hills: .4, trees: .6, stars: 0, reeds: false, ripple: 0 },
+  'pixel-fjord': { ...BASE, seed: 870, bodyX: .55, bodyY: .7, bodySize: .8, crescent: .3, mountains: .8, roughness: .5, snow: .7, hills: .3, trees: .6, stars: .7, reeds: false, ripple: .25, auroraHeight: .7 },
+  'pixel-clockwork': { ...BASE, seed: 1700, body: 'none', stars: 0, trees: 0, reeds: false, ripple: 0 },
+  'pixel-orrery': { ...BASE, seed: 1543, body: 'none', stars: 1, trees: 0, reeds: false, ripple: 0 },
+  // A rainbow stands opposite the sun, so the sun is behind the viewer.
+  'pixel-rainbow': { ...BASE, seed: 818, body: 'none', bodyX: .5, bodyY: .45, bodySize: .9, crescent: 0, mountains: .5, roughness: .45, hills: .5, trees: .8, stars: 0, reeds: true, ripple: .35 },
+  'pixel-risingcity': { ...BASE, seed: 1871, bodyX: .8, bodyY: .5, bodySize: .8, crescent: .3, mountains: .3, trees: 0, hills: .2, stars: .4, reeds: false, city: .85, windows: .6, ripple: .4 },
+  'pixel-abyss': { ...BASE, seed: 4000, body: 'none', mountains: .4, hills: .4, trees: .4, stars: .5, reeds: false, ripple: 0 },
+  'pixel-piazza': { ...BASE, seed: 1914, body: 'none', mountains: .2, roughness: .3, snow: 0, hills: .2, trees: 0, stars: 0, reeds: false, ripple: 0 },
+  'pixel-pool': { ...BASE, seed: 1967, body: 'sun', bodyX: .75, bodyY: .5, bodySize: 1, mountains: .25, roughness: .3, snow: 0, hills: .2, trees: .3, stars: 0, reeds: false, ripple: 0 },
+  'pixel-wheat': { ...BASE, seed: 1889, body: 'sun', bodyX: .3, bodyY: .22, bodySize: 1.3, mountains: .3, roughness: .35, snow: 0, hills: .4, trees: .4, stars: 0, reeds: false, ripple: 0 },
+  'pixel-startrails': { ...BASE, seed: 4242, body: 'none', bodyX: .62, bodyY: .7, mountains: .55, roughness: .6, snow: .3, hills: .35, trees: .7, stars: .6, reeds: true, ripple: .05 },
+  'pixel-empire': { ...BASE, seed: 1954, body: 'none', mountains: 0, hills: .9, trees: .55, stars: 0, reeds: false, ripple: .1 },
+  'pixel-lantern': { ...BASE, seed: 3131, body: 'moon', bodyX: .8, bodyY: .78, bodySize: .6, crescent: .8, mountains: .4, snow: 0, hills: .8, trees: .9, stars: .8, reeds: true, ripple: .3 },
+  'pixel-blizzard': { ...BASE, seed: 2020, body: 'none', mountains: .7, roughness: .5, snow: 1, hills: .5, trees: .8, stars: 0, reeds: true, ripple: 0 },
   'pixel-forest': { ...BASE, seed: 131, bodyX: .5, bodyY: .72, bodySize: .8, mountains: .45, trees: 1, hills: .8, stars: .55, ripple: .3 },
 }
 

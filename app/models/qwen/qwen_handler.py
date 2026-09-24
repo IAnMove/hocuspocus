@@ -106,6 +106,15 @@ class family_handler():
                 "label": "Inpainting Method",
                 "image_modes": [1, 2],
             }
+            if model_def.get("qwen21_viggle_turbo"):
+                extra_model_def["max_image_refs"] = 3
+                extra_model_def["resolution_presets"] = {
+                    key: {**preset, "values": dict(preset["values"])}
+                    for key, preset in _QWEN21_RESOLUTION_PRESETS.items()
+                }
+                extra_model_def["resolution_presets"]["auto"]["hint"] = (
+                    "Recommended 1K canvas; Auto aspect follows the source. Viggle Turbo: 6 steps, CFG 1."
+                )
             return extra_model_def
 
         if base_model_type in ["qwen_image_layered_20B"]:
@@ -311,7 +320,7 @@ class family_handler():
             ui_defaults.update({
                 "guidance_scale": 1,
                 "sample_solver": "default",
-                "num_inference_steps": 40,
+                "num_inference_steps": 6 if model_def.get("qwen21_viggle_turbo") else 40,
                 "video_prompt_type": "",
             })
             return
@@ -361,8 +370,17 @@ class family_handler():
                 if width < 64 or height < 64 or width % 32 or height % 32:
                     return "Qwen Image 2.1 requires dimensions divisible by 32 (for example 1024x1024 or 1376x768)."
             refs = inputs.get("image_refs") or []
-            if len(refs) > 10:
-                return "Qwen Image 2.1 accepts at most 10 reference images."
+            turbo = model_def.get("qwen21_viggle_turbo")
+            limit = 3 if turbo else 10
+            source = inputs.get("image_guide")
+            source_count = int(any(source) if isinstance(source, list) else bool(source))
+            if len(refs) + source_count > limit:
+                return f"Qwen Image 2.1 accepts at most {limit} input images, including the edit source."
+            if turbo:
+                if inputs.get("num_inference_steps", 6) != 6:
+                    return "Qwen Image 2.1 Viggle Turbo requires its fixed 6-step schedule."
+                if inputs.get("guidance_scale", 1) != 1:
+                    return "Qwen Image 2.1 Viggle Turbo requires CFG 1 (no classifier-free guidance)."
         if base_model_type in ["qwen_image_layered_20B"]:
             if inputs.get("image_guide") is None:
                 return "Qwen Image Layered requires a Control Image."
