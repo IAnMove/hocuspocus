@@ -127,6 +127,7 @@ const LANDSCAPES: Record<Exclude<typeof PIXEL_TEMPLATE_IDS[number], 'pixel-tv-wa
   'pixel-firefly-forest': ['pixel-forest', { palettes: ['forest', 'midnight', 'aurora'], hold: 7, meteors: .4 }],
   // Four moods of 6 s each: dawn at sunrise, day at noon, sunset, night under the moon.
   // A year in 24 s: moods follow the seasons in step with the foliage and snow.
+  'pixel-orrery': ['pixel-orrery', { palettes: ['cosmos'], hold: 20, meteors: 0 }],
   'pixel-clockwork': ['pixel-clockwork', { palettes: ['brass'], hold: 20, meteors: 0 }],
   'pixel-fjord': ['pixel-fjord', { palettes: ['aurora', 'polar'], hold: 12, meteors: .4 }],
   'pixel-cloud-shadows': ['pixel-meadow', { palettes: ['jungle', 'sunset'], hold: 12, meteors: 0 }],
@@ -182,6 +183,7 @@ const SHOTS: Partial<Record<Landscape, Scene3DDocument['camera']>> = {
   'pixel-moon-caravan': { family: 'fixed', eye: [0, 1.4, 9], look: [0, 2.5, -40], fov: 20 },
   // The camera glides round a point down the fjord: the walls slide by faster
   // than the far peaks, showing the world's depth.
+  'pixel-orrery': { family: 'fixed', eye: [0, 22, 9], look: [0, 0, .5], fov: 56 },
   'pixel-clockwork': { family: 'fixed', eye: [0, 5.8, 3], look: [0, 5.8, -10], fov: 58 },
   'pixel-fjord': { family: 'orbit', eye: [0, 1.6, 8], look: [0, 4, -16], fov: 52, orbitRadius: 24, orbitHeight: -2.4, orbitTurns: .07 },
   'pixel-cloud-shadows': { family: 'fixed', eye: [0, 5, 14], look: [0, 3, -40], fov: 50 },

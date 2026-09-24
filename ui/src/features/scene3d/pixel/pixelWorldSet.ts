@@ -33,7 +33,7 @@ type PixelRuntime = {
   spinners: { mesh: Mesh; speed: number }[]
   swingers: { mesh: Mesh; swing: NonNullable<LayerSpec['swing']> }[]
   scrollers: { material: ShaderMaterial; speed: number; axis: 'uScroll' | 'uScrollY' }[]
-  orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']> }[]
+  orbiters: { mesh: Mesh; orbit: NonNullable<LayerSpec['orbit']>; id?: string }[]
   celestials: Mesh[]
   sprites: { material: ShaderMaterial; frames: DataTexture[]; fps: number }[]
   launchers: { mesh: Mesh; y: number; launch: NonNullable<LayerSpec['launch']> }[]
@@ -311,7 +311,7 @@ function track(runtime: PixelRuntime, spec: LayerSpec, mesh: Mesh) {
   if (spec.swing) runtime.swingers.push({ mesh, swing: spec.swing })
   if (spec.scroll) runtime.scrollers.push({ material, speed: spec.scroll, axis: 'uScroll' })
   if (spec.scrollY) runtime.scrollers.push({ material, speed: spec.scrollY, axis: 'uScrollY' })
-  if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit })
+  if (spec.orbit) runtime.orbiters.push({ mesh, orbit: spec.orbit, id: spec.id })
   if (spec.celestial) runtime.celestials.push(mesh)
   if (spec.shimmer) runtime.shimmers.push(material)
   if (spec.dissolve) runtime.dissolvers.push({ material, dissolve: spec.dissolve })
@@ -376,13 +376,16 @@ function placeMover(mover: Mover, seconds: number) {
   if (mover.bob) mover.mesh.position.y = mover.y + sway
 }
 
-function placeOrbiter(mesh: Mesh, orbit: NonNullable<LayerSpec['orbit']>, seconds: number) {
+function placeOrbiter(mesh: Mesh, orbit: NonNullable<LayerSpec['orbit']>, seconds: number, centre?: Mesh) {
   const angle = orbit.phase + seconds * orbit.speed, ry = orbit.ry ?? orbit.radius
-  mesh.position.x = orbit.x + Math.cos(angle) * orbit.radius
+  // Around a moving body, the centre travels with it.
+  const cx = centre ? centre.position.x : orbit.x, cz = centre ? centre.position.z : orbit.y
+  mesh.position.x = cx + Math.cos(angle) * orbit.radius
   if (orbit.flat) {
     // Swimming on the ground plane: turn to face the way it goes.
     const way = Math.sign(orbit.speed)
-    mesh.position.z = orbit.y + Math.sin(angle) * ry
+    mesh.position.z = cz + Math.sin(angle) * ry
+    if (orbit.upright) return
     mesh.rotation.z = Math.atan2(-Math.cos(angle) * ry * way, -Math.sin(angle) * orbit.radius * way)
     return
   }
@@ -413,7 +416,8 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
   for (const shaft of runtime.shafts) (shaft.material as ShaderMaterial).uniforms.uPower.value = .5 + .5 * Math.sin(seconds * .5 - shaft.userData.hue * 1.05)
   for (const sprite of runtime.sprites) sprite.material.uniforms.uIndex.value = sprite.frames[Math.floor(seconds * sprite.fps) % sprite.frames.length]
   for (const scroller of runtime.scrollers) scroller.material.uniforms[scroller.axis].value = seconds * scroller.speed
-  for (const { mesh, orbit } of runtime.orbiters) placeOrbiter(mesh, orbit, seconds)
+  const named = new Map(runtime.orbiters.map(item => [item.id, item.mesh]))
+  for (const { mesh, orbit } of runtime.orbiters) placeOrbiter(mesh, orbit, seconds, orbit.around ? named.get(orbit.around) : undefined)
 }
 
 /** Paint the world's planes for its current layout, if that changed. */

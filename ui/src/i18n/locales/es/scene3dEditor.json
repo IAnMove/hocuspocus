@@ -1477,6 +1477,10 @@
     "pixel-clockwork": {
       "title": "Mecanismo de reloj",
       "description": "Dentro de una torre del reloj: un tren de engranajes de latón gira engranado, cada uno a la velocidad que marca su tamaño y al revés que su vecino, encima una esfera da la hora y un péndulo oscila ante una pared de hierro remachada."
+    },
+    "pixel-orrery": {
+      "title": "Planetario",
+      "description": "Un sistema solar visto desde arriba: los planetas giran alrededor de un sol brillante siguiendo tenues órbitas, los interiores más rápido como en la naturaleza, un gigante con anillos entre ellos, una luna que gira en torno a su planeta mientras este gira alrededor del sol, y un cinturón de asteroides que rota despacio."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1765,7 +1769,8 @@
       "pixel-mirage": "Espejismo",
       "pixel-meadow": "Prado",
       "pixel-fjord": "Fiordo",
-      "pixel-clockwork": "Mecanismo"
+      "pixel-clockwork": "Mecanismo",
+      "pixel-orrery": "Planetario"
     },
     "addTv": "Añadir televisor",
     "tvs": "{{count}} televisores",

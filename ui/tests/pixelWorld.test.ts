@@ -661,3 +661,22 @@ test('clockwork: meshed gears turn against each other and the pendulum swings', 
   assert.ok(angle(.5) > .3 && angle(1.5) < -.3, 'swings one way then the other')
   assert.ok(Math.abs(angle(2)) < 1e-9, 'back through the middle each period')
 })
+
+test('orrery: inner planets run faster and a moon circles its moving planet', () => {
+  const plan = worldPlan('pixel-orrery', resolvePixelScene('pixel-orrery', undefined))
+  const planets = plan.layers.filter(layer => layer.id?.startsWith('planet-'))
+  planets.slice(1).forEach((planet, i) => assert.ok(Math.abs(planet.orbit!.speed) < Math.abs(planets[i].orbit!.speed), 'farther is slower'))
+  const root = pixelWorldGroup('pixel-orrery'), dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  const pixel = applyScene3DTemplate('pixel-orrery').pixelWorld!
+  const at = (seconds: number) => {
+    paintPixelWorld(root, new Scene(), dir, pixel, seconds, 720)
+    const bodies = (root as Group).children.filter(child => child.position.y === .02 || child.position.y === .03)
+    const host = bodies[2].position.clone(), moon = bodies.at(-1)!.position.clone()
+    return { host, moon }
+  }
+  for (const t of [0, 3, 9]) {
+    const { host, moon } = at(t)
+    assert.ok(Math.abs(Math.hypot(moon.x - host.x, moon.z - host.z) - 1.3) < 1e-6, 'the moon keeps its distance from its planet')
+  }
+  assert.ok(at(3).host.distanceTo(at(0).host) > .1, 'while the planet itself moves on')
+})

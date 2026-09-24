@@ -1477,6 +1477,10 @@
     "pixel-clockwork": {
       "title": "Clockwork",
       "description": "Inside a clock tower: a train of brass gears turns in mesh, each at the speed its size dictates and against its neighbour, above them a clock face keeps time and a pendulum swings to and fro before a riveted iron wall."
+    },
+    "pixel-orrery": {
+      "title": "Orrery",
+      "description": "A solar system seen from above: planets circle a glowing sun along faint orbit lines, the inner ones fastest as in nature, a ringed giant among them, a moon circling its planet as the planet circles the sun, and an asteroid belt turning slowly."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1765,7 +1769,8 @@
       "pixel-mirage": "Mirage",
       "pixel-meadow": "Meadow",
       "pixel-fjord": "Fjord",
-      "pixel-clockwork": "Clockwork"
+      "pixel-clockwork": "Clockwork",
+      "pixel-orrery": "Orrery"
     },
     "addTv": "Add TV",
     "tvs": "{{count}} TVs",

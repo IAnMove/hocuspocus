@@ -698,3 +698,30 @@ export function paintIronWall(width: number, height: number, seed = 1): IndexedL
   }
   return wall
 }
+
+/** A round planet in one colour, lit toward the plane's centre side and
+ *  shaded round its rim. */
+export function paintPlanetDisc(size: number, tone: number): IndexedLayer {
+  const planet = layer(size, size)
+  const c = (size - 1) / 2
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - c, y - c) / (size / 2)
+    if (d <= 1) set(planet, x, y, d > .8 && bayer(x, y) < (d - .8) * 5 ? INDEX.trees : tone)
+  }
+  return planet
+}
+
+/** Thin elliptical orbit lines, and a scatter of asteroids in a belt. */
+export function paintOrbits(size: number, radii: number[], belt: [number, number], seed: number): IndexedLayer {
+  const orbits = layer(size, size)
+  const c = size / 2
+  for (const r of radii) for (let a = 0; a < 2000; a++) {
+    const t = a / 2000 * Math.PI * 2
+    if (a % 6 < 3) set(orbits, Math.round(c + Math.cos(t) * r), Math.round(c + Math.sin(t) * r), INDEX.far)
+  }
+  for (let k = 0; k < 420; k++) {
+    const t = fxRandom(seed, k) * Math.PI * 2, r = belt[0] + fxRandom(seed, k + 500) * (belt[1] - belt[0])
+    set(orbits, Math.round(c + Math.cos(t) * r), Math.round(c + Math.sin(t) * r), k % 5 ? INDEX.near : INDEX.nearRim)
+  }
+  return orbits
+}

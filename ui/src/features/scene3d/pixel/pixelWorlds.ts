@@ -1,6 +1,6 @@
 import { fxRandom } from '../../sceneFx/types'
 import { INDEX, layer, paintMoon, paintRange, paintReeds, paintSky, type IndexedLayer } from './pixelPaint'
-import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall } from './pixelPaintWorlds'
+import { paintCliff, paintDunes, paintFireflies, paintForest, paintMesas, paintSkyline, paintTrain, paintViaduct, paintVolcano, paintCars, paintGarden, paintReef, paintSchool, paintSeaLight, paintMist, paintBalloon, paintWheel, paintStand, paintCabin, paintTents, paintVillage, paintSkater, paintFalls, paintNebula, paintPlanetLimb, paintStation, paintAsteroid, paintWindmills, paintFacade, paintCastle, paintBeach, paintLanterns, paintRoom, paintLoopRange, paintPoles, paintCarriage, dustSnow, paintOrchard, paintNaveWall, paintArcade, paintFlagstones, paintPond, paintLilies, paintKoi, paintCaravan, paintGrid, paintPalms, paintMurmuration, paintLaunchTower, paintRocket, paintExhaust, paintCaveMouth, paintGrotto, paintSwirls, paintCypress, paintMotel, paintRoad, paintSand, paintClouds, paintMeadow, paintCloudShadows, paintGear, paintClockFace, paintHand, paintPendulum, paintIronWall, paintPlanetDisc, paintOrbits } from './pixelPaintWorlds'
 import { bodySkyX, type PixelScene, type PixelWorldKind } from './pixelScene'
 
 /** One painted plane of a world: where it stands (meters) and its art size. */
@@ -23,7 +23,9 @@ export type LayerSpec = {
   /** Swings about its centre: `amp` radians either way, one full swing per `period` s. */
   swing?: { amp: number; period: number }
   /** Goes round a centre (x, y) at `radius`, staying upright, like a gondola. */
-  orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number; /** Circles on the ground (y is then z), facing where it goes. */ flat?: boolean }
+  orbit?: { x: number; y: number; radius: number; speed: number; phase: number; /** Hangs this far below its point, like a gondola. */ drop?: number; /** Vertical radius, for a flattened arc. */ ry?: number; /** Circles on the ground (y is then z), facing where it goes. */ flat?: boolean; /** Circles this earlier orbiting layer (by `id`) instead of a fixed point. */ around?: string; /** Keeps its own facing instead of turning along its path. */ upright?: boolean }
+  /** A name other layers can orbit around. */
+  id?: string
   /** The sun or moon on its arc: the key light follows whichever is higher. */
   celestial?: 'sun' | 'moon'
   /** Paints frame `frame` of `frames` when the layer is a sprite animation. */
@@ -95,6 +97,9 @@ function clockworkGears(seed: number): LayerSpec[] {
       spin: speed, paint: (w: number) => paintGear(w, teeth) }
   })
 }
+
+/** Orrery planets: orbit radius (m), size, colour slot (-1 ringed), start angle. */
+const ORRERY: [number, number, number, number][] = [[2.8, .8, INDEX.balloon + 1, .4], [4.3, 1.1, INDEX.balloon, 2.1], [6, 1.3, INDEX.balloon + 2, 4], [10.5, 3.6, -1, 1.2], [13, 1.6, INDEX.balloon + 3, 5.4]]
 
 /** A day in the day-cycle world lasts as long as its template's clip. */
 export const DAY_SECONDS = 24
@@ -481,6 +486,24 @@ const WORLDS: Record<PixelWorldKind, (scene: PixelScene) => WorldPlan> = {
     // The pendulum hangs from its plane's centre, so it swings about the pivot.
     { z: -9.6, x: 0, width: 1.2, height: 8, bottom: 2.2, texture: [24, 160], swing: { amp: .32, period: 2 }, paint: (w, h) => paintPendulum(w, h) },
   ] }),
+  'pixel-orrery': scene => {
+    const pixelsPerMeter = 16
+    return { ground: 'none', layers: [
+      // Deep space on the floor, seen from above.
+      { z: 0, width: 60, height: 60, bottom: -.1, floor: true, texture: [480, 480], paint: (w, h) => paintSky(w, h, { seed: scene.seed, horizonRow: h * 3, stars: 700, moon: null }) },
+      { z: 0, width: 30, height: 30, bottom: -.05, floor: true, texture: [480, 480], spin: .03,
+        paint: w => paintOrbits(w, ORRERY.map(([r]) => r * pixelsPerMeter), [7.6 * pixelsPerMeter, 8.6 * pixelsPerMeter], scene.seed) },
+      { z: 0, width: 4.4, height: 4.4, bottom: 0, floor: true, texture: [64, 64], spin: .2, paint: (w, h) => { const sun = layer(w, h); paintMoon(sun, scene.seed, { kind: 'sun', x: .5, y: .5, radius: 8, crescent: 0 }); return sun } },
+      // Kepler: the farther the planet, the slower it goes (speed ~ r^-1.5).
+      ...ORRERY.map(([r, size, tone, phase], i) => ({
+        id: `planet-${i}`, z: 0, width: size, height: size, bottom: .02, floor: true, texture: [Math.round(size * 16), Math.round(size * 16)] as [number, number],
+        orbit: { x: 0, y: 0, radius: r, ry: r, speed: 1.6 * Math.pow(r, -1.5), phase, flat: true, upright: true },
+        paint: (w: number) => tone < 0 ? (() => { const ringed = layer(w, w); paintMoon(ringed, scene.seed, { kind: 'planet', x: .5, y: .5, radius: w * .2, crescent: 0 }); return ringed })() : paintPlanetDisc(w, tone),
+      })),
+      // A moon circling the third planet as it circles the sun.
+      { z: 0, width: .5, height: .5, bottom: .03, floor: true, texture: [10, 10], orbit: { x: 0, y: 0, radius: 1.3, speed: 1.4, phase: 0, flat: true, upright: true, around: 'planet-2' }, paint: w => paintPlanetDisc(w, INDEX.balloon + 3) },
+    ] }
+  },
   'pixel-forest': scene => ({ ground: 'water', layers: [
     sky(scene), range(scene),
     { z: -42, width: 120, height: 14, bottom: -1, texture: [640, 75], paint: (w, h) => paintForest(w, h, { seed: scene.seed + 5, tall: scene.hills * .6, density: .6 + scene.trees * .4, body: INDEX.far }) },
