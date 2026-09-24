@@ -265,11 +265,50 @@ function clear(root: Object3D) {
       if (!(node instanceof Mesh)) return
       node.geometry.dispose()
       const material = node.material as ShaderMaterial
-      for (const frame of (node.userData.frames ?? []) as DataTexture[]) frame.dispose()
-      material.uniforms?.uIndex?.value?.dispose?.()
+      const frames = (node.userData.frames ?? []) as DataTexture[]
+      for (const frame of frames) frame.dispose()
+      const index = material.uniforms?.uIndex?.value
+      if (index && !frames.includes(index)) index.dispose?.()
       material.dispose()
     })
     if (child instanceof Reflector) child.dispose()
+  }
+}
+
+/** Release every GPU texture a pixel set holds, including the shared palette
+ *  and the water's reflection target. `dropDressing` used to walk meshes only,
+ *  so those allocations survived a template switch. */
+export function disposePixelWorld(root: Object3D) {
+  const runtime = root.userData.pixelWorld as PixelRuntime | undefined
+  clear(root)
+  runtime?.palette.dispose()
+  root.userData.pixelWorld = undefined
+}
+
+/** A handful of live sets, oldest evicted first. The template-browser preview
+ *  paints a different world every frame; without this it rebuilt and leaked. */
+export function createPixelWorldCache(limit = 8) {
+  const items = new Map<string, Object3D>()
+  return {
+    take(kind: PixelDressing) {
+      const hit = items.get(kind)
+      if (hit) { items.delete(kind); items.set(kind, hit); return hit }
+      if (items.size >= limit) {
+        const oldest = items.keys().next().value
+        if (oldest !== undefined) {
+          disposePixelWorld(items.get(oldest)!)
+          items.delete(oldest)
+        }
+      }
+      const group = pixelWorldGroup(kind)
+      items.set(kind, group)
+      return group
+    },
+    release() {
+      for (const root of items.values()) disposePixelWorld(root)
+      items.clear()
+    },
+    size() { return items.size },
   }
 }
 
