@@ -407,6 +407,19 @@ function placeOrbiter(mesh: Mesh, orbit: NonNullable<LayerSpec['orbit']>, second
   mesh.position.y = orbit.y + Math.sin(angle) * ry - (orbit.drop ?? 0)
 }
 
+/** Planes that shimmer, fade into haze, grow or dither in and out over the scene. */
+function fadeParts(runtime: PixelRuntime, seconds: number, palette: PixelPalette) {
+  for (const material of runtime.shimmers) material.uniforms.uTime.value = seconds
+  if (runtime.haze) for (const { material, depth } of runtime.hazers) material.uniforms.uHaze.value = Math.min(1, hazeAt(runtime.haze, seconds) * (.25 + depth * 1.1))
+  for (const { material, grow } of runtime.growers) material.uniforms.uGrow.value = Math.max(0, Math.min(1, (seconds - grow.from) / (grow.to - grow.from)))
+  for (const { material, dissolve } of runtime.dissolvers) {
+    const t = Math.max(0, Math.min(1, (seconds - dissolve.from) / (dissolve.to - dissolve.from)))
+    // Just past 0 and 1 at the ends, so no Bayer step is left half-drawn.
+    material.uniforms.uDissolve.value = dissolve.appear ? 1.001 - t * 1.002 : t * 1.001
+  }
+  for (const { material } of runtime.hazers) material.uniforms.uHazeColor.value.set(mixHex(palette.sky[2], '#e8eef6', .6))
+}
+
 /** Everything that travels, spins or orbits, on the scene clock. */
 function moveParts(runtime: PixelRuntime, seconds: number) {
   // Travelling planes follow the scene clock, so scrubbing and export agree.
@@ -416,14 +429,6 @@ function moveParts(runtime: PixelRuntime, seconds: number) {
     const since = Math.max(0, seconds - launch.at)
     mesh.position.y = y + Math.min(400, .5 * launch.accel * since * since)
     if (launch.ignite) mesh.visible = seconds >= launch.at - 1.2
-  }
-  for (const material of runtime.shimmers) material.uniforms.uTime.value = seconds
-  if (runtime.haze) for (const { material, depth } of runtime.hazers) material.uniforms.uHaze.value = Math.min(1, hazeAt(runtime.haze, seconds) * (.25 + depth * 1.1))
-  for (const { material, grow } of runtime.growers) material.uniforms.uGrow.value = Math.max(0, Math.min(1, (seconds - grow.from) / (grow.to - grow.from)))
-  for (const { material, dissolve } of runtime.dissolvers) {
-    const t = Math.max(0, Math.min(1, (seconds - dissolve.from) / (dissolve.to - dissolve.from)))
-    // Just past 0 and 1 at the ends, so no Bayer step is left half-drawn.
-    material.uniforms.uDissolve.value = dissolve.appear ? 1.001 - t * 1.002 : t * 1.001
   }
   // The tide lifts the whole lake, covering whatever lies low.
   if (runtime.lake && runtime.tide) runtime.lake.position.y = tideLevel(runtime.tide, seconds)
@@ -447,7 +452,7 @@ function ensureBuilt(dressing: Object3D, runtime: PixelRuntime, pixel: PixelWorl
 
 function syncSet(runtime: PixelRuntime, scene: PixelScene, pixel: PixelWorld, palette: PixelPalette, seconds: number, frameHeight: number) {
   writePalette(runtime.bytes, palette, seconds)
-  for (const { material } of runtime.hazers) material.uniforms.uHazeColor.value.set(mixHex(palette.sky[2], '#e8eef6', .6))
+  fadeParts(runtime, seconds, palette)
   runtime.palette.needsUpdate = true
   const meteors = meteorsAt(seconds, pixel.meteors, runtime.sky, 5, scene.meteorDirection)
   const bursts = fireworksAt(runtime.fireworks ? seconds : -1, runtime.sky, scene.seed)
