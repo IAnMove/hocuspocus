@@ -213,7 +213,7 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
     runtime.seek = async (seconds, current) => {
       if (runtime.error) throw runtime.error
       if (poses && !abort.signal.aborted) { poses.paint(context, current, seconds); texture.needsUpdate = true; onFrame(); return }
-      if (!video || abort.signal.aborted) return
+      if (!video || !shared || abort.signal.aborted) return
       const next = mediaScreenTime(seconds, video.duration, current)
       desired = Number.isFinite(next) ? next : 0
       // Browsers snap to a frame; retrying the same clock time never lands exactly and hangs export.
