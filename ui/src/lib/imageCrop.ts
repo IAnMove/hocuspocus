@@ -1,6 +1,7 @@
 import { fitFile } from './imageFit'
 import { uploadImage } from '../api/generation'
 import { getOutputThumbnailUrl, type ApiOutput } from '../api/outputs'
+import { randomUuid } from './uuid'
 
 export type CropRect = { x: number; y: number; width: number; height: number }
 const bounded = (value: number, min: number, max: number) => Math.min(max, Math.max(min, Math.round(Number.isFinite(value) ? value : min)))
@@ -26,7 +27,7 @@ export async function cropImageFile(image: HTMLImageElement, rect: CropRect, nam
   context.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height)
   // Unique name even for repeated identical crops. Never write back to the source.
   const stem = name.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}_-]/gu, '-').slice(0, 80) || 'image'
-  return fitFile(canvas, `${stem}-crop-${crypto.randomUUID()}.png`)
+  return fitFile(canvas, `${stem}-crop-${randomUuid()}.png`)
 }
 
 export async function saveCroppedImage(file: File): Promise<ApiOutput> {

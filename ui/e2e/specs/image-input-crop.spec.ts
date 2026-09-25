@@ -41,6 +41,8 @@ test('library crop saves a new input, preserves original pixels, and retries on 
     const explorer = page.getByRole('dialog').filter({ has: page.getByTestId('asset-explorer') })
     await explorer.locator('button[title="hero.png"]').click()
     await explorer.getByRole('button', { name: 'Choose', exact: true }).click()
+    // Mobile LAN HTTP pages do not expose crypto.randomUUID.
+    await page.evaluate(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true }))
     await page.getByRole('button', { name: 'Edit hero.png', exact: true }).click()
     let crop = page.getByRole('dialog', { name: 'Crop image', exact: true })
     await expect(crop.getByLabel('Width (px)')).toHaveValue('400')
