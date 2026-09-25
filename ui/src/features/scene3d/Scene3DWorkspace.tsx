@@ -31,8 +31,7 @@ import { fetchOutputs, type ApiOutput } from '../../api/client'
 import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
-import { Scene3DTemplateBrowser } from './Scene3DTemplateBrowser'
-import { Scene3DUserTemplates } from './Scene3DUserTemplates'
+import { Scene3DShotLibraryCard } from './Scene3DShotLibraryCard'
 import { remountUserTemplate, type World3DUserTemplate } from './userTemplates.ts'
 import { Scene3DAnimationControls } from './Scene3DAnimationControls'
 import { Scene3DDocumentControls } from './Scene3DDocumentControls'
@@ -345,12 +344,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       <Scene3DSpeechStatus document={sceneDoc} seconds={seconds} />
       <Scene3DSoundtrackControls tracks={sceneDoc.soundtrack} disabled={editingLocked}
         onChange={soundtrack => applyScene(current => ({ ...current, soundtrack }))} />
-      <details className="rounded-xl border border-border bg-bg-secondary">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-text-primary">{editorT('templates')} · {editorT(`template.${sceneDoc.templateId}.title`)}</summary>
-      <Scene3DTemplateBrowser selected={selectedUserTemplateId ? undefined : sceneDoc.templateId} disabled={exporting} onSelect={mountTemplate} />
-      <Scene3DUserTemplates document={sceneDoc} disabled={editingLocked} selectedId={selectedUserTemplateId} onApply={mountUserTemplate} />
-      <label className="flex min-h-10 items-center gap-2 px-1 text-xs text-text-secondary"><input type="checkbox" checked={keepAssets} disabled={exporting} onChange={event => setKeepAssets(event.target.checked)} />{editorT('keepAssets')}</label>
-      </details>
+      <Scene3DShotLibraryCard document={sceneDoc} userTemplateId={selectedUserTemplateId} applyDisabled={exporting} editingLocked={editingLocked}
+        keepAssets={keepAssets} onKeepAssets={setKeepAssets} onTemplate={mountTemplate} onUserTemplate={mountUserTemplate} />
       <Scene3DDocumentControls document={sceneDoc} disabled={editingLocked}
         workspace={workspace} identity={session.identity} preview={() => stageRef.current?.paint(seconds, sceneDoc)?.toDataURL('image/png')}
         onChange={next => { applyScene(next); setFrame(0) }}

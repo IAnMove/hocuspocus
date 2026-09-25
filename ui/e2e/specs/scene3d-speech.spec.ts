@@ -28,9 +28,11 @@ test('new talking shots are reachable in the existing 3D video editor', async ({
   await expect(page.getByRole('tab', { name: 'Video 3D', exact: true })).toHaveAttribute('aria-selected', 'true')
   await expect(page).toHaveURL('/')
   await page.getByRole('button', { name: 'Expand editor', exact: true }).click()
-  await workspace.locator('details').first().locator('summary').click()
   for (const id of ['speech-portrait', 'speech-dialogue', 'speech-presenter']) {
-    await workspace.getByTestId('world3d-template-' + id).click()
+    await workspace.getByTestId('world3d-open-library').click()
+    const library = page.getByTestId('world3d-shot-library')
+    await library.getByRole('searchbox', { name: 'Search templates' }).fill(id)
+    await library.getByTestId('world3d-template-' + id).dblclick()
     await expect(toggle).toHaveAttribute('aria-expanded', 'true')
     await expect(workspace.getByTestId('scene3d-speech')).toContainText('Voice and lip-sync')
     await expect(workspace.getByRole('button', { name: 'Import Taberna kit (.zip)', exact: true })).toBeHidden()

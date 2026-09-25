@@ -1878,5 +1878,16 @@
       "windows": "Ventanas y faroles",
       "light": "Luz sobre personajes"
     }
+  },
+  "shotLibrary": {
+    "change": "Cambiar plano",
+    "use": "Usar este plano",
+    "cancel": "Cancelar",
+    "close": "Cerrar la biblioteca de planos",
+    "examples": "Ejemplos",
+    "recent": "Recientes",
+    "current": "Actual",
+    "pickOne": "Elige un plano para verlo aquí.",
+    "hint": "Doble clic o Intro para usar un plano directamente"
   }
 }
