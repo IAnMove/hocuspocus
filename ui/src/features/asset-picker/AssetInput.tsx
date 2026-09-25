@@ -6,6 +6,7 @@ import { AssetPickTrigger } from '../../components/common/AssetPickTrigger.tsx'
 import type { AssetConstraints } from './types.ts'
 import { rememberLocalImage } from '../../lib/localEditImages'
 import { createUploadSession, fileMatchesConstraints } from './upload.ts'
+import { ImageCropButton } from '../../components/common/ImageCropButton'
 
 const AssetExplorerDialog = lazy(() =>
   import('../../components/common/AssetExplorerDialog.tsx').then(module => ({ default: module.AssetExplorerDialog })),
@@ -100,6 +101,7 @@ export function AssetInput({
     <div className="space-y-1" onDrop={event => { event.preventDefault(); event.stopPropagation(); if (!disabled && !busy) void pickLocal(event.dataTransfer.files[0]) }} onDragOver={event => event.preventDefault()}>
       <AssetPickTrigger label={label} selected={value} showPreview={showPreview} placeholder={busy ? t('picker.uploading') : placeholder} disabled={disabled || busy} onOpen={() => setOpen(true)} />
       <div className="flex flex-wrap gap-1">
+        {value?.type === 'image' && <ImageCropButton key={`${workspaceId}:${value.url}`} item={value} disabled={disabled || busy} onReplace={onChoose} />}
         <button type="button" disabled={disabled || busy} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
           <Monitor size={10} />{t('picker.fromDevice')}
         </button>

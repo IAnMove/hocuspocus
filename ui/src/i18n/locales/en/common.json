@@ -1,4 +1,14 @@
 {
+  "crop": {
+    "title": "Crop image",
+    "editName": "Edit {{name}}",
+    "hint": "Drag to select an area, or enter original pixel coordinates. Saving creates a new PNG copy and uses it as the input; the original is unchanged.",
+    "x": "Left (px)", "y": "Top (px)", "width": "Width (px)", "height": "Height (px)",
+    "reset": "Select whole image",
+    "save": "Save crop", "saving": "Saving copy…",
+    "loadFailed": "Could not load this image. Close and try again.",
+    "saveFailed": "Could not save the crop. Your original input is unchanged. Try again."
+  },
   "language": {
     "name": "English",
     "nativeName": "English"
