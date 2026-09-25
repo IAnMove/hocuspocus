@@ -49,6 +49,8 @@
     "named": "{{name}}"
   },
   "explorer": {
+    "selectItem": "Select",
+    "selectedCount": "Selected: {{count}}",
     "choose": "Choose",
     "subtitle": "Preview, name and creation date — filenames alone are easy to confuse.",
     "search": "Search by name",

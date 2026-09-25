@@ -9,6 +9,7 @@ import { isGenerationJobActive } from '../../lib/generationJobState'
 import { usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
 import { generateBlockedCopy, hasOutpaintArea, isRemoteMiniMaxImage } from '../../lib/generateButtonGate'
 import { imageStudioInputRequirement, supportsImageIntent } from '../../features/studio/imageStudioIntent'
+import { imageBatchStatus, imageBatchHasSources } from '../../features/studio/imageBatch'
 
 export function GenerateButton() {
   const { t } = useUiTranslation('studio')
@@ -33,7 +34,7 @@ export function GenerateButton() {
   )
   const hasStartImage = useStore(s => !!(s.startImage || s.params.image_start))
   const imageRequirement = useStore(s => s.generationMode === 'image'
-    ? imageStudioInputRequirement(s.imageStudioIntent, s.params.image_guide, s.imageRefs.length || s.params.image_refs?.length || 0)
+    ? imageStudioInputRequirement(s.imageStudioIntent, imageBatchHasSources(s.imageStudioIntent, s.imageBatch) ? s.imageBatch?.sources[0]?.url : s.params.image_guide, s.imageRefs.length || s.params.image_refs?.length || 0)
     : null)
   const incompatibleImage = useStore(s => s.generationMode === 'image' && !supportsImageIntent(s.imageStudioIntent, s.modelOptions))
   const needsImage = (generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage)
@@ -49,6 +50,12 @@ export function GenerateButton() {
   const promptSchedulerEnabled = useStore(s => s.promptSchedulerEnabled)
   const imageMode = useStore(s => s.params.image_mode)
   const prompt = useStore(s => s.params.prompt)
+  const imageBatch = useStore(s => s.imageBatch)
+  const imageIntent = useStore(s => s.imageStudioIntent)
+  const imageMask = useStore(s => s.params.image_mask)
+  const { batching, count: batchCount, invalid: invalidBatch } = imageBatchStatus(
+    generationMode, imageIntent, String(prompt || ''), imageMask, imageBatch,
+  )
   const schedulerApplies = promptSchedulerEnabled && generationMode === 'video' && imageMode === 0
   const scheduledVideoCount = schedulerApplies ? splitPromptSchedule(prompt).length : 0
   const needsScheduledPrompts = schedulerApplies && scheduledVideoCount === 0
@@ -58,7 +65,7 @@ export function GenerateButton() {
   const localUnavailable = usePlatformCapabilities()?.capabilities.wangp_local?.state === 'hidden'
     && !isRemoteMiniMaxImage(generationMode, modelType, imageProvider)
   const blocked = incompatibleImage || localUnavailable || needsImage || needsReference || needsOutpaintSource
-    || needsOutpaintArea || needsScheduledPrompts || needsPrompt
+    || needsOutpaintArea || needsScheduledPrompts || needsPrompt || invalidBatch
 
   const handleClick = async () => {
     if (blocked || submissionPending.current) return
@@ -117,8 +124,8 @@ export function GenerateButton() {
       <Play size={13} fill={submitting ? 'currentColor' : 'white'} />
       {checkingFrame ? t('wangp.checkingFrame') : submitting
           ? t('generate.submitting')
-          : scheduledVideoCount > 1
-            ? t('generate.queueCount', { count: scheduledVideoCount })
+          : scheduledVideoCount > 1 || batching
+            ? t('generate.queueCount', { count: batching ? batchCount : scheduledVideoCount })
             : tCommon('actions.generate')}
     </button>
     {queueCount > 0 ? <p className="mt-1 text-right text-[10px] text-text-muted">{t('generate.activeCount', { count: queueCount })}</p> : null}

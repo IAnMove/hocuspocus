@@ -24,6 +24,7 @@ export const IMAGE_INTENT_PARAMS = [
 ] as const
 
 export type ImageStudioDraft = {
+  imageBatch?: import('./imageBatch').ImageBatchSettings
   params: Record<string, unknown>
   imageRefs: File[]
   imageRefType: string
@@ -45,7 +46,7 @@ export function emptyImageStudioDraft(options?: Partial<ModelOptions> | null): I
       batch_size: options?.image_layer_count?.default ?? 1, activated_loras: [], loras_multipliers: '', guidance_phases: 1,
     }, imageRefs: [], imageRefType: '', removeBackgroundRefs: false,
     startImage: null, endImage: null, imageSourceSize: null,
-    resolutionPreset: 'auto', aspectRatio: 'auto', loraWeights: {}, outputCount: 1,
+    resolutionPreset: 'auto', aspectRatio: 'auto', loraWeights: {}, outputCount: 1, imageBatch: undefined,
   }
 }
 
@@ -62,6 +63,7 @@ export function imageStudioInputRequirement(intent: ImageStudioIntent, source: u
 
 export function imageStudioDraft(state: Omit<ImageStudioDraft, 'params'> & { params: object }): ImageStudioDraft {
   return {
+    imageBatch: state.imageBatch ? { ...state.imageBatch, sources: state.imageBatch.sources.map(item => ({ ...item })) } : undefined,
     params: Object.fromEntries(IMAGE_INTENT_PARAMS.map(key => [key, (state.params as Record<string, unknown>)[key]])),
     imageRefs: [...state.imageRefs], imageRefType: state.imageRefType,
     removeBackgroundRefs: state.removeBackgroundRefs,

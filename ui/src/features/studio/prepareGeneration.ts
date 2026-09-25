@@ -72,6 +72,7 @@ export type StudioImageIntent = {
 }
 
 export type StudioImageIntentSource = {
+  imageBatch?: import('./imageBatch').ImageBatchSettings
   generationMode: string
   imageStudioIntent?: import('./imageStudioIntent').ImageStudioIntent
   activeWorkspace?: string
@@ -91,6 +92,7 @@ export type StudioImageIntentSource = {
     image_source_support?: boolean
     image_source_required?: boolean
     image_conditioning_required?: boolean
+    image_layer_count?: { min: number; max: number; default: number } | null
     image_ref_choices?: import('../../types').ChoiceConfig | null
   } | null
   models?: Array<{ model_type: string; name: string }>

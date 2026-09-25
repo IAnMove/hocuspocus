@@ -10,6 +10,7 @@ export function ImageEditSection() {
   const modelOptions = useStore(s => s.modelOptions)
   const params = useStore(s => s.params)
   const setParam = useStore(s => s.setParam)
+  const batch = useStore(s => Boolean(s.imageBatch?.enabled))
   const capabilities = studioImageEditCapabilities(modelOptions)
   if (!capabilities) return null
   if (!capabilities.source && !capabilities.outpaint && !capabilities.rgba) return null
@@ -41,7 +42,7 @@ export function ImageEditSection() {
       {capabilities.rgba && (
         <p className="text-[10px] text-text-muted">{t('imageEdit.rgbaHint')}</p>
       )}
-      {capabilities.source && (
+      {capabilities.source && !batch && (
         <>
           <WangpMediaInput
             label={t('imageEdit.source')}
@@ -63,7 +64,7 @@ export function ImageEditSection() {
           )}
         </>
       )}
-      {capabilities.outpaint && source ? (
+      {capabilities.outpaint && source && !batch ? (
         <label className="block text-[11px] text-text-secondary">
           {t('imageEdit.outpaintMargins')}
           <input

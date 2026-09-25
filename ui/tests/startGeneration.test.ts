@@ -151,6 +151,77 @@ function recordingPorts() {
   return { jobs, sent, sendCount: () => sends, ports }
 }
 
+test('two edit sources × two lines freeze four independent single-output commands', async () => {
+  let state = imageSource({ imageStudioIntent: 'edit', params: { prompt: 'red\n\nblue\r\n', repeat_generation: 4, batch_size: 3 },
+    imageBatch: { enabled: true, perLine: true, sources: [{ url: '/api/v1/uploads/a.png' }, { url: '/api/v1/uploads/b.png' }] } })
+  const { ports, sent, jobs } = recordingPorts()
+  const host = { get: () => state, set: () => {} }
+  const work = startStudioImageGenerationFromStore(host, undefined, { actor: 'user', commandId: 'batch' }, {
+    ...ports, startPolling: () => {},
+  })
+  state = imageSource({ activeWorkspace: 'changed', params: { prompt: 'changed' } })
+  await work
+  assert.deepEqual(sent.map(item => [item.input.params.image_guide, item.input.params.prompt]), [
+    ['/api/v1/uploads/a.png', 'red'], ['/api/v1/uploads/a.png', 'blue'],
+    ['/api/v1/uploads/b.png', 'red'], ['/api/v1/uploads/b.png', 'blue'],
+  ])
+  assert.equal(new Set(sent.map(item => item.intent_id)).size, 4)
+  assert.equal(jobs.length, 4)
+  for (const item of sent) {
+    assert.equal(item.input.workspace, 'studio-h11')
+    assert.equal(item.input.params.repeat_generation, 1)
+    assert.equal(item.input.params.batch_size, 1)
+    assert.equal(item.input.params.video_prompt_type, 'V')
+  }
+})
+
+test('Qwen Layered batch keeps the requested layer count instead of pinning batch_size to 1', async () => {
+  const state = imageSource({
+    imageStudioIntent: 'edit',
+    modelOptions: { image_source_support: true, image_source_required: true, image_layer_count: { min: 1, max: 16, default: 4 } },
+    params: { prompt: 'separate clothing', batch_size: 6, repeat_generation: 3 },
+    imageBatch: { enabled: true, perLine: false, sources: [{ url: '/api/v1/uploads/a.png' }, { url: '/api/v1/uploads/b.png' }] },
+  })
+  const { ports, sent } = recordingPorts()
+  await startStudioImageGenerationFromStore({ get: () => state, set: () => {} }, undefined, { actor: 'user', commandId: 'layered' }, {
+    ...ports, startPolling: () => {},
+  })
+  assert.equal(sent.length, 2)
+  for (const item of sent) {
+    assert.equal(item.input.params.batch_size, 6)
+    assert.equal(item.input.params.repeat_generation, 1)
+    assert.equal(item.input.params.video_prompt_type, 'V')
+  }
+})
+
+test('whole prompt keeps newlines and a partial batch failure leaves the other tasks queued', async () => {
+  const state = imageSource({ imageStudioIntent: 'edit', imageBatch: { enabled: true, perLine: false,
+    sources: [{ url: '/api/v1/uploads/a.png' }, { url: '/api/v1/uploads/b.png' }] } })
+  const { ports, sent, jobs } = recordingPorts()
+  let fail = true
+  await assert.rejects(startStudioImageGenerationFromStore({ get: () => state, set: () => {} }, undefined,
+    { actor: 'user', commandId: 'partial' }, { ...ports, startPolling: () => {}, send: async command => {
+      if (fail) { fail = false; throw new Error('temporary failure') }
+      return ports.send(command)
+    } }), /1.*2/)
+  assert.equal(jobs[0].status, 'failed')
+  assert.equal(jobs[1].status, 'queued')
+  assert.equal(sent[0].input.params.prompt, LITERAL_PROMPT)
+  await (jobs[0].retry as () => Promise<unknown>)()
+  assert.equal(sent[1].intent_id, 'partial-1')
+  assert.equal(sent[1].input.params.prompt, LITERAL_PROMPT)
+  assert.equal(sent[1].input.params.image_guide, '/api/v1/uploads/a.png')
+})
+
+test('an empty or oversized image batch is rejected before submitting any jobs', () => {
+  const { ports, jobs } = recordingPorts()
+  for (const sources of [[], Array.from({ length: 101 }, (_, n) => ({ url: `/api/v1/uploads/${n}.png` }))]) {
+    const state = imageSource({ imageStudioIntent: 'edit', imageBatch: { enabled: true, perLine: false, sources } })
+    assert.throws(() => startStudioImageGenerationFromStore({ get: () => state, set: () => {} }, undefined, undefined, ports), /100/)
+  }
+  assert.equal(jobs.length, 0)
+})
+
 test('normalize keeps the literal prompt and does not invent catalog fields', () => {
   const intent = snapshotStudioImageIntent(imageSource())
   const { params } = normalizeStudioImageParams(intent, undefined, {
@@ -436,3 +507,21 @@ test('upload failures keep their reason and can be retried', async () => {
   await (jobs[0].retry as () => Promise<unknown>)()
   assert.equal(sent.length, 1)
 })
+
+for (const selector of ['', 'V', 'VAG']) {
+  test(`Qwen batch enables source conditioning and clears mask flags from ${selector || 'empty'}`, async () => {
+    const state = imageSource({ imageStudioIntent: 'edit',
+      params: { model_type: 'qwen_image_21', video_prompt_type: selector },
+      imageBatch: { enabled: true, perLine: false,
+        sources: [{ url: '/api/v1/uploads/a.png' }, { url: '/api/v1/uploads/b.png' }] } })
+    const { ports, sent } = recordingPorts()
+    await startStudioImageGenerationFromStore({ get: () => state, set: () => {} }, undefined, undefined,
+      { ...ports, startPolling: () => {}, send: async command => {
+        assert.equal(command.input.params.video_prompt_type, 'V')
+        assert.equal(command.input.params.image_mask, undefined)
+        return ports.send(command)
+      } })
+    assert.equal(sent.length, 2)
+    assert.equal(state.params.video_prompt_type, selector)
+  })
+}

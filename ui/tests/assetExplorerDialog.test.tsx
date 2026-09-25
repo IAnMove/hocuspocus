@@ -20,6 +20,25 @@ Object.assign(globalThis, {
 })
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
 
+test('multiple selection is independent from preview and retained across pages', async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { AssetExplorerDialog } = await import('../src/components/common/AssetExplorerDialog.tsx')
+  const items = Array.from({ length: 25 }, (_, index) => ({ name: `${index}.png`, type: 'image' as const,
+    mode: null, size: 1000, created_at: 1000 - index, url: `/api/v1/file/${index}.png?workspace=default`, workspace_id: 'default' }))
+  let chosen: typeof items = []
+  try {
+    render(<AssetExplorerDialog open title="Batch" items={items} workspaceId="default" constraints={{ kinds: ['image'], maxCount: 2, optional: false }} onChoose={() => assert.fail('single callback')} onChooseMany={value => { chosen = value as typeof items }} onClose={() => {}} />)
+    fireEvent.click(screen.getByTitle('0.png'))
+    assert.equal((screen.getByRole('button', { name: 'Choose' }) as HTMLButtonElement).disabled, true)
+    fireEvent.click(screen.getByRole('checkbox', { name: '0.png' }))
+    fireEvent.click(screen.getByRole('button', { name: /Next page/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '24.png' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose' }))
+    assert.deepEqual(chosen.map(item => item.name), ['0.png', '24.png'])
+    assert.ok(chosen.every(item => item.url.includes('/file/') && item.thumbnail_url?.includes('/thumbnail/')))
+  } finally { cleanup() }
+})
+
 test('asset explorer shows preview, name and creation date then confirms a choice', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { AssetExplorerDialog } = await import('../src/components/common/AssetExplorerDialog.tsx')

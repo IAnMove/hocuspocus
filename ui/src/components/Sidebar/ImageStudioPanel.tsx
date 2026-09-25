@@ -7,9 +7,11 @@ import { ImageFitDialog } from './ImageFitDialog'
 import { ImageIntentChooser, ImageIntentSwitch } from './ImageIntentChooser'
 import { ImageRefSection } from './ImageRefSection'
 import { OutputCount } from './OutputCount'
+import { ImageBatchControls } from './ImageBatchControls'
 import { PanoramaLoopPanel } from './PanoramaLoopPanel'
 import { PromptInput } from './PromptInput'
 import { ResolutionPresets } from './ResolutionPresets'
+import { imageBatchEnabled, imageBatchHasSources } from '../../features/studio/imageBatch'
 import { supportsImageIntent } from '../../features/studio/imageStudioIntent'
 
 export function ImageStudioPanel() {
@@ -20,6 +22,8 @@ export function ImageStudioPanel() {
   const resolution = String(useStore(s => s.params.resolution) || '')
   const queueCount = useStore(s => s.jobs.filter(job => ['queued', 'waiting_resource', 'running'].includes(job.status)).length)
   const [fitOpen, setFitOpen] = useState(false)
+  const batch = useStore(s => imageBatchEnabled(s.imageStudioIntent, s.imageBatch))
+  const manySources = useStore(s => imageBatchHasSources(s.imageStudioIntent, s.imageBatch))
 
   if (intent === 'chooser') return <ImageIntentChooser />
   if (!supportsImageIntent(intent, options)) return <><ImageIntentSwitch /><p role="status" className="text-xs text-text-muted">{t('imageIntent.incompatible')}</p></>
@@ -28,8 +32,9 @@ export function ImageStudioPanel() {
     <div className="space-y-3">
       <ImageIntentSwitch />
       <PromptInput />
+      {(['new', 'edit', 'character'].includes(intent)) && <ImageBatchControls />}
       {intent === 'edit' && <ImageEditSection />}
-      {intent === 'edit' && source ? (
+      {intent === 'edit' && !manySources && source ? (
         <button
           type="button"
           onClick={() => setFitOpen(true)}
@@ -45,13 +50,13 @@ export function ImageStudioPanel() {
           <ResolutionPresets />
           <AspectRatioGrid />
           {resolution ? <p className="text-[10px] text-text-muted">{t('imageIntent.canvas', { size: resolution })}</p> : null}
-          <OutputCount />
+          {!batch && <OutputCount />}
         </>
       )}
       {queueCount > 0 ? (
         <p className="text-[10px] text-text-muted">{t('generate.activeCount', { count: queueCount })}</p>
       ) : null}
-      {fitOpen && intent === 'edit' && source ? <ImageFitDialog key={source} source={source} onClose={() => setFitOpen(false)} /> : null}
+      {fitOpen && intent === 'edit' && !manySources && source ? <ImageFitDialog key={source} source={source} onClose={() => setFitOpen(false)} /> : null}
     </div>
   )
 }

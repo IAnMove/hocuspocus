@@ -442,7 +442,7 @@ function exactCatalog(): Record<string, ReturnType<typeof json> | { sse: true }>
 }
 
 function patternedResponse(method: string, pathname: string): ReturnType<typeof json> | null {
-  if (method === 'GET' && /^\/api\/v1\/outputs\/thumbnail\/(hero-no-background|hero_upscaled)\.png$/.test(pathname)) {
+  if (method === 'GET' && /^\/api\/v1\/outputs\/thumbnail\/(hero|hero-no-background|hero_upscaled)\.png$/.test(pathname)) {
     return {
       status: 200,
       contentType: 'image/svg+xml',

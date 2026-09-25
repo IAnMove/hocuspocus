@@ -49,6 +49,8 @@
     "named": "{{name}}"
   },
   "explorer": {
+    "selectItem": "Seleccionar",
+    "selectedCount": "Seleccionadas: {{count}}",
     "choose": "Elegir",
     "subtitle": "Vista previa, nombre y fecha de creación — los nombres solos se confunden.",
     "search": "Buscar por nombre",

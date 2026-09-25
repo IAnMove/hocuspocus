@@ -18,6 +18,31 @@ test.beforeEach(() => {
 })
 test.afterEach(() => { cleanup(); useStore.setState(initial, true); globalThis.fetch = originalFetch })
 
+test('batch controls count image/prompt pairs and keep settings in the edit draft', async () => {
+  useStore.setState({ imageStudioIntent: 'edit', modelOptions: { image_source_support: true } as never,
+    params: { ...initial.params, prompt: 'watercolor\n\noil painting', model_type: 'qwen_image_21' } })
+  const { ImageBatchControls } = await import('../src/components/Sidebar/ImageBatchControls')
+  const view = render(<ImageBatchControls />)
+  fireEvent.click(view.getByRole('checkbox'))
+  fireEvent.change(view.getByTestId('image-batch-files'), { target: { files: [
+    new File(['one'], 'one.png', { type: 'image/png' }), new File(['two'], 'two.png', { type: 'image/png' }),
+  ] } })
+  assert.equal(useStore.getState().imageBatch?.sources.length, 2)
+  fireEvent.change(view.getByRole('combobox'), { target: { value: 'lines' } })
+  assert.match(view.getByRole('status').textContent || '', /4/)
+  await act(async () => useStore.getState().setImageStudioIntent('new'))
+  assert.equal(useStore.getState().imageBatch, undefined)
+  await act(async () => useStore.getState().setImageStudioIntent('edit'))
+  assert.equal(useStore.getState().imageBatch?.perLine, true)
+  assert.equal(useStore.getState().imageBatch?.sources.length, 2)
+  fireEvent.change(view.getByRole('combobox'), { target: { value: 'whole' } })
+  assert.match(view.getByRole('status').textContent || '', /2/)
+  fireEvent.click(view.getByRole('button', { name: /one.png/ }))
+  assert.equal(useStore.getState().imageBatch?.sources.length, 1)
+  await act(async () => useStore.getState().resetImageStudio())
+  assert.equal(useStore.getState().imageBatch, undefined)
+})
+
 test('Layered offers its source and layer count instead of an impossible text/reference workflow', async () => {
   useStore.setState({ modelOptions: { image_source_support: true, image_source_required: true,
     image_layer_count: { min: 1, max: 16, default: 4 }, image_outputs: true } as never })

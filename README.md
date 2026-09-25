@@ -24,6 +24,12 @@ Install with [Pinokio](https://pinokio.computer) from [`https://github.com/IAnMo
 
 ## What you can do
 
+### Edit images in batches
+
+In **Direct generation → Image → Edit**, enable **Edit multiple images separately** and add images from your device or HocusPocus (use the selection checkboxes). Choose either the entire prompt, including line breaks, or **One prompt per line**. Two images and two nonempty prompt lines enqueue four independent generations, each with one output and its own retry action. The selected canvas/model settings apply to every pair. Batches are limited to 100 combinations; shared masks are not supported.
+
+The HocusPocus file picker loads small thumbnails, with a medium preview on selection. **Enlarge** loads the original resolution only when requested.
+
 ### Direct a film, videoclip or trailer
 
 **Director** takes a brief (or a song) and turns it into reviewable shots, prompts and references. Manual mode lets you approve each step. Auto mode runs analyze → plan → images → clips → assemble, and **Productions** keeps the whole thread so you can resume or retake one shot.
