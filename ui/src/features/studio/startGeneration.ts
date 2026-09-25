@@ -25,6 +25,7 @@ import {
 import type { GenerationSubmissionContext } from './generationProvenance'
 import i18n from '../../i18n'
 import { imageBatchPairs, MAX_IMAGE_BATCH_JOBS } from './imageBatch'
+import { mergeVideoPromptLetters } from '../../lib/studioImageEdit'
 
 export type { ScheduledPromptSubmission, StudioImageIntent, StudioImageIntentSource }
 
@@ -371,7 +372,9 @@ export function startStudioImageGenerationFromStore(
     // edits must not alter the rest of an already submitted batch.
     const intents = pairs.map(pair => snapshotStudioImageIntent({ ...source, params: {
       ...source.params, prompt: pair.prompt, repeat_generation: 1, batch_size: 1, multi_prompts_gen_type: 2,
-      ...(pair.source ? { image_guide: pair.source.url, image_mask: undefined } : {}),
+      ...(pair.source ? { image_guide: pair.source.url, image_mask: undefined,
+        video_prompt_type: mergeVideoPromptLetters(String(source.params?.video_prompt_type || ''), 'V', 'VAG'),
+      } : {}),
     } }))
     const batchId = context?.commandId || ports.newIntentId()
     const pending = inFlight.get(batchId)

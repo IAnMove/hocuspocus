@@ -171,6 +171,7 @@ test('two edit sources × two lines freeze four independent single-output comman
     assert.equal(item.input.workspace, 'studio-h11')
     assert.equal(item.input.params.repeat_generation, 1)
     assert.equal(item.input.params.batch_size, 1)
+    assert.equal(item.input.params.video_prompt_type, 'V')
   }
 })
 
@@ -487,3 +488,21 @@ test('upload failures keep their reason and can be retried', async () => {
   await (jobs[0].retry as () => Promise<unknown>)()
   assert.equal(sent.length, 1)
 })
+
+for (const selector of ['', 'V', 'VAG']) {
+  test(`Qwen batch enables source conditioning and clears mask flags from ${selector || 'empty'}`, async () => {
+    const state = imageSource({ imageStudioIntent: 'edit',
+      params: { model_type: 'qwen_image_21', video_prompt_type: selector },
+      imageBatch: { enabled: true, perLine: false,
+        sources: [{ url: '/api/v1/uploads/a.png' }, { url: '/api/v1/uploads/b.png' }] } })
+    const { ports, sent } = recordingPorts()
+    await startStudioImageGenerationFromStore({ get: () => state, set: () => {} }, undefined, undefined,
+      { ...ports, startPolling: () => {}, send: async command => {
+        assert.equal(command.input.params.video_prompt_type, 'V')
+        assert.equal(command.input.params.image_mask, undefined)
+        return ports.send(command)
+      } })
+    assert.equal(sent.length, 2)
+    assert.equal(state.params.video_prompt_type, selector)
+  })
+}
