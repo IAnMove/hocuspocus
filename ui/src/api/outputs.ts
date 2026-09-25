@@ -46,11 +46,11 @@ export interface ApiOutput {
 
 // --- Move to Workspace ---
 
-export async function moveOutput(name: string, workspace: string): Promise<void> {
+export async function moveOutput(name: string, workspace: string, sourceWorkspace?: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}/move`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace }),
+    body: JSON.stringify({ workspace, ...(sourceWorkspace ? { source_workspace: sourceWorkspace } : {}) }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Move failed' }))
@@ -364,8 +364,9 @@ export async function mountAlternativeSong(
   return res.json()
 }
 
-export async function deleteOutput(name: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}`, { method: 'DELETE' })
+export async function deleteOutput(name: string, workspace?: string): Promise<void> {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}${query}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete output')
 }
 

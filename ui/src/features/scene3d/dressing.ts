@@ -17,11 +17,16 @@ import { actionGroup, applyActionAtmosphere, isActionDressing } from './actionSe
 import { clearDrive } from './driveMotion.ts'
 import type { GpuWorld } from './gpu.ts'
 import type { Scene3DDressing } from './types.ts'
-import { isPixelDressing, pixelWorldGroup } from './pixel/pixelWorldSet'
+import { disposePixelWorld, isPixelDressing, pixelWorldGroup } from './pixel/pixelWorldSet'
 
 export function dropDressing(world: GpuWorld) {
   if (!world.dressing) return
   world.scene.remove(world.dressing)
+  if (world.dressing.userData.pixelWorld) {
+    disposePixelWorld(world.dressing)
+    world.dressing = null
+    return
+  }
   world.dressing.traverse(child => {
     if (!(child instanceof Mesh)) return
     child.geometry.dispose()

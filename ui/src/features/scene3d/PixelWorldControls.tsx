@@ -10,8 +10,8 @@ type Patch = Pick<Scene3DDocument, 'pixelWorld' | 'dressing'>
 const RANGES = { hold: [.5, 120, .5], meteors: [0, 1, .05], pixelSize: [1, 8, 1], levels: [4, 64, 1], dither: [0, 1, .05], screenGlow: [0, 2, .05] } as const
 
 /** Lighting program, pixel look and screen light of a pixel world. */
-export function PixelWorldControls({ pixelWorld, dressing, tvs, disabled, onChange, onAddTv }: {
-  pixelWorld: PixelWorld | undefined; dressing: Scene3DDocument['dressing']; tvs: number; disabled: boolean
+export function PixelWorldControls({ pixelWorld, dressing, tvs, slots, disabled, onChange, onAddTv }: {
+  pixelWorld: PixelWorld | undefined; dressing: Scene3DDocument['dressing']; tvs: number; slots: number; disabled: boolean
   onChange: (patch: Partial<Patch>) => void; onAddTv: () => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
@@ -49,7 +49,7 @@ export function PixelWorldControls({ pixelWorld, dressing, tvs, disabled, onChan
       </div>
       {isPixelWorldKind(dressing) && <PixelWorldSceneControls kind={dressing} pixelWorld={pixelWorld} onChange={value => onChange({ pixelWorld: value })} />}
       <PixelWorldColorControls pixelWorld={pixelWorld} onChange={value => onChange({ pixelWorld: value })} />
-      <div className="flex items-center gap-3"><button type="button" onClick={onAddTv} className="min-h-9 rounded border border-border px-3 hover:bg-bg-hover">{t('pixelWorld.addTv')}</button>
+      <div className="flex items-center gap-3"><button type="button" onClick={onAddTv} disabled={disabled || slots >= 64} className="min-h-9 rounded border border-border px-3 hover:bg-bg-hover">{t('pixelWorld.addTv')}</button>
         {tvs > 0 && <span className="text-text-muted">{t('pixelWorld.tvs', { count: tvs })}</span>}</div>
     </div>}
     <p className="mt-2 text-text-muted">{t('pixelWorld.help')}</p>

@@ -413,7 +413,9 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     set({ galleryFeedAtTop: atTop })
     if (atTop && !wasTop && get().galleryRefreshPending) {
       set({ galleryRefreshPending: false })
-      void get().loadOutputs()
+      // Keep the already-paged window. loadOutputs() always asks for the
+      // first 100 rows and would drop everything the reader had scrolled in.
+      void get().refreshOutputs()
     }
   },
   clearGalleryToast: () => set({ galleryToast: null }),
@@ -656,7 +658,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     const workspaceEpoch = _workspaceRequestEpoch
 
     try {
-      await api.deleteOutput(output.name)
+      await api.deleteOutput(output.name, workspace)
       if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
       // Remove from local state
       const allOutputs = get().outputs.filter(o => o.name !== output.name)

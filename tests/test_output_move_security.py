@@ -39,7 +39,9 @@ class JsonRequest:
         return self._body
 
 
-def move_namespace(source: Path, destination: Path) -> dict:
+def move_namespace(source: Path, destination: Path, active: Path | None = None) -> dict:
+    folders = {"target": destination, "film": source}
+    fallback = active if active is not None else source
     namespace = {
         "os": os,
         "Request": FastAPIRequest,
@@ -47,9 +49,7 @@ def move_namespace(source: Path, destination: Path) -> dict:
         "traceback": __import__("traceback"),
         "threading": __import__("threading"),
         "time": __import__("time"),
-        "_workspace_dir": lambda workspace=None: str(
-            destination if workspace == "target" else source
-        ),
+        "_workspace_dir": lambda workspace=None: str(folders.get(workspace, fallback)),
         "_load_favorites": lambda: set(),
         "_save_favorites": lambda _favorites: None,
     }
@@ -162,3 +162,26 @@ def test_move_output_rejects_a_destination_directory_symlink_escape(tmp_path, mo
     assert error.value.status_code == 400
     assert media.read_bytes() == b"video"
     assert not (outside / "clip.mp4").exists()
+
+
+def test_move_output_reads_from_the_listed_workspace_not_the_active_one(tmp_path, monkeypatch):
+    active = tmp_path / "ads"
+    film = tmp_path / "film"
+    archive = tmp_path / "target"
+    active.mkdir()
+    film.mkdir()
+    archive.mkdir()
+    (active / "hero.png").write_bytes(b"ads-hero")
+    (film / "hero.png").write_bytes(b"film-hero")
+    install_win_safe_files_stub(monkeypatch)
+    namespace = move_namespace(film, archive, active)
+
+    result = asyncio.run(namespace["move_output"](
+        "hero.png",
+        JsonRequest({"workspace": "target", "source_workspace": "film"}),
+    ))
+
+    assert result == {"moved": "hero.png", "to": "target"}
+    assert (archive / "hero.png").read_bytes() == b"film-hero"
+    assert not (film / "hero.png").exists()
+    assert (active / "hero.png").read_bytes() == b"ads-hero"

@@ -171,6 +171,26 @@ test('two edit sources × two lines freeze four independent single-output comman
     assert.equal(item.input.workspace, 'studio-h11')
     assert.equal(item.input.params.repeat_generation, 1)
     assert.equal(item.input.params.batch_size, 1)
+    assert.equal(item.input.params.video_prompt_type, 'V')
+  }
+})
+
+test('Qwen Layered batch keeps the requested layer count instead of pinning batch_size to 1', async () => {
+  const state = imageSource({
+    imageStudioIntent: 'edit',
+    modelOptions: { image_source_support: true, image_source_required: true, image_layer_count: { min: 1, max: 16, default: 4 } },
+    params: { prompt: 'separate clothing', batch_size: 6, repeat_generation: 3 },
+    imageBatch: { enabled: true, perLine: false, sources: [{ url: '/api/v1/uploads/a.png' }, { url: '/api/v1/uploads/b.png' }] },
+  })
+  const { ports, sent } = recordingPorts()
+  await startStudioImageGenerationFromStore({ get: () => state, set: () => {} }, undefined, { actor: 'user', commandId: 'layered' }, {
+    ...ports, startPolling: () => {},
+  })
+  assert.equal(sent.length, 2)
+  for (const item of sent) {
+    assert.equal(item.input.params.batch_size, 6)
+    assert.equal(item.input.params.repeat_generation, 1)
+    assert.equal(item.input.params.video_prompt_type, 'V')
   }
 })
 
@@ -487,3 +507,21 @@ test('upload failures keep their reason and can be retried', async () => {
   await (jobs[0].retry as () => Promise<unknown>)()
   assert.equal(sent.length, 1)
 })
+
+for (const selector of ['', 'V', 'VAG']) {
+  test(`Qwen batch enables source conditioning and clears mask flags from ${selector || 'empty'}`, async () => {
+    const state = imageSource({ imageStudioIntent: 'edit',
+      params: { model_type: 'qwen_image_21', video_prompt_type: selector },
+      imageBatch: { enabled: true, perLine: false,
+        sources: [{ url: '/api/v1/uploads/a.png' }, { url: '/api/v1/uploads/b.png' }] } })
+    const { ports, sent } = recordingPorts()
+    await startStudioImageGenerationFromStore({ get: () => state, set: () => {} }, undefined, undefined,
+      { ...ports, startPolling: () => {}, send: async command => {
+        assert.equal(command.input.params.video_prompt_type, 'V')
+        assert.equal(command.input.params.image_mask, undefined)
+        return ports.send(command)
+      } })
+    assert.equal(sent.length, 2)
+    assert.equal(state.params.video_prompt_type, selector)
+  })
+}

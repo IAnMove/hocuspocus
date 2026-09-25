@@ -8,7 +8,9 @@ import { paletteAt, PIXEL_PALETTES } from '../src/features/scene3d/pixel/pixelPa
 import { parsePixelWorld } from '../src/features/scene3d/pixel/pixelWorld'
 import { INDEX, paintRange, paintSky, ridge } from '../src/features/scene3d/pixel/pixelPaint'
 import { fireworksAt, meteorsAt, snowCover, writePalette } from '../src/features/scene3d/pixel/pixelCycle'
-import { paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
+import { createPixelWorldCache, disposePixelWorld, paintPixelWorld, pixelWorldGroup } from '../src/features/scene3d/pixel/pixelWorldSet'
+import { dropDressing } from '../src/features/scene3d/dressing'
+import type { GpuWorld } from '../src/features/scene3d/gpu'
 import { bodyDirection, parsePixelScene, PIXEL_WORLD_KINDS, resolvePixelScene } from '../src/features/scene3d/pixel/pixelScene'
 import { eclipseShade, hazeAt, launchGlow, tideLevel, worldPlan } from '../src/features/scene3d/pixel/pixelWorlds'
 import { paintJellyfish, paintLoopRange, paintMurmuration, paintPool, paintStarTrails, paintText, paintWheat } from '../src/features/scene3d/pixel/pixelPaintWorlds'
@@ -85,6 +87,18 @@ test('TVs: CRT screens keep their tube colour, share one recording and can be ad
   assert.equal(more.slots.length, shared.slots.length + 1)
   assert.equal(more.slots.at(-1)!.screen!.sourceUrl, '/api/v1/file/mine.mp4?workspace=w')
   assert.equal(new Set(more.slots.map(slot => slot.id)).size, more.slots.length)
+})
+
+test('adding TVs stops at 64 slots so the scene still saves and reopens', () => {
+  const wall = applyScene3DTemplate('pixel-tv-wall')
+  assert.ok(wall.slots.length < 64)
+  let scene = wall
+  for (let i = wall.slots.length; i < 70; i++) scene = addTv(scene)
+  assert.equal(scene.slots.length, 64)
+  assert.equal(addTv(scene), scene)
+  assert.ok(parseScene3DDocument(JSON.parse(JSON.stringify(scene))))
+  const overflow = { ...scene, slots: [...scene.slots, { ...scene.slots[0], id: 'overflow-tv' }] }
+  assert.equal(parseScene3DDocument(JSON.parse(JSON.stringify(overflow))), null)
 })
 
 test('every world paints its planes from a layout that can be reimagined', () => {
@@ -487,6 +501,35 @@ test('moon caravan: the camels walk frame by frame as the caravan crosses', () =
   assert.ok(b.x > a.x, 'the caravan advances')
   assert.notEqual(a.texture, b.texture, 'and steps to the next frame')
   assert.equal(state(1).texture, a.texture, 'frames follow the clock')
+})
+
+test('dropping a painted pixel world releases its palette, and the preview cache reuses a set', () => {
+  const root = pixelWorldGroup('pixel-lake')
+  const scene = new Scene()
+  scene.add(root)
+  const dir = { color: new Color(), intensity: 0, position: new Vector3() }
+  paintPixelWorld(root, scene, dir, applyScene3DTemplate('pixel-moon-lake').pixelWorld!, 1, 720)
+  const palette = root.userData.pixelWorld.palette
+  let released = 0
+  const dispose = palette.dispose.bind(palette)
+  palette.dispose = () => { released++; dispose() }
+  dropDressing({ scene, dressing: root } as GpuWorld)
+  assert.equal(released, 1)
+  assert.equal(root.children.length, 0)
+  assert.equal(scene.children.includes(root), false)
+
+  const cache = createPixelWorldCache(2)
+  const lake = cache.take('pixel-lake')
+  const peaks = cache.take('pixel-peaks')
+  assert.equal(cache.take('pixel-lake'), lake)
+  assert.equal(cache.size(), 2)
+  const orbit = cache.take('pixel-orbit')
+  assert.notEqual(orbit, peaks)
+  assert.equal(cache.take('pixel-lake'), lake)
+  assert.equal(cache.size(), 2)
+  cache.release()
+  assert.equal(cache.size(), 0)
+  disposePixelWorld(pixelWorldGroup('pixel-gallery'))
 })
 
 test('synthwave: the grid flows toward the lens and pulses on the beat', () => {

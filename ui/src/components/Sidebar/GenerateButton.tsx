@@ -9,7 +9,7 @@ import { isGenerationJobActive } from '../../lib/generationJobState'
 import { usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
 import { generateBlockedCopy, hasOutpaintArea, isRemoteMiniMaxImage } from '../../lib/generateButtonGate'
 import { imageStudioInputRequirement, supportsImageIntent } from '../../features/studio/imageStudioIntent'
-import { imageBatchPairs, MAX_IMAGE_BATCH_JOBS } from '../../features/studio/imageBatch'
+import { imageBatchStatus, imageBatchHasSources } from '../../features/studio/imageBatch'
 
 export function GenerateButton() {
   const { t } = useUiTranslation('studio')
@@ -34,7 +34,7 @@ export function GenerateButton() {
   )
   const hasStartImage = useStore(s => !!(s.startImage || s.params.image_start))
   const imageRequirement = useStore(s => s.generationMode === 'image'
-    ? imageStudioInputRequirement(s.imageStudioIntent, s.imageStudioIntent === 'edit' && s.imageBatch?.enabled ? s.imageBatch.sources[0]?.url : s.params.image_guide, s.imageRefs.length || s.params.image_refs?.length || 0)
+    ? imageStudioInputRequirement(s.imageStudioIntent, imageBatchHasSources(s.imageStudioIntent, s.imageBatch) ? s.imageBatch?.sources[0]?.url : s.params.image_guide, s.imageRefs.length || s.params.image_refs?.length || 0)
     : null)
   const incompatibleImage = useStore(s => s.generationMode === 'image' && !supportsImageIntent(s.imageStudioIntent, s.modelOptions))
   const needsImage = (generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage)
@@ -53,9 +53,9 @@ export function GenerateButton() {
   const imageBatch = useStore(s => s.imageBatch)
   const imageIntent = useStore(s => s.imageStudioIntent)
   const imageMask = useStore(s => s.params.image_mask)
-  const batching = generationMode === 'image' && (imageBatch?.perLine || (imageIntent === 'edit' && imageBatch?.enabled))
-  const batchCount = batching ? imageBatchPairs(String(prompt || ''), imageBatch, imageIntent === 'edit').length : 0
-  const invalidBatch = batching && (!batchCount || batchCount > MAX_IMAGE_BATCH_JOBS || (imageBatch?.enabled && imageIntent === 'edit' && Boolean(imageMask)))
+  const { batching, count: batchCount, invalid: invalidBatch } = imageBatchStatus(
+    generationMode, imageIntent, String(prompt || ''), imageMask, imageBatch,
+  )
   const schedulerApplies = promptSchedulerEnabled && generationMode === 'video' && imageMode === 0
   const scheduledVideoCount = schedulerApplies ? splitPromptSchedule(prompt).length : 0
   const needsScheduledPrompts = schedulerApplies && scheduledVideoCount === 0

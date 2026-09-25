@@ -11,6 +11,7 @@ import { ImageBatchControls } from './ImageBatchControls'
 import { PanoramaLoopPanel } from './PanoramaLoopPanel'
 import { PromptInput } from './PromptInput'
 import { ResolutionPresets } from './ResolutionPresets'
+import { imageBatchEnabled, imageBatchHasSources } from '../../features/studio/imageBatch'
 import { supportsImageIntent } from '../../features/studio/imageStudioIntent'
 
 export function ImageStudioPanel() {
@@ -21,8 +22,8 @@ export function ImageStudioPanel() {
   const resolution = String(useStore(s => s.params.resolution) || '')
   const queueCount = useStore(s => s.jobs.filter(job => ['queued', 'waiting_resource', 'running'].includes(job.status)).length)
   const [fitOpen, setFitOpen] = useState(false)
-  const batch = useStore(s => Boolean(s.imageBatch?.perLine || (s.imageStudioIntent === 'edit' && s.imageBatch?.enabled)))
-  const manySources = useStore(s => s.imageBatch?.enabled && s.imageStudioIntent === 'edit')
+  const batch = useStore(s => imageBatchEnabled(s.imageStudioIntent, s.imageBatch))
+  const manySources = useStore(s => imageBatchHasSources(s.imageStudioIntent, s.imageBatch))
 
   if (intent === 'chooser') return <ImageIntentChooser />
   if (!supportsImageIntent(intent, options)) return <><ImageIntentSwitch /><p role="status" className="text-xs text-text-muted">{t('imageIntent.incompatible')}</p></>
@@ -31,7 +32,7 @@ export function ImageStudioPanel() {
     <div className="space-y-3">
       <ImageIntentSwitch />
       <PromptInput />
-      {(intent === 'new' || intent === 'edit' || intent === 'character') && <ImageBatchControls />}
+      {(['new', 'edit', 'character'].includes(intent)) && <ImageBatchControls />}
       {intent === 'edit' && <ImageEditSection />}
       {intent === 'edit' && !manySources && source ? (
         <button

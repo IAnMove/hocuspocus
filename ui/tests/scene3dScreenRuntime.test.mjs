@@ -252,3 +252,59 @@ test('a wall of CRTs playing one clip shares a decoder and seeks it once per fra
     assert.equal(shown().at(-1), 3, 'the others keep playing after one TV is removed')
   } finally { tvs.forEach(tv => tv.dispose()); h.restore() }
 })
+
+test('a wall of CRTs with a snapped decoder still seeks once per clock time', async () => {
+  const h = mediaHarness(), create = globalThis.document.createElement
+  let assignments = 0, time = 0
+  globalThis.document.createElement = kind => {
+    if (kind === 'video') return create(kind)
+    const element = create(kind), context = element.getContext()
+    context.createRadialGradient = context.createLinearGradient = () => ({ addColorStop() {} })
+    return element
+  }
+  Object.defineProperty(h.video, 'currentTime', {
+    configurable: true,
+    get() { return time },
+    set(value) { assignments += 1; time = Math.round(Number(value) * 24) / 24 },
+  })
+  const screen = { ...defaultMediaScreen(), media: 'video', style: 'crt', sourceUrl: '/wall.mp4' }
+  const roots = [0, 1, 2].map(() => { const root = new Group(), mesh = new Mesh(undefined, new MeshBasicMaterial()); mesh.name = 'SCREEN_CONTENT'; root.add(mesh); return root })
+  const tvs = await Promise.all(roots.map(root => bindScreenMedia(root, screen, true, new AbortController().signal)))
+  try {
+    const pending = tvs.map(tv => tv.seek(1 / 30, screen))
+    assert.equal(assignments, 1)
+    assert.ok(Math.abs(h.video.currentTime - 1 / 30) > .0005)
+    h.finishSeek()
+    await Promise.race([Promise.all(pending), new Promise((_, reject) => setTimeout(() => reject(new Error('shared-snap-did-not-settle')), 50))])
+    assert.equal(assignments, 1, 'later TVs must not reseek the snapped frame')
+  } finally { tvs.forEach(tv => tv.dispose()); h.restore() }
+})
+
+test('queued CRT seekers follow the latest clock instead of seeking backwards', async () => {
+  const h = mediaHarness(), create = globalThis.document.createElement
+  const times = []
+  globalThis.document.createElement = kind => {
+    if (kind === 'video') return create(kind)
+    const element = create(kind), context = element.getContext()
+    context.createRadialGradient = context.createLinearGradient = () => ({ addColorStop() {} })
+    return element
+  }
+  Object.defineProperty(h.video, 'currentTime', {
+    configurable: true,
+    get() { return times.at(-1) ?? 0 },
+    set(value) { times.push(value) },
+  })
+  const screen = { ...defaultMediaScreen(), media: 'video', style: 'crt', sourceUrl: '/wall.mp4' }
+  const roots = [0, 1, 2].map(() => { const root = new Group(), mesh = new Mesh(undefined, new MeshBasicMaterial()); mesh.name = 'SCREEN_CONTENT'; root.add(mesh); return root })
+  const tvs = await Promise.all(roots.map(root => bindScreenMedia(root, screen, true, new AbortController().signal)))
+  try {
+    const first = tvs.map(tv => tv.seek(0, screen))
+    await Promise.resolve()
+    const later = tvs.map(tv => tv.seek(4, screen))
+    h.finishSeek(); h.finishSeek()
+    await Promise.all([...first, ...later])
+    assert.ok(times.length <= 2, `decoder moved ${times.length} times: ${times.join(',')}`)
+    assert.equal(times.at(-1), 4)
+    assert.ok(!times.includes(0) || times.indexOf(0) < times.lastIndexOf(4), 'must not seek back to 0 after 4')
+  } finally { tvs.forEach(tv => tv.dispose()); h.restore() }
+})

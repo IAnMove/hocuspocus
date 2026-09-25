@@ -48,6 +48,32 @@ test('generation refreshes wait for initial loading and coalesce into one follow
   assert.deepEqual(useStore.getState().outputs.map(f => f.name), ['new.png', 'old.png'])
 })
 
+test('returning to the top after a deferred refresh keeps the loaded window', async () => {
+  const loaded = Array.from({ length: 150 }, (_, i) => file(`old-${String(i).padStart(3, '0')}.png`))
+  const server = [file('new.png'), ...loaded]
+  useStore.setState({
+    activeWorkspace: 'default', browsingUploads: false, mediaFilter: 'images',
+    outputSearchQuery: '', galleryOrder: 'newest', galleryFeedAtTop: false,
+    galleryRefreshPending: true, outputs: loaded, outputsTotal: 150, selectedOutput: 50,
+  })
+  let requestedLimit = 0
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('/metadata')) return Response.json({ params: null })
+    requestedLimit = Number(new URL(url, 'http://localhost').searchParams.get('limit') || 0)
+    return Response.json({ outputs: server.slice(0, requestedLimit || server.length), total: server.length })
+  }
+  useStore.getState().setGalleryFeedAtTop(true)
+  await flush()
+  await flush()
+  assert.equal(requestedLimit, 150)
+  assert.equal(useStore.getState().outputs.length, 150)
+  assert.equal(useStore.getState().outputsTotal, 151)
+  assert.equal(useStore.getState().outputs[0].name, 'new.png')
+  assert.equal(useStore.getState().outputs[useStore.getState().selectedOutput].name, 'old-050.png')
+  assert.equal(useStore.getState().galleryRefreshPending, false)
+})
+
 test('legacy original-file thumbnail URLs cannot load full images in the gallery', () => {
   const src = galleryThumbnailUrl({ ...file('large.png'), thumbnail_url: '/api/v1/file/large.png' }, 'archive', 'sm')!
   assert.match(src, /\/outputs\/thumbnail\/large.png/)
