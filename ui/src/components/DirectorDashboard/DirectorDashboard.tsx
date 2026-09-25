@@ -6,6 +6,14 @@ import { getOutputReference } from '../../lib/outputReference'
 import type { H3SegmentState, PipelineClipState, SavedPipelineState } from '../../types'
 import { ModalShell } from '../common/ModalShell'
 import i18n, { useUiTranslation } from '../../i18n'
+import { ProductionReviewHost } from '../../features/production-review/ProductionReviewHost'
+import { reviewCopy } from '../../features/production-review/copy'
+
+function applySavedReview(pipeline: SavedPipelineState, workspace: string) {
+  useStore.setState(state => state.activeWorkspace === workspace
+    && state.dashboardSelectedPipeline?.pipeline_id === pipeline.pipeline_id
+    ? { dashboardSelectedPipeline: pipeline } : {})
+}
 
 /** Safely coerce any value to a displayable string */
 function safeStr(val: unknown): string {
@@ -1153,6 +1161,11 @@ function DirectorDashboardInner() {
               )}
             </div>
 
+            <details className="rounded-lg border border-border p-3">
+              <summary className="cursor-pointer text-sm">{reviewCopy().title}</summary>
+              <ProductionReviewHost key={`${activeWorkspace}:${selectedPipeline.pipeline_id}`} pipeline={selectedPipeline} workspace={activeWorkspace}
+                onSaved={pipeline => applySavedReview(pipeline, activeWorkspace)} />
+            </details>
             {/* LLM Log */}
             <div className="bg-bg-secondary rounded-lg border border-border p-3">
               <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium mb-2">{t('dashboard.llmLog')}</h3>

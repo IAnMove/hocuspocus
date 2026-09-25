@@ -2,13 +2,13 @@
   "speech": {
     "resting": "en silencio",
     "speaking": "hablando",
-    "characterDefinition": "Personaje reutilizable · modelo 3D, cara y voz",
-    "definitionHint": "La ficha guarda el modelo y su cara. Cada escena conserva una copia independiente; sus frases y audios no se guardan en el personaje.",
+    "characterDefinition": "Personaje reutilizable · voz y lipsync",
+    "definitionHint": "Configura su voz y, cuando lo necesites, su boca 2D o su modelo 3D. Las frases y los audios pertenecen a cada escena. Guarda los cambios antes de preparar lipsync.",
     "savedCharacter": "Personaje de la biblioteca",
     "newCharacter": "Crear personaje nuevo",
     "useCharacter": "Usar personaje en este plano",
     "definitionName": "Nombre del personaje",
-    "saveCharacter": "Guardar personaje con cara y voz",
+    "saveCharacter": "Guardar toda la configuración del personaje",
     "characterSaved": "Personaje guardado. Modelo, boca, ojos y voz disponibles en otros planos.",
     "characterApplied": "Personaje aplicado. Los turnos del plano se conservan.",
     "reloadLibrary": "Recargar biblioteca",
@@ -17,13 +17,15 @@
     "libraryVoice": "Voz preferida (opcional)",
     "noPreferredVoice": "Sin voz preferida · usar audio existente",
     "voiceDirection": "Dirección de voz (opcional)",
-    "voiceHint": "Qwen3 CustomVoice local. Idioma detectado por el texto. Requiere el modelo instalado; no se guardan claves ni se genera audio automáticamente.",
+    "voiceHint": "Qwen3 CustomVoice habla varios idiomas, pero ninguna de estas nueve voces originales es nativa española. La pronunciación y el acento varían según el idioma: escucha una muestra antes de elegir. La dirección de voz puede influir en la interpretación; no garantiza cambiar el acento.",
     "generateVoice": "Generar voz de esta frase",
     "attachGeneratedVoice": "Aplicar audio ya generado",
     "existingAudioWins": "Esta frase ya tiene audio: se reutiliza y no se genera otra voz.",
     "explicitGeneration": "Solo este botón genera audio. Se usa el texto literal y luego Rhubarb local calcula los labios.",
     "voiceTooLong": "El audio dura {{seconds}} s y no cabe en este turno. Amplía su fin y pulsa Aplicar audio ya generado. Archivo conservado: {{file}}",
-    "noLinkedCharacter": "Sin vincular · elegir GLB manualmente",
+    "noLinkedCharacter": "Sin vincular",
+    "kitKind2d": "2D",
+    "kitKind3d": "3D",
     "missingCharacter": "Personaje no disponible en la biblioteca",
     "otherWorkspace": "Referencia guardada en {{workspace}}.",
     "textOnlyProduction": "Sin audio: se abrirán los turnos editables. Puedes añadir audio o generar cada frase con la voz del personaje dentro de Vídeo3D.",
@@ -88,6 +90,34 @@
     "offset": "Recortar inicio del audio (s)",
     "gain": "Volumen",
     "needsPlacement": "Añade labios a este sujeto antes de visualizar su voz sobre el modelo.",
+    "facePack": "Cara mascota",
+    "facePackHint": "Caras incluidas para una pantalla de cabeza CRT: visemas y expresiones. Experimental.",
+    "expressionHold": "Expresión al hablar",
+    "expressionHoldHint": "Las vocales solo cambian la boca. Esta expresión se mantiene en toda la frase salvo que añadas cues de expresión.",
+    "facePackMaker": "Montar un pack con stills",
+    "facePackMakerHint": "Las caras de plano-cubo y los labios se montan en Character Creator: prompts, stills y un pack 9×6 con la piel anclada.",
+    "pack": {
+      "tv": "CRT",
+      "skull": "Cráneo",
+      "voxel": "Cubo",
+      "anime": "Anime",
+      "cubeskull": "Cráneo voxel",
+      "felt": "Felt",
+      "clay": "Arcilla",
+      "pixel": "Pixel",
+      "porcelain": "Porcelana",
+      "cat": "Gato",
+      "oni": "Oni",
+      "stencil": "Stencil",
+      "alien": "Alien",
+      "pumpkin": "Calabaza",
+      "ice": "Hielo",
+      "mushroom": "Seta",
+      "vector": "Vector",
+      "halftone": "Halftone",
+      "steampunk": "Steampunk",
+      "gummy": "Gominola"
+    },
     "busy": "Preparando voz o kit…",
     "adjust": "Ajustar boca y expresiones",
     "adjustHint": "X: izquierda/derecha; Y: arriba/abajo; Z: profundidad. Orienta la cara hacia delante (+Z), ajusta anchura/altura y reproduce. El GLB se conserva.",
@@ -143,6 +173,27 @@
     "pickHint": "Haz clic en la boca del sujeto seleccionado. Escape cancela.",
     "pickMissed": "Haz clic en la cara del modelo seleccionado, no en el fondo.",
     "cancelPlacement": "Cancelar colocación",
+    "timeline": {
+      "title": "Línea de gestos",
+      "clocks": "El tiempo de fuente es el archivo de audio. El recorte salta su inicio. El tiempo de escena es inicio + fuente − recorte.",
+      "sourceTime": "Fuente {{seconds}} s",
+      "sceneTime": "Escena {{seconds}} s",
+      "offsetTime": "Recorte de voz {{seconds}} s",
+      "zoom": "Zoom",
+      "loop": "Repetir selección",
+      "reanalyze": "Recalcular selección",
+      "addSilence": "Añadir silencio",
+      "viseme": "Visema",
+      "cueStart": "Inicio del gesto (fuente s)",
+      "cueEnd": "Fin del gesto (fuente s)",
+      "selectStart": "Inicio de selección (fuente s)",
+      "selectEnd": "Fin de selección (fuente s)",
+      "selection": "Selección {{start}}–{{end}} s",
+      "manual": "Manual",
+      "waveform": "Forma de onda",
+      "playback": "Reproducción de la línea de gestos",
+      "noAudio": "Añade una voz para ver la forma de onda. Los gestos importados se pueden editar igual."
+    },
     "isolation": {
       "label": "Aislar voz antes de calcular labios",
       "loading": "Comprobando el modelo local opcional…",
@@ -150,6 +201,81 @@
       "missing": "Modelo opcional no disponible. Necesita audio-separator instalado y el checkpoint BS-RoFormer con su YAML en app/ckpts/roformer. No se descarga nada automáticamente.",
       "error": "No se pudo comprobar el modelo opcional.",
       "retry": "Comprobar de nuevo"
+    },
+    "optionalModel": "Modelo 3D (opcional; no hace falta para voz o personajes 2D)",
+    "configure2d": "Configurar boca y lipsync 2D",
+    "need2dImage": "Para lipsync 2D, añade una imagen al personaje y guarda su ficha. Puedes hacerlo en Personajes o desde su referencia en Series Lab.",
+    "configureLibraryCharacter": "Configurar voz y lipsync de {{name}}",
+    "voiceOrigin": "Idioma/perfil de origen: {{language}}",
+    "voiceOrigins": {
+      "chinese": "Chino",
+      "beijing": "Chino · Pekín",
+      "sichuan": "Chino · Sichuan",
+      "english": "Inglés",
+      "americanEnglish": "Inglés estadounidense",
+      "japanese": "Japonés",
+      "korean": "Coreano"
+    },
+    "voiceProfiles": {
+      "vivian": "Voz femenina joven, brillante y con un punto incisivo.",
+      "serena": "Voz femenina joven, cálida y suave.",
+      "uncle_fu": "Voz masculina madura, grave y aterciopelada.",
+      "dylan": "Voz masculina joven, clara y natural.",
+      "eric": "Voz masculina vivaz, brillante y algo ronca.",
+      "ryan": "Voz masculina dinámica, con ritmo marcado.",
+      "aiden": "Voz masculina luminosa, de registro medio claro.",
+      "ono_anna": "Voz femenina juguetona, ligera y ágil.",
+      "sohee": "Voz femenina cálida y expresiva."
+    },
+    "voiceAudition": {
+      "language": "Idioma de la frase de prueba",
+      "sample": {
+        "es": "Hola, esta es mi voz. Así sueno al contar una historia en español.",
+        "en": "Hello, this is my voice. This is how I sound when telling a story in English."
+      },
+      "generate": "Generar muestra de voz",
+      "generating": "Generando muestra…",
+      "cancel": "Cancelar muestra",
+      "audio": "Muestra de la voz seleccionada",
+      "hint": "Usa esta voz y su dirección actual. Elegir una voz no genera audio. Este botón crea una grabación breve en HocusPocus; no hace falta guardar el personaje ni configurar las bocas."
+    },
+    "customVoice": {
+      "add": "Añadir voz propia: importar o grabar",
+      "selected": "Voz propia",
+      "saved": "Voces propias guardadas en personajes",
+      "name": "Nombre de esta voz",
+      "hint": "Usa una muestra limpia de una sola persona, sin música ni otras voces. Importa o graba entre 3 y 30 segundos; después escribe exactamente lo que dice. El modelo usará su voz para leer diálogos nuevos.",
+      "import": "Importar muestra de audio",
+      "record": "Grabar con el micrófono",
+      "recordHint": "Se guardan hasta 30 segundos. Puedes leer una frase de 5–15 segundos y copiarla en la transcripción.",
+      "referencePreview": "Muestra original de la voz",
+      "transcript": "Texto exacto de la muestra",
+      "transcriptPlaceholder": "Escribe aquí las mismas palabras que se escuchan en el audio. No es el diálogo que se generará.",
+      "language": "Idioma para los nuevos diálogos",
+      "saveHint": "Guarda todo el personaje para conservar esta voz. Podrás elegirla en otros personajes; los planos nuevos o regenerados usarán esa configuración.",
+      "incomplete": "Para probar o guardar esta voz, añade su nombre, una muestra de audio y su transcripción exacta.",
+      "voiceFileSize": "Elige un audio de hasta 20 MB que no esté vacío.",
+      "voiceFileDecode": "El navegador no ha podido leer este audio. Prueba con WAV o MP3.",
+      "voiceFileDuration": "La muestra debe durar entre 3 y 30 segundos. Recorta el audio y conserva el texto exacto del fragmento.",
+      "microphoneUnavailable": "El navegador solo permite el micrófono desde HTTPS o localhost. Abre HocusPocus con una de esas direcciones, o importa un audio aquí.",
+      "states": {
+        "permission": "Permite el acceso al micrófono en el navegador…",
+        "recording": "Grabando · máximo 30 segundos",
+        "uploading": "Guardando muestra de audio…"
+      },
+      "languages": {
+        "auto": "Automático según el texto",
+        "spanish": "Español",
+        "english": "Inglés",
+        "chinese": "Chino",
+        "japanese": "Japonés",
+        "korean": "Coreano",
+        "german": "Alemán",
+        "french": "Francés",
+        "russian": "Ruso",
+        "portuguese": "Portugués",
+        "italian": "Italiano"
+      }
     }
   },
   "title": "Estudio de escenas 3D",
@@ -157,6 +283,10 @@
   "templates": "Biblioteca de planos",
   "search": "Buscar plantillas",
   "all": "Todas",
+  "allSettings": "Cualquier decorado",
+  "filterCategory": "Tipo de plano",
+  "filterSetting": "Decorado",
+  "filterCount": "{{shown}} / {{total}}",
   "noResults": "No hay plantillas para esta búsqueda.",
   "play": "Reproducir",
   "pause": "Pausar",
@@ -166,7 +296,13 @@
   "speedHelp": "Se aplica a la reproducción y al MP4 exportado.",
   "outputDuration": "Resultado: {{seconds}} s",
   "camera": "Cámara",
-  "objects": "Objetos",
+  "objects": {
+    "title": "Objetos de la escena",
+    "hint": "Selecciona cualquier objeto, aunque esté detrás de otro.",
+    "image": "Imagen",
+    "model3d": "Modelo 3D",
+    "screen": "Imagen / vídeo"
+  },
   "translate": "Mover",
   "rotate": "Girar Y",
   "scale": "Escalar",
@@ -181,15 +317,107 @@
   "position": "Posición (m)",
   "yaw": "Giro Y (°)",
   "keepAssets": "Conservar mis objetos al cambiar de plano",
+  "userTemplates": {
+    "title": "Mis escenarios",
+    "help": "Exporta un tipo de escenario (cámara, decorado, disposición, recorrido) como JSON intercambiable. Impórtalo aquí para reutilizarlo. No es el JSON de un plano y no empaqueta los GLB.",
+    "name": "Nombre del escenario",
+    "description": "Descripción (opcional)",
+    "includeAssets": "Incluir URL duraderas de la galería (nunca archivos blob:)",
+    "export": "Exportar plantilla de escenario",
+    "import": "Importar plantilla de escenario",
+    "chooseFile": "Archivo JSON de plantilla de escenario",
+    "exported": "Escenario guardado en este navegador y descargado como archivo .world3d.template.json.",
+    "imported": "Escenario añadido a Mis escenarios. Púlsalo para aplicarlo a este plano.",
+    "removed": "Escenario eliminado de este navegador.",
+    "empty": "Aún no hay escenarios importados. Exporta el plano actual o importa un archivo .world3d.template.json.",
+    "noDescription": "Cámara, decorado y disposición de objetos de un escenario compartido.",
+    "remove": "Quitar",
+    "needTitle": "Pon un nombre al escenario antes de exportarlo.",
+    "invalid": "No se pudo importar: el archivo no es una plantilla de escenario de Video 3D.",
+    "tooLarge": "El archivo de plantilla supera 1,5 MB.",
+    "saveFailed": "No se pudo guardar el escenario en este navegador (almacenamiento lleno o bloqueado).",
+    "openAsShot": "Este archivo es una plantilla de escenario. Impórtalo desde Mis escenarios, no como JSON de plano."
+  },
   "cameraHelp": "Puedes cambiar la cámara; tus objetos conservan su identidad.",
   "category": {
     "cinema": "Cine",
+    "action": "Acción",
     "product": "Producto",
     "music": "Videoclip",
     "space": "Espacio",
-    "drive": "Conducción"
+    "drive": "Conducción",
+    "dark-fantasy": "Dark Fantasy",
+    "psx": "PSX",
+    "creative": "Creativas",
+    "perspective": "Perspectivas",
+    "animated": "Fondos vivos",
+    "pixel": "Mundos pixel"
+  },
+  "setting": {
+    "sea": "Mar",
+    "city": "Ciudad",
+    "rooftop": "Azotea",
+    "hangar": "Hangar",
+    "desert": "Desierto",
+    "train": "Tren",
+    "moon": "Luna",
+    "space": "Espacio",
+    "jungle": "Selva",
+    "snow": "Nieve",
+    "casino": "Casino",
+    "studio": "Estudio",
+    "street": "Calle",
+    "stage": "Escenario"
   },
   "template": {
+    "topdown-dragon-portals": {
+      "title": "Dark Fantasy · El portal del dragón",
+      "description": "Un dragón animado y sin fondo atraviesa un portal 3D que gira, revela otro reino y se expande entre chispas. Capas y tiempos editables."
+    },
+    "topdown-cliff-flight": {
+      "title": "Dark Fantasy · Vuelo sobre el abismo",
+      "description": "Un dragón visto desde arriba planea entre acantilados independientes, con profundidad, niebla y partículas. Cámara fija vertical y cuatro capas editables."
+    },
+    "dark-cathedral": {
+      "title": "Dark Fantasy · La catedral del eclipse",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-forest": {
+      "title": "Dark Fantasy · El bosque que respira",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-stairway": {
+      "title": "Dark Fantasy · La escalera imposible",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-moonlake": {
+      "title": "Dark Fantasy · El lago de dos lunas",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-portal": {
+      "title": "Dark Fantasy · La puerta del otro mundo",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-throne": {
+      "title": "Dark Fantasy · El trono de ceniza",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-library": {
+      "title": "Dark Fantasy · La biblioteca del vacío",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-ice": {
+      "title": "Dark Fantasy · La santa de hielo",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-abyss": {
+      "title": "Dark Fantasy · El puente del abismo",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-eclipse": {
+      "title": "Dark Fantasy · El último sol",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
     "speech-portrait": {
       "title": "Retrato hablando",
       "description": "Primer plano con voz, boca integrada y expresiones."
@@ -481,6 +709,818 @@
     "tv-head-walk": {
       "title": "Caminata cabeza CRT",
       "description": "Humanoide generado (piernas, cuerpo, brazos) con un televisor CRT antiguo de cabeza. El plano de la cara va en el hueso headfront."
+    },
+    "reflective-stage": {
+      "title": "Escenario reflectante",
+      "description": "Suelo metálico, portal de energía y niebla suave."
+    },
+    "character-materialization": {
+      "title": "Materialización de personaje",
+      "description": "Fotos detrás, rayo y personaje animado centrado sobre una tarima."
+    },
+    "blast-stage": {
+      "title": "Explosión en suelo",
+      "description": "Explosión cinematográfica sobre el metal: destello, bola de fuego, onda, escombros y humo."
+    },
+    "server-inspection": {
+      "title": "Inspección de servidor",
+      "description": "Una grúa baja hacia el rack mientras el inspector entra por el pasillo."
+    },
+    "coding-desk": {
+      "title": "Mesa de código",
+      "description": "El programador se sienta en el taller; el monitor es una pantalla intercambiable."
+    },
+    "tracking-chase": {
+      "title": "Persecución en travelling",
+      "description": "Un travelling lateral sigue a dos corredores; entran por la izquierda y salen por la derecha."
+    },
+    "character-presentation": {
+      "title": "Presentación de personaje",
+      "description": "Una órbita alrededor del héroe que materializa sobre una tarima reflectante."
+    },
+    "screen-alert": {
+      "title": "Alerta en pantalla",
+      "description": "El operador corre hacia el mural de alerta cuando el rayo golpea el cristal."
+    },
+    "product-comparison": {
+      "title": "Comparación de producto",
+      "description": "Dos productos entran desde lados opuestos mientras la cámara orbita el par."
+    },
+    "topic-travelling": {
+      "title": "Travelling temático",
+      "description": "La guía recorre un pasillo de plaza junto a pantallas de tema intercambiables."
+    },
+    "heroic-close": {
+      "title": "Cierre heroico",
+      "description": "Un empuje bajo a la cara mientras el héroe entra en primer plano."
+    },
+    "sea-deck": {
+      "title": "Cubierta en el mar",
+      "description": "Dos protagonistas recorren la cubierta de un barco en mar abierto mientras el agua golpea la proa."
+    },
+    "lunar-outpost": {
+      "title": "Puesto lunar",
+      "description": "Un astronauta cruza el regolito hacia el hábitat con la Tierra en el cielo."
+    },
+    "car-chase": {
+      "title": "Persecución en coche",
+      "description": "Un travelling lateral se pega a dos coches a toda velocidad por la ciudad."
+    },
+    "ship-chase": {
+      "title": "Persecución de naves",
+      "description": "Dos naves cruzan un pasillo de asteroides mientras los láseres cortan la oscuridad."
+    },
+    "rooftop-run": {
+      "title": "Carrera en azotea",
+      "description": "La cámara de persecución sigue a dos corredores por la azotea hacia el helipuerto."
+    },
+    "alley-motorcycle": {
+      "title": "Moto en callejón",
+      "description": "Una carrera a ras de faro por una calle estrecha con el objetivo al frente."
+    },
+    "hangar-standoff": {
+      "title": "Enfrentamiento en hangar",
+      "description": "Dos figuras cierran distancias en un hangar hasta quedarse a pocos metros."
+    },
+    "train-roof": {
+      "title": "Techo del tren",
+      "description": "Dos luchadores se cierran en el techo de un tren en marcha mientras el paisaje vuela."
+    },
+    "desert-convoy": {
+      "title": "Convoy en el desierto",
+      "description": "Una cámara de seguimiento monta tres vehículos por un cañón entre dunas."
+    },
+    "night-rain-pursuit": {
+      "title": "Persecución bajo la lluvia",
+      "description": "Persecución de frente por una calle inundada cuando cae el rayo."
+    },
+    "dock-ambush": {
+      "title": "Emboscada en el muelle",
+      "description": "Un paseo por el muelle acaba en explosión cuando sale la segunda figura."
+    },
+    "bridge-standoff": {
+      "title": "Enfrentamiento en el puente",
+      "description": "Dos figuras recorren un puente aéreo desde extremos opuestos y se detienen en el centro."
+    },
+    "cockpit-pursuit": {
+      "title": "Persecución desde cabina",
+      "description": "Vista de cabina mientras la nave enemiga llena el cristal."
+    },
+    "helicopter-extract": {
+      "title": "Extracción en helicóptero",
+      "description": "Una grúa baja al helipuerto mientras el protagonista entra a la carrera."
+    },
+    "warehouse-breach": {
+      "title": "Asalto al almacén",
+      "description": "La puerta salta y el protagonista entra mientras el guardia busca cobertura."
+    },
+    "canyon-run": {
+      "title": "Carrera en el cañón",
+      "description": "Dos vehículos se cuelan por un cañón del desierto con la arena saltando de las paredes."
+    },
+    "jungle-ambush": {
+      "title": "Emboscada en la selva",
+      "description": "Dos figuras se cierran en un claro en ruinas mientras la copa se traga la luz."
+    },
+    "snow-compound": {
+      "title": "Complejo en la nieve",
+      "description": "Un agente cruza el ventisquero hacia el refugio mientras la nieve se come el horizonte."
+    },
+    "casino-heist": {
+      "title": "Atraco al casino",
+      "description": "Dos jugadores se cierran sobre una mesa de tapete bajo luz dorada."
+    },
+    "bank-vault": {
+      "title": "Cámara acorazada",
+      "description": "Una grúa baja a la cámara mientras el ladrón entra con el soplete."
+    },
+    "skyscraper-ledge": {
+      "title": "Cornisa del rascacielos",
+      "description": "Una persecución por el pretil con la ciudad cayendo al vacío."
+    },
+    "oil-rig": {
+      "title": "Plataforma petrolífera",
+      "description": "Una grúa sobre mar abierto mientras el fuego lame la torre."
+    },
+    "subway-brawl": {
+      "title": "Pelea en el metro",
+      "description": "Dos luchadores se cierran en un vagón mientras los raíles echan chispas."
+    },
+    "freeway-overpass": {
+      "title": "Autopista y paso elevado",
+      "description": "Un travelling alto de dos vehículos bajo lámparas de sodio."
+    },
+    "prison-break": {
+      "title": "Fuga de prisión",
+      "description": "El protagonista cruza el patio mientras el guardia gira demasiado tarde."
+    },
+    "arctic-chase": {
+      "title": "Persecución ártica",
+      "description": "Dos vehículos cortan un páramo blanco mientras la nieve ciega al que sigue."
+    },
+    "clock-tower": {
+      "title": "Torre del reloj",
+      "description": "Una órbita alrededor del trepador en la torre mientras la ciudad gira abajo."
+    },
+    "mansion-infil": {
+      "title": "Infiltración en la mansión",
+      "description": "El infiltrado cruza un salón de mármol hacia la puerta interior."
+    },
+    "cargo-hold": {
+      "title": "Bodega de carga",
+      "description": "Una carrera de frente por la bodega mientras la rampa se abre detrás."
+    },
+    "jungle-river": {
+      "title": "Río en la selva",
+      "description": "Un travelling de dos embarcaciones en un río de niebla bajo la copa."
+    },
+    "red-carpet": {
+      "title": "Alfombra roja",
+      "description": "Una órbita lenta mientras la estrella recorre el suelo dorado hasta el primer plano."
+    },
+    "volcano-ridge": {
+      "title": "Cresta del volcán",
+      "description": "Una grúa sobre dos figuras en la cresta mientras la caldera respira fuego."
+    },
+    "hangar-talk": {
+      "title": "Charla en hangar",
+      "description": "Cabeza CRT y un cráneo básico se turnan con vocales sintéticas, visemas y expresiones."
+    },
+    "sea-talk": {
+      "title": "Charla en cubierta",
+      "description": "Los mismos mascotas CRT y cráneo hacen lipsync en la cubierta, en un plano más cerrado."
+    },
+    "voxel-talk": {
+      "title": "Charla voxel",
+      "description": "Una cabeza cubo y un cráneo voxel se turnan en la azotea, ojos anime sobre caras de bloques."
+    },
+    "dark-vertical-ivory-gate": {
+      "title": "Dark Fantasy · La puerta de marfil",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-saffron-well": {
+      "title": "Dark Fantasy · El pozo del sol",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-crimson-tide": {
+      "title": "Dark Fantasy · La marea carmesí",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-frozen-bell": {
+      "title": "Dark Fantasy · La campana de hielo",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-bone-stair": {
+      "title": "Dark Fantasy · La escalera de hueso",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-jade-rift": {
+      "title": "Dark Fantasy · La grieta de jade",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-ashen-rose": {
+      "title": "Dark Fantasy · La rosa de ceniza",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-violet-gravity": {
+      "title": "Dark Fantasy · Gravedad violeta",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-ember-totem": {
+      "title": "Dark Fantasy · El tótem de brasas",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-white-abyss": {
+      "title": "Dark Fantasy · El abismo blanco",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-psx-ivory-gate": {
+      "title": "PSX · La puerta de marfil · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-saffron-well": {
+      "title": "PSX · El pozo del sol · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-crimson-tide": {
+      "title": "PSX · La marea carmesí · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-frozen-bell": {
+      "title": "PSX · La campana de hielo · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-bone-stair": {
+      "title": "PSX · La escalera de hueso · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-jade-rift": {
+      "title": "PSX · La grieta de jade · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-ashen-rose": {
+      "title": "PSX · La rosa de ceniza · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-violet-gravity": {
+      "title": "PSX · Gravedad violeta · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-ember-totem": {
+      "title": "PSX · El tótem de brasas · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-white-abyss": {
+      "title": "PSX · El abismo blanco · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "creative-neon-diner": {
+      "title": "Último ramen",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-sun-orchard": {
+      "title": "El jardín del mañana",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-vermilion-museum": {
+      "title": "Museo bermellón",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en el fondo."
+    },
+    "creative-cobalt-moon": {
+      "title": "Turno en la luna",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-coral-caravan": {
+      "title": "Caravana de papel",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-emerald-hotel": {
+      "title": "Hotel Esmeralda",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-mint-pool": {
+      "title": "Piscina de las seis",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-indigo-shrine": {
+      "title": "Lluvia de índigo",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-ocean-window": {
+      "title": "Estación abisal",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en el fondo."
+    },
+    "creative-velvet-theatre": {
+      "title": "El teatro silencioso",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-ochre-terminal": {
+      "title": "Andén del sol",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-ceramic-room": {
+      "title": "La sala de cobalto",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-tangerine-market": {
+      "title": "Mercado mandarina",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en el fondo."
+    },
+    "creative-botanical-hangar": {
+      "title": "Hangar botánico",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-ink-mountain": {
+      "title": "El valle de tinta",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-submerged-archive": {
+      "title": "Archivo azul",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-sunset-court": {
+      "title": "Última partida",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-kinetic-gold": {
+      "title": "Equilibrio dorado",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en el fondo."
+    },
+    "creative-lunar-garden": {
+      "title": "Invernadero orbital",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-peach-laundry": {
+      "title": "Lavandería de medianoche",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-amber-ice": {
+      "title": "La estación del deshielo",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-scarlet-tide": {
+      "title": "La marea roja",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-pearl-spores": {
+      "title": "El vivero de perlas",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-ultramarine-forge": {
+      "title": "La fundición azul",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-rose-orbit": {
+      "title": "Capilla en órbita",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-brass-mirage": {
+      "title": "El espejismo de latón",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-jade-cinema": {
+      "title": "La última sesión verde",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-apricot-cable": {
+      "title": "Último funicular",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-violet-baths": {
+      "title": "Baños ultravioleta",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-clockwork-glass": {
+      "title": "El jardín mecánico",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-paper-monsoon": {
+      "title": "Monzón de papel",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-cobalt-crater": {
+      "title": "El cráter de cobalto",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-saffron-lens": {
+      "title": "El ojo del desierto",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-glass-orchard": {
+      "title": "La cosecha de cristal",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-terracotta-radio": {
+      "title": "La habitación que escucha",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-chrome-bloom": {
+      "title": "Flores de cromo",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-arctic-spin": {
+      "title": "Centrifugado polar",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-domino-garden": {
+      "title": "El jardín dominó",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-midnight-bakery": {
+      "title": "Pan de medianoche",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-coral-radio": {
+      "title": "Radio arrecife",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-scarlet-tide-motion": {
+      "title": "Marea tras el muro",
+      "description": "Mar animado tras una ventana escarlata. Pared y marco estáticos, personaje y objetos en otras profundidades."
+    },
+    "creative-rose-orbit-motion": {
+      "title": "Órbita de terciopelo",
+      "description": "Espacio animado detrás de una abertura ovalada. La habitación rosa conserva cada detalle."
+    },
+    "creative-glass-orchard-motion": {
+      "title": "La casa del huerto",
+      "description": "Hojas y pétalos tras los dos cristales de una casa. El marco central, la pared y el suelo permanecen estáticos."
+    },
+    "creative-amber-ice-motion": {
+      "title": "Ventana al deshielo",
+      "description": "Nieve y nubes tras un portal de ámbar. Arquitectura estática con profundidad independiente."
+    },
+    "creative-coral-radio-motion": {
+      "title": "Radio de las mareas",
+      "description": "Olas detrás de cinco cristales. Los marcos turquesa, el interior y los personajes son capas separadas."
+    },
+    "creative-cobalt-crater-motion": {
+      "title": "Observatorio del núcleo",
+      "description": "Lava animada al otro lado de un observatorio. Ventanal, interior y personajes en capas independientes."
+    },
+    "dark-living-sleeping-titan": {
+      "title": "El titán dormido",
+      "description": "Marfil contra musgo; un caballero ante una criatura del tamaño de una montaña."
+    },
+    "dark-living-bell-of-ash": {
+      "title": "La campana de ceniza",
+      "description": "Un campanario carbonizado se abre sobre un desierto de ceniza y oro."
+    },
+    "dark-living-antler-moon": {
+      "title": "La luna entre astas",
+      "description": "Raíces negras, luna azul y un ciervo imposible emergiendo de la niebla."
+    },
+    "dark-living-drowned-king": {
+      "title": "El rey sumergido",
+      "description": "Oleaje turquesa detrás de un palacio hundido, con una corona gigantesca."
+    },
+    "dark-living-red-pilgrim": {
+      "title": "El peregrino rojo",
+      "description": "Un portal de arenisca encuadra la marcha lenta de un gigante remoto."
+    },
+    "dark-living-last-aqueduct": {
+      "title": "El último acueducto",
+      "description": "Ruinas blancas y agua azul suspendidas sobre un abismo."
+    },
+    "dark-living-ember-heart": {
+      "title": "Corazón de brasa",
+      "description": "Un santuario negro protege el corazón vivo de una montaña."
+    },
+    "dark-living-violet-oracle": {
+      "title": "El oráculo violeta",
+      "description": "Amatista y hueso frente a un cielo donde flotan medusas colosales."
+    },
+    "dark-living-winter-shoulder": {
+      "title": "Sobre el hombro del invierno",
+      "description": "Una fortaleza parece diminuta junto a un guardián helado."
+    },
+    "dark-living-thorn-crown": {
+      "title": "La corona de espinas",
+      "description": "Espinas oscuras contra un jardín rojo que todavía respira."
+    },
+    "dark-living-black-tide": {
+      "title": "La marea negra",
+      "description": "Ventanas de hueso y un leviatán bajo el agua luminosa."
+    },
+    "dark-living-golden-ruin": {
+      "title": "La ruina dorada",
+      "description": "Un observatorio de azufre contempla un sol atrapado en anillos de piedra."
+    },
+    "dark-living-hollow-saint": {
+      "title": "El santo hueco",
+      "description": "Una figura vacía custodia montañas cubiertas de nubes."
+    },
+    "dark-living-fungal-throne": {
+      "title": "El trono del micelio",
+      "description": "Un reino subterráneo mezcla hongos luminosos y piedra funeraria."
+    },
+    "dark-living-storm-bridge": {
+      "title": "El puente de la tormenta",
+      "description": "Una pasarela firme frente a nubes enormes y rayos lejanos."
+    },
+    "dark-living-sand-library": {
+      "title": "Los nombres bajo la arena",
+      "description": "Una cámara sellada mira hacia libros de piedra de escala imposible."
+    },
+    "dark-living-jade-dragon": {
+      "title": "El dragón de jade",
+      "description": "Un pabellón oscuro ante montañas verdes y un dragón petrificado."
+    },
+    "dark-living-moon-grave": {
+      "title": "La tumba de la luna",
+      "description": "Piedra oscura y una luna caída que ilumina la nieve."
+    },
+    "dark-living-copper-trees": {
+      "title": "El bosque de cobre",
+      "description": "Troncos negros, hojas metálicas y un centinela oculto entre la niebla."
+    },
+    "dark-living-final-gate": {
+      "title": "La puerta del último gigante",
+      "description": "Un último caballero frente al coloso que sostiene el horizonte."
+    },
+    "dark-still-salt-sea": {
+      "title": "Sal sobre el mar",
+      "description": "Cámara fija; la espuma turquesa se mueve detrás del arco y la viuda de sal."
+    },
+    "dark-still-still-flame": {
+      "title": "La llama inmóvil",
+      "description": "Basalto oscuro delante, piedra en el centro y lava dorada al fondo."
+    },
+    "dark-still-winter-vigil": {
+      "title": "La vigilia blanca",
+      "description": "La figura y el marco permanecen quietos mientras pasan la nieve y la niebla."
+    },
+    "dark-still-moth-moon": {
+      "title": "La polilla y la luna",
+      "description": "Una silueta de tinta y marfil ante un lago violeta en movimiento."
+    },
+    "dark-still-ivory-fire": {
+      "title": "Marfil contra incendio",
+      "description": "Experimento: armadura clara y cercana, arquitectura negra y horizonte rojo."
+    },
+    "dark-still-two-distances": {
+      "title": "Dos distancias",
+      "description": "Experimento: una figura oscura muy cerca y otra pequeña iluminada al fondo."
+    },
+    "dark-still-copper-night": {
+      "title": "Cobre sobre violeta",
+      "description": "Experimento: personaje PSX, cobre intermedio y niebla violeta suave al fondo."
+    },
+    "dark-still-time-wounds": {
+      "title": "El tiempo pesa",
+      "description": "El caballero cede, se apoya en el suelo y vuelve a levantarse en fragmentos. El ambiente fluye."
+    },
+    "dark-motion-knight-passage": {
+      "title": "El caminante de ceniza",
+      "description": "El caballero avanza con su capa y sus pasos; el pasillo y la niebla tienen otro movimiento."
+    },
+    "dark-motion-knight-embers": {
+      "title": "Hacia las brasas",
+      "description": "La misma marcha frente a lava viva, detrás de arquitectura quieta."
+    },
+    "creative-motion-skate-coast": {
+      "title": "Sal y velocidad",
+      "description": "Ilustración en movimiento sobre mar turquesa y costa coral; el horizonte se desliza."
+    },
+    "creative-motion-skate-neon": {
+      "title": "La ciudad pasa",
+      "description": "La chaqueta respira mientras la ciudad violeta corre por detrás."
+    },
+    "creative-motion-skate-clouds": {
+      "title": "Carretera de nubes",
+      "description": "Una tabla, un camino imposible y nubes enormes a otra velocidad."
+    },
+    "creative-motion-skate-portal": {
+      "title": "El mar al otro lado",
+      "description": "Personaje con filtro PSX, piedra inmóvil y un horizonte que se mueve detrás del arco."
+    },
+    "pixel-tv-wall": {
+      "title": "Muro de televisores",
+      "description": "Dos bancos de televisores CRT apilados en una galería oscura. Cada pantalla reproduce tu grabación; los tubos iluminan el suelo mojado y la sala pasa de fría a neón."
+    },
+    "pixel-moon-lake": {
+      "title": "Lago de luna",
+      "description": "Noche pixel dibujada a mano sobre un lago en calma: luna con halo, aurora, estrellas fugaces y un reflejo que ondula, pasando de medianoche a aurora, amanecer y atardecer."
+    },
+    "pixel-tv-lake": {
+      "title": "Televisores en el lago",
+      "description": "Televisores antiguos dentro de un lago pixel de noche, brillando con tu grabación y reflejados en el agua mientras el cielo pasa por neón y eclipse."
+    },
+    "pixel-aurora-peaks": {
+      "title": "Picos de aurora",
+      "description": "Montañas pixel nevadas sobre un lago helado bajo cortinas de aurora; la luz pasa del verde polar al día helado y vuelve a la noche."
+    },
+    "pixel-neon-city": {
+      "title": "Puerto de neón",
+      "description": "Una silueta de ciudad pixel sobre agua oscura: las ventanas se encienden y apagan con ciclo de color y la ciudad se refleja en el puerto mientras la noche se vuelve neón."
+    },
+    "pixel-desert-sun": {
+      "title": "Sol del desierto",
+      "description": "Mesetas y dunas bajo un sol enorme a franjas; la arena brilla del crepúsculo al atardecer y se enfría en una noche estrellada."
+    },
+    "pixel-lighthouse": {
+      "title": "Faro",
+      "description": "Un acantilado con un faro cuyo haz barre la noche sobre un mar picado, de la tormenta a la luz de luna y el amanecer."
+    },
+    "pixel-firefly-forest": {
+      "title": "Bosque de luciérnagas",
+      "description": "Pinos altos alrededor de un lago del bosque, con luciérnagas que laten entre los árboles y los juncos, bajo una aurora verde."
+    },
+    "pixel-planet-rise": {
+      "title": "Salida del planeta",
+      "description": "Un planeta con anillos se alza sobre picos alienígenas y un mar violeta; sus bandas de nubes derivan con ciclo de color mientras la luz pasa del turquesa alienígena al neón vapor."
+    },
+    "pixel-night-train": {
+      "title": "Tren de medianoche",
+      "description": "Un tren iluminado cruza un viaducto de piedra sobre un lago de luna, con sus ventanas brillando en el agua, mientras la medianoche se vuelve amanecer."
+    },
+    "pixel-storm-lake": {
+      "title": "Tormenta en el lago",
+      "description": "La lluvia azota un lago pixel oscuro mientras los rayos caen sobre las cordilleras; cada rayo ilumina todo el mundo pintado un instante y su trueno llega a tiempo."
+    },
+    "pixel-volcano": {
+      "title": "Volcán",
+      "description": "Ríos de lava bajan por un volcán con puro ciclo de color, el cráter brilla y exhala humo y ascuas, y el rojo se derrama sobre el mar bajo una luna eclipsada."
+    },
+    "pixel-drive-in": {
+      "title": "Autocine",
+      "description": "Un autocine en el desierto bajo las estrellas: una pantalla enorme reproduce tu grabación, las filas de coches encienden sus luces de freno y la luz de la película baña coches, arena y mesetas."
+    },
+    "pixel-cherry-garden": {
+      "title": "Jardín de cerezos",
+      "description": "Cerezos en flor alrededor de un estanque en calma, una pagoda con ventanas encendidas bajo un pico nevado, faroles de piedra brillando y pétalos cayendo mientras el crepúsculo rosa se vuelve noche."
+    },
+    "pixel-coral-reef": {
+      "title": "Arrecife de coral",
+      "description": "Bajo el mar: rayos de sol que titilan desde una superficie ondulante, algas sobre el coral, dos bancos de peces que se cruzan en direcciones opuestas y plancton que destella, de una laguna luminosa al azul profundo."
+    },
+    "pixel-balloons": {
+      "title": "Globos al amanecer",
+      "description": "Globos aerostáticos flotan sobre un valle con niebla mientras sale el sol, los cercanos grandes y lentos, los lejanos pequeños, todos reflejados en el lago mientras el amanecer se calienta hacia el atardecer."
+    },
+    "pixel-night-fair": {
+      "title": "Feria nocturna",
+      "description": "Una noria gira sobre el puerto, sus bombillas se persiguen con ciclo de color mientras las góndolas cuelgan rectas, las carpas a rayas brillan bajo guirnaldas de luces y toda la feria titila en el agua."
+    },
+    "pixel-snow-village": {
+      "title": "Aldea nevada",
+      "description": "Una aldea nevada al anochecer: ventanas encendidas, el campanario de la iglesia, humo saliendo de las chimeneas y patinadores deslizándose por un lago helado que lo refleja todo mientras sigue nevando."
+    },
+    "pixel-waterfall": {
+      "title": "Cascada",
+      "description": "Una cascada cae entre acantilados cubiertos de musgo con puro ciclo de color, la espuma hierve a sus pies, un arcoíris cuelga en la bruma y la luz de la selva pasa al crepúsculo y la noche."
+    },
+    "pixel-orbit": {
+      "title": "Órbita",
+      "description": "Muy por encima de un planeta: su horizonte curvo brilla con la atmósfera, las luces de las ciudades salpican el lado nocturno, las nebulosas respiran entre estrellas densas y una estación espacial y asteroides pasan a la deriva."
+    },
+    "pixel-tulip-fields": {
+      "title": "Campos de tulipanes",
+      "description": "Hileras de tulipanes rojos, amarillos, rosas y violetas corren hasta el horizonte en perspectiva real mientras los molinos giran sus aspas ante un atardecer que pasa al crepúsculo y al alba."
+    },
+    "pixel-neon-alley": {
+      "title": "Callejón de neón",
+      "description": "Una calle estrecha bajo la lluvia entre fachadas altas: ventanas encendidas, escaleras de incendios, escaparates y rótulos de neón que zumban y parpadean, todo reflejado en el suelo mojado, con la ciudad brillando al fondo."
+    },
+    "pixel-castle-fireworks": {
+      "title": "Fuegos en el castillo",
+      "description": "Un castillo sobre su colina con ventanas encendidas y estandartes mientras los fuegos artificiales suben y estallan en anillos de chispas que caen y se apagan, cada estallido reflejado en el lago."
+    },
+    "pixel-glow-tide": {
+      "title": "Marea luminosa",
+      "description": "Una playa nocturna donde cada ola brilla azul al romper: franjas de espuma bioluminiscente llegan sobre la arena mojada con ciclo de color, bajo una luna reflejada en el mar."
+    },
+    "pixel-lantern-festival": {
+      "title": "Festival de farolillos",
+      "description": "Cientos de farolillos de papel suben despacio desde un lago en calma al anochecer, balanceándose y titilando cálidos, los cercanos más rápidos que los lejanos, todos reflejados en el agua."
+    },
+    "pixel-rainy-window": {
+      "title": "Ventana con lluvia",
+      "description": "Desde una habitación a la luz de una vela, la ciudad de noche a través de una ventana: la lluvia resbala por el cristal, las cortinas enmarcan la vista y una planta y una vela reposan en el alféizar mientras brillan las luces del puerto."
+    },
+    "pixel-night-express": {
+      "title": "Expreso nocturno",
+      "description": "La vista desde un tren en marcha: las montañas pasan despacio, las colinas de pinos más rápido y los postes del telégrafo cruzan veloces la ventana, todo reflejado en un lago, mientras la luna acompaña y el crepúsculo se vuelve noche de aurora."
+    },
+    "pixel-whole-day": {
+      "title": "Un día entero",
+      "description": "Un time-lapse sobre un lago: el sol sale por el este, cruza el cielo en arco y se pone por el oeste, luego le sigue la luna, mientras la luz pasa del amanecer al día, el atardecer y la noche y cae sobre los personajes desde donde estén el sol o la luna."
+    },
+    "pixel-eclipse": {
+      "title": "Eclipse",
+      "description": "Mediodía sobre mesetas rojas: la luna se desliza sobre el sol, el desierto se oscurece como de noche en plena tarde, aparecen las estrellas y la corona solar, y el día vuelve cuando la luna sigue su camino."
+    },
+    "pixel-four-seasons": {
+      "title": "Las cuatro estaciones",
+      "description": "Un año entero sobre un lago en un solo clip: los árboles florecen rosas en primavera, se oscurecen de verde en verano, arden naranjas y rojos en otoño mientras caen las hojas, y en invierno la nieve se acumula por niveles en picos y colinas, todo con ciclo de color."
+    },
+    "pixel-cathedral": {
+      "title": "Catedral",
+      "description": "Dentro de una nave gótica: un gran rosetón y dos ventanales de vidriera brillan por turnos mientras gira el sol, haces de luz de colores caen sobre las losas y motas de polvo giran despacio en la luz."
+    },
+    "pixel-koi-pond": {
+      "title": "Estanque de carpas",
+      "description": "Mirando desde arriba un estanque de jardín: las carpas koi giran despacio bajo los nenúfares y las flores de loto, la luz del sol ondula por el fondo en una red de cáusticas y caen pétalos sobre el agua."
+    },
+    "pixel-moon-caravan": {
+      "title": "Caravana bajo la luna",
+      "description": "Una caravana de camellos cruza las dunas a contraluz de una luna gigante que sale, las patas avanzando fotograma a fotograma mientras un guía abre el camino y el crepúsculo se vuelve noche estrellada del desierto."
+    },
+    "pixel-synthwave": {
+      "title": "Synthwave",
+      "description": "Una cuadrícula de neón infinita avanza hacia ti y late a 120 BPM bajo un enorme sol a franjas, con montañas de borde neón y siluetas de palmeras, del rosa vapor a la noche de neón."
+    },
+    "pixel-monsoon": {
+      "title": "Monzón",
+      "description": "Una lluvia cálida cae sobre un lago tropical: cada gota que llega abre en el agua anillos de píxeles que se extienden, las palmeras y los juncos aguantan el aguacero y de vez en cuando un relámpago brilla tras las colinas mientras la tormenta se abre al verde."
+    },
+    "pixel-murmuration": {
+      "title": "Murmuración",
+      "description": "Al atardecer sobre una marisma de juncos, miles de estorninos giran como uno solo: la bandada se hincha, se pliega y se retuerce en formas siempre nuevas mientras cruza el cielo y se refleja en el agua quieta."
+    },
+    "pixel-night-launch": {
+      "title": "Lanzamiento nocturno",
+      "description": "Un cohete espera junto a su torre en una costa bajo la luna; en el encendido los motores estallan en luz, el humo hierve y el cohete despega, ganando velocidad mientras su luz baña la orilla y se apaga poco a poco hacia el amanecer."
+    },
+    "pixel-crystal-cave": {
+      "title": "Cueva de cristal",
+      "description": "Desde la boca de una cueva llena de estalactitas, un lago subterráneo escondido brilla con cristales cuya luz recorre los grupos en oleadas, toda la gruta respirando su brillo cian y violeta mientras las gotas rizan el agua quieta."
+    },
+    "pixel-starry-night": {
+      "title": "Noche estrellada",
+      "description": "Un homenaje a la noche del pintor: remolinos en espiral giran por un cielo azul profundo, las estrellas laten en anillos de luz, una luna creciente brilla sobre el pueblo dormido y un ciprés se alza como una llama oscura."
+    },
+    "pixel-mist-rising": {
+      "title": "Niebla que se levanta",
+      "description": "Al amanecer, cresta tras cresta aparecen entre bancos de niebla; a medida que sube el sol la niebla se disuelve en pasos tramados, primero el banco más cercano y el más lejano al final, hasta que todo el valle queda claro y verde."
+    },
+    "pixel-roadside-motel": {
+      "title": "Motel de carretera",
+      "description": "Un motel del desierto de noche: su alto rótulo de neón escribe M-O-T-E-L letra a letra, parpadea y vuelve a empezar, una flecha de bombillas corre hacia la recepción, VACANCY zumba y las habitaciones brillan bajo las estrellas."
+    },
+    "pixel-tidal-abbey": {
+      "title": "Abadía de las mareas",
+      "description": "Una abadía sobre su roca, unida por una calzada de piedra con la marea baja; mientras se pone el sol la marea sube sobre la calzada y aísla la isla, y vuelve a bajar bajo el cielo nocturno."
+    },
+    "pixel-mirage": {
+      "title": "Espejismo",
+      "description": "Una carretera recta del desierto a mediodía, con sus líneas pasando como si condujeras; la calima hace temblar las mesetas y dunas lejanas sobre un falso lago de cielo en el horizonte, y el resplandor se apaga en un atardecer rojo."
+    },
+    "pixel-cloud-shadows": {
+      "title": "Sombras de nubes",
+      "description": "Una tarde soleada sobre prados abiertos: nubes esponjosas cruzan el cielo y sus sombras tramadas se deslizan por la hierba y las flores debajo de ellas, hasta que la luz se vuelve dorada al atardecer."
+    },
+    "pixel-fjord": {
+      "title": "Fiordo",
+      "description": "La cámara se desliza entre las paredes verticales de un fiordo bajo la aurora: los acantilados cercanos pasan más rápido que los picos nevados del fondo, revelando la profundidad del mundo pintado, todo reflejado en el agua quieta."
+    },
+    "pixel-clockwork": {
+      "title": "Mecanismo de reloj",
+      "description": "Dentro de una torre del reloj: un tren de engranajes de latón gira engranado, cada uno a la velocidad que marca su tamaño y al revés que su vecino, encima una esfera da la hora y un péndulo oscila ante una pared de hierro remachada."
+    },
+    "pixel-orrery": {
+      "title": "Planetario",
+      "description": "Un sistema solar visto desde arriba: los planetas giran alrededor de un sol brillante siguiendo tenues órbitas, los interiores más rápido como en la naturaleza, un gigante con anillos entre ellos, una luna que gira en torno a su planeta mientras este gira alrededor del sol, y un cinturón de asteroides que rota despacio."
+    },
+    "pixel-after-storm": {
+      "title": "Después de la tormenta",
+      "description": "La lluvia azota el valle y los rayos caen sobre las crestas; luego la tormenta pasa, el cielo se abre a una tarde verde y luminosa y un arcoíris aparece tramado sobre las montañas, brillando hasta un atardecer cálido."
+    },
+    "pixel-city-rising": {
+      "title": "Ciudad que crece",
+      "description": "Un time-lapse de una ciudad construyéndose: desde un terreno vacío junto al agua, los barrios se alzan en oleadas, primero las torres lejanas y al final el frente marítimo, mientras pasa un día del amanecer a una noche llena de ventanas encendidas."
+    },
+    "pixel-jellyfish": {
+      "title": "Medusas",
+      "description": "En el mar profundo, medusas luminosas suben a su propio ritmo, cada campana se contrae y se relaja con cada impulso mientras sus tentáculos ondulan detrás, la luz recorre sus cuerpos y la nieve marina cae junto al arrecife."
+    },
+    "pixel-blizzard": {
+      "title": "Ventisca",
+      "description": "Un paso nevado con una cabaña iluminada: la ventisca se espesa hasta que los picos lejanos desaparecen en el blanco y los pinos cercanos se difuminan, solo brillan las ventanas de la cabaña, y luego la tormenta amaina y vuelven las montañas."
+    },
+    "pixel-lantern-walk": {
+      "title": "Paseo con farol",
+      "description": "Un bosque oscuro junto al lago de noche: alguien camina por la orilla con un farol, y los pinos, la ribera y los juncos se encienden cálidos a su paso y vuelven a la sombra."
+    },
+    "pixel-empire-of-light": {
+      "title": "El imperio de las luces",
+      "description": "Inspirado en Magritte: un cielo azul de día con nubes blancas sobre una casa junto a un estanque donde ya es de noche, con las ventanas encendidas y una sola farola iluminando los árboles oscuros."
+    },
+    "pixel-star-trails": {
+      "title": "Estelas de estrellas",
+      "description": "Una larga exposición sobre un lago de montaña: las estrellas trazan poco a poco sus arcos alrededor de la estrella polar mientras avanza el plano, duplicadas en el agua quieta, sobre una tienda iluminada por dentro."
+    },
+    "pixel-wheat-wind": {
+      "title": "Trigo al viento",
+      "description": "Un campo de trigo dorado al atardecer con un ciprés solitario: las rachas lo recorren en olas, doblando las espigas y dejando un brillo pálido sobre el oro, mientras pasan las nubes."
+    },
+    "pixel-hockney-pool": {
+      "title": "Piscina al sol",
+      "description": "Inspirado en Hockney: una casa rosa de tejado plano, dos palmeras altas meciéndose y una piscina cuyo fondo baila con una red de luz, mientras el día luminoso de California se vuelve tarde."
+    },
+    "pixel-metaphysical-square": {
+      "title": "Plaza metafísica",
+      "description": "Inspirado en De Chirico: un sol bajo cruza tras una arcada, una estatua y una chimenea alta, y sus largas sombras, con los arcos incluidos, giran despacio sobre la plaza vacía."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -499,6 +1539,10 @@
   "animationFitHint": "Reproduce una vez la animación restante durante la duración actual del plano (velocidad 0,1–4×). Aplícalo de nuevo si cambias la duración o el inicio.",
   "clipNumber": "Número de clip",
   "duration": "Duración (s)",
+  "frameFormat": "Formato de encuadre",
+  "frameFormatLandscape": "Horizontal 16:9 (1280×720)",
+  "frameFormatPortrait": "Móvil 9:16 (720×1280)",
+  "frameRate": "Cadencia (fps)",
   "saveDocument": "Guardar plano JSON",
   "loadDocument": "Abrir plano JSON",
   "invalidDocument": "No se pudo abrir: el archivo no es un plano 3D válido.",
@@ -512,6 +1556,7 @@
     "ease": "Entrada y salida suaves",
     "distance": "Distancia recta: {{distance}} m · {{speed}} m/s",
     "floor": "Usar imagen como textura de suelo",
+    "cutout": "Personaje / recorte con transparencia",
     "surface": "Uso de la imagen",
     "backdrop": "Fondo",
     "wall": "Textura de pared",
@@ -571,11 +1616,25 @@
     "height": "Alto / proporción",
     "flipY": "Invertir verticalmente",
     "start": "Inicio del vídeo (s)",
-    "speed": "Velocidad del vídeo",
+    "speed": "Velocidad de reproducción",
     "loop": "Repetir vídeo",
     "clockHelp": "El vídeo sigue el tiempo de la escena. Su audio está silenciado.",
     "remove": "Quitar pantalla",
-    "failed": "No se pudo cargar la pantalla. Comprueba la malla y el archivo."
+    "failed": "No se pudo cargar la pantalla. Comprueba la malla y el archivo.",
+    "animateImage": "Animar esta capa",
+    "transparent": "Conservar transparencia",
+    "transparentHelp": "Usa una imagen o un vídeo con canal alfa (por ejemplo, WebM transparente). Esta opción conserva el recorte; no elimina el fondo de un vídeo opaco.",
+    "loopDetails": "Continuidad entre planos",
+    "pingPong": "Repetir hacia delante y hacia atrás",
+    "loopRange": "Repetir solo un tramo del vídeo",
+    "loopStart": "Inicio del tramo (s)",
+    "loopEnd": "Final del tramo (s)",
+    "timeOffset": "Tiempo acumulado entre planos (s)",
+    "loopDetailsHelp": "Ida y vuelta evita el salto al reiniciar; también invierte el movimiento. Usa el tiempo acumulado para continuar la misma animación en el siguiente plano.",
+    "crt": "Televisor CRT",
+    "hue": "Tono del tubo",
+    "applyAll": "Usar en todos los televisores",
+    "applyAllDone": "Todas las pantallas reproducen ahora esta grabación"
   },
   "library": {
     "name": "Nombre de la escena",
@@ -587,5 +1646,248 @@
     "previewUnavailable": "Espera a que cargue la vista 3D antes de guardar.",
     "saveFailed": "No se pudo guardar la escena.",
     "cancelLoad": "Cancelar carga"
+  },
+  "cinematic": {
+    "title": "Entorno cinematográfico",
+    "floorStyle": "Acabado del suelo",
+    "tiles": "Baldosas",
+    "mirror": "Superficie continua",
+    "noFloor": "Sin suelo",
+    "floor": "Suelo metálico reflectante",
+    "platform": "Tarima de materialización",
+    "bloom": "Resplandor",
+    "help": "Elige una imagen de fondo y selecciona Fondo de escena completo en su control Superficie. La imagen llena el encuadre; es un fondo ilustrado, no arquitectura 3D.",
+    "appearance": "Materializar personaje",
+    "start": "Inicio (s)",
+    "duration": "Aparición (s)",
+    "color": "Color de energía",
+    "idle": "Mantener una pose viva",
+    "idleHelp": "Usa la animación elegida en su punto de inicio con un movimiento corporal sutil. Elige un fotograma relajado de reposo o de andar; no se transfieren animaciones entre rigs.",
+    "background": "Fondo de escena completo",
+    "floorColor": "Color del suelo",
+    "backdropFloor": "Suelo del escenario",
+    "floorSourceHeight": "Porción inferior del fondo usada como suelo",
+    "road": "Calzada infinita",
+    "road_speed": "Velocidad (m/s)",
+    "road_slope": "Pendiente (°)",
+    "road_offset": "Continuidad (s)"
+  },
+  "imageLook": {
+    "title": "Aspecto de la imagen",
+    "tint": "Tinte",
+    "unlit": "Conservar iluminación original",
+    "psx": "PSX solo en esta capa",
+    "intensity": "Intensidad PSX",
+    "grounded": "Ajustar apoyo a los pies",
+    "shadow": "Sombra de contacto",
+    "roll": "Inclinación (°)",
+    "cleanTransparency": "Limpiar transparencia",
+    "colorKeyHelp": "Selecciona el color de fondo que queda en los huecos y bordes. Empieza con poca tolerancia para conservar los detalles. Se aplica a esta imagen o capa animada; puedes desactivarlo cuando quieras.",
+    "backgroundColor": "Color de fondo a eliminar",
+    "keyTolerance": "Tolerancia",
+    "keySoftness": "Borde suave"
+  },
+  "preview": {
+    "title": "Vista previa",
+    "expand": "Ampliar vídeo",
+    "exit": "Salir de pantalla completa"
+  },
+  "perspectiveReview": "Ver y evaluar las 20 nuevas",
+  "livingReview": "Ver los 6 fondos vivos",
+  "windows": {
+    "title": "Ventanas transparentes ({{count}})",
+    "help": "Marca puntos alrededor del hueco y pulsa Guardar ventana. Arrastra los puntos para ajustar el contorno. Pon una capa de vídeo detrás: el marco, la pared y los objetos conservan su imagen original. La imagen no se modifica.",
+    "image": "Imagen de la capa estática",
+    "draw": "Dibujar el contorno de la ventana",
+    "save": "Guardar ventana",
+    "undo": "Quitar último punto",
+    "cancel": "Descartar contorno",
+    "item": "Ventana {{number}}",
+    "edit": "Editar contorno",
+    "remove": "Cerrar hueco"
+  },
+  "darkLivingReview": "Ver los 20 mundos dark fantasy",
+  "poses": {
+    "enable": "Poses a saltos",
+    "help": "Cada pose se mantiene durante su intervalo. El ambiente sigue animándose. Usa imágenes PNG recortadas; ajusta la altura y la posición para conservar el tamaño del personaje y su apoyo en el suelo.",
+    "number": "Pose {{count}}",
+    "image": "Imagen de la pose",
+    "choose": "Seleccionar una imagen sin fondo",
+    "duration": "Duración (s)",
+    "height": "Altura relativa",
+    "x": "Desplazamiento horizontal",
+    "lift": "Elevación desde el suelo",
+    "earlier": "Mover antes",
+    "later": "Mover después",
+    "remove": "Quitar pose",
+    "add": "Añadir pose"
+  },
+  "stillnessReview": "Ver cámara fija y poses",
+  "movingCutoutsReview": "Personajes en movimiento · 6 clips ↗",
+  "portalRidesReview": "Ver calzada y dragón",
+  "kingdomRoadReview": "Viajes y película musical",
+  "pixelWorld": {
+    "title": "Luz pixel",
+    "enable": "Iluminación de mundo pixel",
+    "help": "El mundo está pintado con huecos de paleta: al cambiar la paleta se reilumina cada píxel, como el arte con ciclo de color.",
+    "palettes": "Programa de iluminación",
+    "add": "Añadir ambiente",
+    "remove": "Quitar {{name}}",
+    "hold": "Segundos por ambiente",
+    "meteors": "Estrellas fugaces",
+    "pixelSize": "Tamaño de píxel",
+    "levels": "Niveles de color",
+    "dither": "Tramado",
+    "screenGlow": "Luz de pantallas",
+    "setting": "Mundo",
+    "noSet": "Mantener el decorado actual",
+    "palette": {
+      "midnight": "Medianoche",
+      "aurora": "Aurora",
+      "dawn": "Amanecer",
+      "sunset": "Atardecer",
+      "storm": "Tormenta",
+      "eclipse": "Eclipse",
+      "vapor": "Vapor",
+      "polar": "Polar",
+      "forest": "Bosque",
+      "harbor": "Puerto",
+      "dusk": "Crepúsculo",
+      "alien": "Alienígena",
+      "sakura": "Sakura",
+      "abyss": "Abismo",
+      "lagoon": "Laguna",
+      "jungle": "Selva",
+      "cosmos": "Cosmos",
+      "neon": "Neón",
+      "noon": "Mediodía",
+      "nave": "Nave",
+      "grotto": "Gruta",
+      "starry": "Noche estrellada",
+      "brass": "Latón"
+    },
+    "set": {
+      "pixel-lake": "Lago de luna",
+      "pixel-peaks": "Picos nevados",
+      "pixel-gallery": "Galería oscura",
+      "pixel-city": "Ciudad de neón",
+      "pixel-desert": "Desierto",
+      "pixel-coast": "Acantilado",
+      "pixel-forest": "Bosque",
+      "pixel-viaduct": "Viaducto",
+      "pixel-volcano": "Volcán",
+      "pixel-drivein": "Autocine",
+      "pixel-garden": "Jardín de cerezos",
+      "pixel-reef": "Arrecife",
+      "pixel-valley": "Valle",
+      "pixel-fair": "Feria nocturna",
+      "pixel-village": "Aldea nevada",
+      "pixel-falls": "Cascada",
+      "pixel-orbit": "Órbita",
+      "pixel-tulips": "Campos de tulipanes",
+      "pixel-alley": "Callejón de neón",
+      "pixel-castle": "Castillo",
+      "pixel-beach": "Playa",
+      "pixel-lanterns": "Lago de farolillos",
+      "pixel-window": "Ventana",
+      "pixel-express": "Ventana del tren",
+      "pixel-daycycle": "Ciclo del día",
+      "pixel-eclipse": "Eclipse",
+      "pixel-seasons": "Estaciones",
+      "pixel-cathedral": "Catedral",
+      "pixel-koi": "Estanque de carpas",
+      "pixel-caravan": "Caravana",
+      "pixel-synthwave": "Synthwave",
+      "pixel-monsoon": "Monzón",
+      "pixel-marsh": "Marisma",
+      "pixel-launch": "Base de lanzamiento",
+      "pixel-grotto": "Gruta",
+      "pixel-starry": "Noche estrellada",
+      "pixel-dawnmist": "Crestas con niebla",
+      "pixel-motel": "Motel",
+      "pixel-tidal": "Isla de marea",
+      "pixel-mirage": "Espejismo",
+      "pixel-meadow": "Prado",
+      "pixel-fjord": "Fiordo",
+      "pixel-clockwork": "Mecanismo",
+      "pixel-orrery": "Planetario",
+      "pixel-rainbow": "Valle del arcoíris",
+      "pixel-risingcity": "Ciudad que crece",
+      "pixel-abyss": "Mar profundo",
+      "pixel-blizzard": "Paso de ventisca",
+      "pixel-lantern": "Orilla del farol",
+      "pixel-empire": "Imperio de las luces",
+      "pixel-startrails": "Lago de estelas",
+      "pixel-wheat": "Campo de trigo",
+      "pixel-pool": "Piscina de Hockney",
+      "pixel-piazza": "Plaza metafísica"
+    },
+    "addTv": "Añadir televisor",
+    "tvs": "{{count}} televisores",
+    "scene": {
+      "title": "Elementos del mundo",
+      "reimagine": "Reimaginar",
+      "reimagineHelp": "Pinta el mismo mundo con otra disposición de crestas, árboles, estrellas y edificios.",
+      "body": "Sol o luna",
+      "bodyKind": {
+        "moon": "Luna",
+        "sun": "Sol",
+        "none": "Ninguno",
+        "planet": "Planeta con anillos"
+      },
+      "bodyX": "Posición en el cielo",
+      "bodyY": "Altura en el cielo",
+      "bodySize": "Tamaño",
+      "crescent": "Fase de la luna",
+      "mountains": "Montañas",
+      "roughness": "Aspereza",
+      "snow": "Nieve",
+      "hills": "Colinas y dunas",
+      "trees": "Árboles",
+      "stars": "Estrellas",
+      "auroraHeight": "Altura de la aurora",
+      "reeds": "Juncos en primer plano",
+      "ripple": "Oleaje",
+      "meteorDirection": "Las estrellas fugaces caen",
+      "meteor": {
+        "both": "A ambos lados",
+        "left": "Hacia la izquierda",
+        "right": "Hacia la derecha"
+      },
+      "city": "Rascacielos",
+      "windows": "Ventanas encendidas",
+      "lightHelp": "La luz principal viene del sol o la luna: muévelo para iluminar personajes y televisores desde ese lado.",
+      "reset": "Volver al mundo original"
+    },
+    "colors": {
+      "title": "Colores",
+      "mood": "Ambiente a recolorear",
+      "reset": "Restablecer este ambiente",
+      "sky0": "Cielo alto",
+      "sky1": "Cielo medio",
+      "sky2": "Horizonte",
+      "moon": "Sol o luna",
+      "stars": "Estrellas",
+      "far0": "Cordillera lejana",
+      "far1": "Luz de la cordillera",
+      "near0": "Tierra cercana",
+      "near1": "Luz cercana",
+      "trees": "Árboles y siluetas",
+      "water": "Agua o arena",
+      "aurora": "Aurora",
+      "windows": "Ventanas y faroles",
+      "light": "Luz sobre personajes"
+    }
+  },
+  "shotLibrary": {
+    "change": "Cambiar plano",
+    "use": "Usar este plano",
+    "cancel": "Cancelar",
+    "close": "Cerrar la biblioteca de planos",
+    "examples": "Ejemplos",
+    "recent": "Recientes",
+    "current": "Actual",
+    "pickOne": "Elige un plano para verlo aquí.",
+    "hint": "Doble clic o Intro para usar un plano directamente"
   }
 }

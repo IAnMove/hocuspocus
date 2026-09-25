@@ -6,6 +6,8 @@ HocusPocus is an experimental, **non-commercial** fork of [Blizaine/Maestro](htt
 
 The **HocusPocus** mark is a quill shaping a cube: imagination becoming a buildable world. The UI is English and Spanish.
 
+Open **Help / Ayuda** next to Settings for the in-app tutorial, with screenshots of the layout, generation, studios and queue. Its ES/EN selector changes the UI language. Use Tab and Shift+Tab to navigate the dialog; Escape closes it and returns focus to Help.
+
 <p align="center">
   <img src="docs/images/readme/gandalf-hero.jpg" alt="Gandalf and Tentri in a HocusPocus Video 3D scene" />
 </p>
@@ -21,6 +23,12 @@ Install with [Pinokio](https://pinokio.computer) from [`https://github.com/IAnMo
 ---
 
 ## What you can do
+
+### Edit images in batches
+
+In **Direct generation → Image → Edit**, enable **Edit multiple images separately** and add images from your device or HocusPocus (use the selection checkboxes). Choose either the entire prompt, including line breaks, or **One prompt per line**. Two images and two nonempty prompt lines enqueue four independent generations, each with one output and its own retry action. The selected canvas/model settings apply to every pair. Batches are limited to 100 combinations; shared masks are not supported.
+
+The HocusPocus file picker loads small thumbnails, with a medium preview on selection. **Enlarge** loads the original resolution only when requested.
 
 ### Direct a film, videoclip or trailer
 
@@ -50,11 +58,17 @@ Walkthrough with screenshots: [Story → Comics → Video](docs/MAESTRO_X_STORY_
 
 **Studio** is the manual bench: pick image, video or audio, write the prompt, add references and LoRAs, generate. Outputs land in the gallery and are reusable as references, editor clips, 3D plates or comic identities.
 
+Image requests appear in the gallery queue as soon as you press Generate, while inputs upload and prepare in the background. Failed image cards show the reported error and offer **Retry**, retaining the original prompt, settings and source images while the tab remains open. An uncertain submission reuses its command ID to avoid duplicate work; retrying an acknowledged job creates a new attempt.
+
+The gallery loads bounded 320/640 px previews; opening the details dialog loads the original image. Background refreshes preserve the selected file, reconcile changes from other browsers and wait for any ongoing page load. Image dimensions and colours are prepared for the requested page rather than the entire library.
+
 | Kind | What ships in the box (among others) |
 |---|---|
 | Video | MiniMax H3 (picture + stereo audio), Wan 2.1 / 2.2, Hunyuan Video, LTX-2.3 |
-| Image | Flux 2 Klein, Qwen Image Edit |
+| Image | Flux 2 Klein, Qwen Image 2.1, Qwen Image Edit |
 | Audio | ACE-Step 1.5 XL (default new songs), MiniMax Music, Kugelaudio / Qwen3 TTS, MMAudio SFX |
+
+**Qwen Image 2.1 Viggle Turbo v0.2.1** is available in the image model selector for text-to-image and instruction editing with up to three input images (including the source). It reuses the Qwen 2.1 INT8 base files and downloads the pinned rank-256 adapter automatically on first use. Its six-step schedule and CFG 1 are fixed; start at 1024×1024. The LoRA runs without merging into the quantized base. This is a preview: complex edits can be less faithful, and 2K/RGBA/masked editing are not validated by its authors. [Model card and Qwen Research License](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo).
 
 **Example — MiniMax H3.** Prompt a wide night sea and add `Audio: surf, wind, a low cello`. Use **FL2VA** when you have an exact first/last frame from Story. Use **Ref2VA** when you pass up to 9 images, 3 videos and 3 audio clips as identity/mood references (`<Picture 1>`, `<Video 1>`, `<Audio 1>`).
 
@@ -96,11 +110,37 @@ Gandalf speaking in that world (image lips on the mesh, not a baked video):
 
 The **Wizard** is an in-app director: “open the concert scene”, “prepare a 3D showcase”, “make a 5-second clip of the cube in the rain”. **MCP** exposes the same jobs to external agents (image, video, SFX, scenes, receipts). Switching the footer workspace while a Wizard scene is still loading will **not** stomp the compositor or wipe undo.
 
+Connect through **Settings → Integrations → Hocuspocus MCP**, using the app's address plus `/api/v1/mcp` and the MCP Bearer token. This is Hocuspocus's shared tool server, including generation, assets, collections and scenes supported by the installation. The historical `/api/v1/wangp/mcp` URL remains an alias for existing clients. See the [MCP connection guide](docs/development/SCENE_EFFECTS_AND_MCP.md#enable-and-connect-mcp).
+
 **Example.** In 3D Video, ask the Wizard to open a saved scene by name and select a layer. If you change output folder mid-load, it aborts instead of importing into the wrong world.
+
+Wizard interprets your intended outcome using the conversation and current project. Describe what you want in your own words: it can explain, ask for essential missing context, or plan supported actions. Questions remain visible even when it also opens a lab. Once a series request has creative direction, Wizard can propose missing titles and plot details and save a first episode draft without another interview. Its receipt includes the saved series and episode premises. Opening Series Lab alone does not generate an episode's media.
+
+In **Series Lab → Canon**, generate reference images from each character or location's description and the series style. Use **Shots → Generate all missing references** to prepare the episode's characters and environments in a batch. Approve the images with the canon, then click **Use approved references in this episode** directly in Shots. Existing series images are reused without another generation. **Setup → Allowed production methods** lets you combine AI video, 2D animation, 3D scenes and imported clips; each shot has its own method and production controls. See [Series production and references](docs/series-lab/IMPLEMENTATION.md#reference-images-and-mixed-production).
+
+For 2D/3D animation, prepare both environments and characters. Each shot shows its environment selector and reference previews, and opens the editor once the episode has approved images for the environment and every visible character. Preparation shortcuts lead directly to the corresponding Bible cards. An establishing shot can use just its environment.
+
+**Generate all / Regenerate all** in **Series Lab → Shots** prepares editable 2D scenes and MP4 takes. Each shot also has **Regenerate this shot**. The app removes character backgrounds, uses saved voices and synchronizes mouths to each isolated recording with the offline Rhubarb engine. English recordings also use the script; other languages use phonetic recognition. New speaking-shot preparation requires all nine mouth positions; previously rendered clips and imported four-mouth scenes remain usable. The **20 mouth styles** provide complete nine-position packs, and Character Creator shows missing slots before generation. Download individual styles or all 20 as PNG packs from Character Creator. Saving a character creates a reusable resting still with the selected mouth while retaining the mouthless animation base. Configured listeners and silent shots use that resting mouth too.
+
+Regeneration preserves saved motion and audio and appends unapproved versions; approved takes remain available. Save the character workshop, return to Shots and click **Regenerate all** to update existing scenes. Missing setup links directly to the character. Keep the tab open during the batch. Completed shots release their temporary recovery copies after the editable scene and video are saved; unsaved editor changes and failed preparations retain their backups. Install/Update prepares the pinned offline engine; **Pinokio → Advanced → Repair offline lip sync** repairs it separately. See [2D speech quality and mouth packs](docs/character-kits/SPEECH_QUALITY.md).
+
+**Results** separates approved references from pending video takes and links to each incomplete item. **Generate AI draft takes** leaves its outputs awaiting review; 2D/3D and imported shots have their own production shortcuts.
+
+You can also enable production methods directly in **Series Lab → Shots**. For an existing episode, select an enabled method and use **Apply to shots without a take** to assign it across unfinished shots; completed and active takes are preserved.
+
+Location image prompts describe empty environments. Series Lab separates the physical setting and rendering style from character design and narrative occupants before generating. Use **Prepare environment prompt** in the location card to review the exact prompt first.
+
+Character Creator identifies each Qwen3 preset by its original language/profile and timbre. The nine presets can speak several languages, but none is natively Spanish. Use **Generate voice sample** with a Spanish or English sentence to hear the selected voice before saving or preparing mouths. Changing the voice cancels only that audition and stops the previous sample.
+
+Choose **Add your own voice: import or record** to use **Qwen3 Base** with a clean 3–30 second recording (up to 20 MB). Import an audio file or record with the microphone, name the voice, enter the exact recording transcript, and choose the language for new dialogue. Audition it, then **Save everything** on the character. Saved custom voices appear in the voice selector for other characters; new or regenerated native 2D/3D dialogue uses the stored recording and transcript. Existing takes remain available. Recording requires a browser with microphone support on HTTPS or localhost; importing also works over LAN HTTP. Audio samples are stored as persistent local uploads, and character metadata stores public references rather than machine-specific paths. No new model or recording is generated merely by selecting or saving a voice.
+
+Each **Canon → Characters** card also shows voice, 2D lip-sync and 3D lip-sync readiness. **Configure in Character Creator** opens a dedicated view for that exact character, carries over its reference image, and links the saved configuration by ID. The Series card keeps its library selector. **Save everything and return to Series Lab** saves voice, mouth images and placement together, then returns to the source character. A failed save retains the draft and keeps the editor open; a fully saved session can yield to the next character even after switching tabs. A voice can be saved without a 3D model. Save the character before opening its 2D mouth workshop or 3D face calibration. The mouth workshop has a rectangle whose width and height can be adjusted independently, a visible mouth-pack catalog with previews, explicit AI generation buttons, and a one-click prerecorded English voice sample for previewing mouth movement without generating speech. **Apply placement to all mouths** copies the current position, scale and rotation to all nine mouth shapes. **Try with their voice** previews the full isolated recording with the same phonetic analyzer as native shots, including pauses and resting-mouth closure; the separate quick text preview is approximate. Eyes and blinking are optional: keep the original drawing unless you want to add overlays. Review the cleaned base and mouth variants, then save the speech character. Dialogue shots open Character Creator directly; the advanced voice table links to the character card. AI video with native audio continues to use its generator's voice; the reusable TTS preset is used in the speech editor.
 
 ### Finish without regenerating
 
 **Video Editor** trims, splits and reorders clips you already like (H3 MP4s, compositor exports, series handoffs). Export is a queued FFmpeg job. Guide: [Video Editor](docs/video-editor/HOWUSEIT.md).
+
+**Studio Tools** post-process an existing image or clip (FlashVSR/Lanczos upscale, SeedVC revoice, rembg) and always write a new file. Guide: [Studio Tools](docs/tools/HOWUSEIT.md).
 
 **Edits** (experimental): retake a section, outpaint a frame, prompt-driven replace. **Multi-clip** is for longer prompt-by-prompt sequences with overlapping continuity.
 
@@ -111,7 +151,7 @@ The **Wizard** is an in-app director: “open the concert scene”, “prepare a
 - **CivitAI LoRA browser** with one-click install, update badges, and auto-written prompting guides from CivitAI / Hugging Face cards.
 - **Local LLM** (Gemma 4 / Qwen GGUF via llama.cpp) or external OpenAI / Anthropic / compatible endpoints. Unloads after idle so VRAM goes back to generation.
 - **Themes:** Golden Hour, Classic, Onyx.
-- **LAN:** optional share on the local network; optional token auth (`LOREFRAME_LAN_AUTH`).
+- **LAN:** optional share on the local network; optional token auth (`LOREFRAME_LAN_AUTH`). Creating series drafts, characters and speech clips also works from plain HTTP network URLs. After updating, reload the browser; Wizard can continue an empty series draft with the same title after a failed creation attempt.
 - **NSFW** and experimental gates are opt-in.
 
 Operator index: [docs/HOWUSEIT.md](docs/HOWUSEIT.md).
@@ -253,3 +293,134 @@ If we missed a name you shipped into this tree, open an issue — we want the li
 ## Issues
 
 Bugs and requests: [github.com/IAnMove/hocuspocus/issues](https://github.com/IAnMove/hocuspocus/issues).
+
+### Creative and Dark Fantasy perspective templates
+
+In **Studios → Video 3D → Shot library**, **Perspectives** adds 20 new vertical scenes with a [clip review page](ui/public/examples/perspective-lab/README.md). **Creative** now offers 50 vertical scenes ranging from neon streets and paper landscapes to orbital gardens and ceramic architecture. **Dark Fantasy** offers 60 more: ten landscape compositions, ten vertical scenes, ten PSX variants, twenty layered worlds with animated landscapes, and eight fixed-camera studies. Play and rate the new colossi, ruins, forests and oceans in the [Living Dark Fantasy gallery](ui/public/examples/dark-worlds/README.md). These editable 2.5D scenes use grounded image characters with gentle camera movement or a fixed viewpoint. The fixed-camera set includes six new characters and an eight-second wounded-knight study whose poses hold and jump while the environment flows. Play and rate it in the [Time Has Weight gallery](ui/public/examples/dark-stillness/README.md). **PSX** includes selective treatments of characters, props or backgrounds; each image layer can keep its own style. Edit depth, contact shadows, tint, camera movement, spatial effects and the floor projected from the backdrop, then render with the native compositor. See the [Creative guide](ui/public/examples/creative/README.md) and [Dark Fantasy guide](ui/public/examples/dark-fantasy/README.md) for editing and sharing.
+
+**Video background removal** is available in **Studio → Tools → Remove background**. Choose a video to create a reusable transparent WebM with audio. The [Moving Cutouts gallery](ui/public/examples/moving-cutouts/README.md) adds six native compositions: a walking knight and an illustrated skater over independently moving backgrounds. Their editable templates are included in the shot library.
+
+The [Skate Portal study](ui/public/examples/skate-portal/README.md) joins four editable shots into a vertical jump between the coast and a cloud road. Portal videos follow the scene clock, including backward scrubbing and export; each portal owns and releases its media independently.
+
+The [Kingdom Road collection](ui/public/examples/kingdom-road/README.md) extends the skater and PSX dragon journeys across 35 animated backgrounds. It also includes a Spanish YuE2 song with a beat-aligned music film, editable scene archives and downloadable media. Video layers expose source intervals, forward/backward looping and sequence time offsets under **Continuity between shots**. Native exports reuse a bounded local video cache for faster seeks, preserve transparent characters, and share the GPU queue with generation.
+
+The preview fits portrait scenes between black sidebars while keeping editor controls readable. **Expand video** shows just the picture fullscreen. Select covered characters, props or backgrounds in **Scene objects**, then move, rotate or scale them. For a cutout layer, enable **Animate this layer** and choose a video from the gallery or upload one; its depth and individual PSX treatment are retained in saved scenes and native exports.
+
+If automatic background removal leaves color inside a ring, between ropes or along an edge, select the layer and enable **Image appearance → Clean transparency**. Choose the leftover background color, then increase **Tolerance** gradually and adjust **Soft edge**. The cleanup works on still images and animated cutouts, keeps existing transparency, and can be combined with PSX. It is saved with the scene and can be disabled without changing the source file. Colors shared by the object and its background need a more selective mask; keep tolerance low to protect pale details.
+
+For a stationary viewpoint, select **Fixed camera**. Image cutouts can use **Held poses** with per-pose duration, relative height and ground placement. **Preserve transparency** supports images and videos that already have alpha, including transparent WebM; it does not segment an opaque video. These controls remain editable in saved scenes and portable templates.
+
+The [Portal Ride study](ui/public/examples/skate-portal-v2/README.md) expands that experiment to three continuous world changes. Native world effects now support editable position/rotation/scale keyframes and screen-projected portal video with its own start, speed and loop controls.
+
+The [Portal Rides gallery](ui/public/examples/portal-rides/README.md) adds a downhill skater and a dragon rider. **Cinematic stage → Endless road** keeps a separately moving road underneath world changes; edit speed, slope and timeline continuity. **Image appearance → Tilt** rotates a cutout around its foot anchor to match a slope. Both clips are saved native scenes with portable templates, rendered from interpolated transparent video layers at natural speed.
+
+### Qwen Image 2.1 in Studio
+
+Choose **Image → Create**, **Edit**, or **References**. Each keeps its own prompt,
+canvas, image inputs, sampling settings, seed, LoRAs and output count; switching
+back restores the draft. The selected model is shared between these flows.
+Create submits no hidden editing image or mask. Edit needs a source; References needs references.
+**Start over** clears these drafts. Panorama has its own generation button.
+
+Gallery actions distinguish **Edit this image** (use the result as the new source),
+**Load settings** (restore the complete saved recipe) and **Use as reference**.
+Loading settings or applying a recipe restores source, mask, references, method,
+sampling and LoRAs together. Missing inputs produce an error without replacing
+the current draft; a late download cannot overwrite a newer edit. Stored inputs
+keep their source workspace. Hidden model variants can still be restored by ID.
+Once Generate is pressed, the submission retains its selected local source and
+mask even if those inputs are replaced while the job is being prepared.
+Edit Anything / Viggle opens an extracted frame in References and restores the
+previous reference draft when the frame is applied, skipped or cancelled.
+
+Qwen 2.1 and Qwen Edit Plus/Plus2 accept additional references inside **Edit**;
+the source counts toward the model's input limit. Older Qwen image models expose
+their supported inpainting methods and outpainting controls. Studio keeps the
+public image mode at `1` and translates legacy masked edits to native mode `2`
+at the server boundary. Qwen Layered offers an editing source and **Number of
+layers**, separate from the number of queued results. Incompatible flows are
+excluded from the chooser and blocked if already open after a model switch.
+
+Start with **Auto / 1K**, **40 steps**, **CFG 1**. Every Qwen 2.1 preset uses
+32-pixel aligned dimensions. Auto aspect follows the editing source; without a
+source it is square. **2K** has roughly four times as many pixels and requires
+more time and memory. Recommended 1K canvases:
+
+| Format | Pixels | 2K option |
+|---|---|---|
+| Square | 1024×1024 | 2048×2048 |
+| Landscape 16:9 | 1376×768 | 2752×1536 |
+| Portrait 9:16 | 768×1376 | 1536×2752 |
+| Landscape 4:3 | 1184×896 | 2400×1792 |
+| Portrait 3:4 | 896×1184 | 1792×2400 |
+| Wide 21:9 | 1536×672 | 2816×1216 |
+
+Use **VAE tiling: Auto** for memory management, including on a 24 GB GPU.
+Explicitly disabling tiling can still exhaust VRAM. The INT8 ConvRot text encoder
+now restores embedding orientation when loading; this also applies when the
+image transformer uses GGUF. No checkpoint re-download is required.
+
+**Fit to model** exports PNG, keeps transparency and applies the same crop,
+padding or stretch to the editing mask. Black mask padding preserves that area.
+Replacing a source clears its previous mask and outpainting margins.
+
+The **Activity** footer shows model, canvas, current stage, steps and a truncated
+prompt. Hover over the prompt to read it in full, or click to copy it. **Generate**
+keeps its action label; the separate active-job count includes running and queued
+jobs. The activity panel also opens while loading or reconnecting. Incomplete
+image writes are hidden until publication. Missing-model errors identify the
+selected variant and required files. ETA becomes
+available after measured sampling steps, excluding loading and reference encoding;
+decoding and saving can add time. It is an estimate for the current sampling pass,
+not a hardware-independent promise for the entire queue.
+
+The version-2 image command API accepts the same explicit resolutions. Reuse an
+`intent_id` only when retrying exactly the same request. Example request body:
+
+```json
+{"version":2,"operation":"generation.image","intent_id":"my-qwen-image-001","input":{"workspace":"default","params":{"model_type":"qwen_image_21","prompt":"A red toy house in a sunny meadow","resolution":"1024x1024","num_inference_steps":40,"guidance_scale":1,"seed":7}}}
+```
+
+Save it as `qwen-request.json`, then submit to your running app:
+
+```bash
+curl -H 'Content-Type: application/json' --data-binary @qwen-request.json "$HOCUS_BASE_URL/api/v1/generation/commands"
+```
+
+```javascript
+const body = JSON.parse(await (await import('node:fs/promises')).readFile('qwen-request.json', 'utf8'));
+const result = await fetch(`${process.env.HOCUS_BASE_URL}/api/v1/generation/commands`, {
+  method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+});
+console.log(await result.json());
+```
+
+```python
+import json, os, urllib.request
+body = json.load(open('qwen-request.json', encoding='utf-8'))
+request = urllib.request.Request(
+    os.environ['HOCUS_BASE_URL'] + '/api/v1/generation/commands',
+    data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
+with urllib.request.urlopen(request) as response:
+    print(json.load(response))
+```
+
+Use the receipt to identify the admitted job; live canonical tasks are available
+at `/api/v1/tasks` and `/api/v1/tasks/events`. For editing, use uploaded/catalog
+references through the command reference endpoint; local browser tokens are
+materialized by Studio before submission.
+
+The abenzerps GGUF entries retain their legacy `qwen_image_21_uncensored_*`
+identifiers so saved recipes keep working, but are hidden from the model selector
+until they offer a verified distinction from the other Qwen 2.1 variants. Existing
+downloaded weights are kept. The [publisher's current model card](https://huggingface.co/abenzerps/Qwen-Image-2.1-GGUF)
+identifies the downloads as quantizations of the original base weights and says
+a separate uncensored version is still in development. The former name is not
+evidence of a distinct uncensoring fine-tune.
+
+Image previews open from gallery cards and selected source/reference thumbnails.
+The enlarged view shows dimensions, file details and available generation metadata,
+with the full saved record under **All saved information**. Activity uses frozen
+reference links from the submitted job, with cached thumbnails and the same enlarged
+view. Updating the model catalog preserves the current Studio draft. A server or UI
+update now offers an explicit reload instead of discarding an in-progress form.

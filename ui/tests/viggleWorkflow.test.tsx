@@ -135,7 +135,7 @@ test('Viggle checks once before submitting a valid frame through generation even
     await fixture.finish()
     assert.equal(fixture.submissions.length, 1)
     assert.equal(fixture.submissions[0][0], undefined)
-    assert.deepEqual(fixture.sidebarChanges, [false])
+    assert.deepEqual(fixture.sidebarChanges, [])
     assert.equal(fixture.view.queryByRole('alert'), null)
     assert.equal(fixture.useStore.getState().models[0].is_downloaded, false)
   } finally { fixture.close() }

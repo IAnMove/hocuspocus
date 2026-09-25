@@ -1,5 +1,6 @@
 import type { CharacterFaceAnchor, CharacterKit, CharacterKitAsset, CharacterMouthState } from './characterKit'
 import type { SceneLayer } from '../types'
+import { CHARACTER_MOUTH_STATES } from './characterMouthStates'
 
 export type FacePatchRegion = { x: number; y: number; size: number }
 export type FacePatchMetadata = {
@@ -17,7 +18,7 @@ export type FacePatchMetadata = {
 }
 
 export const FACE_PATCH_MAX_PIXELS = 4_194_304
-const MOUTH_STATES = ['closed', 'small', 'wide', 'round'] as const
+const MOUTH_STATES = CHARACTER_MOUTH_STATES
 const integer = (value: unknown, min: number, max: number): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
 
@@ -163,7 +164,10 @@ export function registerCharacterFacePatch(kit: CharacterKit, poseId: string, st
 
 export function characterFacePatchPrompt(name: string, state: CharacterMouthState): string {
   const expressions = { closed: 'lips closed, resting naturally', small: 'mouth slightly open in a narrow EE speaking shape',
-    wide: 'mouth open in a clear AH speaking shape', round: 'lips rounded in an OO speaking shape' }
+    wide: 'mouth open in a clear AH speaking shape', round: 'lips rounded in an O speaking shape',
+    pressed: 'lips firmly pressed shut for M/B/P', medium: 'mouth moderately open for EH',
+    pucker: 'lips narrowly puckered for OO/W', bite: 'upper teeth touching the lower lip for F/V',
+    tongue: 'tongue tip raised behind the upper teeth for L' }
   if (!Object.hasOwn(expressions, state)) throw new Error('Choose a mouth state for this patch.')
   return `Edit the reference image of ${name}: change ONLY the mouth to ${expressions[state]}. Preserve the exact canvas, head position, facial proportions, eyes, nose, hair, beard texture, lighting, colors, clothing and background. Keep the surrounding skin or beard, not a detached mouth sprite. No reframing, no new pose, no transparency, no extra faces, no text. This is one full-frame expression variant for region replacement, not a new character.`
 }

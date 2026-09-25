@@ -1,4 +1,5 @@
 import * as api from '../../api/client'
+import { revealDirectorWorkspace } from '../../lib/navigationCategories'
 import { useStore } from '../../stores/useStore'
 import {
   buildMusicVideoAdaptation,
@@ -362,6 +363,7 @@ export async function loadStoryMusicVideoProduction(options: StoryMusicVideoProd
     missingMessage: 'Location reference unavailable',
   })
 
+  revealDirectorWorkspace(useStore.getState())
   window.dispatchEvent(new Event('maestro:director-open'))
   const audioOptions = {
     lyricsHint: resolvedCue.lyrics || undefined,

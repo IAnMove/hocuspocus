@@ -1,0 +1,22 @@
+export const PERSPECTIVE_TEMPLATE_IDS = [
+  "creative-amber-ice",
+  "creative-scarlet-tide",
+  "creative-pearl-spores",
+  "creative-ultramarine-forge",
+  "creative-rose-orbit",
+  "creative-brass-mirage",
+  "creative-jade-cinema",
+  "creative-apricot-cable",
+  "creative-violet-baths",
+  "creative-clockwork-glass",
+  "creative-paper-monsoon",
+  "creative-cobalt-crater",
+  "creative-saffron-lens",
+  "creative-glass-orchard",
+  "creative-terracotta-radio",
+  "creative-chrome-bloom",
+  "creative-arctic-spin",
+  "creative-domino-garden",
+  "creative-midnight-bakery",
+  "creative-coral-radio"
+] as const

@@ -6,7 +6,7 @@ import {
   buildPendingSongCandidate,
   patchSongCandidateFailed,
   patchSongCandidateReady,
-  overlayCueMusicCandidate,
+  overlaySavedCueCandidates,
   upsertCueMusicCandidate,
 } from './musicWorkflowState'
 import { pendingSongProvenance } from './provenance'
@@ -137,30 +137,39 @@ async function persistCueCandidate(
     },
   )
   const saved = library.projects[projectId]
-  const savedCandidate = cueCandidate(saved, cueId, candidateId)
   const latest = useStoryStore.getState()
   if (latest.workspace !== workspace) return saved
-  const live = latest.projects[projectId] || before.projects[projectId] || saved
-  const merged = savedCandidate
-    ? overlayCueMusicCandidate(live, cueId, savedCandidate)
-    : saved
-  const visibleId = latest.project.id
-  const visible = visibleId === projectId && savedCandidate
-    ? overlayCueMusicCandidate(latest.project, cueId, savedCandidate)
-    : latest.project
-  useStoryStore.setState({
-    project: visible,
-    projects: {
-      ...latest.projects,
-      [projectId]: merged,
-      [visibleId]: visible,
-    },
-    libraryRevision: library.revision,
-    dirty: latest.dirty,
-    hydrated: true,
-    loading: false,
-    saveError: null,
-    libraryConflicts: latest.libraryConflicts,
+  // A 409 rebase PUTs remote-only siblings — extra stories, extra cues, and
+  // extra song rows on this story. Overlaying only this persist's candidate
+  // onto a stale snapshot leaves the next persist (ready/job) to rewrite the
+  // library without those rows.
+  let merged = saved
+  useStoryStore.setState(current => {
+    if (current.workspace !== workspace) return {}
+    const remoteOnly = Object.fromEntries(
+      Object.entries(library.projects).filter(([id]) => !current.projects[id]),
+    )
+    const live = current.projects[projectId] || before.projects[projectId] || saved
+    merged = overlaySavedCueCandidates(live, saved)
+    const visibleId = current.project.id
+    const visible = visibleId === projectId
+      ? overlaySavedCueCandidates(current.project, saved)
+      : current.project
+    return {
+      project: visible,
+      projects: {
+        ...current.projects,
+        ...remoteOnly,
+        [projectId]: merged,
+        [visibleId]: visible,
+      },
+      libraryRevision: library.revision,
+      dirty: current.dirty,
+      hydrated: true,
+      loading: false,
+      saveError: null,
+      libraryConflicts: current.libraryConflicts,
+    }
   })
   noteStoryLibraryPersisted({ onlyIfClean: true })
   return merged

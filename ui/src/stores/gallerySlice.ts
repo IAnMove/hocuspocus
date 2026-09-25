@@ -8,6 +8,29 @@ export type GalleryView = 'feed' | 'grid' | 'masonry'
 const GALLERY_VIEW_KEY = 'hocuspocus_gallery_view'
 const GALLERY_VIEWS: readonly GalleryView[] = ['feed', 'grid', 'masonry']
 
+const GALLERY_GRID_COLUMNS_KEY = 'hocuspocus_gallery_grid_columns'
+const GALLERY_ORDER_KEY = 'hocuspocus_gallery_order'
+const GALLERY_ORDERS: readonly api.GalleryOrder[] = ['newest', 'oldest', 'favorites']
+
+function readStoredGalleryOrder(): api.GalleryOrder {
+  try {
+    const stored = localStorage.getItem(GALLERY_ORDER_KEY)
+    return GALLERY_ORDERS.includes(stored as api.GalleryOrder) ? stored as api.GalleryOrder : 'newest'
+  } catch {
+    return 'newest'
+  }
+}
+export const GALLERY_GRID_COLUMN_RANGE = [2, 6] as const
+
+function readStoredGridColumns(): number | null {
+  try {
+    const stored = Number(localStorage.getItem(GALLERY_GRID_COLUMNS_KEY))
+    return Number.isInteger(stored) && stored >= GALLERY_GRID_COLUMN_RANGE[0] && stored <= GALLERY_GRID_COLUMN_RANGE[1] ? stored : null
+  } catch {
+    return null
+  }
+}
+
 function readStoredGalleryView(): GalleryView {
   try {
     const stored = localStorage.getItem(GALLERY_VIEW_KEY)
@@ -35,6 +58,15 @@ export type GallerySlice = {
    *  moment and reviewing one-up the next. */
   galleryView: GalleryView
   setGalleryView: (view: GalleryView) => void
+  /** Phone grid columns chosen with a pinch; null follows the screen width. */
+  galleryGridColumns: number | null
+  setGalleryGridColumns: (columns: number | null) => void
+  /** Listing order, applied by the server so paging follows it. */
+  galleryOrder: api.GalleryOrder
+  setGalleryOrder: (order: api.GalleryOrder) => void
+  /** The phone history panel, opened from the gallery toolbar. */
+  mobileHistoryOpen: boolean
+  setMobileHistoryOpen: (open: boolean) => void
   outputSearchQuery: string
   galleryFeedAtTop: boolean
   galleryRefreshPending: boolean
@@ -50,6 +82,8 @@ export type GallerySlice = {
   loadMoreOutputs: () => Promise<void>
   refreshOutputs: () => Promise<void>
   toggleFavorite: (name: string) => Promise<void>
+  /** Fold late sizes and colours into listed outputs. Returns how many changed. */
+  mergeOutputFacts: (facts: api.OutputFacts) => number
   selectedOutputMeta: OutputMetadata | null
   metadataLoading: boolean
   loadOutputMetadata: (name: string) => Promise<void>
@@ -62,6 +96,7 @@ let _workspaceListRequestEpoch = 0
 let _pendingWorkspaceTransitionEpoch: number | null = null
 let _outputRequestEpoch = 0
 let _outputAbortController: AbortController | null = null
+let _refreshAfterOutputRequest = false
 let _metadataRequestEpoch = 0
 let _metadataAbortController: AbortController | null = null
 let _foCachedOutputs: OutputFile[] = []
@@ -88,6 +123,7 @@ function _workspaceName(state: { activeWorkspace: string; browsingUploads: boole
 }
 
 function _beginWorkspaceTransition(): number {
+  _refreshAfterOutputRequest = false
   _workspaceRequestEpoch += 1
   _pendingWorkspaceTransitionEpoch = null
   _workspaceListRequestEpoch += 1
@@ -121,8 +157,13 @@ function _isCurrentOutputRequest(
     && _workspaceName(get()) === request.workspace
 }
 
-function _finishOutputRequest(request: WorkspaceOutputRequest): void {
-  if (_outputAbortController === request.controller) _outputAbortController = null
+function _finishOutputRequest(request: WorkspaceOutputRequest, refresh: () => void): void {
+  if (_outputAbortController !== request.controller) return
+  _outputAbortController = null
+  if (_refreshAfterOutputRequest) {
+    _refreshAfterOutputRequest = false
+    refresh()
+  }
 }
 
 const FILTER_PREDICATES: Partial<Record<MediaFilter, (output: OutputFile) => boolean>> = {
@@ -165,6 +206,8 @@ function toOutputFile(output: api.ApiOutput): OutputFile {
     completed_at: output.completed_at,
     completion_time_source: output.completion_time_source,
     thumbnail_url: output.thumbnail_url || null,
+    ...(output.width && output.height ? { width: output.width, height: output.height } : {}),
+    ...(output.color && /^#[0-9a-f]{6}$/i.test(output.color) ? { color: output.color } : {}),
   }
 }
 
@@ -180,6 +223,9 @@ function outputSnapshotEquals(current: OutputFile, latest: OutputFile): boolean 
     && latest.completion_time_source === current.completion_time_source
     && latest.thumbnail_url === current.thumbnail_url
     && latest.result_kind === current.result_kind
+    && latest.width === current.width
+    && latest.height === current.height
+    && latest.color === current.color
 }
 
 function mergeRefreshedOutputs(current: OutputFile[], fresh: OutputFile[]): {
@@ -189,16 +235,15 @@ function mergeRefreshedOutputs(current: OutputFile[], fresh: OutputFile[]): {
 } {
   const currentNames = new Set(current.map(output => output.name))
   const newItems = fresh.filter(output => !currentNames.has(output.name))
-  const freshByName = new Map(fresh.map(output => [output.name, output]))
-  const updatedCurrent = current.map(output => {
-    const latest = freshByName.get(output.name)
-    if (!latest) return output
-    return outputSnapshotEquals(output, latest) ? output : latest
+  const currentByName = new Map(current.map(output => [output.name, output]))
+  const merged = fresh.map(latest => {
+    const output = currentByName.get(latest.name)
+    return output && outputSnapshotEquals(output, latest) ? output : latest
   })
   return {
-    merged: [...newItems, ...updatedCurrent],
+    merged,
     newItems,
-    existingChanged: updatedCurrent.some((output, index) => output !== current[index]),
+    existingChanged: merged.length !== current.length || merged.some((output, index) => output !== current[index]),
   }
 }
 
@@ -326,6 +371,25 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     set({ galleryView: view })
     try { localStorage.setItem(GALLERY_VIEW_KEY, view) } catch { /* private browsing */ }
   },
+  galleryGridColumns: readStoredGridColumns(),
+  setGalleryGridColumns: (columns) => {
+    const [min, max] = GALLERY_GRID_COLUMN_RANGE
+    const next = columns == null ? null : Math.min(max, Math.max(min, Math.round(columns)))
+    set({ galleryGridColumns: next })
+    try {
+      if (next == null) localStorage.removeItem(GALLERY_GRID_COLUMNS_KEY)
+      else localStorage.setItem(GALLERY_GRID_COLUMNS_KEY, String(next))
+    } catch { /* private browsing */ }
+  },
+  galleryOrder: readStoredGalleryOrder(),
+  setGalleryOrder: (order) => {
+    if (get().galleryOrder === order) return
+    set({ galleryOrder: order, selectedOutput: 0 })
+    try { localStorage.setItem(GALLERY_ORDER_KEY, order) } catch { /* private browsing */ }
+    void get().loadOutputs()
+  },
+  mobileHistoryOpen: false,
+  setMobileHistoryOpen: (open) => set({ mobileHistoryOpen: open }),
   outputSearchQuery: '',
   galleryFeedAtTop: true,
   galleryRefreshPending: false,
@@ -349,7 +413,9 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     set({ galleryFeedAtTop: atTop })
     if (atTop && !wasTop && get().galleryRefreshPending) {
       set({ galleryRefreshPending: false })
-      void get().loadOutputs()
+      // Keep the already-paged window. loadOutputs() always asks for the
+      // first 100 rows and would drop everything the reader had scrolled in.
+      void get().refreshOutputs()
     }
   },
   clearGalleryToast: () => set({ galleryToast: null }),
@@ -370,13 +436,11 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     await get().refreshOutputs()
   },
   setOutputSearchQuery: (q) => {
+    const previous = get().outputSearchQuery.trim()
     set({ outputSearchQuery: q, selectedOutput: 0 })
-    if (q.trim()) {
-      get().loadOutputs()
-    } else if (get().mediaFilter === 'all') {
-      // Clear search: reload normal paginated view
-      get().loadOutputs()
-    }
+    // Any change reloads, including clearing a search on a filtered tab,
+    // which used to leave the search results on screen.
+    if (q.trim() !== previous) void get().loadOutputs()
   },
   filteredOutputs: () => {
     const { outputs, mediaFilter } = get()
@@ -394,6 +458,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     try {
       const { outputs: apiOutputs, total } = query.useServerList
         ? await api.fetchOutputs(query.resultKind || query.favoritesOnly || query.multiclipOnly || query.editsOnly || query.search ? 0 : PAGE_SIZE, 0, {
+            order: get().galleryOrder,
             favoritesOnly: query.favoritesOnly,
             multiclipOnly: query.multiclipOnly,
             editsOnly: query.editsOnly,
@@ -403,7 +468,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
             workspace,
             signal: request.controller.signal,
           })
-        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace, signal: request.controller.signal })
+        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace, order: get().galleryOrder, signal: request.controller.signal })
       if (!_isCurrentOutputRequest(get, request)) return
       const outputs: OutputFile[] = apiOutputs.map(toOutputFile)
       const previousName = get().filteredOutputs()[get().selectedOutput]?.name
@@ -418,12 +483,13 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
       console.error('Failed to load outputs:', e)
       set({ outputsLoading: false })
     } finally {
-      _finishOutputRequest(request)
+      _finishOutputRequest(request, () => { void get().maybeRefreshGallery() })
     }
   },
 
   // Load next page of outputs (infinite scroll)
   loadMoreOutputs: async () => {
+    if (_outputAbortController) return
     const PAGE_SIZE = 100
     const current = get().outputs
     const total = get().outputsTotal
@@ -434,6 +500,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
       const query = galleryListQuery(get().mediaFilter, get().outputSearchQuery)
       const { outputs: apiOutputs, total: newTotal } = await api.fetchOutputs(PAGE_SIZE, current.length, {
         workspace,
+        order: get().galleryOrder,
         mediaType: query.mediaType,
         resultKind: query.resultKind,
         favoritesOnly: query.favoritesOnly,
@@ -453,18 +520,24 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     } catch {
       // Silent fail
     } finally {
-      _finishOutputRequest(request)
+      _finishOutputRequest(request, () => { void get().maybeRefreshGallery() })
     }
   },
 
   // Incremental refresh: only fetch the newest items to detect new outputs during generation
   refreshOutputs: async () => {
+    // Heartbeats must not abort initial loading, paging or another refresh.
+    // Coalesce concurrent heartbeats into one trailing refresh, including a
+    // completion that arrives during the initial request.
+    if (_outputAbortController) { _refreshAfterOutputRequest = true; return }
     const workspace = _workspaceName(get())
     const request = _beginOutputRequest(workspace)
     const query = galleryListQuery(get().mediaFilter, get().outputSearchQuery)
     try {
-      // Only fetch first page — new outputs appear at the top (newest first)
-      const { outputs: apiOutputs, total } = await api.fetchOutputs(50, 0, {
+      // Reconcile the loaded window in the server's chosen order, including
+      // deletions and replacements made by another browser.
+      const { outputs: apiOutputs, total } = await api.fetchOutputs(Math.max(100, get().outputs.length), 0, {
+        order: get().galleryOrder,
         workspace,
         mediaType: query.mediaType,
         resultKind: query.resultKind,
@@ -487,20 +560,33 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
           }
           return
         }
-        // Prepend new items (newest first), update files that were first seen
-        // while still being written, and shift selection to keep the same
-        // logical item active.
-        const sel = get().selectedOutput
-        set({ outputs: merged, outputsTotal: total, selectedOutput: sel + newItems.length })
+        const selectedName = get().filteredOutputs()[get().selectedOutput]?.name
+        const selected = computeFilteredOutputs(merged, get().mediaFilter).findIndex(file => file.name === selectedName)
+        set({ outputs: merged, outputsTotal: total, selectedOutput: Math.max(0, selected) })
       }
     } catch {
       // Silent fail for background refresh
     } finally {
       if (_isCurrentOutputRequest(get, request)) set({ outputsLoading: false })
-      _finishOutputRequest(request)
+      _finishOutputRequest(request, () => { void get().maybeRefreshGallery() })
     }
   },
 
+  mergeOutputFacts: (facts) => {
+    let changed = 0
+    const outputs = get().outputs.map(file => {
+      const fact = facts[file.name]
+      if (!fact) return file
+      const width = fact.width && fact.height ? fact.width : file.width
+      const height = fact.width && fact.height ? fact.height : file.height
+      const color = fact.color && /^#[0-9a-f]{6}$/i.test(fact.color) ? fact.color : file.color
+      if (width === file.width && height === file.height && color === file.color) return file
+      changed += 1
+      return { ...file, width, height, color }
+    })
+    if (changed) set({ outputs })
+    return changed
+  },
   toggleFavorite: async (name) => {
     const workspace = _workspaceName(get())
     const workspaceEpoch = _workspaceRequestEpoch
@@ -572,7 +658,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     const workspaceEpoch = _workspaceRequestEpoch
 
     try {
-      await api.deleteOutput(output.name)
+      await api.deleteOutput(output.name, workspace)
       if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
       // Remove from local state
       const allOutputs = get().outputs.filter(o => o.name !== output.name)

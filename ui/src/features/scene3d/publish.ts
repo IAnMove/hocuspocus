@@ -1,3 +1,4 @@
+import { canonicalSceneFps } from '../../lib/sceneFps.ts'
 import { sceneVoiceTracks } from './speech/timeline'
 import { scene3dOutputDuration } from './clock.ts'
 import { saveSceneRecording } from '../../api/video3d.ts'
@@ -11,7 +12,7 @@ export function world3dRecordingStub(document: Scene3DDocument) {
     name: `${document.clipNumber ? `clip-${String(document.clipNumber).padStart(2, '0')}-` : ''}world3d-${document.templateId || 'scene'}`,
     width: size.width,
     height: size.height,
-    fps: document.fps === 60 ? 60 : 30,
+    fps: canonicalSceneFps(document.fps),
     duration: scene3dOutputDuration(document),
     layers: [] as unknown[],
   }

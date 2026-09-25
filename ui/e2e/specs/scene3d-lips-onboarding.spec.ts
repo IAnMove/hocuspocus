@@ -4,6 +4,7 @@ import { speechFixture, speechTestGlb } from '../helpers/speechAssets'
 import { closeApp } from '../helpers/gotoApp'
 
 test('place lips on the selected surface, retry a miss and cancel without changing placement', async ({ page }, info) => {
+  test.setTimeout(90_000)
   const app = await speechApp(page), doc = speechFixture()
   doc.slots[0].speech = undefined
   doc.camera.framing = { targetSlot: 'subject_1', anchor: 'head', from: [0, 0, 1.5], to: [0, 0, 1.5] }

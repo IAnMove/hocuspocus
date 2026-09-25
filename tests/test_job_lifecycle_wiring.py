@@ -62,6 +62,30 @@ def _load_isolated_function(relative_path: str, name: str, namespace: dict):
 
 
 class TestJobLifecycleWiring(unittest.TestCase):
+    def test_worker_stream_error_survives_final_failure_message(self):
+        from services.job_lifecycle import update_job, finish_job
+
+        generation = _function(self.launch, "_run_generation")
+        error_branch = next(node for node in ast.walk(generation)
+                            if isinstance(node, ast.If)
+                            and ast.unparse(node.test) == "cmd == 'error'")
+        final_call = next(node for node in ast.walk(generation)
+                          if isinstance(node, ast.Call)
+                          and isinstance(node.func, ast.Name)
+                          and node.func.id == "finish_job"
+                          and any(keyword.arg == "message" and isinstance(keyword.value, ast.IfExp)
+                                  for keyword in node.keywords))
+        job = {"id": "failed-image", "status": "running", "error": None}
+        namespace = {"job": job, "data": "Source image could not be decoded",
+                     "update_job": update_job, "finish_job": finish_job,
+                     "success": False}
+        module = ast.Module(body=[*error_branch.body, ast.Expr(value=final_call)], type_ignores=[])
+        ast.fix_missing_locations(module)
+        exec(compile(module, "worker-error", "exec"), namespace)
+        self.assertEqual(job["status"], "failed")
+        self.assertEqual(job["error"], "Source image could not be decoded")
+        self.assertEqual(job["message"], job["error"])
+
     @classmethod
     def setUpClass(cls):
         cls.launch = _parse("app/_launch_runtime.py")
@@ -394,10 +418,13 @@ class TestJobLifecycleWiring(unittest.TestCase):
             command = next(c for c in commands if "-filter_complex" in c)
             filter_value = command[command.index("-filter_complex") + 1]
             self.assertIn(
-                "[1:a]atrim=start=2.000000,asetpts=PTS-STARTPTS[outa]",
+                "[1:a]atrim=start=2.000000,asetpts=PTS-STARTPTS,apad,"
+                "atrim=duration=3.000000[outa]",
                 filter_value,
             )
             self.assertIn("[outa]", command)
+            self.assertIn("-shortest", command)
+            self.assertNotIn("atrim=duration=2.100000", filter_value)
 
     def test_multiclip_concat_can_be_cancelled_during_ffmpeg(self):
         concatenate = _load_isolated_function(

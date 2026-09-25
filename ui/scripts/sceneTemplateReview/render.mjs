@@ -92,6 +92,7 @@ async function renderOne({ browser, server, repoRoot, template, runtime }) {
   await page.addInitScript(({ snapshot, languageKey }) => {
     localStorage.setItem(languageKey, 'en')
     localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
+    localStorage.setItem('hocuspocus_welcome_seen_v2', '453')
     sessionStorage.setItem('maestro_scene_animator_pending_scene', JSON.stringify(snapshot))
   }, { snapshot: scene, languageKey: LANGUAGE_STORAGE_KEY })
 

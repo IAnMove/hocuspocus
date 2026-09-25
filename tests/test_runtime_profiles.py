@@ -35,12 +35,26 @@ def test_older_driver_keeps_core_available_without_claiming_h3_support():
 
 
 def test_unavailable_platforms_and_accelerators_never_fall_through_to_cuda():
-    for platform, arch, gpu in [("darwin", "arm64", "apple"), ("linux", "arm64", "nvidia"),
+    for platform, arch, gpu in [("linux", "arm64", "nvidia"),
                                 ("win32", "x64", "amd"), ("linux", "x64", "intel"),
                                 ("linux", "x64", "cpu"), ("linux", "x64", "unknown")]:
         result = profiles.select_profiles(platform, arch, gpu)
         assert not result["supported"]
-        assert all(not engine["supported"] and engine["reason"] for engine in result["engines"].values())
+        assert all(not engine["supported"] and engine["reason"] for engine in result["engines"].values()
+                   if engine.get("cuda"))
+
+
+def test_apple_silicon_installs_core_without_cuda_engines():
+    result = profiles.select_profiles("darwin", "arm64", "apple")
+    assert result["supported"]
+    assert result["engines"]["core"]["supported"]
+    assert result["engines"]["core"]["id"] == "darwin-arm64-core-core"
+    assert not result["engines"]["wangp"]["supported"]
+    assert not result["engines"]["minimax_h3"]["supported"]
+    assert not result["engines"]["hunyuan3d"]["supported"]
+    assert "NVIDIA" in result["engines"]["wangp"]["reason"]
+    intel = profiles.select_profiles("darwin", "x64", "apple")
+    assert not intel["supported"]
 
 
 def test_missing_driver_is_explicitly_unverified():

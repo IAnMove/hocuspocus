@@ -2,6 +2,7 @@ import ast
 import copy
 import json
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -25,9 +26,10 @@ def load_list_outputs(namespace: dict):
     exec(compile(module, str(LAUNCH), "exec"), namespace)
 
 
-def list_test_outputs(tmp_path, **kwargs):
+def list_test_outputs(tmp_path, favorites=(), **kwargs):
     namespace = {
         "os": os,
+        "re": re,
         "json": json,
         "time": time,
         "threading": threading,
@@ -35,7 +37,7 @@ def list_test_outputs(tmp_path, **kwargs):
         "Response": object,
         "wgp": SimpleNamespace(server_config={"save_path": str(tmp_path)}),
         "_workspace_dir": lambda workspace=None: str(tmp_path),
-        "_load_favorites": lambda: set(),
+        "_load_favorites": lambda: set(favorites),
         "_output_scan_cache": {},
         "_output_scan_cache_lock": threading.Lock(),
         "_OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS": 5.0,
@@ -88,6 +90,14 @@ def test_output_list_hides_director_audio_scratch_files(tmp_path):
     names = {item["name"] for item in list_test_outputs(tmp_path)}
 
     assert names == {"song.wav"}
+
+
+def test_output_list_waits_for_atomic_image_publication(tmp_path):
+    pending = tmp_path / "synthetic.tmp_1234abcd.png"
+    pending.write_bytes(b"partial image")
+    assert list_test_outputs(tmp_path) == []
+    pending.rename(tmp_path / "synthetic.png")
+    assert [item["name"] for item in list_test_outputs(tmp_path)] == ["synthetic.png"]
 
 
 def test_output_list_edits_only_keeps_tagged_and_legacy_avatar_files(tmp_path):

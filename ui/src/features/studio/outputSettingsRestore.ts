@@ -8,11 +8,16 @@ interface RestoreState {
   selectedOutputMeta: OutputMetadata | null
   filteredOutputs: () => OutputFile[]
   loadOutputMetadata: (name: string) => Promise<void>
+  params?: object
+  generationMode?: string
+  imageStudioIntent?: string
 }
 
 let restoreEpoch = 0
 const workspaceOf = (state: RestoreState) => state.browsingUploads ? '__uploads__' : state.activeWorkspace
 const selectedName = (state: RestoreState) => state.filteredOutputs()[state.selectedOutput]?.name
+const sameForm = (before: RestoreState, after: RestoreState) => before.params === after.params
+  && before.generationMode === after.generationMode && before.imageStudioIntent === after.imageStudioIntent
 
 /** An explicit card action owns its source; scroll selection never redirects it. */
 export async function beginOutputSettingsRestore(
@@ -32,6 +37,6 @@ export async function beginOutputSettingsRestore(
     await initial.loadOutputMetadata(name)
     metadata = get().selectedOutputMeta
   }
-  if (!isCurrent() || !metadata?.params) return null
+  if (!isCurrent() || !metadata?.params || !sameForm(initial, get())) return null
   return { name: name ?? '', metadata: structuredClone(metadata), isCurrent }
 }

@@ -1,0 +1,277 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "skate-portal-v2-06",
+  "title": "Volver por el último portal",
+  "description": "El salto abre el mar y alinea el suelo del regreso.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T21:30:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 1.6666666666666667,
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0,
+      "floorStyle": "none",
+      "floorColor": "#222233"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-neon-0.png",
+        "position": [
+          0,
+          -5.203072599586523,
+          -8
+        ],
+        "scale": 8.203072599586523,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-neon.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 3.4000000000000004,
+          "speed": 0.6,
+          "loop": true,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          -1.05,
+          -0.15,
+          0
+        ],
+        "scale": 1.52,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0,
+          "tint": "#ffffff"
+        },
+        "screen": {
+          "sourceUrl": "/examples/skate-portal/skate-jump.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 2.4,
+          "speed": 0.6,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        },
+        "motion": {
+          "to": [
+            -1.3,
+            -0.18,
+            0
+          ],
+          "faceTravel": false,
+          "easing": "linear",
+          "via": [
+            -1.175,
+            0.9,
+            0
+          ]
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        3,
+        10
+      ],
+      "look": [
+        0,
+        3,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "world-window",
+        "kind": "media_portal",
+        "label": "Ventana en expansión",
+        "position": {
+          "x": -1.6,
+          "y": 1.9,
+          "z": -1.2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff71cb",
+        "scale": 1.95,
+        "intensity": 0.65,
+        "seed": 414,
+        "start": 0,
+        "end": 1.6666666666666667,
+        "sound": false,
+        "volume": 0,
+        "sourceUrl": "/examples/moving-cutouts/skate-coast.mp4",
+        "motion": [
+          {
+            "time": 0,
+            "position": {
+              "x": -1.6,
+              "y": 1.9,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 720
+            },
+            "scale": 1.95,
+            "easing": "smooth"
+          },
+          {
+            "time": 0.35,
+            "position": {
+              "x": -1.6,
+              "y": 2.0,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 730
+            },
+            "scale": 2.2,
+            "easing": "smooth"
+          },
+          {
+            "time": 0.75,
+            "position": {
+              "x": -1.3,
+              "y": 2.65,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 755
+            },
+            "scale": 4.1,
+            "easing": "smooth"
+          },
+          {
+            "time": 1.2,
+            "position": {
+              "x": 0,
+              "y": 3,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 780
+            },
+            "scale": 12.5,
+            "easing": "smooth"
+          },
+          {
+            "time": 1.5,
+            "position": {
+              "x": 0,
+              "y": 3,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 780
+            },
+            "scale": 24,
+            "easing": "smooth"
+          },
+          {
+            "time": 1.6666666666666667,
+            "position": {
+              "x": 0,
+              "y": 3,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 780
+            },
+            "scale": 24,
+            "easing": "smooth"
+          }
+        ],
+        "mediaProjection": "screen",
+        "mediaPlayback": {
+          "start": 1.2,
+          "speed": 0.6,
+          "loop": true
+        }
+      }
+    ],
+    "effects": []
+  }
+}

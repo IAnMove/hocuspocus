@@ -1,0 +1,726 @@
+{
+  "renderer": "HocusPocus World3D native export",
+  "workspace": "default",
+  "clips": [
+    {
+      "id": "creative-amber-ice",
+      "sha256": "781090ecb34e9a03a6c0022aa1d4aa4c66714d888b182370df5ffd53393c5039",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 1,
+        "title": "La estación del deshielo",
+        "saved": {
+          "name": "2026-09-15-09h41m25s_world3d-creative-amber-ice_637081.mp4",
+          "url": "/api/v1/file/2026-09-15-09h41m25s_world3d-creative-amber-ice_637081.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1168845,
+        "elapsedSeconds": 27.19,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-01-La-estaci-n-del-deshielo-bd20719ed33f4070a08b2ca2fc64ae47.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-01-La-estaci-n-del-deshielo-bd20719ed33f4070a08b2ca2fc64ae47.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-01-La-estaci-n-del-deshielo-bd20719ed33f4070a08b2ca2fc64ae47.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-scarlet-tide",
+      "sha256": "c9e3cef923635931ba4a26c7408d499207d4277a58fa91361165f7b4b8aaf499",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 2,
+        "title": "La marea roja",
+        "saved": {
+          "name": "2026-09-15-09h41m51s_world3d-creative-scarlet-tide_d6e9c5.mp4",
+          "url": "/api/v1/file/2026-09-15-09h41m51s_world3d-creative-scarlet-tide_d6e9c5.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1577857,
+        "elapsedSeconds": 27.18,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-02-La-marea-roja-c5525ed17ffa4615b4235717a8b6998c.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-02-La-marea-roja-c5525ed17ffa4615b4235717a8b6998c.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-02-La-marea-roja-c5525ed17ffa4615b4235717a8b6998c.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-pearl-spores",
+      "sha256": "69026a902882a0e38655125f77ce3c2eb31f1eeb3495584bf08b45062b707d08",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 3,
+        "title": "El vivero de perlas",
+        "saved": {
+          "name": "2026-09-15-09h42m12s_world3d-creative-pearl-spores_4febf2.mp4",
+          "url": "/api/v1/file/2026-09-15-09h42m12s_world3d-creative-pearl-spores_4febf2.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1283207,
+        "elapsedSeconds": 21.17,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-03-El-vivero-de-perlas-bb28dac43d3647e0995b1ccd2d55effa.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-03-El-vivero-de-perlas-bb28dac43d3647e0995b1ccd2d55effa.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-03-El-vivero-de-perlas-bb28dac43d3647e0995b1ccd2d55effa.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-ultramarine-forge",
+      "sha256": "d9b902474a2aa39f7238804c16d5694289e05bf63eaeec52ee0f6611bfc0a134",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 4,
+        "title": "La fundición azul",
+        "saved": {
+          "name": "2026-09-15-09h42m38s_world3d-creative-ultramarine-forge_1c23ab.mp4",
+          "url": "/api/v1/file/2026-09-15-09h42m38s_world3d-creative-ultramarine-forge_1c23ab.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1700541,
+        "elapsedSeconds": 24.17,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-04-La-fundici-n-azul-94085ba1e3d74a91ba51b311b1ddcb4d.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-04-La-fundici-n-azul-94085ba1e3d74a91ba51b311b1ddcb4d.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-04-La-fundici-n-azul-94085ba1e3d74a91ba51b311b1ddcb4d.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-rose-orbit",
+      "sha256": "d311d7e070bdf10b8208e35647a05fa0513e9f5ea92250d3e20aa7db6d33ea0c",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 5,
+        "title": "Capilla en órbita",
+        "saved": {
+          "name": "2026-09-15-09h43m03s_world3d-creative-rose-orbit_8b43e9.mp4",
+          "url": "/api/v1/file/2026-09-15-09h43m03s_world3d-creative-rose-orbit_8b43e9.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1335395,
+        "elapsedSeconds": 27.22,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-05-Capilla-en-rbita-dc9b4a16857b4d5385b00cbaf619ed6d.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-05-Capilla-en-rbita-dc9b4a16857b4d5385b00cbaf619ed6d.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-05-Capilla-en-rbita-dc9b4a16857b4d5385b00cbaf619ed6d.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-brass-mirage",
+      "sha256": "8926a4d5419f77d07f4cfc774c788dd821049b2805962d962a051abf4eea010c",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 6,
+        "title": "El espejismo de latón",
+        "saved": {
+          "name": "2026-09-15-09h43m30s_world3d-creative-brass-mirage_5bd3d3.mp4",
+          "url": "/api/v1/file/2026-09-15-09h43m30s_world3d-creative-brass-mirage_5bd3d3.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1159114,
+        "elapsedSeconds": 27.18,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-06-El-espejismo-de-lat-n-641807010cab4dc284ac3e3eec7ec698.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-06-El-espejismo-de-lat-n-641807010cab4dc284ac3e3eec7ec698.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-06-El-espejismo-de-lat-n-641807010cab4dc284ac3e3eec7ec698.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-jade-cinema",
+      "sha256": "8678983197fb94fd6665ef69f8369f7033dc977c0b4c3f7e291fb8a92d224839",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 7,
+        "title": "La última sesión verde",
+        "saved": {
+          "name": "2026-09-15-09h51m36s_world3d-creative-jade-cinema_d8d163.mp4",
+          "url": "/api/v1/file/2026-09-15-09h51m36s_world3d-creative-jade-cinema_d8d163.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1451660,
+        "elapsedSeconds": 319.54,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-07-La-ltima-sesi-n-verde-27ac53db7d8941509980e688b9560390.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-07-La-ltima-sesi-n-verde-27ac53db7d8941509980e688b9560390.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-07-La-ltima-sesi-n-verde-27ac53db7d8941509980e688b9560390.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-apricot-cable",
+      "sha256": "cc97a14b602e07b6934c712cbdeec1cab56c4c869e5ab70dd4ea474e98e10188",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 8,
+        "title": "Último funicular",
+        "saved": {
+          "name": "2026-09-15-09h51m57s_world3d-creative-apricot-cable_e9e9c4.mp4",
+          "url": "/api/v1/file/2026-09-15-09h51m57s_world3d-creative-apricot-cable_e9e9c4.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1618255,
+        "elapsedSeconds": 21.17,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-08-ltimo-funicular-b1869abdfa1b4a0086fd191b44b07272.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-08-ltimo-funicular-b1869abdfa1b4a0086fd191b44b07272.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-08-ltimo-funicular-b1869abdfa1b4a0086fd191b44b07272.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-violet-baths",
+      "sha256": "c7876b272df4e9abeed6ede5cc56004408ad49b841c33751f31c888b908a5f08",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 9,
+        "title": "Baños ultravioleta",
+        "saved": {
+          "name": "2026-09-15-09h52m23s_world3d-creative-violet-baths_7a1020.mp4",
+          "url": "/api/v1/file/2026-09-15-09h52m23s_world3d-creative-violet-baths_7a1020.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1200667,
+        "elapsedSeconds": 24.18,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-09-Ba-os-ultravioleta-720bb4c0fb0c4238948648b4a22893a0.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-09-Ba-os-ultravioleta-720bb4c0fb0c4238948648b4a22893a0.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-09-Ba-os-ultravioleta-720bb4c0fb0c4238948648b4a22893a0.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-clockwork-glass",
+      "sha256": "f544d20ffbae8c52373746aa93dec0e6e09093c498d3e4a6406b0d6a9f39bcfd",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 10,
+        "title": "El jardín mecánico",
+        "saved": {
+          "name": "2026-09-15-09h52m49s_world3d-creative-clockwork-glass_0058ff.mp4",
+          "url": "/api/v1/file/2026-09-15-09h52m49s_world3d-creative-clockwork-glass_0058ff.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2228528,
+        "elapsedSeconds": 27.18,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-10-El-jard-n-mec-nico-f33687e9f0d44e3396df041ee175b5fe.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-10-El-jard-n-mec-nico-f33687e9f0d44e3396df041ee175b5fe.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-10-El-jard-n-mec-nico-f33687e9f0d44e3396df041ee175b5fe.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-paper-monsoon",
+      "sha256": "ba9c7473cc59b27c88a9459eb516365a0fb229d2399389f9a4a0df3c772d070a",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 11,
+        "title": "Monzón de papel",
+        "saved": {
+          "name": "2026-09-15-09h53m15s_world3d-creative-paper-monsoon_473388.mp4",
+          "url": "/api/v1/file/2026-09-15-09h53m15s_world3d-creative-paper-monsoon_473388.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1814441,
+        "elapsedSeconds": 27.16,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-11-Monz-n-de-papel-97e2536acc71499fa561713620daa167.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-11-Monz-n-de-papel-97e2536acc71499fa561713620daa167.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-11-Monz-n-de-papel-97e2536acc71499fa561713620daa167.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-cobalt-crater",
+      "sha256": "02d8c01bfe68687bca47ffaf4c384ae173e36206ce44f1e57436befe82eea705",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 12,
+        "title": "El cráter de cobalto",
+        "saved": {
+          "name": "2026-09-15-09h53m42s_world3d-creative-cobalt-crater_c463b3.mp4",
+          "url": "/api/v1/file/2026-09-15-09h53m42s_world3d-creative-cobalt-crater_c463b3.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1691304,
+        "elapsedSeconds": 24.34,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-12-El-cr-ter-de-cobalto-949cee9489094cadafe72c87d1f78046.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-12-El-cr-ter-de-cobalto-949cee9489094cadafe72c87d1f78046.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-12-El-cr-ter-de-cobalto-949cee9489094cadafe72c87d1f78046.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-saffron-lens",
+      "sha256": "b3df88ba71699c31b877db805aca399bf116c74e9cbd4d1ab4bb856b77cd2f91",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 13,
+        "title": "El ojo del desierto",
+        "saved": {
+          "name": "2026-09-15-09h54m02s_world3d-creative-saffron-lens_a10eea.mp4",
+          "url": "/api/v1/file/2026-09-15-09h54m02s_world3d-creative-saffron-lens_a10eea.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1371035,
+        "elapsedSeconds": 21.17,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-13-El-ojo-del-desierto-1b571fa786eb42efba9196cbdf299738.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-13-El-ojo-del-desierto-1b571fa786eb42efba9196cbdf299738.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-13-El-ojo-del-desierto-1b571fa786eb42efba9196cbdf299738.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-glass-orchard",
+      "sha256": "4a17c6e5de00a6e9ca84b78f305d163c7f0684213abb9ca98f0c405f8b88c7ff",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 14,
+        "title": "La cosecha de cristal",
+        "saved": {
+          "name": "2026-09-15-09h54m28s_world3d-creative-glass-orchard_3971c7.mp4",
+          "url": "/api/v1/file/2026-09-15-09h54m28s_world3d-creative-glass-orchard_3971c7.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1133762,
+        "elapsedSeconds": 27.19,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-14-La-cosecha-de-cristal-ca6517e313cc46229951bb905d80e706.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-14-La-cosecha-de-cristal-ca6517e313cc46229951bb905d80e706.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-14-La-cosecha-de-cristal-ca6517e313cc46229951bb905d80e706.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-terracotta-radio",
+      "sha256": "2bd624c44ba73d2555d970bc9d59f155079fd9b9ef42a4d2565210bb87fc7f28",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 15,
+        "title": "La habitación que escucha",
+        "saved": {
+          "name": "2026-09-15-09h54m54s_world3d-creative-terracotta-radio_71b059.mp4",
+          "url": "/api/v1/file/2026-09-15-09h54m54s_world3d-creative-terracotta-radio_71b059.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1053616,
+        "elapsedSeconds": 24.17,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-15-La-habitaci-n-que-escucha-aa73f526beac49cbb8d9cbe917fa9857.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-15-La-habitaci-n-que-escucha-aa73f526beac49cbb8d9cbe917fa9857.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-15-La-habitaci-n-que-escucha-aa73f526beac49cbb8d9cbe917fa9857.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-chrome-bloom",
+      "sha256": "0a1c732751d9f236afe2d4fca7af039f22d2f58a27f86d1799e0f94f8d4ec33b",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 16,
+        "title": "Flores de cromo",
+        "saved": {
+          "name": "2026-09-15-09h55m20s_world3d-creative-chrome-bloom_5d1bff.mp4",
+          "url": "/api/v1/file/2026-09-15-09h55m20s_world3d-creative-chrome-bloom_5d1bff.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1855446,
+        "elapsedSeconds": 27.2,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-16-Flores-de-cromo-9cfaa6ab937348b79ae6942df4132f39.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-16-Flores-de-cromo-9cfaa6ab937348b79ae6942df4132f39.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-16-Flores-de-cromo-9cfaa6ab937348b79ae6942df4132f39.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-arctic-spin",
+      "sha256": "b442f3386c419e129aba3bdacbadd60a6484b2b8f30ee5cd8203e20624e99b46",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 17,
+        "title": "Centrifugado polar",
+        "saved": {
+          "name": "2026-09-15-09h55m40s_world3d-creative-arctic-spin_378083.mp4",
+          "url": "/api/v1/file/2026-09-15-09h55m40s_world3d-creative-arctic-spin_378083.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1052439,
+        "elapsedSeconds": 161.34,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-17-Centrifugado-polar-7a87e946b1964f148623e6ad634eec0e.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-17-Centrifugado-polar-7a87e946b1964f148623e6ad634eec0e.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-17-Centrifugado-polar-7a87e946b1964f148623e6ad634eec0e.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-domino-garden",
+      "sha256": "cf719b753c19d07fb1394618654df976a41438cce83d8bda59b644cb85232d26",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 18,
+        "title": "El jardín dominó",
+        "saved": {
+          "name": "2026-09-15-10h02m32s_world3d-creative-domino-garden_01c482.mp4",
+          "url": "/api/v1/file/2026-09-15-10h02m32s_world3d-creative-domino-garden_01c482.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1644967,
+        "elapsedSeconds": 222.44,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-18-El-jard-n-domin-a7874e7ada0640c98cf97c306cd1d9e0.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-18-El-jard-n-domin-a7874e7ada0640c98cf97c306cd1d9e0.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-18-El-jard-n-domin-a7874e7ada0640c98cf97c306cd1d9e0.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-midnight-bakery",
+      "sha256": "52f3ee11321211bba0dfe072ef5f8b3afd10292e10ae759d62281f0bb889bc43",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 19,
+        "title": "Pan de medianoche",
+        "saved": {
+          "name": "2026-09-15-10h03m20s_world3d-creative-midnight-bakery_83bb6e.mp4",
+          "url": "/api/v1/file/2026-09-15-10h03m20s_world3d-creative-midnight-bakery_83bb6e.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1335738,
+        "elapsedSeconds": 24.21,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-19-Pan-de-medianoche-253f3512fa7a4711b6b58597018901b4.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-19-Pan-de-medianoche-253f3512fa7a4711b6b58597018901b4.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-19-Pan-de-medianoche-253f3512fa7a4711b6b58597018901b4.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-coral-radio",
+      "sha256": "b4e574a0626667c2d7797f817ce0862acac98616395f52ae2c573b70eba14344",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "nativePublication": {
+        "clip": 20,
+        "title": "Radio arrecife",
+        "saved": {
+          "name": "2026-09-15-10h03m45s_world3d-creative-coral-radio_0b8805.mp4",
+          "url": "/api/v1/file/2026-09-15-10h03m45s_world3d-creative-coral-radio_0b8805.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1775116,
+        "elapsedSeconds": 24.19,
+        "scene": {
+          "name": "Perspectivas-20-nuevos-escenarios-20-Radio-arrecife-795dee0623604f509c79ef92d51d9c89.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-20-Radio-arrecife-795dee0623604f509c79ef92d51d9c89.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Perspectivas-20-nuevos-escenarios-20-Radio-arrecife-795dee0623604f509c79ef92d51d9c89.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    }
+  ]
+}

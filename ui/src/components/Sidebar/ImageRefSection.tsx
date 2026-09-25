@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
@@ -6,6 +6,8 @@ import type { ApiOutput } from '../../api/outputs'
 import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import { fileFromStudioOutput } from '../../lib/studioInputsPick.ts'
 import { useWorkspaceOutputs } from '../../lib/studioAssetPick.ts'
+import { LocalImagePreview } from '../common/ImagePreview'
+import { forgetLocalImage, localEditFile } from '../../lib/localEditImages'
 
 export function ImageRefSection() {
   const { t } = useUiTranslation('studio')
@@ -23,13 +25,18 @@ export function ImageRefSection() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const imageItems = useWorkspaceOutputs(activeWorkspace, 'image')
+  const mounted = useRef(true)
+  const [error, setError] = useState('')
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
 
   const config = modelOptions?.image_ref_choices
   const bgLabel = modelOptions?.background_removal_label
   // max_image_refs is the model's total conditioning-image budget. In Edit
   // mode the uploaded source already consumes one slot.
   const configuredMaxRefs = modelOptions?.max_image_refs ?? null
-  const maxRefs = configuredMaxRefs == null ? null : Math.max(0, configuredMaxRefs - (imageMode === 2 ? 1 : 0))
+  const imageGuide = useStore(s => s.params.image_guide)
+  const usesEditSource = Boolean(imageGuide) || imageMode === 2
+  const maxRefs = configuredMaxRefs == null ? null : Math.max(0, configuredMaxRefs - (usesEditSource ? 1 : 0))
   const canAddMore = maxRefs == null || imageRefs.length < maxRefs
 
   const addFiles = useCallback((files: File[]) => {
@@ -61,8 +68,17 @@ export function ImageRefSection() {
   }, [addFiles])
 
   const chooseImage = useCallback((item: ApiOutput) => {
-    void fileFromStudioOutput(item).then(file => addFiles([file]))
-  }, [addFiles])
+    const before = useStore.getState()
+    const local = localEditFile(item.url)
+    setError('')
+    void (local ? Promise.resolve(local) : fileFromStudioOutput(item)).then(file => {
+      if (local) forgetLocalImage(item.url)
+      const state = useStore.getState()
+      if (!mounted.current || state.activeWorkspace !== before.activeWorkspace
+        || state.imageStudioIntent !== before.imageStudioIntent || state.generationMode !== before.generationMode) return
+      if (maxRefs == null || state.imageRefs.length < maxRefs) state.addImageRef(file)
+    }).catch(() => { if (mounted.current) setError(tCommon('picker.uploadFailed')) })
+  }, [maxRefs, tCommon])
 
   if (!config) return null
 
@@ -99,11 +115,7 @@ export function ImageRefSection() {
               dragOverIndex === i ? 'border-accent-blue border-2' : 'border-border'
             }`}
           >
-            <img
-              src={URL.createObjectURL(file)}
-              alt={t('inputs.refAlt', { n: i + 1 })}
-              className="w-full h-full object-cover pointer-events-none"
-            />
+            <LocalImagePreview file={file} label={t('inputs.refAlt', { n: i + 1 })} className="h-full w-full cursor-zoom-in" />
             {i === 0 && imageRefs.length > 1 && hasLandscapeMode && imageRefType === 'KI' && (
               <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white text-center py-0.5">
                 {t('imageRef.main')}
@@ -131,12 +143,15 @@ export function ImageRefSection() {
               items={imageItems}
               accept=".png,.jpg,.jpeg,.webp,.bmp,image/*"
               workspaceId={activeWorkspace}
+              keepLocal
               constraints={{ kinds: ['image'], maxCount: 1, optional: false }}
               onChoose={item => { if (item) chooseImage(item) }}
             />
           </div>
         )}
       </div>
+
+      {error && <p role="alert" className="text-[10px] text-red-300">{error}</p>}
 
       {maxRefs != null && (
         <p className="text-[9px] text-text-muted">

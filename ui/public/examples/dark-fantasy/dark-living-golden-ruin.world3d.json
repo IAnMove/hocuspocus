@@ -1,0 +1,347 @@
+{
+  "version": 1,
+  "units": "meters",
+  "up": "y",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "duration": 6,
+  "templateId": "dark-living-golden-ruin",
+  "light": {
+    "kind": "directional",
+    "direction": [
+      -0.5,
+      -0.6,
+      -0.8
+    ],
+    "intensity": 2,
+    "color": "#fff2e4"
+  },
+  "environment": {
+    "reflectiveFloor": false,
+    "platform": false,
+    "bloom": 0.07,
+    "floorStyle": "backdrop",
+    "floorColor": "#49402c",
+    "floorSourceHeight": 1
+  },
+  "slots": [
+    {
+      "id": "background",
+      "slot": "background",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/dark-living-golden-ruin-frame.jpg",
+      "position": [
+        0,
+        -7.1846875,
+        -11
+      ],
+      "scale": 12.3,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "windows": [
+          [
+            [
+              0.3958333333333333,
+              0.7046875
+            ],
+            [
+              0.5986111111111111,
+              0.7046875
+            ],
+            [
+              0.5958333333333333,
+              0.6875
+            ],
+            [
+              0.6777777777777778,
+              0.68671875
+            ],
+            [
+              0.6763888888888889,
+              0.6390625
+            ],
+            [
+              0.7319444444444444,
+              0.61875
+            ],
+            [
+              0.7791666666666667,
+              0.59296875
+            ],
+            [
+              0.8180555555555555,
+              0.5625
+            ],
+            [
+              0.8486111111111111,
+              0.528125
+            ],
+            [
+              0.8666666666666667,
+              0.490625
+            ],
+            [
+              0.8736111111111111,
+              0.45078125
+            ],
+            [
+              0.8680555555555556,
+              0.4109375
+            ],
+            [
+              0.8513888888888889,
+              0.3734375
+            ],
+            [
+              0.8222222222222222,
+              0.3390625
+            ],
+            [
+              0.7833333333333333,
+              0.3078125
+            ],
+            [
+              0.7361111111111112,
+              0.28203125
+            ],
+            [
+              0.6805555555555556,
+              0.2609375
+            ],
+            [
+              0.6208333333333333,
+              0.24453125
+            ],
+            [
+              0.5569444444444445,
+              0.2359375
+            ],
+            [
+              0.49166666666666664,
+              0.23359375
+            ],
+            [
+              0.425,
+              0.23828125
+            ],
+            [
+              0.3611111111111111,
+              0.25
+            ],
+            [
+              0.3013888888888889,
+              0.2671875
+            ],
+            [
+              0.24861111111111112,
+              0.290625
+            ],
+            [
+              0.20416666666666666,
+              0.31875
+            ],
+            [
+              0.16805555555555557,
+              0.35078125
+            ],
+            [
+              0.14166666666666666,
+              0.38671875
+            ],
+            [
+              0.12222222222222222,
+              0.425
+            ],
+            [
+              0.11527777777777778,
+              0.4625
+            ],
+            [
+              0.12361111111111112,
+              0.5015625
+            ],
+            [
+              0.14583333333333334,
+              0.5390625
+            ],
+            [
+              0.17777777777777778,
+              0.571875
+            ],
+            [
+              0.22083333333333333,
+              0.6015625
+            ],
+            [
+              0.26944444444444443,
+              0.6265625
+            ],
+            [
+              0.3138888888888889,
+              0.64140625
+            ],
+            [
+              0.3125,
+              0.68515625
+            ],
+            [
+              0.3972222222222222,
+              0.6859375
+            ]
+          ]
+        ],
+        "unlit": true
+      }
+    },
+    {
+      "id": "hero",
+      "slot": "subject_1",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+      "position": [
+        -0.55,
+        0,
+        -0.1
+      ],
+      "scale": 1.25,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.88,
+        "tint": "#c9cbd0",
+        "psx": 0.16
+      }
+    },
+    {
+      "id": "near-prop",
+      "slot": "prop",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+      "position": [
+        2.6,
+        0,
+        3
+      ],
+      "scale": 2.8,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.8,
+        "tint": "#68717e"
+      }
+    },
+    {
+      "id": "exterior-video",
+      "slot": "prop",
+      "media": "screen",
+      "sourceUrl": "",
+      "clip": null,
+      "position": [
+        -0.07687499999999974,
+        -0.8471124999999988,
+        -12.5
+      ],
+      "rotationY": 0,
+      "scale": 1,
+      "screen": {
+        "sourceUrl": "/examples/dark-fantasy/dark-living-golden-ruin-exterior.mp4",
+        "media": "video",
+        "mode": "mesh",
+        "targetMesh": "SCREEN_CONTENT",
+        "anchor": "",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "pitch": 0,
+        "yaw": 0,
+        "roll": 0,
+        "width": 12.1723875,
+        "height": 13.44313125,
+        "style": "frameless",
+        "fit": "cover",
+        "start": 0,
+        "speed": 1,
+        "loop": true,
+        "flipY": false
+      }
+    }
+  ],
+  "camera": {
+    "family": "establishment",
+    "frameFormat": "portrait",
+    "eye": [
+      0.18,
+      3.75,
+      10.6
+    ],
+    "look": [
+      0,
+      3.75,
+      -0.5
+    ],
+    "fov": 49,
+    "framing": {
+      "targetSlot": "hero",
+      "anchor": "feet",
+      "from": [
+        0.584,
+        3.0,
+        8.48
+      ],
+      "to": [
+        0.40800000000000003,
+        3.0,
+        8.264
+      ],
+      "lookFrom": [
+        0.44000000000000006,
+        3.0,
+        -0.4
+      ],
+      "lookTo": [
+        0.44000000000000006,
+        3.0,
+        -0.4
+      ],
+      "rollFrom": 0,
+      "rollTo": 0,
+      "relativeToFacing": false,
+      "orbitTurns": 0
+    }
+  },
+  "worldSfx": [
+    {
+      "id": "atmosphere",
+      "kind": "dust",
+      "position": {
+        "x": 0,
+        "y": 1.5,
+        "z": -1.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#ffdc70",
+      "scale": 2,
+      "intensity": 0.1,
+      "seed": 927,
+      "start": 0,
+      "end": 6,
+      "sound": false,
+      "volume": 0
+    }
+  ]
+}

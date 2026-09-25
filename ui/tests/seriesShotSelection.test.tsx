@@ -45,10 +45,12 @@ test('approving a selected Series shot removes it from selection and bulk count'
   const { SeriesShotsPanel } = await import('../src/features/series/SeriesShotsPanel.tsx')
   const t = ensureUiI18n().getFixedT('en', 'seriesLab')
   const series = {
+    canon: { approval: 'approved', revision: 1 },
     id: 'series-1', characters: [], locations: [], assets: {}, bestEffortLipSyncAcknowledged: false,
   }
   const props = {
     workspace: 'default', series: series as never,
+    updateSeries: () => undefined,
     updateEpisode: () => undefined, replaceSeries: () => undefined,
     saveNow: async () => undefined, onAcknowledgeLipSync: async () => undefined,
     onRender: () => undefined,

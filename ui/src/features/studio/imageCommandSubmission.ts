@@ -27,6 +27,15 @@ function assertSameForm(before: StudioState, current: StudioState): void {
 }
 
 async function canonicalReferences(params: Record<string, unknown>): Promise<void> {
+  const { materializeLocalEditFields } = await import('../../lib/localEditImages')
+  await materializeLocalEditFields(params, MEDIA_FIELDS)
+  for (const field of MEDIA_FIELDS) {
+    const value = params[field]
+    const values = Array.isArray(value) ? value : value ? [value] : []
+    if (values.some(item => typeof item === 'string' && item && !item.startsWith('/api/v1/') && !item.startsWith('asset'))) {
+      throw new Error(i18n.t('studio:commands.referenceFailed'))
+    }
+  }
   const fields = MEDIA_FIELDS.filter(field => params[field])
   const references = fields.flatMap(field => Array.isArray(params[field]) ? params[field] as unknown[] : [params[field]])
     .filter(value => value !== '')

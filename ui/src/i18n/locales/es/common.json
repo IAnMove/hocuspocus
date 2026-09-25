@@ -49,6 +49,8 @@
     "named": "{{name}}"
   },
   "explorer": {
+    "selectItem": "Seleccionar",
+    "selectedCount": "Seleccionadas: {{count}}",
     "choose": "Elegir",
     "subtitle": "Vista previa, nombre y fecha de creación — los nombres solos se confunden.",
     "search": "Buscar por nombre",
@@ -94,7 +96,7 @@
     "fromDevice": "Desde mi equipo",
     "fromLibrary": "Desde HocusPocus",
     "remove": "Quitar",
-    "uploading": "Subiendo…",
+    "uploading": "Añadiendo…",
     "uploadFailed": "No se pudo subir el archivo."
   },
   "welcome": {
@@ -104,7 +106,65 @@
     "modelsBody": "La instalación preparó la app, no los pesos del modelo. La primera vez que usas un modelo, sus archivos se descargan una vez — a menudo decenas de GB para un modelo de vídeo — antes de que aparezca nada. Las siguientes veces son rápidas. Mira el progreso abajo a la derecha; el primer vídeo puede tardar.",
     "directorTitle": "Director usa un LLM local",
     "directorBody": "El modo Director planifica el vídeo con un modelo de lenguaje local (Gemma 4, ~5 GB, se descarga en el primer uso de Director): no se envía nada a la nube. Puedes cambiar de modelo, o conectar una API externa, en Ajustes → Servicios.",
+    "recentTitle": "Últimos cambios",
+    "recentHint": "Una frase por PR, lo más reciente arriba. Desplaza la lista para verlos todos.",
     "enter": "Entrar al estudio",
     "closeAria": "Cerrar"
+  },
+  "imagePreview": {
+    "open": "Ampliar {{name}}",
+    "title": "Información de la imagen",
+    "download": "Descargar imagen",
+    "loading": "Cargando información del archivo…",
+    "failed": "No se ha podido cargar la imagen.",
+    "infoFailed": "No se ha podido cargar la información del archivo.",
+    "noInfo": "Este archivo no tiene metadatos de generación disponibles.",
+    "allInfo": "Toda la información guardada",
+    "fields": {
+      "model_type": "Modelo",
+      "resolution": "Resolución",
+      "seed": "Semilla",
+      "num_inference_steps": "Pasos",
+      "guidance_scale": "Guía",
+      "prompt": "Prompt",
+      "negative_prompt": "Prompt negativo",
+      "dimensions": "Dimensiones",
+      "duration": "Duración",
+      "size": "Tamaño del archivo",
+      "created_at": "Creación",
+      "generation_time": "Tiempo de generación",
+      "source": "Origen de los metadatos",
+      "job_id": "ID del trabajo",
+      "task_id": "ID de la tarea",
+      "root_task_id": "ID de la tarea raíz",
+      "director_pipeline_id": "ID del flujo de Director"
+    },
+    "openVideo": "Abrir vídeo {{name}}",
+    "videoTitle": "Información del vídeo",
+    "downloadVideo": "Descargar vídeo",
+    "videoFailed": "No se ha podido cargar el vídeo.",
+    "retryInfo": "Reintentar información",
+    "information": "Información del archivo",
+    "sources": {
+      "sidecar": "Metadatos guardados",
+      "embedded": "Metadatos incrustados"
+    },
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "position": "{{current}} de {{total}}",
+    "zoomHint": "Doble toque o pellizca para ampliar",
+    "resetZoom": "Restablecer zoom",
+    "outputTitle": "Detalles del elemento",
+    "openInEditor": "Abrir en su editor",
+    "noPreview": "Este elemento no tiene vista previa",
+    "compare": "Comparar",
+    "stopCompare": "Dejar de comparar",
+    "swap": "Intercambiar A y B",
+    "compareHint": "Las flechas y el deslizamiento cambian B"
+  },
+  "runtimeUpdate": {
+    "message": "Se ha detectado una actualización o un reinicio del servidor. Conservamos tu formulario. Recarga cuando termines; se borrarán los cambios sin enviar.",
+    "reload": "Recargar ahora",
+    "later": "Más tarde"
   }
 }

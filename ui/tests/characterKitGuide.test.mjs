@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { CHARACTER_MOUTH_STATES } from '../src/lib/characterMouthStates.ts'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
 import { lockFaceRigMouthPlacement } from '../src/lib/characterKitFaceRig.ts'
 import { registerWipedKitPose } from '../src/lib/characterKit.ts'
@@ -52,6 +53,8 @@ test('after wipe and lock the changed pose must be reviewed before putting it on
   assert.equal(kit.base.reviewState, 'pending')
   assert.equal(characterKitNextStep(kit, 'base').id, 'add-body')
   kit = { ...kit, base: { ...kit.base, reviewState: 'approved' } }
+  assert.equal(characterKitNextStep(kit, 'base').id, 'make-mouths')
+  kit.mouth = Object.fromEntries(CHARACTER_MOUTH_STATES.map(state => [state, { ...approved(state, `/${state}.png`), kind: 'overlay' }]))
   const next = characterKitNextStep(kit, 'base')
   assert.equal(next.id, 'put-on-scene')
   assert.match(next.title, /scene/i)

@@ -699,15 +699,19 @@ status = requests.get(f"{base}/api/v1/video-editor/export/{job['job_id']}").json
 
 ## Image background removal
 
+Operator workflow: [`docs/tools/HOWUSEIT.md`](../../docs/tools/HOWUSEIT.md).
+
 `POST /api/v1/tools/remove-background` queues a standalone image tool job. It
 uses the shared rembg U2Net adapter, never overwrites the source, and publishes
 the transparent PNG plus a canonical `.meta.json` asset manifest in the
-destination workspace. Use an exact `asset_id` from `GET /api/v1/assets?kind=image`
-whenever possible; `source` may be the exact filename, an `/api/v1/file/...`
-URL, or an absolute path already inside the selected uploads/workspace root.
-`source_workspace` is required when the source belongs to another output
-folder. Poll `GET /api/v1/status/{job_id}` and cancel with
-`POST /api/v1/cancel/{job_id}`.
+destination workspace. Accepted image extensions are `.png`, `.jpg`, `.jpeg`,
+and `.webp` (narrower than Tools upscale). Use an exact `asset_id` from
+`GET /api/v1/assets?kind=image` whenever possible; `source` may be the exact
+filename, an `/api/v1/file/...` URL, or an absolute path already inside the
+selected uploads/workspace root. For a source in another output folder,
+preserve its file-URL `?workspace=` or provide `source_workspace`; an explicit
+scope must agree with the URL. Optional `instruction` (max 2 000 chars) is stored on the job and sidecar; U2Net does not consume it. Poll
+`GET /api/v1/status/{job_id}` and cancel with `POST /api/v1/cancel/{job_id}`.
 
 ```bash
 curl -X POST "$HOCUSPOCUS_URL/api/v1/tools/remove-background" \
@@ -715,7 +719,6 @@ curl -X POST "$HOCUSPOCUS_URL/api/v1/tools/remove-background" \
   -d '{
     "asset_id": "asset_image_123",
     "workspace": "default",
-    "instruction": "preserve the hair edges",
     "provenance": {"actor": "user"}
   }'
 ```
@@ -728,21 +731,50 @@ transparent-PNG technical metadata.
 
 ## Tools upscale
 
-`POST /api/v1/tools/upscale` is one shared post-processing action for either a
-still image or a video. Send `{ "source": "image.png", "source_kind":
+Studio and Wizard upscale now submit version 2 `tools.upscale` through
+`POST /api/v1/generation/commands`; MCP exposes the same operation by name.
+The shared contract requires an explicit method, source kind, output workspace,
+and an asset ID or canonical local media URL as `input.params.source`.
+It rejects host paths and bare filenames. See the
+[shared command guide](../../docs/development/SHARED_NATIVE_COMMANDS.md) for
+the envelope, receipts and replay, and
+[Tools commands](../../docs/development/TOOLS_COMMANDS.md) for source identity.
+
+The native legacy `POST /api/v1/tools/upscale` handles either a still image
+or a video. Send `{ "source": "image.png", "source_kind":
 "image", "asset_id": "...", "source_workspace": "...", "method":
 "flashvsr2", "workspace": "default" }` for an image, or keep the legacy
-`video_path` field with `source_kind: "video"` for a clip. Supported image
+`video_path` field with `source_kind: "video"` for a clip. Built-in spatial
+methods include `flashvsr2` (native default), `flashvsr3`, `flashvsr4`,
+`flashvsr2pass2`, `flashvsr2pass4`, `lanczos1.5`, and `lanczos2`. Additional
+native processors have media/platform constraints; discover the current schema
+through `GET /api/v1/generation/commands` and processor availability in the
+Tools panel. Conflicting `source` / `source_path` / `video_path` values return
+`409`. Supported image
 formats are `.bmp`, `.gif`, `.jpeg`, `.jpg`, `.png`, `.tif`, `.tiff`, and
 `.webp`; supported video formats are `.avi`, `.m4v`, `.mkv`, `.mov`, `.mp4`,
 `.mpeg`, `.mpg`, `.webm`, and `.wmv`. The source must be an exact asset, upload, or
 file inside the selected workspace roots; path traversal and mismatched asset
 IDs/kinds are rejected. Images use the existing spatial upsampler in still
-mode and produce a new PNG beside the source. Videos retain the existing
+mode and produce a new PNG in the destination workspace. Videos retain the existing
 audio-preserving pipeline and produce a new video. Neither path overwrites its
 source. Poll the returned job with `GET /api/v1/status/{job_id}` and cancel it
 with `POST /api/v1/cancel/{job_id}`. Activity and the canonical asset manifest
 retain the source lineage, method, workspace, provenance, and execution mode.
+
+## Tools revoice
+
+`POST /api/v1/tools/revoice` replaces voices on an existing **video** with
+SeedVC. Body: `{ "video_path": "take.mp4", "voice_ref_paths": ["ref.wav"],
+"mode": "single"|"two", "diffusion_steps": 25, "cfg_rate": 0.5,
+"workspace": "default" }`. At least one and at most two reference paths are
+required (audio or video). Supply two references for `mode: "two"`; with one,
+the worker falls back to single-voice conversion. `mode` defaults to `single`
+and any other string is coerced to `single`. The worker copies the source to a new `_revoiced`
+file, then converts the copy; the original clip is never mutated. Failure
+when the clip has no audio or SeedVC is unavailable. Same poll/cancel
+endpoints as the other Tools jobs. See
+[`docs/tools/HOWUSEIT.md`](../../docs/tools/HOWUSEIT.md).
 
 ## Gallery mix kinds
 
@@ -801,9 +833,9 @@ export HOCUSPOCUS_URL=http://127.0.0.1:7860
   folder; disallowed/missing images return `400`/`404`.
 
 The output-folder token is `default` or `[A-Za-z0-9][A-Za-z0-9_-]*`. Kit mouth
-keys are `closed`, `small`, `wide`, and `round`; eye keys are `open` and
-`blink`. `blob:` sources are rejected, and the UI-only `lookNotes` field is
-stripped when the kit is normalized for persistence.
+keys are `closed`, `small`, `wide`, `round`, `pressed`, `medium`, `pucker`, `bite`, and `tongue`; eye keys are `open` and
+`blink`. `blob:` sources are rejected. Optional `lookNotes` (max 4000
+characters) and `voice` (local Qwen3 CustomVoice) persist on the kit.
 
 ```bash
 curl "$HOCUSPOCUS_URL/api/v1/character-kits/library?workspace=default"
@@ -835,4 +867,41 @@ These routes always use the server active output folder. They do not accept `?wo
 - `POST /api/v1/director/pipeline/{pid}/resume` and `POST /api/v1/director/pipeline/{pid}/continue` use the singular `pipeline` path.
 - Batch prompt rewrite is UI-only: loop `POST /api/v1/llm/generate` (local LLM) then PUT the chosen prompts.
 
-Operator notes: `docs/video-editor/HOWUSEIT.md`, `docs/workspaces/HOWUSEIT.md`, and `docs/character-kits/HOWUSEIT.md`.
+Operator notes: `docs/tools/HOWUSEIT.md`, `docs/video-editor/HOWUSEIT.md`, `docs/workspaces/HOWUSEIT.md`, and `docs/character-kits/HOWUSEIT.md`.
+
+Character Kit `restPose` optionally contains `{asset, fingerprint}`: a derived resting still for reference consumers. The original `base` remains the animation rig source. Speech analysis accepts both PCM WAV bytes and a bounded JSON envelope with `wavBase64`, `dialogue`, and `language`; see [2D speech quality](../../docs/character-kits/SPEECH_QUALITY.md).
+
+## Video background removal
+
+The existing `POST /api/v1/tools/remove-background` also accepts a video asset
+ID or canonical file/upload source. Source kind is resolved from the exact asset
+and its location. It retains the original, processes every frame through the
+shared U2Net session, and publishes a VP9 WebM with alpha and its original audio
+(re-encoded to Opus). Image inputs continue to produce PNGs.
+
+```json
+{
+  "source": "/api/v1/file/walking-knight.mp4",
+  "source_workspace": "default",
+  "workspace": "default",
+  "temporal_smoothing": true
+}
+```
+
+The response identifies a normal queued Tools job; poll `/api/v1/status/{job_id}`
+and cancel through `/api/v1/cancel/{job_id}`. Progress counts processed frames.
+A failed or cancelled operation removes temporary output. Memory holds the current
+and previous frame; it does not write an image sequence to disk. Output lineage
+records the source, dimensions, frame rate, frame count, duration, alpha and audio.
+
+Limits: 60 seconds, 1800 frames, up to 60 fps, output long edge at most 1920 px.
+The source display orientation is respected; variable frame rates are normalized
+to the reported average. `temporal_smoothing` defaults to true and damps small
+matte changes where adjacent source pixels agree; it does not track objects or
+preserve an occluded subject. Review fine details and fast motion after removal.
+`instruction` records a note; it does not steer U2Net.
+
+In the UI use **Studio → Tools → Remove background**, select/upload a video and
+run. For a separate actor in Video 3D, assign the result under **Animate this layer**
+and enable **Preserve transparency**. Background video has its own clock and depth.
+Exported MP4 compositions are opaque; the source WebM remains reusable with alpha.

@@ -1,0 +1,184 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "creative-coral-caravan",
+  "title": "Caravana de papel",
+  "description": "Composición vertical con apoyo, cámara suave y PSX selectivo en props.",
+  "includeAssets": true,
+  "createdAt": "2026-09-14T19:00:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-coral-caravan",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#b67755",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/coral-caravan.jpg",
+        "position": [
+          0,
+          -9.851791164018195,
+          -11
+        ],
+        "scale": 13.951791164018195,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          -0.2,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.35,
+          0,
+          -1.6
+        ],
+        "scale": 0.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.42000000000000004,
+        3.6,
+        9.8
+      ],
+      "look": [
+        -0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333336,
+          1.1818181818181819,
+          5.93939393939394
+        ],
+        "to": [
+          0.1090909090909091,
+          1.1818181818181819,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffa86c",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 35,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

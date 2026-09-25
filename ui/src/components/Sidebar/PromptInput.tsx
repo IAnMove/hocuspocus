@@ -201,16 +201,18 @@ export function PromptInput() {
   )
   const activeWindowMatch = matchingActiveH3Phase.match(/Sliding Window\s+(\d+)\/(\d+)/i)
   const activeH3Window = activeWindowMatch ? Number(activeWindowMatch[1]) : null
+  const imageStudioIntent = useStore(s => s.imageStudioIntent)
   const modePlaceholder = generationMode === 'avatar' && editSubMode === 'recast'
     ? t('prompt.placeholderRecast')
     : generationMode === 'avatar' && editSubMode === 'restyle'
       ? t('prompt.placeholderRestyle')
       : t(
-        generationMode === 'image' ? 'prompt.placeholderImage'
-          : generationMode === 'video' ? 'prompt.placeholderVideo'
-            : generationMode === 'audio' ? 'prompt.placeholderAudio'
-              : generationMode === 'avatar' ? 'prompt.placeholderAvatar'
-                : 'prompt.placeholderContent',
+        generationMode === 'image' && imageStudioIntent === 'edit' ? 'prompt.placeholderImageEdit'
+          : generationMode === 'image' ? 'prompt.placeholderImage'
+            : generationMode === 'video' ? 'prompt.placeholderVideo'
+              : generationMode === 'audio' ? 'prompt.placeholderAudio'
+                : generationMode === 'avatar' ? 'prompt.placeholderAvatar'
+                  : 'prompt.placeholderContent',
       )
 
   // Close TTS menu on outside click

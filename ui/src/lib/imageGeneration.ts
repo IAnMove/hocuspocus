@@ -198,7 +198,10 @@ async function prepareLocalImageReferences(
         ? 'KI'
         : currentType.includes('I') ? currentType : `${currentType}I`
       referenceParams.remove_background_images_ref = 0
-      if (options.referenceMode === 'edit' && selected.startsWith('qwen_image_edit')) {
+      if (
+        options.referenceMode === 'edit'
+        && (selected.startsWith('qwen_image_edit') || selected.startsWith('qwen_image_21'))
+      ) {
         // Do not inherit inpainting/denoise state from whatever image model
         // happened to be selected in Studio. This is a full-canvas Qwen edit.
         referenceParams.model_mode = 0
@@ -313,6 +316,30 @@ async function runLocalImage(
   }
 }
 
+/** MiniMax only accepts workspace files, uploads, data URLs or public http(s). Bundled /examples stills are uploaded first. */
+export async function persistMiniMaxSubjectReference(reference: string | undefined, workspace: string): Promise<string | undefined> {
+  if (!reference) return undefined
+  if (reference.startsWith('/api/v1/file/')) {
+    const url = new URL(reference, 'http://reference.invalid')
+    const entries = [...url.searchParams.entries()]
+    if (url.hash || entries.some(([key, value]) => key !== 'workspace' || value !== workspace) || entries.length > 1) {
+      throw new Error('MiniMax identity reference must belong to the requested workspace')
+    }
+    return url.pathname
+  }
+  if (reference.startsWith('/api/v1/uploads/') || reference.startsWith('data:image/') || /^https?:\/\//.test(reference)) {
+    return reference
+  }
+  const response = await fetch(reference)
+  if (!response.ok) throw new Error('The selected identity reference is no longer available')
+  const blob = await response.blob()
+  const uploaded = await api.uploadImage(new File(
+    [blob], fileName(decodeURIComponent(reference)) || 'identity.png',
+    { type: blob.type || 'image/png' },
+  ))
+  return uploaded.url || `/api/v1/uploads/${uploaded.filename}`
+}
+
 export async function generateImageAsset(
   provider: 'maestro' | 'minimax',
   prompt: string,
@@ -322,17 +349,8 @@ export async function generateImageAsset(
   options?: LocalImageOptions,
 ): Promise<ComicAsset> {
   if (provider === 'minimax') {
-    const requestedWorkspace = useStore.getState().activeWorkspace
-    let subjectReference = reference
-    if (reference?.startsWith('/api/v1/file/')) {
-      const url = new URL(reference, 'http://reference.invalid')
-      const entries = [...url.searchParams.entries()]
-      if (url.hash || entries.some(([key, value]) => key !== 'workspace' || value !== requestedWorkspace) || entries.length > 1) {
-        throw new Error('MiniMax identity reference must belong to the requested workspace')
-      }
-      // Legacy servers resolve the job workspace but do not parse file queries.
-      subjectReference = url.pathname
-    }
+    const requestedWorkspace = options?.workspace || useStore.getState().activeWorkspace
+    const subjectReference = await persistMiniMaxSubjectReference(reference, requestedWorkspace)
     const providerPrompt = compactProviderPrompt(prompt)
     let job: api.MiniMaxImageJob
     if (options?.existingJobId) {

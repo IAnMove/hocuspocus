@@ -15,6 +15,22 @@ export function restoreSemanticBridgeSettings(input: Partial<GenerateParams> | R
   }
 }
 
+/** Effective Studio→H3 request fields. Invalid enums fall back; Semantic Bridge stays off unless a supported model has alpha > 0. Does not rewrite spoken text. */
+export function projectStudioH3RequestParams(
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const modelType = String(params.model_type || '')
+  if (!modelType.startsWith('minimax_h3')) return params
+  params.minimax_h3_planning_style = params.minimax_h3_planning_style === 'creative'
+    ? 'creative'
+    : 'faithful'
+  params.minimax_h3_audio_policy = params.minimax_h3_audio_policy === 'legacy'
+    ? 'legacy'
+    : 'native'
+  Object.assign(params, restoreSemanticBridgeSettings(params, modelType))
+  return params
+}
+
 export function h3ModelSwitchSettings(params: GenerateParams, modelType: string): Partial<GenerateParams> {
   const nextH3 = modelType.startsWith('minimax_h3')
   if (!nextH3 && !params.model_type.startsWith('minimax_h3')) return {}

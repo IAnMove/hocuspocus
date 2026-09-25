@@ -10,6 +10,16 @@ import sys
 
 SUCCESS = "success"
 
+# Display names must match job ``name:`` strings in .github/workflows/ci.yml.
+REQUIRED_JOB_NAMES = (
+    "Clean-repo guard + Python checks",
+    "Python tests A",
+    "Python tests B",
+    "UI tests + lint + type-check + build",
+    "UI E2E boot (Chromium + simulated API)",
+    "Speech E2E Windows (real H.264 + AAC)",
+)
+
 
 def evaluate(results: dict[str, str]) -> tuple[bool, list[str]]:
     if not results:
@@ -20,6 +30,12 @@ def evaluate(results: dict[str, str]) -> tuple[bool, list[str]]:
         if value != SUCCESS
     ]
     return (not failed), failed
+
+
+def evaluate_required(results: dict[str, str]) -> tuple[bool, list[str]]:
+    """Fail closed if any required job is missing, skipped, cancelled or failed."""
+    combined = {name: results.get(name, "") for name in REQUIRED_JOB_NAMES}
+    return evaluate(combined)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"invalid result pair: {item}", file=sys.stderr)
             return 2
         results[name] = value.strip()
-    ok, failed = evaluate(results)
+    ok, failed = evaluate_required(results)
     for name, value in results.items():
         print(f"{name}: {value}")
     if not ok:

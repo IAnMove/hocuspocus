@@ -177,8 +177,8 @@ def test_http_and_mcp_share_effect_receipt_recovery_auth_and_revision_conflicts(
     assert first.status_code == 200
     discovered = client.post("/api/v1/wangp/mcp", headers={"Authorization": "Bearer test-token"},
                              json={"jsonrpc": "2.0", "id": 0, "method": "tools/list"}).json()["result"]["tools"]
-    assert set(OPERATIONS).issubset({tool["name"] for tool in discovered})
-    assert {tool["name"] for tool in discovered} >= {"generate", "organize", "upscale", "collections"}
+    assert {tool["name"] for tool in discovered} == set(OPERATIONS) | {"assets", "collections", "organize", "analyze"}
+    assert {tool["name"] for tool in discovered[:len(OPERATIONS)]} == set(OPERATIONS)
     assert mcp_call(client, command["operation"], arguments, authorized=False).status_code == 401
     replay = mcp_call(client, command["operation"], arguments).json()["result"]
     assert replay["isError"] is False

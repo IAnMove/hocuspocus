@@ -7,6 +7,7 @@ test('seeds #root before the index.html watchdog can replace the document', asyn
   await page.route('**/assets/*.js', route => route.abort())
   await page.addInitScript(() => {
     window.localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
+    window.localStorage.setItem('hocuspocus_welcome_seen_v2', '453')
   })
   await page.addInitScript({ path: bootWatchdogPlaceholderPath })
 

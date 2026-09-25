@@ -124,6 +124,37 @@ test('navigation destinations map to visible categories', async () => {
   assert.equal(categoryForNavigationDestination('images'), 'media')
   assert.equal(categoryForNavigationDestination('settings'), null)
   assert.equal(categoryForMediaFilter('character-replacement'), 'studios')
+  const { hidesDirectGenerationSidebar, revealDirectorWorkspace, visibleWorkspaceSurface } = await import('../src/lib/navigationCategories.ts')
+  assert.equal(hidesDirectGenerationSidebar('scene3d', 'studio'), true)
+  assert.equal(hidesDirectGenerationSidebar('stories', 'studio'), true)
+  assert.equal(hidesDirectGenerationSidebar('characters', 'studio'), true)
+  assert.equal(hidesDirectGenerationSidebar('videos', 'studio'), false)
+  assert.equal(hidesDirectGenerationSidebar('comics', 'director'), false)
+  assert.equal(hidesDirectGenerationSidebar('scene3d', 'director'), true)
+  const revealed = { mediaFilter: 'stories' as const, sidebarMode: 'studio' as const, sidebarOpen: false }
+  revealDirectorWorkspace({
+    mediaFilter: revealed.mediaFilter,
+    setSidebarMode: mode => { revealed.sidebarMode = mode },
+    setSidebarOpen: open => { revealed.sidebarOpen = open },
+    setMediaFilter: filter => { revealed.mediaFilter = filter },
+  })
+  assert.equal(revealed.sidebarMode, 'director')
+  assert.equal(revealed.sidebarOpen, true)
+  assert.equal(revealed.mediaFilter, 'all')
+  assert.equal(hidesDirectGenerationSidebar(revealed.mediaFilter, revealed.sidebarMode), false)
+  const comicDirector = { mediaFilter: 'comics' as const, sidebarMode: 'studio' as const, sidebarOpen: false }
+  revealDirectorWorkspace({
+    mediaFilter: comicDirector.mediaFilter,
+    setSidebarMode: mode => { comicDirector.sidebarMode = mode },
+    setSidebarOpen: open => { comicDirector.sidebarOpen = open },
+    setMediaFilter: filter => { comicDirector.mediaFilter = filter },
+  })
+  assert.equal(comicDirector.mediaFilter, 'comics')
+  assert.equal(visibleWorkspaceSurface({ mediaFilter: 'images', sidebarMode: 'studio', sidebarOpen: true }), 'generate')
+  assert.equal(visibleWorkspaceSurface({ mediaFilter: 'images', sidebarMode: 'studio', sidebarOpen: false }), 'section')
+  assert.equal(visibleWorkspaceSurface({ mediaFilter: 'stories', sidebarMode: 'studio', sidebarOpen: true }), 'section')
+  assert.equal(visibleWorkspaceSurface({ mediaFilter: 'all', sidebarMode: 'director', sidebarOpen: true }), 'director')
+  assert.equal(visibleWorkspaceSurface({ mediaFilter: 'videos', sidebarMode: 'studio', sidebarOpen: true, dashboardOpen: true }), 'section')
 })
 
 test('character replacement is a featured studio beside the video editors in both languages', { concurrency: false }, async () => {
@@ -146,6 +177,9 @@ test('character replacement is a featured studio beside the video editors in bot
       const replacement = screen.getByRole('tab', { name: language === 'en' ? 'Replace character' : 'Reemplazar personaje' })
       assert.equal(replacement.getAttribute('data-navigation-featured'), 'true')
       assert.equal(replacement.previousElementSibling?.textContent, language === 'en' ? 'Video 3D' : 'Vídeo 3D')
+      fireEvent.click(screen.getByRole('tab', { name: language === 'en' ? 'Video 2.5D' : 'Vídeo 2,5D' }))
+      assert.equal(useStore.getState().mediaFilter, 'scene3d')
+      assert.equal(useStore.getState().sidebarOpen, false)
       fireEvent.click(replacement)
       assert.equal(useStore.getState().mediaFilter, 'character-replacement')
       assert.equal(useStore.getState().sidebarOpen, false)
@@ -162,25 +196,102 @@ test('character replacement is a featured studio beside the video editors in bot
   await setUiLanguage('en')
 })
 
-test('character replacement releases the tools column and restores its previous collapsed state on exit', { concurrency: false }, async () => {
-  const { render, screen, cleanup, act } = await import('@testing-library/react')
+test('opening Director from a studio leaves the studio so the sidebar can mount', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
-  const { Sidebar } = await import('../src/components/Sidebar/Sidebar.tsx')
-  const previousMatchMedia = window.matchMedia
-  window.matchMedia = (() => ({ matches: false, addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-  window.localStorage.setItem('hocuspocus-tools-sidebar-collapsed', 'true')
-  useStore.setState({ mediaFilter: 'character-replacement', generationMode: 'image', sidebarMode: 'studio' })
+  const { hidesDirectGenerationSidebar } = await import('../src/lib/navigationCategories.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
+  useStore.setState({
+    mediaFilter: 'stories', outputSearchQuery: '', generationMode: 'video',
+    sidebarMode: 'studio', sidebarOpen: false, settingsOpen: false, dashboardOpen: false,
+    activeWorkspace: 'default', loadOutputs: async () => undefined,
+  })
   try {
-    const view = render(<Sidebar />)
-    assert.equal(view.container.querySelector('aside'), null)
-    await act(async () => { useStore.setState({ mediaFilter: 'videos' }) })
-    assert.ok(screen.getByRole('button', { name: 'Expand Studio tools' }))
-    assert.equal(window.localStorage.getItem('hocuspocus-tools-sidebar-collapsed'), 'true')
+    render(<TabFilter />)
+    fireEvent.click(screen.getByRole('button', { name: 'Production' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Director' }))
+    const state = useStore.getState()
+    assert.equal(state.sidebarMode, 'director')
+    assert.equal(state.sidebarOpen, true)
+    assert.equal(state.mediaFilter, 'all')
+    assert.equal(hidesDirectGenerationSidebar(state.mediaFilter, state.sidebarMode), false)
   } finally {
     cleanup()
-    window.localStorage.removeItem('hocuspocus-tools-sidebar-collapsed')
-    window.matchMedia = previousMatchMedia
   }
+})
+
+test('library filters leave Direct generation and Studios occupy the main workspace', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const { visibleWorkspaceSurface } = await import('../src/lib/navigationCategories.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
+  useStore.setState({
+    mediaFilter: 'all', outputSearchQuery: '', generationMode: 'image',
+    sidebarMode: 'studio', sidebarOpen: true, settingsOpen: false, dashboardOpen: false,
+    activeWorkspace: 'default', loadOutputs: async () => undefined,
+  })
+  try {
+    render(<TabFilter />)
+    fireEvent.click(screen.getByRole('button', { name: 'Media' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Images' }))
+    assert.equal(useStore.getState().mediaFilter, 'images')
+    assert.equal(useStore.getState().sidebarOpen, false)
+    assert.equal(visibleWorkspaceSurface(useStore.getState()), 'section')
+    fireEvent.click(screen.getByRole('button', { name: 'Direct generation' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }))
+    assert.equal(useStore.getState().generationMode, 'image')
+    assert.equal(useStore.getState().sidebarOpen, true)
+    assert.equal(visibleWorkspaceSurface(useStore.getState()), 'generate')
+    fireEvent.click(screen.getByRole('button', { name: 'Studios' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Story Lab' }))
+    assert.equal(useStore.getState().mediaFilter, 'stories')
+    assert.equal(visibleWorkspaceSurface(useStore.getState()), 'section')
+  } finally { cleanup() }
+})
+
+test('settings and Director events still work when Direct generation is unmounted', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { WorkspaceEventBridge } = await import('../src/components/Sidebar/WorkspaceEventBridge.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const { visibleWorkspaceSurface } = await import('../src/lib/navigationCategories.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
+  useStore.setState({
+    mediaFilter: 'stories', outputSearchQuery: '', generationMode: 'video',
+    sidebarMode: 'studio', sidebarOpen: false, settingsOpen: false, dashboardOpen: true,
+    activeWorkspace: 'default', loadOutputs: async () => undefined,
+  })
+  try {
+    render(<>
+      <WorkspaceEventBridge />
+      <TabFilter />
+    </>)
+    assert.equal(visibleWorkspaceSurface(useStore.getState()), 'section')
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    assert.equal(useStore.getState().settingsOpen, true)
+    assert.equal(useStore.getState().dashboardOpen, false)
+    useStore.setState({ settingsOpen: false, mediaFilter: 'stories', sidebarMode: 'studio', sidebarOpen: false })
+    window.dispatchEvent(new Event('maestro:director-open'))
+    const afterDirector = useStore.getState()
+    assert.equal(afterDirector.sidebarMode, 'director')
+    assert.equal(afterDirector.sidebarOpen, true)
+    assert.equal(afterDirector.mediaFilter, 'all')
+    assert.equal(visibleWorkspaceSurface(afterDirector), 'director')
+    useStore.setState({ sidebarMode: 'director', sidebarOpen: false, mediaFilter: 'all', settingsOpen: false })
+    window.dispatchEvent(new Event('hocuspocus:studio-open'))
+    const afterStudio = useStore.getState()
+    assert.equal(afterStudio.sidebarMode, 'studio')
+    assert.equal(afterStudio.sidebarOpen, true)
+    assert.equal(visibleWorkspaceSurface(afterStudio), 'generate')
+  } finally { cleanup() }
 })
 
 test('favorites compact label stays empty instead of leaking the catalog key', { concurrency: false }, async () => {

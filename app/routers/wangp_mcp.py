@@ -45,8 +45,11 @@ def _command_tool(operation):
     schema = operation['inputSchema']
     schema = {**schema, 'properties': {key: value for key, value in schema['properties'].items() if key != 'operation'},
               'required': [key for key in schema['required'] if key != 'operation']}
+    guidance = 'Versioned command. Follow inputSchema for workspace and exact resource IDs.'
+    if operation['mutation']:
+        guidance += ' Reuse intent_id on transport retries; inspect commands.receipt after an uncertain response.'
     return {
-        'name': operation['name'], 'description': operation['description'], 'inputSchema': schema,
+        'name': operation['name'], 'description': f"{operation['description']} {guidance}", 'inputSchema': schema,
         'annotations': {'readOnlyHint': not operation['mutation'], 'destructiveHint': False, 'idempotentHint': True},
     }
 
@@ -65,6 +68,8 @@ def tool_definitions(available=None, command_operations=None):
         ('recast', 'Submit Viggle character replacement: model_type=viggle_animate, video_path and ref_image_path (an edited frame of that video).'),
         ('upscale', 'Process an existing image/video using the shared Tools queue: face refinement, DLSS, RIFE or existing upscalers.'),
     ]:
+        if available is not None and name not in available:
+            continue
         properties, required = {}, []
         if name in REQUEST_TOOLS:
             params_schema = {
@@ -103,10 +108,22 @@ def tool_definitions(available=None, command_operations=None):
                       'inputSchema': {'type': 'object', 'properties': properties, 'required': required, 'additionalProperties': False},
                       'annotations': {'readOnlyHint': name not in MUTATIONS, 'destructiveHint': False, 'idempotentHint': True}})
     operations, _ = _selected_operations(command_operations)
+    command_tools = []
     for operation in operations:
         if available is not None and operation['name'] in available:
-            tools.append(_command_tool(operation))
-    return tools
+            command_tools.append(_command_tool(operation))
+    return command_tools + tools
+
+
+async def mcp_payload_response(payload, dispatch):
+    """Shared HTTP envelope; profiles supply only their tool dispatcher."""
+    messages = payload if isinstance(payload, list) else [payload]
+    if not 1 <= len(messages) <= 32:
+        raise HTTPException(400, 'Invalid batch size')
+    results = [result for message in messages if (result := await dispatch(message)) is not None]
+    if not results:
+        return Response(status_code=202)
+    return JSONResponse(results if isinstance(payload, list) else results[0])
 
 
 class UncertainRequest(ValueError):
@@ -281,7 +298,8 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
                 }}
             return {'jsonrpc': '2.0', 'id': request_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': str(detail)}]}}
 
-    @router.post('/api/v1/wangp/mcp')
+    @router.post('/api/v1/wangp/mcp', include_in_schema=False)
+    @router.post('/api/v1/mcp')
     async def mcp(request: Request):
         token = token_getter()
         if not token:
@@ -295,15 +313,10 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
             payload = await request.json()
         except ValueError:
             return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}, status_code=400)
-        messages = payload if isinstance(payload, list) else [payload]
-        if not 1 <= len(messages) <= 32:
-            raise HTTPException(400, 'Invalid batch size')
-        results = [result for message in messages if (result := await dispatch(message)) is not None]
-        if not results:
-            return Response(status_code=202)
-        return JSONResponse(results if isinstance(payload, list) else results[0])
+        return await mcp_payload_response(payload, dispatch)
 
-    @router.get('/api/v1/wangp/mcp')
+    @router.get('/api/v1/wangp/mcp', include_in_schema=False)
+    @router.get('/api/v1/mcp')
     async def no_stream():
         return Response(status_code=405, headers={'Allow': 'POST'})
 

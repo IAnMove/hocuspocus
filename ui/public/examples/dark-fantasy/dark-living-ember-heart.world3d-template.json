@@ -1,0 +1,228 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-living-ember-heart",
+  "title": "Corazón de brasa",
+  "description": "Un santuario negro protege el corazón vivo de una montaña.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T14:25:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-living-ember-heart",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#302425",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-ember-heart-frame.jpg",
+        "position": [
+          0,
+          -5.704843749999999,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.275,
+                0.76484375
+              ],
+              [
+                0.7263888888888889,
+                0.76484375
+              ],
+              [
+                0.7236111111111111,
+                0.35625
+              ],
+              [
+                0.5013888888888889,
+                0.25234375
+              ],
+              [
+                0.2777777777777778,
+                0.3546875
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.88,
+          "tint": "#c9cbd0"
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e",
+          "psx": 0.22
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.009609374999999967,
+          -0.9285999999999985,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-fantasy/dark-living-ember-heart-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 7.245468749999999,
+          "height": 14.6247,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.84,
+        10.959999999999999
+      ],
+      "look": [
+        0,
+        3.84,
+        -0.5
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "feet",
+        "from": [
+          -0.5615384615384615,
+          2.9538461538461536,
+          8.43076923076923
+        ],
+        "to": [
+          -0.3923076923076923,
+          2.9538461538461536,
+          8.223076923076922
+        ],
+        "lookFrom": [
+          -0.4230769230769231,
+          2.9538461538461536,
+          -0.3846153846153846
+        ],
+        "lookTo": [
+          -0.4230769230769231,
+          2.9538461538461536,
+          -0.3846153846153846
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff783b",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 922,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

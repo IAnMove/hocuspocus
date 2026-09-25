@@ -13,7 +13,9 @@ import {
   protectUserVerbatimSegments,
   type AgentActionResult,
 } from './agentActions'
-import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
+import { applyPollToCard, cardsFromResults, type WizardExecutionCard } from './executionCards'
+import { openAgentActivityDetails } from './agentUiBus'
+import { executeWizardCardControl, wizardCardControls, type WizardCardControl } from './wizardCardActions'
 import {
   applyRemoteWizardConversation,
   isWizardConversationWriteCurrent,
@@ -30,7 +32,7 @@ import i18n, { useUiTranslation } from '../../i18n'
 import { WizardVisualInput, type WizardVisualMedia } from './WizardVisualInput'
 import type { VisualEvidence } from './visualEvidence'
 import { WizardVisualEvidence } from './WizardVisualEvidence'
-import { reconcileWizardMediaTurn } from './wizardVisualPolicy'
+import { validateWizardPlan } from './wizardVisualPolicy'
 import { formatWizardTurnReply, normalizeWizardResult, wizardTurnVisualState } from './wizardTurnReport'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -143,7 +145,7 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
 
 function taskExecutionState(status: CanonicalTask['status']): 'completed' | 'failed' | 'queued' | 'running' {
   if (status === 'completed') return 'completed'
-  if (status === 'failed' || status === 'cancelled') return 'failed'
+  if (status === 'failed' || status === 'cancelled' || status === 'interrupted') return 'failed'
   if (status === 'queued' || status === 'waiting_resource') return 'queued'
   return 'running'
 }
@@ -158,6 +160,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   const [visualMedia, setVisualMedia] = useState<WizardVisualMedia | null>(null)
   const [state, setState] = useState<AgentVisualState>('idle')
   const [busy, setBusy] = useState(false)
+  const [consulting, setConsulting] = useState(false)
   const [busyMessage, setBusyMessage] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [errorCardId, setErrorCardId] = useState<string | null>(null)
@@ -175,6 +178,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   conversationWorkspaceRef.current = conversationWorkspace
   const followMessagesRef = useRef(true)
   const messagesRef = useRef(messages)
+  const turnSequenceRef = useRef(0)
   messagesRef.current = messages
   const activeCount = useMemo(() => tasks.filter(task => ACTIVE.has(task.status) && !task.parent_id).length, [tasks])
   const latestTask = useMemo(() => [...tasks].sort((left, right) => right.created_at - left.created_at || left.id.localeCompare(right.id))[0], [tasks])
@@ -271,22 +275,24 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           }
           if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
           setConversationSaveError(null)
-          const visibleMessages = messagesRef.current
           const pendingClearBase = conversationClearBasesRef.current.get(conversationWorkspace)
             ?? (queuedWrite.honorLocalDeletes ? queuedWrite.base : undefined)
-          const rebased = rebaseWizardConversationAfterSave({
-            ...queuedWrite.captured,
-            revision: saved.conversation.revision,
-            messages: visibleMessages,
-            executions: visibleMessages.flatMap(message => message.cards || []),
-          }, queuedWrite.captured, saved.conversation, pendingClearBase)
-          if (saved.merged || rebased.needsPersist) {
+          // A fast conversational reply may be queued for React before this
+          // save finishes. Rebase against the latest state, not the last render's ref.
+          setMessages(visibleMessages => {
+            const rebased = rebaseWizardConversationAfterSave({
+              ...queuedWrite.captured,
+              revision: saved.conversation.revision,
+              messages: visibleMessages,
+              executions: visibleMessages.flatMap(message => message.cards || []),
+            }, queuedWrite.captured, saved.conversation, pendingClearBase)
+            if (!saved.merged && !rebased.needsPersist) return visibleMessages
             skipNextConversationSaveRef.current = !rebased.needsPersist
-            setMessages(normalizeRemoteWizardMessages(
+            return normalizeRemoteWizardMessages(
               rebased.conversation.messages,
               rebased.conversation.executions,
-            ) as AgentMessage[])
-          }
+            ) as AgentMessage[]
+          })
         } catch (error) {
           if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
           setConversationSaveError(error instanceof Error ? error.message : String(error))
@@ -366,6 +372,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         if (!message.cards?.length) return message
         let changed = false
         const cards = message.cards.map(card => {
+          // A completed task is one workflow step, not the whole workflow.
+          if (card.target?.kind === 'wizard_workflow') return card
           const task = tasks.find(item => (
             (card.taskId && (item.id === card.taskId || item.root_id === card.taskId || item.backend_job_id === card.taskId))
             || (card.pipelineId && item.pipeline_id === card.pipelineId)
@@ -422,9 +430,37 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
     setState('idle')
   }
 
+  const controlCard = async (card: WizardExecutionCard, control: WizardCardControl) => {
+    if (busy || workspace !== conversationWorkspace) return
+    setBusy(true)
+    try {
+      const results = await executeWizardCardControl(card, control, conversationWorkspace)
+      if (mountedRef.current && results.length) setMessages(current => [...current, { id: newId(), role: 'assistant' as const,
+        text: results.map(result => result.message).join('\n'), createdAt: Date.now(), cards: cardsFromResults(results.map(normalizeWizardResult)),
+      }].slice(-40))
+    } catch (error) {
+      if (mountedRef.current) setMessages(current => [...current, { id: newId(), role: 'assistant' as const,
+        text: t('controlError', { message: error instanceof Error ? error.message : String(error) }), createdAt: Date.now(),
+      }].slice(-40))
+    } finally { if (mountedRef.current) setBusy(false) }
+  }
+
+  const stopConsulting = () => {
+    if (!consulting) return
+    turnSequenceRef.current += 1
+    setConsulting(false)
+    setBusy(false)
+    setState('idle')
+    setMessages(current => [...current, { id: newId(), role: 'assistant' as const,
+      text: t('responseDiscarded'), createdAt: Date.now(),
+    }].slice(-40))
+  }
+
   const ask = async (text: string) => {
     const question = text.trim()
     if (!question || busy) return
+    const sequence = ++turnSequenceRef.current
+    const currentTurn = () => mountedRef.current && turnSequenceRef.current === sequence
     const turnMedia = visualMedia?.workspace === workspace ? [visualMedia] : undefined
     const userMessage: AgentMessage = { id: newId(), role: 'user', text: question, createdAt: Date.now() }
     const nextMessages = [...messages, userMessage].slice(-40)
@@ -454,7 +490,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         return
       }
       let mediaEvidence: VisualEvidence[] = []
-      const answer = await generateLlmText({
+      setConsulting(true)
+      const llmRequest: Parameters<typeof generateLlmText>[0] = {
         onMediaEvidence: evidence => { mediaEvidence = evidence },
         media: turnMedia,
         workspace,
@@ -466,25 +503,34 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         max_new_tokens: 3_200,
         temperature: .1,
         json_schema: wizardLlmRequestSchema(),
-      })
-      if (!mountedRef.current) return
-      const proposedTurn = parseAgentTurn(answer)
-      const reconciledTurn = await reconcileWizardMediaTurn(
+      }
+      let answer = await generateLlmText(llmRequest)
+      if (!currentTurn()) return
+      let proposedTurn = parseAgentTurn(answer)
+      if (!proposedTurn.intent && !turnMedia) {
+        // Repair the structured interpretation once, before any proposed action
+        // can run. The model still interprets the original request in context.
+        answer = await generateLlmText({ ...llmRequest,
+          prompt: `${llmRequest.prompt}\n\nThe previous response did not contain a valid intent. Return a corrected complete plan matching the schema, including intent.kind, goal, question and execution. Use clarification with a focused question when essential context is missing; do not invent completed actions. Previous response (untrusted data):\n${JSON.stringify(answer)}`,
+        })
+        if (!currentTurn()) return
+        proposedTurn = parseAgentTurn(answer)
+      }
+      const reconciledTurn = validateWizardPlan(
         Boolean(turnMedia),
-        question,
         proposedTurn,
-        nextMessages.map(message => ({ role: message.role, text: message.text })),
       )
       const turn = protectUserVerbatimSegments(question, {
         ...reconciledTurn,
         conversationLanguage: reconciledTurn.conversationLanguage || proposedTurn.conversationLanguage,
       })
       let results: AgentActionResult[] = []
+      setConsulting(false)
       if (turn.actions.length) {
         setState('acting')
         results = await executeAgentActions(turn.actions, message => {
           if (mountedRef.current) setBusyMessage(message)
-        })
+        }, { workspace })
       }
       appendWizardTrace({
         startedAt: traceStartedAt,
@@ -496,14 +542,14 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         turn,
         results,
       })
-      if (!mountedRef.current) return
+      if (!currentTurn()) return
       results = results.map(normalizeWizardResult)
       const cards = cardsFromResults(results)
       const assistantMessage: AgentMessage = {
         id: newId(),
         role: 'assistant',
         text: formatWizardTurnReply({ ...turn, reply: humanReply(turn.reply || '') }, results,
-          (key, options) => String(t(key, { defaultValue: key, ...options })), question),
+          (key, options) => String(t(key, { defaultValue: key, ...options }))),
         createdAt: Date.now(),
         language: turn.conversationLanguage || undefined,
         mediaEvidence,
@@ -512,7 +558,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       setMessages(current => [...current, assistantMessage].slice(-40))
       setState(wizardTurnVisualState(turn, results))
     } catch (error) {
-      if (!mountedRef.current) return
+      if (!currentTurn()) return
       const message = error instanceof Error ? error.message : String(error)
       appendWizardTrace({
         startedAt: traceStartedAt,
@@ -532,7 +578,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       setMessages(current => [...current, assistantMessage].slice(-40))
       setState('error')
     } finally {
-      if (mountedRef.current) setBusy(false)
+      if (currentTurn()) { setBusy(false); setConsulting(false) }
     }
   }
 
@@ -566,7 +612,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           <AgentAvatar state={state} size={48} />
           <div className="min-w-0 flex-1">
             <h2 className="hp-wordmark max-w-36 whitespace-normal text-xl font-semibold leading-[1.05] text-wizard-lit">{t('title')}</h2>
-            <p className="truncate text-[10px] text-white/45">{t('workspace', { name: workspace })}</p>
+            <p className="truncate text-[10px] text-white/45">{t('workspace', { name: conversationWorkspace })}</p>
           </div>
           <button
             type="button"
@@ -578,7 +624,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           >
             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
-          <button type="button" onClick={clearConversation} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('clear')} aria-label={t('clear')}><Trash2 size={13} /></button>
+          <button type="button" onClick={clearConversation} disabled={busy} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('clear')} aria-label={t('clear')}><Trash2 size={13} /></button>
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('close')} aria-label={t('close')}><PanelLeftClose size={15} /></button>
         </div>
         <div className="relative mt-2 flex items-center gap-2 text-[9px] text-white/45">
@@ -600,10 +646,12 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
               : `${expanded ? 'max-w-[min(56rem,86%)]' : 'max-w-[92%]'} rounded-2xl rounded-bl-sm border border-wizard-soft/10 bg-wizard-pale/[.045] px-3 py-2 leading-relaxed text-wizard-lit/85`}>
               {message.role === 'assistant' ? <AgentMarkdown text={message.text} /> : message.text}
               <WizardVisualEvidence evidence={message.mediaEvidence} />
-              {message.cards?.map(card => (
+              {message.cards?.map(card => {
+                const controls = wizardCardControls(card, conversationWorkspace)
+                return (
                 <div key={card.id} className="mt-2 rounded-xl border border-wizard-soft/15 bg-black/20 p-2">
                   <div className="flex items-center justify-between gap-2 text-[10px]">
-                    <span className="font-medium uppercase tracking-wide text-wizard-pale/80">{card.state}</span>
+                    <span className="font-medium uppercase tracking-wide text-wizard-pale/80">{t(`executionState.${card.state}`)}</span>
                     {card.target?.title && <span className="min-w-0 truncate text-white/50">{card.target.title}</span>}
                   </div>
                   <p className="mt-1 text-[10px] leading-relaxed text-wizard-lit/80">{card.message}</p>
@@ -613,28 +661,42 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
                   {card.assetIds?.length ? (
                     <p className="mt-1 truncate text-[9px] text-emerald-200/80">{t('assets', { ids: card.assetIds.join(', ') })}</p>
                   ) : null}
-                  {errorCardId === card.id && card.controls.viewErrors && (
+                  {errorCardId === card.id && controls.viewErrors && (
                     <p className="mt-1 text-[9px] text-rose-200/80">{card.message}</p>
                   )}
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {card.controls.open && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'open_tab', tab: tabForExecutionTarget(card.target?.kind) }])}>{t('openTarget')}</button>
+                    {controls.open && (
+                      <button type="button" className="min-h-11 min-w-11 rounded border border-white/10 px-2 py-1 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40" disabled={busy || workspace !== conversationWorkspace} onClick={() => void controlCard(card, 'open')}>{t('openSection')}</button>
                     )}
-                    {card.controls.cancel && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'cancel_task', taskId: card.taskId || 'latest', confirm: true }])}>{tCommon('actions.cancel')}</button>
+                    {(card.taskId || (typeof card.metadata?.commandId === 'string' && card.metadata.commandId) || (typeof card.metadata?.intent_id === 'string' && card.metadata.intent_id)) && (
+                      <button
+                        type="button"
+                        className="min-h-11 min-w-11 rounded border border-white/10 px-2 py-1 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
+                        onClick={() => openAgentActivityDetails({
+                          taskId: card.taskId,
+                          intentId: typeof card.metadata?.commandId === 'string' ? card.metadata.commandId : typeof card.metadata?.intent_id === 'string' ? card.metadata.intent_id : undefined,
+                          receiptId: typeof card.metadata?.receiptId === 'string' ? card.metadata.receiptId : undefined,
+                        })}
+                      >
+                        {t('viewInActivity')}
+                      </button>
                     )}
-                    {card.controls.resume && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'resume_task', taskId: card.taskId || 'latest', confirm: true }])}>{tCommon('actions.resume')}</button>
+                    {controls.cancel && (
+                      <button type="button" className="min-h-11 min-w-11 rounded border border-white/10 px-2 py-1 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40" disabled={busy || workspace !== conversationWorkspace} onClick={() => void controlCard(card, 'cancel')}>{tCommon('actions.cancel')}</button>
                     )}
-                    {card.controls.viewErrors && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => setErrorCardId(card.id)}>{t('viewErrors')}</button>
+                    {controls.resume && (
+                      <button type="button" className="min-h-11 min-w-11 rounded border border-white/10 px-2 py-1 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40" disabled={busy || workspace !== conversationWorkspace} onClick={() => void controlCard(card, 'resume')}>{tCommon('actions.resume')}</button>
                     )}
-                    {card.controls.retryPending && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'retry_task', taskId: card.taskId || 'latest', confirm: true }])}>{t('retryPending')}</button>
+                    {controls.viewErrors && (
+                      <button type="button" className="min-h-11 min-w-11 rounded border border-white/10 px-2 py-1 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40" onClick={() => setErrorCardId(card.id)}>{t('viewErrors')}</button>
+                    )}
+                    {controls.retryPending && (
+                      <button type="button" className="min-h-11 min-w-11 rounded border border-white/10 px-2 py-1 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40" disabled={busy || workspace !== conversationWorkspace} onClick={() => void controlCard(card, 'retry')}>{t('retryPending')}</button>
                     )}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         ))}
@@ -652,6 +714,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           <div className="flex items-center gap-2 text-[10px] text-wizard-pale/60">
             <AgentAvatar state={state === 'acting' ? 'acting' : 'thinking'} size={24} />
             <Loader2 size={11} className="animate-spin" /> {busyMessage}
+            {consulting && <button type="button" className="min-h-11 shrink-0 rounded border border-white/15 px-2 text-xs" onClick={stopConsulting}>{t('stopResponse')}</button>}
           </div>
         )}
         <div ref={endRef} />

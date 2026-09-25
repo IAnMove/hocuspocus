@@ -96,6 +96,8 @@ STUDIO_SPEECH_DEFAULTS: dict[str, Any] = {
 # operation.  New handlers need a deliberate registration here.
 SPEECH_MODEL_TYPES = frozenset(
     {
+        "auk",
+        "auk_flash",
         "kugelaudio_0_open",
         "qwen3_tts_customvoice",
         "qwen3_tts_voicedesign",

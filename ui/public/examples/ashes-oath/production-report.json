@@ -1,0 +1,1007 @@
+{
+  "version": 1,
+  "title": "The Oath of Cinders / El juramento de ceniza",
+  "createdAt": "2026-09-16T08:33:40.967797+00:00",
+  "startedAt": 1789543680.894931,
+  "elapsedSeconds": 3940.07,
+  "stages": [
+    {
+      "label": "Imágenes nuevas",
+      "work": "8 ilustraciones",
+      "processingSeconds": 136.491,
+      "queueSeconds": 291.989,
+      "receipts": [
+        {
+          "id": "minimax-image-e613e2ab04f1",
+          "name": "cathedral-job",
+          "processingSeconds": 18.247,
+          "queueSeconds": 33.593,
+          "createdAt": 1789543682.2077508,
+          "startedAt": 1789543715.8008332,
+          "finishedAt": 1789543734.0475602,
+          "outputs": [
+            "2026-09-16-09h28m54s_minimax-comic_504ca173.jpg"
+          ]
+        },
+        {
+          "id": "minimax-image-d5238cc8a979",
+          "name": "fallen-knight-job",
+          "processingSeconds": 18.659,
+          "queueSeconds": 37.884,
+          "createdAt": 1789543746.1779675,
+          "startedAt": 1789543784.061682,
+          "finishedAt": 1789543802.7209725,
+          "outputs": [
+            "2026-09-16-09h30m02s_minimax-comic_0e9b0dcb.jpg"
+          ]
+        },
+        {
+          "id": "minimax-image-eb8d2850c511",
+          "name": "forest-job",
+          "processingSeconds": 16.174,
+          "queueSeconds": 51.817,
+          "createdAt": 1789543682.2311225,
+          "startedAt": 1789543734.0477426,
+          "finishedAt": 1789543750.2217178,
+          "outputs": [
+            "2026-09-16-09h29m10s_minimax-comic_145961b3.jpg"
+          ]
+        },
+        {
+          "id": "minimax-image-0add42966bf5",
+          "name": "knight-job",
+          "processingSeconds": 16.457,
+          "queueSeconds": 0.016,
+          "createdAt": 1789543682.1792054,
+          "startedAt": 1789543682.1954842,
+          "finishedAt": 1789543698.6524773,
+          "outputs": [
+            "2026-09-16-09h28m18s_minimax-comic_9ddf3c12.jpg"
+          ]
+        },
+        {
+          "id": "minimax-image-ba8ddcd823d4",
+          "name": "princess-job",
+          "processingSeconds": 17.148,
+          "queueSeconds": 16.46,
+          "createdAt": 1789543682.192777,
+          "startedAt": 1789543698.6523223,
+          "finishedAt": 1789543715.8007088,
+          "outputs": [
+            "2026-09-16-09h28m35s_minimax-comic_9e9c09ac.jpg"
+          ]
+        },
+        {
+          "id": "minimax-image-b492559958ce",
+          "name": "shore-job",
+          "processingSeconds": 16.162,
+          "queueSeconds": 67.976,
+          "createdAt": 1789543682.2458448,
+          "startedAt": 1789543750.2218895,
+          "finishedAt": 1789543766.3842824,
+          "outputs": [
+            "2026-09-16-09h29m26s_minimax-comic_165cfb1f.jpg"
+          ]
+        },
+        {
+          "id": "minimax-image-fe1de08ab977",
+          "name": "shore-platform-job",
+          "processingSeconds": 15.967,
+          "queueSeconds": 0.116,
+          "createdAt": 1789546161.4706602,
+          "startedAt": 1789546161.586552,
+          "finishedAt": 1789546177.5530875,
+          "outputs": [
+            "2026-09-16-10h09m37s_minimax-comic_4bc142be.jpg"
+          ]
+        },
+        {
+          "id": "minimax-image-cc7c435876a7",
+          "name": "thorns-job",
+          "processingSeconds": 17.677,
+          "queueSeconds": 84.127,
+          "createdAt": 1789543682.2578046,
+          "startedAt": 1789543766.3850362,
+          "finishedAt": 1789543784.0617929,
+          "outputs": [
+            "2026-09-16-09h29m44s_minimax-comic_4952936b.jpg"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Canción española",
+      "work": "Toma final YuE2",
+      "processingSeconds": 52.88,
+      "queueSeconds": 1.114,
+      "receipts": [
+        {
+          "id": "c2921ca4",
+          "name": "oath-es-v2",
+          "processingSeconds": 52.88,
+          "queueSeconds": 1.114,
+          "createdAt": 1789543958.0118291,
+          "startedAt": 1789543959.125369,
+          "finishedAt": 1789544012.0085857,
+          "outputs": [
+            "2026-09-16-09h33m31s_seed916645_[Verse]Crucé los reinos muertos,siguiendo tu señal.Princesa de las sombras,te vengo a rescatar.wav"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Canción inglesa",
+      "work": "Toma final YuE2",
+      "processingSeconds": 38.21,
+      "queueSeconds": 0.182,
+      "receipts": [
+        {
+          "id": "aff03759",
+          "name": "oath-en",
+          "processingSeconds": 38.21,
+          "queueSeconds": 0.182,
+          "createdAt": 1789543726.3731663,
+          "startedAt": 1789543726.554914,
+          "finishedAt": 1789543764.7656088,
+          "outputs": [
+            "2026-09-16-09h29m24s_seed916621_[Verse]Beneath an ashen sun I crossed dead kingdoms.Their hollow bells were whispering your name..wav"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Prueba musical descartada",
+      "work": "Primera toma española",
+      "processingSeconds": 44.03,
+      "queueSeconds": 0.188,
+      "receipts": [
+        {
+          "id": "ee6b2407",
+          "name": "oath-es",
+          "processingSeconds": 44.03,
+          "queueSeconds": 0.188,
+          "createdAt": 1789543681.0273042,
+          "startedAt": 1789543681.214984,
+          "finishedAt": 1789543725.2487967,
+          "outputs": [
+            "2026-09-16-09h28m44s_seed916620_[Verse]Bajo un sol de ceniza crucé siete reinos.Los muertos sabían tu nombre al pasar.Princesa.wav"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Análisis de audio",
+      "work": "4 análisis de ritmo y letra",
+      "processingSeconds": 94.58,
+      "queueSeconds": 141.594,
+      "receipts": [
+        {
+          "id": "audio-analysis-2468e8e832e0",
+          "name": "analysis-es.json",
+          "processingSeconds": 25.26,
+          "queueSeconds": 0.738,
+          "createdAt": 1789543790.9081962,
+          "startedAt": 1789543791.6462846,
+          "finishedAt": 1789543816.9090044,
+          "outputs": []
+        },
+        {
+          "id": "audio-analysis-73a8f3119ac4",
+          "name": "analysis-en.json",
+          "processingSeconds": 18.19,
+          "queueSeconds": 0.226,
+          "createdAt": 1789543829.3305945,
+          "startedAt": 1789543829.5570304,
+          "finishedAt": 1789543847.742753,
+          "outputs": []
+        },
+        {
+          "id": "audio-analysis-222a5bad5ec1",
+          "name": "analysis-es-v2.json",
+          "processingSeconds": 43.78,
+          "queueSeconds": 43.52,
+          "createdAt": 1789544057.056624,
+          "startedAt": 1789544100.576575,
+          "finishedAt": 1789544144.3533525,
+          "outputs": []
+        },
+        {
+          "id": "audio-analysis-3f3708370ac6",
+          "name": "analysis-en-mix.json",
+          "processingSeconds": 7.35,
+          "queueSeconds": 97.11,
+          "createdAt": 1789544190.9514685,
+          "startedAt": 1789544288.0616474,
+          "finishedAt": 1789544295.4123456,
+          "outputs": []
+        }
+      ]
+    },
+    {
+      "label": "Animación",
+      "work": "5 vídeos H3 Fused",
+      "processingSeconds": 375.0,
+      "queueSeconds": 116.091,
+      "receipts": [
+        {
+          "id": "63e347fc",
+          "name": "knight-motion",
+          "processingSeconds": 84.67,
+          "queueSeconds": 0.228,
+          "createdAt": 1789543870.602623,
+          "startedAt": 1789543870.8308694,
+          "finishedAt": 1789543955.5021815,
+          "outputs": [
+            "2026-09-16-09h32m33s_seed916630_Camera absolutely locked and unmoving, full body stays in frame. The same painted dark knight remain.mp4"
+          ]
+        },
+        {
+          "id": "5cdde57e",
+          "name": "princess-motion",
+          "processingSeconds": 86.95,
+          "queueSeconds": 54.175,
+          "createdAt": 1789543958.0630224,
+          "startedAt": 1789544012.2380419,
+          "finishedAt": 1789544099.1843753,
+          "outputs": [
+            "2026-09-16-09h34m57s_seed916631_Camera absolutely locked and unmoving, full body stays in frame. The same adult pale haired princess.mp4"
+          ]
+        },
+        {
+          "id": "cee0b53b",
+          "name": "cathedral-motion",
+          "processingSeconds": 68.24,
+          "queueSeconds": 47.521,
+          "createdAt": 1789544100.5792615,
+          "startedAt": 1789544148.1004846,
+          "finishedAt": 1789544216.3392417,
+          "outputs": [
+            "2026-09-16-09h36m54s_seed916632_Absolutely stationary locked camera. An ominous empty painted cathedral under a blood moon. Only the.mp4"
+          ]
+        },
+        {
+          "id": "9a4751ee",
+          "name": "forest-motion",
+          "processingSeconds": 67.35,
+          "queueSeconds": 1.276,
+          "createdAt": 1789544217.9351254,
+          "startedAt": 1789544219.210641,
+          "finishedAt": 1789544286.5566666,
+          "outputs": [
+            "2026-09-16-09h38m05s_seed916633_Absolutely stationary locked camera. An empty painted dead forest under a red moon. Thin turquoise g.mp4"
+          ]
+        },
+        {
+          "id": "2260a87b",
+          "name": "shore-motion",
+          "processingSeconds": 67.79,
+          "queueSeconds": 12.891,
+          "createdAt": 1789544287.1122625,
+          "startedAt": 1789544300.0031304,
+          "finishedAt": 1789544367.7924738,
+          "outputs": [
+            "2026-09-16-09h39m26s_seed916634_Absolutely stationary locked camera. A painted sinister dark fantasy sea shore at night. Natural sea.mp4"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Interpolación",
+      "work": "5 clips a 48 fps",
+      "processingSeconds": 416.39,
+      "queueSeconds": 10.517,
+      "receipts": [
+        {
+          "id": "8abfcf55",
+          "name": "knight-motion-smooth",
+          "processingSeconds": 17.41,
+          "queueSeconds": 1.27,
+          "createdAt": 1789544370.3899977,
+          "startedAt": 1789544371.6604397,
+          "finishedAt": 1789544389.0698378,
+          "outputs": [
+            "2026-09-16-09h32m33s_seed916630_Camera absolutely locked and unmoving, full body stays in frame. The same painted dark knight remain_upscaled.mp4"
+          ]
+        },
+        {
+          "id": "35527c2e",
+          "name": "princess-motion-smooth",
+          "processingSeconds": 323.56,
+          "queueSeconds": 8.379,
+          "createdAt": 1789544392.7806299,
+          "startedAt": 1789544401.1599982,
+          "finishedAt": 1789544724.7244823,
+          "outputs": [
+            "2026-09-16-09h34m57s_seed916631_Camera absolutely locked and unmoving, full body stays in frame. The same adult pale haired princess_upscaled.mp4"
+          ]
+        },
+        {
+          "id": "749270c9",
+          "name": "cathedral-motion-smooth",
+          "processingSeconds": 20.33,
+          "queueSeconds": 0.394,
+          "createdAt": 1789544726.582189,
+          "startedAt": 1789544726.9757664,
+          "finishedAt": 1789544747.3052256,
+          "outputs": [
+            "2026-09-16-09h36m54s_seed916632_Absolutely stationary locked camera. An ominous empty painted cathedral under a blood moon. Only the_upscaled.mp4"
+          ]
+        },
+        {
+          "id": "ce1269c1",
+          "name": "forest-motion-smooth",
+          "processingSeconds": 35.91,
+          "queueSeconds": 0.235,
+          "createdAt": 1789544748.0435224,
+          "startedAt": 1789544748.2784886,
+          "finishedAt": 1789544784.1865304,
+          "outputs": [
+            "2026-09-16-09h38m05s_seed916633_Absolutely stationary locked camera. An empty painted dead forest under a red moon. Thin turquoise g_upscaled.mp4"
+          ]
+        },
+        {
+          "id": "d7b40f0f",
+          "name": "shore-motion-smooth",
+          "processingSeconds": 19.18,
+          "queueSeconds": 0.239,
+          "createdAt": 1789544786.589862,
+          "startedAt": 1789544786.828922,
+          "finishedAt": 1789544806.0056767,
+          "outputs": [
+            "2026-09-16-09h39m26s_seed916634_Absolutely stationary locked camera. A painted sinister dark fantasy sea shore at night. Natural sea_upscaled.mp4"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Recorte de imágenes",
+      "work": "5 imágenes transparentes",
+      "processingSeconds": 13.79,
+      "queueSeconds": 455.908,
+      "receipts": [
+        {
+          "id": "072b5920",
+          "name": "knight-cutout",
+          "processingSeconds": 2.06,
+          "queueSeconds": 85.009,
+          "createdAt": 1789543871.8481455,
+          "startedAt": 1789543956.857488,
+          "finishedAt": 1789543958.92079,
+          "outputs": [
+            "2026-09-16-09h28m18s_minimax-comic_9ddf3c12.no-background-eac96d5b.png"
+          ]
+        },
+        {
+          "id": "34164d5a",
+          "name": "princess-cutout",
+          "processingSeconds": 3.24,
+          "queueSeconds": 185.031,
+          "createdAt": 1789543959.6013222,
+          "startedAt": 1789544144.632246,
+          "finishedAt": 1789544147.8753076,
+          "outputs": [
+            "2026-09-16-09h28m35s_minimax-comic_9e9c09ac.no-background-0ac76ec1.png"
+          ]
+        },
+        {
+          "id": "c8658042",
+          "name": "fallen-knight-cutout",
+          "processingSeconds": 1.22,
+          "queueSeconds": 69.159,
+          "createdAt": 1789544148.6167324,
+          "startedAt": 1789544217.7755094,
+          "finishedAt": 1789544218.9973142,
+          "outputs": [
+            "2026-09-16-09h30m02s_minimax-comic_0e9b0dcb.no-background-47e50816.png"
+          ]
+        },
+        {
+          "id": "0b745946",
+          "name": "thorns-cutout",
+          "processingSeconds": 4.15,
+          "queueSeconds": 74.611,
+          "createdAt": 1789544221.0217574,
+          "startedAt": 1789544295.632682,
+          "finishedAt": 1789544299.7801273,
+          "outputs": [
+            "2026-09-16-09h29m44s_minimax-comic_4952936b.no-background-87844018.png"
+          ]
+        },
+        {
+          "id": "a936ca85",
+          "name": "shore-platform-cutout",
+          "processingSeconds": 3.12,
+          "queueSeconds": 42.098,
+          "createdAt": 1789546218.4084759,
+          "startedAt": 1789546260.5069246,
+          "finishedAt": 1789546263.6234171,
+          "outputs": [
+            "2026-09-16-10h09m37s_minimax-comic_4bc142be.no-background-6c222017.png"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Recorte de vídeo",
+      "work": "2 personajes · 630 fotogramas",
+      "processingSeconds": 1183.88,
+      "queueSeconds": 0.451,
+      "receipts": [
+        {
+          "id": "2906cdf5",
+          "name": "knight-alpha",
+          "processingSeconds": 689.66,
+          "queueSeconds": 0.227,
+          "createdAt": 1789544808.7718322,
+          "startedAt": 1789544808.9992666,
+          "finishedAt": 1789545498.6587076,
+          "outputs": [
+            "2026-09-16-09h32m33s_seed916630_Camera absolutely locked and unmoving, full body stays in frame. The same painted dark knight remain_upscaled.no-background-f94415cf.webm"
+          ]
+        },
+        {
+          "id": "a86236a1",
+          "name": "princess-alpha",
+          "processingSeconds": 494.22,
+          "queueSeconds": 0.224,
+          "createdAt": 1789545500.975493,
+          "startedAt": 1789545501.199418,
+          "finishedAt": 1789545995.4202247,
+          "outputs": [
+            "2026-09-16-09h34m57s_seed916631_Camera absolutely locked and unmoving, full body stays in frame. The same adult pale haired princess_upscaled.no-background-84825012.webm"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Render inglés",
+      "work": "18 planos guardados en Vídeo 3D",
+      "processingSeconds": 631.842,
+      "queueSeconds": 8.951,
+      "receipts": [
+        {
+          "id": "world3d-export-364a067694254897",
+          "name": "en-clip-01.task",
+          "processingSeconds": 70.033,
+          "queueSeconds": 0.553,
+          "createdAt": 1789546044.485684,
+          "startedAt": 1789546045.038371,
+          "finishedAt": 1789546115.0718565,
+          "outputs": [
+            "2026-09-16-10h08m35s_world3d-dark-motion-knight-passage_96bf3c.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-620efb71f4284cc0",
+          "name": "en-clip-02.task",
+          "processingSeconds": 30.281,
+          "queueSeconds": 0.874,
+          "createdAt": 1789546123.0879529,
+          "startedAt": 1789546123.9622302,
+          "finishedAt": 1789546154.2435415,
+          "outputs": [
+            "2026-09-16-10h09m14s_world3d-dark-motion-knight-passage_10c269.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-44af86acefe64787",
+          "name": "en-clip-03.task",
+          "processingSeconds": 66.393,
+          "queueSeconds": 0.264,
+          "createdAt": 1789546193.6042523,
+          "startedAt": 1789546193.8685348,
+          "finishedAt": 1789546260.26111,
+          "outputs": [
+            "2026-09-16-10h11m00s_world3d-dark-motion-knight-passage_c08f2f.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-c8e6ad0cb0e74cbc",
+          "name": "en-clip-04.task",
+          "processingSeconds": 24.646,
+          "queueSeconds": 3.335,
+          "createdAt": 1789546260.595682,
+          "startedAt": 1789546263.930936,
+          "finishedAt": 1789546288.577301,
+          "outputs": [
+            "2026-09-16-10h11m28s_world3d-dark-motion-knight-passage_ad1b9b.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-6423da6fb2024e27",
+          "name": "en-clip-05.task",
+          "processingSeconds": 42.518,
+          "queueSeconds": 0.28,
+          "createdAt": 1789546290.9592266,
+          "startedAt": 1789546291.2392013,
+          "finishedAt": 1789546333.757156,
+          "outputs": [
+            "2026-09-16-10h12m13s_world3d-dark-motion-knight-passage_3088d4.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-c7e7643a18314f4f",
+          "name": "en-clip-06.task",
+          "processingSeconds": 22.274,
+          "queueSeconds": 0.245,
+          "createdAt": 1789546335.7464006,
+          "startedAt": 1789546335.9914804,
+          "finishedAt": 1789546358.2653913,
+          "outputs": [
+            "2026-09-16-10h12m38s_world3d-dark-motion-knight-passage_4533a7.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-d8e0de5c11774d70",
+          "name": "en-clip-07.task",
+          "processingSeconds": 85.898,
+          "queueSeconds": 0.51,
+          "createdAt": 1789546362.7059464,
+          "startedAt": 1789546363.216372,
+          "finishedAt": 1789546449.1145778,
+          "outputs": [
+            "2026-09-16-10h14m09s_world3d-dark-motion-knight-passage_4af8d7.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-92a754c18c82400e",
+          "name": "en-clip-08.task",
+          "processingSeconds": 25.123,
+          "queueSeconds": 0.261,
+          "createdAt": 1789546450.3437223,
+          "startedAt": 1789546450.604384,
+          "finishedAt": 1789546475.7272255,
+          "outputs": [
+            "2026-09-16-10h14m35s_world3d-dark-motion-knight-passage_332d72.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-341eda9a5c314bf3",
+          "name": "en-clip-09.task",
+          "processingSeconds": 26.285,
+          "queueSeconds": 0.25,
+          "createdAt": 1789546477.876531,
+          "startedAt": 1789546478.1268692,
+          "finishedAt": 1789546504.412254,
+          "outputs": [
+            "2026-09-16-10h15m04s_world3d-dark-motion-knight-passage_a5da38.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-de7c7e4a2c504c52",
+          "name": "en-clip-10.task",
+          "processingSeconds": 36.809,
+          "queueSeconds": 0.262,
+          "createdAt": 1789546559.1767647,
+          "startedAt": 1789546559.4389377,
+          "finishedAt": 1789546596.2482145,
+          "outputs": [
+            "2026-09-16-10h16m36s_world3d-dark-motion-knight-passage_998822.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-307f87b654184614",
+          "name": "en-clip-11.task",
+          "processingSeconds": 22.243,
+          "queueSeconds": 0.291,
+          "createdAt": 1789546598.820613,
+          "startedAt": 1789546599.1118786,
+          "finishedAt": 1789546621.3547924,
+          "outputs": [
+            "2026-09-16-10h17m01s_world3d-dark-motion-knight-passage_0c77a9.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-111e565cf5054745",
+          "name": "en-clip-12.task",
+          "processingSeconds": 24.587,
+          "queueSeconds": 0.263,
+          "createdAt": 1789546623.4176347,
+          "startedAt": 1789546623.6805656,
+          "finishedAt": 1789546648.2680295,
+          "outputs": [
+            "2026-09-16-10h17m28s_world3d-dark-motion-knight-passage_ad7aaa.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-ef7e74dee9f74779",
+          "name": "en-clip-13.task",
+          "processingSeconds": 25.618,
+          "queueSeconds": 0.257,
+          "createdAt": 1789546650.9428692,
+          "startedAt": 1789546651.1997643,
+          "finishedAt": 1789546676.8172817,
+          "outputs": [
+            "2026-09-16-10h17m56s_world3d-dark-motion-knight-passage_eb3acb.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-19becba4335f45d9",
+          "name": "en-clip-14.task",
+          "processingSeconds": 25.085,
+          "queueSeconds": 0.282,
+          "createdAt": 1789546678.5009468,
+          "startedAt": 1789546678.7825694,
+          "finishedAt": 1789546703.8674927,
+          "outputs": [
+            "2026-09-16-10h18m23s_world3d-dark-motion-knight-passage_a00738.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-e0b776247ae6489a",
+          "name": "en-clip-15.task",
+          "processingSeconds": 25.767,
+          "queueSeconds": 0.258,
+          "createdAt": 1789546706.037402,
+          "startedAt": 1789546706.2953935,
+          "finishedAt": 1789546732.062777,
+          "outputs": [
+            "2026-09-16-10h18m52s_world3d-dark-motion-knight-passage_0db95e.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-e1cf1507dc8e45a5",
+          "name": "en-clip-16.task",
+          "processingSeconds": 25.331,
+          "queueSeconds": 0.243,
+          "createdAt": 1789546733.6392753,
+          "startedAt": 1789546733.8826585,
+          "finishedAt": 1789546759.2138457,
+          "outputs": [
+            "2026-09-16-10h19m19s_world3d-dark-motion-knight-passage_3365a9.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-9d169d106e504d29",
+          "name": "en-clip-17.task",
+          "processingSeconds": 25.221,
+          "queueSeconds": 0.256,
+          "createdAt": 1789546761.1472404,
+          "startedAt": 1789546761.4035392,
+          "finishedAt": 1789546786.6246219,
+          "outputs": [
+            "2026-09-16-10h19m46s_world3d-dark-motion-knight-passage_b362cb.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-3333e7901d69401b",
+          "name": "en-clip-18.task",
+          "processingSeconds": 27.73,
+          "queueSeconds": 0.267,
+          "createdAt": 1789546788.6705153,
+          "startedAt": 1789546788.9370594,
+          "finishedAt": 1789546816.666941,
+          "outputs": [
+            "2026-09-16-10h20m16s_world3d-dark-motion-knight-passage_4504f1.mp4"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Montaje inglés",
+      "work": "Video Editor",
+      "processingSeconds": 26.045,
+      "queueSeconds": 0.05,
+      "receipts": [
+        {
+          "id": "video-edit-c16245405ed5",
+          "name": "Video Editor en",
+          "processingSeconds": 26.045,
+          "queueSeconds": 0.05,
+          "createdAt": 1789546855.868297,
+          "startedAt": 1789546855.9185781,
+          "finishedAt": 1789546881.963492,
+          "outputs": [
+            "2026-09-16-10h20m55s_The_Oath_of_Cinders_-_English_-_vertical.mp4"
+          ],
+          "clientWallSeconds": 26.216
+        }
+      ]
+    },
+    {
+      "label": "Render español",
+      "work": "14 planos guardados en Vídeo 3D",
+      "processingSeconds": 362.284,
+      "queueSeconds": 3.785,
+      "receipts": [
+        {
+          "id": "world3d-export-5b6e277043724211",
+          "name": "es-clip-01.task",
+          "processingSeconds": 35.232,
+          "queueSeconds": 0.257,
+          "createdAt": 1789546855.9473407,
+          "startedAt": 1789546856.2046618,
+          "finishedAt": 1789546891.4368353,
+          "outputs": [
+            "2026-09-16-10h21m31s_world3d-dark-motion-knight-passage_9cd949.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-8c766d8489834125",
+          "name": "es-clip-02.task",
+          "processingSeconds": 21.921,
+          "queueSeconds": 0.263,
+          "createdAt": 1789546892.6086917,
+          "startedAt": 1789546892.871794,
+          "finishedAt": 1789546914.7923577,
+          "outputs": [
+            "2026-09-16-10h21m54s_world3d-dark-motion-knight-passage_26cc9e.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-0b8b994ad75b44d6",
+          "name": "es-clip-03.task",
+          "processingSeconds": 30.608,
+          "queueSeconds": 0.242,
+          "createdAt": 1789546917.1848326,
+          "startedAt": 1789546917.4269292,
+          "finishedAt": 1789546948.0353892,
+          "outputs": [
+            "2026-09-16-10h22m28s_world3d-dark-motion-knight-passage_9d192e.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-5b5470b1f4a24900",
+          "name": "es-clip-04.task",
+          "processingSeconds": 23.47,
+          "queueSeconds": 0.281,
+          "createdAt": 1789546950.7532089,
+          "startedAt": 1789546951.033718,
+          "finishedAt": 1789546974.5033786,
+          "outputs": [
+            "2026-09-16-10h22m54s_world3d-dark-motion-knight-passage_3495be.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-3e1c20fcf095468e",
+          "name": "es-clip-05.task",
+          "processingSeconds": 32.223,
+          "queueSeconds": 0.246,
+          "createdAt": 1789546975.271688,
+          "startedAt": 1789546975.51807,
+          "finishedAt": 1789547007.7414122,
+          "outputs": [
+            "2026-09-16-10h23m27s_world3d-dark-motion-knight-passage_bc4c31.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-c13a749bd8344e09",
+          "name": "es-clip-06.task",
+          "processingSeconds": 18.79,
+          "queueSeconds": 0.249,
+          "createdAt": 1789547008.8252096,
+          "startedAt": 1789547009.0746808,
+          "finishedAt": 1789547027.864216,
+          "outputs": [
+            "2026-09-16-10h23m47s_world3d-dark-motion-knight-passage_2c218e.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-cc957500998346bb",
+          "name": "es-clip-07.task",
+          "processingSeconds": 33.698,
+          "queueSeconds": 0.25,
+          "createdAt": 1789547030.3306139,
+          "startedAt": 1789547030.580642,
+          "finishedAt": 1789547064.279051,
+          "outputs": [
+            "2026-09-16-10h24m24s_world3d-dark-motion-knight-passage_876c66.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-f5b2be2495314d97",
+          "name": "es-clip-08.task",
+          "processingSeconds": 51.724,
+          "queueSeconds": 0.249,
+          "createdAt": 1789547066.9186606,
+          "startedAt": 1789547067.167605,
+          "finishedAt": 1789547118.8911872,
+          "outputs": [
+            "2026-09-16-10h25m18s_world3d-dark-motion-knight-passage_465f07.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-17744eed467b4ddc",
+          "name": "es-clip-09.task",
+          "processingSeconds": 14.173,
+          "queueSeconds": 0.267,
+          "createdAt": 1789547121.6918657,
+          "startedAt": 1789547121.9588857,
+          "finishedAt": 1789547136.131622,
+          "outputs": [
+            "2026-09-16-10h25m36s_world3d-dark-motion-knight-passage_5b35b3.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-c798151eebe84cea",
+          "name": "es-clip-10.task",
+          "processingSeconds": 26.19,
+          "queueSeconds": 0.272,
+          "createdAt": 1789547137.1540499,
+          "startedAt": 1789547137.4259546,
+          "finishedAt": 1789547163.6155748,
+          "outputs": [
+            "2026-09-16-10h26m03s_world3d-dark-motion-knight-passage_06c6cc.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-9abafa870ee046c1",
+          "name": "es-clip-11.task",
+          "processingSeconds": 15.756,
+          "queueSeconds": 0.26,
+          "createdAt": 1789547164.7161748,
+          "startedAt": 1789547164.9757504,
+          "finishedAt": 1789547180.7319858,
+          "outputs": [
+            "2026-09-16-10h26m20s_world3d-dark-motion-knight-passage_89a8ee.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-ecd272b4373e4bbf",
+          "name": "es-clip-12.task",
+          "processingSeconds": 12.563,
+          "queueSeconds": 0.374,
+          "createdAt": 1789547183.189241,
+          "startedAt": 1789547183.5632315,
+          "finishedAt": 1789547196.126608,
+          "outputs": [
+            "2026-09-16-10h26m36s_world3d-dark-motion-knight-passage_1cf101.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-65ff76a18680402d",
+          "name": "es-clip-13.task",
+          "processingSeconds": 27.245,
+          "queueSeconds": 0.277,
+          "createdAt": 1789547198.7342396,
+          "startedAt": 1789547199.0108612,
+          "finishedAt": 1789547226.2553759,
+          "outputs": [
+            "2026-09-16-10h27m06s_world3d-dark-motion-knight-passage_2a2a6d.mp4"
+          ]
+        },
+        {
+          "id": "world3d-export-a8541dfdb4444855",
+          "name": "es-clip-14.task",
+          "processingSeconds": 18.691,
+          "queueSeconds": 0.298,
+          "createdAt": 1789547229.2919972,
+          "startedAt": 1789547229.5904722,
+          "finishedAt": 1789547248.2818248,
+          "outputs": [
+            "2026-09-16-10h27m28s_world3d-dark-motion-knight-passage_f30fc6.mp4"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Montaje español",
+      "work": "Video Editor",
+      "processingSeconds": 317.913,
+      "queueSeconds": 0.027,
+      "receipts": [
+        {
+          "id": "video-edit-523f7f86e1a1",
+          "name": "Video Editor es",
+          "processingSeconds": 317.913,
+          "queueSeconds": 0.027,
+          "createdAt": 1789547260.9221387,
+          "startedAt": 1789547260.9491062,
+          "finishedAt": 1789547578.8617752,
+          "outputs": [
+            "2026-09-16-10h27m40s_El_juramento_de_ceniza_-_Espanol_-_vertical.mp4"
+          ],
+          "clientWallSeconds": 346.776
+        }
+      ]
+    }
+  ],
+  "processingSumSeconds": 3693.34,
+  "queueSumSeconds": 1030.85,
+  "nativeOnly": true,
+  "notes": [
+    "Los tiempos incluyen pausas del sistema dentro de cada trabajo.",
+    "La toma española inicial se descartó; la segunda es la publicada.",
+    "Los recursos se comparten entre ambas versiones.",
+    "Las sumas por etapa y las esperas no equivalen al tiempo total porque hubo operaciones solapadas."
+  ],
+  "films": {
+    "en": {
+      "duration": 130.86666666666667,
+      "frames": 3926,
+      "dimensions": [
+        720,
+        1280
+      ],
+      "fps": 30,
+      "shots": 18,
+      "beatAudit": {
+        "sourceAnalysisJob": "audio-analysis-3f3708370ac6",
+        "audioStart": 15.185850340136055,
+        "detectedBpm": 66.3,
+        "renderedFrames": 3926,
+        "pulses": 144,
+        "maxQuantizationErrorMs": 16.553287981864173,
+        "shotBoundaries": [
+          0.0,
+          6.4,
+          14.5,
+          20.933333333333334,
+          29.033333333333335,
+          35.43333333333333,
+          42.733333333333334,
+          49.96666666666667,
+          58.166666666666664,
+          64.53333333333333,
+          72.7,
+          79.06666666666666,
+          86.33333333333333,
+          93.6,
+          100.7,
+          108.16666666666667,
+          115.36666666666666,
+          122.7,
+          130.86666666666667
+        ]
+      },
+      "lyricAlignment": {
+        "method": "authoritative_lyrics_word_alignment",
+        "coverage": 0.951,
+        "matched_words": 137,
+        "total_words": 144,
+        "approximate_lines": 0
+      },
+      "bytes": 62766833,
+      "sha256": "6eaaeef9ee285cef61d4fb6a36e556aa0319ddc0d9e05b614dab3756568cd7be"
+    },
+    "es": {
+      "duration": 99.2,
+      "frames": 2976,
+      "dimensions": [
+        720,
+        1280
+      ],
+      "fps": 30,
+      "shots": 14,
+      "beatAudit": {
+        "sourceAnalysisJob": "audio-analysis-222a5bad5ec1",
+        "audioStart": 40.797,
+        "detectedBpm": 123.0,
+        "renderedFrames": 2976,
+        "pulses": 203,
+        "maxQuantizationErrorMs": 16.650793650811124,
+        "shotBoundaries": [
+          0.0,
+          9.6,
+          16.466666666666665,
+          23.866666666666667,
+          31.666666666666668,
+          39.53333333333333,
+          45.43333333333333,
+          53.766666666666666,
+          66.53333333333333,
+          70.46666666666667,
+          78.26666666666667,
+          82.63333333333334,
+          86.13333333333334,
+          93.86666666666666,
+          99.2
+        ]
+      },
+      "lyricAlignment": {
+        "method": "authoritative_lyrics_word_alignment",
+        "coverage": 0.938,
+        "matched_words": 75,
+        "total_words": 80,
+        "approximate_lines": 0
+      },
+      "bytes": 45068648,
+      "sha256": "69a74cd7b4bff023fcf2542e968a9344f0028f512c9495c17eb6933a0534b4f9"
+    }
+  },
+  "limitations": [
+    "Las trayectorias se guardan como datos nativos editables; falta una acción de interfaz para crearlas automáticamente desde los beats.",
+    "El recorte refinado de vídeo es costoso y no permite reanudar por bloques.",
+    "Los subtítulos alineados pueden diferir de alguna pronunciación cantada."
+  ]
+}

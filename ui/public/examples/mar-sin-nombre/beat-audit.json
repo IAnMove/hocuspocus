@@ -1,0 +1,9 @@
+{
+  "analysisJob": "audio-analysis-8a14e2a95e94",
+  "bpm": 99.4,
+  "audioStart": 15.666666666666666,
+  "detectedBeats": 231,
+  "maxQuantizationErrorMs": 16.6439909297047,
+  "finalFrames": 4180,
+  "crossfadeFrames": 15
+}

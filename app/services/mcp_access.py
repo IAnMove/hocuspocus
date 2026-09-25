@@ -34,7 +34,7 @@ class McpAccess:
         with self.lock:
             environment = bool(self.env_token())
             return {'enabled': bool(self.token()), 'managedByEnvironment': environment,
-                    'endpoint': '/api/v1/wangp/mcp', 'transport': 'streamable-http',
+                    'endpoint': '/api/v1/mcp', 'transport': 'streamable-http',
                     'authentication': 'Bearer', 'protocolVersion': '2025-03-26'}
 
     def update(self, enabled: bool, rotate: bool = False):

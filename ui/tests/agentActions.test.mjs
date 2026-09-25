@@ -822,6 +822,43 @@ test('parses only confirmed exact 3D scene open and save requests', async () => 
   ])
 })
 
+test('parses Qwen 2.1 edit-source and edit-mask Studio references', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Edito el lienzo.',
+    actions: [
+      {
+        type: 'prepare_image',
+        prompt: 'Change the sky to sunset.',
+        model_type: 'qwen_image_21',
+        resolution_preset: '1080p',
+        outpaint_margins: '10 10 10 10',
+      },
+      {
+        type: 'attach_studio_references',
+        reference_output_names: ['hero.png'],
+        reference_role: 'edit_source',
+      },
+      {
+        type: 'attach_studio_references',
+        reference_output_names: ['hero-mask.png'],
+        reference_role: 'edit_mask',
+      },
+    ],
+  }))
+  assert.equal(turn.actions[0].type, 'prepare_image')
+  assert.equal(turn.actions[0].modelType, 'qwen_image_21')
+  assert.equal(turn.actions[0].outpaintMargins, '10 10 10 10')
+  assert.deepEqual(turn.actions[1], {
+    type: 'attach_studio_references',
+    outputNames: ['hero.png'],
+    role: 'edit_source',
+    replaceExisting: true,
+    removeBackground: false,
+  })
+  assert.equal(turn.actions[2].role, 'edit_mask')
+})
+
 test('parses bounded Studio references by output name and role', async () => {
   const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
   const turn = parseAgentTurn(JSON.stringify({

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { appliedCharacterFaceTransform, captureCharacterFaceAnchor, characterKitInventory, characterKitRecipeInventory, claimUnusedCharacterKitId, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, nextCharacterKitId, parseCharacterKitPoseLayerId, syncMountedCharacterKitLayers, syncSceneCharacterKits } from '../src/lib/characterKit.ts'
+import { appliedCharacterFaceTransform, captureCharacterFaceAnchor, characterKitInventory, characterKitRecipeInventory, characterKitStillSource, claimUnusedCharacterKitId, createCharacterKit, emptyCharacterKitLibrary, listCharacterKits, mountCharacterKitLayers, nextCharacterKitId, parseCharacterKitPoseLayerId, resolvedCharacterTts, syncMountedCharacterKitLayers, syncSceneCharacterKits } from '../src/lib/characterKit.ts'
 
 const asset = (id, reviewState = 'approved') => ({ id, name: id, source: `${id}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState })
 
@@ -210,4 +210,54 @@ test('inventory exposes only reviewed performance pieces to the LLM', () => {
   const recipeInventory = characterKitRecipeInventory({ version: 1, revision: 1, activeId: kit.id, kits: { [kit.id]: kit } })
   assert.deepEqual(recipeInventory.map(item => item.name), ['brin/base', 'brin/pose/run', 'brin/mouth/wide'])
   assert.ok(recipeInventory.every(item => item.description.includes('APPROVED_CHARACTER_KIT id=brin')))
+})
+
+test('cast lists 2D cutouts unless a 3D talker is required', () => {
+  const paper = { ...createCharacterKit('Nilo'), id: 'nilo' }
+  const talker = {
+    ...createCharacterKit('Alice'),
+    id: 'alice',
+    speech3d: { digest: 'a'.repeat(64), model: { workspaceId: 'ws', filename: 'alice.glb', url: '/api/v1/file/alice.glb' } },
+  }
+  const library = { ...emptyCharacterKitLibrary(), kits: { nilo: paper, alice: talker } }
+  assert.deepEqual(listCharacterKits(library).map(kit => kit.id), ['alice', 'nilo'])
+  assert.deepEqual(listCharacterKits(library, { requireSpeech3d: true }).map(kit => kit.id), ['alice'])
+})
+
+test('identity still prefers identityReference then base, and TTS prefers the kit voice', () => {
+  const kit = {
+    ...createCharacterKit('Berta'),
+    identityReference: { ...asset('face'), kind: 'image', source: '/examples/berta-face.png' },
+    base: { ...asset('body'), kind: 'image', source: '/examples/berta-body.png' },
+    voice: { provider: 'local', model: 'qwen3_tts_customvoice', voiceId: 'serena' },
+  }
+  assert.equal(characterKitStillSource(kit), '/examples/berta-face.png')
+  assert.equal(characterKitStillSource({ ...kit, identityReference: undefined }), '/examples/berta-body.png')
+  assert.deepEqual(resolvedCharacterTts(kit, { voiceId: 'dylan' }), {
+    source: 'kit', voiceId: 'serena', provider: 'local', instructions: undefined,
+  })
+  assert.deepEqual(resolvedCharacterTts(undefined, { provider: 'local', voiceId: 'dylan' }), {
+    source: 'profile', voiceId: 'dylan', provider: 'local',
+  })
+  assert.equal(resolvedCharacterTts().source, 'none')
+})
+
+test('calibrated mouths align with source pixels in portrait, landscape and rotated shots', () => {
+  for (const viewport of [{ width: 720, height: 1280 }, { width: 1280, height: 720 }]) {
+    for (const rotation of [0, 35]) {
+      const kit = { ...createCharacterKit('Calibrated'), base: { ...asset('body'), kind: 'image', width: 864, height: 1152 },
+        mouth: { closed: asset('closed'), wide: asset('wide') }, eyes: {},
+        anchors: { base: { mouth: { offsetX: -1, offsetY: -22.5, scale: .095, rotation: 0 } } } }
+      const pose = { x: 50, y: 68, scale: .7, opacity: 1, rotation }
+      const mouth = mountCharacterKitLayers(kit, 'base', pose, 3, viewport)[1]
+      // The same source point used by Character Creator and the saved resting face.
+      const fit = Math.min(viewport.width / 864, viewport.height / 1152) * pose.scale
+      const dx = -.01 * 1152 * fit, dy = -.225 * 1152 * fit, angle = rotation * Math.PI / 180
+      assert.ok(Math.abs((mouth.transform.x - pose.x) * viewport.width / 100 - (dx * Math.cos(angle) - dy * Math.sin(angle))) < 1e-8)
+      assert.ok(Math.abs((mouth.transform.y - pose.y) * viewport.height / 100 - (dx * Math.sin(angle) + dy * Math.cos(angle))) < 1e-8)
+      assert.ok(Math.abs(mouth.transform.scale * Math.min(viewport.width, viewport.height) - .095 * 1152 * fit) < 1e-8)
+      const captured = captureCharacterFaceAnchor({ transform: pose }, mouth, kit.base, viewport)
+      for (const key of ['offsetX', 'offsetY', 'scale', 'rotation']) assert.ok(Math.abs(captured[key] - kit.anchors.base.mouth[key]) < 1e-8, key)
+    }
+  }
 })

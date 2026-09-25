@@ -285,8 +285,18 @@ def finalize_reserved_music(
     if cancel_check and cancel_check() and not publication.get("audio_filename") and not audio_filename and not audio_path:
         record = dict(record)
         record["status"] = "cancelled"
-        return store.replace(record)
+        replaced = store.replace(record)
+        from .story_music_generation_record import cancel_story_music_generation_record
+        cancel_story_music_generation_record(workspace_dir, replaced)
+        return replaced
     if publication.get("stage") == "candidate" and publication.get("audio_filename"):
+        from .story_music_generation_record import complete_story_music_generation_record
+        complete_story_music_generation_record(
+            workspace_dir,
+            record,
+            filename=publication.get("audio_filename"),
+            sidecar=publication.get("sidecar"),
+        )
         return record
     record, destination = _stage_bytes(
         store, record,
@@ -305,4 +315,13 @@ def finalize_reserved_music(
         return _mark_repair(store, record, "injected failure after manifest")
     if fail_after == "candidate":
         return _mark_repair(store, record, "injected failure after manifest before candidate")
-    return _stage_candidate(store, record, workspace_dir)
+    published = _stage_candidate(store, record, workspace_dir)
+    from .story_music_generation_record import complete_story_music_generation_record
+    publication = _publication(published)
+    complete_story_music_generation_record(
+        workspace_dir,
+        published,
+        filename=publication.get("audio_filename"),
+        sidecar=publication.get("sidecar"),
+    )
+    return published

@@ -99,7 +99,7 @@ export function ModalShell({
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
       if (dialog) openDialogs.splice(openDialogs.indexOf(dialog), 1)
-      restoreFocusRef.current?.focus()
+      restoreFocusRef.current?.focus({ preventScroll: true })
       restoreFocusRef.current = null
     }
   }, [open])
@@ -119,6 +119,8 @@ export function ModalShell({
     >
       {children}
     </div>,
-    document.body,
+    // In real fullscreen only the fullscreen element's subtree is drawn, so a
+    // dialog opened there (the expanded 3D editor) must live inside it.
+    document.fullscreenElement ?? document.body,
   )
 }

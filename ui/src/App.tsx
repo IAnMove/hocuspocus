@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Menu, Settings } from 'lucide-react'
-import { Sidebar } from './components/Sidebar/Sidebar'
 import { WizardSidebar } from './components/Sidebar/WizardSidebar'
+import { WorkspaceEventBridge } from './components/Sidebar/WorkspaceEventBridge'
 import { MainContent } from './components/MainContent/MainContent'
 import { LoraBrowser } from './components/LoraBrowser/LoraBrowser'
 import { StorageDashboard } from './components/StorageDashboard/StorageDashboard'
@@ -9,7 +9,9 @@ import { RetakeDialog } from './components/RetakeDialog'
 import { OomRecoveryBanner } from './components/OomRecoveryBanner'
 import { DownloadStatusBanner } from './components/DownloadStatusBanner'
 import { PreflightBanner } from './components/PreflightBanner'
+import { PlatformModeBanner } from './components/PlatformModeBanner'
 import { ActivityFooter } from './components/ActivityFooter'
+import { RuntimeUpdateNotice } from './components/RuntimeUpdateNotice'
 import { GalleryReadyToast } from './components/MainContent/GalleryReadyToast'
 import { WelcomeModal } from './components/WelcomeModal'
 import { QueueRecoveryDialog } from './components/QueueRecoveryDialog'
@@ -18,6 +20,8 @@ import { BrandIdentity } from './components/BrandIdentity'
 import { HocusPocusIntro } from './components/HocusPocusIntro'
 import { LanAuthGate } from './components/LanAuthGate'
 import { ExecutionModeBanner } from './components/ExecutionModeBanner'
+import { SeriesNativeBatchBanner } from './features/series/SeriesNativeBatchBanner'
+import { catalogFromOutputs, GenerationInspectorHost } from './features/generation-inspector'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
 
@@ -30,11 +34,16 @@ const DirectorDashboard = lazy(() => import('./components/DirectorDashboard/Dire
 // Settings is a drawer that boots closed, and the two panels behind it are
 // the largest thing in the app that nobody sees on load — hardware and
 // service configuration, plus the theme catalogue. Loading it on first open
-// keeps all of that out of the initial chunk. The open event is handled in
-// Sidebar.tsx and lands in the store, so nothing here needs to be mounted to
-// receive it.
+// keeps all of that out of the initial chunk. The open event is handled by
+// WorkspaceEventBridge (always mounted) and lands in the store. Direct
+// generation only mounts while that workspace is visible, so the listener
+// cannot live there.
 const SettingsDrawer = lazy(() => import('./components/SettingsDrawer/SettingsDrawer').then(module => ({
   default: module.SettingsDrawer,
+})))
+
+const HelpOverlay = lazy(() => import('./components/Help/HelpOverlay').then(module => ({
+  default: module.HelpOverlay,
 })))
 
 export function LazySettingsDrawer({ open }: { open: boolean }) {
@@ -61,6 +70,23 @@ export function LazyDirectorOverlay({ open }: { open: boolean }) {
   </Suspense>
 }
 
+export function LazyHelpOverlay() {
+  const [open, setOpen] = useState(false)
+  const [everOpened, setEverOpened] = useState(false)
+  useEffect(() => {
+    const openHelp = () => {
+      setEverOpened(true)
+      setOpen(true)
+    }
+    window.addEventListener('hocuspocus:help-open', openHelp)
+    return () => window.removeEventListener('hocuspocus:help-open', openHelp)
+  }, [])
+  if (!everOpened) return null
+  return <Suspense fallback={null}>
+    <HelpOverlay open={open} onClose={() => setOpen(false)} />
+  </Suspense>
+}
+
 function AppContent() {
   const [introComplete, setIntroComplete] = useState(false)
   const completeIntro = useCallback(() => setIntroComplete(true), [])
@@ -79,10 +105,11 @@ function AppContent() {
   const dashboardOpen = useStore(s => s.dashboardOpen)
   const settingsOpen = useStore(s => s.settingsOpen)
   const runtimeIdentity = useStore(s => s.systemStats?.runtime)
-  const toggleSidebar = useStore(s => s.toggleSidebar)
-  const setSidebarOpen = useStore(s => s.setSidebarOpen)
   const toggleSettings = useStore(s => s.toggleSettings)
   const appVersion = useStore(s => s.systemConfig?.app_version)
+  const activeWorkspace = useStore(s => s.activeWorkspace)
+  const outputs = useStore(s => s.outputs)
+  const params = useStore(s => s.params)
   const isMobile = useIsMobile()
 
   useEffect(() => {
@@ -123,23 +150,6 @@ function AppContent() {
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [maybeRefreshGallery])
-
-  // Pinokio popup tabs can outlive the backend process. Reload once when the
-  // server instance or the served React build changes so an old bundle cannot
-  // keep mounting videos or showing stale telemetry after an update.
-  useEffect(() => {
-    if (!runtimeIdentity?.instance_id || !runtimeIdentity.ui_build_id) return
-    const key = 'maestro_runtime_identity'
-    const current = `${runtimeIdentity.instance_id}:${runtimeIdentity.ui_build_id}`
-    try {
-      const previous = window.sessionStorage.getItem(key)
-      window.sessionStorage.setItem(key, current)
-      if (previous && previous !== current) window.location.reload()
-    } catch {
-      // Storage may be disabled; periodic output refresh still keeps the tab
-      // functional, it simply cannot auto-reload across server versions.
-    }
-  }, [runtimeIdentity?.instance_id, runtimeIdentity?.ui_build_id])
 
   // Poll LLM status to stay in sync with backend auto-load/unload
   useEffect(() => {
@@ -189,18 +199,20 @@ function AppContent() {
   return (
     <div className="flex flex-col h-full w-full bg-bg-primary">
       <ExecutionModeBanner />
+      <SeriesNativeBatchBanner />
       {/* Mobile header */}
       {isMobile && (
         <header className="h-12 shrink-0 px-4 border-b border-border flex items-center justify-between bg-bg-secondary">
           <button
-            onClick={toggleSidebar}
+            onClick={() => window.dispatchEvent(new Event('hocuspocus:wizard-open'))}
             className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
+            aria-label="Ask to the Wizard"
           >
             <Menu size={20} />
           </button>
           <BrandIdentity appVersion={appVersion} />
           <button
-            onClick={() => { setSidebarOpen(false); toggleSettings() }}
+            onClick={() => { toggleSettings() }}
             className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
           >
             <Settings size={20} />
@@ -209,17 +221,24 @@ function AppContent() {
       )}
 
       <div className="flex flex-1 min-h-0 w-full">
+        <WorkspaceEventBridge />
         <WizardSidebar />
-        <Sidebar />
         <MainContent />
       </div>
       <GalleryReadyToast />
       <ActivityFooter />
+      <RuntimeUpdateNotice identity={runtimeIdentity} />
       <LazySettingsDrawer open={settingsOpen} />
+      <LazyHelpOverlay />
       <LoraBrowser />
       <LazyDirectorOverlay open={dashboardOpen} />
       <StorageDashboard />
       <RecipesOverlay />
+      <GenerationInspectorHost
+        workspace={activeWorkspace}
+        catalog={catalogFromOutputs(outputs || [])}
+        currentModel={{ id: params.model_type }}
+      />
       <RetakeDialog />
       {/* OomRecoveryBanner is a fixed-position overlay — renders nothing
           unless the latest job/pipeline failure has oom_info attached.
@@ -230,6 +249,7 @@ function AppContent() {
           environment is missing ffmpeg / CUDA or low on disk. Renders
           nothing when everything checks out. */}
       <PreflightBanner />
+      <PlatformModeBanner />
       {/* DownloadStatusBanner — fixed bottom-right overlay, polls
           /api/v1/downloads/active every 2s. Renders nothing unless
           a model file is being downloaded. Highlights stalled

@@ -1,0 +1,44 @@
+[
+  {
+    "shot": 1,
+    "title": "El mar de la brújula ciega",
+    "description": "El marinero observa la luna desde su camarote. El mar se mueve detrás del ojo de buey, entre la madera y el farol.",
+    "preview": "scene-01.png",
+    "scene": "scene-01.world3d.json"
+  },
+  {
+    "shot": 5,
+    "title": "La sombra del leviatán",
+    "description": "En la cofa, una criatura gigantesca pasa tras el marinero. Mástil, cesta, vela y aparejos ocupan distintos planos.",
+    "preview": "scene-05.png",
+    "scene": "scene-05.world3d.json"
+  },
+  {
+    "shot": 12,
+    "title": "Donde sangran los astros",
+    "description": "Agua carmesí y cielo negro al otro lado de la ventana. El interior mantiene su propia iluminación cálida.",
+    "preview": "scene-12.png",
+    "scene": "scene-12.world3d.json"
+  },
+  {
+    "shot": 13,
+    "title": "El océano que sueña",
+    "description": "Medusas de color y aguas imposibles contrastan con el camarote oscuro y la figura del marinero.",
+    "preview": "scene-13.png",
+    "scene": "scene-13.world3d.json"
+  },
+  {
+    "shot": 17,
+    "title": "La chispa bajo el agua",
+    "description": "El mar nocturno se ilumina por dentro. Una pequeña luz cálida acompaña la canción.",
+    "preview": "scene-17.png",
+    "scene": "scene-17.world3d.json"
+  },
+  {
+    "shot": 25,
+    "title": "El faro de vuelta a casa",
+    "description": "Después de los mares extraños aparece la costa al amanecer. El viaje termina frente a la misma ventana.",
+    "preview": "scene-25.png",
+    "scene": "scene-25.world3d.json"
+  }
+]

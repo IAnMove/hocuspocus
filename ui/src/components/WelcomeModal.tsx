@@ -1,27 +1,22 @@
 import { useState } from 'react'
-import { Sparkles, Download, Cpu, X } from 'lucide-react'
+import { Sparkles, Download, Cpu, GitPullRequest, X } from 'lucide-react'
 import { useUiTranslation } from '../i18n'
 import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
-
-const SEEN_KEY = 'hocuspocus_welcome_seen_v1'
+import { latestWhatsNewPr, WELCOME_SEEN_KEY, WHATS_NEW } from '../whatsNew'
 
 /**
- * WelcomeModal — a one-time first-run intro. Sets the expectations that
- * most surprise new users (model weights download on first use, not at
- * install; Director is planned by a local LLM). Shown once ever, tracked
- * in localStorage.
- *
- * Deliberately not tied to any backend call — it's pure orientation, so
- * it can render instantly on first paint.
+ * WelcomeModal — first-run keys plus a scrollable one-liner per recent PR.
+ * Re-shown when the newest listed PR changes.
  */
 export function WelcomeModal() {
-  const { t } = useUiTranslation('common')
-  const [open, setOpen] = useState(() => safeStorageGet('local', SEEN_KEY) !== '1')
+  const { t, i18n } = useUiTranslation('common')
+  const [open, setOpen] = useState(() => safeStorageGet('local', WELCOME_SEEN_KEY) !== String(latestWhatsNewPr()))
+  const locale = i18n.language.startsWith('es') ? 'es' : 'en'
 
   if (!open) return null
 
   const dismiss = () => {
-    safeStorageSet('local', SEEN_KEY, '1')
+    safeStorageSet('local', WELCOME_SEEN_KEY, String(latestWhatsNewPr()))
     setOpen(false)
   }
 
@@ -55,6 +50,28 @@ export function WelcomeModal() {
           <Row icon={<Cpu size={16} className="text-accent-blue" />} title={t('welcome.directorTitle')}>
             {t('welcome.directorBody')}
           </Row>
+          <Row icon={<GitPullRequest size={16} className="text-accent-blue" />} title={t('welcome.recentTitle')}>
+            {t('welcome.recentHint')}
+          </Row>
+          <ul
+            className="max-h-44 overflow-y-auto rounded-xl border border-border bg-bg-tertiary/40 px-3 py-2 space-y-1.5"
+            aria-label={t('welcome.recentTitle')}
+          >
+            {WHATS_NEW.map(item => (
+              <li key={item.pr} className="text-[11px] leading-snug text-text-secondary">
+                <a
+                  href={`https://github.com/IAnMove/hocuspocus/pull/${item.pr}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent-blue hover:underline"
+                >
+                  #{item.pr}
+                </a>
+                <span className="text-text-muted"> · </span>
+                <span>{item[locale]}</span>
+              </li>
+            ))}
+          </ul>
         </div>
 
         {/* Footer */}

@@ -1,7 +1,13 @@
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
+import { canonicalSceneFps } from '../../lib/sceneFps.ts'
 import { encodeSpeechAudio } from './speech/encodeAudio'
 import { scene3dFrameCount, scene3dFrameTime } from './clock.ts'
 import { scene3dCopy } from './copy.ts'
+
+export function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  throw signal.reason instanceof DOMException ? signal.reason : new DOMException('Aborted', 'AbortError')
+}
 
 export function evenDim(value: number): number {
   const n = Math.round(Number.isFinite(value) ? value : 0)
@@ -29,7 +35,7 @@ export function world3dEncoderConfig(width: number, height: number, fps: number)
 }
 
 export function world3dExportPlan(duration: number, fps: number) {
-  const rate = fps === 60 ? 60 : 30
+  const rate = canonicalSceneFps(fps)
   const count = scene3dFrameCount(duration, rate)
   const times = Array.from({ length: count }, (_, index) => scene3dFrameTime(index, duration, rate))
   return { count, fps: rate, times }
@@ -59,21 +65,25 @@ export async function encodeWorld3DFrames(options: {
   paint: (seconds: number) => HTMLCanvasElement | Promise<HTMLCanvasElement>
   onProgress?: (index: number, count: number) => void
   overlay?: (context: CanvasRenderingContext2D, width: number, height: number, seconds: number) => void
+  signal?: AbortSignal
 }): Promise<Blob> {
+  throwIfAborted(options.signal)
   const size = world3dExportSize(options.width, options.height)
   const plan = world3dExportPlan(options.duration, options.fps)
   const config = await supportedEncoder(size, plan.fps)
+  throwIfAborted(options.signal)
   const copy = document.createElement('canvas')
   copy.width = size.width
   copy.height = size.height
   const context = copy.getContext('2d')
   if (!context) throw new Error(scene3dCopy('stage.exportCanvasFailed'))
+  const audioChannels = options.audio ? Math.min(2, Math.max(1, options.audio.numberOfChannels || 1)) : 1
   const target = new ArrayBufferTarget()
   const muxer = new Muxer({
     target,
     video: { codec: 'avc', width: size.width, height: size.height, frameRate: plan.fps },
     fastStart: 'in-memory',
-    audio: options.audio ? { codec: 'aac', numberOfChannels: 1, sampleRate: options.audio.sampleRate } : undefined,
+    audio: options.audio ? { codec: 'aac', numberOfChannels: audioChannels, sampleRate: options.audio.sampleRate } : undefined,
     firstTimestampBehavior: 'strict',
   })
   let encoderError: Error | null = null
@@ -86,11 +96,13 @@ export async function encodeWorld3DFrames(options: {
   try {
     if (options.audio) await encodeSpeechAudio(muxer, options.audio)
     for (let index = 0; index < plan.count; index += 1) {
+      throwIfAborted(options.signal)
       if (encoderError) throw encoderError
       const source = await options.paint(plan.times[index] ?? 0)
       context.drawImage(source, 0, 0, size.width, size.height)
       options.overlay?.(context, size.width, size.height, plan.times[index] ?? 0)
       await nextPaint()
+      throwIfAborted(options.signal)
       const frame = new VideoFrame(copy, { timestamp: index * frameDurationUs, duration: frameDurationUs })
       encoder.encode(frame, { keyFrame: index % Math.max(1, plan.fps * 2) === 0 })
       frame.close()

@@ -14,13 +14,14 @@
   "outputs": "Salidas: {{names}}",
   "assets": "Recursos: {{ids}}",
   "openTarget": "Abrir destino",
+  "viewInActivity": "Ver en Actividad",
   "viewErrors": "Ver errores",
   "retryPending": "Reintentar pendientes",
   "removeBackgroundTitle": "Eliminar fondo",
   "removeBackgroundQueued": "He abierto Tools y he encolado la eliminación de fondo para «{{name}}».",
-  "removeBackgroundInvalidAsset": "El recurso exacto seleccionado no es una imagen.",
+  "removeBackgroundInvalidAsset": "El recurso exacto seleccionado no es una imagen ni un vídeo.",
   "removeBackgroundNoLocation": "La imagen exacta no tiene una ubicación disponible.",
-  "removeBackgroundMissingSource": "Elige una imagen exacta de la biblioteca o indica una ruta canónica.",
+  "removeBackgroundMissingSource": "Elige una imagen o un vídeo exacto de la biblioteca o indica una ruta canónica.",
   "upscaleTitle": "Escalar medio",
   "upscaleQueued": "He abierto Tools y he encolado el escalado de {{kind}} para «{{name}}».",
   "upscaleInvalidAsset": "El recurso exacto seleccionado no es {{kind}}.",
@@ -68,6 +69,7 @@
     "reported": "Informado"
   },
   "rejectionReason": {
+    "invalid_intent": "El asistente no devolvió una interpretación válida de tu intención. Reintenta la petición.",
     "invalid_action": "Acción desconocida, parámetros obligatorios ausentes o valores inválidos.",
     "invalid_action_list": "Las acciones propuestas deben ser una lista.",
     "action_limit": "La propuesta supera el número de acciones permitido por turno.",
@@ -75,5 +77,9 @@
     "duplicate_generation": "Ya se ha solicitado una generación en este turno.",
     "request_policy": "La acción se excluyó o sustituyó al comprobar tu petición y contexto.",
     "visual_evidence_only": "Se analizó el medio adjunto; ese análisis no autorizó esta acción."
-  }
+  },
+  "stopResponse": "Descartar respuesta",
+  "responseDiscarded": "Respuesta descartada. Sus acciones propuestas no se ejecutarán. La consulta al LLM puede terminar en segundo plano.",
+  "controlError": "No se pudo aplicar este control: {{message}}",
+  "openSection": "Abrir sección"
 }

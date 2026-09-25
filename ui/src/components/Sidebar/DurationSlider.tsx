@@ -3,6 +3,7 @@ import { Lock, Unlock } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import type { ModelOptions } from '../../types'
+import { H3_EXPERIMENTAL_MAX_FRAMES, supportsH3ExtendedDuration } from '../../lib/h3ExtendedDuration'
 
 /* eslint-disable react-refresh/only-export-components -- shared slider helpers are intentionally exported. */
 
@@ -51,6 +52,9 @@ export function DurationSlider() {
   const setWindowSize = useStore(s => s.setSlidingWindowSeconds)
   const overlap = useStore(s => s.slidingWindowOverlap)
   const locked = useStore(s => s.slidingWindowLocked)
+  const generationMode = useStore(s => s.generationMode)
+  const extendedDuration = useStore(s => s.params.minimax_h3_extended_duration === true)
+  const setExtendedDuration = useStore(s => s.setH3ExtendedDuration)
   const modelOptions = useStore(s => s.modelOptions)
   const resolution = useStore(s => s.params.resolution)
   const totalVramGb = useStore(s => s.systemStats?.gpu.vram_total_gb ?? 0)
@@ -157,6 +161,17 @@ export function DurationSlider() {
         value={duration}
         onChange={e => setDuration(Number(e.target.value))}
       />
+      {generationMode === 'video' && supportsH3ExtendedDuration(modelOptions) && (
+        <label className="mt-2 flex items-start gap-2 rounded-lg border border-border p-2.5 text-xs">
+          <input type="checkbox" className="mt-0.5 accent-accent-blue"
+            checked={extendedDuration}
+            onChange={event => setExtendedDuration(event.target.checked)} />
+          <span>
+            <span className="text-text-primary">{t('duration.allow30s')} <span className="text-amber-400">{t('duration.experimental')}</span></span>
+            <span className="mt-1 block text-[10px] text-text-muted">{t('duration.allow30sHint')}</span>
+          </span>
+        </label>
+      )}
       {showSlidingWindow && !isMultiClip && (
         <div className="text-[10px] text-text-muted mt-1">
           {t('duration.windowsOf', { count: windowCount, size: formatSeconds(windowSize) })} &middot;{' '}
@@ -197,6 +212,8 @@ export function WindowSettings() {
   const setOverlap = useStore(s => s.setSlidingWindowOverlap)
   const locked = useStore(s => s.slidingWindowLocked)
   const setLocked = useStore(s => s.setSlidingWindowLocked)
+  const setExtendedDuration = useStore(s => s.setH3ExtendedDuration)
+  const extendedDuration = useStore(s => s.params.minimax_h3_extended_duration === true)
   const modelOptions = useStore(s => s.modelOptions)
   const resolution = useStore(s => s.params.resolution)
   const totalVramGb = useStore(s => s.systemStats?.gpu.vram_total_gb ?? 0)
@@ -210,7 +227,11 @@ export function WindowSettings() {
   const swDefaults = (modelOptions as Record<string, unknown> | null)?.sliding_window_defaults as Record<string, number> | undefined
   const supportsSlidingWindows = modelOptions?.sliding_window === true
   const windowMinSeconds = (swDefaults?.window_min ?? Math.round(3 * fps)) / fps
-  const windowMaxSeconds = (swDefaults?.window_max ?? Math.round(40 * fps)) / fps
+  const windowMaxSeconds = (
+    extendedDuration && supportsH3ExtendedDuration(modelOptions)
+      ? H3_EXPERIMENTAL_MAX_FRAMES
+      : (swDefaults?.window_max ?? Math.round(40 * fps))
+  ) / fps
   const windowStepSeconds = Math.max(1, swDefaults?.window_step ?? fps) / fps
   const overlapMin = swDefaults?.overlap_min ?? 1
   const overlapMax = swDefaults?.overlap_max ?? 97
@@ -250,10 +271,9 @@ export function WindowSettings() {
             <button
               onClick={() => {
                 if (locked) {
-                  // Unlocking — let auto-track resume
+                  if (extendedDuration) setExtendedDuration(false)
                   setLocked(false)
                 } else {
-                  // Locking — freeze current window size
                   setLocked(true)
                 }
               }}
