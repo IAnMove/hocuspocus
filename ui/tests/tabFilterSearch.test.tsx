@@ -76,6 +76,7 @@ test('primary navigation exposes four stable categories and highlights the selec
     assert.equal(useStore.getState().mediaFilter, 'images')
     assert.equal(useStore.getState().sidebarOpen, true)
     assert.equal(useStore.getState().sidebarMode, 'studio')
+    assert.equal(useStore.getState().generationMode, 'image')
     const directDestinations = [
       ['Image', 'image', 'images'],
       ['Video', 'video', 'videos'],
@@ -92,6 +93,65 @@ test('primary navigation exposes four stable categories and highlights the selec
     }
     assert.equal(direct.getAttribute('data-navigation-active'), 'true')
     assert.equal(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected'), 'true')
+  } finally {
+    cleanup()
+  }
+})
+
+test('reopening Direct generation keeps the remembered mode form instead of resetting it', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
+  useStore.setState({
+    generationMode: 'image',
+    imageStudioIntent: 'edit',
+    developerMode: false,
+    mediaFilter: 'images',
+    outputSearchQuery: '',
+    activeWorkspace: 'default',
+    browsingUploads: false,
+    sidebarOpen: true,
+    sidebarMode: 'studio',
+    settingsOpen: false,
+    dashboardOpen: false,
+    resolutionPreset: '1080p',
+    aspectRatio: '16:9',
+    params: {
+      ...useStore.getState().params,
+      model_type: 'qwen_image_21',
+      prompt: 'keep this edit prompt',
+      image_guide: '/api/v1/uploads/source.png',
+      image_mask: '/api/v1/uploads/mask.png',
+      num_inference_steps: 37,
+      guidance_scale: 2.5,
+      image_mode: 1,
+    },
+    loadOutputs: async () => undefined,
+    loadModelOptions: async () => undefined,
+    loadLoras: async () => undefined,
+  })
+  try {
+    render(<TabFilter />)
+    fireEvent.click(screen.getByRole('button', { name: 'Media', exact: true }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Images', exact: true }))
+    assert.equal(useStore.getState().mediaFilter, 'images')
+    fireEvent.click(screen.getByRole('button', { name: 'Direct generation', exact: true }))
+    const state = useStore.getState()
+    assert.equal(state.generationMode, 'image')
+    assert.equal(state.imageStudioIntent, 'edit')
+    assert.equal(state.sidebarOpen, true)
+    assert.equal(state.sidebarMode, 'studio')
+    assert.equal(state.mediaFilter, 'images')
+    assert.equal(state.aspectRatio, '16:9')
+    assert.equal(state.resolutionPreset, '1080p')
+    assert.equal(state.params.prompt, 'keep this edit prompt')
+    assert.equal(state.params.image_guide, '/api/v1/uploads/source.png')
+    assert.equal(state.params.image_mask, '/api/v1/uploads/mask.png')
+    assert.equal(state.params.num_inference_steps, 37)
+    assert.equal(state.params.guidance_scale, 2.5)
   } finally {
     cleanup()
   }
