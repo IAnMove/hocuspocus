@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pencil, SlidersHorizontal, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo } from 'lucide-react'
 import { editOutputImage, addOutputImageReference } from '../../features/studio/imageInputActions'
 import { beginImageSettingsChange } from '../../features/studio/imageSettingsRestore'
-import { outputImageUrl } from '../../lib/storedImageFiles'
+import { outputImageUrl, outputMediaUrl } from '../../lib/storedImageFiles'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { MediaMoveDialog } from './MediaMoveDialog'
@@ -10,7 +10,7 @@ import { ConfirmDialog } from '../common/ConfirmDialog'
 import { useUiTranslation } from '../../i18n'
 import { galleryWorkspaceName } from '../../stores/gallerySlice'
 import { useStore } from '../../stores/useStore'
-import { fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, selectPipelineClipVideo } from '../../api/client'
+import { fetchOutputMetadata, moveOutput, uploadImage, selectPipelineClipVideo } from '../../api/client'
 import type { OutputFile } from '../../types'
 import {
   readVideoEditorReplacementTarget,
@@ -132,17 +132,17 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
       clipId: target.clipId,
       clipIndex: target.clipIndex,
       outputName: file.name,
-      source: getFileUrl(file.name),
+      source: outputMediaUrl(file.name, outputWorkspace),
       selectedAt: Date.now(),
     })
     setMediaFilter('videoeditor')
-  }, [file.name, file.type, setMediaFilter])
+  }, [file.name, file.type, outputWorkspace, setMediaFilter])
 
   const handleOpenInVideoEditor = useCallback(() => {
     if (file.type !== 'video') return
     writeVideoEditorPendingSource({
       name: file.name,
-      url: getFileUrl(file.name, outputWorkspace),
+      url: outputMediaUrl(file.name, outputWorkspace),
     })
     setMediaFilter('videoeditor')
   }, [file.name, file.type, outputWorkspace, setMediaFilter])
@@ -292,7 +292,7 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
         // The dialog releases its player on close; recover its selected frame.
         video = document.createElement('video')
         temporaryVideo = video
-        video.src = getFileUrl(file.name, outputWorkspace)
+        video.src = outputMediaUrl(file.name, outputWorkspace)
         video.muted = true
         await new Promise<void>((resolve, reject) => {
           video!.onloadeddata = () => resolve()
@@ -334,7 +334,7 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
   const handleContinueFrom = async () => {
     if (file.type !== 'video') return
     try {
-      const res = await fetch(getFileUrl(file.name))
+      const res = await fetch(outputMediaUrl(file.name, outputWorkspace))
       const blob = await res.blob()
       const videoFile = new File([blob], file.name, { type: blob.type || 'video/mp4' })
       const url = URL.createObjectURL(videoFile)
@@ -521,14 +521,14 @@ function InputActions({ a }: { a: OutputActions }) {
 }
 
 function LibraryActions({ a }: { a: OutputActions }) {
-  const { activeWorkspace, browsingUploads, file, handleMove, moving, setConfirmDelete, setShowMoveMenu, showMoveMenu, t, toggleFavorite, workspaces } = a
+  const { activeWorkspace, browsingUploads, file, handleMove, moving, outputWorkspace, setConfirmDelete, setShowMoveMenu, showMoveMenu, t, toggleFavorite, workspaces } = a
   return (
     <>
         <button
           onClick={(e) => {
             e.stopPropagation()
             const link = document.createElement('a')
-            link.href = getFileUrl(file.name)
+            link.href = outputMediaUrl(file.name, outputWorkspace)
             link.download = file.name
             document.body.appendChild(link)
             link.click()
