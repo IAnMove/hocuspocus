@@ -1,7 +1,7 @@
 import React, { useState, type ReactNode, type RefObject } from 'react'
 import { BookOpen, Box, Film, Play } from 'lucide-react'
-import { getFileUrl } from '../../api/client'
 import type { OutputFile } from '../../types'
+import { outputMediaUrl } from '../../lib/storedImageFiles'
 import { ImagePreview } from '../common/ImagePreview'
 
 // The card's media box has a fixed height; every preview is contained in it.
@@ -50,9 +50,10 @@ function FeedVideoPreview({ file, workspace, previewUrl, videoTime, onVideoTimeC
 }
 
 function FeedModel3dPreview({
-  file, isActive, canPreviewModel3d, isRigged, riggedClips, activeClip, setActiveClip,
+  file, workspace, isActive, canPreviewModel3d, isRigged, riggedClips, activeClip, setActiveClip,
 }: {
   file: OutputFile
+  workspace?: string
   isActive: boolean
   canPreviewModel3d: boolean
   isRigged: boolean
@@ -60,12 +61,13 @@ function FeedModel3dPreview({
   activeClip: string | null
   setActiveClip: (clip: string) => void
 }) {
+  const mediaUrl = outputMediaUrl(file.name, workspace || '')
   let preview: ReactNode
   if (canPreviewModel3d && isActive) {
     preview = (
       <model-viewer
         key={file.url}
-        src={getFileUrl(file.name)}
+        src={mediaUrl}
         alt={file.name}
         camera-controls
         auto-rotate={isRigged ? undefined : true}
@@ -93,7 +95,7 @@ function FeedModel3dPreview({
   return (
     <div className="relative h-full w-full">
       {preview}
-      <a href={getFileUrl(file.name)} download={file.name} className="absolute right-2 top-2 rounded-lg border border-white/20 bg-black/60 px-2.5 py-1.5 text-[10px] text-white transition-colors hover:bg-black/80">Download</a>
+      <a href={mediaUrl} download={file.name} className="absolute right-2 top-2 rounded-lg border border-white/20 bg-black/60 px-2.5 py-1.5 text-[10px] text-white transition-colors hover:bg-black/80">Download</a>
       {isRigged && riggedClips.length > 0 && (
         <select value={activeClip ?? riggedClips[0]} onChange={event => setActiveClip(event.target.value)} className="absolute bottom-2 left-2 rounded-lg border border-white/20 bg-black/60 px-2 py-1 text-[10px] text-white" title="Animation clip">
           {riggedClips.map(clip => <option key={clip} value={clip}>{clip}</option>)}
@@ -147,6 +149,7 @@ function renderFeedMedia({
     return (
       <FeedModel3dPreview
         file={file}
+        workspace={workspace}
         isActive={isActive}
         canPreviewModel3d={canPreviewModel3d}
         isRigged={isRigged}
