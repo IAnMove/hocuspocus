@@ -175,6 +175,25 @@ test('two edit sources × two lines freeze four independent single-output comman
   }
 })
 
+test('Qwen Layered batch keeps the requested layer count instead of pinning batch_size to 1', async () => {
+  const state = imageSource({
+    imageStudioIntent: 'edit',
+    modelOptions: { image_source_support: true, image_source_required: true, image_layer_count: { min: 1, max: 16, default: 4 } },
+    params: { prompt: 'separate clothing', batch_size: 6, repeat_generation: 3 },
+    imageBatch: { enabled: true, perLine: false, sources: [{ url: '/api/v1/uploads/a.png' }, { url: '/api/v1/uploads/b.png' }] },
+  })
+  const { ports, sent } = recordingPorts()
+  await startStudioImageGenerationFromStore({ get: () => state, set: () => {} }, undefined, { actor: 'user', commandId: 'layered' }, {
+    ...ports, startPolling: () => {},
+  })
+  assert.equal(sent.length, 2)
+  for (const item of sent) {
+    assert.equal(item.input.params.batch_size, 6)
+    assert.equal(item.input.params.repeat_generation, 1)
+    assert.equal(item.input.params.video_prompt_type, 'V')
+  }
+})
+
 test('whole prompt keeps newlines and a partial batch failure leaves the other tasks queued', async () => {
   const state = imageSource({ imageStudioIntent: 'edit', imageBatch: { enabled: true, perLine: false,
     sources: [{ url: '/api/v1/uploads/a.png' }, { url: '/api/v1/uploads/b.png' }] } })

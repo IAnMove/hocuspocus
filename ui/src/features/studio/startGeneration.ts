@@ -371,7 +371,10 @@ export function startStudioImageGenerationFromStore(
     // Freeze every combination before the first await: later form/workspace
     // edits must not alter the rest of an already submitted batch.
     const intents = pairs.map(pair => snapshotStudioImageIntent({ ...source, params: {
-      ...source.params, prompt: pair.prompt, repeat_generation: 1, batch_size: 1, multi_prompts_gen_type: 2,
+      ...source.params, prompt: pair.prompt, repeat_generation: 1, multi_prompts_gen_type: 2,
+      // Layer count lives in batch_size for Qwen Layered. Only pin it to 1
+      // when the model uses that field as extra images per prompt.
+      ...(source.modelOptions?.image_layer_count ? {} : { batch_size: 1 }),
       ...(pair.source ? { image_guide: pair.source.url, image_mask: undefined,
         video_prompt_type: mergeVideoPromptLetters(String(source.params?.video_prompt_type || ''), 'V', 'VAG'),
       } : {}),
