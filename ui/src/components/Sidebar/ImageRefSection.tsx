@@ -6,7 +6,7 @@ import type { ApiOutput } from '../../api/outputs'
 import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import { fileFromStudioOutput } from '../../lib/studioInputsPick.ts'
 import { useWorkspaceOutputs } from '../../lib/studioAssetPick.ts'
-import { LocalImagePreview } from '../common/ImagePreview'
+import { EditableImageReference } from './EditableImageReference'
 import { forgetLocalImage, localEditFile } from '../../lib/localEditImages'
 
 export function ImageRefSection() {
@@ -115,9 +115,9 @@ export function ImageRefSection() {
               dragOverIndex === i ? 'border-accent-blue border-2' : 'border-border'
             }`}
           >
-            <LocalImagePreview file={file} label={t('inputs.refAlt', { n: i + 1 })} className="h-full w-full cursor-zoom-in" />
+            <EditableImageReference key={`${activeWorkspace}:${file.name}:${file.lastModified}`} file={file} />
             {i === 0 && imageRefs.length > 1 && hasLandscapeMode && imageRefType === 'KI' && (
-              <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white text-center py-0.5">
+              <div className="pointer-events-none absolute top-4 left-0 right-0 bg-black/60 text-[8px] text-white text-center py-0.5">
                 {t('imageRef.main')}
               </div>
             )}

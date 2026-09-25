@@ -30,6 +30,8 @@ In **Direct generation → Image → Edit**, enable **Edit multiple images separ
 
 The HocusPocus file picker loads small thumbnails, with a medium preview on selection. **Enlarge** loads the original resolution only when requested.
 
+Selected images (single inputs, batch inputs and image references) show a small preview and an **Edit** button. Drag a crop rectangle, or enter its position and size in original pixels, then choose **Save crop**. This uploads a new PNG copy and replaces only that input; the original library image is never overwritten. Copies remain in **Uploads**. Cancel leaves the input untouched; a save error lets you retry. Cropping an edit source clears its previous mask, which no longer matches the new geometry.
+
 ### Direct a film, videoclip or trailer
 
 **Director** takes a brief (or a song) and turns it into reviewable shots, prompts and references. Manual mode lets you approve each step. Auto mode runs analyze → plan → images → clips → assemble, and **Productions** keeps the whole thread so you can resume or retake one shot.

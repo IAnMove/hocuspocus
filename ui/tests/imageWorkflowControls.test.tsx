@@ -37,7 +37,7 @@ test('batch controls count image/prompt pairs and keep settings in the edit draf
   assert.equal(useStore.getState().imageBatch?.sources.length, 2)
   fireEvent.change(view.getByRole('combobox'), { target: { value: 'whole' } })
   assert.match(view.getByRole('status').textContent || '', /2/)
-  fireEvent.click(view.getByRole('button', { name: /one.png/ }))
+  fireEvent.click(view.getByRole('button', { name: 'Remove one.png', exact: true }))
   assert.equal(useStore.getState().imageBatch?.sources.length, 1)
   await act(async () => useStore.getState().resetImageStudio())
   assert.equal(useStore.getState().imageBatch, undefined)
