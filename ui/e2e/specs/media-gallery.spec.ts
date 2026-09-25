@@ -23,6 +23,30 @@ const FIRST_IMAGE = FIXTURES[0].name
 const LAST_IMAGE = FIXTURES.at(-1)!.name
 const VIDEO = FIXTURES[2].name
 
+test('mobile gallery keeps its width after returning from direct generation', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const session = await bootGalleryApp(page), fixtures = await installGalleryFixtures(page)
+  fixtures.releaseImages(); fixtures.releaseMetadata()
+  try {
+    await page.getByRole('button', { name: 'Direct generation', exact: true }).click()
+    await page.getByRole('tab', { name: 'Image', exact: true }).click()
+    await expect(page.getByTestId('direct-generation-workspace')).toBeVisible()
+    await page.getByRole('button', { name: 'Media', exact: true }).click()
+    await page.getByRole('tab', { name: 'Images', exact: true }).click()
+    const feed = page.getByTestId('media-feed')
+    const card = feed.locator('[data-feed-index="0"]')
+    await expect(card).toBeVisible()
+    await expect.poll(async () => (await card.boundingBox())!.width).toBeGreaterThan(350)
+    const bounds = (await card.boundingBox())!
+    expect(bounds.x).toBeGreaterThanOrEqual(0)
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(390)
+    await page.screenshot({ path: test.info().outputPath('mobile-return.png') })
+    await page.getByRole('button', { name: 'Direct generation', exact: true }).click()
+    await expect(page.getByTestId('direct-generation-workspace')).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Image', exact: true })).toHaveAttribute('aria-selected', 'true')
+  } finally { await closeApp(page, session) }
+})
+
 function gate() {
   let release!: () => void
   const promise = new Promise<void>(resolve => { release = resolve })

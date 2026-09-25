@@ -26,6 +26,8 @@ Install with [Pinokio](https://pinokio.computer) from [`https://github.com/IAnMo
 
 ### Edit images in batches
 
+Clicking **Direct generation** opens the currently selected generation mode immediately; use its tabs to switch modes.
+
 In **Direct generation → Image → Edit**, enable **Edit multiple images separately** and add images from your device or HocusPocus (use the selection checkboxes). Choose either the entire prompt, including line breaks, or **One prompt per line**. Two images and two nonempty prompt lines enqueue four independent generations, each with one output and its own retry action. The selected canvas/model settings apply to every pair. Batches are limited to 100 combinations; shared masks are not supported.
 
 The HocusPocus file picker loads small thumbnails, with a medium preview on selection. **Enlarge** loads the original resolution only when requested.

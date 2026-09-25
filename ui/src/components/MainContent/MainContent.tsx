@@ -358,6 +358,11 @@ export function MainContent() {
   }, [developerMode, mediaFilter, setMediaFilter])
 
   const feedRef = useRef<HTMLDivElement>(null)
+  const [feedElement, setFeedElement] = useState<HTMLDivElement | null>(null)
+  const attachFeed = useCallback((element: HTMLDivElement | null) => {
+    feedRef.current = element
+    setFeedElement(element)
+  }, [])
   const listRef = useRef<HTMLDivElement>(null)
   const jobsAnchorRef = useRef<HTMLDivElement>(null)
   const activeIndex = selectedOutput
@@ -447,7 +452,7 @@ export function MainContent() {
   }, [markFeedTop, syncWindow])
 
   useEffect(() => {
-    const el = feedRef.current
+    const el = feedElement
     if (!el) return
     const probe = document.createElement('div')
     probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:100svh;visibility:hidden;pointer-events:none'
@@ -472,7 +477,7 @@ export function MainContent() {
       observer.disconnect()
       probe.remove()
     }
-  }, [mediaFilter, workspaceSurface, tryRestore])
+  }, [feedElement, mediaFilter, workspaceSurface, tryRestore])
 
   // Each list (workspace or uploads × filter) remembers where the reader was;
   // switching lists saves the old position and returns to the new one's.
@@ -685,7 +690,7 @@ export function MainContent() {
   }
 
   return (
-    <main className="flex-1 flex flex-col h-full overflow-hidden">
+    <main className="min-w-0 flex-1 flex flex-col h-full overflow-hidden">
       {/* Top bar */}
       <div className="border-b border-border px-2 py-2 md:px-6 md:py-3">
         <TabFilter />
@@ -783,7 +788,7 @@ export function MainContent() {
         {/* Gallery column: its own toolbar above the rows, so the layout
             switcher belongs to the rows it changes rather than floating over
             the cards or the history strip. */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex min-h-[3.25rem] shrink-0 items-center border-b border-border/60 px-3 py-1 md:px-4">
           <GalleryToolbar
             view={galleryView}
@@ -806,7 +811,7 @@ export function MainContent() {
           />
         </div>
         <div
-          ref={feedRef}
+          ref={attachFeed}
           data-testid="media-feed"
           className="relative min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 [overflow-anchor:none] md:p-4"
           style={phoneGrid ? { touchAction: 'pan-y' } : undefined}
