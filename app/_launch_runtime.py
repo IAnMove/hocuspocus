@@ -7465,6 +7465,7 @@ async def update_services_config(request: Request):
 
     services = wgp.server_config.setdefault("services", {})
     updated = {}
+    previous_llm_provider = _effective_llm_routing(services)[0]
 
     for key, value in body.items():
         if key not in ALLOWED_KEYS:
@@ -7494,6 +7495,23 @@ async def update_services_config(request: Request):
 
     wgp.server_config["services"] = services
 
+    # Switching to the internal server without naming a model must not keep the
+    # previous provider's model or URL: a MiniMax chat id forces MiniMax routing,
+    # so "local" would still call the MiniMax API without a key.
+    switched_to_local = (
+        "llm_provider" in body and "llm_model_id" not in body
+        and str(services.get("llm_provider") or "").strip().lower() == "local"
+        and previous_llm_provider != "local"
+    )
+    if switched_to_local:
+        from services.llm_service import MODEL_REGISTRY
+        current_model = services.get("llm_model_id") or _active_production_profile()["text"]["model"]
+        if current_model not in MODEL_REGISTRY:
+            services["llm_model_id"] = _DEFAULT_LLM_REPO
+            updated["llm_model_id"] = _DEFAULT_LLM_REPO
+        services["llm_remote_url"] = ""
+        updated["llm_remote_url"] = ""
+
     # Keep the global text profile and the legacy LLM controls coherent. API
     # keys remain solely in services; only credential-free routing is mirrored.
     if "llm_provider" in body or "llm_model_id" in body:
@@ -7507,6 +7525,8 @@ async def update_services_config(request: Request):
             )
             if services.get("llm_remote_url"):
                 profile["text"]["base_url"] = str(services.get("llm_remote_url") or "")
+            elif switched_to_local:
+                profile["text"]["base_url"] = ""
             wgp.server_config[_PRODUCTION_PROFILE_CONFIG_KEY] = _normalize_production_profile(profile)
         except ValueError:
             pass
