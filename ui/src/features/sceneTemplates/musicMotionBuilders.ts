@@ -17,7 +17,7 @@ export function sampledPath(samples: number, pose: (at: number) => Pose): Beat[]
 export function copySubject(c: BuildContext, index: number, points: Beat[], slot: TemplateSlotName = 'subject_1'): SceneLayer {
   const source = asset(c, slot, { y: 56, scale: .45 })
   const id = index === 0 ? slot : `${slot}-copy-${index}`
-  return keyframes({ ...source, id, name: `${source.name} · copia ${index + 1}` }, points)
+  return keyframes({ ...source, id, name: `${source.name} · copy ${index + 1}` }, points)
 }
 
 /** Seamless artwork recommended. A stable overscan underlay covers the viewport
@@ -29,7 +29,7 @@ export function musicMotionBackground(id: string, c: BuildContext): SceneLayer[]
   }
   const direction = scrolling[id]
   if (!direction) return [base]
-  const strip = { ...base, id: 'background-scroll', name: 'background · desplazamiento', z: 1,
+  const strip = { ...base, id: 'background-scroll', name: 'background · scroll', z: 1,
     strip: { enabled: true, count: 4, spacing: 100, direction, speed: id === 'music-conveyor' ? 28 : 95, phase: 0 },
   }
   return [base, strip]

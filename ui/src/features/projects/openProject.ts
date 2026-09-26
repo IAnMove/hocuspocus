@@ -8,7 +8,7 @@ export function resolveProjectSource(
 ): ProjectSource {
   const source = project.sources.find(item => item.workspace_id === preferredWorkspace)
     || project.sources[0]
-  if (!source) throw new Error('El proyecto no tiene una ubicación persistente.')
+  if (!source) throw new Error('The project has no persistent location.')
   return source
 }
 
@@ -18,7 +18,7 @@ async function selectWorkspace(workspace: string) {
     await app.switchWorkspace(workspace)
   }
   if (useStore.getState().activeWorkspace !== workspace || useStore.getState().browsingUploads) {
-    throw new Error(`No se pudo abrir el workspace “${workspace}”.`)
+    throw new Error(`The workspace “${workspace}” could not be opened.`)
   }
 }
 
@@ -27,14 +27,14 @@ export async function openProject(project: ProjectCatalogItem): Promise<void> {
   const source = resolveProjectSource(project, preferred)
   if (project.kind === 'comic') {
     const { useComicStore } = await import('../comics/store')
-    if (useComicStore.getState().dirty && !window.confirm('¿Abrir este cómic y descartar los cambios sin guardar?')) return
+    if (useComicStore.getState().dirty && !window.confirm('Open this comic and discard unsaved changes?')) return
   }
   await selectWorkspace(source.workspace_id)
 
   if (project.kind === 'story') {
     const { useStoryStore } = await import('../stories/store')
     await useStoryStore.getState().loadWorkspace(source.workspace_id)
-    if (!useStoryStore.getState().projects[project.id]) throw new Error('Story Lab no contiene ese proyecto.')
+    if (!useStoryStore.getState().projects[project.id]) throw new Error('Story Lab does not contain that project.')
     useStoryStore.getState().openProject(project.id)
     useStore.getState().setMediaFilter('stories')
     return
@@ -48,16 +48,16 @@ export async function openProject(project: ProjectCatalogItem): Promise<void> {
       || !seriesId
       || !useSeriesStore.getState().library.seriesById[seriesId]
     ) {
-      throw new Error('Series Lab no contiene la serie de ese proyecto.')
+      throw new Error('Series Lab does not contain that project\'s series.')
     }
     await useSeriesStore.getState().openSeries(seriesId)
     if (useSeriesStore.getState().activeSeriesId !== seriesId) {
-      throw new Error('Series Lab no contiene la serie de ese proyecto.')
+      throw new Error('Series Lab does not contain that project\'s series.')
     }
     if (project.kind === 'episode') {
       useSeriesStore.getState().openEpisode(project.id)
       if (useSeriesStore.getState().activeEpisodeId !== project.id) {
-        throw new Error('Series Lab no contiene ese episodio.')
+        throw new Error('Series Lab does not contain that episode.')
       }
     }
     useStore.getState().setMediaFilter('series')
@@ -96,5 +96,5 @@ export async function openProject(project: ProjectCatalogItem): Promise<void> {
     useStore.getState().setMediaFilter('characters')
     return
   }
-  throw new Error('Este tipo de proyecto todavía no tiene almacenamiento durable que abrir.')
+  throw new Error('This project type has no durable storage to open yet.')
 }

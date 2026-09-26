@@ -14,7 +14,7 @@ export function StoryMusicSettingsBar(props: StoryMusicTabProps) {
   } = props
   const selectedModel = useStore(state => state.models.find(model => model.model_type === project.music.model))
   const resourceHint = modelRequirementsText(selectedModel?.resource_requirements)
-    || (project.music.model === MINIMAX_MUSIC3_LOCAL_MODEL ? '≈24 GB VRAM · ~28 GB en disco · CUDA' : '')
+    || (project.music.model === MINIMAX_MUSIC3_LOCAL_MODEL ? '≈24 GB VRAM · ~28 GB on disk · CUDA' : '')
   const musicBusy = Boolean(busy || musicQueue || musicCueBusy)
   return (
     <>

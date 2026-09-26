@@ -31,35 +31,35 @@ export const explicitMusicLanguage = (value: string): string => {
     es: 'Español', en: 'English', fr: 'Français', de: 'Deutsch',
     it: 'Italiano', pt: 'Português', ja: '日本語', ko: '한국어', zh: '中文',
   }
-  return aliases[raw.toLowerCase()] || raw || 'Español'
+  return aliases[raw.toLowerCase()] || raw || 'English'
 }
 
 export function creativeCharacters(values: CreativeCharacter[]): CreativeCharacter[] {
   return values.length ? values : [{
-    name: 'Protagonista',
-    role: 'Protagonista',
-    personality: 'Ingenioso, curioso y decidido.',
-    desire: 'Resolver el conflicto central.',
-    flaw: 'Se precipita cuando cree tener razón.',
-    appearance: 'Silueta clara, vestuario reconocible y expresiones legibles.',
-    voice: 'Natural, expresiva y coherente con el tono.',
+    name: 'Protagonist',
+    role: 'Protagonist',
+    personality: 'Resourceful, curious and determined.',
+    desire: 'Resolve the central conflict.',
+    flaw: 'Rushes ahead when they think they are right.',
+    appearance: 'Clear silhouette, recognizable wardrobe and readable expressions.',
+    voice: 'Natural, expressive and consistent with the tone.',
   }]
 }
 
 export function creativeLocations(values: CreativeLocation[]): CreativeLocation[] {
   return values.length ? values : [{
-    name: 'Escenario principal',
-    purpose: 'Reunir a los personajes y hacer visible el conflicto.',
-    description: 'Un lugar reconocible, visualmente coherente y con espacio para la acción.',
+    name: 'Main setting',
+    purpose: 'Bring the characters together and make the conflict visible.',
+    description: 'A recognizable, visually consistent place with room for the action.',
   }]
 }
 
 export function outlineBeats(values: string[], premise: string, ending: string): string[] {
   if (values.length >= 3) return values
   return [
-    `Inicio: ${premise || 'se presenta el deseo del protagonista y aparece una complicación.'}`,
-    'Desarrollo: el plan inicial empeora el conflicto y obliga a los personajes a cambiar de estrategia.',
-    `Final: ${ending || 'la decisión final resuelve el problema con una consecuencia clara y memorable.'}`,
+    `Beginning: ${premise || 'the protagonist\'s desire is introduced and a complication appears.'}`,
+    'Middle: the initial plan worsens the conflict and forces the characters to change strategy.',
+    `Ending: ${ending || 'the final decision resolves the problem with a clear, memorable consequence.'}`,
   ]
 }
 

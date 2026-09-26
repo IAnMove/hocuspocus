@@ -56,9 +56,9 @@ def main():
         result = run_row(args.base_url, args.output_dir, row, server_pid=args.server_pid)
         folder = args.output_dir / row['id']
         save(folder / 'assessment.json', {'notes': (
-            f"4 pasos · {row['style']} · ambiente {row['soundscape']} · cierre {row['ending']}. "
-            + ('Diálogo ampliado manualmente con «Estaba de oferta»; no atribuido al LLM. ' if row['style'] == 'creative' else 'Dos réplicas originales. ')
-            + 'Sin bloque largo de silencios. Audio sin recortar; pendiente de escuchar.')})
+            f"4 steps · {row['style']} · soundscape {row['soundscape']} · ending {row['ending']}. "
+            + ('Dialogue extended by hand with «Estaba de oferta»; not attributed to the LLM. ' if row['style'] == 'creative' else 'Two original lines. ')
+            + 'No long block of silence. Untrimmed audio; awaiting listening.')})
         render(args.output_dir, page)
         print('RESULT', row['id'], result.get('elapsed_seconds'), result.get('result', {}).get('status'), flush=True)
         if result.get('result', {}).get('status') not in ('completed', 'complete', 'done'):

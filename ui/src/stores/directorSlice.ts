@@ -15,6 +15,7 @@ import type {
 } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import type { SliceCreator } from './storeApi'
+import { defaultProjectLanguages } from '../i18n/language'
 
 export type DirectorSlice = {
   directorStep: 'upload' | 'analyze' | 'structure' | 'style' | 'plan' | 'review' | 'generate_images' | 'plan_video' | 'review_video'
@@ -139,7 +140,7 @@ export const createDirectorSlice: SliceCreator<DirectorSlice> = set => {
     })),
     directorClipPlans: [],
     directorSceneDescription: '',
-    directorSpokenLanguage: 'Español de España',
+    directorSpokenLanguage: defaultProjectLanguages().spoken,
     directorLoading: false,
     directorLoadingMessage: null,
     directorError: null,

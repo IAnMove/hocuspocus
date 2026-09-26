@@ -72,7 +72,7 @@ class TestLTXPromptQueue(unittest.TestCase):
             {"start": 1, "end": 4, "total": 24}
         )
 
-        self.assertEqual(label, "Preparando textos 1–4 de 24")
+        self.assertEqual(label, "Preparing prompts 1–4 of 24")
 
 
 if __name__ == "__main__":

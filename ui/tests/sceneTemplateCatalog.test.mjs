@@ -126,15 +126,15 @@ test('prop requirements and kinds match the candidate contract', () => {
   }
 })
 
-test('slot copy and prompt metadata explain the candidate limits in Spanish', () => {
+test('slot copy and prompt metadata explain the candidate limits in English', () => {
   for (const template of CANDIDATE_SCENE_TEMPLATES) {
     assert.ok(template.title.length > 0)
     assert.ok(template.description.length > 0)
     assert.ok(template.limits.length >= 6)
-    assert.ok(template.limits.some(limit => /Máximo 2 GLB/.test(limit)), `${template.id} caps GLB use`)
-    assert.ok(template.limits.some(limit => /assets proporcionados/.test(limit)), `${template.id} uses supplied assets`)
-    assert.ok(template.limits.some(limit => /Sin vídeo generado por IA/.test(limit)), `${template.id} rejects AI video`)
-    assert.ok(template.limits.some(limit => /Sin diálogo incluido/.test(limit)), `${template.id} excludes dialogue`)
+    assert.ok(template.limits.some(limit => /At most 2 GLB/.test(limit)), `${template.id} caps GLB use`)
+    assert.ok(template.limits.some(limit => /supplied assets/.test(limit)), `${template.id} uses supplied assets`)
+    assert.ok(template.limits.some(limit => /No AI-generated video/.test(limit)), `${template.id} rejects AI video`)
+    assert.ok(template.limits.some(limit => /No dialogue included/.test(limit)), `${template.id} excludes dialogue`)
     assert.ok(template.limits.some(limit => /BPM/.test(limit)), `${template.id} documents preview audio limits`)
     for (const candidate of template.slots) {
       assert.ok(candidate.description.length > 20, `${template.id}/${candidate.id} explains its role`)

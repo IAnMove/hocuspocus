@@ -8,10 +8,10 @@ export interface OrbitRefSpec {
 
 /** PoopMan333 6-panel body grabs (H3_CharSheetMaker_6_Panel.json ImageFromBatch). */
 export const CHARACTER_ORBIT_VIEWS = [
-  { id: 'front', hunyuan: 'front' as const, label: 'Frente', objectLabel: 'Frente', frame: 2 },
-  { id: 'left', hunyuan: 'left' as const, label: 'Izquierda', objectLabel: 'Izquierda', frame: 21 },
-  { id: 'back', hunyuan: 'back' as const, label: 'Espalda', objectLabel: 'Trasera', frame: 42 },
-  { id: 'right', hunyuan: 'right' as const, label: 'Derecha', objectLabel: 'Derecha', frame: 63 },
+  { id: 'front', hunyuan: 'front' as const, label: 'Front', objectLabel: 'Front', frame: 2 },
+  { id: 'left', hunyuan: 'left' as const, label: 'Left', objectLabel: 'Left', frame: 21 },
+  { id: 'back', hunyuan: 'back' as const, label: 'Back', objectLabel: 'Back', frame: 42 },
+  { id: 'right', hunyuan: 'right' as const, label: 'Right', objectLabel: 'Right', frame: 63 },
 ] as const
 
 export const CHARACTER_SHEET_RESOLUTION = '768x1344'

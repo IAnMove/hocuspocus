@@ -5,6 +5,7 @@ import type { SceneRecipe, SceneRecipeAsset, SceneRecipeAudio } from './sceneRec
 import { aspectRatioForScene, h3FramesForDuration, h3ResolutionForScene, recipeAssetDuration, recipeAudioDuration } from './sceneRecipe'
 import { assertSceneRecipeGenerationAllowed, effectiveSceneGenerationPolicy } from './sceneGenerationPolicy'
 import type { SceneGenerationPolicy } from './sceneGenerationPolicy'
+import { defaultProjectLanguages } from '../i18n/language'
 
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 
@@ -103,7 +104,7 @@ async function resolveVideo(asset: SceneRecipeAsset, recipe: SceneRecipe, onStat
     resolution: h3ResolutionForScene(recipe.scene.width || 1280, recipe.scene.height || 720),
     video_length: h3FramesForDuration(recipeAssetDuration(recipe, asset.id)),
     generation_mode: 'video',
-    spoken_language: 'Español de España',
+    spoken_language: defaultProjectLanguages().spoken,
   })
   const status = await pollUntil(
     `H3 “${asset.id}”`,

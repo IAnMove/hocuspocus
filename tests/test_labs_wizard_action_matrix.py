@@ -145,7 +145,7 @@ def test_l12_mandatory_cases_have_an_executable_suite():
         "Qué puedes hacer en Series Lab",
         "Cómo genero un capítulo",
         "quick_video",
-        "canon ajeno",
+        "unrelated canon",
         "He descubierto ChatGPT",
         "selected_latest",
         "stage_series_comic",

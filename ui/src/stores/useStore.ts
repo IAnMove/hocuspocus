@@ -1,4 +1,5 @@
 import { h3ModelSwitchSettings, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
+import { defaultProjectLanguages } from '../i18n/language'
 import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
 import { beginWangpRestore, editingInputsChanged, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
@@ -1393,7 +1394,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice {
   themePrefs: ThemePrefs
   setThemeMode: (mode: ThemeMode) => void
   setThemeFamily: (family: FamilyId) => void
-  /** Internal tools (Auditoría interna). Off by default; persisted locally. */
+  /** Internal tools (Internal audit). Off by default; persisted locally. */
   developerMode: boolean
   setDeveloperMode: (enabled: boolean) => void
 
@@ -8196,7 +8197,7 @@ export const useStore = create<AppState>((set, get) => {
       shortFilmPreserveVisualStyle: true,
       directorCharacterVisualStyle: '',
       directorAllowClipText: false,
-      directorSpokenLanguage: 'Español de España',
+      directorSpokenLanguage: defaultProjectLanguages().spoken,
       // Detach this editor session from any prior recoverable pipeline. The
       // backend job is intentionally not cancelled and remains in Dashboard,
       // but its poller must not overwrite the next story loaded into Director.

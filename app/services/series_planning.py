@@ -704,13 +704,13 @@ def normalize_known_series_bootstrap(result: Any, series: dict) -> dict:
         "revision": int(series.get("canon", {}).get("revision") or 1),
     }
     fallback_rights = (
-        "Borrador no oficial basado en una obra de terceros. Verifica los derechos necesarios antes de publicar o monetizar."
+        "Unofficial draft based on a third-party work. Check the necessary rights before publishing or monetizing."
     )
     return {
         "title": text(setup.get("title") or series.get("title") or "Untitled series", 300),
         "premise": text(setup.get("premise"), 6000), "logline": text(setup.get("logline"), 2000),
         "format": format_value, "defaultEpisodeDurationSeconds": duration,
-        "language": text(setup.get("language") or series.get("language") or "Español", 200),
+        "language": text(setup.get("language") or series.get("language") or "English", 200),
         "genre": text(setup.get("genre"), 500), "tone": text(setup.get("tone"), 1000),
         "audience": text(setup.get("audience") or "General", 500),
         "visualStyle": text(setup.get("visualStyle"), 4000),

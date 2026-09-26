@@ -1145,7 +1145,7 @@ function parseComicPages(value: unknown): AgentComicPage[] {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return []
     const raw = canonicalRecord(item as Record<string, unknown>)
     const panels = parseComicPanels(raw.comic_panels)
-    return panels.length ? [{ title: cleanString(raw.title, 300) || `Página ${index + 1}`, stage: cleanString(raw.stage, 600), panels }] : []
+    return panels.length ? [{ title: cleanString(raw.title, 300) || `Page ${index + 1}`, stage: cleanString(raw.stage, 600), panels }] : []
   }) : []
 }
 
@@ -1765,7 +1765,7 @@ export function parseAgentTurn(raw: string): AgentTurn {
   }
   const conversationLanguage = normalizeConversationLanguageTag(object.conversation_language)
   return {
-    reply: reply || (actions.length ? 'El hechizo está trazado; voy a mover HocusPocus.' : humanReply(raw.trim())),
+    reply: reply || (actions.length ? 'The spell is cast; I\'ll set HocusPocus in motion.' : humanReply(raw.trim())),
     actions,
     ...(proposalIndices.some((index, position) => index !== position) ? { proposalIndices } : {}),
     ...(rejections.length ? { rejections } : {}),
@@ -2164,18 +2164,18 @@ function comicCreateFallback(request: string): AgentCreateComicAction | undefine
   const exactTitle = request.match(/\b(?:c[oó]mic|tebeo)\b[^.!?\n]{0,80}\btitulad[oa]\s+(?:exactamente\s+)?["“]([^"”]+)["”]/i)?.[1]?.trim()
   const topic = request.match(/\b(?:sobre|acerca\s+de)\s+([^.!?\n]+)/i)?.[1]?.trim()
     || request.match(/\b(?:c[oó]mic|tebeo)\s+de\s+([^.!?\n]+)/i)?.[1]?.trim()
-    || 'una aventura inventada por el usuario'
+    || 'an adventure invented by the user'
   const pageCount = Math.min(24, Math.max(1, Number(request.match(/\b(\d{1,2})\s+p[aá]ginas?\b/i)?.[1] || 1)))
   const panelsPerPage = Math.min(12, Math.max(1, Number(request.match(/\b(\d{1,2})\s+vi[nñ]etas?[^.!?\n]{0,40}\bpor\s+p[aá]gina\b/i)?.[1] || 4)))
-  const title = exactTitle || topic.slice(0, 100) || 'Nuevo cómic'
+  const title = exactTitle || topic.slice(0, 100) || 'New comic'
   const pages: AgentComicPage[] = Array.from({ length: pageCount }, (_, pageIndex) => ({
-    title: `Página ${pageIndex + 1}`,
-    stage: `Etapa ${pageIndex + 1} de ${pageCount}`,
+    title: `Page ${pageIndex + 1}`,
+    stage: `Stage ${pageIndex + 1} of ${pageCount}`,
     panels: Array.from({ length: panelsPerPage }, (_, panelIndex) => ({
-      caption: `Página ${pageIndex + 1} · Viñeta ${panelIndex + 1}`,
+      caption: `Page ${pageIndex + 1} · Panel ${panelIndex + 1}`,
       dialogue: '',
       sfx: '',
-      scene: `${topic}. Momento ${panelIndex + 1} de la etapa ${pageIndex + 1}; composición distinta y continuidad visual con las demás viñetas.`,
+      scene: `${topic}. Moment ${panelIndex + 1} of stage ${pageIndex + 1}; a distinct composition with visual continuity across the other panels.`,
     })),
   }))
   return {
@@ -2183,7 +2183,7 @@ function comicCreateFallback(request: string): AgentCreateComicAction | undefine
     title,
     synopsis: topic,
     language: /\b(?:espa[nñ]ol|castellano)\b/i.test(request) ? 'Español' : '',
-    styleName: 'Dirección visual coherente con la petición del usuario',
+    styleName: 'Visual direction consistent with the user\'s request',
     characters: [],
     panels: [],
     pages,
@@ -2224,9 +2224,9 @@ export async function reconcileAgentTurnWithRequest(
   if (isComicLaunchHowQuestion(request, history)) {
     return {
       reply: [
-        'No hay un botón llamado **Render page**.',
-        'El dibujo de las viñetas es **Generate all images** en Comic Director (barra de Comics), o dímelo aquí: **lánzalo**.',
-        'Las viñetas entran en la **misma GPU**, una detrás de otra, no en paralelo. No es un segundo motor.',
+        'There is no button called **Render page**.',
+        'Panels are drawn with **Generate all images** in Comic Director (Comics bar), or tell me here: **launch it**.',
+        'Panels run on the **same GPU**, one after another, not in parallel. It is not a second engine.',
       ].join('\n\n'),
       actions: [{ type: 'open_tab', tab: 'comics' }],
     }
@@ -2252,7 +2252,7 @@ export async function reconcileAgentTurnWithRequest(
     const prompt = existing?.prompt.trim() || studioPrompt
     if (!prompt) {
       return {
-        reply: 'Studio no tiene un prompt preparado. Dime la escena y la encolo.',
+        reply: 'Studio has no prepared prompt. Describe the scene and I\'ll queue it.',
         actions: [{ type: 'open_tab', tab: 'studio' }],
       }
     }
@@ -2264,7 +2264,7 @@ export async function reconcileAgentTurnWithRequest(
       aspectRatio: state.generationMode === 'video' ? state.aspectRatio : undefined,
     }
     return {
-      reply: 'Lanzo a la cola el vídeo ya preparado en Studio. 🪄',
+      reply: 'Queueing the video already prepared in Studio. 🪄',
       actions: [prepare, { type: 'start_generation', confirm: true }],
     }
   }
@@ -2275,7 +2275,7 @@ export async function reconcileAgentTurnWithRequest(
   )
   if (rhythmic3dWorkflow) {
     return {
-      reply: 'Invocaré la canción y esperaré su taskId real; después crearé la escena 3D, convertiré sus beats en keyframes editables, guardaré el proyecto y publicaré el MP4. Si un paso falla, el hechizo podrá reanudarse desde ese punto. 🪄',
+      reply: 'I\'ll summon the song and wait for its real taskId; then I\'ll create the 3D scene, turn its beats into editable keyframes, save the project and publish the MP4. If a step fails, the spell can resume from that point. 🪄',
       actions: [rhythmic3dWorkflow],
     }
   }
@@ -2289,7 +2289,7 @@ export async function reconcileAgentTurnWithRequest(
   const targetedComicPanel = comicPanelTarget(request, history)
   if (targetedComicPanel) {
     return {
-      reply: `Regeneraré sólo la viñeta ${targetedComicPanel.panelNumber} de la página ${targetedComicPanel.pageNumber}; las demás quedan intactas. 🪄`,
+      reply: `I'll regenerate only panel ${targetedComicPanel.panelNumber} of page ${targetedComicPanel.pageNumber}; the others stay untouched. 🪄`,
       actions: [{
         type: 'generate_comic_panel',
         pageNumber: targetedComicPanel.pageNumber,
@@ -2327,7 +2327,7 @@ export async function reconcileAgentTurnWithRequest(
         .reduce((sum, page) => sum + page.panels.length, 0)
       const estimate = intent.pilot ? (prepared.pages[0]?.panels.length || prepared.panels.length) : panels
       return {
-        reply: `Crearé “${prepared.title}” con ${prepared.pages.length || 1} páginas reales y después dibujaré ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} con ${requestedMiniMax ? 'MiniMax image-01' : requestedLocal ? 'el proveedor local' : 'el proveedor elegido'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''}. 🪄`,
+        reply: `I'll create “${prepared.title}” with ${prepared.pages.length || 1} real pages and then draw ${intent.pilot ? 'the pilot page' : intent.scope === 'failed' ? 'the failed panels' : 'the pending panels'} with ${requestedMiniMax ? 'MiniMax image-01' : requestedLocal ? 'the local provider' : 'the chosen provider'}. Estimate: ${estimate} calls${requestedMiniMax ? ' MiniMax' : ''}. 🪄`,
         actions: [prepared, generate],
       }
     }
@@ -2336,7 +2336,7 @@ export async function reconcileAgentTurnWithRequest(
       ? Math.max(1, Math.ceil(inventory.panels / Math.max(1, inventory.pages)))
       : intent.scope === 'failed' ? inventory.failed : inventory.pending
     return {
-      reply: `Voy a dibujar ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} del cómic abierto con ${requestedMiniMax ? 'MiniMax image-01' : requestedLocal ? 'el proveedor local' : 'su proveedor configurado'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''} (${inventory.completed}/${inventory.panels} ya listas). 🪄`,
+      reply: `I'll draw ${intent.pilot ? 'the pilot page' : intent.scope === 'failed' ? 'the failed panels' : 'the pending panels'} of the open comic with ${requestedMiniMax ? 'MiniMax image-01' : requestedLocal ? 'the local provider' : 'its configured provider'}. Estimate: ${estimate} calls${requestedMiniMax ? ' MiniMax' : ''} (${inventory.completed}/${inventory.panels} already done). 🪄`,
       actions: [generate],
     }
   }
@@ -2364,7 +2364,7 @@ export async function reconcileAgentTurnWithRequest(
         // Keep the story's legacy ISO value when no explicit song language
         // was requested; an explicit request is canonicalised by the song
         // language resolver and takes precedence over the story language.
-        lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
+        lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'English',
         instrumental: false,
         durationSeconds: createdMusicVideo.durationSeconds || 90,
       }
@@ -2431,7 +2431,7 @@ export async function reconcileAgentTurnWithRequest(
           style: request.trim().slice(0, 4_000),
           lyrics: '',
           writeLyrics: true,
-          lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
+          lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'English',
           instrumental: false,
           durationSeconds: createdMusicVideo.durationSeconds || 90,
         }
@@ -2482,19 +2482,19 @@ export async function reconcileAgentTurnWithRequest(
         : correlatedSongSetup
       return {
         reply: configuredSong
-          ? 'Guardaré la canción y su letra en Story Lab, generaré el audio real y sólo entonces prepararé e iniciaré el videoclip. En marcha no es terminado. 🪄'
-          : 'Prepararé el videoclip en Music Video Director y, si el plan queda listo, lo iniciaré. Preparado no es en cola; en marcha no es terminado. 🪄',
+          ? 'I\'ll save the song and its lyrics in Story Lab, generate the real audio, and only then prepare and start the music video. Running is not finished. 🪄'
+          : 'I\'ll prepare the music video in Music Video Director and, if the plan is ready, start it. Prepared is not queued; running is not finished. 🪄',
         actions: [...songActions, stage, { type: 'start_director_production', targetStoryTitle: stage.targetStoryTitle, kind: 'music_video', confirm: true }],
       }
     }
     if (musicVideoStart) {
       return {
-        reply: 'Iniciaré la producción de videoclip ya preparada en Director y devolveré el pipelineId real. En marcha no es terminado. 🪄',
+        reply: 'I\'ll start the music video production already prepared in Director and return the real pipelineId. Running is not finished. 🪄',
         actions: [{ type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true }],
       }
     }
     return {
-      reply: 'Prepararé el videoclip en Music Video Director con la historia, la canción y el cue exactos. No iniciaré generación. 🪄',
+      reply: 'I\'ll prepare the music video in Music Video Director with the exact story, song and cue. I won\'t start generation. 🪄',
       actions: [stage],
     }
   }
@@ -2509,7 +2509,7 @@ export async function reconcileAgentTurnWithRequest(
       : !authored && GAME_SFX_HINT.test(request) ? ARCADE_HORDE_SFX_PACK : []
     if (clips.length) {
       return {
-        reply: 'Prepararé Studio → Audio → SFX y encolaré el pack de efectos. Irán detrás de lo que ya use la GPU. La galería Audios solo muestra resultados cuando terminen. 🪄',
+        reply: 'I\'ll prepare Studio → Audio → SFX and queue the effects pack. It will run after whatever is already using the GPU. The Audio gallery only shows results once they finish. 🪄',
         actions: [{
           ...existing,
           type: 'queue_sfx_pack',
@@ -2531,7 +2531,7 @@ export async function reconcileAgentTurnWithRequest(
       (action): action is AgentCancelTaskAction => action.type === 'cancel_task',
     )
     return {
-      reply: 'Cancelaré la tarea activa en la cola canónica y dejaré Activity a la vista. 🪄',
+      reply: 'I\'ll cancel the active task in the canonical queue and keep Activity in view. 🪄',
       actions: [{ type: 'cancel_task', taskId: existing?.taskId || '', confirm: true }],
     }
   }
@@ -2541,7 +2541,7 @@ export async function reconcileAgentTurnWithRequest(
     )
     const latest = /(?:[uú]ltim[oa]|latest|last)/i.test(request)
     return {
-      reply: 'Reintentaré la tarea canónica indicada desde su estado persistido y abriré Activity para mostrar el resultado. 🪄',
+      reply: 'I\'ll retry the specified canonical task from its saved state and open Activity to show the result. 🪄',
       actions: [{
         type: 'retry_task',
         taskId: existing?.taskId || (latest ? 'latest' : ''),
@@ -2562,7 +2562,7 @@ export async function reconcileAgentTurnWithRequest(
         durationSeconds: 15,
       } satisfies AgentPrepareAudioAction
     return {
-      reply: 'Prepararé Studio → Audio con los valores visibles y enviaré la generación a la cola. 🪄',
+      reply: 'I\'ll prepare Studio → Audio with the visible values and send the generation to the queue. 🪄',
       actions: [...navigation, restoreAuthoredMusicFields(request, prepare), { type: 'start_generation', confirm: true }],
     }
   }
@@ -2583,7 +2583,7 @@ export async function reconcileAgentTurnWithRequest(
       } satisfies AgentPrepareVideoAction
 
     return {
-      reply: '¡La petición está clara! Usaré un conjuro de vídeo estándar con los ajustes disponibles, prepararé Studio → Video y lo enviaré a la cola. 🪄',
+      reply: 'The request is clear! I\'ll use a standard video spell with the available settings, prepare Studio → Video and send it to the queue. 🪄',
       actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
     }
   }
@@ -2600,7 +2600,7 @@ export async function reconcileAgentTurnWithRequest(
         seed: 1234,
       } satisfies AgentPrepare3dAction
     return {
-      reply: 'Prepararé Studio → 3D (Hunyuan3D) con un preset equilibrado y lo enviaré a generar. 🪄',
+      reply: 'I\'ll prepare Studio → 3D (Hunyuan3D) with a balanced preset and send it to generate. 🪄',
       actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
     }
   }
@@ -2629,7 +2629,7 @@ export async function reconcileAgentTurnWithRequest(
     } satisfies AgentPrepareImageAction
 
   return {
-    reply: '¡La petición está clara! Prepararé Studio → Image con un modelo compatible y lo enviaré a la cola. 🪄',
+    reply: 'The request is clear! I\'ll prepare Studio → Image with a compatible model and send it to the queue. 🪄',
     actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
   }
 }
@@ -3030,10 +3030,10 @@ export async function executeAgentActions(
       results.push({
         action,
         ok: false,
-        message: `No ejecuto ${action.type}: el paso requerido ${failedPredecessor} ha fallado.`,
+        message: `Not running ${action.type}: the required step ${failedPredecessor} failed.`,
         report: executionReport({
           state: 'failed',
-          message: `Bloqueado por el fallo de ${failedPredecessor}.`,
+          message: `Blocked by the failure of ${failedPredecessor}.`,
           recoverable: true,
         }),
       })
@@ -3043,7 +3043,7 @@ export async function executeAgentActions(
     const changesOutputFolder = action.type === 'select_workspace' || action.type === 'create_workspace'
     const visibleWorkspace = useStore.getState().activeWorkspace || 'default'
     if (!changesOutputFolder && visibleWorkspace !== executionWorkspace) {
-      const message = `El output folder cambió de “${executionWorkspace}” a “${visibleWorkspace}” durante el hechizo. ¿Quieres que continúe en “${visibleWorkspace}” o que vuelva a “${executionWorkspace}”?`
+      const message = `The output folder changed from “${executionWorkspace}” to “${visibleWorkspace}” during the spell. Should I continue in “${visibleWorkspace}” or go back to “${executionWorkspace}”?`
       results.push({
         action,
         ok: false,
@@ -3054,121 +3054,121 @@ export async function executeAgentActions(
     }
     const registeredProgress = getCapability(action.type)?.progress
     const working = registeredProgress || (action.type === 'open_tab'
-      ? `Abriendo ${TAB_LABELS[action.tab]}…`
+      ? `Opening ${TAB_LABELS[action.tab]}…`
       : action.type === 'open_story_section'
-        ? `Abriendo Story Lab → ${action.section}…`
+        ? `Opening Story Lab → ${action.section}…`
         : action.type === 'open_series_section'
-          ? `Abriendo Series Lab → ${action.section}…`
+          ? `Opening Series Lab → ${action.section}…`
       : action.type === 'prepare_video'
-        ? 'Trazando el hechizo de vídeo en Studio…'
+        ? 'Casting the video spell in Studio…'
         : action.type === 'prepare_image'
-          ? 'Trazando el hechizo de imagen en Studio…'
+          ? 'Casting the image spell in Studio…'
         : action.type === 'prepare_audio'
-          ? 'Trazando el hechizo de audio en Studio…'
+          ? 'Casting the audio spell in Studio…'
         : action.type === 'prepare_3d'
-          ? 'Trazando el hechizo 3D en Studio…'
+          ? 'Casting the 3D spell in Studio…'
         : action.type === 'queue_sfx_pack'
-          ? 'Encolando el pack de efectos SFX…'
+          ? 'Queueing the SFX effects pack…'
         : action.type === 'start_generation'
-          ? 'Enviando a la cola…'
+          ? 'Sending to the queue…'
           : action.type === 'create_story'
-            ? 'Escribiendo y guardando la nueva historia…'
+            ? 'Writing and saving the new story…'
             : action.type === 'update_story'
-              ? 'Actualizando y guardando la historia…'
+              ? 'Updating and saving the story…'
             : action.type === 'generate_story_section'
-              ? `Invocando una propuesta de Story Lab (${action.scope})…`
+              ? `Summoning a Story Lab proposal (${action.scope})…`
             : action.type === 'apply_story_proposal'
-              ? 'Aplicando la propuesta revisable al canon de Story Lab…'
+              ? 'Applying the reviewable proposal to the Story Lab canon…'
             : action.type === 'approve_story_section'
               ? `Validando y aprobando Story Lab → ${action.section}…`
             : action.type === 'approve_story_visuals'
-              ? 'Vinculando y aprobando referencias visuales de Story Lab…'
+              ? 'Linking and approving Story Lab visual references…'
             : action.type === 'generate_story_visuals'
-              ? `Generando referencias visuales de Story Lab (${action.scope})…`
+              ? `Generating Story Lab visual references (${action.scope})…`
             : action.type === 'stage_story_comic'
-              ? 'Adaptando la historia a Comic Director…'
+              ? 'Adapting the story for Comic Director…'
             : action.type === 'stage_story_video'
-              ? `Adaptando la historia como ${action.kind === 'trailer' ? 'tráiler' : 'cortometraje'}…`
+              ? `Adapting the story as a ${action.kind === 'trailer' ? 'trailer' : 'short film'}…`
             : action.type === 'stage_story_music_video'
-              ? 'Preparando el videoclip en Music Video Director…'
+              ? 'Preparing the music video in Music Video Director…'
             : action.type === 'start_director_production'
-              ? 'Abriendo el portal de producción en Director…'
+              ? 'Opening the production portal in Director…'
             : action.type === 'create_series_episode'
-              ? 'Preparando la serie y el nuevo episodio…'
+              ? 'Preparing the series and the new episode…'
             : action.type === 'update_series_episode'
-              ? 'Actualizando y guardando el episodio…'
+              ? 'Updating and saving the episode…'
             : action.type === 'generate_series_plan'
-              ? `Invocando el plan de Series Lab (${action.scope})…`
+              ? `Summoning the Series Lab plan (${action.scope})…`
             : action.type === 'apply_series_plan'
-              ? 'Aplicando la propuesta de Series Lab al episodio…'
+              ? 'Applying the Series Lab proposal to the episode…'
             : action.type === 'render_series_shots'
               ? `Encolando render de Series Lab (${action.mode})…`
             : action.type === 'review_series_attempts'
               ? `${action.decision === 'approve' ? 'Aprobando' : 'Rechazando'} intentos de Series Lab…`
             : action.type === 'assemble_series_episode'
-              ? 'Uniendo las tomas aprobadas del episodio…'
+              ? 'Joining the episode\'s approved shots…'
             : action.type === 'commit_series_canon'
-              ? 'Registrando las decisiones de canon del episodio…'
+              ? 'Recording the episode\'s canon decisions…'
             : action.type === 'open_3d_scene'
-              ? `Abriendo la escena 3D ${action.sceneName}…`
+              ? `Opening the 3D scene ${action.sceneName}…`
             : action.type === 'save_3d_scene'
-              ? 'Guardando la escena 3D editable…'
+              ? 'Saving the editable 3D scene…'
             : action.type === 'export_3d_scene'
-              ? 'Renderizando y publicando el MP4 de la escena 3D…'
+              ? 'Rendering and publishing the 3D scene MP4…'
             : action.type === 'apply_3d_rhythm'
-              ? 'Analizando la canción y creando keyframes rítmicos…'
+              ? 'Analyzing the song and creating rhythmic keyframes…'
               : action.type === 'create_character_kit'
                 ? `Creando el Character Kit ${action.name}…`
               : action.type === 'open_character_kit'
-                ? `Abriendo Character Kit ${action.kitName}…`
+                ? `Opening Character Kit ${action.kitName}…`
               : action.type === 'update_character_kit'
-                ? 'Actualizando la identidad del Character Kit…'
+                ? 'Updating the Character Kit identity…'
               : action.type === 'attach_character_kit_references'
-                ? 'Adjuntando referencias al Character Kit…'
+                ? 'Attaching references to the Character Kit…'
               : action.type === 'build_character_kit'
-                ? 'Montando el kit de personaje…'
+                ? 'Assembling the character kit…'
               : action.type === 'open_character_kit_rig'
-                ? 'Abriendo el Face Rig…'
+                ? 'Opening the Face Rig…'
               : action.type === 'apply_character_kit_preset'
-                ? `Aplicando el preset ${action.presetId}…`
+                ? `Applying preset ${action.presetId}…`
               : action.type === 'track_character_kit_job'
-                ? 'Consultando el trabajo del Character Kit…'
+                ? 'Checking the Character Kit job…'
               : action.type === 'create_video_editor_project'
-                ? `Creando el proyecto de Video Editor ${action.projectName}…`
+                ? `Creating the Video Editor project ${action.projectName}…`
               : action.type === 'open_video_editor_project'
-                ? 'Abriendo Video Editor…'
+                ? 'Opening Video Editor…'
               : action.type === 'add_video_editor_clips'
-                ? 'Añadiendo clips exactos a Video Editor…'
+                ? 'Adding exact clips to Video Editor…'
               : action.type === 'order_video_editor_clips'
-                ? 'Reordenando la línea de tiempo…'
+                ? 'Reordering the timeline…'
               : action.type === 'trim_video_editor_clip'
                 ? `Recortando ${action.clipName}…`
               : action.type === 'add_video_editor_audio'
-                ? 'Añadiendo audio a la línea de tiempo…'
+                ? 'Adding audio to the timeline…'
               : action.type === 'validate_video_editor_timeline'
-                ? 'Validando la línea de tiempo…'
+                ? 'Validating the timeline…'
               : action.type === 'export_video_editor'
-                ? 'Encolando la exportación de Video Editor…'
+                ? 'Queueing the Video Editor export…'
               : action.type === 'track_video_editor_export'
-                ? 'Consultando la exportación de Video Editor…'
+                ? 'Checking the Video Editor export…'
               : action.type === 'create_comic'
-                ? 'Montando el cómic de ejemplo…'
+                ? 'Assembling the example comic…'
               : action.type === 'generate_comic'
-                ? 'Dibujando las viñetas del cómic…'
+                ? 'Drawing the comic panels…'
               : action.type === 'generate_comic_panel'
-                ? `Regenerando la viñeta ${action.panelNumber} de la página ${action.pageNumber}…`
+                ? `Regenerating panel ${action.panelNumber} of page ${action.pageNumber}…`
               : action.type === 'attach_studio_references'
                 ? 'Adjuntando referencias verificadas a Studio…'
               : action.type === 'configure_studio_loras'
-                ? 'Configurando LoRAs compatibles en Studio…'
+                ? 'Configuring compatible LoRAs in Studio…'
               : action.type === 'inspect_queue'
-                ? 'Consultando la cola canónica…'
+                ? 'Checking the canonical queue…'
                 : action.type === 'cancel_task'
-                  ? 'Cancelando la tarea en la cola…'
+                  ? 'Cancelling the queued task…'
                   : action.type === 'resume_task'
-                    ? 'Reanudando la tarea en la cola…'
+                    ? 'Resuming the queued task…'
                     : action.type === 'retry_task'
-                      ? 'Reintentando la tarea en la cola…'
+                      ? 'Retrying the queued task…'
                       : action.type === 'select_workspace'
                         ? `Cambiando al workspace ${action.workspaceName}…`
                         : `Creando el workspace ${String((action as { workspaceName?: string }).workspaceName || '')}…`)
@@ -3185,7 +3185,7 @@ export async function executeAgentActions(
         targetId = bindDirectorProductionTarget(
           stagedProductionId,
           handoff?.productionId || '',
-          handoff?.productionId || 'producción abierta',
+          handoff?.productionId || 'open production',
         )
       }
       const keyParams = action.type === 'start_generation' && preparedStudioAction
@@ -3215,7 +3215,7 @@ export async function executeAgentActions(
         results.push({
           action,
           ok: true,
-          message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`,
+          message: `Reusing the previous run (${reused.state}). ${reused.message}`,
           report: reused,
         })
         if (action.type === 'generate_story_song' && reused.target?.id) {
@@ -3226,7 +3226,7 @@ export async function executeAgentActions(
     }
     try {
       if (action.type === 'start_generation' && !preparedStudio) {
-        throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
+        throw new Error('Studio was not prepared in this turn; I did not launch it.')
       }
       const registeredResult = await runRegisteredCapability(action, {
         adapters: defaultApplicationAdapters,
@@ -3249,7 +3249,7 @@ export async function executeAgentActions(
         }
         if (action.type === 'configure_story_song' && registeredResult.report?.target?.title) {
           const configuredProject = registeredResult.report.projectTarget
-          if (!configuredProject?.id) throw new Error('Story Lab no devolvió el ID exacto de la historia configurada.')
+          if (!configuredProject?.id) throw new Error('Story Lab did not return the exact ID of the configured story.')
           configuredStorySong = {
             targetStoryId: configuredProject.id,
             targetStoryTitle: configuredProject.title,
@@ -3268,12 +3268,12 @@ export async function executeAgentActions(
         await defaultApplicationAdapters.storyLab.open()
         const { openAgentStorySection } = await import('./agentUiBus')
         openAgentStorySection(action.section)
-        results.push({ action, ok: true, message: `He abierto Story Lab → ${action.section}.` })
+        results.push({ action, ok: true, message: `I opened Story Lab → ${action.section}.` })
       } else if (action.type === 'open_series_section') {
         await defaultApplicationAdapters.seriesLab.open()
         const { openAgentSeriesSection } = await import('./agentUiBus')
         openAgentSeriesSection(action.section)
-        results.push({ action, ok: true, message: `He abierto Series Lab → ${action.section}.` })
+        results.push({ action, ok: true, message: `I opened Series Lab → ${action.section}.` })
       } else if (action.type === 'prepare_video') {
         const outcome = await defaultApplicationAdapters.studio.prepareVideo(action)
         preparedStudio = true
@@ -3298,7 +3298,7 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.studio.queueSfxPack(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'start_generation') {
-        if (!preparedStudio) throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
+        if (!preparedStudio) throw new Error('Studio was not prepared in this turn; I did not launch it.')
         const outcome = await defaultApplicationAdapters.studio.startGeneration(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'create_story') {
@@ -3435,7 +3435,7 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.videoEditor.validateTimeline()
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'export_video_editor') {
-        if (!action.confirm) throw new Error('Exportar Video Editor requiere confirm=true.')
+        if (!action.confirm) throw new Error('Exporting from Video Editor requires confirm=true.')
         const outcome = await defaultApplicationAdapters.videoEditor.exportProject(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'track_video_editor_export') {
@@ -3445,7 +3445,7 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.comic.create(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'generate_comic') {
-        if (!action.confirm) throw new Error('Dibujar las viñetas requiere confirm=true.')
+        if (!action.confirm) throw new Error('Drawing the panels requires confirm=true.')
         const outcome = await defaultApplicationAdapters.comic.generate(action, createdComicId || undefined, onStep)
         results.push({
           action,
@@ -3465,7 +3465,7 @@ export async function executeAgentActions(
           }),
         })
       } else if (action.type === 'generate_comic_panel') {
-        if (!action.confirm) throw new Error('Regenerar una viñeta requiere confirm=true.')
+        if (!action.confirm) throw new Error('Regenerating a panel requires confirm=true.')
         const outcome = await defaultApplicationAdapters.comic.generatePanel(action.pageNumber, action.panelNumber, onStep)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'attach_studio_references') {
@@ -3486,7 +3486,7 @@ export async function executeAgentActions(
             action,
             ok: true,
             message: cancelledBatch
-              ? `${outcome.message} También he pedido cancelar el lote de viñetas; las terminadas se conservan.`
+              ? `${outcome.message} I also asked to cancel the panel batch; finished panels are kept.`
               : outcome.message,
             report: outcome.report,
           })
@@ -3495,7 +3495,7 @@ export async function executeAgentActions(
           results.push({
             action,
             ok: true,
-            message: 'He pedido cancelar el lote de viñetas; las ilustraciones terminadas se conservan.',
+            message: 'I asked to cancel the panel batch; finished illustrations are kept.',
           })
         }
       } else if (action.type === 'resume_task') {
@@ -3511,7 +3511,7 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.workspace.create(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else {
-        throw new Error(`No hay ejecutor para ${action.type}.`)
+        throw new Error(`No executor for ${action.type}.`)
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

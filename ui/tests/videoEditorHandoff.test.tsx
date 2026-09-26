@@ -32,7 +32,7 @@ function clip(name: string) {
     id: `existing-${name}`, name, source: `${name}.mp4`, previewUrl: `${name}.mp4`, thumbnailUrl: '',
     duration: 10, width: 1920, height: 1080, fps: 30, has_audio: true, pixel_format: 'yuv420p', has_alpha: false,
     trimStart: 0, trimEnd: 10, volume: 1, muted: false, fit: 'fit', transition: 'none', transitionDuration: 0.5,
-    transitionText: 'Momentos después…', transitionTextSize: 100,
+    transitionText: 'Moments later…', transitionTextSize: 100,
   }
 }
 

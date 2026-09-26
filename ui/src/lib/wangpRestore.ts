@@ -44,7 +44,7 @@ export function beginWangpRestore(params: Record<string, unknown>, get: () => St
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const blob = await response.blob()
         if (!current()) return
-        const file = new File([blob], path.split('/').pop() || kind, { type: blob.type })
+        const file = new File([blob], path.split(/[?#]/, 1)[0].split('/').pop() || kind, { type: blob.type })
         const url = URL.createObjectURL(file)
         if (kind === 'video') {
           get().setEditVideo(file, path, url, 0, '')

@@ -134,7 +134,7 @@ export function normalizeEditorClips(
       fit: FIT_VALUES.has(raw.fit as ClipFit) ? raw.fit as ClipFit : 'fit',
       transition: TRANSITION_VALUES.has(raw.transition as Transition) ? raw.transition as Transition : 'none',
       transitionDuration: clamp(finiteNumber(raw.transitionDuration, 0.5), 0.05, 5),
-      transitionText: typeof raw.transitionText === 'string' ? raw.transitionText : 'Momentos después…',
+      transitionText: typeof raw.transitionText === 'string' ? raw.transitionText : 'Moments later…',
       transitionTextSize: clamp(finiteNumber(raw.transitionTextSize, 100), 50, 160),
     }
     if (Object.entries(normalized).some(([key, normalizedValue]) => raw[key] !== normalizedValue)) {

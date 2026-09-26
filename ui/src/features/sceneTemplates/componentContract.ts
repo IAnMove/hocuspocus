@@ -12,14 +12,14 @@ import {
  * or authorize a generation request.
  */
 export const TEMPLATE_SLOT_LABELS: Record<TemplateSlotName, string> = Object.freeze({
-  hero: 'Protagonista',
+  hero: 'Protagonist',
   plate: 'Fondo',
-  prop: 'Objeto / segundo sujeto',
-  foreground: 'Primer término',
-  subject_1: 'Sujeto 1',
-  subject_2: 'Sujeto 2',
+  prop: 'Object / second subject',
+  foreground: 'Foreground',
+  subject_1: 'Subject 1',
+  subject_2: 'Subject 2',
   background: 'Fondo',
-  prop_1: 'Accesorio 1',
+  prop_1: 'Prop 1',
 }) as Record<TemplateSlotName, string>
 
 export type TemplateComponent = {
@@ -69,10 +69,10 @@ export function describeTemplateComponents(id: string): TemplateComponentContrac
 }
 
 const TEMPLATE_COMPONENT_PROMPT_INSTRUCTION = [
-  'Asigna cada componente únicamente mediante un asset canónico conocido por su assetId y workspace.',
-  'Este contrato es descriptivo: no autoriza llamadas a APIs, colas, generación ni creación de archivos.',
-  'No inventes archivos, rutas, nombres ni IDs; si falta un asset canónico, informa del faltante.',
-  'Mantén separados el cuerpo o identidad y la pose: no sustituyas un cuerpo por una pose ni una pose por un cuerpo.',
+  'Assign each component only through a canonical asset known by its assetId and workspace.',
+  'This contract is descriptive: it does not authorize API calls, queues, generation or file creation.',
+  'Do not invent files, paths, names or IDs; if a canonical asset is missing, report what is missing.',
+  'Keep body or identity separate from pose: never substitute a body for a pose or a pose for a body.',
 ].join(' ')
 
 /**

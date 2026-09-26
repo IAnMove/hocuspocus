@@ -78,7 +78,7 @@ function encodeGlb(parts: Part[]): string {
 
 const cache = new Map<string, string>()
 export function demoShip(variant: 'coral' | 'teal' = 'coral') {
-  if (variant !== 'coral' && variant !== 'teal') throw new Error('Variante de nave desconocida.')
+  if (variant !== 'coral' && variant !== 'teal') throw new Error('Unknown ship variant.')
   if (!cache.has(variant)) {
     const hull: Vec = variant === 'coral' ? [.65, .73, .82] : [.19, .26, .34]
     const accent: Vec = variant === 'coral' ? [.1, .76, .87] : [.98, .31, .16]

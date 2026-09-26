@@ -52,8 +52,8 @@ test('migrates valid legacy keep/discard/pending choices and keeps new IDs pendi
   assert.equal(loaded.state.choices[newTemplate.id].decision, 'pending')
   assert.equal(loaded.state.choices[newTemplate.id].notes, '')
   assert.equal(loaded.state.choices.unknown, undefined)
-  assert.match(loaded.warning, /24.*previas/)
-  assert.match(loaded.warning, /24.*nuevas.*pendientes/)
+  assert.match(loaded.warning, /24 previous/)
+  assert.match(loaded.warning, /24 new templates stay pending/)
 })
 
 test('does not preserve malformed legacy rows, even when another legacy row is valid', () => {
@@ -71,8 +71,8 @@ test('does not preserve malformed legacy rows, even when another legacy row is v
   const loaded = loadCatalogReview(makeStorage(raw))
   assert.equal(loaded.state.choices[valid.id].decision, 'keep')
   assert.equal(loaded.state.choices[stale.id].decision, 'pending')
-  assert.match(loaded.warning, /IDs o versiones/)
-  assert.match(loaded.warning, /nuevas.*pendientes/)
+  assert.match(loaded.warning, /IDs or versions/)
+  assert.match(loaded.warning, /new templates stay pending/)
 })
 
 test('invalid schema or catalog version fails closed with every expanded choice pending', () => {
@@ -82,7 +82,7 @@ test('invalid schema or catalog version fails closed with every expanded choice 
     choices: { [CANDIDATE_SCENE_TEMPLATES[0].id]: choice(CANDIDATE_SCENE_TEMPLATES[0], 'keep') },
   })
   const invalidSchema = loadCatalogReview(makeStorage(rawInvalidSchema))
-  assert.match(invalidSchema.warning, /otra versión del catálogo/)
+  assert.match(invalidSchema.warning, /another catalog version/)
   assert.equal(Object.values(invalidSchema.state.choices).every(item => item.decision === 'pending'), true)
 
   const rawOtherVersion = JSON.stringify({
@@ -91,13 +91,13 @@ test('invalid schema or catalog version fails closed with every expanded choice 
     choices: { [CANDIDATE_SCENE_TEMPLATES[0].id]: choice(CANDIDATE_SCENE_TEMPLATES[0], 'keep') },
   })
   const otherVersion = loadCatalogReview(makeStorage(rawOtherVersion))
-  assert.match(otherVersion.warning, /otra versión del catálogo/)
+  assert.match(otherVersion.warning, /another catalog version/)
   assert.equal(Object.values(otherVersion.state.choices).every(item => item.decision === 'pending'), true)
 })
 
 test('malformed JSON fails closed and reports a warning', () => {
   const loaded = loadCatalogReview(makeStorage('{not-json'))
-  assert.match(loaded.warning, /JSON válido/)
+  assert.match(loaded.warning, /valid JSON/)
   assert.equal(loaded.state.catalogVersion, EXPANDED_CATALOG_VERSION)
   assert.equal(Object.values(loaded.state.choices).every(item => item.decision === 'pending'), true)
 })
@@ -118,7 +118,7 @@ test('an expanded state reloads unchanged and exports the expanded catalog versi
 
 test('storage errors fail closed without importing any decision', () => {
   const loaded = loadCatalogReview({ getItem: () => { throw new Error('blocked') } })
-  assert.match(loaded.warning, /almacenamiento/)
+  assert.match(loaded.warning, /Storage/)
   assert.equal(Object.values(loaded.state.choices).every(item => item.decision === 'pending'), true)
 })
 

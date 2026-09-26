@@ -147,11 +147,11 @@ test('expone claves y descripciones musicales, exige dos sujetos, conserva IDs y
     assert.equal((view.screen.getByRole('spinbutton', { name: 'Visual BPM' }) as HTMLInputElement).disabled, true)
     assert.equal((view.screen.getByRole('spinbutton', { name: 'Pulse intensity' }) as HTMLInputElement).disabled, true)
 
-    assert.ok(await view.screen.findByText(/referencia visual pendiente de revisión/i))
+    assert.ok(await view.screen.findByText(/visual reference awaiting review/i))
     assert.equal(view.container.querySelector('video, iframe'), null)
     assert.equal(view.container.querySelector('a[href*="github.com"]'), null)
 
-    const copyButton = view.screen.getByRole('button', { name: 'Copiar contrato para el Wizard' })
+    const copyButton = view.screen.getByRole('button', { name: 'Copy contract for the Wizard' })
     view.fireEvent.click(copyButton)
     await view.waitFor(() => assert.ok(clipboardText))
     const contract = JSON.parse(clipboardText)

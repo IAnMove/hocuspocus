@@ -53,7 +53,7 @@ function stage(
 function requireConfirmation(action: AgentAction, required: boolean): void {
   if (!required) return
   if (!('confirm' in action) || action.confirm !== true) {
-    throw new Error(`${action.type} requiere confirmación explícita.`)
+    throw new Error(`${action.type} requires explicit confirmation.`)
   }
 }
 
@@ -127,7 +127,7 @@ export async function runRegisteredCapability(
   stage(options, 'correlate', action.type)
   const target = definition.correlate(prepared, executed)
   if (executed.target && !target) {
-    throw new Error(`${action.type} ejecutó una navegación que no pudo correlacionarse.`)
+    throw new Error(`${action.type} performed a navigation that could not be linked.`)
   }
   const entity: EntityRef | undefined = target?.id ? {
     kind: target.kind || 'entity',
@@ -206,7 +206,7 @@ export async function resolveAndRunRegisteredCapability(
   if (!definition) return undefined
   stage(options, 'resolve', name)
   const action = parseRegisteredCapability(name, raw)
-  if (!action) throw new Error(`${name} no cumple el contrato de entrada.`)
+  if (!action) throw new Error(`${name} does not satisfy the input contract.`)
   return runRegisteredCapability(action, {
     ...options,
     onStage: (current, actionType) => {

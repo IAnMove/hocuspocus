@@ -503,7 +503,7 @@ curl -X POST "$MAESTRO_URL/api/v1/stories/generate/start" \
   -d '{
     "scope": "all",
     "premise": "A cartographer discovers that her hand-drawn islands are becoming real.",
-    "language": "Español",
+    "language": "English",
     "genre": "Adventure",
     "tone": "Mysterious",
     "audience": "General",

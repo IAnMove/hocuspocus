@@ -103,10 +103,10 @@ test('mantiene la ruta original y vuelve a la galería coral cuando el paquete n
   try {
     const view = await renderRoute()
     await view.waitFor(() => assert.equal(requested, true))
-    assert.ok(view.screen.getByRole('heading', { name: 'Escenas programáticas reutilizables' }))
+    assert.ok(view.screen.getByRole('heading', { name: 'Reusable programmatic scenes' }))
     assert.equal(view.screen.queryByText('Showcase local'), null)
     assert.equal(window.location.pathname, routePath)
-    assert.equal(view.screen.getByRole('link', { name: /Laboratorio de escenas candidatas/ }).getAttribute('href'), routePath)
+    assert.equal(view.screen.getByRole('link', { name: /Candidate scene lab/ }).getAttribute('href'), routePath)
     view.cleanup()
   } finally {
     globalThis.fetch = originalFetch
@@ -129,7 +129,7 @@ test('trata el index.html de una SPA como showcase ausente, sin ocultar un manif
     const view = await renderRoute()
     await view.waitFor(() => assert.equal(requested, true))
     await view.waitFor(() => assert.equal(view.screen.queryByRole('alert'), null))
-    assert.ok(view.screen.getByRole('heading', { name: 'Escenas programáticas reutilizables' }))
+    assert.ok(view.screen.getByRole('heading', { name: 'Reusable programmatic scenes' }))
     assert.equal(view.screen.queryByText('Showcase local'), null)
     assert.equal(window.location.pathname, routePath)
     view.cleanup()
@@ -152,8 +152,8 @@ test('muestra un manifest hostil como error visible y conserva las referencias o
   try {
     const view = await renderRoute()
     const alert = await view.screen.findByRole('alert')
-    assert.match(alert.textContent || '', /URL relativa/i)
-    assert.ok(view.screen.getByRole('heading', { name: 'Escenas programáticas reutilizables' }))
+    assert.match(alert.textContent || '', /relative \/scene-showcase\/ URL/i)
+    assert.ok(view.screen.getByRole('heading', { name: 'Reusable programmatic scenes' }))
     assert.equal(view.screen.queryByText('Showcase local'), null)
     assert.equal(calls, 1)
     view.cleanup()
@@ -184,7 +184,7 @@ test('comprueba SHA y transfiere la escena exacta al editor por el handoff versi
   }) as typeof fetch
   try {
     const view = await renderRoute()
-    const open = await view.screen.findByRole('button', { name: 'Abrir escena en editor' })
+    const open = await view.screen.findByRole('button', { name: 'Open scene in editor' })
     view.fireEvent.click(open)
     await view.waitFor(() => {
       const pending = window.sessionStorage.getItem(PENDING_SCENE_KEY)

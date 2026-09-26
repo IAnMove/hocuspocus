@@ -421,7 +421,7 @@ def assert_enqueue_guard(spec: Mapping[str, Any]) -> None:
         instrumental=bool(spec.get("instrumental")),
     )
     raise MusicModelError(
-        "La letra no respeta el idioma solicitado: " + " ".join(str(item) for item in (guard.get("reasons") or [])),
+        "The lyrics do not match the requested language: " + " ".join(str(item) for item in (guard.get("reasons") or [])),
         details={
             "language_guard": dict(guard),
             "proposal": repaired.get("proposal"),

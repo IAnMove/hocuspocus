@@ -141,13 +141,13 @@ function isRecord(value: unknown): value is RecordValue {
 }
 
 function record(value: unknown, name: string): RecordValue {
-  if (!isRecord(value)) throw new CommandContractError(`${name} debe ser un objeto.`, 'invalid_object', name)
+  if (!isRecord(value)) throw new CommandContractError(`${name} must be an object.`, 'invalid_object', name)
   return value
 }
 
 function text(value: unknown, name: string): string {
   if (typeof value !== 'string' || !value.trim()) {
-    throw new CommandContractError(`${name} no puede estar vacío.`, 'empty_id', name)
+    throw new CommandContractError(`${name} cannot be empty.`, 'empty_id', name)
   }
   return value.trim()
 }
@@ -159,7 +159,7 @@ function optionalText(value: unknown, name: string): string | undefined {
 
 function nonNegativeInteger(value: unknown, name: string): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-    throw new CommandContractError(`${name} debe ser un entero no negativo.`, 'invalid_version', name)
+    throw new CommandContractError(`${name} must be a non-negative integer.`, 'invalid_version', name)
   }
   return value
 }
@@ -185,7 +185,7 @@ function normalizeJsonValue(
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
-      throw new CommandContractError(`${name} debe contener números finitos.`, 'invalid_json_value', name)
+      throw new CommandContractError(`${name} must contain finite numbers.`, 'invalid_json_value', name)
     }
     return value
   }
@@ -193,10 +193,10 @@ function normalizeJsonValue(
     throw new CommandContractError(`${name} contiene un valor no serializable.`, 'invalid_json_value', name)
   }
   if (depth >= MAX_JSON_DEPTH) {
-    throw new CommandContractError(`${name} es demasiado profundo.`, 'json_depth_exceeded', name)
+    throw new CommandContractError(`${name} is too deeply nested.`, 'json_depth_exceeded', name)
   }
   if (seen.has(value)) {
-    throw new CommandContractError(`${name} contiene una referencia circular.`, 'circular_json_value', name)
+    throw new CommandContractError(`${name} contains a circular reference.`, 'circular_json_value', name)
   }
     seen.add(value)
   try {
@@ -212,10 +212,10 @@ function normalizeJsonValue(
       return normalizedArray
     }
     if (!isRecord(value)) {
-      throw new CommandContractError(`${name} debe ser JSON plano.`, 'invalid_json_value', name)
+      throw new CommandContractError(`${name} must be plain JSON.`, 'invalid_json_value', name)
     }
     if (Object.getOwnPropertySymbols(value).length > 0) {
-      throw new CommandContractError(`${name} no puede contener claves Symbol.`, 'invalid_json_value', name)
+      throw new CommandContractError(`${name} cannot contain Symbol keys.`, 'invalid_json_value', name)
     }
     const normalized: RecordValue = {}
     for (const [key, item] of Object.entries(value)) {
@@ -238,14 +238,14 @@ function normalizePayload<T>(value: unknown, name: string, defaultValue: T): T {
 function normalizeMetadata(value: unknown, name: string): RecordValue {
   const normalized = normalizeJsonValue(value, name)
   if (!isRecord(normalized)) {
-    throw new CommandContractError(`${name} debe ser un objeto JSON.`, 'invalid_object', name)
+    throw new CommandContractError(`${name} must be a JSON object.`, 'invalid_object', name)
   }
   return normalized
 }
 
 function stringList(value: unknown, name: string): string[] {
   if (value == null) return []
-  if (!Array.isArray(value)) throw new CommandContractError(`${name} debe ser una lista.`, 'invalid_list', name)
+  if (!Array.isArray(value)) throw new CommandContractError(`${name} must be a list.`, 'invalid_list', name)
   const seen = new Set<string>()
   return value.map((item, index) => {
     const next = text(item, `${name}[${index}]`)
@@ -267,7 +267,7 @@ function expectedWorkspace(value: unknown, name = 'workspaceId'): string {
 function assertWorkspaceMatch(expected: string, actual: string, path: string): void {
   if (expected !== actual) {
     throw new CommandContractError(
-      `${path} pertenece al workspace “${actual}”, no al workspace “${expected}”.`,
+      `${path} belongs to workspace “${actual}”, not workspace “${expected}”.`,
       'cross_workspace_reference',
       path,
     )
@@ -297,7 +297,7 @@ export function validateEntityRef(value: unknown, workspaceId?: string): string[
     normalizeEntityRef(value, workspaceId)
     return []
   } catch (error) {
-    return [error instanceof Error ? error.message : 'Referencia de entidad inválida.']
+    return [error instanceof Error ? error.message : 'Invalid entity reference.']
   }
 }
 
@@ -305,7 +305,7 @@ function normalizeArtifactRefRecord(raw: RecordValue, workspaceId?: string, path
   const id = text(raw.id, `${path}.id`)
   const kind = text(raw.kind, `${path}.kind`)
   if (!(ARTIFACT_KINDS as readonly string[]).includes(kind)) {
-    throw new CommandContractError(`${path}.kind no es un tipo de artefacto válido.`, 'invalid_artifact_kind', `${path}.kind`)
+    throw new CommandContractError(`${path}.kind is not a valid artifact type.`, 'invalid_artifact_kind', `${path}.kind`)
   }
   const owner = normalizeEntityRefRecord(record(raw.owner, `${path}.owner`), workspaceId, `${path}.owner`)
   const taskId = optionalText(raw.taskId, `${path}.taskId`)
@@ -335,7 +335,7 @@ export function validateArtifactRef(value: unknown, workspaceId?: string): strin
     normalizeArtifactRef(value, workspaceId)
     return []
   } catch (error) {
-    return [error instanceof Error ? error.message : 'Referencia de artefacto inválida.']
+    return [error instanceof Error ? error.message : 'Invalid artifact reference.']
   }
 }
 
@@ -366,7 +366,7 @@ export function validateNavigationTarget(value: unknown, workspaceId?: string): 
     normalizeNavigationTarget(value, workspaceId)
     return []
   } catch (error) {
-    return [error instanceof Error ? error.message : 'Destino de navegación inválido.']
+    return [error instanceof Error ? error.message : 'Invalid navigation target.']
   }
 }
 
@@ -383,10 +383,10 @@ function normalizePresentationRecord(raw: RecordValue, workspaceId?: string): Pr
   const focus = optionalText(raw.focus, 'presentation.focus')
   const speed = raw.speed == null ? 'normal' : text(raw.speed, 'presentation.speed')
   if (!(PRESENTATION_SPEEDS as readonly string[]).includes(speed)) {
-    throw new CommandContractError('presentation.speed no es válido.', 'invalid_presentation_speed', 'presentation.speed')
+    throw new CommandContractError('presentation.speed is not valid.', 'invalid_presentation_speed', 'presentation.speed')
   }
   if (raw.replay != null && raw.replay !== 'atomic') {
-    throw new CommandContractError('presentation.replay sólo admite “atomic”.', 'invalid_presentation_replay', 'presentation.replay')
+    throw new CommandContractError('presentation.replay only accepts “atomic”.', 'invalid_presentation_replay', 'presentation.replay')
   }
   return {
     ...(navigationTarget == null ? {} : { navigationTarget }),
@@ -410,7 +410,7 @@ export function validatePresentationPlan(value: unknown, workspaceId?: string): 
     normalizePresentationPlan(value, workspaceId)
     return []
   } catch (error) {
-    return [error instanceof Error ? error.message : 'Plan de presentación inválido.']
+    return [error instanceof Error ? error.message : 'Invalid presentation plan.']
   }
 }
 
@@ -439,7 +439,7 @@ export function normalizeStructuredError(value: unknown): StructuredError {
     : (typeof raw.retryable === 'boolean'
       ? raw.retryable
       : (() => {
-        throw new CommandContractError('error.retryable debe ser booleano.', 'invalid_boolean', 'error.retryable')
+        throw new CommandContractError('error.retryable must be a boolean.', 'invalid_boolean', 'error.retryable')
       })())
   const field = optionalText(raw.field, 'error.field')
   const details = raw.details == null ? undefined : normalizeMetadata(raw.details, 'error.details')
@@ -461,7 +461,7 @@ export function validateStructuredError(value: unknown): string[] {
     normalizeStructuredError(value)
     return []
   } catch (error) {
-    return [error instanceof Error ? error.message : 'Error estructurado inválido.']
+    return [error instanceof Error ? error.message : 'Invalid structured error.']
   }
 }
 
@@ -521,7 +521,7 @@ export function normalizeCommandEnvelope<T>(value: unknown): CommandEnvelope<T> 
   const workspaceId = expectedWorkspace(raw.workspaceId ?? raw.workspace_id, 'command.workspaceId')
   const actor = text(raw.actor, 'command.actor')
   if (actor !== 'user' && actor !== 'wizard') {
-    throw new CommandContractError('command.actor debe ser “user” o “wizard”.', 'invalid_actor', 'command.actor')
+    throw new CommandContractError('command.actor must be “user” or “wizard”.', 'invalid_actor', 'command.actor')
   }
   const target = raw.target == null ? undefined : normalizeEntityRef(raw.target, workspaceId)
   const input = normalizePayload<T>(raw.input, 'command.input', {} as T)
@@ -558,14 +558,14 @@ export function validateCommandEnvelope(value: unknown): string[] {
     normalizeCommandEnvelope(value)
     return []
   } catch (error) {
-    return [error instanceof Error ? error.message : 'Envelope de comando inválido.']
+    return [error instanceof Error ? error.message : 'Invalid command envelope.']
   }
 }
 
 function normalizeStatus(value: unknown): CommandStatus {
   const status = text(value, 'result.status')
   if (!(COMMAND_STATUSES as readonly string[]).includes(status)) {
-    throw new CommandContractError(`result.status “${status}” no es válido.`, 'invalid_status', 'result.status')
+    throw new CommandContractError(`result.status “${status}” is not valid.`, 'invalid_status', 'result.status')
   }
   return status as CommandStatus
 }
@@ -579,15 +579,15 @@ export function normalizeCommandResult(value: unknown, workspaceId?: string): Co
     ? []
     : (Array.isArray(raw.entities)
       ? raw.entities.map((item, index) => normalizeEntityRefRecord(record(item, `result.entities[${index}]`), expected, `result.entities[${index}]`))
-      : (() => { throw new CommandContractError('result.entities debe ser una lista.', 'invalid_list', 'result.entities') })())
+      : (() => { throw new CommandContractError('result.entities must be a list.', 'invalid_list', 'result.entities') })())
   const artifacts = raw.artifacts == null
     ? []
     : (Array.isArray(raw.artifacts)
       ? raw.artifacts.map((item, index) => normalizeArtifactRefRecord(record(item, `result.artifacts[${index}]`), expected, `result.artifacts[${index}]`))
-      : (() => { throw new CommandContractError('result.artifacts debe ser una lista.', 'invalid_list', 'result.artifacts') })())
+      : (() => { throw new CommandContractError('result.artifacts must be a list.', 'invalid_list', 'result.artifacts') })())
   const workspaces = new Set([...entities.map(item => item.workspaceId), ...artifacts.map(item => item.owner.workspaceId)])
   if (expected == null && workspaces.size > 1) {
-    throw new CommandContractError('result contiene referencias de varios workspaces.', 'cross_workspace_reference', 'result')
+    throw new CommandContractError('result contains references from several workspaces.', 'cross_workspace_reference', 'result')
   }
   const inferredWorkspace = expected ?? [...workspaces][0]
   const taskIds = normalizedUniqueList(raw.taskIds ?? raw.task_ids, 'result.taskIds')
@@ -617,7 +617,7 @@ export function validateCommandResult(value: unknown, workspaceId?: string): str
     normalizeCommandResult(value, workspaceId)
     return []
   } catch (error) {
-    return [error instanceof Error ? error.message : 'Resultado de comando inválido.']
+    return [error instanceof Error ? error.message : 'Invalid command result.']
   }
 }
 
@@ -634,7 +634,7 @@ export function serializeCommandResult(value: CommandResult, workspaceId?: strin
 export function assertWorkspaceScope(workspaceId: string, references: readonly (EntityRef | ArtifactRef)[]): void {
   const expected = expectedWorkspace(workspaceId)
   if (!Array.isArray(references)) {
-    throw new CommandContractError('references debe ser una lista.', 'invalid_list', 'references')
+    throw new CommandContractError('references must be a list.', 'invalid_list', 'references')
   }
   references.forEach((reference, index) => {
     const path = `references[${index}]`

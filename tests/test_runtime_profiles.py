@@ -266,3 +266,15 @@ def test_missing_vendor_files_and_changed_revisions_trigger_repair(tmp_path, mon
     git("add", "custom.py")
     git("commit", "-m", "different upstream revision")
     assert not sources.sources_current(["fixture"], tmp_path)
+
+
+def test_package_check_tolerates_only_allowed_wheel_tag_mismatches():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runtime_pip_check_test", ROOT / "scripts/runtime_pip.py")
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    header = "Using Python 3.10.20 environment at: app/env\nChecked 309 packages in 3ms\nFound 1 incompatibility\n"
+    assert helper.check_passes(header + "The package `decord` was built for a different platform\n")
+    assert helper.check_passes(header + "The package `bpy` was built for a different platform\n")
+    assert not helper.check_passes(header + "The package `torch` was built for a different platform\n")
+    assert not helper.check_passes(header + "The package `numpy` requires `python>=3.11`\n")

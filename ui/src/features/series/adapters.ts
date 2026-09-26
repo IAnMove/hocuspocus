@@ -70,30 +70,30 @@ export function resolveSeriesComicCommand(action: {
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(seriesTitle))
     : []
   if (seriesMatches.length > 1) {
-    throw new Error(`Hay varias series tituladas “${seriesTitle}”; nombra el id exacto o renombra una.`)
+    throw new Error(`There are several series titled “${seriesTitle}”; give the exact id or rename one.`)
   }
   const series = requestedSeries
     || seriesMatches[0]
     || (!seriesTitle && !action.seriesId ? library.seriesById[store.activeSeriesId] : undefined)
   if (!series) {
     throw new Error(seriesTitle
-      ? `No existe la serie “${seriesTitle}” en este workspace.`
-      : 'No hay una serie activa ni un título exacto para adaptar a cómic.')
+      ? `There is no series “${seriesTitle}” in this workspace.`
+      : 'There is no active series or exact title to adapt into a comic.')
   }
   const requestedEpisode = action.episodeId ? series.episodesById[action.episodeId] : undefined
   const episodeMatches = !requestedEpisode && episodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(episodeTitle))
     : []
   if (episodeMatches.length > 1) {
-    throw new Error(`Hay varios episodios titulados “${episodeTitle}”; nombra el id exacto.`)
+    throw new Error(`There are several episodes titled “${episodeTitle}”; give the exact id.`)
   }
   const episode = requestedEpisode
     || episodeMatches[0]
     || (!episodeTitle && !action.episodeId ? series.episodesById[store.activeEpisodeId] : undefined)
   if (!episode) {
     throw new Error(episodeTitle
-      ? `No existe el episodio “${episodeTitle}” en “${series.title}”.`
-      : 'No hay un episodio activo ni un título exacto para adaptar a cómic.')
+      ? `There is no episode “${episodeTitle}” in “${series.title}”.`
+      : 'There is no active episode or exact title to adapt into a comic.')
   }
   return {
     seriesId: series.id,

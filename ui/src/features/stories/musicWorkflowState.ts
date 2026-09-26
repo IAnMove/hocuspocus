@@ -256,10 +256,10 @@ export function validateMusicVideoStaging(
   const directVideo = project.musicVideoGenerationMode === 'direct_video'
   const directReferences = project.musicVideoGenerationMode === 'direct_references'
   if (directReferences && !String(project.videoOverride.model || '').startsWith('minimax_h3')) {
-    throw new Error('Las referencias directas de este videoclip requieren un modelo MiniMax H3 con Ref2VA.')
+    throw new Error('This music video\'s direct references require a MiniMax H3 model with Ref2VA.')
   }
   if (directReferences && !adaptation.characterReferences.length && !adaptation.locationReferences.length) {
-    throw new Error('No hay referencias aprobadas para este cue. Aprueba una imagen de mundo, localización o personaje antes de preparar el videoclip.')
+    throw new Error('There are no approved references for this cue. Approve a world, location or character image before preparing the music video.')
   }
   return { directVideo, directReferences }
 }

@@ -50,13 +50,13 @@ function twoClips() {
       id: 'clip-a', name: 'First', source: 'first.mp4', previewUrl: 'first.mp4', thumbnailUrl: '',
       duration: 10, width: 1280, height: 720, fps: 24, has_audio: true, pixel_format: 'yuv420p', has_alpha: false,
       trimStart: 0, trimEnd: 8, volume: 1, muted: false, fit: 'fit', transition: 'none', transitionDuration: 0.5,
-      transitionText: 'Momentos después…', transitionTextSize: 100,
+      transitionText: 'Moments later…', transitionTextSize: 100,
     },
     {
       id: 'clip-b', name: 'Second', source: 'second.mp4', previewUrl: 'second.mp4', thumbnailUrl: '',
       duration: 10, width: 1280, height: 720, fps: 24, has_audio: true, pixel_format: 'yuv420p', has_alpha: false,
       trimStart: 0, trimEnd: 6, volume: 1, muted: false, fit: 'fit', transition: 'none', transitionDuration: 0.5,
-      transitionText: 'Momentos después…', transitionTextSize: 100,
+      transitionText: 'Moments later…', transitionTextSize: 100,
     },
   ]
 }

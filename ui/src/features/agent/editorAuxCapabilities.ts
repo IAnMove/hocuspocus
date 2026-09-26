@@ -65,7 +65,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     risk: 'compute',
     confirmation: 'required',
-    progress: 'Regenerando la viñeta del cómic…',
+    progress: 'Regenerating the comic panel…',
     resolve(raw) {
       if (raw.confirm !== true) return null
       const pageNumber = typeof raw.page_number === 'number' && Number.isFinite(raw.page_number) && raw.page_number > 0
@@ -116,7 +116,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     risk: 'edit',
     confirmation: 'none',
-    progress: 'Actualizando la identidad del Character Kit…',
+    progress: 'Updating the Character Kit identity…',
     resolve(raw) {
       const style = text(raw.visual_style, 40)
       return {
@@ -160,7 +160,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     risk: 'edit',
     confirmation: 'none',
-    progress: 'Añadiendo clips al Video Editor…',
+    progress: 'Adding clips to the Video Editor…',
     resolve(raw) {
       const outputNames = stringArray(raw.reference_output_names, 24, 300)
       return outputNames.length ? { type: 'add_video_editor_clips', outputNames } : null
@@ -194,7 +194,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     risk: 'edit',
     confirmation: 'none',
-    progress: 'Reordenando los clips del Video Editor…',
+    progress: 'Reordering the Video Editor clips…',
     resolve(raw) {
       const clipNames = stringArray(raw.clip_names, 40, 300)
       return clipNames.length ? { type: 'order_video_editor_clips', clipNames } : null
@@ -230,7 +230,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     risk: 'edit',
     confirmation: 'none',
-    progress: 'Recortando el clip del Video Editor…',
+    progress: 'Trimming the Video Editor clip…',
     resolve(raw) {
       const clipName = text(raw.clip_name, 300)
       if (!clipName || typeof raw.trim_end !== 'number' || !Number.isFinite(raw.trim_end)) return null
@@ -279,7 +279,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     risk: 'edit',
     confirmation: 'none',
-    progress: 'Añadiendo la banda sonora al Video Editor…',
+    progress: 'Adding the soundtrack to the Video Editor…',
     resolve(raw) {
       const outputName = text(raw.audio_output_name, 300)
       return outputName
@@ -312,7 +312,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     risk: 'read',
     confirmation: 'none',
-    progress: 'Validando la línea de tiempo del Video Editor…',
+    progress: 'Validating the Video Editor timeline…',
     resolve() { return { type: 'validate_video_editor_timeline' } },
     validate() { return [] },
     async prepare(action) { return action },
@@ -340,7 +340,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     risk: 'compute',
     confirmation: 'required',
-    progress: 'Encolando la exportación del Video Editor…',
+    progress: 'Queueing the Video Editor export…',
     resolve(raw) { return raw.confirm === true ? { type: 'export_video_editor', confirm: true } : null },
     validate(action) { return action.confirm === true ? [] : ['export confirmation is required'] },
     async prepare(action) { return action },
@@ -368,7 +368,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     risk: 'read',
     confirmation: 'none',
-    progress: 'Consultando la exportación del Video Editor…',
+    progress: 'Checking the Video Editor export…',
     resolve() { return { type: 'track_video_editor_export' } },
     validate() { return [] },
     async prepare(action) { return action },

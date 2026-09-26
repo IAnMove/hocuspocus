@@ -1,7 +1,7 @@
 import { capConversationValues, insertMissingConversationValues } from './wizardMessageOrder'
 import { normalizeVisualEvidence, type VisualEvidence } from './visualEvidence'
 
-export const WIZARD_WELCOME_TEXT = 'Saludos, creador. Soy el mago de HocusPocus: puedo consultar la cola, explicarte el estudio, llevarte a la sección adecuada y preparar o lanzar un vídeo cuando me lo pidas. Dime qué quieres conjurar. 🪄'
+export const WIZARD_WELCOME_TEXT = 'Greetings, creator. I am the HocusPocus wizard: I can check the queue, explain the studio, take you to the right section, and prepare or launch a video when you ask. Tell me what you want to conjure. 🪄'
 
 export interface WizardSyncMessage {
   id: string

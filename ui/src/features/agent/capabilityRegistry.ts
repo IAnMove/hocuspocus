@@ -290,7 +290,7 @@ defineCapability<AgentOpenTabAction>({
   },
   risk: 'read',
   confirmation: 'none',
-  progress: 'Abriendo una sección de HocusPocus…',
+  progress: 'Opening a HocusPocus section…',
   resolve(raw) {
     const tab = text(raw.tab, 40)
     return tabSet.has(tab) ? { type: 'open_tab', tab: tab as AgentTab } : null
@@ -328,7 +328,7 @@ defineCapability<AgentAttachVideoclipAlternativeSongAction>({
     },
     required: ['type', 'videoclip_name', 'audio_output_name'],
   },
-  risk: 'edit', confirmation: 'none', progress: 'Añadiendo la canción alternativa al videoclip…',
+  risk: 'edit', confirmation: 'none', progress: 'Adding the alternative song to the music video…',
   resolve(raw) {
     const videoclipName = text(raw.videoclip_name, 300)
     const audioOutputName = text(raw.audio_output_name, 300)
@@ -364,7 +364,7 @@ defineCapability<AgentMountVideoclipAlternativeSongAction>({
     },
     required: ['type', 'videoclip_name', 'audio_output_name', 'confirm'],
   },
-  risk: 'compute', confirmation: 'required', progress: 'Montando el videoclip con la canción alternativa…',
+  risk: 'compute', confirmation: 'required', progress: 'Assembling the music video with the alternative song…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const videoclipName = text(raw.videoclip_name, 300)
@@ -387,18 +387,18 @@ defineCapability<AgentMountVideoclipAlternativeSongAction>({
 
 defineCapability<AgentCreateCharacterKitAction>({
   name: 'create_character_kit', title: 'Create a Character Kit', description: 'Create or reopen one canonical Character Kit and return its real ID.', useWhen: 'The user asks to create a named Character Kit.', parameters: ['kit_name', 'style'],
-  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'create_character_kit' }, kit_name: { type: 'string', maxLength: 160 }, style: { type: 'string', enum: ['cutout', 'children-illustration', 'anime-2d'] } }, required: ['type', 'kit_name'] }, risk: 'edit', confirmation: 'none', progress: 'Creando el Character Kit…',
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'create_character_kit' }, kit_name: { type: 'string', maxLength: 160 }, style: { type: 'string', enum: ['cutout', 'children-illustration', 'anime-2d'] } }, required: ['type', 'kit_name'] }, risk: 'edit', confirmation: 'none', progress: 'Creating the Character Kit…',
   resolve(raw) { const name = text(raw.kit_name, 160); const style = text(raw.style, 40); return name && (style === 'cutout' || style === 'children-illustration' || style === 'anime-2d') ? { type: 'create_character_kit', name, style } : null },
   validate(action) { return action.name ? [] : ['kit name is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.characterKit.create(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'character_kit', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'character_kit', anchors: ['kit'], replay: 'atomic' },
 })
 
 defineCapability<AgentOpenCharacterKitAction>({
-  name: 'open_character_kit', title: 'Open a Character Kit', description: 'Open one exact canonical Character Kit.', useWhen: 'The user asks to open a Character Kit.', parameters: ['kit_name'], inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'open_character_kit' }, kit_name: { type: 'string', maxLength: 160 } }, required: ['type'] }, risk: 'read', confirmation: 'none', progress: 'Abriendo Character Kit…',
+  name: 'open_character_kit', title: 'Open a Character Kit', description: 'Open one exact canonical Character Kit.', useWhen: 'The user asks to open a Character Kit.', parameters: ['kit_name'], inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'open_character_kit' }, kit_name: { type: 'string', maxLength: 160 } }, required: ['type'] }, risk: 'read', confirmation: 'none', progress: 'Opening Character Kit…',
   resolve(raw) { return { type: 'open_character_kit', kitName: text(raw.kit_name, 160) } }, validate() { return [] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.characterKit.openKit(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'character_kit', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'character_kit', anchors: ['kit'] },
 })
 
 defineCapability<AgentAttachCharacterKitReferencesAction>({
-  name: 'attach_character_kit_references', title: 'Attach a Character Kit identity reference', description: 'Attach one exact existing image output as the kit identity reference.', useWhen: 'The user explicitly asks to use an image as a Character Kit identity.', parameters: ['kit_name', 'reference_output_names'], inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'attach_character_kit_references' }, kit_name: { type: 'string' }, reference_output_names: { type: 'array', minItems: 1, maxItems: 1, items: { type: 'string' } } }, required: ['type', 'reference_output_names'] }, risk: 'edit', confirmation: 'none', progress: 'Vinculando la identidad del Character Kit…',
+  name: 'attach_character_kit_references', title: 'Attach a Character Kit identity reference', description: 'Attach one exact existing image output as the kit identity reference.', useWhen: 'The user explicitly asks to use an image as a Character Kit identity.', parameters: ['kit_name', 'reference_output_names'], inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'attach_character_kit_references' }, kit_name: { type: 'string' }, reference_output_names: { type: 'array', minItems: 1, maxItems: 1, items: { type: 'string' } } }, required: ['type', 'reference_output_names'] }, risk: 'edit', confirmation: 'none', progress: 'Linking the Character Kit identity…',
   resolve(raw) { const names = Array.isArray(raw.reference_output_names) ? raw.reference_output_names.flatMap(value => { const name = text(value, 300); return name ? [name] : [] }).slice(0, 2) : []; return names.length === 1 ? { type: 'attach_character_kit_references', kitName: text(raw.kit_name, 160), outputNames: names } : null }, validate(action) { return action.outputNames.length === 1 ? [] : ['one exact identity reference is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.characterKit.attachReference(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'character_kit', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'character_kit', anchors: ['identity-reference'], replay: 'atomic' },
 })
 
@@ -406,7 +406,7 @@ function characterKitNamedAction<T extends AgentBuildCharacterKitAction | AgentO
 characterKitNamedAction<AgentBuildCharacterKitAction>('build_character_kit', 'Build Character Kit', (action, context) => context.adapters.characterKit.build(action))
 characterKitNamedAction<AgentOpenCharacterKitRigAction>('open_character_kit_rig', 'Open Character Kit Face Rig', (action, context) => context.adapters.characterKit.openRig(action))
 defineCapability<AgentApplyCharacterKitPresetAction>({ name: 'apply_character_kit_preset', title: 'Apply Character Kit preset', description: 'Apply one verified Face Rig preset to the canonical kit.', useWhen: 'The user explicitly asks to apply a Face Rig preset.', parameters: ['kit_name', 'preset_id'], inputSchema: { type: 'object', properties: { type: { const: 'apply_character_kit_preset' }, kit_name: { type: 'string' }, preset_id: { type: 'string' } }, required: ['type', 'preset_id'] }, risk: 'edit', confirmation: 'none', progress: 'Aplicando preset de Face Rig…', resolve(raw) { const presetId = text(raw.preset_id, 160); return presetId ? { type: 'apply_character_kit_preset', kitName: text(raw.kit_name, 160), presetId } : null }, validate(action) { return action.presetId ? [] : ['preset is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.characterKit.applyPreset(action) }, correlate(_a, o) { return o.target }, async track(_a, o) { return o }, report: { targetKind: 'character_kit', successState: 'completed' }, summarize(_a, o) { return o.message }, presentation: { destination: 'character_kit', anchors: ['face-rig', 'preset'], replay: 'atomic' } })
-defineCapability<AgentTrackCharacterKitJobAction>({ name: 'track_character_kit_job', title: 'Track Character Kit job', description: 'Inspect the canonical queue for one Character Kit.', useWhen: 'The user asks for Character Kit work status.', parameters: ['kit_name'], inputSchema: { type: 'object', properties: { type: { const: 'track_character_kit_job' }, kit_name: { type: 'string' } }, required: ['type'] }, risk: 'read', confirmation: 'none', progress: 'Consultando Character Kit…', resolve(raw) { return { type: 'track_character_kit_job', kitName: text(raw.kit_name, 160) } }, validate() { return [] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.characterKit.trackJob(action) }, correlate(_a, o) { return o.target }, async track(_a, o) { return o }, report: { targetKind: 'character_kit', successState: 'completed' }, summarize(_a, o) { return o.message }, presentation: { destination: 'character_kit', anchors: ['queue'] } })
+defineCapability<AgentTrackCharacterKitJobAction>({ name: 'track_character_kit_job', title: 'Track Character Kit job', description: 'Inspect the canonical queue for one Character Kit.', useWhen: 'The user asks for Character Kit work status.', parameters: ['kit_name'], inputSchema: { type: 'object', properties: { type: { const: 'track_character_kit_job' }, kit_name: { type: 'string' } }, required: ['type'] }, risk: 'read', confirmation: 'none', progress: 'Checking Character Kit…', resolve(raw) { return { type: 'track_character_kit_job', kitName: text(raw.kit_name, 160) } }, validate() { return [] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.characterKit.trackJob(action) }, correlate(_a, o) { return o.target }, async track(_a, o) { return o }, report: { targetKind: 'character_kit', successState: 'completed' }, summarize(_a, o) { return o.message }, presentation: { destination: 'character_kit', anchors: ['queue'] } })
 
 defineCapability<AgentApply3dRhythmAction>({
   name: 'apply_3d_rhythm',
@@ -430,7 +430,7 @@ defineCapability<AgentApply3dRhythmAction>({
   },
   risk: 'compute',
   confirmation: 'required',
-  progress: 'Analizando la canción y creando keyframes rítmicos…',
+  progress: 'Analyzing the song and creating rhythmic keyframes…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const cueSource = text(raw.cue_source, 30)
@@ -493,7 +493,7 @@ defineCapability<AgentCreateRhythmic3dVideoAction>({
     required: ['type', 'scene_name', 'visual_output_name', 'confirm'],
   },
   risk: 'compute', confirmation: 'required',
-  progress: 'Invocando la canción y el vídeo 3D al ritmo…',
+  progress: 'Summoning the song and the beat-synced 3D video…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const sceneName = text(raw.scene_name, 300)
@@ -531,7 +531,7 @@ defineCapability<AgentCreateRhythmic3dVideoAction>({
     const workflow = await startRhythmic3dWorkflow(action, context.adapters)
     const step = workflow.steps[workflow.currentStep] ?? workflow.steps.at(-1)
     return {
-      message: `He iniciado el hechizo duradero “${action.sceneName}” (${workflow.workflowId}).`,
+      message: `I started the durable spell “${action.sceneName}” (${workflow.workflowId}).`,
       target: { kind: 'wizard_workflow', id: workflow.workflowId, title: action.sceneName },
       taskId: step?.taskId || undefined,
       outputNames: workflow.outputRefs,
@@ -550,7 +550,7 @@ defineCapability<AgentCreateStoryAction>({
   useWhen: 'The user asks for a new story, episode, trailer, music video or a filled example in Story Lab.',
   parameters: ['title', 'project_type', 'premise', 'creative_brief', 'characters', 'locations', 'outline_beats', 'target_duration_seconds'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'create_story' }, title: { type: 'string', maxLength: 300 }, premise: { type: 'string', maxLength: 2_000 }, project_type: { type: 'string', enum: ['full_story', 'music_video', 'trailer', 'quick_video'] } }, required: ['type', 'title', 'premise'] },
-  risk: 'edit', confirmation: 'none', progress: 'Escribiendo y guardando la nueva historia…',
+  risk: 'edit', confirmation: 'none', progress: 'Writing and saving the new story…',
   resolve(raw) {
     const fields = storyFields(raw)
     if (!fields.title || !fields.premise) return null
@@ -576,7 +576,7 @@ defineCapability<AgentUpdateStoryAction>({
   useWhen: 'The user asks to change an existing Story Lab story, its canon, characters, locations or outline.',
   parameters: ['target_story_title', 'title', 'premise', 'creative_brief', 'characters', 'locations', 'outline_beats', 'target_duration_seconds'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'update_story' }, target_story_title: { type: 'string', maxLength: 300 } }, required: ['type'] },
-  risk: 'edit', confirmation: 'none', progress: 'Actualizando el canon de la historia…',
+  risk: 'edit', confirmation: 'none', progress: 'Updating the story canon…',
   resolve(raw) {
     const fields = storyFields(raw)
     const action: AgentUpdateStoryAction = { type: 'update_story', targetStoryTitle: text(raw.target_story_title, 300), ...fields }
@@ -595,7 +595,7 @@ defineCapability<AgentGenerateStorySectionAction>({
   useWhen: 'The user explicitly asks to generate a Story Lab proposal for review.',
   parameters: ['target_story_title', 'story_generation_scope', 'instruction', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'generate_story_section' }, story_generation_scope: { type: 'string', enum: ['all', 'overview', 'world', 'characters', 'relationships', 'structure'] }, confirm: { const: true } }, required: ['type', 'story_generation_scope', 'confirm'] },
-  risk: 'compute', confirmation: 'required', progress: 'Invocando una propuesta revisable de Story Lab…',
+  risk: 'compute', confirmation: 'required', progress: 'Summoning a reviewable Story Lab proposal…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const scope = text(raw.story_generation_scope, 40)
@@ -613,7 +613,7 @@ defineCapability<AgentApplyStoryProposalAction>({
   useWhen: 'The user explicitly confirms that the saved Story Lab proposal should become canon.',
   parameters: ['target_story_title', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'apply_story_proposal' }, target_story_title: { type: 'string', maxLength: 300 }, confirm: { const: true } }, required: ['type', 'confirm'] },
-  risk: 'edit', confirmation: 'required', progress: 'Aplicando la propuesta revisada al canon…',
+  risk: 'edit', confirmation: 'required', progress: 'Applying the reviewed proposal to the canon…',
   resolve(raw) { return raw.confirm === true ? { type: 'apply_story_proposal', targetStoryTitle: text(raw.target_story_title, 300), confirm: true } : null },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
   async execute(action, context) { return context.adapters.storyLab.applyProposal(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
@@ -627,7 +627,7 @@ defineCapability<AgentApproveStorySectionAction>({
   useWhen: 'The user explicitly asks to approve a reviewed Story Lab canon section.',
   parameters: ['target_story_title', 'story_section', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'approve_story_section' }, story_section: { type: 'string', enum: ['overview', 'world', 'characters', 'relationships', 'structure'] }, confirm: { const: true } }, required: ['type', 'story_section', 'confirm'] },
-  risk: 'edit', confirmation: 'required', progress: 'Validando y aprobando el canon…',
+  risk: 'edit', confirmation: 'required', progress: 'Validating and approving the canon…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const section = text(raw.story_section, 40)
@@ -645,7 +645,7 @@ defineCapability<AgentGenerateStoryVisualsAction>({
   useWhen: 'The user explicitly asks to generate the visual references for a Story Lab project.',
   parameters: ['target_story_title', 'story_visual_scope', 'target_names', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'generate_story_visuals' }, story_visual_scope: { type: 'string', enum: ['world', 'locations', 'characters', 'all'] }, target_names: { type: 'array', items: { type: 'string' } }, confirm: { const: true } }, required: ['type', 'story_visual_scope', 'confirm'] },
-  risk: 'compute', confirmation: 'required', progress: 'Generando y correlacionando referencias visuales…',
+  risk: 'compute', confirmation: 'required', progress: 'Generating and linking visual references…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const scope = text(raw.story_visual_scope, 30)
@@ -668,7 +668,7 @@ defineCapability<AgentApproveStoryVisualsAction>({
   useWhen: 'The user explicitly asks to approve named Story Lab visual references.',
   parameters: ['target_story_title', 'story_visual_selections', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'approve_story_visuals' }, story_visual_selections: { type: 'array' }, confirm: { const: true } }, required: ['type', 'story_visual_selections', 'confirm'] },
-  risk: 'edit', confirmation: 'required', progress: 'Vinculando y aprobando referencias visuales…',
+  risk: 'edit', confirmation: 'required', progress: 'Linking and approving visual references…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const selections = storyVisualSelections(raw.story_visual_selections)
@@ -686,7 +686,7 @@ defineCapability<AgentStageStoryComicAction>({
   useWhen: 'The user explicitly asks to turn a Story Lab project into a filled comic without rendering its artwork yet.',
   parameters: ['target_story_title', 'direction', 'page_count', 'panels_per_page', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_comic' }, target_story_title: { type: 'string', maxLength: 300 }, page_count: { type: 'integer', minimum: 1, maximum: 100 }, panels_per_page: { type: 'integer', minimum: 1, maximum: 12 }, confirm: { const: true } }, required: ['type', 'confirm'] },
-  risk: 'edit', confirmation: 'required', progress: 'Convirtiendo la historia en un cómic editable…',
+  risk: 'edit', confirmation: 'required', progress: 'Turning the story into an editable comic…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     return { type: 'stage_story_comic', targetStoryTitle: text(raw.target_story_title, 300), direction: text(raw.direction, 4_000), pageCount: Math.round(boundedNumber(raw.page_count, 1, 100, 4)), panelsPerPage: Math.round(boundedNumber(raw.panels_per_page, 1, 12, 4)), confirm: true }
@@ -703,7 +703,7 @@ defineCapability<AgentCreateSeriesEpisodeAction>({
   useWhen: 'The user asks for a new, filled episode in Series Lab.',
   parameters: ['series_title', 'episode_title', 'episode_premise', 'create_if_missing', 'characters', 'locations', 'outline_beats'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'create_series_episode' }, series_title: { type: 'string', maxLength: 300 }, episode_premise: { type: 'string', maxLength: 3_000 }, create_if_missing: { type: 'boolean' } }, required: ['type', 'series_title', 'episode_premise'] },
-  risk: 'edit', confirmation: 'none', progress: 'Creando el episodio editable de Series Lab…',
+  risk: 'edit', confirmation: 'none', progress: 'Creating the editable Series Lab episode…',
   resolve(raw) {
     const fields = seriesEpisodeFields(raw)
     if (!fields.seriesTitle || !fields.episodePremise) return null
@@ -721,7 +721,7 @@ defineCapability<AgentUpdateSeriesEpisodeAction>({
   useWhen: 'The user asks to modify one existing Series Lab episode.',
   parameters: ['series_title', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline', 'outline_beats', 'target_duration_seconds'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'update_series_episode' }, series_title: { type: 'string', maxLength: 300 }, target_episode_title: { type: 'string', maxLength: 300 } }, required: ['type'] },
-  risk: 'edit', confirmation: 'none', progress: 'Actualizando el episodio de Series Lab…',
+  risk: 'edit', confirmation: 'none', progress: 'Updating the Series Lab episode…',
   resolve(raw) {
     const fields = seriesEpisodeFields(raw)
     const action: AgentUpdateSeriesEpisodeAction = { type: 'update_series_episode', seriesTitle: fields.seriesTitle, targetEpisodeTitle: text(raw.target_episode_title, 300), episodeTitle: fields.episodeTitle, episodePremise: fields.episodePremise, episodeLogline: fields.episodeLogline, outlineBeats: fields.outlineBeats, targetDurationSeconds: fields.targetDurationSeconds }
@@ -739,7 +739,7 @@ defineCapability<AgentGenerateSeriesPlanAction>({
   useWhen: 'The user explicitly asks to generate an episode outline, script, shots or complete plan.',
   parameters: ['series_title', 'target_episode_title', 'series_plan_scope', 'instruction', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'generate_series_plan' }, series_plan_scope: { type: 'string', enum: ['outline', 'script', 'shots', 'complete'] }, confirm: { const: true } }, required: ['type', 'series_plan_scope', 'confirm'] },
-  risk: 'compute', confirmation: 'required', progress: 'Generando un plan recuperable de Series Lab…',
+  risk: 'compute', confirmation: 'required', progress: 'Generating a recoverable Series Lab plan…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const scope = text(raw.series_plan_scope, 40)
@@ -757,7 +757,7 @@ defineCapability<AgentApplySeriesPlanAction>({
   useWhen: 'The user explicitly asks to apply a completed Series Lab proposal.',
   parameters: ['series_title', 'target_episode_title', 'job_id', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'apply_series_plan' }, job_id: { type: 'string', maxLength: 160 }, confirm: { const: true } }, required: ['type', 'confirm'] },
-  risk: 'edit', confirmation: 'required', progress: 'Aplicando el plan al episodio exacto…',
+  risk: 'edit', confirmation: 'required', progress: 'Applying the plan to the exact episode…',
   resolve(raw) { return raw.confirm === true ? { type: 'apply_series_plan', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), jobId: text(raw.job_id, 160), confirm: true } : null },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
   async execute(action, context) { return context.adapters.seriesLab.applyPlan(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
@@ -771,7 +771,7 @@ defineCapability<AgentRenderSeriesShotsAction>({
   useWhen: 'The user explicitly asks to render a Series Lab episode’s shots.',
   parameters: ['series_title', 'target_episode_title', 'render_mode', 'shot_ids', 'seed', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'render_series_shots' }, render_mode: { type: 'string', enum: ['selected', 'missing', 'failed', 'all'] }, shot_ids: { type: 'array', items: { type: 'string' } }, confirm: { const: true } }, required: ['type', 'render_mode', 'confirm'] },
-  risk: 'compute', confirmation: 'required', progress: 'Encolando las tomas elegibles de Series Lab…',
+  risk: 'compute', confirmation: 'required', progress: 'Queueing the eligible Series Lab shots…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const mode = text(raw.render_mode, 30)
@@ -789,7 +789,7 @@ defineCapability<AgentRenderSeriesShotsAction>({
 defineCapability<AgentReviewSeriesAttemptsAction>({
   name: 'review_series_attempts', title: 'Review exact Series Lab attempts', description: 'Approve or reject only reproducible attempts belonging to the exact canonical episode.',
   useWhen: 'The user explicitly asks to approve or reject rendered Series Lab shots.', parameters: ['series_title', 'target_episode_title', 'review_decision', 'review_scope', 'shot_numbers', 'attempt_id', 'confirm'],
-  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'review_series_attempts' }, review_decision: { type: 'string', enum: ['approve', 'reject'] }, review_scope: { type: 'string', enum: ['selected_latest', 'all_latest', 'replace_latest'] }, confirm: { const: true } }, required: ['type', 'review_decision', 'review_scope', 'confirm'] }, risk: 'edit', confirmation: 'required', progress: 'Revisando intentos reproducibles de Series Lab…',
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'review_series_attempts' }, review_decision: { type: 'string', enum: ['approve', 'reject'] }, review_scope: { type: 'string', enum: ['selected_latest', 'all_latest', 'replace_latest'] }, confirm: { const: true } }, required: ['type', 'review_decision', 'review_scope', 'confirm'] }, risk: 'edit', confirmation: 'required', progress: 'Reviewing playable Series Lab attempts…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const decision = text(raw.review_decision, 30); const scope = text(raw.review_scope, 30)
@@ -805,7 +805,7 @@ defineCapability<AgentReviewSeriesAttemptsAction>({
 defineCapability<AgentCommitSeriesCanonAction>({
   name: 'commit_series_canon', title: 'Commit reviewed Series canon decisions', description: 'Commit only explicit accepted or rejected canon delta items for the exact episode.',
   useWhen: 'The user explicitly asks to accept or reject proposed Series canon changes.', parameters: ['series_title', 'target_episode_title', 'canon_decision', 'canon_item_ids', 'confirm'],
-  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'commit_series_canon' }, canon_decision: { type: 'string', enum: ['accept_all', 'reject_all', 'accept_selected', 'reject_selected'] }, canon_item_ids: { type: 'array', items: { type: 'string' } }, confirm: { const: true } }, required: ['type', 'canon_decision', 'confirm'] }, risk: 'edit', confirmation: 'required', progress: 'Comprometiendo decisiones explícitas de canon…',
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'commit_series_canon' }, canon_decision: { type: 'string', enum: ['accept_all', 'reject_all', 'accept_selected', 'reject_selected'] }, canon_item_ids: { type: 'array', items: { type: 'string' } }, confirm: { const: true } }, required: ['type', 'canon_decision', 'confirm'] }, risk: 'edit', confirmation: 'required', progress: 'Committing explicit canon decisions…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const decision = text(raw.canon_decision, 30)
@@ -819,7 +819,7 @@ defineCapability<AgentCommitSeriesCanonAction>({
 defineCapability<AgentAssembleSeriesEpisodeAction>({
   name: 'assemble_series_episode', title: 'Assemble approved Series Lab shots', description: 'Start a recoverable assembly only when every canonical episode shot has an approved reproducible asset.',
   useWhen: 'The user explicitly asks to assemble the finished Series Lab episode.', parameters: ['series_title', 'target_episode_title', 'confirm'],
-  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'assemble_series_episode' }, confirm: { const: true } }, required: ['type', 'confirm'] }, risk: 'compute', confirmation: 'required', progress: 'Ensamblando el episodio de Series Lab…',
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'assemble_series_episode' }, confirm: { const: true } }, required: ['type', 'confirm'] }, risk: 'compute', confirmation: 'required', progress: 'Assembling the Series Lab episode…',
   resolve(raw) { return raw.confirm === true ? { type: 'assemble_series_episode', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), confirm: true } : null },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.seriesLab.assembleEpisode(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'series_lab', anchors: ['review', 'assembly'], replay: 'atomic' },
 })
@@ -845,7 +845,7 @@ defineCapability<AgentStageSeriesComicAction>({
     },
     required: ['type', 'confirm'],
   },
-  risk: 'edit', confirmation: 'required', progress: 'Convirtiendo el episodio en un cómic editable…',
+  risk: 'edit', confirmation: 'required', progress: 'Turning the episode into an editable comic…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     return {
@@ -880,7 +880,7 @@ defineCapability<AgentCreateComicAction>({
   useWhen: 'The user asks to create a filled comic or a new multi-page comic project.',
   parameters: ['title', 'synopsis', 'language', 'visual_style', 'characters', 'comic_pages', 'comic_panels', 'image_provider', 'model_type'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'create_comic' }, title: { type: 'string', maxLength: 300 } }, required: ['type', 'title'] },
-  risk: 'edit', confirmation: 'none', progress: 'Montando el cómic editable…',
+  risk: 'edit', confirmation: 'none', progress: 'Assembling the editable comic…',
   resolve(raw) {
     const title = text(raw.title, 300)
     if (!title) return null
@@ -893,7 +893,7 @@ defineCapability<AgentCreateComicAction>({
         const item = panel as Record<string, unknown>
         return [{ caption: text(item.caption, 2_000), dialogue: text(item.dialogue, 2_000), sfx: text(item.sfx, 500), scene: text(item.scene, 4_000) }]
       })
-      return panels.length ? [{ title: text(value.title, 300) || `Página ${pageIndex + 1}`, stage: text(value.stage, 2_000), panels }] : []
+      return panels.length ? [{ title: text(value.title, 300) || `Page ${pageIndex + 1}`, stage: text(value.stage, 2_000), panels }] : []
     }) : []
     const panels = Array.isArray(raw.comic_panels) ? raw.comic_panels.slice(0, 12).flatMap(panel => {
       if (!panel || typeof panel !== 'object') return []
@@ -924,7 +924,7 @@ defineCapability<AgentGenerateComicAction>({
   useWhen: 'The user explicitly asks to draw, render or generate comic images.',
   parameters: ['image_provider', 'model_type', 'render_scope', 'page_numbers', 'pilot', 'biography_review', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'generate_comic' }, confirm: { const: true } }, required: ['type', 'confirm'] },
-  risk: 'compute', confirmation: 'required', progress: 'Dibujando las viñetas del cómic…',
+  risk: 'compute', confirmation: 'required', progress: 'Drawing the comic panels…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const provider = text(raw.image_provider, 20)
@@ -944,7 +944,7 @@ defineCapability<AgentStartDirectorProductionAction>({
   useWhen: 'The user explicitly asks to start or queue the prepared Story film, trailer or music video.',
   parameters: ['target_story_id', 'target_story_title', 'production_id', 'production_kind', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'start_director_production' }, target_story_id: { type: 'string' }, target_story_title: { type: 'string' }, production_id: { type: 'string' }, production_kind: { type: 'string', enum: ['film', 'trailer', 'music_video'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
-  risk: 'compute', confirmation: 'required', progress: 'Iniciando el pipeline real de Director…',
+  risk: 'compute', confirmation: 'required', progress: 'Starting the real Director pipeline…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const kind = text(raw.production_kind, 30)
@@ -968,7 +968,7 @@ defineCapability<AgentStageStoryVideoAction>({
   useWhen: 'The user asks to prepare a Story film or trailer for later review or launch.',
   parameters: ['target_story_title', 'production_kind', 'direction', 'duration_seconds', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_video' }, production_kind: { type: 'string', enum: ['film', 'trailer'] }, confirm: { const: true } }, required: ['type', 'production_kind', 'confirm'] },
-  risk: 'edit', confirmation: 'required', progress: 'Preparando la producción de Story en Director…',
+  risk: 'edit', confirmation: 'required', progress: 'Preparing the Story production in Director…',
   resolve(raw) { const kind = text(raw.production_kind, 30); return raw.confirm === true && (kind === 'film' || kind === 'trailer') ? { type: 'stage_story_video', targetStoryTitle: text(raw.target_story_title, 300), kind, direction: text(raw.direction, 4_000), durationSeconds: raw.duration_seconds === undefined ? undefined : boundedNumber(raw.duration_seconds, 15, 3_600, 60), confirm: true } : null },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.storyLab.stageVideo(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'director_production', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'director', anchors: ['production'], replay: 'atomic' },
@@ -997,7 +997,7 @@ defineCapability<AgentConfigureStorySongAction>({
     },
     required: ['type', 'music_style', 'instrumental'],
   },
-  risk: 'edit', confirmation: 'none', progress: 'Rellenando la canción y la letra en Story Lab…',
+  risk: 'edit', confirmation: 'none', progress: 'Filling in the song and lyrics in Story Lab…',
   resolve(raw) {
     const instrumental = raw.instrumental === true
     const lyrics = text(raw.lyrics, 12_000)
@@ -1050,7 +1050,7 @@ defineCapability<AgentGenerateStorySongAction>({
     },
     required: ['type', 'confirm'],
   },
-  risk: 'compute', confirmation: 'required', progress: 'Generando la canción configurada con ACE-Step…',
+  risk: 'compute', confirmation: 'required', progress: 'Generating the configured song with ACE-Step…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const targetStoryId = text(raw.target_story_id, 240)
@@ -1070,7 +1070,7 @@ defineCapability<AgentStageStoryMusicVideoAction>({
   useWhen: 'The user asks to prepare a Story music video for later launch.',
   parameters: ['target_story_id', 'target_story_title', 'song_name', 'cue_id', 'candidate_id', 'cue_title', 'pacing', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_music_video' }, target_story_id: { type: 'string', maxLength: 240 }, target_story_title: { type: 'string', maxLength: 300 }, song_name: { type: 'string', maxLength: 300 }, cue_id: { type: 'string', maxLength: 240 }, candidate_id: { type: 'string', maxLength: 240 }, cue_title: { type: 'string', maxLength: 300 }, pacing: { type: 'string', enum: ['cinematic', 'balanced', 'rhythmic'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
-  risk: 'edit', confirmation: 'required', progress: 'Preparando el videoclip de Story en Director…',
+  risk: 'edit', confirmation: 'required', progress: 'Preparing the Story music video in Director…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const pacing = text(raw.pacing, 20)

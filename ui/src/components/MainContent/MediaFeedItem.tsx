@@ -742,7 +742,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
               <Clock3 size={10} className="shrink-0" aria-hidden="true" />
               <span className="truncate">
                 {completionLabel} · {completionTime}
-                {!browsingUploads && !completionTimeIsExact ? ' · aprox.' : ''}
+                {!browsingUploads && !completionTimeIsExact ? ' · approx.' : ''}
               </span>
             </div>
           )}

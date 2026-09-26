@@ -82,7 +82,7 @@ export function parseNewMusicVideoIntent(request: string, conversationLanguage =
   )?.[1]?.trim() || ''
   const requestedDuration = Number(request.match(/\b(\d{1,4})\s*(?:segundos?|seconds?|secondes?|secondi)\b/i)?.[1] || 90)
   return {
-    title: (exactTitle || protagonist || topic || 'Nuevo videoclip').slice(0, 300),
+    title: (exactTitle || protagonist || topic || 'New music video').slice(0, 300),
     topic,
     protagonist,
     language: musicVideoLanguage(request, conversationLanguage),
@@ -107,17 +107,17 @@ export function newMusicVideoStoryAction(request: string, conversationLanguage =
     logline: topic,
     synopsis: request.trim().slice(0, 6_000),
     theme: topic,
-    ending: `El conflicto central de ${topic} alcanza una resolución visual y musical clara.`,
+    ending: `The central conflict of ${topic} reaches a clear visual and musical resolution.`,
     genre: 'Videoclip musical',
-    tone: 'Cinematográfico',
+    tone: 'Cinematic',
     visualStyle: request.trim().slice(0, 2_000),
     worldSummary: topic,
     language,
     characters: protagonist ? [{
       name: protagonist,
-      role: 'Protagonista',
+      role: 'Protagonist',
       personality: '',
-      desire: 'Superar el conflicto central de la canción.',
+      desire: 'Overcome the song\'s central conflict.',
       flaw: '',
       appearance: '',
       voice: '',

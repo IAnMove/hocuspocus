@@ -144,8 +144,8 @@ export async function queueSfxPack(
   action: QueueSfxPackCommand,
   context?: GenerationSubmissionContext,
 ): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Encolar el pack de SFX requiere confirm=true tras una petición explícita.')
-  if (!action.clips.length) throw new Error('El pack de SFX no incluye clips.')
+  if (!action.confirm) throw new Error('Queueing the SFX pack requires confirm=true after an explicit request.')
+  if (!action.clips.length) throw new Error('The SFX pack contains no clips.')
   const contexts = sfxPackContexts(context, action.clips.length)
   const workspace = workspaceId()
   openStudioAudio('sfx')
@@ -192,12 +192,12 @@ export async function prepareVideo(action: PrepareVideoCommand): Promise<Command
     ? candidates.find(model => model.model_type === action.modelType)
     : undefined
   if (action.modelType && !requested) {
-    throw new Error(`El modelo ${action.modelType} no está instalado, habilitado o no admite texto a vídeo.`)
+    throw new Error(`The model ${action.modelType} is not installed, not enabled, or does not support text-to-video.`)
   }
   const current = candidates.find(model => model.model_type === state.params.model_type)
   const selected = requested || current || candidates.find(model => model.is_downloaded) || candidates[0]
   if (!selected) {
-    throw new Error('No hay ningún modelo texto-a-vídeo instalado y habilitado.')
+    throw new Error('No text-to-video model is installed and enabled.')
   }
 
   if (state.params.model_type !== selected.model_type) state.selectModel(selected.model_type)
@@ -234,7 +234,7 @@ export async function prepareVideo(action: PrepareVideoCommand): Promise<Command
   return studioResult(
     'video',
     'Video',
-    `He preparado Studio → Video con ${selected.name}, ${useStore.getState().durationSeconds.toFixed(1)} s y el prompt indicado.`,
+    `I prepared Studio → Video with ${selected.name}, ${useStore.getState().durationSeconds.toFixed(1)} s and the given prompt.`,
   )
 }
 
@@ -256,12 +256,12 @@ export async function prepareImage(action: PrepareImageCommand): Promise<Command
     ? candidates.find(model => model.model_type === action.modelType)
     : undefined
   if (action.modelType && !requested) {
-    throw new Error(`El modelo ${action.modelType} no está instalado, habilitado o no admite texto a imagen.`)
+    throw new Error(`The model ${action.modelType} is not installed, not enabled, or does not support text-to-image.`)
   }
   const current = candidates.find(model => model.model_type === state.params.model_type)
   const selected = requested || current || candidates.find(model => model.is_downloaded) || candidates[0]
   if (!selected) {
-    throw new Error('No hay ningún modelo de imagen instalado y habilitado.')
+    throw new Error('No image model is installed and enabled.')
   }
 
   if (state.params.model_type !== selected.model_type) state.selectModel(selected.model_type)
@@ -293,7 +293,7 @@ export async function prepareImage(action: PrepareImageCommand): Promise<Command
   return studioResult(
     'image',
     'Image',
-    `He preparado Studio → Image con ${selected.name}, ${resolution} y el prompt indicado.`,
+    `I prepared Studio → Image with ${selected.name}, ${resolution} and the given prompt.`,
   )
 }
 
@@ -316,11 +316,11 @@ export async function prepare3d(action: Prepare3dCommand): Promise<CommandResult
     ? candidates.find(model => model.model_type === action.modelType)
     : undefined
   if (action.modelType && !requested) {
-    throw new Error(`El modelo 3D ${action.modelType} no está disponible.`)
+    throw new Error(`The 3D model ${action.modelType} is not available.`)
   }
   const current = candidates.find(model => model.model_type === state.params.model_type)
   const selected = requested || current || candidates[0]
-  if (!selected) throw new Error('No hay ningún modelo Hunyuan3D disponible.')
+  if (!selected) throw new Error('No Hunyuan3D model is available.')
   if (state.params.model_type !== selected.model_type) state.selectModel(selected.model_type)
   useStore.getState().setParams({
     prompt: action.prompt,
@@ -330,7 +330,7 @@ export async function prepare3d(action: Prepare3dCommand): Promise<CommandResult
   return studioResult(
     '3d',
     '3D',
-    `He preparado Studio → 3D con ${selected.name}, preset ${prepared3dPreset} y el prompt indicado. La pestaña 3D solo muestra resultados; la creación queda en Studio.`,
+    `I prepared Studio → 3D with ${selected.name}, preset ${prepared3dPreset} and the given prompt. The 3D tab only shows results; creation stays in Studio.`,
   )
 }
 
@@ -397,7 +397,7 @@ export async function prepareAudio(action: PrepareAudioCommand): Promise<Command
   return studioResult(
     'audio',
     `Audio → ${room}`,
-    `He preparado Studio → Audio → ${room} con ${modelName}, ${duration.toFixed(0)} s y el prompt indicado. La pestaña Audios solo muestra resultados; la creación queda en Studio.`,
+    `I prepared Studio → Audio → ${room} with ${modelName}, ${duration.toFixed(0)} s and the given prompt. The Audio tab only shows results; creation stays in Studio.`,
   )
 }
 
@@ -433,11 +433,11 @@ export async function startPreparedGeneration(context?: GenerationSubmissionCont
       seed: typeof state.params.seed === 'number' ? state.params.seed : 1234,
       provenance: generationProvenancePayload(context),
     })
-    if (!job.task_id) throw new Error('Hunyuan3D devolvió éxito sin taskId; no considero la generación encolada.')
+    if (!job.task_id) throw new Error('Hunyuan3D returned success without a taskId; I don\'t consider the generation queued.')
     return studioResult(
       'generation',
       'Studio generation',
-      `He enviado el modelo 3D a Hunyuan3D (${job.task_id}). Aparecerá en la galería 3D al terminar.`,
+      `I sent the 3D model to Hunyuan3D (${job.task_id}). It will appear in the 3D gallery when finished.`,
       { taskId: job.task_id },
     )
   }
@@ -446,16 +446,16 @@ export async function startPreparedGeneration(context?: GenerationSubmissionCont
   const admitted = await useStore.getState().startGeneration(undefined, context)
   if (admitted) return studioAdmissionResult(admitted)
   const created = useStore.getState().jobs.find(job => !knownJobs.has(job))
-  if (!created) throw new Error('HocusPocus no creó una tarea; revisa los requisitos del modelo y los campos visibles.')
-  if (created.status === 'failed') throw new Error(created.error || created.message || 'La generación no pudo entrar en cola.')
+  if (!created) throw new Error('HocusPocus did not create a task; check the model requirements and the visible fields.')
+  if (created.status === 'failed') throw new Error(created.error || created.message || 'The generation could not be queued.')
   const taskId = created.taskId
-  if (!taskId) throw new Error('HocusPocus devolvió éxito sin taskId; no considero la generación encolada.')
+  if (!taskId) throw new Error('HocusPocus returned success without a taskId; I don\'t consider the generation queued.')
   const mode = useStore.getState().generationMode
-  const kind = mode === 'image' ? 'imagen' : mode === 'audio' ? 'pista de audio' : 'vídeo'
+  const kind = mode === 'image' ? 'image' : mode === 'audio' ? 'audio track' : 'video'
   return studioResult(
     'generation',
     'Studio generation',
-    `He enviado la ${kind} a la cola (${taskId}).`,
+    `I sent the ${kind} to the queue (${taskId}).`,
     { taskId },
   )
 }
@@ -470,10 +470,10 @@ async function imageOutputFiles(names: string[]): Promise<File[]> {
   for (const requestedName of names) {
     const output = byName.get(normalized(requestedName))
     if (!output) {
-      throw new Error(`No existe la imagen “${requestedName}” en el workspace activo; no he inventado ni sustituido la referencia.`)
+      throw new Error(`There is no image “${requestedName}” in the active workspace; I have not invented or replaced the reference.`)
     }
     const response = await fetch(api.getFileUrl(output.name, workspace))
-    if (!response.ok) throw new Error(`No pude leer la imagen “${output.name}” para usarla como referencia.`)
+    if (!response.ok) throw new Error(`I couldn't read the image “${output.name}” to use as a reference.`)
     const blob = await response.blob()
     files.push(new File([blob], output.name, { type: blob.type || 'image/png' }))
   }
@@ -490,19 +490,19 @@ function clearImageReferences(): void {
 export async function attachStudioReferences(action: AttachStudioReferencesCommand): Promise<CommandResult> {
   let state = useStore.getState()
   if (state.generationMode !== 'image' && state.generationMode !== 'video') {
-    throw new Error('Las referencias visuales sólo pueden adjuntarse a Studio → Image o Studio → Video.')
+    throw new Error('Visual references can only be attached to Studio → Image or Studio → Video.')
   }
   const selectedModel = state.models.find(model => model.model_type === state.params.model_type)
-  if (!selectedModel) throw new Error('Studio no tiene un modelo de imagen/vídeo válido seleccionado.')
+  if (!selectedModel) throw new Error('Studio has no valid image/video model selected.')
   const files = await imageOutputFiles(action.outputNames)
 
   if (action.role === 'start_frame') {
     if (state.generationMode !== 'video' || !selectedModel.is_i2v) {
-      throw new Error(`${selectedModel.name} no admite una imagen inicial en el modo actual.`)
+      throw new Error(`${selectedModel.name} does not accept a start image in the current mode.`)
     }
     if (action.replaceExisting) state.setStartImage(null)
     state.setStartImage(files[0])
-    return studioResult('image', 'Image / Video', `He adjuntado “${files[0].name}” como start frame de Studio → Video.`)
+    return studioResult('image', 'Image / Video', `I attached “${files[0].name}” as the Studio → Video start frame.`)
   }
 
   const config = state.modelOptions?.image_ref_choices
@@ -512,12 +512,12 @@ export async function attachStudioReferences(action: AttachStudioReferencesComma
     ? choices.some(value => value.includes('K'))
     : choices.some(value => value === 'I')
   if (!config || !supportsDesiredType) {
-    throw new Error(`${selectedModel.name} no admite referencias de ${action.role === 'style' ? 'estilo/escenario' : 'sujeto'} en este formulario.`)
+    throw new Error(`${selectedModel.name} does not accept ${action.role === 'style' ? 'style/setting' : 'subject'} references in this form.`)
   }
   const configuredLimit = state.modelOptions?.max_image_refs
   const existingCount = action.replaceExisting ? 0 : state.imageRefs.length
   if (configuredLimit != null && existingCount + files.length > configuredLimit) {
-    throw new Error(`${selectedModel.name} admite como máximo ${configuredLimit} referencias; se solicitaron ${existingCount + files.length}.`)
+    throw new Error(`${selectedModel.name} accepts at most ${configuredLimit} references; ${existingCount + files.length} were requested.`)
   }
   if (action.replaceExisting) clearImageReferences()
   files.forEach(file => useStore.getState().addImageRef(file))
@@ -530,24 +530,24 @@ export async function attachStudioReferences(action: AttachStudioReferencesComma
   return studioResult(
     'image',
     'Image / Video',
-    `He adjuntado ${files.length} referencia${files.length === 1 ? '' : 's'} de ${action.role === 'style' ? 'estilo/escenario' : 'sujeto'} a Studio usando nombres reales del workspace.`,
+    `I attached ${files.length} ${action.role === 'style' ? 'style/setting' : 'subject'} reference${files.length === 1 ? '' : 's'} to Studio using real workspace names.`,
   )
 }
 
 export async function configureStudioLoras(action: ConfigureStudioLorasCommand): Promise<CommandResult> {
   let state = useStore.getState()
   if (state.generationMode !== 'image' && state.generationMode !== 'video') {
-    throw new Error('Los LoRAs sólo pueden configurarse en Studio → Image o Studio → Video.')
+    throw new Error('LoRAs can only be configured in Studio → Image or Studio → Video.')
   }
   const modelType = state.params.model_type
-  if (!modelType) throw new Error('Studio no tiene un modelo seleccionado para consultar LoRAs compatibles.')
+  if (!modelType) throw new Error('Studio has no model selected to look up compatible LoRAs.')
   await state.loadLoras(modelType)
   state = useStore.getState()
   const availableByName = new Map(state.availableLoras.map(name => [normalized(name), name]))
   const resolved = action.loras.map(selection => {
     const filename = availableByName.get(normalized(selection.name))
     if (!filename) {
-      throw new Error(`El LoRA “${selection.name}” no está instalado o no es compatible con ${modelType}; no lo he activado.`)
+      throw new Error(`The LoRA “${selection.name}” is not installed or not compatible with ${modelType}; I did not enable it.`)
     }
     return { ...selection, name: filename }
   })
@@ -568,11 +568,11 @@ export async function configureStudioLoras(action: ConfigureStudioLorasCommand):
   }
   const active = useStore.getState().params.activated_loras || []
   if (!active.length) {
-    return studioResult('image', 'Image / Video', 'He desactivado todos los LoRAs de Studio para el modelo actual.')
+    return studioResult('image', 'Image / Video', 'I disabled all Studio LoRAs for the current model.')
   }
   return studioResult(
     'image',
     'Image / Video',
-    `He configurado ${active.length} LoRA${active.length === 1 ? '' : 's'} compatible${active.length === 1 ? '' : 's'} en Studio: ${active.join(', ')}.`,
+    `I configured ${active.length} compatible LoRA${active.length === 1 ? '' : 's'} in Studio: ${active.join(', ')}.`,
   )
 }

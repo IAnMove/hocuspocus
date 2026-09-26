@@ -250,10 +250,10 @@ async function navigate(tab: AgentTab): Promise<AdapterOutcome> {
     if (mediaFilter) state.setMediaFilter(mediaFilter)
     state.setSidebarOpen(false)
   }
-  if (!isTabOpen(tab)) throw new Error(`HocusPocus no confirmó la navegación a ${TAB_LABELS[tab]}.`)
+  if (!isTabOpen(tab)) throw new Error(`HocusPocus did not confirm navigation to ${TAB_LABELS[tab]}.`)
   announceWizardNavigation(tab)
   return {
-    message: alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`,
+    message: alreadyVisible ? `${TAB_LABELS[tab]} was already visible.` : `I opened ${TAB_LABELS[tab]}.`,
     target: target(tab),
   }
 }
@@ -314,11 +314,11 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     open: tab => navigate(tab || 'studio'),
     async downloadModel(action) {
       const model = useStore.getState().models.find(item => item.model_type === action.modelType)
-      if (!model) throw new Error(`No conozco el modelo “${action.modelType}” en el catálogo actual.`)
+      if (!model) throw new Error(`I don't know the model “${action.modelType}” in the current catalog.`)
       await navigate('settings')
       if (model.is_downloaded === true) {
         return {
-          message: `El modelo “${model.name}” ya está descargado; Ajustes → Models queda abierto.`,
+          message: `The model “${model.name}” is already downloaded; Settings → Models is open.`,
           target: { kind: 'model', id: model.model_type, title: model.name },
         }
       }
@@ -328,16 +328,16 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
         if (status?.status === 'completed') {
           await useStore.getState().loadModels()
           return {
-            message: `Modelo “${model.name}” descargado y listo para usar.`,
+            message: `Model “${model.name}” downloaded and ready to use.`,
             target: { kind: 'model', id: model.model_type, title: model.name },
           }
         }
         if (status?.status === 'failed') {
-          throw new Error(status.error || `Falló la descarga del modelo “${model.name}”.`)
+          throw new Error(status.error || `The download of model “${model.name}” failed.`)
         }
         await new Promise(resolve => setTimeout(resolve, 2_000))
       }
-      throw new Error(`La descarga de “${model.name}” sigue en curso; no he iniciado ninguna generación.`)
+      throw new Error(`The download of “${model.name}” is still in progress; I have not started any generation.`)
     },
     async queueMusic(action) {
       const result = await queueMusic(action)
@@ -481,7 +481,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const presented = await presentStorySliceResult(result)
       const comicId = String(result.artifacts[0]?.metadata?.comicId || '')
       const comicTitle = String(result.artifacts[0]?.metadata?.comicTitle || '')
-      if (!comicId) throw new Error('Story Lab no correlacionó la producción de cómic con su proyecto editable.')
+      if (!comicId) throw new Error('Story Lab did not link the comic production to its editable project.')
       return { ...presented, target: { kind: 'comic', id: comicId, title: comicTitle } }
     },
     async stageVideo(action) {
@@ -506,7 +506,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const stories = useStoryStore.getState()
       const project = handoff ? stories.projects[handoff.projectId] || stories.project : stories.project
       const production = project?.productions.find(item => item.id === handoff?.productionId)
-      if (!production) throw new Error('Director no devolvió el destino de producción verificado.')
+      if (!production) throw new Error('Director did not return the verified production target.')
       bindDirectorProductionTarget(expectedProductionId, production.id, production.title)
       const { startProduction } = await import('../stories/adapters')
       const result = await startProduction(action)
@@ -535,7 +535,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async generatePlan(action) {
       const { generatePlan } = await import('../series/adapters')
       const outcome = await presentSeriesSliceResult(await generatePlan(action))
-      if (!outcome.taskId) throw new Error('Series Lab no devolvió el job de planificación iniciado.')
+      if (!outcome.taskId) throw new Error('Series Lab did not return the started planning job.')
       return outcome
     },
     async applyPlan(action) {
@@ -545,7 +545,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async renderShots(action) {
       const { renderShots } = await import('../series/adapters')
       const outcome = await presentSeriesSliceResult(await renderShots(action))
-      if (!outcome.taskId) throw new Error('Series Lab no devolvió el job de render iniciado.')
+      if (!outcome.taskId) throw new Error('Series Lab did not return the started render job.')
       return outcome
     },
     async reviewAttempts(action) {
@@ -559,7 +559,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async assembleEpisode(action) {
       const { assembleEpisode } = await import('../series/adapters')
       const outcome = await presentSeriesSliceResult(await assembleEpisode(action))
-      if (!outcome.taskId) throw new Error('Series Lab no devolvió el job de ensamblado iniciado.')
+      if (!outcome.taskId) throw new Error('Series Lab did not return the started assembly job.')
       return outcome
     },
     async stageComic(action) {
@@ -592,25 +592,25 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { createProject } = await import('../video-editor/adapters')
       const result = await createProject({ projectName: action.projectName })
       const name = result.entities[0]?.id || action.projectName.trim() || 'my_video'
-      return editorOutcome(result, `He creado el proyecto de Video Editor “${name}”.`)
+      return editorOutcome(result, `I created the Video Editor project “${name}”.`)
     },
     async openProject(action) {
       const { openProject } = await import('../video-editor/adapters')
       const result = await openProject({ projectName: action.projectName })
       const { loadEditorDraft } = await import('../video-editor/editorDraft')
       const draft = loadEditorDraft(useStore.getState().activeWorkspace || 'default')
-      return editorOutcome(result, `He abierto Video Editor “${draft.projectName}” con ${draft.clips.length} clips.`)
+      return editorOutcome(result, `I opened Video Editor “${draft.projectName}” with ${draft.clips.length} clips.`)
     },
     async addClips(action) {
       const { addClips } = await import('../video-editor/adapters')
       const result = await addClips({ outputNames: action.outputNames })
       const name = result.entities[0]?.id || 'Video Editor'
-      return editorOutcome(result, `He añadido ${action.outputNames.length} clips exactos a “${name}”.`)
+      return editorOutcome(result, `I added ${action.outputNames.length} exact clips to “${name}”.`)
     },
     async orderClips(action) {
       const { orderClips } = await import('../video-editor/adapters')
       const result = await orderClips({ clipNames: action.clipNames })
-      return editorOutcome(result, `He reordenado ${action.clipNames.length} clips.`)
+      return editorOutcome(result, `I reordered ${action.clipNames.length} clips.`)
     },
     async trimClip(action) {
       const { trimClip } = await import('../video-editor/adapters')
@@ -619,13 +619,13 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
         trimStart: action.trimStart,
         trimEnd: action.trimEnd,
       })
-      return editorOutcome(result, `He recortado “${action.clipName}” a ${action.trimStart}-${action.trimEnd}s.`)
+      return editorOutcome(result, `I trimmed “${action.clipName}” to ${action.trimStart}-${action.trimEnd}s.`)
     },
     async addAudio(action) {
       const { addAudio } = await import('../video-editor/adapters')
       const result = await addAudio({ clipName: action.clipName, outputName: action.outputName })
       const name = result.entities[0]?.id || 'Video Editor'
-      return editorOutcome(result, `He configurado “${action.outputName}” como banda sonora de “${name}”.`)
+      return editorOutcome(result, `I set “${action.outputName}” as the soundtrack of “${name}”.`)
     },
     async validateTimeline() {
       const { validateTimeline } = await import('../video-editor/adapters')
@@ -634,10 +634,10 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { sequenceTotalDuration } = await import('../video-editor/editorTimeline')
       const draft = loadEditorDraft(useStore.getState().activeWorkspace || 'default')
       const duration = sequenceTotalDuration(draft.clips)
-      return editorOutcome(result, `Línea de tiempo válida: ${draft.clips.length} clips, ${duration.toFixed(1)}s.`)
+      return editorOutcome(result, `Valid timeline: ${draft.clips.length} clips, ${duration.toFixed(1)}s.`)
     },
     async exportProject(action) {
-      if (!action.confirm) throw new Error('Exportar requiere confirm=true.')
+      if (!action.confirm) throw new Error('Exporting requires confirm=true.')
       const { loadEditorDraft } = await import('../video-editor/editorDraft')
       const { sequenceTotalDuration } = await import('../video-editor/editorTimeline')
       const workspace = useStore.getState().activeWorkspace || 'default'
@@ -662,7 +662,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const reused = reuseExecution(key)
       if (reused) {
         return {
-          message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`,
+          message: `Reusing the previous run (${reused.state}). ${reused.message}`,
           target: reused.target || { kind: 'video_editor', id: draft.projectName, title: draft.projectName },
           taskId: reused.taskId,
           outputNames: reused.outputNames,
@@ -672,7 +672,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { exportProject } = await import('../video-editor/adapters')
       const result = await exportProject({ confirm: true })
       const jobId = result.taskIds[0]
-      const message = `He encolado la exportación de “${draft.projectName}” (${jobId}).`
+      const message = `I queued the export of “${draft.projectName}” (${jobId}).`
       const report = executionReport({
         state: 'queued',
         message,
@@ -695,7 +695,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
         : jobStatus === 'failed' || jobStatus === 'cancelled' || result.status === 'failed' ? 'failed'
           : jobStatus === 'queued' || jobStatus === 'waiting_resource' ? 'queued'
             : 'running'
-      const message = `Exportación ${jobId}: ${jobStatus}. ${jobMessage}`.trim()
+      const message = `Export ${jobId}: ${jobStatus}. ${jobMessage}`.trim()
       const outputNames = result.artifacts.filter(item => item.kind === 'video').map(item => item.id)
       const report = executionReport({
         state,
@@ -715,14 +715,14 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const result = await createKit({ name: action.name, style: action.style })
       const name = kitNameFromResult(result)
       const message = result.navigationTarget?.section === 'existing'
-        ? `He abierto el Character Kit existente “${name}”.`
-        : `He creado el Character Kit “${name}”. Todavía no he generado poses.`
+        ? `I opened the existing Character Kit “${name}”.`
+        : `I created the Character Kit “${name}”. I have not generated poses yet.`
       return kitOutcome(result, message)
     },
     async openKit(action) {
       const { openKit } = await import('../characters/adapters')
       const result = await openKit({ kitName: action.kitName })
-      return kitOutcome(result, `He abierto Character Kit “${kitNameFromResult(result)}”.`)
+      return kitOutcome(result, `I opened Character Kit “${kitNameFromResult(result)}”.`)
     },
     async update(action) {
       const { updateKit } = await import('../characters/adapters')
@@ -732,30 +732,30 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
         lookNotes: action.lookNotes,
         style: action.style,
       })
-      return kitOutcome(result, `He actualizado la identidad de “${kitNameFromResult(result)}”.`)
+      return kitOutcome(result, `I updated the identity of “${kitNameFromResult(result)}”.`)
     },
     async attachReference(action) {
       const { attachReference } = await import('../characters/adapters')
       const result = await attachReference({ kitName: action.kitName, outputNames: action.outputNames })
       return kitOutcome(
         result,
-        `He adjuntado “${action.outputNames[0]}” como referencia de identidad de “${kitNameFromResult(result)}”.`,
+        `I attached “${action.outputNames[0]}” as the identity reference of “${kitNameFromResult(result)}”.`,
       )
     },
     async build(action) {
       const { buildKit } = await import('../characters/adapters')
       const result = await buildKit({ kitName: action.kitName })
-      return kitOutcome(result, `He montado el kit “${kitNameFromResult(result)}” con la pose base. No he lanzado generación.`)
+      return kitOutcome(result, `I assembled the kit “${kitNameFromResult(result)}” with the base pose. I have not launched generation.`)
     },
     async openRig(action) {
       const { openRig } = await import('../characters/adapters')
       const result = await openRig({ kitName: action.kitName })
-      return kitOutcome(result, `He abierto el Face Rig de “${kitNameFromResult(result)}”.`)
+      return kitOutcome(result, `I opened the Face Rig of “${kitNameFromResult(result)}”.`)
     },
     async applyPreset(action) {
       const { applyPreset } = await import('../characters/adapters')
       const result = await applyPreset({ kitName: action.kitName, presetId: action.presetId })
-      return kitOutcome(result, `He aplicado el preset “${action.presetId}” al Face Rig de “${kitNameFromResult(result)}”.`)
+      return kitOutcome(result, `I applied the preset “${action.presetId}” to the Face Rig of “${kitNameFromResult(result)}”.`)
     },
     async trackJob(action) {
       const { trackJob } = await import('../characters/adapters')
@@ -769,7 +769,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
           : '')
       openAgentActivityDetails()
       const name = kitNameFromResult(result)
-      const message = `Sigo el trabajo de “${name}”. ${queue}`
+      const message = `Following the job for “${name}”. ${queue}`
       const target = entityTarget(result, name, 'character_kit')
       return {
         message,
@@ -787,7 +787,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async openActivity() {
       openAgentActivityDetails()
       return {
-        message: 'He abierto Activity.',
+        message: 'I opened Activity.',
         target: { kind: 'activity', id: 'activity', title: 'Activity' },
       }
     },
@@ -796,17 +796,17 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       return presentQueueSliceResult(await inspect({ scope }))
     },
     async cancel(taskId, confirm) {
-      if (!confirm) throw new Error('Cancelar requiere confirm=true tras una petición explícita del usuario.')
+      if (!confirm) throw new Error('Cancelling requires confirm=true after an explicit user request.')
       const { cancel } = await import('../studio/adapters')
       return presentQueueSliceResult(await cancel({ taskId, confirm: true }))
     },
     async resume(taskId, confirm) {
-      if (!confirm) throw new Error('Reanudar requiere confirm=true tras una petición explícita del usuario.')
+      if (!confirm) throw new Error('Resuming requires confirm=true after an explicit user request.')
       const { resume } = await import('../studio/adapters')
       return presentQueueSliceResult(await resume({ taskId, confirm: true }))
     },
     async retry(taskId, confirm) {
-      if (!confirm) throw new Error('Reintentar requiere confirm=true tras una petición explícita del usuario.')
+      if (!confirm) throw new Error('Retrying requires confirm=true after an explicit user request.')
       const { retry } = await import('../studio/adapters')
       return presentQueueSliceResult(await retry({ taskId, confirm: true }))
     },
@@ -837,7 +837,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const reused = reuseExecution(key)
       if (reused) {
         return {
-          message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`,
+          message: `Reusing the previous run (${reused.state}). ${reused.message}`,
           target: reused.target || { kind: 'video', id: action.videoclipName, title: action.videoclipName },
           report: reused,
           taskId: reused.taskId,
@@ -857,7 +857,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { requestProgrammaticVideoPreparation } = await import('./programmaticVideoHandoff')
       const navigation = await navigate('video_3d')
       const prepared = await requestProgrammaticVideoPreparation({ ...action, workspace })
-      if ((useStore.getState().activeWorkspace || 'default') !== workspace) throw new Error('El workspace cambió durante la preparación de Video3D.')
+      if ((useStore.getState().activeWorkspace || 'default') !== workspace) throw new Error('The workspace changed while Video3D was being prepared.')
       return { ...navigation, message: prepared.message, metadata: { generationPolicy: prepared.policy, stage: 'prepared', generated: false } }
     },
     async applyRhythm(action) {
@@ -894,11 +894,11 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
 
 async function stagedDirectorOutcome(message: string): Promise<AdapterOutcome> {
   const handoff = useStore.getState().directorStoryProductionHandoff
-  if (!handoff?.productionId) throw new Error('Story Lab no devolvió el destino de producción preparado.')
+  if (!handoff?.productionId) throw new Error('Story Lab did not return the prepared production target.')
   const { useStoryStore } = await import('../stories/store')
   const project = useStoryStore.getState().projects[handoff.projectId] || useStoryStore.getState().project
   const production = project?.productions.find(item => item.id === handoff.productionId)
-  if (!production) throw new Error('La producción preparada no está en el estado canónico de Story Lab.')
+  if (!production) throw new Error('The prepared production is not in the canonical Story Lab state.')
   const provenance = production.provenance || {}
   return {
     message,
@@ -916,7 +916,7 @@ async function stagedDirectorOutcome(message: string): Promise<AdapterOutcome> {
 async function storyOutcome(message: string): Promise<AdapterOutcome> {
   const { useStoryStore } = await import('../stories/store')
   const project = useStoryStore.getState().project
-  if (!project?.id) throw new Error('Story Lab no devolvió la historia canónica creada o actualizada.')
+  if (!project?.id) throw new Error('Story Lab did not return the created or updated canonical story.')
   return { message, target: { kind: 'story', id: project.id, title: project.title } }
 }
 
@@ -938,7 +938,7 @@ async function presentStorySliceResult(result: CommandResult): Promise<AdapterOu
   }
   const meta = result.artifacts[0]?.metadata || {}
   if (meta.notifyDraft === true && result.entities[0]?.id) notifyAgentStoryDraft(result.entities[0].id)
-  const summary = typeof meta.summary === 'string' ? meta.summary : 'Story Lab listo.'
+  const summary = typeof meta.summary === 'string' ? meta.summary : 'Story Lab ready.'
   if (destination === 'director' || destination === 'comics') {
     const title = typeof meta.title === 'string' ? meta.title : (result.entities[0]?.id || 'story')
     return {
@@ -962,7 +962,7 @@ async function seriesEpisodeOutcome(message: string): Promise<AdapterOutcome> {
   const state = useSeriesStore.getState()
   const series = state.library.seriesById[state.activeSeriesId]
   const episode = series?.episodesById[state.activeEpisodeId]
-  if (!series?.id || !episode?.id) throw new Error('Series Lab no devolvió el episodio canónico creado o actualizado.')
+  if (!series?.id || !episode?.id) throw new Error('Series Lab did not return the created or updated canonical episode.')
   return { message, target: { kind: 'series_episode', id: episode.id, title: `${series.title} · ${episode.title}` } }
 }
 
@@ -971,8 +971,8 @@ async function presentSeriesComicResult(result: CommandResult): Promise<AdapterO
   const { useComicStore } = await import('../comics/store')
   const comic = useComicStore.getState().project
   const meta = result.artifacts[0]?.metadata || {}
-  const summary = typeof meta.summary === 'string' ? meta.summary : 'Cómic de Series Lab preparado.'
-  if (!comic?.id) throw new Error('Series Lab no correlacionó el cómic editable.')
+  const summary = typeof meta.summary === 'string' ? meta.summary : 'Series Lab comic prepared.'
+  if (!comic?.id) throw new Error('Series Lab did not link the editable comic.')
   return {
     message: summary,
     target: { kind: 'comic', id: comic.id, title: comic.title },
@@ -1002,12 +1002,12 @@ async function presentSeriesSliceResult(result: CommandResult): Promise<AdapterO
   if (channel === 'series_render' && job) notifyAgentSeriesRenderJob(job as unknown as SeriesJobStatus)
   if (channel === 'series_assembly' && job) notifyAgentSeriesAssemblyJob(job as unknown as SeriesAssemblyJob)
   if (channel === 'series_plan_clear') clearAgentSeriesPlanJob(result.entities[0]?.id || '')
-  const summary = typeof meta.summary === 'string' ? meta.summary : 'Series Lab listo.'
+  const summary = typeof meta.summary === 'string' ? meta.summary : 'Series Lab ready.'
   const outcome = await seriesEpisodeOutcome(summary)
   if (channel === 'series_plan' || channel === 'series_render' || channel === 'series_assembly') {
     const jobEpisodeId = typeof job?.episodeId === 'string' ? job.episodeId : ''
     if (jobEpisodeId && jobEpisodeId !== outcome.target.id) {
-      throw new Error('El job de Series Lab no pertenece al episodio canónico abierto.')
+      throw new Error('The Series Lab job does not belong to the open canonical episode.')
     }
   }
   return { ...outcome, taskId: result.taskIds[0] }
@@ -1017,7 +1017,7 @@ async function presentQueueSliceResult(result: CommandResult): Promise<AdapterOu
   openAgentActivityDetails()
   const summary = typeof result.artifacts[0]?.metadata?.summary === 'string'
     ? result.artifacts[0].metadata.summary
-    : 'He abierto Activity.'
+    : 'I opened Activity.'
   return {
     message: summary,
     target: { kind: 'activity', id: result.entities[0]?.id || 'activity', title: 'Activity' },
@@ -1059,7 +1059,7 @@ async function presentStudioSliceResult(result: CommandResult, fallbackTitle: st
   await navigate('studio')
   const summary = typeof result.artifacts[0]?.metadata?.summary === 'string'
     ? result.artifacts[0].metadata.summary
-    : 'Studio listo.'
+    : 'Studio ready.'
   const title = String(result.artifacts[0]?.metadata?.title || fallbackTitle)
   const mode = String(result.artifacts[0]?.metadata?.mode || 'studio')
   return {
@@ -1079,7 +1079,7 @@ async function presentVideoclipSliceResult(
 ): Promise<AdapterOutcome> {
   const summary = typeof result.artifacts[0]?.metadata?.summary === 'string'
     ? result.artifacts[0].metadata.summary
-    : 'Videoclip listo.'
+    : 'Music video ready.'
   const title = String(result.artifacts[0]?.metadata?.title || result.entities[0]?.id || 'videoclip')
   const outputName = typeof result.artifacts[0]?.metadata?.outputName === 'string'
     ? result.artifacts[0].metadata.outputName
@@ -1104,7 +1104,7 @@ async function presentVideoclipSliceResult(
 async function presentWorkspaceSliceResult(result: CommandResult): Promise<AdapterOutcome> {
   const summary = typeof result.artifacts[0]?.metadata?.summary === 'string'
     ? result.artifacts[0].metadata.summary
-    : 'Workspace listo.'
+    : 'Workspace ready.'
   const name = String(result.artifacts[0]?.metadata?.title || result.entities[0]?.id || 'workspace')
   return {
     message: summary,
@@ -1115,7 +1115,7 @@ async function presentWorkspaceSliceResult(result: CommandResult): Promise<Adapt
 async function presentComicSliceResult(result: CommandResult): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }> {
   await navigate('comics')
   const meta = result.artifacts[0]?.metadata || {}
-  const summary = typeof meta.summary === 'string' ? meta.summary : 'Comics listo.'
+  const summary = typeof meta.summary === 'string' ? meta.summary : 'Comics ready.'
   const title = typeof meta.title === 'string' ? meta.title : (result.entities[0]?.id || 'comic')
   const state = result.status === 'partial' ? 'partial' : result.status === 'failed' ? 'failed' : 'completed'
   return {

@@ -46,7 +46,7 @@ export function throwIfImageObservationAborted(signal?: AbortSignal): void {
 
 const wait = (milliseconds: number) =>
   new Promise(resolve => window.setTimeout(resolve, milliseconds))
-const fileName = (path: string) => path.split(/[\\/]/).pop() || path
+const fileName = (path: string) => path.split(/[?#]/, 1)[0].split(/[\\/]/).pop() || path
 const compactProviderPrompt = (value: string, limit = 1450): string => {
   const normalized = value.replace(/\s+/g, ' ').trim()
   if (normalized.length <= limit) return normalized

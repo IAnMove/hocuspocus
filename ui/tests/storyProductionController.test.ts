@@ -76,7 +76,7 @@ test('effective music cue preserves the selected song context only when story-so
 
   assert.throws(
     () => effectiveMusicCue(project, undefined, selected),
-    /no tiene un cue persistido/,
+    /has no saved cue/,
   )
   const cue = effectiveMusicCue(project, undefined, selected, 'story-song')
 

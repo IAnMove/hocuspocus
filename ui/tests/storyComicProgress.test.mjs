@@ -97,7 +97,7 @@ test('stageStoryComic keeps Comics navigation instead of Story Lab', { concurren
   assert.notEqual(useStore.getState().mediaFilter, 'stories')
   assert.equal(useStore.getState().sidebarMode, 'director')
   assert.equal(useStore.getState().sidebarOpen, true)
-  assert.match(outcome.message, /capítulo editable/)
+  assert.match(outcome.message, /editable chapter/)
   assert.match(outcome.message, /Comic Director/)
 })
 
@@ -186,7 +186,7 @@ test('startDirectorProduction hydrates a persisted production that is not loaded
     confirm: true,
   })
 
-  assert.match(outcome.message, /ya estaba iniciada/)
+  assert.match(outcome.message, /was already started/)
   assert.equal(outcome.target.id, production.id)
   assert.equal(useStoryStore.getState().projects[project.id]?.productions[0]?.id, production.id)
 })
@@ -286,7 +286,7 @@ test('Story generation persists a new language contract before calling the write
       conversationLanguage: 'fr', contentLanguage: 'en', spokenLanguage: 'es',
       technicalPromptLanguage: 'en', verbatimSegments: [],
     },
-  }), /necesita una premisa/)
+  }), /needs a premise/)
   assert.deepEqual(calls, [], 'invalid generation must not persist language intent')
   useStoryStore.setState({
     project,
@@ -370,7 +370,7 @@ test('Series validation rejects before persisting a new language contract', { co
       conversationLanguage: 'fr', contentLanguage: 'en', spokenLanguage: 'es',
       technicalPromptLanguage: 'en', verbatimSegments: [],
     },
-  }), /necesita una premisa/)
+  }), /needs a premise/)
   assert.deepEqual(writes, [], 'invalid planning must not persist language intent')
 
   await assert.rejects(updateSeriesEpisode({
@@ -384,7 +384,7 @@ test('Series validation rejects before persisting a new language contract', { co
       conversationLanguage: 'fr', contentLanguage: 'en', spokenLanguage: 'es',
       technicalPromptLanguage: 'en', verbatimSegments: [],
     },
-  }), /No existe el episodio/)
+  }), /There is no episode/)
   assert.deepEqual(writes, [], 'invalid episode updates must not persist language intent')
 })
 

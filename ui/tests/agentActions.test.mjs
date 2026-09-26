@@ -549,7 +549,7 @@ test('reusing generate_story_song still binds its persisted candidate ID to stag
       pacing: 'rhythmic', confirm: true,
     }])
     assert.equal(resumed.every(result => result.ok), true)
-    assert.match(resumed[1].message, /Reutilizo/)
+    assert.match(resumed[1].message, /Reusing the previous run/)
     assert.equal(received.filter(action => action.type === 'generate_story_song').length, 1)
     const staged = received.find(action => action.type === 'stage_story_music_video')
     assert.equal(staged.candidateId, 'song-real')
@@ -583,7 +583,7 @@ test('a Wizard turn stops and asks when its output-folder context changes mid-fl
     assert.equal(results.length, 2)
     assert.equal(results[1].ok, false)
     assert.equal(results[1].report.state, 'awaiting_input')
-    assert.match(results[1].message, /cambió de “alpha” a “beta”/)
+    assert.match(results[1].message, /changed from “alpha” to “beta”/)
   } finally {
     defaultApplicationAdapters.storyLab.configureSong = originalConfigure
     useStore.setState({ activeWorkspace: originalWorkspace })
@@ -651,13 +651,13 @@ test('resolves an exact Story song and cue, and rejects ambiguous names', async 
   assert.equal(exact.cue?.title, 'Tema de Iria')
   const exactId = resolveStoryMusicSelection(project, '', 'etiqueta obsoleta', 'cue-1')
   assert.equal(exactId.cue?.id, 'cue-1')
-  assert.throws(() => resolveStoryMusicSelection(project, '', '', 'cue-missing'), /cue con ID/)
+  assert.throws(() => resolveStoryMusicSelection(project, '', '', 'cue-missing'), /cue with ID/)
   const unique = resolveStoryMusicSelection(project, '', '')
   assert.equal(unique.candidate.id, 'cand-1')
   project.music.candidates.push({
     ...project.music.candidates[0], id: 'cand-2', displayName: 'Marea de faro', name: 'marea-2.mp3',
   })
-  assert.throws(() => resolveStoryMusicSelection(project, 'Marea de faro', ''), /varias canciones/)
+  assert.throws(() => resolveStoryMusicSelection(project, 'Marea de faro', ''), /several song/)
 })
 
 test('parses a non-empty Series episode patch without destructive fields', async () => {
@@ -902,8 +902,8 @@ test('a filled comic includes Director brief, structure, continuity and editable
   const project = useComicStore.getState().project
   assert.equal(project.title, 'La brújula dormida')
   assert.ok(project.director?.input.storyContext?.includes('Ada'))
-  assert.ok(project.director?.input.worldContext?.includes('Universo visual'))
-  assert.ok(project.director?.input.forbiddenElements?.includes('No cambiar'))
+  assert.ok(project.director?.input.worldContext?.includes('Visual universe'))
+  assert.ok(project.director?.input.forbiddenElements?.includes('Do not change'))
   assert.ok(project.director?.input.ending)
   assert.equal(project.director?.plan.storyStructure?.length, 1)
   assert.ok(project.director?.plan.pages[0].panels.every(panel => panel.continuityNotes))
@@ -933,7 +933,7 @@ test('parses a multi-page MiniMax comic and a confirmed all-images render', asyn
   assert.equal(reconciled.actions[0].imageProvider, 'minimax')
   assert.equal(reconciled.actions[1].imageModel, 'image-01')
   assert.equal(reconciled.actions[1].scope, 'missing')
-  assert.match(reconciled.reply, /Estimación: 2 llamadas MiniMax/)
+  assert.match(reconciled.reply, /Estimate: 2 calls MiniMax/)
   assert.equal(reconciled.actions[0].type === 'create_comic' && reconciled.actions[1].type === 'generate_comic', true)
   const failed = await reconcileAgentTurnWithRequest('reintenta las fallidas del comic', { reply: 'Vale.', actions: [] }, [
     { role: 'user', text: 'hazme un comic' },
@@ -1139,7 +1139,7 @@ test('executeAgentActions reports the created comic and reuses an identical gene
       recoverable: true,
     }))
     const reused = await executeAgentActions([action])
-    assert.match(reused[0].message, /Reutilizo/)
+    assert.match(reused[0].message, /Reusing the previous run/)
     assert.equal(reused[0].report.taskId, 'task-keep')
     assert.equal(reused[0].report.target.id, project.id)
   } finally {
@@ -1222,7 +1222,7 @@ test('start_generation reports the real taskId and an identical repeat reuses it
     assert.equal(generationContexts[0].capability, 'start_generation')
     assert.equal(generationContexts[0].commandId, first[1].command.commandId)
     const second = await executeAgentActions([prepare, { type: 'start_generation', confirm: true }])
-    assert.match(second[1].message, /Reutilizo/)
+    assert.match(second[1].message, /Reusing the previous run/)
     assert.equal(second[1].report.taskId, 'canonical-generation-job-studio-1')
     assert.equal(generationCalls, 1)
 
@@ -1233,7 +1233,7 @@ test('start_generation reports the real taskId and an identical repeat reuses it
     })
     const retry = await executeAgentActions([prepare, { type: 'start_generation', confirm: true }])
     assert.equal(retry[1].ok, true)
-    assert.doesNotMatch(retry[1].message, /Reutilizo/)
+    assert.doesNotMatch(retry[1].message, /Reusing the previous run/)
     assert.equal(retry[1].report.taskId, 'canonical-generation-job-studio-2')
     assert.equal(generationCalls, 2)
   } finally {
@@ -1281,7 +1281,7 @@ test('create_comic then generate_comic reports the newly created comic id', asyn
     }])
     assert.equal(generated[0].ok, true)
     assert.equal(generated[0].report.target.id, project.id)
-    assert.match(generated[0].message, /ya tenían dibujo|He dibujado/)
+    assert.match(generated[0].message, /already had artwork|I drew/)
   } finally {
     globalThis.fetch = originalFetch
     clearExecutionMemory()
@@ -1393,7 +1393,7 @@ test('start_director_production after same-turn stage reports that pipeline, not
     const repeat = await executeAgentActions([
       { type: 'start_director_production', targetStoryTitle: '', kind: 'film', confirm: true },
     ])
-    assert.match(repeat[0].message, /Reutilizo/)
+    assert.match(repeat[0].message, /Reusing the previous run/)
     assert.equal(repeat[0].report.pipelineId, 'pipe-new-1')
     assert.equal(repeat[0].report.target.id, stagedId)
     assert.equal(pipelineStarts, 1)
@@ -1500,7 +1500,7 @@ test('character kit and video editor execute, reuse export id, and reject unsign
       name: 'tema.wav', source: '/outputs/tema.wav', trim_start: 0, trim_end: 4, volume: 1, loop: false,
     })
     const again = await executeAgentActions([{ type: 'export_video_editor', confirm: true }])
-    assert.match(again[0].message, /Reutilizo/)
+    assert.match(again[0].message, /Reusing the previous run/)
     assert.equal(again[0].report.taskId, 'export-77')
     assert.equal(exportCalls, 1)
   } finally {
@@ -1617,9 +1617,9 @@ test('track_character_kit_job inspects the canonical queue and stays running', a
     assert.equal(tracked[0].ok, true)
     assert.equal(tracked[0].report.state, 'running')
     assert.equal(tracked[0].report.target.kind, 'character_kit')
-    assert.match(tracked[0].message, /Sigo el trabajo de “Nora”/)
+    assert.match(tracked[0].message, /Following the job for “Nora”/)
     assert.match(tracked[0].message, /Pose base Nora/)
-    assert.match(tracked[0].message, /He abierto Activity/)
+    assert.match(tracked[0].message, /I opened Activity/)
     assert.ok(activityOpened >= 1)
   } finally {
     window.removeEventListener('hocuspocus:activity-details', onActivity)
@@ -2353,7 +2353,7 @@ test('bare create asks instead of inventing, then an example follow-up fills a d
   assert.equal(how.actions[0].type, 'open_tab')
   assert.equal(how.actions.some(action => action.type === 'generate_comic'), false)
   assert.match(how.reply, /Generate all images/)
-  assert.match(how.reply, /l[aá]nzalo/)
+  assert.match(how.reply, /launch it/)
   const launch = await reconcileAgentTurnWithRequest('lanzalo ya', { reply: 'Vale.', actions: [] }, [
     { role: 'user', text: 'hazme un comic de ejemplo' },
     { role: 'assistant', text: first.reply },

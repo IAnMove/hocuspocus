@@ -80,15 +80,15 @@ test('valida el catálogo, muestra tres vídeos completos primero y mantiene un 
   try {
     const view = await renderGallery(manifest)
     assert.deepEqual([...view.container.querySelectorAll('[data-showcase-id]')].map(node => node.getAttribute('data-showcase-id')), ['music-full', 'music-second', 'scene-one'])
-    assert.ok(view.screen.getByText('Videoclips completos'))
-    assert.ok(view.screen.getByText('Escenas guardadas'))
-    assert.ok(view.screen.getByText(/En una URL LAN HTTP puedes reproducir previews/))
-    assert.ok(view.screen.getByText(/La reproducción de vídeo y póster no verifica SHA-256/))
+    assert.ok(view.screen.getByText('Full music videos'))
+    assert.ok(view.screen.getByText('Saved scenes'))
+    assert.ok(view.screen.getByText(/On a LAN HTTP URL you can play previews/))
+    assert.ok(view.screen.getByText(/Video and poster playback does not verify SHA-256/))
     assert.equal(view.container.querySelectorAll('video').length, 0)
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Ver vídeo completo de Videoclip completo' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Watch the full video of Videoclip completo' }))
     assert.equal(view.container.querySelectorAll('video').length, 1)
     assert.equal(view.container.querySelector('video')?.getAttribute('autoplay'), null)
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Ver vídeo completo de Segundo videoclip' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Watch the full video of Segundo videoclip' }))
     assert.equal(view.container.querySelectorAll('video').length, 1)
     assert.match(view.container.querySelector('video')?.getAttribute('src') || '', /second\.mp4$/)
     assert.deepEqual(calls, [])
@@ -112,15 +112,15 @@ test('abre el JSON exacto tras comprobar bytes, SHA y provided_only; los planos 
   }) as typeof fetch
   try {
     const view = await renderGallery(manifest, sceneValue => opened.push(sceneValue))
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Abrir escena en editor' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Open scene in editor' }))
     await view.waitFor(() => assert.equal(opened.length, 1))
     assert.equal(opened[0].name, 'Stored scene snapshot')
     assert.equal(opened[0].generationPolicy, 'provided_only')
     assert.deepEqual(calls, ['/scene-showcase/scene.json'])
 
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Mostrar planos exactos (2)' }))
-    assert.ok(view.screen.getByText(/Planos guardados individualmente/))
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Abrir plano 1' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Show exact shots (2)' }))
+    assert.ok(view.screen.getByText(/Shots saved individually/))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Open shot 1' }))
     await view.waitFor(() => assert.equal(opened.length, 2))
     assert.equal(opened[1].name, 'Stored exact shot')
     assert.deepEqual(calls, ['/scene-showcase/scene.json', '/scene-showcase/shot-1.json'])
@@ -138,7 +138,7 @@ test('muestra hash mismatch y no abre una salida alternativa', async () => {
   globalThis.fetch = (async () => new Response(tampered)) as typeof fetch
   try {
     const view = await renderGallery(fixture.manifest, value => opened.push(value))
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Abrir escena en editor' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Open scene in editor' }))
     const alert = await view.screen.findByRole('alert')
     assert.match(alert.textContent || '', /SHA-256/i)
     assert.equal(opened.length, 0)
@@ -158,8 +158,8 @@ test('rechaza URLs remotas y IDs duplicados antes de descargar', async () => {
   let calls = 0
   globalThis.fetch = (async () => { calls += 1; throw new Error('No debe descargarse un manifest inválido') }) as typeof fetch
   try {
-    assert.throws(() => parseShowcaseManifest(remote), /URL relativa/)
-    assert.throws(() => parseShowcaseManifest(duplicate), /id duplicado/)
+    assert.throws(() => parseShowcaseManifest(remote), /relative \/scene-showcase\/ URL/)
+    assert.throws(() => parseShowcaseManifest(duplicate), /duplicate id/)
     const first = await renderGallery(remote)
     assert.ok(first.screen.getByRole('alert'))
     first.cleanup()
@@ -182,7 +182,7 @@ test('rechaza una escena con política distinta aunque el hash sea correcto', as
   globalThis.fetch = (async () => new Response(bytes)) as typeof fetch
   try {
     const view = await renderGallery(invalid)
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Abrir escena en editor' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Open scene in editor' }))
     const alert = await view.screen.findByRole('alert')
     assert.match(alert.textContent || '', /provided_only/i)
     view.cleanup()
@@ -195,12 +195,12 @@ test('exige escena editable para escenas y videoclip con planos; el nombre semá
   const fixture = manifestFixture()
   const missingScene = structuredClone(fixture.manifest)
   delete missingScene.items[2].scene
-  assert.throws(() => parseShowcaseManifest(missingScene), /referencia JSON editable/i)
+  assert.throws(() => parseShowcaseManifest(missingScene), /editable JSON reference/i)
 
   const emptyMusicVideo = structuredClone(fixture.manifest)
   delete emptyMusicVideo.items[0].scene
   emptyMusicVideo.items[0].shots = []
-  assert.throws(() => parseShowcaseManifest(emptyMusicVideo), /escena editable o al menos un plano guardado/i)
+  assert.throws(() => parseShowcaseManifest(emptyMusicVideo), /editable scene or at least one saved shot/i)
 
   const missingSceneName = structuredClone(fixture.manifest)
   delete missingSceneName.items[2].scene!.sceneName
@@ -220,9 +220,9 @@ test('rechaza un JSON válido con identidad semántica distinta', async () => {
   globalThis.fetch = (async () => new Response(fixture.sceneBytes)) as typeof fetch
   try {
     const view = await renderGallery(invalid, value => opened.push(value))
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Abrir escena en editor' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Open scene in editor' }))
     const alert = await view.screen.findByRole('alert')
-    assert.match(alert.textContent || '', /identidad semántica/i)
+    assert.match(alert.textContent || '', /semantic identity/i)
     assert.equal(opened.length, 0)
     view.cleanup()
   } finally {
@@ -246,7 +246,7 @@ test('rechaza Content-Length sobredimensionado antes de consumir el JSON', async
   }) as typeof fetch
   try {
     const view = await renderGallery(fixture.manifest)
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Abrir escena en editor' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Open scene in editor' }))
     const alert = await view.screen.findByRole('alert')
     assert.match(alert.textContent || '', /4 MiB/i)
     assert.equal(reads, 0)
@@ -270,9 +270,9 @@ test('rechaza un Content-Length inválido de una escena antes de leer su body', 
   }) as unknown as Response) as typeof fetch
   try {
     const view = await renderGallery(fixture.manifest)
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Abrir escena en editor' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Open scene in editor' }))
     const alert = await view.screen.findByRole('alert')
-    assert.match(alert.textContent || '', /Content-Length.*válido/i)
+    assert.match(alert.textContent || '', /Content-Length.*valid/i)
     assert.equal(reads, 0)
     view.cleanup()
   } finally {
@@ -293,7 +293,7 @@ test('corta un stream de JSON cuando los bytes observados superan 4 MiB', async 
   globalThis.fetch = (async () => new Response(stream, { headers: { 'content-length': '1' } })) as typeof fetch
   try {
     const view = await renderGallery(fixture.manifest)
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Abrir escena en editor' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Open scene in editor' }))
     const alert = await view.screen.findByRole('alert')
     assert.match(alert.textContent || '', /4 MiB/i)
     view.cleanup()
@@ -317,7 +317,7 @@ test('acepta respuestas sin body stream usando el lector arrayBuffer limitado', 
   globalThis.fetch = (async () => response) as typeof fetch
   try {
     const view = await renderGallery(fixture.manifest, value => opened.push(value))
-    view.fireEvent.click(view.screen.getByRole('button', { name: 'Abrir escena en editor' }))
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Open scene in editor' }))
     await view.waitFor(() => assert.equal(opened.length, 1))
     assert.equal(opened[0].name, 'Stored scene snapshot')
     view.cleanup()

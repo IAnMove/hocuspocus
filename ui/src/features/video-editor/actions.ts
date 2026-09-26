@@ -58,8 +58,8 @@ export async function openAgentVideoEditorProject(command: OpenVideoEditorProjec
   const draft = loadDraft()
   if (command.projectName.trim() && draft.projectName !== command.projectName.trim()) {
     throw new Error(
-      `Solo existe un borrador de Video Editor por workspace: “${draft.projectName}”. `
-      + 'Pide explícitamente crear otro proyecto para reemplazar el borrador actual.',
+      `There is only one Video Editor draft per workspace: “${draft.projectName}”. `
+      + 'Explicitly ask to create another project to replace the current draft.',
     )
   }
   return editorResult()
@@ -78,7 +78,7 @@ async function clipsFromNamedOutputs(
       fallback = fallback || await fetchOutputs(80, 0, { workspace: workspaceName() })
       output = fallback.outputs.find(item => item.name === name)
     }
-    if (!output) throw new Error(`No existe el output “${name}” en este workspace.`)
+    if (!output) throw new Error(`There is no output “${name}” in this workspace.`)
     const probe = await probeVideoEditorClip(output.url || output.name, workspaceName())
     added.push({
       ...probe,
@@ -113,7 +113,7 @@ export async function orderAgentVideoEditorClips(command: OrderVideoEditorClipsC
   const byName = new Map(draft.clips.map(clip => [clip.name, clip]))
   const ordered = command.clipNames.map(name => {
     const clip = byName.get(name)
-    if (!clip) throw new Error(`El clip “${name}” no está en la línea de tiempo.`)
+    if (!clip) throw new Error(`The clip “${name}” is not in the timeline.`)
     return clip
   })
   const rest = draft.clips.filter(clip => !command.clipNames.includes(clip.name))
@@ -130,7 +130,7 @@ export async function trimAgentVideoEditorClip(command: TrimVideoEditorClipComma
     return { ...clip, trimStart: start, trimEnd: end }
   })
   if (!draft.clips.some(clip => clip.name === command.clipName || clip.id === command.clipName)) {
-    throw new Error(`No encuentro el clip “${command.clipName}” para recortar.`)
+    throw new Error(`I can't find the clip “${command.clipName}” to trim.`)
   }
   saveDraft(clips, draft.projectName, draft.resolution, draft.fps)
   return editorResult()
@@ -139,10 +139,10 @@ export async function trimAgentVideoEditorClip(command: TrimVideoEditorClipComma
 export async function addAgentVideoEditorAudio(command: AddVideoEditorAudioCommand): Promise<CommandResult> {
   const draft = loadDraft()
   const wanted = command.outputName.trim()
-  if (!wanted) throw new Error('Indica el nombre exacto del output de audio.')
+  if (!wanted) throw new Error('Give the exact name of the audio output.')
   const outputs = await fetchOutputs(80, 0, { workspace: workspaceName(), mediaType: 'audio' })
   const output = outputs.outputs.find(item => item.name === wanted)
-  if (!output) throw new Error(`No existe el output de audio “${wanted}” en este workspace.`)
+  if (!output) throw new Error(`There is no audio output “${wanted}” in this workspace.`)
   const source = output.url || output.name
   const probe = await probeVideoEditorAudio(source, workspaceName())
   const soundtrack: EditorSoundtrack = {
@@ -160,16 +160,16 @@ export async function addAgentVideoEditorAudio(command: AddVideoEditorAudioComma
 
 export async function validateAgentVideoEditorTimeline(): Promise<CommandResult> {
   const draft = loadDraft()
-  if (!draft.clips.length) throw new Error('La línea de tiempo está vacía.')
+  if (!draft.clips.length) throw new Error('The timeline is empty.')
   const duration = sequenceTotalDuration(draft.clips)
-  if (duration <= 0) throw new Error('La línea de tiempo no tiene duración usable.')
+  if (duration <= 0) throw new Error('The timeline has no usable duration.')
   return editorResult()
 }
 
 export async function exportAgentVideoEditor(command: ExportVideoEditorCommand): Promise<CommandResult> {
-  if (!command.confirm) throw new Error('Exportar requiere confirm=true.')
+  if (!command.confirm) throw new Error('Exporting requires confirm=true.')
   const draft = loadDraft()
-  if (!draft.clips.length) throw new Error('No hay clips para exportar.')
+  if (!draft.clips.length) throw new Error('There are no clips to export.')
   const job = await startVideoEditorExport({
     name: draft.projectName,
     width: draft.resolution.width,
@@ -198,7 +198,7 @@ export async function exportAgentVideoEditor(command: ExportVideoEditorCommand):
       transition_text_size: clip.transitionTextSize,
     })),
   })
-  if (!job.job_id) throw new Error('El exportador devolvió éxito sin jobId.')
+  if (!job.job_id) throw new Error('The exporter returned success without a jobId.')
   try {
     window.localStorage.setItem(`${EXPORT_KEY}:${encodeURIComponent(workspaceName())}`, job.job_id)
   } catch { /* keep going */ }
@@ -215,7 +215,7 @@ export async function trackAgentVideoEditorExport(): Promise<CommandResult> {
   } catch {
     jobId = ''
   }
-  if (!jobId) throw new Error('No hay una exportación de Video Editor en curso.')
+  if (!jobId) throw new Error('There is no Video Editor export in progress.')
   const job = await fetchVideoEditorExport(jobId)
   const status = job.status === 'completed' ? 'completed'
     : job.status === 'failed' || job.status === 'cancelled' ? 'failed'

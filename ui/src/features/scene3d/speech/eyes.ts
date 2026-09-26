@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 
 export const EXPRESSIONS = {
-  neutral: { label: 'Neutra', values: [0, 0, 0, 0], brows: 0 },
-  happy: { label: 'Alegre', values: [.06, .28, 0, .10], brows: 0 },
-  angry: { label: 'Enfadada', values: [.30, .08, .65, -.15], brows: 1 },
-  worried: { label: 'Preocupada', values: [.10, .08, -.55, .15], brows: 1 },
-  surprised: { label: 'Sorprendida', values: [0, 0, 0, .65], brows: 1 },
-  sleepy: { label: 'Somnolienta', values: [.70, .06, 0, -.15], brows: 0 },
+  neutral: { label: 'Neutral', values: [0, 0, 0, 0], brows: 0 },
+  happy: { label: 'Happy', values: [.06, .28, 0, .10], brows: 0 },
+  angry: { label: 'Angry', values: [.30, .08, .65, -.15], brows: 1 },
+  worried: { label: 'Worried', values: [.10, .08, -.55, .15], brows: 1 },
+  surprised: { label: 'Surprised', values: [0, 0, 0, .65], brows: 1 },
+  sleepy: { label: 'Sleepy', values: [.70, .06, 0, -.15], brows: 0 },
 };
 export const EYE_PROFILES = {
   human_mira: { rise: .33, spacing: .19, width: .225, height: .12 },

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,24 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app"))
 from services.runtime_environment import isolated_environment  # noqa: E402
 from services.runtime_profiles import recipe  # noqa: E402
+
+# Wheels whose only published Linux build carries a stale CPython tag but loads
+# its native library through ctypes, so it runs on every supported Python.
+# decord 0.6.0 ships only cp36-cp36m-manylinux2010 wheels; bpy 4.2 (UniRig)
+# is built for Python 3.11 but its wheel is tagged cp39.
+TAG_MISMATCH_ALLOWED = {"decord", "bpy"}
+_PLATFORM_MISMATCH = re.compile(r"^The package `([^`]+)` was built for a different platform$")
+
+
+def check_passes(output: str) -> bool:
+    """Accept uv pip check output whose only findings are allowed tag mismatches."""
+    findings = [line.strip() for line in output.splitlines()
+                if line.strip() and not line.startswith(("Using Python", "Checked ", "Found "))]
+    for finding in findings:
+        match = _PLATFORM_MISMATCH.match(finding)
+        if not match or match.group(1).lower() not in TAG_MISMATCH_ALLOWED:
+            return False
+    return True
 
 
 def command(engine: str, arguments: list[str]) -> tuple[list[str], dict[str, str]]:
@@ -51,7 +70,14 @@ def main() -> None:
     args = parser.parse_args()
     arguments = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
     cmd, env = command(args.engine, arguments)
-    result = subprocess.run(cmd, env=env)
+    if arguments[0] == "check":
+        result = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        sys.stdout.write(result.stdout)
+        if result.returncode and check_passes(result.stdout):
+            print("Ignoring wheel tag mismatch for: " + ", ".join(sorted(TAG_MISMATCH_ALLOWED)))
+            return
+    else:
+        result = subprocess.run(cmd, env=env)
     if result.returncode:
         raise SystemExit("Error: HOCUS_RUNTIME_FAILED. Package operation failed; environment was not verified.")
 

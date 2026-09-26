@@ -142,7 +142,7 @@ export function bindGenerateComicTarget(
 ): string {
   if (createdProjectId && createdProjectId !== currentProjectId) {
     throw new Error(
-      `No dibujo un cómic anterior: generate_comic debe usar el proyecto recién creado (${createdProjectId}), no “${currentTitle}”.`,
+      `Not drawing an earlier comic: generate_comic must use the newly created project (${createdProjectId}), not “${currentTitle}”.`,
     )
   }
   return createdProjectId || currentProjectId
@@ -155,7 +155,7 @@ export function bindDirectorProductionTarget(
 ): string {
   if (stagedProductionId && stagedProductionId !== currentProductionId) {
     throw new Error(
-      `No inicio una producción anterior: start_director_production debe usar la producción recién preparada (${stagedProductionId}), no “${currentTitle}”.`,
+      `Not starting an earlier production: start_director_production must use the newly prepared production (${stagedProductionId}), not “${currentTitle}”.`,
     )
   }
   return stagedProductionId || currentProductionId

@@ -51,7 +51,7 @@ const rawCatalogVersion = (raw: string): unknown => {
 }
 
 const migrationWarning = (legacyWarning?: string) => [
-  'Se preservaron las decisiones válidas de las 24 plantillas previas; las 24 plantillas nuevas quedan pendientes y no se autoaprueban.',
+  'Valid decisions for the 24 previous templates were kept; the 24 new templates stay pending and are not auto-approved.',
   legacyWarning,
 ].filter(Boolean).join(' ')
 
@@ -81,7 +81,7 @@ export function loadCatalogReview(storage: Pick<Storage, 'getItem'>): CatalogRev
   } catch {
     return {
       state: blankExpandedReview(),
-      warning: 'No se pudo leer el almacenamiento; las decisiones quedan pendientes en esta sesión.',
+      warning: 'Storage could not be read; decisions stay pending in this session.',
     }
   }
 

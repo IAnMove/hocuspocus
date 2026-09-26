@@ -50,8 +50,8 @@ test('accepts the canonical active-workspace location, not a global asset URL', 
 test('blocks non-canonical metadata and unsafe, ambiguous, or incompatible locations', () => {
   for (const metadata_status of ['legacy', 'missing', 'invalid']) {
     const item = makeAsset({ metadata_status })
-    assert.throws(() => catalogAssetBinding(item, WORKSPACE, imageSlot), /metadatos canónicos/i)
-    assert.match(catalogBindingIssue(item, WORKSPACE, imageSlot), /metadatos canónicos/i)
+    assert.throws(() => catalogAssetBinding(item, WORKSPACE, imageSlot), /canonical Library identity and metadata/i)
+    assert.match(catalogBindingIssue(item, WORKSPACE, imageSlot), /canonical Library identity and metadata/i)
   }
 
   const cases = [

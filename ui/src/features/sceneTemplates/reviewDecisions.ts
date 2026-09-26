@@ -88,18 +88,18 @@ export function parseReviewChoicesResult(
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return invalidChoices(catalogVersion, templates, 'Las decisiones guardadas no son JSON válido; se mantienen como pendientes.')
+    return invalidChoices(catalogVersion, templates, 'The saved decisions are not valid JSON; they stay pending.')
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return invalidChoices(catalogVersion, templates, 'Las decisiones guardadas tienen un formato desconocido; se mantienen como pendientes.')
+    return invalidChoices(catalogVersion, templates, 'The saved decisions have an unknown format; they stay pending.')
   }
 
   const record = parsed as Record<string, unknown>
   if (record.schemaVersion !== REVIEW_DECISIONS_SCHEMA_VERSION || record.catalogVersion !== catalogVersion) {
-    return invalidChoices(catalogVersion, templates, 'Las decisiones pertenecen a otra versión del catálogo; no se importan aprobaciones antiguas.')
+    return invalidChoices(catalogVersion, templates, 'The decisions belong to another catalog version; old approvals are not imported.')
   }
   if (!record.choices || typeof record.choices !== 'object' || Array.isArray(record.choices)) {
-    return invalidChoices(catalogVersion, templates, 'Las decisiones no contienen una tabla válida; se mantienen como pendientes.')
+    return invalidChoices(catalogVersion, templates, 'The decisions contain no valid table; they stay pending.')
   }
 
   const known = new Map(templates.map(template => [template.id, template]))
@@ -123,7 +123,7 @@ export function parseReviewChoicesResult(
     }
   }
   return ignored
-    ? { state: initial, warning: 'Se ignoraron decisiones con IDs o versiones que ya no coinciden con el catálogo.' }
+    ? { state: initial, warning: 'Decisions with IDs or versions that no longer match the catalog were ignored.' }
     : { state: initial }
 }
 
@@ -144,7 +144,7 @@ export function loadReviewChoicesResult(
   try {
     return parseReviewChoicesResult(storage.getItem(REVIEW_DECISIONS_STORAGE_KEY), catalogVersion, templates)
   } catch {
-    return invalidChoices(catalogVersion, templates, 'No se pudo leer el almacenamiento; las decisiones quedan pendientes en esta sesión.')
+    return invalidChoices(catalogVersion, templates, 'Storage could not be read; decisions stay pending in this session.')
   }
 }
 

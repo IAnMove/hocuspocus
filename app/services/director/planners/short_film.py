@@ -36,6 +36,7 @@ from ..h3_dialogue import (
     h3_non_speech_vocal_cues as _h3_non_speech_vocal_matches,
     h3_vocal_sound_cues as _h3_affirmative_vocal_effect_matches,
     normalize_h3_text as _normalize_h3_text,
+    scrub_h3_silent_shot_vocals as _scrub_h3_silent_shot_vocals,
 )
 from .base import BasePlanner
 
@@ -421,6 +422,16 @@ def _h3_plain_dialogue_text(value: Any) -> str:
     # Spanish screenplay prose commonly prefixes a spoken line with an em dash.
     # It is punctuation, not part of the exact words sent to H3.
     text = re.sub(r"^[\-\u2013\u2014]\s*", "", text).strip()
+    # Local writing models often format lines as screenplay Markdown, e.g.
+    # "*(growling, low)* **WHERE—IS—**". H3 voices everything inside <d>, so
+    # inline stage directions, bold markers and stutter dashes become
+    # babble. Keep only the words that should be spoken.
+    text = re.sub(r"[*_]*\([^)]*\)[*_]*", " ", text)
+    # Single *word* emphasis is an intentional stress cue; only bold markers go.
+    text = re.sub(r"\*{2,3}", "", text)
+    text = re.sub(r"\s*[\u2013\u2014]\s*(?=\S)", "... ", text)
+    text = re.sub(r"\s*[\u2013\u2014]+\s*$", "...", text)
+    text = re.sub(r"\s+([,.!?])", r"\1", text).strip(" ,")
     return re.sub(r"\s+", " ", text)
 
 
@@ -451,6 +462,15 @@ def _h3_screenplay_speaker_heading(value: Any) -> tuple[str, bool] | None:
     )
     if colon_heading:
         text = colon_heading.group(1).strip()
+        # Screenplay front matter ("Main Character:", "Logline:") is not a
+        # speaker; treating it as one voices the cast list as dialogue.
+        if re.search(
+            r"\b(?:characters?|cast|logline|theme|title|synopsis|premise|setting|"
+            r"genre|tone|notes?|summary|style|audience|locations?|scene|world)\b",
+            text,
+            flags=re.IGNORECASE,
+        ):
+            return None
 
     # Standard screenplay headings are short uppercase names. Exclude scene
     # headings and structural labels so they cannot become phantom speakers.
@@ -518,7 +538,12 @@ def _extract_h3_screenplay_dialogue(screenplay: Any) -> list[dict[str, str]]:
             ):
                 break
             dialogue = re.sub(r"^>\s?", "", stripped).strip()
-            if re.fullmatch(r"\([^)]*\)", dialogue):
+            # Cast-list bullets ("- **Name** (ID): description") are profile
+            # text, never spoken words.
+            if re.match(r"^[-*\u2022]\s+\**[^*:]{1,60}\**\s*(?:\([^)]*\))?\s*:", dialogue):
+                index += 1
+                continue
+            if re.fullmatch(r"\*?\([^)]*\)\*?", dialogue):
                 index += 1
                 continue
             spoken_lines.append(dialogue)
@@ -1369,9 +1394,14 @@ def _h3_rebuilt_visual_prompt(raw: dict) -> str:
         description = clean(subject.get("visual_description"))
         wardrobe = clean(subject.get("wardrobe"))
         position = clean(subject.get("position_or_relation"))
-        bits = [name]
-        if description and description.casefold() != name.casefold():
-            bits.append(description)
+        # Planners often write the description as "Name (ID): ...". Do not
+        # prefix the name again, or the prompt reads "Name, Name (ID): ...".
+        if description and name and description.casefold().startswith(name.casefold()):
+            bits = [description]
+        else:
+            bits = [name]
+            if description and description.casefold() != name.casefold():
+                bits.append(description)
         if wardrobe:
             bits.append(f"wearing {wardrobe}")
         if position:
@@ -6138,6 +6168,22 @@ VOCAL SEMANTIC REPAIR:
             )
             _normalize_h3_audio_metadata(shot_dicts)
             vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
+            if vocal_semantic_issues:
+                # Smaller local planners often repeat the same stray "gasps"
+                # in a silent shot.  Apply the compiler's silent-shot rewrites
+                # to the audited fields instead of failing the whole plan.
+                scrubbed = [
+                    index for index, shot in enumerate(shot_dicts, start=1)
+                    if isinstance(shot, dict) and _scrub_h3_silent_shot_vocals(shot)
+                ]
+                if scrubbed:
+                    _normalize_h3_audio_metadata(shot_dicts)
+                    vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
+                    print(
+                        "[ShortFilmPlanner] Removed unstructured vocal cues from "
+                        f"silent shot(s) {', '.join(map(str, scrubbed))}; "
+                        f"{len(vocal_semantic_issues)} vocal issue(s) remain."
+                    )
             if vocal_semantic_issues:
                 raise RuntimeError(
                     "MiniMax H3's repaired plan still contains contradictory "

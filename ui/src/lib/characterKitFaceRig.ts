@@ -57,14 +57,14 @@ export const DEFAULT_FACE_RIG_ANCHOR: CharacterFaceAnchor = DEFAULT_CHARACTER_MO
 export const DEFAULT_FACE_RIG_BLINK_ANCHOR: CharacterFaceAnchor = DEFAULT_CHARACTER_BLINK_ANCHOR
 
 export const FACE_RIG_STYLE_PRESETS = [
-  { id: 'paper-cut', label: 'Recorte de papel', prompt: 'flat paper-cut collage, torn paper edges, thick uneven black outline, layered construction paper' },
-  { id: 'plasticine', label: 'Plastilina', prompt: 'hand-sculpted plasticine clay, visible fingerprints, matte clay material, stop-motion puppet' },
+  { id: 'paper-cut', label: 'Paper cut-out', prompt: 'flat paper-cut collage, torn paper edges, thick uneven black outline, layered construction paper' },
+  { id: 'plasticine', label: 'Plasticine', prompt: 'hand-sculpted plasticine clay, visible fingerprints, matte clay material, stop-motion puppet' },
   { id: 'cartoon', label: 'Cartoon', prompt: 'bold cartoon, clean cel shading, thick ink outline, simple graphic shapes' },
-  { id: 'watercolor', label: 'Acuarela', prompt: 'soft watercolor illustration, paper grain, gentle pigment bleeds, children\'s book' },
-  { id: 'comic-ink', label: 'Tinta cómic', prompt: 'high-contrast comic-book ink, halftone dots, graphic novel linework' },
-  { id: 'felt-puppet', label: 'Títere de fieltro', prompt: 'felt puppet, stitched edges, wool texture, handmade craft' },
-  { id: 'limited-anime', label: 'Anime limitado', prompt: 'limited-animation anime, flat color fills, simple shapes, 2D TV cutout' },
-  { id: 'children-illustration', label: 'Ilustración infantil', prompt: 'children\'s picture-book illustration, friendly proportions, soft lighting' },
+  { id: 'watercolor', label: 'Watercolour', prompt: 'soft watercolor illustration, paper grain, gentle pigment bleeds, children\'s book' },
+  { id: 'comic-ink', label: 'Comic ink', prompt: 'high-contrast comic-book ink, halftone dots, graphic novel linework' },
+  { id: 'felt-puppet', label: 'Felt puppet', prompt: 'felt puppet, stitched edges, wool texture, handmade craft' },
+  { id: 'limited-anime', label: 'Limited anime', prompt: 'limited-animation anime, flat color fills, simple shapes, 2D TV cutout' },
+  { id: 'children-illustration', label: 'Children\'s illustration', prompt: 'children\'s picture-book illustration, friendly proportions, soft lighting' },
 ] as const
 
 export const FACE_RIG_TRAIT_CHIPS = [

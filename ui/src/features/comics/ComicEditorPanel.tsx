@@ -6,6 +6,7 @@ import {
   Maximize2, Type, Undo2, Unlock, Upload, WandSparkles, X,
 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
+import { defaultProjectLanguages } from '../../i18n/language'
 import { getModelMode, useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
@@ -194,7 +195,7 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
   const { t } = useUiTranslation('comics')
   const projectLanguage = useComicStore(state => state.project.language)
   const hasDirectorPlan = useComicStore(state => Boolean(state.project.director?.plan))
-  const [language, setLanguage] = useState(projectLanguage || 'Español')
+  const [language, setLanguage] = useState(projectLanguage || defaultProjectLanguages().content)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
 

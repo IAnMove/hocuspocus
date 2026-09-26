@@ -23,7 +23,7 @@ export function keyframes(item: SceneLayer, beats: Beat[]): SceneLayer {
 }
 export function asset(ctx: BuildContext, slot: TemplateSlotName, pose: Pose = {}, z = 10): SceneLayer {
   const binding = ctx.bindings[slot]
-  if (!binding) throw new Error(`Falta el recurso del slot ${slot}.`)
+  if (!binding) throw new Error(`The resource for slot ${slot} is missing.`)
   const item = layer(slot, binding.type, binding.source, ctx.duration, pose, z)
   item.name = `${slot} · ${binding.name || slot}`
   if (binding.type === 'model3d') item.transform = { ...item.transform, rotationX: 65, rotationY: -35 }
@@ -44,7 +44,7 @@ export function atmosphere(ctx: BuildContext, kind: SceneAtmosphereKind, color =
   return { ...layer(`atmosphere-${kind}`, 'effect', '', ctx.duration, { opacity: .35 }, 60), atmosphere: { kind, density: 25, speed: .5, size: .6, wind: 1, color } }
 }
 export function pulse(ctx: BuildContext, item: SceneLayer, kind: 'bounce' | 'scale' = 'scale'): SceneLayer {
-  if (item.animation.keyframes?.length) throw new Error('El pulso necesita una pose base, no reemplaza keyframes existentes.')
+  if (item.animation.keyframes?.length) throw new Error('The pulse needs a base pose; it does not replace existing keyframes.')
   const beats: Beat[] = []
   const seconds = 60 / ctx.bpm
   for (let time = 0; time < ctx.duration; time += seconds) {

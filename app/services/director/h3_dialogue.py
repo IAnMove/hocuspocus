@@ -2059,3 +2059,50 @@ def compile_h3_clip_plans(
         original.clear()
         original.update(candidate)
     return clip_plans
+
+
+_H3_PROMPT_SOUNDSCAPE_RE = re.compile(
+    r"(\boverall_soundscape\s*:\s*)(.*?)(?=\bnon_diegetic_music\s*:|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def scrub_h3_silent_shot_vocals(shot: MutableMapping[str, Any]) -> bool:
+    """Deterministically remove unstructured vocal cues from one silent shot.
+
+    Applies the same rewrites prompt compilation uses for silent shots, but to
+    the planner fields the vocal preflight audits.  Shots with exact dialogue
+    or song-driven audio are left untouched.  Returns True when a field changed.
+    """
+    beats = [
+        beat for beat in (shot.get("dialogue_beats") or [])
+        if isinstance(beat, Mapping) and normalize_h3_text(beat.get("spoken_text"))
+    ]
+    audio = shot.get("audio_plan") if isinstance(shot.get("audio_plan"), MutableMapping) else None
+    if beats or h3_audio_plan_wants_drive(audio, has_dialogue=False):
+        return False
+    before = copy.deepcopy(dict(shot))
+    prompt = str(shot.get("video_prompt") or "")
+    if prompt:
+        prompt = _H3_PROMPT_SOUNDSCAPE_RE.sub(
+            lambda match: match.group(1) + _sanitize_silent_soundscape(match.group(2)) + " ",
+            prompt,
+        )
+        shot["video_prompt"] = _sanitize_silent_visual_vocals(prompt)
+    for field in ("scene_goal", "ending_beat"):
+        if isinstance(shot.get(field), str):
+            shot[field] = _sanitize_silent_visual_vocals(shot[field])
+    if isinstance(shot.get("action_beats"), list):
+        shot["action_beats"] = [
+            _sanitize_silent_visual_vocals(beat) if isinstance(beat, str) else beat
+            for beat in shot["action_beats"]
+        ]
+    if audio is not None:
+        if isinstance(audio.get("ambience"), str):
+            audio["ambience"] = _sanitize_silent_soundscape(audio["ambience"])
+        if isinstance(audio.get("effects"), list):
+            audio["effects"] = [
+                effect for effect in audio["effects"]
+                if not h3_vocal_sound_cues(effect)
+            ]
+    return dict(shot) != before

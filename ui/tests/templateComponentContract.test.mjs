@@ -100,8 +100,8 @@ test('devuelve objetos frescos y no permite mutar el catálogo mediante el contr
   assert.notEqual(fresh.components[0].description, 'mutated locally')
   assert.deepEqual(fresh.components[0].kinds, ['image'])
   assert.ok(!fresh.limits.includes('mutated locally'))
-  assert.equal(TEMPLATE_SLOT_LABELS.subject_2, 'Sujeto 2')
-  assert.equal(TEMPLATE_SLOT_LABELS.prop_1, 'Accesorio 1')
+  assert.equal(TEMPLATE_SLOT_LABELS.subject_2, 'Subject 2')
+  assert.equal(TEMPLATE_SLOT_LABELS.prop_1, 'Prop 1')
 })
 
 test('rechaza una plantilla desconocida y el prompt no intenta generar ni inventar archivos', () => {
@@ -114,8 +114,8 @@ test('rechaza una plantilla desconocida y el prompt no intenta generar ni invent
   assert.equal(parsed.schema, 'hocuspocus.template-components')
   assert.equal(parsed.generationPolicy, 'provided_only')
   assert.equal(typeof parsed.instruction, 'string')
-  assert.match(parsed.instruction, /assetId y workspace/)
-  assert.match(parsed.instruction, /no autoriza.*generación/i)
-  assert.match(parsed.instruction, /No inventes archivos/i)
-  assert.match(parsed.instruction, /cuerpo.*pose/i)
+  assert.match(parsed.instruction, /assetId and workspace/)
+  assert.match(parsed.instruction, /does not authorize.*generation/i)
+  assert.match(parsed.instruction, /Do not invent files/i)
+  assert.match(parsed.instruction, /body.*pose/i)
 })

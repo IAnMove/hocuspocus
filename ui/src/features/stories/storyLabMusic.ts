@@ -13,29 +13,29 @@ export function storyProjectPremise(project: StoryProject): string {
     return [
       sourceBrief,
       project.creativeBrief.context,
-      project.creativeBrief.performer && `Artista o creador: ${project.creativeBrief.performer}`,
-      project.creativeBrief.musicStyle && `Estilo musical: ${project.creativeBrief.musicStyle}`,
-      project.creativeBrief.songStory && `La canción cuenta: ${project.creativeBrief.songStory}`,
+      project.creativeBrief.performer && `Artist or creator: ${project.creativeBrief.performer}`,
+      project.creativeBrief.musicStyle && `Music style: ${project.creativeBrief.musicStyle}`,
+      project.creativeBrief.songStory && `The song tells: ${project.creativeBrief.songStory}`,
     ].filter(Boolean).join('\n')
   }
   if (project.projectType === 'quick_video') {
     return [
       sourceBrief,
       project.creativeBrief.context,
-      project.creativeBrief.subjects && `Protagonistas: ${project.creativeBrief.subjects}`,
-      project.creativeBrief.setting && `Lugar: ${project.creativeBrief.setting}`,
-      project.creativeBrief.action && `Acción o diálogo: ${project.creativeBrief.action}`,
-      `Formato: ${project.creativeBrief.quickFormat}`,
+      project.creativeBrief.subjects && `Protagonists: ${project.creativeBrief.subjects}`,
+      project.creativeBrief.setting && `Place: ${project.creativeBrief.setting}`,
+      project.creativeBrief.action && `Action or dialogue: ${project.creativeBrief.action}`,
+      `Format: ${project.creativeBrief.quickFormat}`,
     ].filter(Boolean).join('\n')
   }
   if (project.projectType === 'trailer') {
     return [
       sourceBrief,
       project.creativeBrief.context,
-      project.creativeBrief.subjects && `Protagonistas: ${project.creativeBrief.subjects}`,
-      project.creativeBrief.setting && `Mundo y localizaciones: ${project.creativeBrief.setting}`,
-      project.creativeBrief.action && `Conflicto y promesa del tráiler: ${project.creativeBrief.action}`,
-      `Duración objetivo del tráiler: ${project.creativeBrief.durationSeconds}s`,
+      project.creativeBrief.subjects && `Protagonists: ${project.creativeBrief.subjects}`,
+      project.creativeBrief.setting && `World and locations: ${project.creativeBrief.setting}`,
+      project.creativeBrief.action && `Trailer conflict and promise: ${project.creativeBrief.action}`,
+      `Target trailer duration: ${project.creativeBrief.durationSeconds}s`,
     ].filter(Boolean).join('\n')
   }
   return [sourceBrief, project.premise].filter(Boolean).join('\n')

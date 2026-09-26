@@ -8695,7 +8695,7 @@ async def upload_audio(file: UploadFile = File(...)):
     VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"}
     ALLOWED_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
 
-    ext = os.path.splitext(file.filename or "audio.wav")[1].lower()
+    ext = _upload_extension(file.filename, "audio.wav")
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
@@ -36000,6 +36000,17 @@ def delete_output(name: str):
     return {"deleted": name}
 
 
+def _upload_extension(filename: str | None, default: str) -> str:
+    """Return a safe lowercase extension from a client-supplied upload name.
+
+    Browsers sometimes name re-uploaded blobs after their source URL, e.g.
+    ``photo.jpg?workspace=default``; the query must not reach the saved path.
+    """
+    name = re.split(r"[?#]", str(filename or ""), maxsplit=1)[0] or default
+    ext = os.path.splitext(os.path.basename(name))[1].lower()
+    return ext if re.fullmatch(r"\.[a-z0-9]{1,8}", ext) else ""
+
+
 @api.post("/api/v1/upload")
 async def upload_image(file: UploadFile = File(...)):
     """Upload an image or audio/video asset. Image was the original use;
@@ -36013,7 +36024,7 @@ async def upload_image(file: UploadFile = File(...)):
     upload_dir = os.path.join(os.getcwd(), "uploads")
     os.makedirs(upload_dir, exist_ok=True)
 
-    ext = os.path.splitext(file.filename or "img.png")[1].lower() or ".png"
+    ext = _upload_extension(file.filename, "img.png") or ".png"
     unique_name = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(upload_dir, unique_name)
 

@@ -19,7 +19,7 @@ class TestGenerationTaskTiming(unittest.TestCase):
     def test_total_and_phase_times_are_separated_per_panel(self):
         clock = _Clock()
         timer = GenerationTaskTimer(3, 24, "panel prompt", clock=clock)
-        timer.phase("Preparando textos 1–4 de 24")
+        timer.phase("Preparing prompts 1–4 of 24")
         clock.value += 2.5
         timer.phase("Diffusion 1/8")
         clock.value += 7.25
@@ -32,7 +32,7 @@ class TestGenerationTaskTiming(unittest.TestCase):
         self.assertEqual(
             metric["phase_timings"],
             [
-                {"phase": "Preparando textos 1–4 de 24", "seconds": 2.5},
+                {"phase": "Preparing prompts 1–4 of 24", "seconds": 2.5},
                 {"phase": "Diffusion #/#", "seconds": 7.25},
             ],
         )

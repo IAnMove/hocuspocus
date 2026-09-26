@@ -83,7 +83,7 @@ export function resolveSongLyricsLanguage({
   request = '',
   requestedLanguage = '',
   languageIntent,
-  fallback = 'Español',
+  fallback = 'English',
 }: SongLanguageResolutionInput): string {
   return canonicalLanguage(
     extractRequestedSongLanguage(request)
@@ -91,7 +91,7 @@ export function resolveSongLyricsLanguage({
       || languageIntent?.spokenLanguage
       || languageIntent?.contentLanguage
       || fallback,
-  ) || 'Español'
+  ) || 'English'
 }
 
 export function resolveStorySongLanguage(
@@ -233,11 +233,11 @@ export interface StorySongWritingRequestInput {
 export function buildStorySongWritingRequest(input: StorySongWritingRequestInput) {
   const { target, brief, style, lyricsLanguage, protectedLyrics } = input
   const storyContext = [
-    `Título: ${target.title}`,
-    `Premisa: ${target.premise}`,
-    target.synopsis ? `Sinopsis: ${target.synopsis}` : '',
-    target.theme ? `Tema: ${target.theme}` : '',
-    target.beats.length ? `Progresión: ${target.beats.map(item => item.summary).join(' → ')}` : '',
+    `Title: ${target.title}`,
+    `Premise: ${target.premise}`,
+    target.synopsis ? `Synopsis: ${target.synopsis}` : '',
+    target.theme ? `Theme: ${target.theme}` : '',
+    target.beats.length ? `Progression: ${target.beats.map(item => item.summary).join(' → ')}` : '',
   ].filter(Boolean).join('\n')
   return {
     description: `${brief}\nWrite the provider-facing music direction in English and the complete lyrics in ${lyricsLanguage}.`,
@@ -443,7 +443,7 @@ export function assertGeneratedSongFidelity(
 ): SongSemanticFidelityReport {
   const fidelity = evaluateSongSemanticFidelity(input)
   if (!fidelity.ok) {
-    throw new Error(`La letra generada no respeta el idioma o el tema solicitado (${fidelity.score}%): ${fidelity.reasons.join(' ')}`)
+    throw new Error(`The generated lyrics do not match the requested language or theme (${fidelity.score}%): ${fidelity.reasons.join(' ')}`)
   }
   return fidelity
 }

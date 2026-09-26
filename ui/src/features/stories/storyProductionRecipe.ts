@@ -2,6 +2,7 @@ import {
   DEFAULT_COMIC_CHAPTER_DIRECTION,
   DEFAULT_SHORT_FILM_DIRECTION,
   DEFAULT_TRAILER_DIRECTION,
+  LEGACY_SPANISH_TRAILER_DIRECTION,
 } from './adaptations'
 import { DEFAULT_TRAILER_DURATION } from './trailerDefaults'
 import type {
@@ -65,7 +66,9 @@ export function normalizeStoryProductionRecipe(raw: unknown): StoryProductionRec
     comicDirection: text(source.comicDirection, fallback.comicDirection),
     comicPageCount: bounded(source.comicPageCount, 1, 24, fallback.comicPageCount),
     comicPanelsPerPage: bounded(source.comicPanelsPerPage, 1, 12, fallback.comicPanelsPerPage),
-    trailerDirection: text(source.trailerDirection, fallback.trailerDirection),
+    trailerDirection: source.trailerDirection === LEGACY_SPANISH_TRAILER_DIRECTION
+      ? fallback.trailerDirection
+      : text(source.trailerDirection, fallback.trailerDirection),
     trailerDurationSeconds: bounded(source.trailerDurationSeconds, 15, 180, fallback.trailerDurationSeconds),
     trailerFormat: pick(source.trailerFormat, TRAILER_FORMATS, fallback.trailerFormat),
     trailerNarration: pick(source.trailerNarration, TRAILER_NARRATIONS, fallback.trailerNarration),
