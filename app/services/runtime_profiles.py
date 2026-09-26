@@ -8,8 +8,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import platform as host_platform
 import re
+import shutil
 import subprocess
 import sys
 from functools import lru_cache
@@ -148,6 +150,37 @@ def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = Non
             "engines": engines}
 
 
+# Engines whose Windows install compiles native code (Hunyuan3D: diso and the
+# mesh painter extensions). Kept here, not in profiles.json, because that file
+# feeds every engine's install fingerprint.
+WINDOWS_COMPILER_ENGINES = {"hunyuan3d"}
+MSVC_MISSING_REASON = (
+    "{label} needs the Microsoft C++ Build Tools to compile its native parts on Windows. "
+    "Install Visual Studio Build Tools with \"Desktop development with C++\" from "
+    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Install again."
+)
+
+
+def msvc_available() -> bool:
+    """Whether an MSVC x64 toolset is installed (vswhere) or already on PATH."""
+    if shutil.which("cl"):
+        return True
+    root = os.environ.get("ProgramFiles(x86)") or os.environ.get("ProgramFiles") or r"C:\Program Files (x86)"
+    vswhere = Path(root) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+    if not vswhere.is_file():
+        return False
+    try:
+        result = subprocess.run(
+            [str(vswhere), "-latest", "-products", "*",
+             "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+             "-property", "installationPath"],
+            capture_output=True, text=True, timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
 def detect_profiles(*, platform: str | None = None, arch: str | None = None,
                     gpu: str | None = None, inspect_engines: set[str] | None = None) -> dict:
     driver = None
@@ -168,6 +201,15 @@ def detect_profiles(*, platform: str | None = None, arch: str | None = None,
     for name, item in result["engines"].items():
         if inspect_engines is None or name in inspect_engines:
             item["installed"] = installation_current(name, result["platform"]) if item["supported"] else False
+    # Only gate installs that have yet to happen: a working install stays usable.
+    needs_compiler = [item for name, item in result["engines"].items()
+                      if name in WINDOWS_COMPILER_ENGINES and item["supported"]
+                      and item.get("installed") is False]
+    if result["platform"] == "win32" and needs_compiler and not msvc_available():
+        for item in needs_compiler:
+            item["supported"] = False
+            item["reason"] = MSVC_MISSING_REASON.format(label=item["label"])
+        result["supported"] = all(e["supported"] for e in result["engines"].values() if e["required"])
     return result
 
 

@@ -280,3 +280,43 @@ def test_missing_vendor_files_and_changed_revisions_trigger_repair(tmp_path, mon
     git("add", "custom.py")
     git("commit", "-m", "different upstream revision")
     assert not sources.sources_current(["fixture"], tmp_path)
+
+
+def _detect_windows(installed: bool, compiler: bool) -> dict:
+    with patch.object(profiles.subprocess, "run", side_effect=OSError), \
+            patch.object(profiles, "installation_current", return_value=installed), \
+            patch.object(profiles, "msvc_available", return_value=compiler) as probe:
+        result = profiles.detect_profiles(platform="win32", arch="x64", gpu="nvidia")
+    return result, probe
+
+
+def test_windows_hunyuan3d_install_is_skipped_with_a_reason_without_msvc():
+    result, _ = _detect_windows(installed=False, compiler=False)
+    item = result["engines"]["hunyuan3d"]
+    assert item["supported"] is False
+    assert "Build Tools" in item["reason"] and "Desktop development with C++" in item["reason"]
+    assert result["engines"]["wangp"]["supported"] is True
+    assert result["supported"] is True  # Hunyuan3D is optional; the main install continues.
+
+
+def test_windows_hunyuan3d_stays_available_with_msvc_or_an_existing_install():
+    result, _ = _detect_windows(installed=False, compiler=True)
+    assert result["engines"]["hunyuan3d"]["supported"] is True
+    result, probe = _detect_windows(installed=True, compiler=False)
+    assert result["engines"]["hunyuan3d"]["supported"] is True
+    probe.assert_not_called()
+
+
+def test_msvc_is_detected_through_vswhere(tmp_path):
+    vswhere = tmp_path / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+    vswhere.parent.mkdir(parents=True)
+    vswhere.write_bytes(b"")
+    found = subprocess.CompletedProcess([], 0, stdout="C:\BuildTools\n")
+    missing = subprocess.CompletedProcess([], 0, stdout="")
+    with patch.object(profiles.shutil, "which", return_value=None), \
+            patch.dict(profiles.os.environ, {"ProgramFiles(x86)": str(tmp_path)}):
+        with patch.object(profiles.subprocess, "run", return_value=found) as run:
+            assert profiles.msvc_available()
+            assert "Microsoft.VisualStudio.Component.VC.Tools.x86.x64" in run.call_args.args[0]
+        with patch.object(profiles.subprocess, "run", return_value=missing):
+            assert not profiles.msvc_available()
