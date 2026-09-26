@@ -8,4 +8,4 @@ torchaudio==2.7.1+cu128
 torchvision==0.22.1+cu128
 transformers==4.57.1
 triton-windows==3.3.1.post19
-xformers==0.0.31
+xformers==0.0.31.post1

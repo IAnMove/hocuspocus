@@ -19,7 +19,7 @@ def test_windows_and_linux_choose_distinct_main_abis():
     assert win["supported"] and linux["supported"]
     assert win["engines"]["wangp"]["torch"] == "2.7.1"
     assert linux["engines"]["wangp"]["torch"] == "2.7.0"
-    assert win["engines"]["wangp"]["constraints"]["xformers"] == "0.0.31"
+    assert win["engines"]["wangp"]["constraints"]["xformers"] == "0.0.31.post1"
     assert "torchcodec" not in win["engines"]["wangp"]["constraints"]
     assert linux["engines"]["wangp"]["constraints"]["torchcodec"] == "0.5"
     assert not win["engines"]["rigging"]["supported"]
