@@ -132,6 +132,7 @@ def test_native_helpers_affect_installation_fingerprint(tmp_path):
     import shutil
     source = tmp_path / "source"
     for name in ["app/runtime", "app/services/hunyuan3d/requirements.txt", "app/services/hunyuan3d/build_mesh_painter.py",
+                 "app/services/hunyuan3d/patch_windows_sources.py",
                  "runtime_install.js", "vendor_revisions.js", "hunyuan_native.js", "torch.js", "scripts/runtime_verify.py",
                  "scripts/runtime_pip.py", "scripts/runtime_failed.py", "scripts/runtime_vendor.py",
                  "app/services/runtime_sources.py"]:
