@@ -79,6 +79,7 @@
     "urlOpenAi": "URL base de la API de OpenAI; déjala en blanco para usar la predeterminada.",
     "llmModel": "Modelo LLM",
     "localModelHint": "Los modelos más grandes dan descripciones de escena más creativas, pero usan más RAM",
+    "modelUnavailable": "{{model}} (no disponible para este proveedor — elige un modelo)",
     "testLlm": "Probar LLM",
     "testing": "Probando",
     "test": "Probar",
