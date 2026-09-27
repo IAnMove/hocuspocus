@@ -36,6 +36,10 @@ function shell(engine, platform, cwd = '.', extraEnv = {}) {
 }
 
 function pip(engine, platform, args, cwd = '.') {
+  if (args.startsWith('uninstall ')) {
+    const packages = new Set([...args.slice(10).split(' '), ...(selected(engine, platform).excludedPackages || [])])
+    args = `uninstall ${[...packages].join(' ')}`
+  }
   return `python "{{path.resolve(cwd, 'scripts/runtime_pip.py')}}" --engine ${engine} -- ${args}`
 }
 
@@ -107,9 +111,8 @@ function engineSteps(engine, platform) {
   }
   const torch = ['torch', 'torchvision', 'torchaudio'].filter(k => spec[k])
     .map(k => `${k}==${spec[k]}+cu${spec.cuda.replace('.', '')}`).join(' ')
-  const removals = spec.excludedPackages?.length
-    ? [pip(engine, platform, `uninstall ${spec.excludedPackages.join(' ')}`)]
-    : engine === 'wangp' && platform === 'win32' ? [pip(engine, platform, 'uninstall torchcodec')] : []
+  const removals = engine === 'wangp' && platform === 'win32'
+    ? [pip(engine, platform, 'uninstall torchcodec')] : []
   run.push({method: 'shell.run', params: {...shell(engine, platform), message: [
     ...removals,
     pip(engine, platform, `install ${torch}`),

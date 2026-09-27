@@ -38,6 +38,7 @@ for (const platform of ['linux', 'win32']) {
     (!step.when || render(step.when, ctx) === 'true'))
   assert.equal(JSON.stringify(preflight).includes('windows_toolchain.py'), platform === 'win32')
   if (platform === 'win32') {
+    assert(all.includes('uninstall torchcodec flash-attn'), 'Repair must remove incompatible external attention')
     assert(!all.includes('targets/x86_64-linux'))
     assert(!all.includes('bash compile_mesh_painter'))
     assert(all.includes('build_mesh_painter.py'))
