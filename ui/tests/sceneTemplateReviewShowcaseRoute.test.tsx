@@ -8,7 +8,7 @@ import type { ShowcaseFileReference, ShowcaseManifest } from '../src/features/sc
 import { PENDING_SCENE_KEY } from '../src/lib/sceneOutput.ts'
 
 const virtualConsole = new VirtualConsole()
-virtualConsole.sendTo(console, { omitJSDOMErrors: true })
+virtualConsole.forwardTo(console, { jsdomErrors: 'none' })
 const dom = new JSDOM('<!doctype html><html><body /></html>', { url: 'http://localhost/scene-template-review', virtualConsole })
 Object.assign(globalThis, {
   window: dom.window,

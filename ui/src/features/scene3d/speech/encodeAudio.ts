@@ -1,7 +1,7 @@
-import type { ArrayBufferTarget, Muxer } from 'mp4-muxer'
+import type { Mp4Muxer } from '../../../lib/mp4Muxer'
 
 /** Fail explicitly if AAC is unavailable; never publish a silently muted voice scene. */
-export async function encodeSpeechAudio(muxer: Muxer<ArrayBufferTarget>, buffer: AudioBuffer) {
+export async function encodeSpeechAudio(muxer: Pick<Mp4Muxer, 'addAudioChunk'>, buffer: AudioBuffer) {
   if (typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined') throw new Error('AAC audio export needs a browser with AudioEncoder (Chrome/Edge).')
   const supported = await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: buffer.sampleRate, numberOfChannels: 1, bitrate: 128000 })
   if (!supported.supported || !supported.config) throw new Error('AAC audio encoding is unavailable in this browser.')
