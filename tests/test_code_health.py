@@ -361,6 +361,43 @@ class ReleaseIntegrationHealthTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exact commit"):
             self.release.release_chain("origin/main", head)
 
+    def test_main_sync_keeps_actual_fork_and_every_development_checkpoint(self):
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            def git(*args):
+                return subprocess.check_output(
+                    ['git', '-C', folder, '-c', 'user.name=Test', '-c', 'user.email=test@example.test', *args],
+                    text=True,
+                ).strip()
+            git('init', '-q')
+            (root / 'base').write_text('base')
+            git('add', '.')
+            git('commit', '-qm', 'base')
+            fork = git('rev-parse', 'HEAD')
+            git('checkout', '-qb', 'development')
+            (root / 'feature').write_text('feature')
+            git('add', '.')
+            git('commit', '-qm', 'feature')
+            feature = git('rev-parse', 'HEAD')
+            git('checkout', '-qb', 'release-main', fork)
+            (root / 'hotfix').write_text('hotfix')
+            git('add', '.')
+            git('commit', '-qm', 'main hotfix')
+            base = git('rev-parse', 'HEAD')
+            git('checkout', '-q', 'development')
+            git('merge', '--no-ff', '-qm', 'sync main', base)
+            head = git('rev-parse', 'HEAD')
+            with self.patch.object(self.release, 'ROOT', root):
+                self.assertEqual(self.release.release_chain(base, head), [base, fork, feature, head])
+            # A larger release base must not conceal oversized feature growth.
+            reports = [self.report(lines=4000), self.report(lines=1000),
+                       self.report(lines=3001), self.report(lines=4000)]
+            _, failures, _ = self.release.compare_release(
+                reports[-1], reports[0], [base, fork, feature, head], reports)
+            self.assertTrue(any(feature in finding and 'production LOC grew' in finding for finding in failures))
+
     def test_changed_or_missing_historical_measurement_inputs_fail_closed(self):
         rows = [('100644', 'blob', 'a' * 40, path) for path in self.release.MEASUREMENT_INPUTS]
         for second in (rows[:-1], [(mode, kind, 'b' * 40, path) for mode, kind, _, path in rows]):

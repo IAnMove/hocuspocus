@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { afterEach } from 'node:test'
 import React from 'react'
 import { JSDOM } from 'jsdom'
 import type { AssetCatalogItem } from '../src/api/assets.ts'
@@ -24,6 +24,11 @@ Object.assign(globalThis, {
   ResizeObserver: class { observe() {} disconnect() {} },
 })
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
+
+afterEach(async () => {
+  const { cleanup } = await import('@testing-library/react')
+  cleanup()
+})
 
 const makeAsset = (id: string, workspace: string, overrides: Partial<AssetCatalogItem> = {}): AssetCatalogItem => {
   const filename = overrides.filename || `${id}.png`

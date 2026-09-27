@@ -216,7 +216,11 @@ export function TabFilter() {
     const state = useStore.getState()
     state.setSettingsOpen(false)
     state.setDashboardOpen(false)
-    state.setGenerationMode(mode)
+    // setGenerationMode is not idempotent: same-mode calls rebuild params
+    // from defaults, force image_mode/aspect/resolution, and then overwrite
+    // sampling with stock model defaults. Re-opening the remembered mode
+    // must not discard the form the user is returning to.
+    if (state.generationMode !== mode) state.setGenerationMode(mode)
     const filter = DIRECT_GENERATION_MEDIA[mode]
     locallySelectedFilterRef.current = filter
     state.setMediaFilter(filter)

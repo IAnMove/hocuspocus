@@ -147,3 +147,6 @@ app/services/rigging/env/
 # UI compilation staging and last-good backup (never source or model data).
 /ui/.hocus-ui-*/
 /ui/.hocus-ui-*.lock
+
+# Example media is fetched on demand; never bundle developer-generated copies.
+/ui/public/examples/

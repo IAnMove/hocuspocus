@@ -1,6 +1,5 @@
 import { withCharacterPoseDimensions } from '../../lib/characterPoseDimensions'
 import { sceneAudioWav, supportsSceneAac } from '../../features/sceneFx/audioExport'
-import { paintSceneFx } from '../../features/sceneFx/paint'
 import { waitForSceneImages } from '../../lib/sceneMediaReady'
 import { mixFxAudio } from '../../features/sceneFx/mix'
 import { encodeSpeechAudio } from '../../features/scene3d/speech/encodeAudio'
@@ -12,7 +11,9 @@ import { isRetroLook } from '../../features/sceneFx/retroPaint'
 import { adoptPreparedSceneDocument, withFxShowcase } from '../../features/sceneFx/showcase'
 import { KineticTextControls } from '../common/KineticTextControls'
 import { KineticTextOverlay } from '../common/KineticTextOverlay'
-import { paintKineticTexts, parseKineticTexts } from '../../lib/kineticText'
+import { LiveRhythmStore, SceneFinalPreview, SceneFinishControls, SceneMotionControls } from '../../features/scene2d/boostControls'
+import { beatEnvelope } from '../../lib/scene2d/motion'
+import { parseKineticTexts } from '../../lib/kineticText'
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ParseKeys } from 'i18next'
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
@@ -53,45 +54,33 @@ import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { applySceneRhythmToLayer, buildSceneRhythmMap, type SceneRhythmCueSource, type SceneRhythmProfile } from '../../lib/sceneRhythm'
-import { applyCutoutDialogue, bindCutoutFaceToPose, ensureCutoutFacePlayback, findCutoutMouthLayers, isCutoutFaceLayer, normalizeAlignedCutoutUnits, normalizeFaceBinding, planAlignedCutoutDialogue, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
+import { applyCutoutDialogue, bindCutoutFaceToPose, ensureCutoutFacePlayback, findCutoutMouthLayers, isCutoutFaceLayer, normalizeAlignedCutoutUnits, planAlignedCutoutDialogue, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
 import { captureCharacterKitFaceAnchor, characterKitAssetFromLayer, claimUnusedCharacterKitId, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, syncMountedCharacterKitLayers, syncSceneCharacterKits, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
 import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } from '../../lib/characterKitHandoff'
 import { rememberCharacterKitLibrary, rememberVideo3dScene } from '../../features/agent/wizardLabSession'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
-import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
-import { normalizeSeamOccluder, paintSeamOccluder, seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
-import type { AudioAnalysisResult, Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
+import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
+import { seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
+import type { AudioAnalysisResult, Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneMask } from '../../types'
 import { canonicalSceneFps } from '../../lib/sceneFps.ts'
+import { createSceneEvaluator } from '../../lib/scene2d/evaluate'
+import { paintScene2D } from '../../lib/scene2d/paint'
+import { assignZ, breakDependencyCycles, dependencyWouldCycleIn, normalizeScene2DLayers, normalizeZ } from '../../lib/scene2d/normalize'
+import { ATMOSPHERE_KINDS, ATMOSPHERE_OPACITY, ATMOSPHERE_PRESETS, DEFAULT_EFFECTS, drawAtmosphere, effectFilter, finiteNumber, hasCanvasFilterEffects, isVisualLayer, normalizedAtmosphere, normalizedEffects, normalizedStrip } from '../../lib/scene2d/layerStyle'
+import type { AnimatorLayer, AnimatorLayerType, AnimatorScene, Atmosphere, LayerEffects, LayerStrip, Point, VisualAnimatorLayer, VisualLayerType } from '../../lib/scene2d/types'
 import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
 import { CharacterKitLibraryPanel } from '../../features/characters/CharacterKitLibraryPanel'
 import type { CharacterKitEditorTab } from '../../features/characters/characterKitGuide'
 import { listenForAgentSceneControl, listenForAgentSceneRhythm, listenForAgentSceneWorkflow } from '../../features/agent/agentUiBus'
 
-type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
-type AnimatorLayerType = SceneLayerType
-type VisualLayerType = Exclude<SceneLayerType, 'camera'>
 type ParallaxPreset = 'background' | 'midground' | 'foreground'
-type AnimatorLayer = Omit<SceneLayer, 'type' | 'animation'> & {
-  type: AnimatorLayerType
-  /** Camera-pan response. Distant layers move less; foreground layers move more. */
-  parallax?: number
-  animation: Omit<SceneLayer['animation'], 'start' | 'end'> & { start: Point; end: Point }
-}
-type AnimatorScene = Omit<Scene, 'layers'> & { layers: AnimatorLayer[] }
-type VisualAnimatorLayer = AnimatorLayer & { type: VisualLayerType }
-type LayerState = { x: number; y: number; scale: number; opacity: number; rotation: number; z: number; modelYaw?: number }
 type PresetCategory = 'classic' | 'game' | 'cinematic'
 type Preset = { id: string; label: string; category: PresetCategory; start: Point; end: Point; duration: number; spin: boolean; curve: SceneCurve; requiresTarget?: boolean; preview: string; poster: string }
 type CameraPreset = { id: string; label: string; start: Point; end: Point; duration: number; curve: SceneCurve; shake?: { amount: number; frequency: number; seed?: number } }
 type PhotoMotionPreset = CameraPreset & { description: string }
 type Gesture = { id: string; mode: 'move' | 'resize' | 'orbit'; startX: number; startY: number; x: number; y: number; scale: number; rotationX: number; rotationY: number }
-type LayerEffects = Required<NonNullable<SceneLayer['effects']>>
-type LayerStrip = Required<Omit<NonNullable<SceneLayer['strip']>, 'seamOccluder'>> & {
-  seamOccluder: { enabled: boolean; kind: SeamOccluderKind; scale: number; opacity: number }
-}
-type Atmosphere = Required<NonNullable<SceneLayer['atmosphere']>>
 type ModelViewerAnimationElement = HTMLElement & { loaded?: boolean; availableAnimations?: string[]; animationName?: string; currentTime: number; duration: number; pause: () => void }
 type SpeechRecognizer = { lang: string; continuous: boolean; interimResults: boolean; start: () => void; stop: () => void; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null }
 type SpeechRecognizerConstructor = new () => SpeechRecognizer
@@ -143,9 +132,6 @@ const PRESETS: Preset[] = ([
 ]).map(preset => ({ ...preset, preview: `/preset-previews/${preset.id}.webm`, poster: `/preset-previews/${preset.id}.webp` }))
 
 const DEFAULT_COMPOSITION: NonNullable<Scene['composition']> = { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }
-const DEFAULT_EFFECTS: LayerEffects = { blur: 0, brightness: 1, contrast: 1, saturation: 1, hue: 0, glow: 0, shadow: 0, blendMode: 'normal', mask: 'none', maskRadius: 12 }
-const DEFAULT_STRIP: LayerStrip = { enabled: false, count: 5, spacing: 24, direction: 'down', speed: 18, phase: 0, seamOccluder: { enabled: false, kind: 'pole', scale: 1, opacity: .82 } }
-const ATMOSPHERE_KINDS: SceneAtmosphereKind[] = ['rain', 'snow', 'dust', 'embers', 'fog', 'smoke', 'ash', 'fireflies', 'confetti', 'bokeh', 'sparkles', 'bubbles', 'speedlines', 'leaves']
 const ATMOSPHERE_LABELS: Record<SceneAtmosphereKind, string> = {
   rain: 'Cinematic rain',
   snow: 'Falling snow',
@@ -178,193 +164,11 @@ const ATMOSPHERE_DESCRIPTIONS: Record<SceneAtmosphereKind, string> = {
   speedlines: 'Fast directional streaks for action and impacts.',
   leaves: 'Rotating autumn leaves with varied warm colours.',
 }
-const ATMOSPHERE_OPACITY: Record<SceneAtmosphereKind, number> = {
-  rain: .92, snow: .95, dust: .78, embers: .92, fog: .58, smoke: .62, ash: .72,
-  fireflies: .95, confetti: 1, bokeh: .58, sparkles: .9, bubbles: .85, speedlines: .7, leaves: .95,
-}
-const ATMOSPHERE_PRESETS: Record<SceneAtmosphereKind, Atmosphere> = {
-  rain: { kind: 'rain', density: 145, speed: 1.3, size: 1.65, wind: -10, color: '#dbeafe' },
-  snow: { kind: 'snow', density: 90, speed: .42, size: 2.15, wind: 8, color: '#ffffff' },
-  dust: { kind: 'dust', density: 58, speed: .25, size: 2.5, wind: 18, color: '#fde68a' },
-  embers: { kind: 'embers', density: 68, speed: .62, size: 1.55, wind: 10, color: '#fb923c' },
-  fog: { kind: 'fog', density: 16, speed: .18, size: 1.15, wind: 28, color: '#dbeafe' },
-  smoke: { kind: 'smoke', density: 22, speed: .3, size: .85, wind: 12, color: '#cbd5e1' },
-  ash: { kind: 'ash', density: 95, speed: .34, size: 1.35, wind: 14, color: '#d1d5db' },
-  fireflies: { kind: 'fireflies', density: 38, speed: .22, size: 1.4, wind: 4, color: '#fde047' },
-  confetti: { kind: 'confetti', density: 86, speed: .72, size: 1.65, wind: 12, color: '#f472b6' },
-  bokeh: { kind: 'bokeh', density: 24, speed: .12, size: 2.8, wind: 6, color: '#f0abfc' },
-  sparkles: { kind: 'sparkles', density: 42, speed: .18, size: 1.8, wind: 4, color: '#ffffff' },
-  bubbles: { kind: 'bubbles', density: 46, speed: .45, size: 1.6, wind: 5, color: '#bae6fd' },
-  speedlines: { kind: 'speedlines', density: 72, speed: 1.65, size: 1.15, wind: 45, color: '#e0f2fe' },
-  leaves: { kind: 'leaves', density: 54, speed: .48, size: 1.8, wind: 20, color: '#f59e0b' },
-}
 const blankScene = (): AnimatorScene => ({ version: 1, name: 'Untitled scene', width: 1280, height: 720, fps: 30, duration: 5, layers: [], composition: { ...DEFAULT_COMPOSITION } })
 const AUTOSAVE_KEY = 'maestro-scene-animator-autosave-v1'
 const HISTORY_LIMIT = 80
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-const finiteNumber = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback
-const boundedNumber = (value: unknown, fallback: number, min: number, max: number) => Math.max(min, Math.min(max, finiteNumber(value, fallback)))
-const normalizedEffects = (value: SceneLayer['effects'] | undefined): LayerEffects => ({
-  blur: boundedNumber(value?.blur, DEFAULT_EFFECTS.blur, 0, 3),
-  brightness: boundedNumber(value?.brightness, DEFAULT_EFFECTS.brightness, 0, 3),
-  contrast: boundedNumber(value?.contrast, DEFAULT_EFFECTS.contrast, 0, 3),
-  saturation: boundedNumber(value?.saturation, DEFAULT_EFFECTS.saturation, 0, 4),
-  hue: boundedNumber(value?.hue, DEFAULT_EFFECTS.hue, -180, 180),
-  glow: boundedNumber(value?.glow, DEFAULT_EFFECTS.glow, 0, 5),
-  shadow: boundedNumber(value?.shadow, DEFAULT_EFFECTS.shadow, 0, 8),
-  blendMode: ['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken'].includes(value?.blendMode ?? '') ? value?.blendMode as SceneBlendMode : 'normal',
-  mask: ['none', 'rounded', 'ellipse'].includes(value?.mask ?? '') ? value?.mask as SceneMask : 'none',
-  maskRadius: boundedNumber(value?.maskRadius, DEFAULT_EFFECTS.maskRadius, 0, 50),
-})
-const normalizedStrip = (value: SceneLayer['strip'] | undefined): LayerStrip => ({
-  enabled: value?.enabled === true,
-  count: Math.round(boundedNumber(value?.count, DEFAULT_STRIP.count, 1, 12)),
-  spacing: boundedNumber(value?.spacing, DEFAULT_STRIP.spacing, 2, 200),
-  direction: ['up', 'down', 'left', 'right'].includes(value?.direction ?? '') ? value?.direction as LayerStrip['direction'] : DEFAULT_STRIP.direction,
-  speed: boundedNumber(value?.speed, DEFAULT_STRIP.speed, 0, 300),
-  phase: boundedNumber(value?.phase, DEFAULT_STRIP.phase, -1000, 1000),
-  seamOccluder: normalizeSeamOccluder(value?.seamOccluder),
-})
-const normalizedAtmosphere = (value: SceneLayer['atmosphere'] | undefined): Atmosphere => {
-  const kind = ATMOSPHERE_KINDS.includes(value?.kind as SceneAtmosphereKind) ? value!.kind : 'rain'
-  const preset = ATMOSPHERE_PRESETS[kind]
-  return {
-    kind,
-    density: Math.round(boundedNumber(value?.density, preset.density, 5, 240)),
-    speed: boundedNumber(value?.speed, preset.speed, .05, 4),
-    size: boundedNumber(value?.size, preset.size, .2, 8),
-    wind: boundedNumber(value?.wind, preset.wind, -100, 100),
-    color: typeof value?.color === 'string' && /^#[0-9a-f]{6}$/i.test(value.color) ? value.color : preset.color,
-  }
-}
-const particleNoise = (index: number, salt: number) => {
-  const value = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453
-  return value - Math.floor(value)
-}
-const atmosphereParticles = (atmosphere: Atmosphere, seconds: number) => Array.from({ length: atmosphere.density }, (_, index) => {
-  const phase = particleNoise(index, 1.7)
-  const baseX = particleNoise(index, 4.1) * 120 - 10
-  const baseY = particleNoise(index, 8.3) * 120 - 10
-  const depth = .35 + particleNoise(index, 11.9) * .65
-  const pulse = .35 + .65 * Math.abs(Math.sin(seconds * (1.2 + depth * 2.4) + phase * Math.PI * 2))
-  const rotation = (particleNoise(index, 15.3) * 360 + seconds * atmosphere.speed * (30 + depth * 100)) % 360
-  const rate = atmosphere.kind === 'rain' ? .55
-    : atmosphere.kind === 'snow' ? .09
-      : atmosphere.kind === 'embers' || atmosphere.kind === 'bubbles' ? .16
-        : atmosphere.kind === 'confetti' || atmosphere.kind === 'leaves' ? .12
-          : atmosphere.kind === 'ash' ? .075
-            : atmosphere.kind === 'speedlines' ? .5
-              : .045
-  const travel = ((phase + seconds * atmosphere.speed * rate * depth) % 1 + 1) % 1
-  const wind = atmosphere.wind * travel * .18
-  const shared = { size: atmosphere.size * depth, pulse, rotation, variant: Math.floor(particleNoise(index, 19.7) * 6) }
-  if (atmosphere.kind === 'embers' || atmosphere.kind === 'smoke' || atmosphere.kind === 'bubbles') return { ...shared, x: baseX + wind + Math.sin(seconds * 1.7 + index) * (atmosphere.kind === 'smoke' ? 4 : 1.8), y: 110 - travel * 120, alpha: atmosphere.kind === 'smoke' ? .12 + depth * .22 : .3 + depth * .65 }
-  if (atmosphere.kind === 'dust' || atmosphere.kind === 'fog') return { ...shared, x: ((baseX + travel * (18 + atmosphere.wind) + 10) % 120 + 120) % 120 - 10, y: baseY + Math.sin(seconds * atmosphere.speed + index * 2.1) * (atmosphere.kind === 'fog' ? 5 : 3), alpha: atmosphere.kind === 'fog' ? .1 + depth * .16 : .14 + depth * .32 }
-  if (atmosphere.kind === 'fireflies' || atmosphere.kind === 'bokeh' || atmosphere.kind === 'sparkles') return { ...shared, x: baseX + Math.sin(seconds * atmosphere.speed * 2 + index) * (2 + atmosphere.wind * .05), y: baseY + Math.cos(seconds * atmosphere.speed * 1.7 + index * 1.8) * 3, alpha: pulse * (atmosphere.kind === 'bokeh' ? .28 : .85) }
-  if (atmosphere.kind === 'speedlines') return { ...shared, x: -10 + travel * 120, y: baseY, alpha: .18 + depth * .58 }
-  return { ...shared, x: baseX + wind + (atmosphere.kind === 'snow' || atmosphere.kind === 'ash' || atmosphere.kind === 'leaves' ? Math.sin(seconds * 1.2 + index) * 2.8 : 0), y: -10 + travel * 120, alpha: atmosphere.kind === 'rain' ? .28 + depth * .55 : atmosphere.kind === 'ash' ? .18 + depth * .45 : .35 + depth * .65 }
-})
-const drawAtmosphere = (context: CanvasRenderingContext2D, atmosphere: Atmosphere, seconds: number, width: number, height: number) => {
-  const shortSide = Math.min(width, height)
-  const confettiPalette = ['#f472b6', '#60a5fa', '#facc15', '#34d399', '#c084fc', '#fb7185']
-  const leafPalette = ['#f59e0b', '#dc2626', '#84cc16', '#d97706', '#a16207', '#fbbf24']
-  for (const particle of atmosphereParticles(atmosphere, seconds)) {
-    const x = -width / 2 + width * particle.x / 100
-    const y = -height / 2 + height * particle.y / 100
-    const color = atmosphere.kind === 'confetti' ? confettiPalette[particle.variant] : atmosphere.kind === 'leaves' ? leafPalette[particle.variant] : atmosphere.color
-    context.save()
-    context.globalAlpha *= particle.alpha
-    context.fillStyle = color
-    context.strokeStyle = color
-    context.lineCap = 'round'
-    if (atmosphere.kind === 'rain') {
-      context.lineWidth = Math.max(1, shortSide * particle.size / 520)
-      context.beginPath(); context.moveTo(x, y); context.lineTo(x + atmosphere.wind * width / 1900, y + height * particle.size / 30); context.stroke()
-    } else if (atmosphere.kind === 'fog' || atmosphere.kind === 'smoke') {
-      const radius = shortSide * particle.size / (atmosphere.kind === 'fog' ? 8 : 11)
-      const gradient = context.createRadialGradient(x, y, 0, x, y, radius)
-      gradient.addColorStop(0, color)
-      gradient.addColorStop(.45, `${color}88`)
-      gradient.addColorStop(1, `${color}00`)
-      context.fillStyle = gradient
-      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
-    } else if (atmosphere.kind === 'fireflies' || atmosphere.kind === 'embers') {
-      const radius = Math.max(1, shortSide * particle.size / 420)
-      context.shadowColor = color; context.shadowBlur = radius * (atmosphere.kind === 'fireflies' ? 7 : 4)
-      context.globalAlpha *= atmosphere.kind === 'fireflies' ? particle.pulse : 1
-      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
-    } else if (atmosphere.kind === 'confetti') {
-      const unit = shortSide * particle.size / 270
-      context.translate(x, y); context.rotate(particle.rotation * Math.PI / 180)
-      context.fillRect(-unit / 2, -unit * 1.4, unit, unit * 2.8)
-    } else if (atmosphere.kind === 'bokeh') {
-      const radius = shortSide * particle.size / 42
-      context.lineWidth = Math.max(1, radius * .08)
-      context.globalAlpha *= particle.pulse
-      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
-      context.globalAlpha *= .8; context.strokeStyle = '#ffffff'; context.stroke()
-    } else if (atmosphere.kind === 'sparkles') {
-      const radius = shortSide * particle.size * particle.pulse / 135
-      context.shadowColor = color; context.shadowBlur = radius * 2
-      context.lineWidth = Math.max(1, radius * .14)
-      context.beginPath(); context.moveTo(x - radius, y); context.lineTo(x + radius, y); context.moveTo(x, y - radius); context.lineTo(x, y + radius); context.stroke()
-    } else if (atmosphere.kind === 'bubbles') {
-      const radius = shortSide * particle.size / 145
-      context.lineWidth = Math.max(1, radius * .16)
-      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.stroke()
-      context.globalAlpha *= .65; context.fillStyle = '#ffffff'; context.beginPath(); context.arc(x - radius * .32, y - radius * .3, radius * .16, 0, Math.PI * 2); context.fill()
-    } else if (atmosphere.kind === 'speedlines') {
-      const length = width * particle.size / 9
-      context.lineWidth = Math.max(1, shortSide * particle.size / 480)
-      context.beginPath(); context.moveTo(x - length, y - atmosphere.wind * height / 3500); context.lineTo(x, y); context.stroke()
-    } else if (atmosphere.kind === 'leaves') {
-      const radius = shortSide * particle.size / 180
-      context.translate(x, y); context.rotate(particle.rotation * Math.PI / 180)
-      context.beginPath(); context.ellipse(0, 0, radius, radius * .48, 0, 0, Math.PI * 2); context.fill()
-      context.strokeStyle = '#78350f'; context.lineWidth = Math.max(.5, radius * .08); context.beginPath(); context.moveTo(-radius, 0); context.lineTo(radius, 0); context.stroke()
-    } else {
-      const radius = Math.max(.8, shortSide * particle.size / (atmosphere.kind === 'dust' ? 330 : atmosphere.kind === 'ash' ? 520 : 470))
-      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
-    }
-    context.restore()
-  }
-}
-const stripOffsets = (layer: AnimatorLayer, sceneSeconds: number) => {
-  const strip = normalizedStrip(layer.strip)
-  if (!strip.enabled || strip.count <= 1) return [{ x: 0, y: 0 }]
-  const period = strip.count * strip.spacing
-  const sign = strip.direction === 'up' || strip.direction === 'left' ? -1 : 1
-  const travel = sign * (strip.phase + sceneSeconds * strip.speed)
-  const wrap = (value: number) => ((value + period / 2) % period + period) % period - period / 2
-  return Array.from({ length: strip.count }, (_, index) => {
-    const offset = wrap((index - (strip.count - 1) / 2) * strip.spacing + travel)
-    return strip.direction === 'up' || strip.direction === 'down' ? { x: 0, y: offset } : { x: offset, y: 0 }
-  })
-}
-const effectFilter = (effects: LayerEffects, pixelUnit: number) => {
-  const filters = [`brightness(${effects.brightness})`, `contrast(${effects.contrast})`, `saturate(${effects.saturation})`, `hue-rotate(${effects.hue}deg)`]
-  if (effects.blur > 0) filters.unshift(`blur(${(effects.blur * pixelUnit).toFixed(2)}px)`)
-  if (effects.glow > 0) filters.push(`drop-shadow(0 0 ${(effects.glow * pixelUnit).toFixed(2)}px rgba(96,165,250,.9))`)
-  if (effects.shadow > 0) filters.push(`drop-shadow(0 ${(effects.shadow * pixelUnit * .35).toFixed(2)}px ${(effects.shadow * pixelUnit * .7).toFixed(2)}px rgba(0,0,0,.8))`)
-  return filters.join(' ')
-}
-const hasCanvasFilterEffects = (effects: LayerEffects) => effects.blur > 0 || effects.glow > 0 || effects.shadow > 0 || effects.brightness !== 1 || effects.contrast !== 1 || effects.saturation !== 1 || effects.hue !== 0
-const applyLayerMask = (context: CanvasRenderingContext2D, effects: LayerEffects, width: number, height: number) => {
-  context.beginPath()
-  if (effects.mask === 'none') context.rect(-width / 2, -height / 2, width, height)
-  else if (effects.mask === 'ellipse') context.ellipse(0, 0, width / 2, height / 2, 0, 0, Math.PI * 2)
-  else {
-    const x = -width / 2; const y = -height / 2; const radius = Math.min(width, height) * effects.maskRadius / 100
-    context.moveTo(x + radius, y); context.lineTo(x + width - radius, y); context.arcTo(x + width, y, x + width, y + radius, radius)
-    context.lineTo(x + width, y + height - radius); context.arcTo(x + width, y + height, x + width - radius, y + height, radius)
-    context.lineTo(x + radius, y + height); context.arcTo(x, y + height, x, y + height - radius, radius)
-    context.lineTo(x, y + radius); context.arcTo(x, y, x + radius, y, radius)
-  }
-  context.closePath(); context.clip()
-}
 const isMissing = (source: string) => source.startsWith('blob:')
-const isAnimatorLayerType = (value: unknown): value is AnimatorLayerType => value === 'model3d' || value === 'image' || value === 'video' || value === 'overlay' || value === 'effect' || value === 'camera'
-const isVisualLayer = (layer: AnimatorLayer): layer is VisualAnimatorLayer => layer.type !== 'camera'
 const findLayerElements = (root: HTMLElement | null, id: string) => Array.from(root?.querySelectorAll<HTMLElement>('[data-layer-id]') ?? []).filter(element => element.dataset.layerId === id)
 const findLayerElement = (root: HTMLElement | null, id: string) => findLayerElements(root, id)[0] ?? null
 const modelViewerCanvas = (element: HTMLElement | null) => {
@@ -382,38 +186,6 @@ const RESOLUTIONS = [
   ['Square', 1080, 1080], ['HD portrait', 720, 1280], ['Full HD portrait', 1080, 1920], ['4K portrait', 2160, 3840],
 ] as const
 
-const assignZ = (layers: AnimatorLayer[]) => layers.map((layer, index) => ({ ...layer, z: index * 10 }))
-const normalizeZ = (layers: AnimatorLayer[]) => assignZ([...layers].sort((a, b) => a.z - b.z))
-const dependencyTargets = (layer: AnimatorLayer) => [layer.relationship?.targetLayerId, layer.animation.orbit?.targetLayerId].filter((id): id is string => Boolean(id))
-const dependencyWouldCycleIn = (layers: AnimatorLayer[], layerId: string, targetId: string) => {
-  const pending = [targetId]
-  const visited = new Set<string>()
-  while (pending.length > 0) {
-    const currentId = pending.pop()
-    if (!currentId) continue
-    if (currentId === layerId) return true
-    if (visited.has(currentId)) continue
-    visited.add(currentId)
-    const current = layers.find(layer => layer.id === currentId)
-    if (current) pending.push(...dependencyTargets(current))
-  }
-  return false
-}
-const breakDependencyCycles = (layers: AnimatorLayer[]) => {
-  let next = layers
-  for (const candidate of layers) {
-    const current = next.find(layer => layer.id === candidate.id)
-    if (!current) continue
-    if (current.relationship && dependencyWouldCycleIn(next, current.id, current.relationship.targetLayerId)) {
-      next = next.map(layer => layer.id === current.id ? { ...layer, relationship: undefined } : layer)
-    }
-    const withRelationshipChecked = next.find(layer => layer.id === candidate.id)
-    if (withRelationshipChecked?.animation.orbit && dependencyWouldCycleIn(next, withRelationshipChecked.id, withRelationshipChecked.animation.orbit.targetLayerId)) {
-      next = next.map(layer => layer.id === withRelationshipChecked.id ? { ...layer, animation: { ...layer.animation, orbit: undefined } } : layer)
-    }
-  }
-  return next
-}
 const ANIMATED_FIELDS = ['x', 'y', 'scale', 'opacity', 'rotation'] as const
 type AnimatedField = typeof ANIMATED_FIELDS[number]
 
@@ -1089,152 +861,13 @@ export function SceneAnimatorPanel() {
     else updateLayer(gesture.id, layer => ({ ...layer, transform: { ...layer.transform, rotationY: gesture.rotationY + (event.clientX - gesture.startX) * .8, rotationX: Math.max(1, Math.min(179, gesture.rotationX + (event.clientY - gesture.startY) * .5)) } }))
   }
   const endGesture = () => { gestureRef.current = null }
-  const baseLayerState = (layer: AnimatorLayer, time: number): LayerState => ({ ...evaluateSceneLayer(layer, sceneTimeToLayerTime(layer, time * scene.duration)), z: layer.z })
-  const activeCameraLayer = () => [...scene.layers].filter(layer => layer.type === 'camera' && layer.visible).sort((a, b) => b.z - a.z)[0]
-  const cameraState = (time: number): LayerState => {
-    const camera = activeCameraLayer()
-    return camera ? layerState(camera, time) : { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0, z: 0 }
-  }
-  const applyCameraTransform = (state: LayerState, layer: AnimatorLayer, time: number): LayerState => {
-    const camera = activeCameraLayer()
-    if (!camera || layer.type === 'camera' || layer.type === 'effect') return state
-    const view = layerState(camera, time)
-    const parallax = effectiveParallax(layer)
-    const dx = state.x - 50 - (view.x - 50) * parallax
-    const dy = state.y - 50 - (view.y - 50) * parallax
-    const radians = view.rotation * Math.PI / 180
-    const cos = Math.cos(radians); const sin = Math.sin(radians)
-    const zoom = Math.max(.05, view.scale)
-    const aspect = scene.width / Math.max(1, scene.height)
-    return {
-      ...state,
-      // Rotate in scene pixels rather than percent-space so portrait and
-      // landscape shots keep a physically correct camera roll.
-      x: 50 + (dx * cos + dy / aspect * sin) * zoom,
-      y: 50 + (-dx * aspect * sin + dy * cos) * zoom,
-      scale: state.scale * zoom,
-      rotation: state.rotation - view.rotation,
-    }
-  }
-  function effectiveParallax(layer: AnimatorLayer, visited = new Set<string>()): number {
-    if (visited.has(layer.id)) return layer.parallax ?? 1
-    const nextVisited = new Set(visited); nextVisited.add(layer.id)
-    const targetId = layer.relationship?.targetLayerId ?? layer.animation.orbit?.targetLayerId
-    const target = targetId && scene.layers.find(item => item.id === targetId)
-    return target && isVisualLayer(target) ? effectiveParallax(target, nextVisited) : layer.parallax ?? 1
-  }
-  function layerState(layer: AnimatorLayer, time = progress, visited = new Set<string>(), applyShake = true): LayerState {
-    let state = baseLayerState(layer, time)
-    if (visited.has(layer.id)) return state
-    const nextVisited = new Set(visited); nextVisited.add(layer.id)
-    const relationship = layer.relationship
-    const relationshipTarget = relationship && scene.layers.find(item => item.id === relationship.targetLayerId)
-    if (relationship && relationshipTarget && isVisualLayer(relationshipTarget) && !nextVisited.has(relationshipTarget.id)) {
-      const targetState = layerState(relationshipTarget, time, nextVisited, applyShake)
-      if (relationship.type === 'parent') {
-        const targetOrigin = layerState(relationshipTarget, 0, nextVisited, applyShake)
-        const scaleRatio = targetState.scale / Math.max(.01, targetOrigin.scale)
-        const angle = (targetState.rotation - targetOrigin.rotation) * Math.PI / 180
-        const relativeX = (state.x - targetOrigin.x) * scene.width
-        const relativeY = (state.y - targetOrigin.y) * scene.height
-        const rotatedX = (relativeX * Math.cos(angle) - relativeY * Math.sin(angle)) * scaleRatio
-        const rotatedY = (relativeX * Math.sin(angle) + relativeY * Math.cos(angle)) * scaleRatio
-        state = {
-          ...state,
-          x: targetState.x + rotatedX / scene.width,
-          y: targetState.y + rotatedY / scene.height,
-          scale: state.scale * scaleRatio,
-          rotation: state.rotation + targetState.rotation - targetOrigin.rotation,
-        }
-      } else if (relationship.type === 'follow') {
-        const strength = Math.max(0, Math.min(1, relationship.strength ?? 1))
-        const targetX = targetState.x + (relationship.offsetX ?? 0)
-        const targetY = targetState.y + (relationship.offsetY ?? 0)
-        state = { ...state, x: state.x + (targetX - state.x) * strength, y: state.y + (targetY - state.y) * strength }
-      } else {
-        const dx = (targetState.x - state.x) * scene.width
-        const dy = (targetState.y - state.y) * scene.height
-        state = { ...state, rotation: Math.atan2(dy, dx) * 180 / Math.PI + (relationship.rotationOffset ?? 0) }
-      }
-    }
-    const orbit = layer.animation.orbit
-    const target = orbit && scene.layers.find(item => item.id === orbit.targetLayerId)
-    if (orbit && target && isVisualLayer(target) && target.id !== layer.id && !nextVisited.has(target.id)) {
-      const targetState = layerState(target, time, nextVisited, applyShake)
-      const orbitProgress = sceneLayerMotionProgress(layer, time * scene.duration)
-      const angle = orbit.phase * Math.PI / 180 + orbitProgress * orbit.turns * Math.PI * 2
-      const depth = Math.sin(angle)
-      const centerX = targetState.x + (orbit.centerOffsetX ?? 0)
-      const centerY = targetState.y + (orbit.centerOffsetY ?? 0)
-      state = { ...state, x: centerX + Math.cos(angle) * orbit.radiusX, y: centerY + depth * orbit.radiusY, scale: state.scale * (1 + depth * .12), z: target.z + (depth >= 0 ? 1 : -1) }
-    }
-    if (applyShake && layer.type === 'camera' && layer.animation.shake?.amount) {
-      const amount = Math.max(0, Math.min(8, layer.animation.shake.amount))
-      const frequency = Math.max(.1, Math.min(30, layer.animation.shake.frequency))
-      const sceneSeconds = time * scene.duration
-      const timing = getSceneLayerTiming(layer)
-      const elapsed = Math.max(0, sceneSeconds - timing.offset) * timing.speed
-      if (sceneSeconds >= timing.offset && (timing.loop || elapsed <= timing.span)) {
-        const localTime = sceneTimeToLayerTime(layer, sceneSeconds)
-        const shakeStart = layer.animation.shake.startTime ?? timing.trimStart
-        const shakeEnd = layer.animation.shake.endTime ?? timing.trimEnd
-        if (localTime < shakeStart || localTime > shakeEnd) return state
-        const localElapsed = localTime - shakeStart
-        const phase = localElapsed * frequency * Math.PI * 2 + (layer.animation.shake.seed ?? 0)
-        state = { ...state, x: state.x + Math.sin(phase) * amount, y: state.y + Math.sin(phase * 1.37 + 1.2) * amount * .65, rotation: state.rotation + Math.sin(phase * .73 + .4) * amount * .35 }
-      }
-    }
-    return state
-  }
-  const renderedLayerStates = (layer: AnimatorLayer, time = progress) => {
-    const orbitCount = layer.animation.orbit ? Math.round(boundedNumber(layer.animation.orbit.count, 1, 1, 12)) : 1
-    const offsets = stripOffsets(layer, time * sceneRef.current.duration)
-    const instances: LayerState[] = []
-    for (let orbitIndex = 0; orbitIndex < orbitCount; orbitIndex += 1) {
-      const orbit = layer.animation.orbit
-      const instanceLayer = orbit && orbitCount > 1 ? { ...layer, animation: { ...layer.animation, orbit: { ...orbit, phase: orbit.phase + orbitIndex * 360 / orbitCount } } } : layer
-      let orbitState = layerState(instanceLayer, time)
-      if (layer.type === 'model3d' && layer.animation.spin) {
-        const timing = getSceneLayerTiming(layer)
-        const localSeconds = sceneTimeToLayerTime(layer, time * scene.duration) - timing.trimStart
-        orbitState = { ...orbitState, modelYaw: localSeconds * (layer.animation.rotationSpeed ?? 35) }
-      }
-      for (const offset of offsets) {
-        let state = { ...orbitState, x: orbitState.x + offset.x, y: orbitState.y + offset.y }
-        if (orbit && orbit.facing && orbit.facing !== 'fixed') {
-          const target = scene.layers.find(item => item.id === orbit.targetLayerId)
-          if (target && isVisualLayer(target)) {
-            const targetState = layerState(target, time)
-            const centerX = targetState.x + (orbit.centerOffsetX ?? 0)
-            const centerY = targetState.y + (orbit.centerOffsetY ?? 0)
-            const angle = Math.atan2((centerY - state.y) * scene.height, (centerX - state.x) * scene.width) * 180 / Math.PI
-            const facingAngle = angle + (orbit.facing === 'outward' ? 180 : 0)
-            state = layer.type === 'model3d'
-              ? { ...state, modelYaw: facingAngle }
-              : { ...state, rotation: facingAngle }
-          }
-        }
-        instances.push(applyCameraTransform(state, layer, time))
-      }
-    }
-    // Each 3D copy is a live WebGL context. orbit(12) × strip(12) = 144
-    // viewers, which locks the GPU and can freeze the host.
-    const cap = layer.type === 'model3d' ? 4 : 24
-    return instances.slice(0, cap)
-  }
-  const seamCoverStates = (layer: AnimatorLayer, time = progress) => {
-    const strip = normalizedStrip(layer.strip)
-    if (!strip.enabled || !strip.seamOccluder.enabled) return []
-    const offsets = stripOffsets({ ...layer, strip: { ...strip, phase: strip.phase + strip.spacing / 2 } }, time * sceneRef.current.duration)
-    const base = layerState(layer, time)
-    return offsets.map(offset => applyCameraTransform({
-      ...base,
-      x: base.x + offset.x,
-      y: 82,
-      scale: strip.seamOccluder.scale,
-      opacity: Math.min(1, base.opacity * strip.seamOccluder.opacity),
-    }, layer, time))
-  }
+  const evaluator = createSceneEvaluator(scene)
+  const applyCameraTransform = evaluator.applyCameraTransform
+  const activeCameraLayer = evaluator.activeCameraLayer
+  const cameraState = evaluator.cameraState
+  const layerState = (layer: AnimatorLayer, time = progress, visited?: Set<string>, applyShake = true) => evaluator.layerState(layer, time, visited, applyShake)
+  const renderedLayerStates = (layer: AnimatorLayer, time = progress) => evaluator.renderedLayerStates(layer, time)
+  const seamCoverStates = (layer: AnimatorLayer, time = progress) => evaluator.seamCoverStates(layer, time)
   const moveLayerZ = (id: string, direction: 1 | -1) => updateScene(current => {
     const layers = normalizeZ(current.layers)
     const moving = layers.find(layer => layer.id === id)
@@ -1692,88 +1325,7 @@ export function SceneAnimatorPanel() {
   const importScene = (text: string, successMessage?: string): boolean => {
     try {
       const incoming = parseSceneFile(text) as AnimatorScene
-      const incomingIds = incoming.layers.map((layer, index) => {
-        const id = (layer as { id?: unknown } | null)?.id
-        if (typeof id !== 'string' || !id.trim()) throw new Error(`Layer ${index + 1} needs a valid id.`)
-        return id
-      })
-      if (new Set(incomingIds).size !== incomingIds.length) throw new Error('Every scene layer must have a unique id.')
-      const width = Math.round(boundedNumber(incoming.width, 1280, 64, 7680))
-      const height = Math.round(boundedNumber(incoming.height, 720, 64, 7680))
-      const incomingVisualIds = new Set(incoming.layers.filter(layer => layer && layer.type !== 'camera').map(layer => layer.id))
-      const activeCameraId = [...incoming.layers]
-        .filter(layer => layer.type === 'camera' && layer.visible)
-        .sort((a, b) => (b.z ?? 0) - (a.z ?? 0))[0]?.id
-      const normalizedLayers = normalizeZ(incoming.layers.map(rawLayer => {
-        if (!isAnimatorLayerType((rawLayer as { type?: unknown }).type)) throw new Error(`Unsupported scene layer type: ${String((rawLayer as { type?: unknown }).type ?? 'missing')}`)
-        const isCamera = rawLayer.type === 'camera'
-        const isModel = rawLayer.type === 'model3d'
-        const isEffect = rawLayer.type === 'effect'
-        const transform = {
-          ...rawLayer.transform,
-          x: finiteNumber(rawLayer.transform?.x, 50),
-          y: finiteNumber(rawLayer.transform?.y, 50),
-          scale: boundedNumber(rawLayer.transform?.scale, 1, .01, 20),
-          opacity: boundedNumber(rawLayer.transform?.opacity, 1, 0, 1),
-          rotation: finiteNumber(rawLayer.transform?.rotation, 0),
-          rotationX: boundedNumber(rawLayer.transform?.rotationX, 75, 1, 179),
-          rotationY: finiteNumber(rawLayer.transform?.rotationY, 0),
-        }
-        const start = { x: finiteNumber(rawLayer.animation?.start?.x, transform.x), y: finiteNumber(rawLayer.animation?.start?.y, transform.y), scale: boundedNumber(rawLayer.animation?.start?.scale, transform.scale, .01, 20), opacity: boundedNumber(rawLayer.animation?.start?.opacity, transform.opacity, 0, 1), rotation: finiteNumber(rawLayer.animation?.start?.rotation, transform.rotation) }
-        const end = { x: finiteNumber(rawLayer.animation?.end?.x, transform.x), y: finiteNumber(rawLayer.animation?.end?.y, transform.y), scale: boundedNumber(rawLayer.animation?.end?.scale, transform.scale, .01, 20), opacity: boundedNumber(rawLayer.animation?.end?.opacity, transform.opacity, 0, 1), rotation: finiteNumber(rawLayer.animation?.end?.rotation, transform.rotation) }
-        const visible = isCamera ? rawLayer.id === activeCameraId : rawLayer.visible !== false
-        const rawRelationship = rawLayer.relationship
-        const relationshipTypes = ['parent', 'follow', 'lookAt']
-        const relationship = rawRelationship && relationshipTypes.includes(rawRelationship.type) && (!isCamera || rawRelationship.type === 'follow') && rawRelationship.targetLayerId !== rawLayer.id && incomingVisualIds.has(rawRelationship.targetLayerId) ? {
-          type: rawRelationship.type,
-          targetLayerId: rawRelationship.targetLayerId,
-          offsetX: Number.isFinite(rawRelationship.offsetX) ? rawRelationship.offsetX : 0,
-          offsetY: Number.isFinite(rawRelationship.offsetY) ? rawRelationship.offsetY : 0,
-          strength: Number.isFinite(rawRelationship.strength) ? Math.max(0, Math.min(1, rawRelationship.strength ?? 1)) : 1,
-          rotationOffset: Number.isFinite(rawRelationship.rotationOffset) ? rawRelationship.rotationOffset : 0,
-        } as AnimatorLayer['relationship'] : undefined
-        const rawShake = rawLayer.animation?.shake
-        const shake = isCamera && rawShake && Number.isFinite(rawShake.amount) && Number.isFinite(rawShake.frequency) ? { amount: Math.max(0, Math.min(8, rawShake.amount)), frequency: Math.max(.1, Math.min(30, rawShake.frequency)), seed: Number.isFinite(rawShake.seed) ? rawShake.seed : 0, startTime: typeof rawShake.startTime === 'number' && Number.isFinite(rawShake.startTime) ? Math.max(0, Math.min(3600, rawShake.startTime)) : undefined, endTime: typeof rawShake.endTime === 'number' && Number.isFinite(rawShake.endTime) ? Math.max(0, Math.min(3600, rawShake.endTime)) : undefined } : undefined
-        const rawOrbit = rawLayer.animation?.orbit
-        const orbit = !isCamera && rawOrbit && rawOrbit.targetLayerId !== rawLayer.id && incomingVisualIds.has(rawOrbit.targetLayerId) ? {
-          targetLayerId: rawOrbit.targetLayerId,
-          radiusX: boundedNumber(rawOrbit.radiusX, 18, 0, 100),
-          radiusY: boundedNumber(rawOrbit.radiusY, 9, 0, 100),
-          turns: boundedNumber(rawOrbit.turns, 1, -20, 20),
-          phase: boundedNumber(rawOrbit.phase, 0, -360, 360),
-          count: Math.round(boundedNumber(rawOrbit.count, 1, 1, 12)),
-          facing: ['fixed', 'center', 'outward'].includes(rawOrbit.facing ?? '') ? rawOrbit.facing as 'fixed' | 'center' | 'outward' : 'fixed',
-          centerOffsetX: boundedNumber(rawOrbit.centerOffsetX, 0, -100, 100),
-          centerOffsetY: boundedNumber(rawOrbit.centerOffsetY, 0, -100, 100),
-        } : undefined
-        const duration = boundedNumber(rawLayer.animation?.duration, finiteNumber(incoming.duration, 5), .1, 3600)
-        const curve: SceneCurve = ['linear', 'ease', 'dramatic', 'bounce', 'hold'].includes(rawLayer.animation?.curve ?? '') ? rawLayer.animation.curve : 'linear'
-        const events = normalizeSceneEvents(rawLayer.animation?.events, duration, rawLayer.id)
-        const clip = isModel && typeof rawLayer.animation?.clip === 'string' && rawLayer.animation.clip.trim() ? rawLayer.animation.clip.trim().slice(0, 200) : undefined
-        const clipOffset = isModel ? boundedNumber(rawLayer.animation?.clipOffset, 0, 0, 3600) : undefined
-        const clipSpeed = isModel ? boundedNumber(rawLayer.animation?.clipSpeed, 1, .05, 8) : undefined
-        const clipTrimStart = isModel ? boundedNumber(rawLayer.animation?.clipTrimStart, 0, 0, 3600) : undefined
-        const clipTrimEnd = isModel && typeof rawLayer.animation?.clipTrimEnd === 'number' && Number.isFinite(rawLayer.animation.clipTrimEnd) ? Math.max((clipTrimStart ?? 0) + .001, Math.min(3600, rawLayer.animation.clipTrimEnd)) : undefined
-        const layer = {
-          ...rawLayer,
-          name: typeof rawLayer.name === 'string' && rawLayer.name.trim() ? rawLayer.name : `Layer ${rawLayer.id}`,
-          source: isCamera ? '' : String(rawLayer.source ?? ''),
-          visible,
-          locked: rawLayer.locked === true,
-          faceBinding: normalizeFaceBinding(rawLayer.faceBinding),
-          relationship,
-          effects: isCamera ? undefined : normalizedEffects(rawLayer.effects),
-          strip: isCamera ? undefined : normalizedStrip(rawLayer.strip),
-          atmosphere: isEffect ? normalizedAtmosphere(rawLayer.atmosphere) : undefined,
-          parallax: isCamera ? undefined : typeof rawLayer.parallax === 'number' && Number.isFinite(rawLayer.parallax) ? Math.max(0, Math.min(2, rawLayer.parallax)) : 1,
-          transform,
-          animation: { ...rawLayer.animation, start, end, keyframes: undefined, events, duration, curve, clip, clipOffset, clipSpeed, clipReverse: isModel ? rawLayer.animation?.clipReverse === true : undefined, clipLoop: isModel ? rawLayer.animation?.clipLoop !== false : undefined, clipTrimStart, clipTrimEnd, shake, orbit },
-          missingAsset: isCamera || isEffect ? false : Boolean(rawLayer.missingAsset || !String(rawLayer.source ?? '').trim() || isMissing(String(rawLayer.source ?? ''))),
-        } as AnimatorLayer
-        const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
-        const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
-        return keyframes ? withSceneKeyframes(timedLayer, keyframes, timedLayer.animation.duration) as AnimatorLayer : timedLayer
-      }))
+      const { width, height, layers: normalizedLayers } = normalizeScene2DLayers(incoming, isMissing)
       const layers = syncSceneCharacterKits(breakDependencyCycles(normalizedLayers), characterKitLibraryRef.current, { width, height }) as AnimatorLayer[]
       const duration = Math.min(3600, Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed })))
       const incomingComposition = incoming.composition as Partial<NonNullable<Scene['composition']>> | undefined
@@ -1856,64 +1408,12 @@ export function SceneAnimatorPanel() {
     // Rebind when history changes so keyboard state and buttons stay aligned.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyRevision])
-  const paintScene = (canvas: HTMLCanvasElement, progress: number, exportModelCanvases?: Map<string, HTMLCanvasElement[]>) => {
-    const current = sceneRef.current
-    const sceneProgress = Math.max(0, Math.min(1, progress))
-    const sceneSeconds = sceneProgress * current.duration
-    const context = canvas.getContext('2d')
-    if (!context) return false
-    context.fillStyle = '#0b1020'; context.fillRect(0, 0, canvas.width, canvas.height)
-    current.layers
-      .filter(layer => layer.visible && isVisualLayer(layer))
-      .flatMap(layer => renderedLayerStates(layer, sceneProgress).map((state, instanceIndex) => ({ layer, state, instanceIndex })))
-      .sort((a, b) => a.state.z - b.state.z)
-      .forEach(({ layer, state, instanceIndex }) => {
-      const effects = normalizedEffects(layer.effects)
-      context.save(); context.globalAlpha = state.opacity
-      context.globalCompositeOperation = effects.blendMode === 'normal' ? 'source-over' : effects.blendMode
-      if ('filter' in context) context.filter = effectFilter(effects, Math.min(canvas.width, canvas.height) / 100)
-      const width = canvas.width * (layer.type === 'model3d' ? .52 : 1) * state.scale
-      const height = canvas.height * (layer.type === 'model3d' ? .75 : 1) * state.scale
-      context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100); context.rotate(state.rotation * Math.PI / 180)
-      applyLayerMask(context, effects, width, height)
-      if (layer.type === 'effect') {
-        drawAtmosphere(context, normalizedAtmosphere(layer.atmosphere), sceneSeconds, width, height)
-      } else if (layer.type === 'model3d') {
-        const viewer = exportModelCanvases?.get(layer.id)?.[instanceIndex]
-          ?? modelViewerCanvas(findLayerElements(canvasRef.current, layer.id)[instanceIndex] ?? null)
-        if (viewer) context.drawImage(viewer, -width / 2, -height / 2, width, height)
-      } else {
-        const media = findLayerElement(canvasRef.current, layer.id) as HTMLVideoElement | HTMLImageElement | null
-        if (media && (media instanceof HTMLVideoElement ? media.readyState >= 2 : media.complete)) {
-          const sourceWidth = media instanceof HTMLVideoElement ? media.videoWidth : media.naturalWidth
-          const sourceHeight = media instanceof HTMLVideoElement ? media.videoHeight : media.naturalHeight
-          const sourceRatio = sourceWidth / Math.max(1, sourceHeight); const targetRatio = width / Math.max(1, height)
-          let drawWidth = width; let drawHeight = height
-          if (!layer.fill) { if (sourceRatio > targetRatio) drawHeight = width / sourceRatio; else drawWidth = height * sourceRatio }
-          else if (sourceRatio > targetRatio) drawWidth = height * sourceRatio; else drawHeight = width / sourceRatio
-          context.beginPath(); context.rect(-width / 2, -height / 2, width, height); context.clip()
-          context.drawImage(media, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
-        }
-      }
-      context.restore()
-    })
-    current.layers
-      .filter(layer => layer.visible && isVisualLayer(layer) && normalizedStrip(layer.strip).seamOccluder.enabled)
-      .forEach(layer => {
-        const kind = normalizedStrip(layer.strip).seamOccluder.kind
-        seamCoverStates(layer, sceneProgress).forEach(state => {
-          context.save()
-          context.globalAlpha = state.opacity
-          context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100)
-          context.rotate(state.rotation * Math.PI / 180)
-          paintSeamOccluder(context, kind, canvas.width, canvas.height, normalizedStrip(layer.strip).seamOccluder.scale)
-          context.restore()
-        })
-      })
-    paintSceneFx(context, canvas.width, canvas.height, sceneSeconds, current.sfx)
-    paintKineticTexts(context, canvas.width, canvas.height, sceneSeconds, current.texts)
-    return true
-  }
+  const paintScene = (canvas: HTMLCanvasElement, progress: number, exportModelCanvases?: Map<string, HTMLCanvasElement[]>) => paintScene2D(
+    canvas, sceneRef.current, progress, createSceneEvaluator(sceneRef.current),
+    (layer, instanceIndex) => layer.type === 'model3d'
+      ? exportModelCanvases?.get(layer.id)?.[instanceIndex] ?? modelViewerCanvas(findLayerElements(canvasRef.current, layer.id)[instanceIndex] ?? null)
+      : findLayerElement(canvasRef.current, layer.id) as HTMLVideoElement | HTMLImageElement | null,
+  )
   const sceneSecondsNow = progress * scene.duration
   const retroLive = (scene.sfx ?? []).some(cue => isRetroLook(cue.kind) && sceneSecondsNow >= cue.start && sceneSecondsNow < cue.end)
   useEffect(() => {
@@ -3102,7 +2602,7 @@ export function SceneAnimatorPanel() {
         {(composition.safeArea === 'vertical' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-y-0 left-1/2 z-[993] -translate-x-1/2 border-x border-dashed border-fuchsia-300/90 bg-fuchsia-400/[.03]" style={{ width: `${verticalSafeWidth}%` }}><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-fuchsia-200">{t('animator.verticalBadge')}</span></div>}
         {retroLive && <canvas ref={retroCanvasRef} data-testid="scene-retro-look" className="pointer-events-none absolute inset-0 z-[896] h-full w-full" aria-hidden="true" />}
         {!retroLive && <SceneFxOverlay cues={scene.sfx} seconds={progress * scene.duration} width={scene.width} height={scene.height} duration={scene.duration} playing={playing} />}
-        {!retroLive && <KineticTextOverlay cues={scene.texts} seconds={progress * scene.duration} width={scene.width} height={scene.height} />}
+        {!retroLive && <KineticTextOverlay cues={scene.texts} lyrics={scene.lyrics} seconds={progress * scene.duration} width={scene.width} height={scene.height} envelope={beatEnvelope(scene.rhythm, progress * scene.duration)} />}
         {activeCamera && <div className="pointer-events-none absolute left-2 top-2 z-[997] flex items-center gap-1 rounded bg-black/55 px-1.5 py-1 text-[8px] text-cyan-200"><Camera size={10} /> {activeCamera.name}</div>}
         {orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}
         {flash && <div className="pointer-events-none absolute z-[999]" style={{ left: `${flash.x}%`, top: `${flash.y}%` }}><span className="absolute -left-6 -top-6 h-12 w-12 rounded-full border-2 border-white/90 animate-ping" /><span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-white shadow-[0_0_20px_8px_rgba(96,165,250,.9)]" /></div>}
@@ -3111,7 +2611,10 @@ export function SceneAnimatorPanel() {
       </div>
       <p className="mt-2 text-[9px] text-text-muted">{t('animator.canvasHelp')}</p>
       <SceneFxControls cues={scene.sfx} duration={scene.duration} disabled={playing || recording || publishing} onChange={sfx => updateScene(current => ({ ...current, sfx }))} onShowcase={collection => updateScene(current => withFxShowcase(current, collection))} />
-      <KineticTextControls cues={scene.texts} duration={scene.duration} disabled={playing || recording || publishing} onChange={texts => updateScene(current => ({ ...current, texts }))} />
+      <KineticTextControls cues={scene.texts} lyrics={scene.lyrics} duration={scene.duration} width={scene.width} height={scene.height} disabled={playing || recording || publishing} onChange={texts => updateScene(current => ({ ...current, texts }))} onLyricsChange={lyrics => updateScene(current => ({ ...current, lyrics }))} />
+      <SceneFinishControls finish={scene.finish} playing={playing} recording={recording} publishing={publishing} onChange={finish => updateScene(current => ({ ...current, finish }))} />
+      <SceneFinalPreview scene={scene} seconds={progress * scene.duration} />
+      <SceneMotionControls layer={selected} playing={playing} recording={recording} publishing={publishing} onPath={path => { if (selected) updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, path } })) }} onSequence={sequence => { if (selected) updateLayer(selected.id, layer => ({ ...layer, sequence })) }} />
       <SceneTimeline
         layers={scene.layers}
         duration={scene.duration}
@@ -3196,6 +2699,7 @@ export function SceneAnimatorPanel() {
           </div>
           <label className="block text-[8px] text-text-muted">{t('animator.intensityPercent', { percent: Math.round(rhythmIntensity * 100) })}<input type="range" min="0" max="1" step="0.05" value={rhythmIntensity} onChange={event => setRhythmIntensity(Number(event.target.value))} className="mt-0.5 w-full accent-violet-400" /></label>
           <button type="button" disabled={!activeRhythmAnalysis || !selected || selected.locked || rhythmBusy || playing || recording || publishing} onClick={applySceneRhythm} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{selected?.name ? t('animator.applyToLayer', { name: selected.name }) : t('animator.applyToSelected')}</button>
+          <LiveRhythmStore analysis={activeRhythmAnalysis} track={selectedRhythmTrack} duration={scene.duration} playing={playing} recording={recording} publishing={publishing} rhythmBusy={rhythmBusy} onChange={rhythm => updateScene(current => ({ ...current, rhythm }))} />
           <p className="text-[7px] leading-relaxed text-text-muted">{t('animator.rhythmHelp')}</p>
         </div>}
         {rhythmError && <p className="text-[8px] text-red-300">{rhythmError}</p>}

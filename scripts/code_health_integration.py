@@ -64,7 +64,7 @@ def measurement_manifest(source: str) -> str:
 
 
 def release_chain(base: str, head: str) -> list[str]:
-    """Require complete history and a release tree identical to its fork point."""
+    """Verify development history, including a main sync through a second parent."""
     if not all(re.fullmatch(r"[0-9a-f]{40}", sha) for sha in (base, head)):
         raise ValueError("Release base/head must be exact commit SHAs")
     if git("rev-parse", "--is-shallow-repository") != "false":
@@ -79,13 +79,24 @@ def release_chain(base: str, head: str) -> list[str]:
         raise ValueError("Commit candidate changes before verifying release history")
     commits = git("rev-list", "--first-parent", "--reverse", f"{common}..{head}").splitlines()
     previous = common
+    checkpoints = [base]
+    if commits:
+        previous = git("rev-parse", f"{commits[0]}^1")
+        if previous != common:
+            # A main -> development sync makes main the merge-base without
+            # putting it on development's first-parent chain. Keep the actual
+            # fork checkpoint so its first feature still gets its full budget
+            # check, rather than comparing that feature with a newer main tree.
+            if not re.fullmatch(r"[0-9a-f]{40}", previous) or git("merge-base", previous, common) != previous:
+                raise ValueError("Integration history has a gap before its first-parent chain")
+            checkpoints.append(previous)
     for commit in commits:
         if git("rev-parse", f"{commit}^1") != previous:
             raise ValueError("Integration history has a gap in its first-parent chain")
         previous = commit
     if previous != head:
         raise ValueError("Integration history does not reach the requested HEAD")
-    return [base, *commits]
+    return [*checkpoints, *commits]
 
 
 def read_trees(chain: list[str]) -> tuple[list[dict[str, str]], dict[str, str]]:
@@ -246,7 +257,7 @@ def main() -> int:
         return 2
     print(health._markdown_report(current, baseline, warnings, failures, score_baseline_label="PR base"), end="")
     print("\n### Release integration budgets\n")
-    print(f"Base `{args.base}` → source HEAD `{args.head}`; **{len(chain) - 1} verified first-parent transitions**.")
+    print(f"Base `{args.base}` → source HEAD `{args.head}`; **{len(chain) - 1} verified checkpoint transitions**.")
     print("LOC and complex-function growth use the unchanged budget at every transition. "
           "All other limits compare the complete current tree with the release base. "
           "The cumulative deltas above remain visible; no baseline or exception is changed.")

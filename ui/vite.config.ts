@@ -10,6 +10,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': apiTarget,
+      '/examples': apiTarget,
       '/classic': apiTarget,
     },
   },
@@ -23,7 +24,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: { index: 'index.html', world3d: 'world3d-render.html' },
+      input: { index: 'index.html', world3d: 'world3d-render.html', scene2d: 'scene2d-render.html' },
       output: {
         manualChunks(id) {
           if (

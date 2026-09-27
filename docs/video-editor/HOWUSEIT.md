@@ -28,7 +28,7 @@ Use the editor when you need an **editable cut** (trim, split, time cards, lette
 2. **Sources** must be `.mp4`, `.webm`, `.mov`, `.mkv`, `.avi`, or `.m4v` inside a permitted workspace/uploads path.
 3. **Strip `?workspace=`** before probe/export. Gallery URLs look like `/api/v1/file/clip.mp4?workspace=default`. The filename-with-query does not exist on disk. UI helper: `editorSourcePath()` in `ui/src/features/video-editor/editorHandoff.ts`. Server helper: `parse_media_ref()` in `app/services/media_refs.py`.
 4. **Min trim / split span is 0.05 s.** Transition duration 0.05–5 s. Time-card text size 50–160. Time-card copy is normalised to max 240 characters.
-5. **Timeline edit is UI-only.** Drafts live in `localStorage` key `maestro-video-editor-draft-v1`. The server only sees probe, thumbnail, screenshot, and export.
+5. **Drafts are UI-only; montages are not.** Drafts live in `localStorage` key `maestro-video-editor-draft-v1`. Save a timeline (with timed captions and audio cues) as a workspace montage to keep it editable and reachable by agents: see [Editable montages](MONTAGES.md).
 6. **Cancel is deferred.** `POST .../export/{job_id}/cancel` waits until the current FFmpeg subprocess finishes (`cancel_mode: deferred`, `safe_boundary: after_current_ffmpeg_render`).
 7. **Upload cap is 500 MB** (`POST /api/v1/upload`).
 8. **Mix soft-join is skipped** when an external driving audio file is supplied to `concatenate_multi_clip_videos`. Failure falls back to a hard concat.

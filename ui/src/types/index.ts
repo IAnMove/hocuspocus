@@ -477,11 +477,14 @@ export interface SceneLayer {
     size: number
     wind: number
     color: string
+    emitter?: import('../lib/scene2d/motion').AtmosphereEmitter
   }
   /** Camera-pan multiplier: 0 ignores camera pan, 1 follows it normally,
    *  and values above 1 create foreground parallax. Camera zoom/roll still
    *  affect every visual layer. Ignored by camera layers. */
   parallax?: number
+  beatPulse?: { amount: number; on: 'beats' | 'downbeats' }
+  sequence?: import('../lib/scene2d/motion').FrameSequence
   /** Author-confirmed horizontal continuity. Enables safe loop/cylinder tools;
    * this is never inferred from an arbitrary filename at export time. */
   seamlessHorizontal?: boolean
@@ -545,6 +548,7 @@ export interface SceneLayer {
     end: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
     /** Multi-keyframe timeline. Older scenes continue to use start/end. */
     keyframes?: SceneKeyframe[]
+    path?: import('../lib/scene2d/motion').ScenePath
     /** Metadata markers only; Maestro does not execute them during browser capture. */
     events?: SceneAnimationEvent[]
     duration: number
@@ -599,6 +603,9 @@ export interface SceneLayer {
 export interface Scene {
   sfx?: import('../features/sceneFx/types').SceneFx[]
   texts?: import('../lib/kineticText').KineticText[]
+  lyrics?: import('../lib/kineticText').SceneLyrics
+  finish?: import('../lib/scene2d/finish').SceneFinish
+  rhythm?: import('../lib/scene2d/motion').SceneRhythm
   version: 1
   name: string
   /** Recipe asset-job restriction, retained through save/reload. Not a global
@@ -1362,7 +1369,7 @@ export interface SystemStats {
   model: { name: string | null; model_type: string | null; loaded: boolean }
   /** Changes when Maestro restarts or a different React build is deployed.
    *  The client uses it to avoid running a stale bundle indefinitely. */
-  runtime?: { instance_id: string; ui_build_id: string }
+  runtime?: { instance_id: string; ui_build_id: string; commit?: string; ui_commit?: string }
 }
 
 export interface LlmModelOption {

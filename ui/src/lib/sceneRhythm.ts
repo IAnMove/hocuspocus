@@ -122,6 +122,11 @@ const restFrame = (layer: SceneLayer, time: number, suffix: string) => rhythmFra
  * Bake the layer's current motion plus beat reactions into ordinary editable
  * keyframes. Preview, capture and exported scene JSON therefore share exactly
  * the same deterministic animation path.
+ *
+ * That bake is separate from live modulation. Live modulation stores
+ * `scene.rhythm` (bpm, beats, optional energy) and lets texts, lyrics, finish
+ * and `layer.beatPulse` scale from those marks at paint time. The headless
+ * renderer reads the stored field. It does not analyze audio again.
  */
 export const applySceneRhythmToLayer = (
   layer: SceneLayer,

@@ -9,7 +9,8 @@ from services.series_library import (
     normalize_series_project, series_for_episode_snapshot,
 )
 from services.series_production import (
-    attach_series_import, normalize_production_methods, refresh_episode_references, series_shot_method,
+    attach_series_import, is_series_generated_shot, normalize_production_methods,
+    refresh_episode_references, series_shot_method,
 )
 from services.series_reference_router import route_shot_references
 from services.series_render import apply_series_shot_duration
@@ -29,6 +30,17 @@ def test_production_permissions_persist_and_do_not_silently_allow_other_methods(
     assert series_shot_method(saved, {}) == 'animation_2d'
     with pytest.raises(ValueError, match='not permitted'):
         series_shot_method(saved, {'productionMethod': 'generated_video', 'order': 1})
+    assert is_series_generated_shot(saved, {}) is False
+    assert is_series_generated_shot(
+        {'allowedProductionMethods': ['generated_video']}, {'productionMethod': 'imported_video'}
+    ) is False
+    assert is_series_generated_shot(
+        {'allowedProductionMethods': ['generated_video']}, {'productionMethod': 'generated_video'}
+    ) is True
+    episode = next(iter(saved['episodesById'].values()))
+    episode['shots'][0].pop('productionMethod', None)
+    persisted = normalize_series_project(saved, saved['id'], 'default')
+    assert persisted['episodesById'][episode['id']]['shots'][0]['productionMethod'] == 'animation_2d'
     for invalid in ([], ['unknown'], 'animation_2d'):
         with pytest.raises(ValueError):
             normalize_production_methods(invalid)

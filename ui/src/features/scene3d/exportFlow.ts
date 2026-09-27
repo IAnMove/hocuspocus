@@ -1,6 +1,6 @@
 import { paintSceneFx } from '../sceneFx/paint'
 import { sceneAudioWav, supportsSceneAac } from '../sceneFx/audioExport'
-import { paintKineticTexts } from '../../lib/kineticText.ts'
+import { ensureTextFonts, paintKineticTexts, paintSceneLyrics } from '../../lib/kineticText.ts'
 import { mixSceneSpeech } from './speech/audio'
 import { scene3dOutputDuration, scene3dPlaybackSpeed } from './clock.ts'
 import { scene3dCopy } from './copy.ts'
@@ -42,6 +42,7 @@ export async function exportWorld3DDocument(
     throwIfAborted(signal)
     await waitForWorld3DAssets(handle, snapshot, 25000, signal)
     throwIfAborted(signal)
+    await ensureTextFonts(snapshot.texts)
     const audio = await mixSceneSpeech(snapshot)
     throwIfAborted(signal)
     const serverAudio = audio && !(await supportsSceneAac(audio.numberOfChannels >= 2 ? 2 : 1)) ? sceneAudioWav(audio) : undefined
@@ -60,6 +61,7 @@ export async function exportWorld3DDocument(
       overlay: (context, width, height, seconds) => {
         paintSceneFx(context, width, height, seconds * scene3dPlaybackSpeed(snapshot.playbackSpeed), snapshot.sfx)
         paintKineticTexts(context, width, height, seconds * scene3dPlaybackSpeed(snapshot.playbackSpeed), snapshot.texts)
+        paintSceneLyrics(context, width, height, seconds * scene3dPlaybackSpeed(snapshot.playbackSpeed), snapshot.lyrics)
         paintClipNumber(context, width, height, snapshot.clipNumber)
       },
       onProgress,

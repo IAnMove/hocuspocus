@@ -1,6 +1,8 @@
 import json
 import time
 
+import pytest
+
 from routers.quick_video_batches import (
     _EXECUTION_LOCK,
     QuickVideoBatchActionRequest,
@@ -358,3 +360,47 @@ def test_stale_cancelling_batch_does_not_resume_after_restart(tmp_path):
     assert started == []
     time.sleep(0.1)
     assert started == []
+
+
+def test_atomic_save_retries_windows_sharing_violation(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from routers import quick_video_batches as batches
+    import json
+    import os
+
+    destination = tmp_path / "batch.json"
+    destination.write_text('{"status":"running"}')
+    calls, sleeps = [], []
+    def replace(source, target):
+        calls.append(source)
+        if len(calls) < 3:
+            assert json.loads(destination.read_text())["status"] == "running"
+            raise PermissionError("reader still open")
+        os.replace(source, target)
+    monkeypatch.setattr(batches, "os", SimpleNamespace(**{**vars(os), "name": "nt", "replace": replace}))
+    monkeypatch.setattr(batches.time, "sleep", sleeps.append)
+    batches._atomic_write(str(destination), {"status": "completed"})
+    assert len(calls) == 3 and sleeps == [0.05, 0.05]
+    assert json.loads(destination.read_text()) == {"status": "completed"}
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+@pytest.mark.parametrize("platform, expected_attempts", [("nt", 20), ("posix", 1)])
+def test_atomic_save_failure_preserves_old_file_and_cleans_temp(tmp_path, monkeypatch, platform, expected_attempts):
+    from types import SimpleNamespace
+    from routers import quick_video_batches as batches
+    import os
+
+    destination = tmp_path / "batch.json"
+    destination.write_text('{"status":"running"}')
+    calls, sleeps = [], []
+    def replace(source, target):
+        calls.append(source)
+        raise PermissionError("still locked")
+    monkeypatch.setattr(batches, "os", SimpleNamespace(**{**vars(os), "name": platform, "replace": replace}))
+    monkeypatch.setattr(batches.time, "sleep", sleeps.append)
+    with pytest.raises(PermissionError):
+        batches._atomic_write(str(destination), {"status": "completed"})
+    assert len(calls) == expected_attempts and len(sleeps) == expected_attempts - 1
+    assert destination.read_text() == '{"status":"running"}'
+    assert list(tmp_path.glob("*.tmp")) == []

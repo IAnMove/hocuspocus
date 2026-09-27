@@ -1,0 +1,20 @@
+{
+  "width": 640,
+  "height": 360,
+  "fps": 30,
+  "seconds": [
+    "0.2",
+    "1.2",
+    "3.6"
+  ],
+  "hashes": {
+    "0.2": "f86db845f4260b74d5bb76f269ff42a56536c213ca8c9647e2a2685ae5b628a8",
+    "1.2": "235f3a36e242789238cf291f75aa542d4cb6728a8820dccc0e6ac4a911174441",
+    "3.6": "6049f5eabdfee506306306e7b78c91cad85ee53aa6907e7def4d433bc4d00928"
+  },
+  "tolerance": {
+    "maxChangedRatio": 0,
+    "channelEpsilon": 2,
+    "note": "Exact SHA-256 of the PNG bytes from the headless canvas. Two paints of the same second on one machine must match. If antialiasing makes them differ, a sample counts as changed when any channel differs by more than channelEpsilon; maxChangedRatio is the allowed fraction of RGBA samples."
+  }
+}

@@ -4,7 +4,7 @@ A local studio for turning an idea into a production: story, pictures, clips, co
 
 HocusPocus is an experimental, **non-commercial** fork of [Blizaine/Maestro](https://github.com/Blizaine/Maestro) by [Blaine Brown](https://github.com/Blizaine) ([@blizaine](https://x.com/blizaine)). Maestro already did the hard part: a serious local generation stack on [Wan2GP](https://github.com/deepbeepmeep/Wan2GP). We keep that foundation and add the missing production layer — a world that can be planned, directed, recovered and revised without starting from zero.
 
-The **HocusPocus** mark is a quill shaping a cube: imagination becoming a buildable world. The UI is English and Spanish.
+The **HocusPocus** mark is a quill shaping a cube: imagination becoming a buildable world. New installations start in English. Switch to Spanish in Settings; an explicitly saved language choice is preserved.
 
 Open **Help / Ayuda** next to Settings for the in-app tutorial, with screenshots of the layout, generation, studios and queue. Its ES/EN selector changes the UI language. Use Tab and Shift+Tab to navigate the dialog; Escape closes it and returns focus to Help.
 
@@ -44,9 +44,15 @@ Selected images (single inputs, batch inputs and image references) show a small 
 
 **Example — trailer without a song.** In **Story Lab** create a *Tráiler cinematográfico*. You get a 6–12 beat theatrical arc (cold open → unresolved hook), then generate 15–180 seconds as text-to-video or from approved frames.
 
+### Optional example media
+
+The initial installation does not include example media. **Video 3D → Shot library** keeps all advanced shot types and all 57 Pixel worlds in the main catalog (243 templates). Only 45 additional looks from eight repeated example families live under **Examples and variants**. Template availability is independent of whether its optional media is installed. Choose a collection and press **Download** after checking its size. Browsing does not download media. Downloads support progress, cancellation and offline reuse in `app/cache/examples/`; saved projects keep their existing example references. You can remove this cache while HocusPocus is stopped to reclaim space. See [optional collections](docs/development/OPTIONAL_EXAMPLES.md) for details.
+
+See [example distribution](docs/development/OPTIONAL_EXAMPLES.md) for the pinned source, integrity checks and lightweight installation options.
+
 ### Build a world once, reuse it everywhere
 
-**Story Lab** is the production bible: premise, world rules, locations, cast, relationships, beats. Approve fields, then hand the canon to Comics, Director, trailers or videoclips. Export a `.storypack` when you want to move the project.
+**Story Lab** is the production bible: premise, world rules, locations, cast, relationships, beats. Approve fields, then hand the canon to Comics, Director, trailers or videoclips. Export a `.storypack` when you want to move the project. **Add reference** opens a dialog with **From my computer** and **From HocusPocus** choices, so it stays accessible from long character and location cards. Closing the dialog cancels pending attachment; existing references remain.
 
 **Example.** Approve a desert city, three characters and a logline. Open **Productions → Comic** for a 4-page chapter that does not retell the whole plot. Open **Short Film → Story** with the same canon and the same identity images. The writing model stays the one you picked on the story, not a silent global default.
 
@@ -191,7 +197,7 @@ Every step can also start from an existing image, video, audio file or GLB.
 | 12–16 GB | auto-tune offloads; slower |
 | 6–8 GB | works with heavy offload; keep clips short |
 
-AMD GPUs and macOS are **not** supported (CUDA kernels). First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D compiles native extensions: on Windows you want CUDA Toolkit and Visual Studio Build Tools.
+AMD GPUs and macOS are **not** supported (CUDA kernels). First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Install/Update selects a compatible MSVC toolset, or skips this optional engine with setup instructions while installing the main app. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
 
 For Windows Hunyuan3D, use **CUDA Toolkit 12.8** and a compatible x64 MSVC
 toolset: VS 2022 v143 (14.3x/14.4x) or VS 2019 v142, with a Windows SDK.
@@ -212,7 +218,7 @@ This does not add macOS/MPS support or hide features inside the studio UI.
 2. Discover → paste `https://github.com/IAnMove/hocuspocus`, or download from this repo.
 3. **Install**, then **Start**. The first job on each model fetches its weights.
 
-Pinokio **Install** and **Update** share Windows/Linux recipes with separate Python environments and pinned dependencies per engine. Update also rebuilds the UI. SAM (Inpaint) and UniRig are optional menu installs; UniRig currently has a Linux recipe. See [runtime profiles and recovery](docs/development/RUNTIME_PROFILES.md).
+Pinokio **Install** and **Update** share Windows/Linux recipes with separate Python environments and pinned dependencies per engine. Update also rebuilds the UI. SAM (Inpaint) and UniRig are optional menu installs; UniRig currently has a Linux recipe. See [runtime profiles and recovery](docs/development/RUNTIME_PROFILES.md). Windows WanGP pins xformers 0.0.31.post1 and Flash Attention 2.7.4.post1 (with a SHA-256 pinned wheel) for the Torch 2.7.1 / CUDA 12.8 environment.
 
 **Start** verifies and repairs the React build before loading the backend. For a missing or incomplete interface, stop Start, use **Repair Web UI**, then Start again; models are preserved. Startup logs show the app version, commit, OS and React build ID for bug reports. See [React recovery and manual commands](docs/development/REACT_INSTALLATION.md).
 
@@ -313,13 +319,13 @@ Bugs and requests: [github.com/IAnMove/hocuspocus/issues](https://github.com/IAn
 
 ### Creative and Dark Fantasy perspective templates
 
-In **Studios → Video 3D → Shot library**, **Perspectives** adds 20 new vertical scenes with a [clip review page](ui/public/examples/perspective-lab/README.md). **Creative** now offers 50 vertical scenes ranging from neon streets and paper landscapes to orbital gardens and ceramic architecture. **Dark Fantasy** offers 60 more: ten landscape compositions, ten vertical scenes, ten PSX variants, twenty layered worlds with animated landscapes, and eight fixed-camera studies. Play and rate the new colossi, ruins, forests and oceans in the [Living Dark Fantasy gallery](ui/public/examples/dark-worlds/README.md). These editable 2.5D scenes use grounded image characters with gentle camera movement or a fixed viewpoint. The fixed-camera set includes six new characters and an eight-second wounded-knight study whose poses hold and jump while the environment flows. Play and rate it in the [Time Has Weight gallery](ui/public/examples/dark-stillness/README.md). **PSX** includes selective treatments of characters, props or backgrounds; each image layer can keep its own style. Edit depth, contact shadows, tint, camera movement, spatial effects and the floor projected from the backdrop, then render with the native compositor. See the [Creative guide](ui/public/examples/creative/README.md) and [Dark Fantasy guide](ui/public/examples/dark-fantasy/README.md) for editing and sharing.
+In **Studios → Video 3D → Shot library**, **Perspectives** adds 20 new vertical scenes with a [clip review page](docs/examples/perspective-lab/README.md). **Creative** offers vertical scenes and additional example variants ranging from neon streets and paper landscapes to orbital gardens and ceramic architecture. **Dark Fantasy** offers 60 more: ten landscape compositions, ten vertical scenes, ten PSX variants, twenty layered worlds with animated landscapes, and eight fixed-camera studies. Play and rate the new colossi, ruins, forests and oceans in the [Living Dark Fantasy gallery](docs/examples/dark-worlds/README.md). These editable 2.5D scenes use grounded image characters with gentle camera movement or a fixed viewpoint. The fixed-camera set includes six new characters and an eight-second wounded-knight study whose poses hold and jump while the environment flows. Play and rate it in the [Time Has Weight gallery](docs/examples/dark-stillness/README.md). **PSX** includes selective treatments of characters, props or backgrounds; each image layer can keep its own style. Edit depth, contact shadows, tint, camera movement, spatial effects and the floor projected from the backdrop, then render with the native compositor. See the [Creative guide](docs/examples/creative/README.md) and [Dark Fantasy guide](docs/examples/dark-fantasy/README.md) for editing and sharing.
 
-**Video background removal** is available in **Studio → Tools → Remove background**. Choose a video to create a reusable transparent WebM with audio. The [Moving Cutouts gallery](ui/public/examples/moving-cutouts/README.md) adds six native compositions: a walking knight and an illustrated skater over independently moving backgrounds. Their editable templates are included in the shot library.
+**Video background removal** is available in **Studio → Tools → Remove background**. Choose a video to create a reusable transparent WebM with audio. The [Moving Cutouts gallery](docs/examples/moving-cutouts/README.md) adds six native compositions: a walking knight and an illustrated skater over independently moving backgrounds. Their editable templates are included in the shot library.
 
-The [Skate Portal study](ui/public/examples/skate-portal/README.md) joins four editable shots into a vertical jump between the coast and a cloud road. Portal videos follow the scene clock, including backward scrubbing and export; each portal owns and releases its media independently.
+The [Skate Portal study](docs/examples/skate-portal/README.md) joins four editable shots into a vertical jump between the coast and a cloud road. Portal videos follow the scene clock, including backward scrubbing and export; each portal owns and releases its media independently.
 
-The [Kingdom Road collection](ui/public/examples/kingdom-road/README.md) extends the skater and PSX dragon journeys across 35 animated backgrounds. It also includes a Spanish YuE2 song with a beat-aligned music film, editable scene archives and downloadable media. Video layers expose source intervals, forward/backward looping and sequence time offsets under **Continuity between shots**. Native exports reuse a bounded local video cache for faster seeks, preserve transparent characters, and share the GPU queue with generation.
+The [Kingdom Road collection](docs/examples/kingdom-road/README.md) extends the skater and PSX dragon journeys across 35 animated backgrounds. It also includes a Spanish YuE2 song with a beat-aligned music film, editable scene archives and downloadable media. Video layers expose source intervals, forward/backward looping and sequence time offsets under **Continuity between shots**. Native exports reuse a bounded local video cache for faster seeks, preserve transparent characters, and share the GPU queue with generation.
 
 The preview fits portrait scenes between black sidebars while keeping editor controls readable. **Expand video** shows just the picture fullscreen. Select covered characters, props or backgrounds in **Scene objects**, then move, rotate or scale them. For a cutout layer, enable **Animate this layer** and choose a video from the gallery or upload one; its depth and individual PSX treatment are retained in saved scenes and native exports.
 
@@ -327,9 +333,9 @@ If automatic background removal leaves color inside a ring, between ropes or alo
 
 For a stationary viewpoint, select **Fixed camera**. Image cutouts can use **Held poses** with per-pose duration, relative height and ground placement. **Preserve transparency** supports images and videos that already have alpha, including transparent WebM; it does not segment an opaque video. These controls remain editable in saved scenes and portable templates.
 
-The [Portal Ride study](ui/public/examples/skate-portal-v2/README.md) expands that experiment to three continuous world changes. Native world effects now support editable position/rotation/scale keyframes and screen-projected portal video with its own start, speed and loop controls.
+The [Portal Ride study](docs/examples/skate-portal-v2/README.md) expands that experiment to three continuous world changes. Native world effects now support editable position/rotation/scale keyframes and screen-projected portal video with its own start, speed and loop controls.
 
-The [Portal Rides gallery](ui/public/examples/portal-rides/README.md) adds a downhill skater and a dragon rider. **Cinematic stage → Endless road** keeps a separately moving road underneath world changes; edit speed, slope and timeline continuity. **Image appearance → Tilt** rotates a cutout around its foot anchor to match a slope. Both clips are saved native scenes with portable templates, rendered from interpolated transparent video layers at natural speed.
+The [Portal Rides gallery](docs/examples/portal-rides/README.md) adds a downhill skater and a dragon rider. **Cinematic stage → Endless road** keeps a separately moving road underneath world changes; edit speed, slope and timeline continuity. **Image appearance → Tilt** rotates a cutout around its foot anchor to match a slope. Both clips are saved native scenes with portable templates, rendered from interpolated transparent video layers at natural speed.
 
 ### Qwen Image 2.1 in Studio
 

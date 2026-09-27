@@ -5,7 +5,7 @@ import * as api from '../../api/client'
 import { revealDirectorWorkspace } from '../../lib/navigationCategories'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
-import { AssetInput } from '../asset-picker/AssetInput.tsx'
+import { StoryReferencePicker } from './StoryReferencePicker'
 import { useWorkspaceImageOutputs } from '../../lib/labsImagePick'
 import type { ApiOutput } from '../../api/outputs'
 
@@ -419,7 +419,9 @@ export function StoryLabPanel() {
   const musicQueueCancelRequested = useRef(false)
   const activeMusicJobId = useRef('')
   const styleConversionCancelRequested = useRef(false)
-  const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
+  const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string; projectId: string; workspace: string } | null>(null)
+  useEffect(() => { setUploadTarget(null) }, [project.id, activeWorkspace])
+
   const imageItems = useWorkspaceImageOutputs(activeWorkspace)
   const projectOperationBusy = Boolean(activeProjectOperations[project.id])
   const musicCandidateOptions = useMemo(() => {
@@ -1595,7 +1597,9 @@ export function StoryLabPanel() {
 
   const applyPickedVisual = async (item: ApiOutput) => {
     if (!uploadTarget) return
-    const sourceProjectId = project.id
+    const latest = useStoryStore.getState()
+    if (latest.workspace !== uploadTarget.workspace || latest.project.id !== uploadTarget.projectId) return
+    const sourceProjectId = uploadTarget.projectId
     const target = uploadTarget
     beginProjectOperation(sourceProjectId)
     setImageBusy('upload')
@@ -3721,7 +3725,7 @@ export function StoryLabPanel() {
       referenceBatchBusy,
       generateVisual,
       requestUpload: target => {
-        setUploadTarget(target)
+        setUploadTarget({ ...target, projectId: project.id, workspace: activeWorkspace })
       },
       removeReference,
     }}>
@@ -3776,20 +3780,15 @@ export function StoryLabPanel() {
           {notice.text}
         </div>
       )}
-      {uploadTarget && (
-        <div className="border-b border-border px-3 py-2">
-          <AssetInput
-            label={t('world.addReference')}
-            placeholder={t('world.addReference')}
-            items={imageItems}
-            accept="image/*"
-            constraints={{ kinds: ['image'], maxCount: 1, optional: true }}
-            onChoose={item => {
-              if (!item) { setUploadTarget(null); return }
-              void applyPickedVisual(item)
-            }}
-          />
-        </div>
+      {uploadTarget && uploadTarget.projectId === project.id && uploadTarget.workspace === activeWorkspace && (
+        <StoryReferencePicker
+          key={`${uploadTarget.workspace}:${uploadTarget.projectId}:${uploadTarget.kind}:${uploadTarget.id || ''}`}
+          items={imageItems}
+          workspace={uploadTarget.workspace}
+          disabled={Boolean(imageBusy)}
+          onChoose={item => { void applyPickedVisual(item) }}
+          onClose={() => setUploadTarget(null)}
+        />
       )}
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <StoryLabNavigation

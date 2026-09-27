@@ -15,6 +15,7 @@
         "tests/test_activity_generation_details.py",
         "tests/test_analyze_pr.py",
         "tests/test_app_identity.py",
+        "tests/test_about.py",
         "tests/test_architecture_contracts.py",
         "tests/test_architecture_factory.py",
         "tests/test_asset_catalog.py",
@@ -49,6 +50,8 @@
         "tests/test_generation_provenance_submission.py",
         "tests/test_generation_record.py",
         "tests/test_generation_runtime.py",
+        "tests/test_example_assets.py",
+        "tests/test_inpaint_preparation.py",
         "tests/test_h3_benchmark_client.py",
         "tests/test_h3_director_dialogue.py",
         "tests/test_h3_story_contracts.py",
@@ -208,6 +211,7 @@
         "tests/test_h3_prompt_finalization.py",
         "tests/test_h3_window_planner.py",
         "tests/test_hunyuan_dit_cache.py",
+        "tests/test_hunyuan3d_windows_patch.py",
         "tests/test_image_command_restart_boundaries.py",
         "tests/test_image_generation_spec.py",
         "tests/test_krea2_features.py",
@@ -313,7 +317,11 @@
         "tests/test_wizard_workflow_executor.py",
         "tests/test_workspace_command_failures.py",
         "tests/test_world3d_export.py",
-        "tests/test_world3d_media_cache.py"
+        "tests/test_world3d_media_cache.py",
+        "tests/test_montage_documents.py",
+        "tests/test_scene2d_export.py",
+        "tests/test_video_editor_layers.py",
+        "tests/test_montage_shots.py"
       ]
     }
   ],
@@ -386,6 +394,62 @@
       "prefix": "docs/development/AGENT_QA_POLICY.md",
       "paths": [
         "tests/test_development_branch_policy.py"
+      ]
+    },
+    {
+      "prefix": "app/services/video_editor_layers.py",
+      "paths": [
+        "tests/test_video_editor_layers.py"
+      ]
+    },
+    {
+      "prefix": "app/services/montage_",
+      "paths": [
+        "tests/test_montage_documents.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/montages.py",
+      "paths": [
+        "tests/test_montage_documents.py"
+      ]
+    },
+    {
+      "prefix": "app/services/scene2d_export.py",
+      "paths": [
+        "tests/test_scene2d_export.py"
+      ]
+    },
+    {
+      "prefix": "app/services/scene_documents.py",
+      "paths": [
+        "tests/test_scene2d_export.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/scene2d_export.py",
+      "paths": [
+        "tests/test_scene2d_export.py"
+      ]
+    },
+    {
+      "prefix": "app/services/montage_shots.py",
+      "paths": [
+        "tests/test_montage_shots.py",
+        "tests/test_montage_documents.py"
+      ]
+    },
+    {
+      "prefix": "app/app_identity.py",
+      "paths": [
+        "tests/test_about.py",
+        "tests/test_app_identity.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/about.py",
+      "paths": [
+        "tests/test_about.py"
       ]
     }
   ]

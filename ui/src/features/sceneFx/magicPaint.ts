@@ -1,4 +1,5 @@
 import { fxRandom } from './types'
+import { withAlpha } from './color'
 import { glow, ring, star, strokeEnergy, TAU, type FxPainter } from './energyBrush'
 
 const magicCircle: FxPainter = (ctx, cue, time, progress) => {
@@ -67,7 +68,7 @@ const ice: FxPainter = (ctx, cue, _time, progress) => {
   for (let i = 0; i < 16; i++) {
     ctx.save(); ctx.rotate(i * TAU / 16); const reach = (.18 + fxRandom(cue.seed, i) * .3) * growth
     ctx.beginPath(); ctx.moveTo(-.025, 0); ctx.lineTo(0, -reach); ctx.lineTo(.038, -.06); ctx.closePath()
-    ctx.fillStyle = cue.color + '70'; ctx.fill(); strokeEnergy(ctx, cue.color, .003)
+    ctx.fillStyle = withAlpha(cue.color, '70'); ctx.fill(); strokeEnergy(ctx, cue.color, .003)
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -reach); ctx.stroke(); ctx.restore()
   }
 }

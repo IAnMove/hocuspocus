@@ -73,6 +73,15 @@ def test_metadata_inspection_rejects_leftover_incompatible_accelerator(monkeypat
         helper.inspect_environment("wangp")
 
 
+def test_windows_excluded_accelerators_are_absent_from_recipe_and_lock():
+    spec = profiles.recipe("wangp", "win32")
+    lock = (ROOT / "app/runtime/locks/win32-wangp.txt").read_text()
+    for package in spec["excludedPackages"]:
+        assert not any(line.startswith((f"{package}==", f"{package} @")) for line in lock.splitlines())
+    assert not any("flash_attn" in package or "flash-attn" in package for package in spec["acceleratorPackages"])
+    assert f"xformers=={spec['constraints']['xformers']}" in lock
+
+
 def test_older_driver_keeps_core_available_without_claiming_h3_support():
     result = profiles.select_profiles("linux", "x64", "nvidia", "570.124.06")
     assert result["supported"]
@@ -189,11 +198,75 @@ def test_constraint_files_match_the_selected_recipe():
             assert actual == expected
 
 
+def test_windows_recipe_edits_do_not_change_the_linux_fingerprint():
+    import copy
+    data = copy.deepcopy(profiles.catalog())
+    with patch.object(profiles, "catalog", lambda: data):
+        linux_before = profiles.dependency_fingerprint("wangp", "linux")
+        windows_before = profiles.dependency_fingerprint("wangp", "win32")
+        data["engines"]["wangp"]["windows"]["torch"] = "9.9.9"
+        assert profiles.dependency_fingerprint("wangp", "linux") == linux_before
+        assert profiles.dependency_fingerprint("wangp", "win32") != windows_before
+        linux_before = profiles.dependency_fingerprint("wangp", "linux")
+        windows_now = profiles.dependency_fingerprint("wangp", "win32")
+        data["engines"]["wangp"]["torch"] = "9.8.0"
+        assert profiles.dependency_fingerprint("wangp", "linux") != linux_before
+        assert profiles.dependency_fingerprint("wangp", "win32") == windows_now
+        linux_now = profiles.dependency_fingerprint("wangp", "linux")
+        data["engines"]["wangp"]["windows"]["installStepsVersion"] = 2
+        assert profiles.dependency_fingerprint("wangp", "linux") == linux_now
+        assert profiles.dependency_fingerprint("wangp", "win32") != windows_now
+
+
+def test_legacy_receipt_is_rewritten_once_when_inspect_passes(tmp_path):
+    profiles.catalog()
+    app = tmp_path / "app"
+    env = app / "env"
+    env.mkdir(parents=True)
+    path = env / ".hocus-runtime-profile.json"
+    path.write_text(json.dumps({
+        "fingerprint": "old-whole-file-hash",
+        "profile": "linux-x64-nvidia-wangp",
+        "cudaCalculation": True,
+        "packages": {},
+    }))
+    passed = subprocess.CompletedProcess([], 0)
+    with patch.object(profiles, "APP_DIR", app), \
+            patch.object(profiles, "dependency_fingerprint", return_value="new-fingerprint"), \
+            patch("services.runtime_sources.sources_current", return_value=True), \
+            patch.object(profiles.subprocess, "run", return_value=passed):
+        assert profiles.installation_current("wangp", "linux")
+        updated = json.loads(path.read_text())
+        assert updated["fingerprintScheme"] == profiles.FINGERPRINT_SCHEME
+        assert updated["fingerprint"] == "new-fingerprint"
+        assert updated["packages"] == {}
+        path.write_text(json.dumps({**updated, "fingerprint": "changed-after-migration"}))
+        assert not profiles.installation_current("wangp", "linux")
+        assert json.loads(path.read_text())["fingerprint"] == "changed-after-migration"
+
+
+def test_legacy_receipt_is_kept_when_inspect_fails(tmp_path):
+    profiles.catalog()
+    app = tmp_path / "app"
+    env = app / "env"
+    env.mkdir(parents=True)
+    path = env / ".hocus-runtime-profile.json"
+    original = {"fingerprint": "old-whole-file-hash", "profile": "linux-x64-nvidia-wangp", "cudaCalculation": True}
+    path.write_text(json.dumps(original))
+    failed = subprocess.CompletedProcess([], 1)
+    with patch.object(profiles, "APP_DIR", app), \
+            patch("services.runtime_sources.sources_current", return_value=True), \
+            patch.object(profiles.subprocess, "run", return_value=failed):
+        assert not profiles.installation_current("wangp", "linux")
+    assert json.loads(path.read_text()) == original
+
+
 def test_native_helpers_affect_installation_fingerprint(tmp_path):
     # Exercise the hashing contract using an isolated source copy, no working tree mutation.
     import shutil
     source = tmp_path / "source"
     for name in ["app/runtime", "app/services/hunyuan3d/requirements.txt", "app/services/hunyuan3d/build_mesh_painter.py",
+                 "app/services/hunyuan3d/patch_windows_sources.py",
                  "runtime_install.js", "vendor_revisions.js", "hunyuan_native.js", "torch.js", "scripts/runtime_verify.py",
                  "scripts/runtime_pip.py", "scripts/runtime_failed.py", "scripts/runtime_vendor.py", "scripts/windows_toolchain.py",
                  "app/services/runtime_sources.py"]:
@@ -336,6 +409,66 @@ def test_missing_vendor_files_and_changed_revisions_trigger_repair(tmp_path, mon
     assert not sources.sources_current(["fixture"], tmp_path)
 
 
+def _detect_windows(installed: bool, toolsets: list) -> dict:
+    with patch.object(profiles.subprocess, "run", side_effect=OSError),             patch.object(profiles, "installation_current", return_value=installed),             patch.object(profiles, "_msvc_toolsets", return_value=toolsets) as probe:
+        result = profiles.detect_profiles(platform="win32", arch="x64", gpu="nvidia")
+    return result, probe
+
+
+def test_windows_hunyuan3d_install_is_skipped_with_a_reason_without_msvc():
+    result, _ = _detect_windows(installed=False, toolsets=[])
+    item = result["engines"]["hunyuan3d"]
+    assert item["supported"] is False
+    assert "Build Tools" in item["reason"] and "Desktop development with C++" in item["reason"]
+    assert result["engines"]["wangp"]["supported"] is True
+    assert result["supported"] is True  # Hunyuan3D is optional; the main install continues.
+
+
+def test_windows_hunyuan3d_rejects_a_compiler_cuda_12_8_cannot_use():
+    vs2026 = [((14, 51, 36231), "14.51.36231", Path("vs18/vcvars64.bat"))]
+    result, _ = _detect_windows(installed=False, toolsets=vs2026)
+    item = result["engines"]["hunyuan3d"]
+    assert item["supported"] is False
+    assert "14.51.36231" in item["reason"] and "2022" in item["reason"]
+
+
+def test_windows_hunyuan3d_uses_the_cuda_compatible_toolset_or_an_existing_install():
+    both = [((14, 29, 30133), "14.29.30133", Path("vs2019/vcvars64.bat")),
+            ((14, 51, 36231), "14.51.36231", Path("vs18/vcvars64.bat"))]
+    result, _ = _detect_windows(installed=False, toolsets=both)
+    assert result["engines"]["hunyuan3d"]["supported"] is True
+    assert result["msvc"] == {"vcvars": str(Path("vs2019/vcvars64.bat")), "toolset": "14.29.30133"}
+    result, probe = _detect_windows(installed=True, toolsets=[])
+    assert result["engines"]["hunyuan3d"]["supported"] is True
+    probe.assert_not_called()
+
+
+def test_msvc_toolsets_are_found_on_disk_when_vswhere_lists_nothing(tmp_path):
+    x86, x64 = tmp_path / "x86", tmp_path / "x64"
+    for base, install, toolset in ((x86, "2019/BuildTools", "14.29.30133"),
+                                   (x64, "18/Community", "14.51.36231")):
+        root = base / "Microsoft Visual Studio" / install
+        (root / "VC/Auxiliary/Build").mkdir(parents=True)
+        (root / "VC/Auxiliary/Build/vcvars64.bat").write_text("", encoding="utf-8")
+        cl = root / "VC/Tools/MSVC" / toolset / "bin/Hostx64/x64/cl.exe"
+        cl.parent.mkdir(parents=True)
+        cl.write_bytes(b"")
+    (x86 / "Microsoft Visual Studio/Installer").mkdir(parents=True)
+    (x86 / "Microsoft Visual Studio/Installer/vswhere.exe").write_bytes(b"")
+    empty = subprocess.CompletedProcess([], 0, stdout="")
+    with patch.dict(profiles.os.environ, {"ProgramFiles(x86)": str(x86), "ProgramFiles": str(x64)}),             patch.object(profiles.subprocess, "run", return_value=empty):
+        assert [item[1] for item in profiles._msvc_toolsets()] == ["14.29.30133", "14.51.36231"]
+        chosen = profiles.find_msvc()
+    assert chosen["toolset"] == "14.29.30133"
+    assert chosen["vcvars"].endswith(str(Path("2019/BuildTools/VC/Auxiliary/Build/vcvars64.bat")))
+
+
+def test_non_windows_profiles_never_probe_msvc():
+    for platform, arch, gpu in [("linux", "x64", "nvidia"), ("darwin", "arm64", "apple")]:
+        with patch.object(profiles.subprocess, "run", side_effect=OSError), \
+                patch.object(profiles, "installation_current", return_value=False), \
+                patch.object(profiles, "find_msvc", side_effect=AssertionError("Windows only")):
+            assert profiles.detect_profiles(platform=platform, arch=arch, gpu=gpu)["supported"]
 # Portable Windows toolchain cases live in this registered CI test module.
 spec = importlib.util.spec_from_file_location("windows_toolchain", ROOT / "scripts/windows_toolchain.py")
 toolchain = importlib.util.module_from_spec(spec)

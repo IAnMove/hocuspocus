@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "name": "texts-v1",
+  "width": 640,
+  "height": 360,
+  "fps": 30,
+  "duration": 4,
+  "texts": [
+    { "id": "impact", "text": "IMPACT", "start": 0, "end": 4, "preset": "impact", "x": 50, "y": 22, "size": 14, "color": "#ffe3a0", "rotation": 0, "font": "sans" },
+    { "id": "rise", "text": "RISE", "start": 0, "end": 4, "preset": "rise", "x": 50, "y": 42, "size": 12, "color": "#9ad7ff", "rotation": -4, "font": "sans" },
+    { "id": "type", "text": "TYPE", "start": 0, "end": 4, "preset": "typewriter", "x": 50, "y": 62, "size": 11, "color": "#f5f7fb", "rotation": 0, "font": "mono" },
+    { "id": "wave", "text": "WAVE", "start": 0, "end": 4, "preset": "wave", "x": 50, "y": 82, "size": 13, "color": "#ffb4d8", "rotation": 0, "font": "sans" }
+  ],
+  "layers": [
+    {
+      "id": "plate",
+      "name": "Plate",
+      "type": "effect",
+      "visible": true,
+      "z": 0,
+      "transform": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+      "animation": {
+        "start": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+        "end": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+        "duration": 4,
+        "curve": "linear"
+      },
+      "atmosphere": { "kind": "dust", "density": 12, "speed": 0.2, "size": 1, "wind": 4, "color": "#fde68a" }
+    }
+  ]
+}

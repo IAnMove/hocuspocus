@@ -1,0 +1,20 @@
+{
+  "width": 640,
+  "height": 360,
+  "fps": 30,
+  "seconds": [
+    "0.2",
+    "0.5",
+    "2.2"
+  ],
+  "hashes": {
+    "0.2": "9c6a651c2ed78305b4fa4c090654812a2d6843fa494059290982af5d7046da12",
+    "0.5": "7159a1b2b0f2457e2a277b26b00a0bbe5408caca88b82b257ca3d267dfdfa2dd",
+    "2.2": "3b851e45e45252200a5c4de87eed023db739a60f5089298316cce121c3064f63"
+  },
+  "tolerance": {
+    "maxChangedRatio": 0,
+    "channelEpsilon": 2,
+    "note": "0.5 is inside the fireworks shell flash, which used to throw. Exact SHA-256 otherwise; see texts-v1 for the pixel-tolerance rule."
+  }
+}

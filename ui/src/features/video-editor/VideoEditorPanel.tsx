@@ -25,6 +25,10 @@ import {
 import { Fragment, lazy, Suspense, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ParseKeys } from 'i18next'
 import { useUiTranslation } from '../../i18n'
+import { MontageLayersPanel, MontageToolbar, type MontageEditorState } from './MontageControls'
+import { loadMontageIntoEditor } from './montageLoader'
+import { ShotBoard } from './ShotBoard'
+import { exportLayerFields, loadMontageState, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { videoEditorClipFromOutput } from './videoEditorCatalogPick'
@@ -726,6 +730,13 @@ export function VideoEditorPanel() {
   const [resolution, setResolution] = useState(draft.resolution)
   const [fps, setFps] = useState(draft.fps)
   const [soundtrack, setSoundtrack] = useState<EditorSoundtrack | null>(draft.soundtrack)
+  const [montage, setMontage] = useState<{ layers: MontageLayers; ref: MontageRef | null }>(() => loadMontageState(activeWorkspace))
+  const [shotBoardOpen, setShotBoardOpen] = useState(false)
+  const applyMontage = (state: MontageEditorState, layers: MontageLayers, ref: MontageRef) => {
+    setClips(state.clips); setProjectName(state.projectName); setResolution(state.resolution); setFps(state.fps); setSoundtrack(state.soundtrack)
+    persistEditorDraft(state.clips, state.projectName, state.resolution, state.fps, draftWorkspaceRef.current, state.soundtrack)
+    setMontage({ layers, ref }); persistMontageState(activeWorkspace, layers, ref)
+  }
   const [previewTime, setPreviewTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [sequenceMode, setSequenceMode] = useState(false)
@@ -779,6 +790,7 @@ export function VideoEditorPanel() {
     setResolution(next.resolution)
     setFps(next.fps)
     setSoundtrack(next.soundtrack)
+    setMontage(loadMontageState(activeWorkspace))
     setSelectedId(next.clips[0]?.id || null)
     setError(next.warning)
     setPreviewTime(0)
@@ -1862,6 +1874,7 @@ export function VideoEditorPanel() {
           transition_text: clip.transitionText,
           transition_text_size: clip.transitionTextSize,
         })),
+        ...exportLayerFields(montage.layers),
       })
       writeVideoEditorExportId(activeWorkspace, started.job_id)
       if (mountedRef.current) setExportJob(started)
@@ -1974,6 +1987,23 @@ export function VideoEditorPanel() {
         >
           <FolderOpen size={13} /> {t('toolbar.fromHocusPocus')}
         </button>
+        <MontageToolbar
+          workspace={activeWorkspace}
+          disabled={adding || isVideoEditorJobActive(exportJob)}
+          current={() => ({ projectName, resolution, fps, clips, soundtrack })}
+          layers={montage.layers}
+          montageRef={montage.ref}
+          onOpen={applyMontage}
+          onSaved={ref => { setMontage(current => ({ ...current, ref })); persistMontageState(activeWorkspace, montage.layers, ref) }}
+          onError={setError}
+        />
+        {montage.ref && (
+          <button type="button" onClick={() => setShotBoardOpen(open => !open)} aria-pressed={shotBoardOpen}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border hover:bg-bg-hover ${shotBoardOpen ? 'bg-bg-hover text-text-primary' : 'bg-bg-secondary'}`}
+            title={t('shots.toggleTitle')}>
+            <Film size={13} /> {t('shots.toggle')}
+          </button>
+        )}
         <button
           onClick={startExport}
           disabled={!clips.length || isVideoEditorJobActive(exportJob)}
@@ -1997,6 +2027,19 @@ export function VideoEditorPanel() {
           </button>
         )}
       </div>
+
+      <MontageLayersPanel
+        layers={montage.layers}
+        disabled={isVideoEditorJobActive(exportJob)}
+        onChange={layers => { setMontage(current => ({ ...current, layers })); persistMontageState(activeWorkspace, layers, montage.ref) }}
+      />
+      {shotBoardOpen && montage.ref && (
+        <ShotBoard workspace={activeWorkspace} file={montage.ref.file} onError={setError}
+          onChanged={async () => {
+            const loaded = await loadMontageIntoEditor(activeWorkspace, montage.ref!.file)
+            applyMontage(loaded.state, loaded.layers, loaded.ref)
+          }} />
+      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border">

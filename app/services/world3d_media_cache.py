@@ -21,6 +21,14 @@ def local_video(url, workspace, workspace_root, app_root):
     if parsed.scheme or parsed.netloc:
         return None
     path = unquote(parsed.path)
+    if path.startswith("/examples/"):
+        from services.example_assets import example_assets
+        try:
+            cached = example_assets.cached(path[len("/examples/"):])
+            if cached and cached.suffix.lower() in {".mp4", ".webm"}:
+                return cached
+        except KeyError:
+            pass
     roots = [("/api/v1/uploads/", app_root / "uploads"),
              ("/examples/", app_root.parent / "ui/dist/examples")]
     scoped = parse_qs(parsed.query).get("workspace", [workspace])[0]

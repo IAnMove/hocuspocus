@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "name": "fx-atmosphere",
+  "width": 640,
+  "height": 360,
+  "fps": 30,
+  "duration": 4,
+  "sfx": [
+    { "id": "burst", "kind": "fireworks", "start": 0, "end": 3.2, "x": 50, "y": 42, "size": 80, "intensity": 1, "color": "#ff88dd", "seed": 7, "sound": false, "volume": 0 },
+    { "id": "gate", "kind": "portal", "start": 0.4, "end": 3.6, "x": 28, "y": 58, "size": 55, "intensity": 1, "color": "#bb77ff", "seed": 3, "sound": false, "volume": 0 },
+    { "id": "sparks", "kind": "sparks", "start": 0, "end": 4, "x": 72, "y": 62, "size": 40, "intensity": 0.8, "color": "#ffbb55", "seed": 11, "sound": false, "volume": 0 }
+  ],
+  "layers": [
+    {
+      "id": "sky",
+      "name": "Sky",
+      "type": "effect",
+      "visible": true,
+      "z": 0,
+      "transform": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+      "animation": {
+        "start": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+        "end": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+        "duration": 4,
+        "curve": "linear"
+      },
+      "atmosphere": { "kind": "rain", "density": 80, "speed": 1.1, "size": 1.4, "wind": -8, "color": "#dbeafe" }
+    },
+    {
+      "id": "haze",
+      "name": "Haze",
+      "type": "effect",
+      "visible": true,
+      "z": 10,
+      "transform": { "x": 50, "y": 50, "scale": 1, "opacity": 0.85, "rotation": 0 },
+      "animation": {
+        "start": { "x": 50, "y": 50, "scale": 1, "opacity": 0.85, "rotation": 0 },
+        "end": { "x": 50, "y": 50, "scale": 1, "opacity": 0.85, "rotation": 0 },
+        "duration": 4,
+        "curve": "linear"
+      },
+      "atmosphere": { "kind": "fog", "density": 10, "speed": 0.2, "size": 1.1, "wind": 12, "color": "#cbd5e1" }
+    }
+  ]
+}

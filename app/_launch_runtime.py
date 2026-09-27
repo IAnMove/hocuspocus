@@ -33,9 +33,10 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 _app_dir_for_identity = os.path.dirname(os.path.abspath(__file__))
 if _app_dir_for_identity not in sys.path:
     sys.path.insert(0, _app_dir_for_identity)
-from app_identity import read_app_version
+from app_identity import read_app_version, startup_identity
 
 APP_VERSION = read_app_version()
+startup_identity()  # pin the deployed commit before anything can change the checkout
 
 import torch
 import glob
@@ -21755,6 +21756,17 @@ async def inpaint_endpoint(request: Request):
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")
 
+    # Read the source size up front: SAM pre-scaling below needs it.
+    try:
+        import decord
+        vr = decord.VideoReader(video_path)
+        fps = vr.get_avg_fps()
+        total_frames = len(vr)
+        src_h, src_w = vr[0].shape[:2]
+        del vr
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot read video: {e}")
+
     from services.inpaint_service import check_sam_status, parse_inpaint_intent, segment_video, unload_sam, ensure_sam_running, shutdown_sam
 
     start_time = float(body.get("start_time", 0))
@@ -21852,16 +21864,6 @@ async def inpaint_endpoint(request: Request):
         pass
 
     # Step 3: Build retake params with spatial mask
-    try:
-        import decord
-        vr = decord.VideoReader(video_path)
-        fps = vr.get_avg_fps()
-        total_frames = len(vr)
-        src_h, src_w = vr[0].shape[:2]
-        del vr
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Cannot read video: {e}")
-
     start_frame = max(0, int(start_time * fps))
     end_frame = int(end_time * fps) if end_time > 0 else total_frames
     end_frame = min(end_frame, total_frames)
@@ -26645,6 +26647,7 @@ async def save_scene_recording(
     """
     from services.scene_recording import (
         SceneRecordingTranscodeError,
+        canonical_scene_fps,
         transcode_scene_recording,
     )
 
@@ -26715,7 +26718,7 @@ async def save_scene_recording(
     output_path = os.path.join(out_dir, output_name)
     upload_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-recording.webm")
     upload_audio_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-audio.wav")
-    fps = 60 if scene.get("fps") == 60 else 30
+    fps = canonical_scene_fps(scene.get("fps"))
     started_at = time.time()
 
     try:
@@ -30068,7 +30071,7 @@ def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
 
 @api.post("/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
 def start_series_episode_render(series_id: str, episode_id: str, body: dict):
-    from services.series_production import series_shot_method
+    from services.series_production import is_series_generated_shot
     from services.series_library import append_shot_render_attempt, series_for_episode_snapshot
     from services.series_reference_router import route_shot_references
     from services.series_render import (
@@ -30096,7 +30099,7 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         routing_series = series_for_episode_snapshot(series, episode)
         try:
             candidates = _series_render_candidates(episode, body)
-            candidates = [shot for shot in candidates if series_shot_method(series, shot) == "generated_video"]
+            candidates = [shot for shot in candidates if is_series_generated_shot(series, shot)]
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not candidates:
@@ -34880,6 +34883,12 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
             resolved_soundtrack["resolved_path"] = _resolve_video_editor_audio_source(
                 str(body["soundtrack"].get("source") or ""), workspace,
             )
+        resolved_layers = None
+        if body.get("layers"):
+            from services.video_editor_layers import resolve_export_layers, workspace_media_resolver
+            resolved_layers = resolve_export_layers(
+                body["layers"], workspace, resolve_path=workspace_media_resolver(_resolve_model3d_input_path),
+            )
 
         if _video_editor_cancel_requested(job_id):
             _finish_video_editor_cancelled(job_id, output_path)
@@ -34922,6 +34931,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                     fps=int(body["fps"]),
                     soundtrack=resolved_soundtrack,
                     progress=report,
+                    layers=resolved_layers,
                 )
         except resource_scheduler.ResourceAcquireCancelled:
             current = _video_editor_job_snapshot(job_id) or {}
@@ -34999,6 +35009,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                         for clip in body["clips"]
                     ],
                     "source_manifest": build_source_provenance_manifest(resolved_clips),
+                    "layers": body.get("layers"),
                     "soundtrack": {
                         key: value
                         for key, value in (body.get("soundtrack") or {}).items()
@@ -35171,6 +35182,12 @@ def start_video_editor_export(body: dict):
         output_path = os.path.join(out_dir, output_name)
         suffix += 1
 
+    from services.video_editor_layers import LayerValidationError, clean_export_layers
+    try:
+        # Timed overlays/audio cues (montages) are validated before queueing.
+        clean_layers = clean_export_layers(body)
+    except LayerValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     clean_body = dict(body)
     clean_body.update({
         "width": width,
@@ -35178,6 +35195,7 @@ def start_video_editor_export(body: dict):
         "fps": fps,
         "clips": clean_clips,
         "soundtrack": clean_soundtrack,
+        "layers": clean_layers,
     })
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
@@ -35930,6 +35948,22 @@ def _upsert_canonical_task(
         # cancellation/completion won. Canonical resume explicitly transitions
         # the registry before the next active adapter snapshot arrives.
         return existing
+    existing_metadata = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
+    incoming_metadata = fields.get("metadata") if isinstance(fields.get("metadata"), dict) else None
+    if incoming_metadata is not None:
+        merged_metadata = dict(existing_metadata)
+        for key, value in incoming_metadata.items():
+            if value is not None:
+                merged_metadata[key] = value
+        fields["metadata"] = merged_metadata
+        # Reservation owns attempt identity. Adapter snapshots must not
+        # replace workflow/title after submit_music_generation wrote them.
+        if any(
+            existing_metadata.get(key)
+            for key in ("generation_id", "candidate_id", "command_id", "idempotency_key")
+        ):
+            fields.pop("workflow", None)
+            fields.pop("title", None)
     mutable = {
         key: value for key, value in fields.items()
         if key not in {"id", "created_at"}
@@ -36276,9 +36310,16 @@ def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
             "actor": provenance.get("actor") or "unknown",
             "tool": provenance.get("tool") or adapter,
             "capability": provenance.get("capability"),
-            "command_id": command.get("command_id"),
+            "command_id": (
+                command.get("command_id")
+                or record.get("commandId")
+                or record.get("command_id")
+            ),
             "workflow_id": command.get("workflow_id"),
             "run_id": command.get("run_id"),
+            "generation_id": record.get("generationId") or record.get("generation_id"),
+            "candidate_id": record.get("candidateId") or record.get("candidate_id"),
+            "idempotency_key": record.get("idempotencyKey") or record.get("idempotency_key"),
         },
     )
 
@@ -36658,6 +36699,35 @@ _world3d_export = World3DExportService(
 )
 bind_world3d_renderer_origin(api, _world3d_export)
 api.include_router(create_world3d_export_router(_world3d_export))
+from services.scene2d_export import Scene2DExportService, command_catalog as scene2d_export_catalog, command_handlers as scene2d_export_handlers
+from routers.scene2d_export import create_scene2d_export_router
+_scene2d_export = Scene2DExportService(workspace_dir=_workspace_dir, registry_for=_task_registry,
+                                       app_url=os.environ.get("HOCUS_APP_URL", ""),
+                                       uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"))
+bind_world3d_renderer_origin(api, _scene2d_export)
+api.include_router(create_scene2d_export_router(_scene2d_export))
+from services.montage_documents import MontageStore
+from services.montage_commands import MontageCommands, command_catalog as montage_command_catalog
+from routers.montages import create_montages_router
+from services.montage_shots import ShotBoard
+from services.wangp_submission import JsonRequest as _ShotRequest
+_montage_store = MontageStore(_workspace_dir)
+
+
+async def _submit_shot_generation(params: dict) -> dict:
+    return await generate(_ShotRequest(params))
+
+
+def _shot_job_status(job_id: str) -> dict | None:
+    return snapshot_job(_jobs[job_id]) if job_id in _jobs else None
+
+
+_montage_commands = MontageCommands(_montage_store, start_export=start_video_editor_export,
+                                    get_export=get_video_editor_export,
+                                    shots=ShotBoard(_montage_store, workspace_dir=_workspace_dir,
+                                                    submit=_submit_shot_generation, job_status=_shot_job_status))
+api.include_router(create_montages_router(_montage_commands))
+from services.scene_documents import command_catalog as scene_document_catalog, command_handlers as scene_document_handlers
 
 from services.mcp_access import McpAccess
 from routers.mcp_access import create_mcp_access_router
@@ -36679,13 +36749,15 @@ api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
     handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers()},
+              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export)},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog()],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *scene_document_catalog(), *scene2d_export_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
+from routers.about import create_about_router
+api.include_router(create_about_router(os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))))
 
 # Optional production renderer: pass a callable that drives the existing
 # Video 3D exportFlow through a process-owned headless browser. Closing a
@@ -36708,6 +36780,9 @@ _mimetypes.add_type("text/javascript", ".js")
 _mimetypes.add_type("text/javascript", ".mjs")
 _mimetypes.add_type("text/css", ".css")
 _mimetypes.add_type("image/svg+xml", ".svg")
+
+from routers.example_assets import create_example_assets_router
+api.include_router(create_example_assets_router())
 
 _ui_dist = os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))
 from services.ui_distribution import build_status as _ui_build_status, recovery_html as _ui_recovery_html

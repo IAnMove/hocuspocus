@@ -170,6 +170,7 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
         },
     )
     import services.asset_manifest as asset_manifest_module
+    import services.video_editor_layers as video_editor_layers_module
 
     services_module = _module(
         "services",
@@ -180,6 +181,7 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
     monkeypatch.setitem(sys.modules, "services", services_module)
     monkeypatch.setitem(sys.modules, "services.video_editor", video_editor_module)
     monkeypatch.setitem(sys.modules, "services.asset_manifest", asset_manifest_module)
+    monkeypatch.setitem(sys.modules, "services.video_editor_layers", video_editor_layers_module)
 
     def workspace_dir(workspace=None) -> str:
         workspace_calls.append(workspace)

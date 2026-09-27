@@ -3,10 +3,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Group, Mesh, Object3D, Vector3 } from 'three'
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial, Object3D, Vector3 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { defaultMediaScreen, defaultModelScreen, parseMediaScreen, pickScreenAnchor } from '../src/features/scene3d/mediaScreen.ts'
-import { SCREEN_PLANE_NAME, attachScreenPlane, detachScreenPlane, namedSceneMeshes, namedSceneNodes } from '../src/features/scene3d/screenPlane.ts'
+import { SCREEN_PLANE_NAME, attachScreenPlane, detachScreenPlane, isGeneratedScreenPlane, namedSceneMeshes, namedSceneNodes } from '../src/features/scene3d/screenPlane.ts'
+import { faceMeshes, manualFace } from '../src/features/scene3d/speech/calibration.ts'
 
 test('Meshy-style TV heads default to a plane on headfront, not the body mesh', () => {
   const names = ['Mesh_0', 'Armature', 'Hips', 'Head', 'headfront', 'head_end']
@@ -96,8 +97,33 @@ test('a stale cleanup cannot remove the replacement plane', () => {
   assert.equal(head.children.length, 0)
 })
 
-test('bundled TV-head example loads as a GLB with headfront and Walking', async () => {
-  const glb = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../public/examples/tv-head-humanoid.glb'))
+test('a headfront plane does not shift speech face mesh indices on Meshy-style armatures', () => {
+  const root = new Group()
+  const hips = new Object3D(); hips.name = 'Hips'; root.add(hips)
+  const head = new Object3D(); head.name = 'Head'; hips.add(head)
+  const headfront = new Object3D(); headfront.name = 'headfront'; head.add(headfront)
+  const body = new Mesh(new BoxGeometry(1, 2, .5), new MeshStandardMaterial()); body.name = 'Mesh_0'; root.add(body)
+  const face = manualFace(root)
+  assert.equal(face.meshIndex, 0)
+  assert.equal(faceMeshes(root)[0], body)
+  const plane = attachScreenPlane(root, defaultModelScreen(['headfront']))
+  assert.equal(plane.parent, headfront)
+  assert.ok(isGeneratedScreenPlane(plane))
+  assert.equal(faceMeshes(root).length, 1)
+  assert.equal(faceMeshes(root)[face.meshIndex], body)
+})
+
+test('an original GLB mesh named like the generated plane stays in the speech catalog', () => {
+  const root = new Group()
+  const original = new Mesh(new BoxGeometry(1, 2, .5), new MeshStandardMaterial())
+  original.name = SCREEN_PLANE_NAME
+  root.add(original)
+  assert.equal(faceMeshes(root)[0], original)
+  assert.equal(isGeneratedScreenPlane(original), false)
+})
+
+test('TV-head example fixture loads as a GLB with headfront and Walking', async () => {
+  const glb = readFileSync(join(dirname(fileURLToPath(import.meta.url)), './fixtures/tv-head-humanoid.glb'))
   assert.ok(glb.length > 1000)
   assert.ok(glb.length < 20000)
   const jsonLength = glb.readUInt32LE(12)

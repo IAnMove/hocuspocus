@@ -1,4 +1,5 @@
 import { fxRandom } from './types'
+import { withAlpha } from './color'
 import { glow, ring, star, strokeEnergy, TAU, type FxPainter } from './energyBrush'
 
 const aura: FxPainter = (ctx, cue, time, progress) => {
@@ -35,7 +36,7 @@ const beam: FxPainter = (ctx, cue, time, progress) => {
   ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = Math.min(1, progress * 8, (1 - progress) * 5)
   const width = (.055 + Math.sin(time * 20) * .007) * cue.intensity
   const gradient = ctx.createLinearGradient(0, -width * 3, 0, width * 3)
-  gradient.addColorStop(0, cue.color + '00'); gradient.addColorStop(.35, cue.color); gradient.addColorStop(.5, '#ffffff'); gradient.addColorStop(.65, cue.color); gradient.addColorStop(1, cue.color + '00')
+  gradient.addColorStop(0, withAlpha(cue.color, '00')); gradient.addColorStop(.35, cue.color); gradient.addColorStop(.5, '#ffffff'); gradient.addColorStop(.65, cue.color); gradient.addColorStop(1, withAlpha(cue.color, '00'))
   ctx.fillStyle = gradient; ctx.fillRect(-.32, -width * 3, 1.25, width * 6)
   for (let i = 0; i < 5; i++) {
     ctx.save(); ctx.translate(-.3 + ((time * 1.2 + i / 5) % 1) * 1.1, 0); ctx.scale(.28, 1); ctx.strokeStyle = '#ffffff'; ring(ctx, width * 1.7, .003); ctx.restore()

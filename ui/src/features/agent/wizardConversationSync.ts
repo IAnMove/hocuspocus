@@ -1,7 +1,7 @@
 import { capConversationValues, insertMissingConversationValues } from './wizardMessageOrder'
 import { normalizeVisualEvidence, type VisualEvidence } from './visualEvidence'
 
-export const WIZARD_WELCOME_TEXT = 'Saludos, creador. Soy el mago de HocusPocus: puedo consultar la cola, explicarte el estudio, llevarte a la sección adecuada y preparar o lanzar un vídeo cuando me lo pidas. Dime qué quieres conjurar. 🪄'
+import { wizardWelcomeText } from './wizardWelcome'
 
 export interface WizardSyncMessage {
   id: string
@@ -55,7 +55,7 @@ export function normalizeRemoteWizardMessages(
     restored.push({
       id: 'wizard-restored-cards',
       role: 'assistant',
-      text: WIZARD_WELCOME_TEXT,
+      text: wizardWelcomeText(),
       createdAt: 0,
       cards: remoteExecutions,
     })

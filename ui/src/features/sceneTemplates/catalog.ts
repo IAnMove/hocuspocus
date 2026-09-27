@@ -493,6 +493,14 @@ export const CANDIDATE_SCENE_TEMPLATES = [
   ),
 ] as const satisfies readonly SceneTemplateDefinition[]
 
+/** Video2D drafts use their own compiler; they are not layer-compositor templates. */
+export const VIDEO2D_SCENE_TEMPLATES = [
+  makeTemplate('documentary-history', 'cinema', 'Documental histórico', 'Foto con movimiento lento, rótulo de fecha y acabado de archivo. Candidata, no aprobada.', cinemaSlots('Fotografía o plano de archivo que sostiene el documental.', 'Placa de entorno detrás de la fecha.', 'Polvo o primer término opcional.'), CINEMA_LIMITS),
+  makeTemplate('trailer-teaser', 'cinema', 'Teaser de tráiler', 'Golpes de título sobre negro, tarjeta final y bandas anchas. Candidata, no aprobada.', cinemaSlots('Plano corto que golpea el título.', 'Negro o placa de contraste.', 'Capa opcional de destello.'), CINEMA_LIMITS),
+  makeTemplate('lyric-vertical', 'music', 'Lyric video vertical', 'Pieza 9:16 con letra en karaoke y pulso. Candidata, no aprobada.', musicSlots('Fondo de movimiento lento.', 'Placa que no compite con la letra.', 'Detalle opcional en los bordes.'), MUSIC_LIMITS),
+  makeTemplate('city-postcard', 'music', 'Postal de ciudad', 'Tira de ciudad, banner de papel y gaviotas. Candidata, no aprobada.', musicSlots('Plano de ciudad en tira.', 'Cielo o placa detrás del banner.', 'Gaviotas u otro primer término.'), MUSIC_LIMITS),
+] as const satisfies readonly SceneTemplateDefinition[]
+
 /** Original references stay versioned separately: never rewrite their hashes or
  * infer that a new choreography has an approved reference because it compiles. */
 export const ALL_SCENE_TEMPLATES: readonly SceneTemplateDefinition[] = [...CANDIDATE_SCENE_TEMPLATES, ...MUSIC_MOTION_TEMPLATES]

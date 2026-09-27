@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "name": "lyrics-demo",
+  "width": 1280,
+  "height": 720,
+  "fps": 24,
+  "duration": 6,
+  "texts": [
+    { "id": "date", "text": "1991", "start": 0, "end": 3, "preset": "impact", "x": 16, "y": 78, "size": 12, "color": "#fff6e8", "rotation": 0, "font": "display", "weight": 400, "align": "left", "template": "lower-third-date", "enter": { "preset": "slide-right", "duration": 0.45 } }
+  ],
+  "lyrics": {
+    "mode": "karaoke",
+    "lines": [
+      { "id": "a", "start": 0.2, "end": 3, "words": [{ "text": "The", "start": 0.2, "end": 0.6 }, { "text": "bird", "start": 0.6, "end": 1.2 }, { "text": "is", "start": 1.2, "end": 1.6 }, { "text": "freed", "start": 1.6, "end": 2.8 }] },
+      { "id": "b", "start": 3, "end": 6, "words": [{ "text": "Keep", "start": 3, "end": 3.6 }, { "text": "the", "start": 3.6, "end": 4 }, { "text": "line", "start": 4, "end": 5.4 }] }
+    ],
+    "style": { "font": "sans", "size": 8, "color": "#f4efe6", "activeColor": "#ffe08a", "x": 50, "y": 62, "maxWidth": 80, "align": "center", "visibleLines": 2 },
+    "source": { "kind": "manual" }
+  },
+  "layers": [
+    {
+      "id": "night",
+      "name": "Night",
+      "type": "effect",
+      "visible": true,
+      "z": 0,
+      "transform": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+      "animation": { "start": { "x": 50, "y": 50, "scale": 1, "opacity": 1 }, "end": { "x": 50, "y": 50, "scale": 1, "opacity": 1 }, "duration": 6, "curve": "linear" },
+      "atmosphere": { "kind": "sparkles", "density": 18, "speed": 0.2, "size": 1, "wind": 0, "color": "#fff7d6" }
+    }
+  ]
+}

@@ -142,21 +142,26 @@ async function launchRenderer() {
 const browser = await launchRenderer();
 const page = await browser.newPage();
 const frames = `${staging}/frames`;
+const bridge = process.env.HOCUS_RENDER_BRIDGE || '__world3dExport';
 fs.mkdirSync(frames, { recursive: true });
 try {
-  await page.goto(new URL('/world3d-render.html', appUrl).href, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => !!window.__world3dExport, null, { timeout: 60000 });
+  await page.goto(new URL(process.env.HOCUS_RENDER_PAGE || '/world3d-render.html', appUrl).href, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(name => !!window[name], bridge, { timeout: 60000 });
   const plan = snapshot.plan;
   const doc = snapshot.document;
-  await page.evaluate(({ document: scene, plan: size }) => window.__world3dExport.load(scene, size), { document: doc, plan });
+  await page.evaluate(({ document: scene, plan: size, bridge: name }) => window[name].load(scene, size), { document: doc, plan, bridge });
   for (let index = 0; index < plan.count; index += 1) {
-    const png = await page.evaluate(seconds => window.__world3dExport.frame(seconds), Math.min(plan.duration, index / plan.fps));
+    const png = await page.evaluate(({ seconds, bridge: name }) => window[name].frame(seconds), { seconds: Math.min(plan.duration, index / plan.fps), bridge });
     const name = String(index + 1).padStart(6, '0');
     fs.writeFileSync(`${frames}/frame_${name}.png`, Buffer.from(png.split(',')[1], 'base64'));
     fs.writeFileSync(`${staging}/progress.json`, JSON.stringify({ current: index + 1, total: plan.count }));
   }
+  const wav = await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(() => '');
+  if (typeof wav === 'string' && wav.startsWith('data:audio')) {
+    fs.writeFileSync(`${staging}/fx.wav`, Buffer.from(wav.split(',')[1], 'base64'));
+  }
 } finally {
-  await page.evaluate(() => { window.__world3dExport?.dispose(); }).catch(() => {});
+  await page.evaluate(name => { window[name]?.dispose(); }, bridge).catch(() => {});
   await browser.close();
 }
 """
@@ -172,12 +177,14 @@ def _wait_owned_browser(proc, cancelled) -> str:
     return stderr or ""
 
 
-def run_owned_browser(snapshot: dict, staging: Path, cancelled, *, app_url: str, module: Path) -> list[Path]:
+def run_owned_browser(snapshot: dict, staging: Path, cancelled, *, app_url: str, module: Path,
+                      page: str = "/world3d-render.html", bridge: str = "__world3dExport") -> list[Path]:
     script = staging / "owned_browser.mjs"
     script.write_text(_OWNED_BROWSER_JS, encoding="utf-8")
     proc = subprocess.Popen(
         ["node", str(script), str(staging / "snapshot.json"), str(staging)],
-        env={**os.environ, "HOCUS_APP_URL": app_url, "PLAYWRIGHT_MODULE": str(module)},
+        env={**os.environ, "HOCUS_APP_URL": app_url, "PLAYWRIGHT_MODULE": str(module),
+             "HOCUS_RENDER_PAGE": page, "HOCUS_RENDER_BRIDGE": bridge},
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     stderr = _wait_owned_browser(proc, cancelled)
@@ -475,16 +482,28 @@ def command_handlers(service):
     return {OPERATION: submit, RECEIPT_OPERATION: receipt, CANCEL_OPERATION: cancel}
 
 
-def staging_dir(workspace_path: str, intent_id: str) -> Path:
+def staging_dir(workspace_path: str, intent_id: str, folder: str = ".world3d-export") -> Path:
     safe = bool(INTENT_RE.fullmatch(intent_id)) and intent_id not in {".", ".."} and ".." not in intent_id
     token = intent_id if safe else hashlib.sha256(intent_id.encode("utf-8")).hexdigest()[:32]
-    path = Path(workspace_path) / ".world3d-export" / token
+    path = Path(workspace_path) / folder / token
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 class World3DExportService:
-    """Canonical admission plus a process-owned worker independent of the UI tab."""
+    """Canonical admission plus a process-owned worker independent of the UI tab.
+
+    Subclasses reuse admission, receipts, cancellation and the owned browser by
+    overriding the class attributes and the ``freeze``/``prepare_snapshot``/
+    ``check_publish``/``output_name``/``sidecar``/``resource_lane`` hooks.
+    """
+
+    operation = OPERATION
+    title = "Video 3D"
+    slug = "world3d-export"
+    staging_folder = ".world3d-export"
+    render_page = "/world3d-render.html"
+    render_bridge = "__world3dExport"
 
     def __init__(self, *, workspace_dir, registry_for, renderer=None, app_url=None):
         self.workspace_dir = workspace_dir
@@ -514,7 +533,7 @@ class World3DExportService:
 
     def submit(self, command) -> dict:
         try:
-            frozen = freeze_export_command(command)
+            frozen = self.freeze(command)
             workspace = frozen["effective"]["input"]["workspace"]
             self._assert_refs(frozen["effective"]["input"]["snapshot"]["refs"], workspace)
             registry = self._registry(workspace)
@@ -537,28 +556,28 @@ class World3DExportService:
         task = registry.get(previous["task_id"])
         if task and task["status"] in {"failed", "interrupted", "cancelled"}:
             registry.update(previous["task_id"], status="queued", phase="queued",
-                            message="Retrying Video 3D export", error=None)
+                            message=f"Retrying {self.title} export", error=None)
         self._dispatch(registry, previous["intent_id"])
         current = registry.command_admission(previous["intent_id"])
         return {"receipt": deepcopy(current["receipt"]), "replayed": True, "capabilities": self.capabilities()}
 
     def _task_fields(self, *, task_id, job_id, workspace, plan) -> dict:
         return {
-            "id": task_id, "root_id": task_id, "kind": "video", "workflow": OPERATION,
-            "title": "Video 3D export", "status": "queued", "phase": "queued",
-            "message": "Queued for Video 3D export", "workspace": workspace,
+            "id": task_id, "root_id": task_id, "kind": "video", "workflow": self.operation,
+            "title": f"{self.title} export", "status": "queued", "phase": "queued",
+            "message": f"Queued for {self.title} export", "workspace": workspace,
             "backend_job_id": job_id, "current": 0, "total": plan["count"],
-            "resource_requirements": ["local_gpu:0", "local_cpu:ffmpeg"], "cancelable": True,
+            "resource_requirements": [self.resource_lane().key, "local_cpu:ffmpeg"], "cancelable": True,
             "resumable": True, "recoverable": True,
-            "metadata": {"operation": OPERATION},
+            "metadata": {"operation": self.operation},
         }
 
     def _admit(self, registry, frozen, workspace) -> dict:
         snapshot = frozen["effective"]["input"]["snapshot"]
-        job_id = f"world3d-export-{uuid.uuid4().hex}"
-        task_id = new_task_id("world3d-export")
+        job_id = f"{self.slug}-{uuid.uuid4().hex}"
+        task_id = new_task_id(self.slug)
         admitted = registry.admit_command_task(
-            intent_id=frozen["original"]["intent_id"], operation=OPERATION,
+            intent_id=frozen["original"]["intent_id"], operation=self.operation,
             digest=frozen["fingerprint"], original=frozen["original"],
             effective=frozen["effective"], fingerprint_version=1,
             task_fields=self._task_fields(task_id=task_id, job_id=job_id, workspace=workspace, plan=snapshot["plan"]),
@@ -579,7 +598,7 @@ class World3DExportService:
                 return
             thread = threading.Thread(
                 target=self._run_worker, args=(intent_id, entry["task_id"], task["workspace"]),
-                name=f"world3d-export-{intent_id[:12]}", daemon=True,
+                name=f"{self.slug}-{intent_id[:12]}", daemon=True,
             )
             self._workers[intent_id] = thread
             thread.start()
@@ -619,10 +638,10 @@ class World3DExportService:
         try:
             token = get_cancellation_token(registry.workspace_dir, task_id)
             self._ensure_active(token, registry, task_id)
-            registry.update(task_id, status="waiting_resource", phase="waiting_resource", message="Waiting for the render GPU")
+            registry.update(task_id, status="waiting_resource", phase="waiting_resource", message="Waiting for the render lane")
             with resource_scheduler.coordinator.acquire(
-                resource_scheduler.local_gpu_lane(0), task_id=task_id,
-                description="Video 3D export", cancelled=lambda: token.is_cancelled()
+                self.resource_lane(), task_id=task_id,
+                description=f"{self.title} export", cancelled=lambda: token.is_cancelled()
                 or (registry.get(task_id) or {}).get("status") == "cancelled",
             ):
                 self._export(registry, intent_id, task_id, workspace)
@@ -649,28 +668,28 @@ class World3DExportService:
         token = get_cancellation_token(registry.workspace_dir, task_id)
         self._ensure_active(token, registry, task_id)
         try:
-            registry.update(task_id, status="running", phase="exporting", message="Exporting Video 3D")
+            registry.update(task_id, status="running", phase="exporting", message=f"Exporting {self.title}")
         except ValueError as error:
             raise World3DExportCancelled() from error
         entry = registry.command_admission(intent_id)
         snapshot = deepcopy(entry["effective"]["input"]["snapshot"])
-        staging = staging_dir(registry.workspace_dir, intent_id)
+        staging = staging_dir(registry.workspace_dir, intent_id, self.staging_folder)
         (staging / "snapshot.json").write_text(
             json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
         frames = self._render_frames(snapshot, staging, token, registry, task_id)
         published = self._publish(snapshot, staging, frames, workspace, registry, task_id, token)
         self._finish(registry, task_id, "completed", phase="completed",
-                     message="Published Video 3D MP4", result_refs=[published["name"]],
-                     metadata={"operation": OPERATION, "output": published})
+                     message=f"Published {self.title} MP4", result_refs=[published["name"]],
+                     metadata={"operation": self.operation, "output": published})
 
     def _owned_browser(self, snapshot, staging, progress, cancelled) -> list[Path]:
         module = playwright_module()
         if not self.app_url or module is None or not shutil.which("node"):
             raise World3DExportPending("real-render pending: playwright/ffmpeg headless export is not configured")
-        rendered = prepare_media_snapshot(snapshot, app_root=Path(__file__).resolve().parents[1],
-                                          workspace_root=Path(self.workspace_dir(snapshot["workspace"])), cancelled=cancelled)
+        rendered = self.prepare_snapshot(snapshot, cancelled)
         (staging / "snapshot.json").write_text(json.dumps(rendered, ensure_ascii=False), encoding="utf-8")
-        frames = run_owned_browser(rendered, staging, cancelled, app_url=self.app_url, module=module)
+        frames = run_owned_browser(rendered, staging, cancelled, app_url=self.app_url, module=module,
+                                   page=self.render_page, bridge=self.render_bridge)
         progress(len(frames), snapshot["plan"]["count"])
         return frames
 
@@ -687,17 +706,44 @@ class World3DExportService:
 
     def _publish(self, snapshot, staging, frames, workspace, registry, task_id, token) -> dict:
         self._ensure_active(token, registry, task_id)
-        if _has_sound(snapshot["document"]):
-            raise RuntimeError("Voiced World3D export cannot publish a silent MP4")
+        self.check_publish(snapshot)
         plan = snapshot["plan"]
         encoded = staging / "encoded.mp4"
         mux_frame_sequence(frames, encoded, fps=plan["fps"], duration=plan["duration"])
+        encoded = self.finish_media(snapshot, staging, encoded)
         self._ensure_active(token, registry, task_id)
-        template = re.sub(r"[^A-Za-z0-9._-]+", "-", str(snapshot["document"].get("templateId") or "scene")).strip("-._")[:40] or "scene"
-        name = f"{time.strftime('%Y-%m-%d-%Hh%Mm%Ss')}_world3d-{template}_{uuid.uuid4().hex[:6]}.mp4"
+        name = self.output_name(snapshot)
         output = Path(self.workspace_dir(workspace)) / name
         os.replace(encoded, output)
-        sidecar = {
+        publish_generation_sidecar(output, self.sidecar(snapshot, name), workspace_id=workspace, tool=self.slug,
+                                   capability=self.operation, actor="user")
+        return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace}
+
+    # -- hooks ------------------------------------------------------------------------
+    def freeze(self, command) -> dict:
+        return freeze_export_command(command)
+
+    def resource_lane(self):
+        return resource_scheduler.local_gpu_lane(0)
+
+    def prepare_snapshot(self, snapshot: dict, cancelled) -> dict:
+        return prepare_media_snapshot(snapshot, app_root=Path(__file__).resolve().parents[1],
+                                      workspace_root=Path(self.workspace_dir(snapshot["workspace"])), cancelled=cancelled)
+
+    def check_publish(self, snapshot: dict) -> None:
+        if _has_sound(snapshot["document"]):
+            raise RuntimeError("Voiced World3D export cannot publish a silent MP4")
+
+    def finish_media(self, snapshot: dict, staging: Path, encoded: Path) -> Path:
+        return encoded
+
+    def output_name(self, snapshot: dict) -> str:
+        template = re.sub(r"[^A-Za-z0-9._-]+", "-", str(snapshot["document"].get("templateId") or "scene")).strip("-._")[:40] or "scene"
+        return f"{time.strftime('%Y-%m-%d-%Hh%Mm%Ss')}_world3d-{template}_{uuid.uuid4().hex[:6]}.mp4"
+
+    def sidecar(self, snapshot: dict, name: str) -> dict:
+        plan = snapshot["plan"]
+        return {
             "params": {
                 "model_type": "scene-animator-3d", "generation_mode": "3d-scene-compositor",
                 "scene": {"version": 1, "name": name, "width": plan["width"], "height": plan["height"],
@@ -708,9 +754,6 @@ class World3DExportService:
             },
             "generation_mode": "video", "tool": "world3d-export", "output_filename": name,
         }
-        publish_generation_sidecar(output, sidecar, workspace_id=workspace, tool="world3d-export",
-                                   capability=OPERATION, actor="user")
-        return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace}
 
     def _finish(self, registry, task_id, status, **fields) -> None:
         task = registry.get(task_id)
