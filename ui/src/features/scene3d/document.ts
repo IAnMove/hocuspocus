@@ -1,7 +1,7 @@
 import { parseEnvironment } from './cinematicSettings'
 import { parseSceneFx } from '../sceneFx/types'
 import { parseWorldSfx } from '../sceneFx/world'
-import { parseKineticTexts } from '../../lib/kineticText.ts'
+import { lyricFields, parseKineticTexts } from '../../lib/kineticText.ts'
 import { parseSoundtrack } from './speech/track'
 import { validScene3DShape } from './documentValidation.ts'
 import { scene3dPlaybackSpeed } from './clock.ts'
@@ -109,5 +109,5 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
   const { pixelWorld, ...fields } = value
-  return { ...fields, ...pixelWorldField(pixelWorld), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
+  return { ...fields, ...pixelWorldField(pixelWorld), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }

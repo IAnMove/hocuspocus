@@ -1,5 +1,5 @@
 import { sceneFxFields } from '../features/sceneFx/types'
-import { kineticTextFields } from './kineticText'
+import { kineticTextFields, lyricFields } from './kineticText'
 import { canonicalSceneFps } from './sceneFps.ts'
 import type { Scene, SceneLayer } from '../types'
 import { parseSceneGenerationPolicy, sceneGenerationPolicyFields } from './sceneGenerationPolicy'
@@ -58,6 +58,7 @@ export const parseSceneFile = (text: string): Scene => {
     ...(candidate as Scene),
     ...sceneFxFields(candidate.sfx),
     ...kineticTextFields(candidate.texts),
+    ...lyricFields(candidate.lyrics),
     version: 1,
     width,
     ...(generationPolicy ? { generationPolicy } : {}),

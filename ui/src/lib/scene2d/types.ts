@@ -18,4 +18,4 @@ export type LayerEffects = Required<NonNullable<SceneLayer['effects']>>
 export type LayerStrip = Required<Omit<NonNullable<SceneLayer['strip']>, 'seamOccluder'>> & {
   seamOccluder: { enabled: boolean; kind: SeamOccluderKind; scale: number; opacity: number }
 }
-export type Atmosphere = Required<NonNullable<SceneLayer['atmosphere']>>
+export type Atmosphere = Required<Omit<NonNullable<SceneLayer['atmosphere']>, 'emitter'>> & Pick<NonNullable<SceneLayer['atmosphere']>, 'emitter'>

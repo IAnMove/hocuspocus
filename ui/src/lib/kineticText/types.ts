@@ -51,6 +51,8 @@ export type KineticText = {
   counter?: TextCounter
   /** Provenance for a template. It does not change painting. */
   template?: string
+  /** Live scale added on stored beats. Absent means the cue does not pulse. */
+  beatPulse?: number
 }
 
 export type TextMotion = {

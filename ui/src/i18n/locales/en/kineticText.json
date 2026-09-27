@@ -44,5 +44,20 @@
   "exits": { "none": "None", "fade": "Fade", "fall": "Fall", "blur": "Blur", "wipe": "Wipe", "scale": "Scale", "slide-left": "To the left", "slide-right": "To the right" },
   "loops": { "none": "None", "wave": "Wave", "pulse": "Pulse", "shake": "Shake", "float": "Float", "flicker": "Flicker" },
   "eases": { "linear": "Linear", "ease": "Ease" },
-  "boxKinds": { "none": "None", "solid": "Solid", "paper": "Paper", "pill": "Pill", "bar": "Bar", "underline": "Underline", "plate": "Full plate" }
+  "boxKinds": { "none": "None", "solid": "Solid", "paper": "Paper", "pill": "Pill", "bar": "Bar", "underline": "Underline", "plate": "Full plate" },
+  "insertTemplate": "Insert template",
+  "lyricsPaste": "Paste LRC, SRT or plain lyrics",
+  "lyricsImport": "Import lyrics",
+  "finishTitle": "Finish",
+  "finishWarm": "Warm cinema",
+  "finishDoc": "Old documentary",
+  "finishNeon": "Night neon",
+  "finishPaper": "Paper / comic",
+  "finishClear": "Clear finish",
+  "finalPreview": "Final preview",
+  "pathTitle": "Path",
+  "pathAdd": "Add a curve",
+  "pathOrient": "Face the tangent",
+  "sequenceSources": "Frame sources, one URL per line",
+  "rhythmLive": "Store the beat on the scene"
 }
