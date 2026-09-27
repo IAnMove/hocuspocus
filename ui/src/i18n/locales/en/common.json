@@ -3,9 +3,13 @@
     "title": "Crop image",
     "editName": "Edit {{name}}",
     "hint": "Drag to select an area, or enter original pixel coordinates. Saving creates a new PNG copy and uses it as the input; the original is unchanged.",
-    "x": "Left (px)", "y": "Top (px)", "width": "Width (px)", "height": "Height (px)",
+    "x": "Left (px)",
+    "y": "Top (px)",
+    "width": "Width (px)",
+    "height": "Height (px)",
     "reset": "Select whole image",
-    "save": "Save crop", "saving": "Saving copy…",
+    "save": "Save crop",
+    "saving": "Saving copy…",
     "loadFailed": "Could not load this image. Close and try again.",
     "saveFailed": "Could not save the crop. Your original input is unchanged. Try again."
   },
@@ -176,5 +180,38 @@
     "message": "An update or server restart was detected. Your current form is kept. Reload when you are ready; unsent edits will be cleared.",
     "reload": "Reload now",
     "later": "Later"
+  },
+  "about": {
+    "title": "About HocusPocus",
+    "subtitle": "Local Creation Lab for directing persistent worlds",
+    "description": "HocusPocus is a local creation studio (a Maestro fork) for directing video, images, music, voice, comics and 3D with recoverable pipelines and an MCP agent. Open source on GitHub.",
+    "repository": "GitHub repository",
+    "close": "Close",
+    "open": "About HocusPocus and deployed version",
+    "deployment": "Deployed version",
+    "backend": "Running server",
+    "backendDetail": "branch {{branch}} · started {{when}}",
+    "uiBuild": "Built interface",
+    "uiBuildDetail": "built {{when}}",
+    "thisTab": "This tab",
+    "dirty": "with uncommitted local changes",
+    "copy": "Copy full commit",
+    "copied": "Copied",
+    "unavailable": "Could not reach the server.",
+    "reload": "Reload",
+    "credits": "Credits",
+    "state": {
+      "reload": "This tab runs an older interface than the server now serves. Reload to see the deployed version.",
+      "rebuild": "The served interface was built from a different commit than the running server. Use Repair Web UI or restart.",
+      "unknown": "No build data (manual npm build)."
+    },
+    "roles": {
+      "fork origin": "original project it is forked from",
+      "local generation engine": "local generation engine",
+      "music": "music",
+      "images, voice and language": "images, voice and language",
+      "video": "video",
+      "installer and launcher": "installer and launcher"
+    }
   }
 }

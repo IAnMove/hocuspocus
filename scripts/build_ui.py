@@ -68,7 +68,9 @@ def _build(root: Path, *, force: bool, run) -> dict:
     backup = staging.with_name(staging.name.replace("-build-", "-previous-"))
     dist = ui / "dist"
     published = False
-    env = {**os.environ, "HOCUSPOCUS_GRAPH_PYTHON": sys.executable}
+    env = {**os.environ, "HOCUSPOCUS_GRAPH_PYTHON": sys.executable,
+           # Baked into the bundle so a stale browser tab can prove which commit it runs.
+           "VITE_HOCUS_BUILD_COMMIT": source["commit"]}
     try:
         # Explicit dev dependencies: TypeScript/Vite are required even with NODE_ENV=production.
         for args in (["ci", "--include=dev", "--no-audit", "--no-fund"],

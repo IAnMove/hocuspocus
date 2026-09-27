@@ -63,9 +63,13 @@ def get_runtime_identity(ui_dist_dir: str | Path) -> dict:
         build_id = hashlib.sha256(index_path.read_bytes()).hexdigest()[:16]
     except OSError:
         build_id = "missing"
+    from app_identity import startup_identity, ui_build_identity
+
     return {
         "instance_id": _SERVER_INSTANCE_ID,
         "ui_build_id": build_id,
+        "commit": startup_identity()["commit"],
+        "ui_commit": ui_build_identity(Path(ui_dist_dir)).get("commit", ""),
     }
 
 
