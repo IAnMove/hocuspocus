@@ -4,7 +4,8 @@ It reuses the World3D admission/receipt/cancel machinery and its owned headless
 browser, but drives ``/scene2d-render.html`` (the Scene Animator's own evaluator
 and painter). Rendering uses a CPU lane, so it never waits for generation jobs
 on the GPU. The scene's ``audioTracks`` (real workspace audio files) are mixed
-into the published MP4; synthesized screen-FX sounds are rejected explicitly.
+into the published MP4. Screen-FX sounds are synthesized by the headless
+page and mixed from ``staging/fx.wav`` when that file is present.
 """
 from __future__ import annotations
 
@@ -27,7 +28,6 @@ from services.world3d_export import (
     World3DExportPending,
     World3DExportService,
     _blocked_url,
-    _cue_sounds,
     _digest,
     _tool_ids,
     export_plan,
@@ -75,9 +75,6 @@ def validated_document(raw) -> dict:
         if layer.get("type") not in LAYER_TYPES:
             raise http_error(422, "unsupported_capability",
                              f"Layer {layer.get('id')}: headless Video 2D export supports image, video, overlay, effect and camera layers")
-    if any(_cue_sounds(cue) for cue in document.get("sfx") or []):
-        raise http_error(422, "unsupported_capability",
-                         "Screen FX sounds are synthesized in the browser; set sound false or add an audioTrack file")
     return document
 
 
@@ -86,26 +83,42 @@ def _durable(url: str) -> bool:
     return lowered.startswith(DURABLE_PREFIXES) or lowered.startswith("data:image/")
 
 
+def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequence: bool) -> None:
+    label = "sequence" if sequence else "source"
+    if not url or _blocked_url(url) or not _durable(url):
+        raise http_error(422, "missing_ref", f"Layer {layer.get('id')} {label} needs durable workspace or example media")
+    if url.lower().startswith("data:"):
+        return
+    record = {"layerId": layer["id"], "url": url, "kind": layer["type"], **({"sequence": True} if sequence else {})}
+    if url.lower().startswith("/examples/"):
+        path = unquote(urlsplit(url).path)
+        if ".." in path.split("/") or "\\" in path:
+            raise http_error(422, "missing_ref", "Use a valid bundled example URL")
+        refs.append(record)
+        return
+    path, scoped = parse_media_ref(url, workspace)
+    record["filename"] = os.path.basename((path or "").replace("\\", "/"))
+    record["workspace"] = scoped or workspace
+    refs.append(record)
+
+
+def _layer_media(refs: list, layer: dict, workspace: str) -> None:
+    sequence = layer.get("sequence") if isinstance(layer.get("sequence"), dict) else {}
+    urls = list(sequence.get("sources") or [])
+    if sequence.get("source"):
+        urls.append(sequence.get("source"))
+    for extra in urls:
+        _append_visual_ref(refs, layer, str(extra or "").strip(), workspace, True)
+    _append_visual_ref(refs, layer, str(layer.get("source") or "").strip(), workspace, False)
+
+
 def media_refs(document: dict, workspace: str) -> list[dict]:
     """Durable media referenced by visual layers and audio tracks."""
     refs = []
     for layer in document["layers"]:
         if layer.get("type") in {"effect", "camera"} or layer.get("visible") is False:
             continue
-        url = str(layer.get("source") or "").strip()
-        if not url or _blocked_url(url) or not _durable(url):
-            raise http_error(422, "missing_ref", f"Layer {layer.get('id')} needs durable workspace or example media")
-        if url.lower().startswith("/examples/"):
-            path = unquote(urlsplit(url).path)
-            if ".." in path.split("/") or "\\" in path:
-                raise http_error(422, "missing_ref", "Use a valid bundled example URL")
-            refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"]})
-            continue
-        if url.lower().startswith("data:"):
-            continue
-        path, scoped = parse_media_ref(url, workspace)
-        refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"],
-                     "filename": os.path.basename((path or "").replace("\\", "/")), "workspace": scoped or workspace})
+        _layer_media(refs, layer, workspace)
     for track in document.get("audioTracks") or []:
         name = os.path.basename(str((track or {}).get("filename") or ""))
         if not name or os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
@@ -132,6 +145,18 @@ def renderer_available(app_url: str | None, module) -> bool:
         return False
     browser = _browser_path(str(module))
     return bool(browser and Path(browser).is_file())
+
+
+def _mix_wav(video: Path, wav: Path, duration: float) -> Path:
+    mixed = video.with_name("fx-mixed.mp4")
+    command = ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-i", str(wav), "-filter_complex",
+               f"[1:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:{duration:.4f}[mix]",
+               "-map", "0:v:0", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+               "-t", f"{duration:.4f}", "-movflags", "+faststart", str(mixed)]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=1800, check=False)
+    if result.returncode != 0 or not mixed.is_file():
+        raise RuntimeError(("Screen FX mix failed: " + (result.stderr or "")).strip()[-800:])
+    return mixed
 
 
 def mix_audio_tracks(video: Path, tracks: list[dict], workspace_root: Path, duration: float) -> Path:
@@ -195,14 +220,17 @@ class Scene2DExportService(World3DExportService):
         return deepcopy(snapshot)
 
     def check_publish(self, snapshot: dict) -> None:
-        if any(_cue_sounds(cue) for cue in snapshot["document"].get("sfx") or []):
-            raise RuntimeError("Video 2D export cannot synthesize screen FX sounds headlessly")
+        return None
 
     def finish_media(self, snapshot: dict, staging: Path, encoded: Path) -> Path:
+        video = encoded
+        fx = staging / "fx.wav"
+        if fx.is_file():
+            video = _mix_wav(video, fx, snapshot["plan"]["duration"])
         tracks = snapshot["document"].get("audioTracks") or []
         if not tracks:
-            return encoded
-        return mix_audio_tracks(encoded, tracks, Path(self.workspace_dir(snapshot["workspace"])), snapshot["plan"]["duration"])
+            return video
+        return mix_audio_tracks(video, tracks, Path(self.workspace_dir(snapshot["workspace"])), snapshot["plan"]["duration"])
 
     def output_name(self, snapshot: dict) -> str:
         label = re.sub(r"[^A-Za-z0-9._-]+", "-", str(snapshot["document"].get("name") or "scene")).strip("-._")[:40] or "scene"
