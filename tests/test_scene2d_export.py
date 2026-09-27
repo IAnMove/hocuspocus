@@ -88,7 +88,6 @@ def test_freeze_validates_2d_documents_and_collects_refs():
 
 @pytest.mark.parametrize("document,code", [
     (_document(layers=[_layer(type="model3d")]), "unsupported_capability"),
-    (_document(sfx=[{"id": "boom", "kind": "explosion", "start": 0, "end": 0.2, "sound": True, "volume": 0.5}]), "unsupported_capability"),
     (_document(layers=[_layer(source="blob:http://x/1")]), "missing_ref"),
     (_document(layers=[_layer(source="https://example.com/a.png")]), "missing_ref"),
     (_document(fps=25), "unsupported_capability"),
@@ -97,6 +96,17 @@ def test_freeze_rejects_unsupported_scenes(document, code):
     with pytest.raises(Exception) as error:
         freeze_export_command(_command(document=document))
     assert error.value.detail["code"] == code
+
+
+def test_freeze_accepts_screen_fx_sound_and_sequence_refs():
+    frozen = freeze_export_command(_command(document=_document(sfx=[{"id": "boom", "kind": "explosion", "start": 0, "end": 0.2, "sound": True, "volume": 0.4}])))
+    assert frozen["effective"]["input"]["snapshot"]["document"]["sfx"][0]["sound"] is True
+    sequenced = _layer(sequence={"kind": "frames", "sources": [f"/api/v1/file/wing.png?workspace={WORKSPACE}"], "fps": 8, "loop": "loop"})
+    refs = freeze_export_command(_command(document=_document(layers=[sequenced])))["effective"]["input"]["snapshot"]["refs"]
+    assert any(ref.get("sequence") and ref["filename"] == "wing.png" for ref in refs)
+    with pytest.raises(Exception) as error:
+        freeze_export_command(_command(document=_document(layers=[_layer(sequence={"kind": "frames", "sources": ["https://example.com/a.png"], "fps": 8, "loop": "loop"})])))
+    assert error.value.detail["code"] == "missing_ref"
 
 
 def test_catalog_and_lane_do_not_use_the_gpu():
@@ -135,6 +145,32 @@ def test_export_publishes_mp4_with_audio_tracks(tmp_path):
     assert sidecar is None or sidecar.get("tool") == "scene2d-export" or "scene2d-export" in json.dumps(sidecar)
 
 
+@pytest.mark.skipif(not FFMPEG, reason="ffmpeg is required")
+def test_export_mixes_synthesized_screen_fx_wav(tmp_path):
+    def paint_with_fx(snapshot, staging, progress, cancelled):
+        frames = _paint(snapshot, staging, progress, cancelled)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.25", str(Path(staging) / "fx.wav")], check=True)
+        return frames
+
+    service = _service(tmp_path, renderer=paint_with_fx)
+    root = Path(service.workspace_dir(WORKSPACE))
+    write_png(root / "bg.png", 8, 8, (10, 20, 30))
+    document = _document(sfx=[{"id": "boom", "kind": "explosion", "start": 0, "end": 0.2, "sound": True, "volume": 0.4}])
+    receipt = asyncio.run(asyncio.to_thread(command_handlers(service)[OPERATION],
+                                            {"version": 1, "intent_id": "scene2d-fx", "input": {"workspace": WORKSPACE, "document": document}}))
+    task_id = receipt["receipt"]["taskIds"][0]
+    registry = service._registry(WORKSPACE)
+    deadline = time.time() + 20
+    while time.time() < deadline and (registry.get(task_id) or {}).get("status") not in {"completed", "failed"}:
+        time.sleep(0.05)
+    task = registry.get(task_id)
+    assert task["status"] == "completed", task
+    output = root / task["metadata"]["output"]["name"]
+    probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(output)],
+                                      capture_output=True, text=True, check=True).stdout)
+    assert {stream["codec_type"] for stream in probe["streams"]} == {"video", "audio"}
+
+
 def test_scene_documents_save_2d_and_3d_revisions(tmp_path):
     workspace_dir = _workspace_dir(tmp_path)
     saved = save_document(WORKSPACE, _document(), name="Intro shot", preview=None, workspace_dir=workspace_dir)
@@ -149,4 +185,6 @@ def test_scene_documents_save_2d_and_3d_revisions(tmp_path):
     assert stored["editor"] == "video3d" and stored["name"].endswith(".world3d.scene.json")
     with pytest.raises(SceneDocumentError):
         save_document(WORKSPACE, _document(layers=[_layer(source="blob:x")]), name=None, preview=None, workspace_dir=workspace_dir)
+    with pytest.raises(SceneDocumentError):
+        save_document(WORKSPACE, _document(layers=[_layer(sequence={"kind": "frames", "sources": ["https://example.com/a.png"], "fps": 8, "loop": "loop"})]), name=None, preview=None, workspace_dir=workspace_dir)
     assert [item["name"] for item in document_catalog()] == ["scenes.document.save", "scenes.document.get"]

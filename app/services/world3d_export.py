@@ -156,6 +156,10 @@ try {
     fs.writeFileSync(`${frames}/frame_${name}.png`, Buffer.from(png.split(',')[1], 'base64'));
     fs.writeFileSync(`${staging}/progress.json`, JSON.stringify({ current: index + 1, total: plan.count }));
   }
+  const wav = await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(() => '');
+  if (typeof wav === 'string' && wav.startsWith('data:audio')) {
+    fs.writeFileSync(`${staging}/fx.wav`, Buffer.from(wav.split(',')[1], 'base64'));
+  }
 } finally {
   await page.evaluate(name => { window[name]?.dispose(); }, bridge).catch(() => {});
   await browser.close();
