@@ -1,6 +1,6 @@
 # Plan de mejora del creador Video 2D para Grok
 
-Fecha: 27 de septiembre de 2026. Estado: **B0+B1 en [#497](https://github.com/IAnMove/hocuspocus/pull/497), B2 en [#502](https://github.com/IAnMove/hocuspocus/pull/502). B3–B8 están en borrador apilado; B4, B5 y B6 comparten el pintor.**
+Fecha: 27 de septiembre de 2026. Estado: **B0+B1 en [#497](https://github.com/IAnMove/hocuspocus/pull/497), B2 en [#502](https://github.com/IAnMove/hocuspocus/pull/502), B3 en [#509](https://github.com/IAnMove/hocuspocus/pull/509), B4–B6 en [#510](https://github.com/IAnMove/hocuspocus/pull/510), B7 en [#508](https://github.com/IAnMove/hocuspocus/pull/508), B8 en [#507](https://github.com/IAnMove/hocuspocus/pull/507).** B4, B5 y B6 comparten el pintor.
 Autor del plan: Claude (revisará cada PR de Grok). Ejecutor: Grok.
 
 ## 1. Por qué
@@ -397,7 +397,7 @@ rama antes de pasar al siguiente bloque.
 |---|---|---|---|
 | B0+B1 | [#497](https://github.com/IAnMove/hocuspocus/pull/497) `fix/scene-fx-alpha-20260927` | draft | Hashes de paridad iguales en los fotogramas que ya pintaban. Fireworks deja de lanzar `hsl(...)00`. Demo: `/mnt/extras/hocuspocus-worktrees/video2d-demo/fireworks-demo.mp4`. |
 | B2 | [#502](https://github.com/IAnMove/hocuspocus/pull/502) `feat/video2d-texts-v2` | draft, apilado sobre #497 | Textos v2, cinco fuentes vendidas, hashes B1 iguales. |
-| B3 | `feat/video2d-titles-lyrics` | draft, apilado sobre #502 | Plantillas en la receta, letra en `scene.lyrics`, demo `ui/tests/fixtures/scene2d/lyrics-demo/scene.json`. |
-| B4–B6 | `feat/video2d-finish` | draft, apilado sobre B3 | Acabado, emisores, secuencias, trayectorias y ritmo guardado. Mismo pintor: un PR. Hashes B0 iguales. |
-| B7 | `feat/video2d-scene-templates` | draft, apilado sobre B4–B6 | Cuatro candidatas sin aprobar. Sin medios de ejemplo: capas de efecto. |
-| B8 | `feat/video2d-fx-sound` | draft, apilado sobre B7 | `sound: true` se sintetiza y se mezcla. Secuencias remotas o `blob:` se rechazan. |
+| B3 | [#509](https://github.com/IAnMove/hocuspocus/pull/509) `feat/video2d-titles-lyrics` | draft, apilado sobre #502 | Plantillas en la receta, letra en `scene.lyrics`, demo `ui/tests/fixtures/scene2d/lyrics-demo/scene.json`. |
+| B4–B6 | [#510](https://github.com/IAnMove/hocuspocus/pull/510) `feat/video2d-finish` | draft, apilado sobre #509 | Acabado, emisores, secuencias, trayectorias y ritmo guardado. Mismo pintor: un PR. Hashes B0 iguales. |
+| B7 | [#508](https://github.com/IAnMove/hocuspocus/pull/508) `feat/video2d-scene-templates` | draft, apilado sobre #510 | Cuatro candidatas sin aprobar. Sin medios de ejemplo: capas de efecto. |
+| B8 | [#507](https://github.com/IAnMove/hocuspocus/pull/507) `feat/video2d-fx-sound` | draft, apilado sobre #508 | `sound: true` se sintetiza y se mezcla. Secuencias remotas o `blob:` se rechazan. |
