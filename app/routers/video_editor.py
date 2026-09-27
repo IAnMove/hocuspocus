@@ -23,6 +23,12 @@ from services import resource_scheduler
 from services.asset_manifest import publish_generation_sidecar
 from services.media_refs import parse_media_ref
 from services.media_thumbnails import ensure_media_thumbnail
+from services.video_editor_layers import (
+    LayerValidationError,
+    clean_export_layers,
+    resolve_export_layers,
+    workspace_media_resolver,
+)
 from services.video_editor import (
     build_source_provenance_manifest,
     extract_frame,
@@ -592,6 +598,7 @@ def _export_sidecar_payload(
                 "clips": [_clip_sidecar(clip) for clip in body["clips"]],
                 "source_manifest": build_source_provenance_manifest(resolved_clips),
                 "soundtrack": _soundtrack_sidecar(body.get("soundtrack")),
+                "layers": body.get("layers"),
             },
             "source": "video_editor",
         },
@@ -673,9 +680,12 @@ def _resolve_export_media(job_id: str, body: dict, workspace: str):
         resolved_soundtrack["resolved_path"] = _resolve_video_editor_audio_source(
             str(soundtrack.get("source") or ""), workspace,
         )
+    resolved_layers = resolve_export_layers(
+        body.get("layers"), workspace, resolve_path=workspace_media_resolver(_runtime.resolve_input_path),
+    )
     if _video_editor_cancel_requested(job_id):
         return None
-    return resolved_clips, resolved_soundtrack
+    return resolved_clips, resolved_soundtrack, resolved_layers
 
 
 def _render_export_on_lane(
@@ -686,6 +696,7 @@ def _render_export_on_lane(
     resolved_soundtrack: dict | None,
     output_path: str,
     report,
+    resolved_layers: dict | None = None,
 ):
     _video_editor_job_update(
         job_id,
@@ -723,6 +734,7 @@ def _render_export_on_lane(
                 fps=int(body["fps"]),
                 soundtrack=resolved_soundtrack,
                 progress=report,
+                layers=resolved_layers,
             )
     except resource_scheduler.ResourceAcquireCancelled:
         current = _video_editor_job_snapshot(job_id) or {}
@@ -819,10 +831,10 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
         if resolved is None:
             _finish_video_editor_cancelled(job_id, output_path)
             return
-        resolved_clips, resolved_soundtrack = resolved
+        resolved_clips, resolved_soundtrack, resolved_layers = resolved
         result = _render_export_on_lane(
             job_id, task_id, body, resolved_clips, resolved_soundtrack,
-            output_path, _make_export_report(job_id),
+            output_path, _make_export_report(job_id), resolved_layers,
         )
         if result is None:
             return
@@ -843,11 +855,15 @@ def _start_video_editor_export(body: dict) -> dict:
     width, height, fps = _parse_export_geometry(body)
     clean_clips = [_clean_export_clip(index, clip) for index, clip in enumerate(clips)]
     clean_soundtrack = _clean_export_soundtrack(body.get("soundtrack"))
+    try:
+        clean_layers = clean_export_layers(body)
+    except LayerValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     workspace, out_dir, output_path = _allocate_export_output(body)
     clean_body = dict(body)
     clean_body.update({
         "width": width, "height": height, "fps": fps,
-        "clips": clean_clips, "soundtrack": clean_soundtrack,
+        "clips": clean_clips, "soundtrack": clean_soundtrack, "layers": clean_layers,
     })
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)

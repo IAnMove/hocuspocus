@@ -316,7 +316,10 @@
         "tests/test_wizard_workflow_executor.py",
         "tests/test_workspace_command_failures.py",
         "tests/test_world3d_export.py",
-        "tests/test_world3d_media_cache.py"
+        "tests/test_world3d_media_cache.py",
+        "tests/test_montage_documents.py",
+        "tests/test_scene2d_export.py",
+        "tests/test_video_editor_layers.py"
       ]
     }
   ],
@@ -389,6 +392,42 @@
       "prefix": "docs/development/AGENT_QA_POLICY.md",
       "paths": [
         "tests/test_development_branch_policy.py"
+      ]
+    },
+    {
+      "prefix": "app/services/video_editor_layers.py",
+      "paths": [
+        "tests/test_video_editor_layers.py"
+      ]
+    },
+    {
+      "prefix": "app/services/montage_",
+      "paths": [
+        "tests/test_montage_documents.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/montages.py",
+      "paths": [
+        "tests/test_montage_documents.py"
+      ]
+    },
+    {
+      "prefix": "app/services/scene2d_export.py",
+      "paths": [
+        "tests/test_scene2d_export.py"
+      ]
+    },
+    {
+      "prefix": "app/services/scene_documents.py",
+      "paths": [
+        "tests/test_scene2d_export.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/scene2d_export.py",
+      "paths": [
+        "tests/test_scene2d_export.py"
       ]
     }
   ]

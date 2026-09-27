@@ -34881,6 +34881,12 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
             resolved_soundtrack["resolved_path"] = _resolve_video_editor_audio_source(
                 str(body["soundtrack"].get("source") or ""), workspace,
             )
+        resolved_layers = None
+        if body.get("layers"):
+            from services.video_editor_layers import resolve_export_layers, workspace_media_resolver
+            resolved_layers = resolve_export_layers(
+                body["layers"], workspace, resolve_path=workspace_media_resolver(_resolve_model3d_input_path),
+            )
 
         if _video_editor_cancel_requested(job_id):
             _finish_video_editor_cancelled(job_id, output_path)
@@ -34923,6 +34929,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                     fps=int(body["fps"]),
                     soundtrack=resolved_soundtrack,
                     progress=report,
+                    layers=resolved_layers,
                 )
         except resource_scheduler.ResourceAcquireCancelled:
             current = _video_editor_job_snapshot(job_id) or {}
@@ -35000,6 +35007,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                         for clip in body["clips"]
                     ],
                     "source_manifest": build_source_provenance_manifest(resolved_clips),
+                    "layers": body.get("layers"),
                     "soundtrack": {
                         key: value
                         for key, value in (body.get("soundtrack") or {}).items()
@@ -35172,6 +35180,12 @@ def start_video_editor_export(body: dict):
         output_path = os.path.join(out_dir, output_name)
         suffix += 1
 
+    from services.video_editor_layers import LayerValidationError, clean_export_layers
+    try:
+        # Timed overlays/audio cues (montages) are validated before queueing.
+        clean_layers = clean_export_layers(body)
+    except LayerValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     clean_body = dict(body)
     clean_body.update({
         "width": width,
@@ -35179,6 +35193,7 @@ def start_video_editor_export(body: dict):
         "fps": fps,
         "clips": clean_clips,
         "soundtrack": clean_soundtrack,
+        "layers": clean_layers,
     })
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
@@ -36659,6 +36674,19 @@ _world3d_export = World3DExportService(
 )
 bind_world3d_renderer_origin(api, _world3d_export)
 api.include_router(create_world3d_export_router(_world3d_export))
+from services.scene2d_export import Scene2DExportService, command_catalog as scene2d_export_catalog, command_handlers as scene2d_export_handlers
+from routers.scene2d_export import create_scene2d_export_router
+_scene2d_export = Scene2DExportService(workspace_dir=_workspace_dir, registry_for=_task_registry,
+                                       app_url=os.environ.get("HOCUS_APP_URL", ""))
+bind_world3d_renderer_origin(api, _scene2d_export)
+api.include_router(create_scene2d_export_router(_scene2d_export))
+from services.montage_documents import MontageStore
+from services.montage_commands import MontageCommands, command_catalog as montage_command_catalog
+from routers.montages import create_montages_router
+_montage_commands = MontageCommands(MontageStore(_workspace_dir), start_export=start_video_editor_export,
+                                    get_export=get_video_editor_export)
+api.include_router(create_montages_router(_montage_commands))
+from services.scene_documents import command_catalog as scene_document_catalog, command_handlers as scene_document_handlers
 
 from services.mcp_access import McpAccess
 from routers.mcp_access import create_mcp_access_router
@@ -36680,10 +36708,10 @@ api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
     handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers()},
+              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export)},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog()],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *scene_document_catalog(), *scene2d_export_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())

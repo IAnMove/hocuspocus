@@ -25,6 +25,8 @@ import {
 import { Fragment, lazy, Suspense, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ParseKeys } from 'i18next'
 import { useUiTranslation } from '../../i18n'
+import { MontageLayersPanel, MontageToolbar } from './MontageControls'
+import { exportLayerFields, loadMontageState, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { videoEditorClipFromOutput } from './videoEditorCatalogPick'
@@ -726,6 +728,7 @@ export function VideoEditorPanel() {
   const [resolution, setResolution] = useState(draft.resolution)
   const [fps, setFps] = useState(draft.fps)
   const [soundtrack, setSoundtrack] = useState<EditorSoundtrack | null>(draft.soundtrack)
+  const [montage, setMontage] = useState<{ layers: MontageLayers; ref: MontageRef | null }>(() => loadMontageState(activeWorkspace))
   const [previewTime, setPreviewTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [sequenceMode, setSequenceMode] = useState(false)
@@ -779,6 +782,7 @@ export function VideoEditorPanel() {
     setResolution(next.resolution)
     setFps(next.fps)
     setSoundtrack(next.soundtrack)
+    setMontage(loadMontageState(activeWorkspace))
     setSelectedId(next.clips[0]?.id || null)
     setError(next.warning)
     setPreviewTime(0)
@@ -1862,6 +1866,7 @@ export function VideoEditorPanel() {
           transition_text: clip.transitionText,
           transition_text_size: clip.transitionTextSize,
         })),
+        ...exportLayerFields(montage.layers),
       })
       writeVideoEditorExportId(activeWorkspace, started.job_id)
       if (mountedRef.current) setExportJob(started)
@@ -1974,6 +1979,20 @@ export function VideoEditorPanel() {
         >
           <FolderOpen size={13} /> {t('toolbar.fromHocusPocus')}
         </button>
+        <MontageToolbar
+          workspace={activeWorkspace}
+          disabled={adding || isVideoEditorJobActive(exportJob)}
+          current={() => ({ projectName, resolution, fps, clips, soundtrack })}
+          layers={montage.layers}
+          montageRef={montage.ref}
+          onOpen={(state, layers, ref) => {
+            setClips(state.clips); setProjectName(state.projectName); setResolution(state.resolution); setFps(state.fps); setSoundtrack(state.soundtrack)
+            persistEditorDraft(state.clips, state.projectName, state.resolution, state.fps, draftWorkspaceRef.current, state.soundtrack)
+            setMontage({ layers, ref }); persistMontageState(activeWorkspace, layers, ref)
+          }}
+          onSaved={ref => { setMontage(current => ({ ...current, ref })); persistMontageState(activeWorkspace, montage.layers, ref) }}
+          onError={setError}
+        />
         <button
           onClick={startExport}
           disabled={!clips.length || isVideoEditorJobActive(exportJob)}
@@ -1997,6 +2016,12 @@ export function VideoEditorPanel() {
           </button>
         )}
       </div>
+
+      <MontageLayersPanel
+        layers={montage.layers}
+        disabled={isVideoEditorJobActive(exportJob)}
+        onChange={layers => { setMontage(current => ({ ...current, layers })); persistMontageState(activeWorkspace, layers, montage.ref) }}
+      />
 
       <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border">

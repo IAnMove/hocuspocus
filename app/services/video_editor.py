@@ -46,6 +46,7 @@ from services.video_editor_time_cards import (
     _time_card_text_width,
     _wrap_time_card_text,
 )
+from services.video_editor_layers import apply_render_layers
 from services.video_editor_frames import (
     AbortCallback,
     MIN_TRIM_SECONDS,
@@ -338,8 +339,14 @@ def render_project(
     soundtrack: dict[str, Any] | None = None,
     progress: ProgressCallback | None = None,
     abort_callback: AbortCallback | None = None,
+    layers: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Normalise, trim and assemble clips into a shareable H.264 MP4."""
+    """Normalise, trim and assemble clips into a shareable H.264 MP4.
+
+    ``layers`` optionally carries resolved ``overlays``, ``audio_cues`` and
+    ``duck`` (see :mod:`services.video_editor_layers`), applied after the
+    soundtrack so captions and narration stay editable in a montage.
+    """
     if not clips:
         raise ValueError("Add at least one video clip")
     if width < 240 or height < 240 or width > 3840 or height > 3840:
@@ -456,6 +463,11 @@ def render_project(
             mixed_path = os.path.join(temp_dir, "final.mp4")
             _mix_soundtrack(assembled_path, mixed_path, soundtrack, duration_seconds)
             staging_path = mixed_path
+
+        staging_path = apply_render_layers(
+            staging_path, temp_dir, layers, width=width, height=height, fps=fps,
+            duration=duration_seconds, progress=progress, abort_callback=abort_callback,
+        )
 
         if progress:
             progress(98, "Validating exported frames and audio…")
