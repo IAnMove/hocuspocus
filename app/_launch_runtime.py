@@ -27397,7 +27397,7 @@ def _story_music_cue_count(project: dict, project_type: str) -> int:
 def _story_lab_schema(
     scope: str,
     project_type: str = "full_story",
-    music_cue_count: int | None = None,
+    music_character_ids: list[str] | None = None,
 ) -> dict:
     """Return the strict editable Story Lab payload requested for one stage."""
     string = {"type": "string"}
@@ -27488,10 +27488,41 @@ def _story_lab_schema(
     beat_maximum = 8 if project_type == "quick_video" else 10 if project_type == "music_video" else 12 if project_type == "trailer" else 14
     music_minimum = 1 if project_type == "music_video" else 4
     music_maximum = 1 if project_type == "music_video" else 16
-    if music_cue_count:
-        # Pin the array length so grammar-constrained providers cannot return
-        # a different count than validation requires.
-        music_minimum = music_maximum = music_cue_count
+    music_cues: dict = {
+        "type": "array", "items": music_cue,
+        "minItems": music_minimum, "maxItems": music_maximum,
+    }
+    if music_character_ids is not None and project_type != "music_video":
+        # Give every position its own rule so grammar-constrained providers
+        # cannot return the wrong count, drop a character, or make a story
+        # song instrumental: one instrumental world cue, one cue per
+        # character, then three vocal story songs.
+        def cue_slot(kind: str, target: str | None = None, instrumental: bool | None = None) -> dict:
+            slot = copy.deepcopy(music_cue)
+            properties = slot["properties"]
+            properties["kind"] = {"type": "string", "enum": [kind]}
+            properties["style"] = {"type": "string", "minLength": 10, "maxLength": 300}
+            if target is not None:
+                properties["targetId"] = {"type": "string", "enum": [target]}
+            if instrumental is not None:
+                properties["instrumental"] = {"type": "boolean", "enum": [instrumental]}
+                properties["lyrics"] = (
+                    {"type": "string", "maxLength": 0} if instrumental
+                    # Long enough that a placeholder such as "None
+                    # (Instrumental)" cannot satisfy it.
+                    else {"type": "string", "minLength": 40, "maxLength": 3500}
+                )
+            return slot
+
+        slots = [
+            cue_slot("world", "world", instrumental=True),
+            *(cue_slot("character", character_id) for character_id in music_character_ids),
+            *(cue_slot("story", instrumental=False) for _ in range(3)),
+        ]
+        # prefixItems without a separate "items" rule: Ollama rejects the
+        # combination, and the pinned length already forbids extra cues.
+        music_cues = {"type": "array", "prefixItems": slots,
+                      "minItems": len(slots), "maxItems": len(slots)}
     creative_brief = {
         "type": "object",
         "properties": {
@@ -27538,7 +27569,7 @@ def _story_lab_schema(
         "music": {
             "type": "object",
             "properties": {
-                "cues": {"type": "array", "items": music_cue, "minItems": music_minimum, "maxItems": music_maximum},
+                "cues": music_cues,
             },
             "required": ["cues"],
             "additionalProperties": False,
@@ -28115,6 +28146,16 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
             if not cue["instrumental"]:
                 if not 10 <= len(lyrics) <= 3500:
                     return f"vocal music cue {index + 1} lyrics must contain 10–3500 characters"
+                # Models told a film is silent sometimes satisfy "lyrics
+                # required" with "None (Instrumental)"; that is not a song.
+                sung = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", lyrics)
+                sung = re.sub(
+                    r"(?i)\b(?:instru\w*|(?:no|without)\s+(?:vocals?|lyrics)|none|n/a)\b",
+                    " ",
+                    sung,
+                )
+                if len(re.findall(r"[^\W\d_]+", sung)) < 2:
+                    return f"vocal music cue {index + 1} has placeholder lyrics instead of a song"
                 if not re.search(r"^\[(Verse|Chorus|Hook)\]\s*$", lyrics, re.MULTILINE):
                     return f"vocal music cue {index + 1} needs supported structural tags"
             ids.append(cue["id"])
@@ -31145,6 +31186,10 @@ Music-specific contract:
 - Return exactly one instrumental ambient cue for targetId "world".
 - Return exactly one presentation cue for each of the {character_count} existing character IDs.
 - Return exactly three distinct vocal story songs covering different emotional/narrative angles.
+- The story songs are soundtrack songs sung by a singer, not dialogue. Even when the
+  film has no dialogue or its characters never speak, each story song must have
+  instrumental false and real singable lyrics about the story. Never write placeholder
+  lyrics such as "instrumental", "no vocals" or "none".
 - The cues array therefore has exactly {_story_music_cue_count(project, project_type)} items in total.
 - referenceSong is an editable input example in "Title — Artist" form. Choose a useful,
   recognizable reference for tempo, instrumentation or emotional architecture only.
@@ -31253,8 +31298,11 @@ Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instr
     schema = _story_lab_schema(
         schema_scope,
         project_type,
-        music_cue_count=(
-            _story_music_cue_count(project, project_type) if scope == "music" else None
+        music_character_ids=(
+            list(dict.fromkeys(
+                str(item.get("id") or "").strip()
+                for item in project.get("characters", []) if isinstance(item, dict)
+            )) if scope == "music" else None
         ),
     )
     max_new_tokens = (

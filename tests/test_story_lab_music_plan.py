@@ -128,15 +128,38 @@ class TestStoryLabMusicPlan(unittest.TestCase):
         self.assertTrue(normalized["music"]["cues"][4]["lyrics"].startswith("[Verse]\n\nTiny feet"))
         self.assertIsNone(_story_stage_problem(normalized, "music", self.project))
 
-    def test_full_story_schema_pins_the_exact_cue_count(self):
-        project = {"projectType": "full_story", "characters": [{"id": "buster"}]}
-        count = _story_music_cue_count(project, "full_story")
-        schema = _story_lab_schema("music", "full_story", music_cue_count=count)
-        cues_schema = schema["properties"]["music"]["properties"]["cues"]
+    def test_placeholder_lyrics_are_not_accepted_as_a_song(self):
+        for placeholder in (
+            "[Verse]\n\nNone (Instrumental)",
+            "[Verse]\n\n100% Instrumental (No Vocals) 100% Instru",
+            "[Verse]\n\nN/A - no vocals, silent",
+        ):
+            result = copy.deepcopy(self.result)
+            result["music"]["cues"][3]["lyrics"] = placeholder
+            normalized = _normalize_story_stage_ids(result, "music", self.project)
+            self.assertIn(
+                "placeholder lyrics",
+                _story_stage_problem(normalized, "music", self.project),
+            )
 
-        self.assertEqual(count, 5)
-        self.assertEqual(cues_schema["minItems"], 5)
-        self.assertEqual(cues_schema["maxItems"], 5)
+    def test_full_story_schema_fixes_each_cue_position(self):
+        project = {"projectType": "full_story", "characters": [{"id": "buster"}]}
+        schema = _story_lab_schema("music", "full_story", music_character_ids=["buster"])
+        cues_schema = schema["properties"]["music"]["properties"]["cues"]
+        slots = cues_schema["prefixItems"]
+
+        self.assertEqual(_story_music_cue_count(project, "full_story"), 5)
+        self.assertEqual((cues_schema["minItems"], cues_schema["maxItems"]), (5, 5))
+        self.assertNotIn("items", cues_schema)
+        self.assertEqual(
+            [slot["properties"]["kind"]["enum"] for slot in slots],
+            [["world"], ["character"], ["story"], ["story"], ["story"]],
+        )
+        self.assertEqual(slots[0]["properties"]["instrumental"]["enum"], [True])
+        self.assertEqual(slots[1]["properties"]["targetId"]["enum"], ["buster"])
+        for story in slots[2:]:
+            self.assertEqual(story["properties"]["instrumental"]["enum"], [False])
+            self.assertEqual(story["properties"]["lyrics"]["minLength"], 40)
 
     def test_music_video_mode_requests_and_accepts_one_vocal_story_song(self):
         schema = _story_lab_schema("music", "music_video")
