@@ -83,42 +83,42 @@ def _durable(url: str) -> bool:
     return lowered.startswith(DURABLE_PREFIXES) or lowered.startswith("data:image/")
 
 
+def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequence: bool) -> None:
+    label = "sequence" if sequence else "source"
+    if not url or _blocked_url(url) or not _durable(url):
+        raise http_error(422, "missing_ref", f"Layer {layer.get('id')} {label} needs durable workspace or example media")
+    if url.lower().startswith("data:"):
+        return
+    record = {"layerId": layer["id"], "url": url, "kind": layer["type"], **({"sequence": True} if sequence else {})}
+    if url.lower().startswith("/examples/"):
+        path = unquote(urlsplit(url).path)
+        if ".." in path.split("/") or "\\" in path:
+            raise http_error(422, "missing_ref", "Use a valid bundled example URL")
+        refs.append(record)
+        return
+    path, scoped = parse_media_ref(url, workspace)
+    record["filename"] = os.path.basename((path or "").replace("\\", "/"))
+    record["workspace"] = scoped or workspace
+    refs.append(record)
+
+
+def _layer_media(refs: list, layer: dict, workspace: str) -> None:
+    sequence = layer.get("sequence") if isinstance(layer.get("sequence"), dict) else {}
+    urls = list(sequence.get("sources") or [])
+    if sequence.get("source"):
+        urls.append(sequence.get("source"))
+    for extra in urls:
+        _append_visual_ref(refs, layer, str(extra or "").strip(), workspace, True)
+    _append_visual_ref(refs, layer, str(layer.get("source") or "").strip(), workspace, False)
+
+
 def media_refs(document: dict, workspace: str) -> list[dict]:
     """Durable media referenced by visual layers and audio tracks."""
     refs = []
     for layer in document["layers"]:
         if layer.get("type") in {"effect", "camera"} or layer.get("visible") is False:
             continue
-        sequence = layer.get("sequence") if isinstance(layer.get("sequence"), dict) else {}
-        extra = list(sequence.get("sources") or [])
-        if sequence.get("source"):
-            extra.append(sequence.get("source"))
-        for extra_url in extra:
-            url = str(extra_url or "").strip()
-            if not url or _blocked_url(url) or not _durable(url):
-                raise http_error(422, "missing_ref", f"Layer {layer.get('id')} sequence needs durable workspace or example media")
-            if url.lower().startswith("data:"):
-                continue
-            if url.lower().startswith("/examples/"):
-                refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"], "sequence": True})
-                continue
-            path, scoped = parse_media_ref(url, workspace)
-            refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"], "sequence": True,
-                         "filename": os.path.basename((path or "").replace("\\", "/")), "workspace": scoped or workspace})
-        url = str(layer.get("source") or "").strip()
-        if not url or _blocked_url(url) or not _durable(url):
-            raise http_error(422, "missing_ref", f"Layer {layer.get('id')} needs durable workspace or example media")
-        if url.lower().startswith("/examples/"):
-            path = unquote(urlsplit(url).path)
-            if ".." in path.split("/") or "\\" in path:
-                raise http_error(422, "missing_ref", "Use a valid bundled example URL")
-            refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"]})
-            continue
-        if url.lower().startswith("data:"):
-            continue
-        path, scoped = parse_media_ref(url, workspace)
-        refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"],
-                     "filename": os.path.basename((path or "").replace("\\", "/")), "workspace": scoped or workspace})
+        _layer_media(refs, layer, workspace)
     for track in document.get("audioTracks") or []:
         name = os.path.basename(str((track or {}).get("filename") or ""))
         if not name or os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
