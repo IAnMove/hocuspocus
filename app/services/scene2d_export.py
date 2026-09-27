@@ -102,14 +102,25 @@ def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequen
     refs.append(record)
 
 
+def _sequence_urls(layer: dict) -> list[str]:
+    sequence = layer.get("sequence")
+    if not isinstance(sequence, dict):
+        return []
+    if sequence.get("kind") == "frames":
+        return [str(source).strip() for source in sequence.get("sources") or [] if str(source).strip()]
+    if sequence.get("kind") == "sheet":
+        source = str(sequence.get("source") or "").strip()
+        return [source] if source else []
+    return []
+
+
 def _layer_media(refs: list, layer: dict, workspace: str) -> None:
-    sequence = layer.get("sequence") if isinstance(layer.get("sequence"), dict) else {}
-    urls = list(sequence.get("sources") or [])
-    if sequence.get("source"):
-        urls.append(sequence.get("source"))
-    for extra in urls:
-        _append_visual_ref(refs, layer, str(extra or "").strip(), workspace, True)
-    _append_visual_ref(refs, layer, str(layer.get("source") or "").strip(), workspace, False)
+    urls = _sequence_urls(layer)
+    for url in urls:
+        _append_visual_ref(refs, layer, url, workspace, True)
+    source = str(layer.get("source") or "").strip()
+    if source or not urls:
+        _append_visual_ref(refs, layer, source, workspace, False)
 
 
 def media_refs(document: dict, workspace: str) -> list[dict]:
