@@ -309,6 +309,7 @@
         "tests/test_video_editor_provenance.py",
         "tests/test_video_editor_router.py",
         "tests/test_video_extra_info.py",
+        "tests/test_video_layout.py",
         "tests/test_vocal_isolation.py",
         "tests/test_wangp_analysis.py",
         "tests/test_wangp_frame_extraction.py",

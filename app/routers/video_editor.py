@@ -23,6 +23,7 @@ from services import resource_scheduler
 from services.asset_manifest import publish_generation_sidecar
 from services.media_refs import parse_media_ref
 from services.media_thumbnails import ensure_media_thumbnail
+from services.video_layout import stamp_layout
 from services.video_editor_layers import (
     LayerValidationError,
     clean_export_layers,
@@ -67,6 +68,10 @@ CLIP_SIDECAR_KEYS = frozenset({
     "volume",
     "muted",
     "fit",
+    "focus_x",
+    "focus_y",
+    "blur_amount",
+    "background_dim",
     "transition",
     "transition_duration",
     "transition_text",
@@ -477,6 +482,7 @@ def _clean_export_clip(index: int, clip: Any) -> dict:
         "transition_text": normalise_time_card_text(clip.get("transition_text")),
         "transition_text_size": transition_text_size,
     })
+    stamp_layout(clean_clip)
     return clean_clip
 
 

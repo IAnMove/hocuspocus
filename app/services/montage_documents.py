@@ -114,6 +114,26 @@ def _takes(raw: Any, label: str) -> list[dict[str, Any]]:
     return takes
 
 
+_FRAME_KNOBS = (
+    ("focusX", 0, 100),
+    ("focusY", 0, 100),
+    ("blurAmount", 0, 1),
+    ("backgroundDim", 0, 1),
+)
+
+
+def _frame_fields(raw: dict, label: str) -> dict[str, Any]:
+    fit = raw.get("fit", "fit")
+    if fit not in ("fit", "fill", "blur"):
+        raise MontageError(f"{label} fit must be fit, fill or blur")
+    fields: dict[str, Any] = {"fit": fit}
+    for key, low, high in _FRAME_KNOBS:
+        if key not in raw or raw.get(key) is None:
+            continue
+        fields[key] = _number(raw.get(key), f"{label} {key}", low, high)
+    return fields
+
+
 def _clip(raw: Any, index: int) -> dict[str, Any]:
     label = f"Clip {index + 1}"
     if not isinstance(raw, dict):
@@ -122,9 +142,6 @@ def _clip(raw: Any, index: int) -> dict[str, Any]:
     trim_end = _number(raw.get("trimEnd"), f"{label} trimEnd", 0, 36000, 0)
     if trim_end and trim_end <= trim_start:
         raise MontageError(f"{label} trimEnd must be after trimStart")
-    fit = raw.get("fit", "fit")
-    if fit not in ("fit", "fill"):
-        raise MontageError(f"{label} fit must be fit or fill")
     clip = {
         "id": str(raw.get("id") or f"clip-{index + 1}").strip()[:160],
         "name": str(raw.get("name") or os.path.basename(str(raw.get("source") or "")) or label).strip()[:300],
@@ -133,12 +150,12 @@ def _clip(raw: Any, index: int) -> dict[str, Any]:
         "trimEnd": trim_end,
         "volume": _number(raw.get("volume"), f"{label} volume", 0, 2, 1),
         "muted": bool(raw.get("muted", False)),
-        "fit": fit,
         "transition": str(raw.get("transition") or "none").strip()[:40],
         "transitionDuration": _number(raw.get("transitionDuration"), f"{label} transitionDuration", 0.05, 5, 0.5),
         "transitionText": str(raw.get("transitionText") or "")[:500],
         "transitionTextSize": _number(raw.get("transitionTextSize"), f"{label} transitionTextSize", 50, 160, 100),
     }
+    clip.update(_frame_fields(raw, label))
     origin = _origin(raw.get("origin"), label)
     if origin:
         clip["origin"] = origin
@@ -232,18 +249,34 @@ def normalize_montage(raw: Any) -> dict[str, Any]:
     return document
 
 
+_EXPORT_KNOBS = (
+    ("focusX", "focus_x"),
+    ("focusY", "focus_y"),
+    ("blurAmount", "blur_amount"),
+    ("backgroundDim", "background_dim"),
+)
+
+
+def _export_clip(clip: dict[str, Any]) -> dict[str, Any]:
+    body = {
+        "name": clip["name"], "source": clip["source"], "trim_start": clip["trimStart"], "trim_end": clip["trimEnd"],
+        "volume": clip["volume"], "muted": clip["muted"], "fit": clip["fit"], "transition": clip["transition"],
+        "transition_duration": clip["transitionDuration"], "transition_text": clip["transitionText"],
+        "transition_text_size": clip["transitionTextSize"],
+    }
+    for source_key, export_key in _EXPORT_KNOBS:
+        if source_key in clip:
+            body[export_key] = clip[source_key]
+    return body
+
+
 def export_body(document: dict[str, Any], workspace: str) -> dict[str, Any]:
     """Translate a montage into the Video Editor export request."""
     soundtrack = document.get("soundtrack")
     return {
         "name": document["name"], "workspace": workspace,
         "width": document["width"], "height": document["height"], "fps": document["fps"],
-        "clips": [{
-            "name": clip["name"], "source": clip["source"], "trim_start": clip["trimStart"], "trim_end": clip["trimEnd"],
-            "volume": clip["volume"], "muted": clip["muted"], "fit": clip["fit"], "transition": clip["transition"],
-            "transition_duration": clip["transitionDuration"], "transition_text": clip["transitionText"],
-            "transition_text_size": clip["transitionTextSize"],
-        } for clip in document["clips"]],
+        "clips": [_export_clip(clip) for clip in document["clips"]],
         "soundtrack": {
             "name": soundtrack["name"], "source": soundtrack["source"], "trim_start": soundtrack["trimStart"],
             "trim_end": soundtrack["trimEnd"], "volume": soundtrack["volume"], "loop": soundtrack["loop"],

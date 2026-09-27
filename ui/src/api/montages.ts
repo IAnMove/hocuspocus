@@ -9,7 +9,11 @@ export interface MontageClip {
   trimEnd: number
   volume: number
   muted: boolean
-  fit: 'fit' | 'fill'
+  fit: 'fit' | 'fill' | 'blur'
+  focusX?: number
+  focusY?: number
+  blurAmount?: number
+  backgroundDim?: number
   transition: string
   transitionDuration: number
   transitionText: string

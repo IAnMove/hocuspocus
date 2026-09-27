@@ -50,7 +50,13 @@
     "unmute": "Unmute clip",
     "mute": "Mute clip",
     "fit": "Fit · no crop",
-    "fill": "Fill · crop"
+    "fill": "Fill · crop",
+    "blur": "Blur · fill the frame",
+    "frame": "Frame",
+    "focus": "Crop focus",
+    "focusHint": "Drag the thumbnail to choose what stays in frame",
+    "blurAmount": "Blur",
+    "backgroundDim": "Dim"
   },
   "timeline": {
     "aria": "Video editor timeline",

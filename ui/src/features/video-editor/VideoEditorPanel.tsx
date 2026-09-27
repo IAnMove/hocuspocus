@@ -43,14 +43,16 @@ import { VIDEO_EDITOR_PENDING_SOURCE_KEY, editorSourcePath } from './editorHando
 import {
   applyTransitionToGaps,
   editorClipRecoveryMessage,
+  exportClipBody,
   normalizeEditorClips,
   splitClipAtTime,
   TIMELINE_TRIM_PX_PER_SEC,
   trimClipFromDelta,
-  type ClipFit,
   type EditorClip,
   type Transition,
 } from './editorClipNormalization'
+import { BlurFillBackdrop, ClipFrameControls } from './ClipFrameControls'
+import { clipObjectPosition, clipPreviewClass } from './clipFrame'
 import {
   clipId,
   loadEditorDraft,
@@ -1861,19 +1863,7 @@ export function VideoEditorPanel() {
           volume: soundtrack.volume,
           loop: soundtrack.loop,
         } : null,
-        clips: normalized.clips.map(clip => ({
-          name: clip.name,
-          source: clip.source,
-          trim_start: clip.trimStart,
-          trim_end: clip.trimEnd,
-          volume: clip.volume,
-          muted: clip.muted,
-          fit: clip.fit,
-          transition: clip.transition,
-          transition_duration: clip.transitionDuration,
-          transition_text: clip.transitionText,
-          transition_text_size: clip.transitionTextSize,
-        })),
+        clips: normalized.clips.map(clip => exportClipBody(clip)),
         ...exportLayerFields(montage.layers),
       })
       writeVideoEditorExportId(activeWorkspace, started.job_id)
@@ -2051,13 +2041,16 @@ export function VideoEditorPanel() {
                   const clip = clips[clipIndex]
                   if (!clip) return null
                   return (
+                    <Fragment key={`${slot}-${clip.id}`}>
+                    <BlurFillBackdrop fit={clip.fit} src={clip.thumbnailUrl} />
                     <video
                       key={`${slot}-${clip.id}`}
                       ref={element => { sequenceRefs.current[slot] = element }}
                       src={clip.previewUrl}
-                      className={`absolute inset-0 w-full h-full ${clip.fit === 'fill' ? 'object-cover' : 'object-contain'}`}
+                      className={clipPreviewClass(clip.fit)}
                       style={{
                         opacity: sequenceStyles[slot].opacity,
+                        objectPosition: clipObjectPosition(clip),
                         clipPath: sequenceStyles[slot].clipPath,
                         transform: sequenceStyles[slot].transform,
                         filter: sequenceStyles[slot].filter,
@@ -2072,6 +2065,7 @@ export function VideoEditorPanel() {
                         pendingSeekAtRef.current = 0
                       }}
                     />
+                    </Fragment>
                   )
                 })}
                 {sequenceInterstitial && (
@@ -2085,11 +2079,13 @@ export function VideoEditorPanel() {
               </ExportPreviewCanvas>
             ) : selected ? (
               <ExportPreviewCanvas width={resolution.width} height={resolution.height}>
+                <BlurFillBackdrop fit={selected.fit} src={selected.thumbnailUrl} />
                 <video
                   key={selected.id}
                   ref={videoRef}
                   src={selected.previewUrl}
-                  className={`absolute inset-0 w-full h-full ${selected.fit === 'fill' ? 'object-cover' : 'object-contain'}`}
+                  className={clipPreviewClass(selected.fit)}
+                  style={{ objectPosition: clipObjectPosition(selected) }}
                   playsInline
                   onLoadedMetadata={event => {
                     event.currentTarget.currentTime = selected.trimStart
@@ -2536,21 +2532,7 @@ export function VideoEditorPanel() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-3">
-                {(['fit', 'fill'] as ClipFit[]).map(value => (
-                  <button
-                    key={value}
-                    onClick={() => patchClip(selected.id, { fit: value })}
-                    className={`px-2 py-1.5 text-[10px] rounded border ${
-                      selected.fit === value
-                        ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
-                        : 'border-border text-text-muted hover:text-text-secondary'
-                    }`}
-                  >
-                    {value === 'fit' ? t('inspector.fit') : t('inspector.fill')}
-                  </button>
-                ))}
-              </div>
+              <ClipFrameControls clip={selected} onChange={patch => patchClip(selected.id, patch)} />
 
               <div className="flex gap-1.5 mt-3">
                 <button

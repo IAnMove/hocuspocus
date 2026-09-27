@@ -5,7 +5,8 @@ import type { MontageAudioCue, MontageClip, MontageDocument, MontageOverlay } fr
 import type { VideoEditorProbe } from '../../api/client'
 import type { ResolutionOption, EditorSoundtrack } from './editorDraft'
 import { RESOLUTIONS } from './editorDraft'
-import type { ClipFit, EditorClip, Transition } from './editorClipNormalization'
+import type { EditorClip, Transition } from './editorClipNormalization'
+import { editorFrameFields, montageFrameFields } from './clipFrame'
 
 export interface MontageLayers {
   overlays: MontageOverlay[]
@@ -52,7 +53,7 @@ export function montageFromEditor(input: {
       trimEnd: clip.trimEnd,
       volume: clip.volume,
       muted: clip.muted,
-      fit: clip.fit,
+      ...montageFrameFields(clip),
       transition: clip.transition,
       transitionDuration: clip.transitionDuration,
       transitionText: clip.transitionText,
@@ -104,7 +105,7 @@ export async function editorFromMontage(
       trimEnd,
       volume: clip.volume,
       muted: clip.muted,
-      fit: (clip.fit === 'fill' ? 'fill' : 'fit') as ClipFit,
+      ...editorFrameFields(clip),
       transition: TRANSITIONS.has(clip.transition as Transition) ? clip.transition as Transition : 'none',
       transitionDuration: clip.transitionDuration,
       transitionText: clip.transitionText,
