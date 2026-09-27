@@ -9,6 +9,17 @@ External source repositories remain pinned in
 different repositories, Python versions, wheels and dependencies without forking
 the entire application.
 
+The install receipt stores fingerprint scheme 2. That hash is the canonical
+JSON of `recipe(engine, platform)` plus the engine's own constraint, lock and
+helper files. It does not include the whole `profiles.json` or
+`runtime_install.js`, so a Windows-only recipe edit does not invalidate a Linux
+install. When the steps inside `runtime_install.js` change for one engine,
+increment `installStepsVersion` on that engine. If only the Windows steps
+changed, increment `windows.installStepsVersion` instead. A receipt written by
+the previous scheme is accepted once when `runtime_verify.py --inspect` passes,
+then rewritten with the new fingerprint. A scheme-2 receipt whose fingerprint
+no longer matches still needs Install or Update.
+
 ## Available recipes
 
 All current recipes require **x64 and NVIDIA**. Selection checks OS,

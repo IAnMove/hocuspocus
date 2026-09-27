@@ -34,6 +34,7 @@
   "engines": {
     "core": {
       "label": "HocusPocus core",
+      "installStepsVersion": 1,
       "env": "app/env",
       "environment": "venv",
       "python": "3.10",
@@ -56,6 +57,7 @@
     },
     "wangp": {
       "label": "HocusPocus / WanGP",
+      "installStepsVersion": 1,
       "env": "app/env",
       "environment": "venv",
       "python": "3.10",
@@ -79,6 +81,7 @@
         "xformers": "0.0.30"
       },
       "windows": {
+        "installStepsVersion": 1,
         "torch": "2.7.1",
         "torchvision": "0.22.1",
         "torchaudio": "2.7.1",
@@ -104,6 +107,7 @@
     },
     "hunyuan3d": {
       "label": "Hunyuan3D",
+      "installStepsVersion": 1,
       "env": "app/services/hunyuan3d/env",
       "environment": "conda",
       "python": "3.10",
@@ -127,10 +131,14 @@
         "hunyuan3d2",
         "hunyuan3d21"
       ],
+      "windows": {
+        "installStepsVersion": 1
+      },
       "defaultInstall": true
     },
     "minimax_h3": {
       "label": "MiniMax H3 Legacy / ComfyUI",
+      "installStepsVersion": 1,
       "env": "app/services/minimax_h3/env",
       "environment": "conda",
       "python": "3.11",
@@ -150,6 +158,7 @@
         "tokenizers": "0.22.1"
       },
       "windows": {
+        "installStepsVersion": 1,
         "constraints": {
           "triton-windows": "3.6.0.post26"
         }
@@ -161,6 +170,7 @@
     },
     "sam": {
       "label": "SAM 3.1",
+      "installStepsVersion": 1,
       "env": "app/services/sam/env",
       "environment": "conda",
       "python": "3.12",
@@ -179,6 +189,7 @@
         "triton": "3.3.0"
       },
       "windows": {
+        "installStepsVersion": 1,
         "constraints": {
           "triton": null,
           "triton-windows": "3.3.1.post19"
@@ -191,6 +202,7 @@
     },
     "rigging": {
       "label": "UniRig",
+      "installStepsVersion": 1,
       "env": "app/services/rigging/env",
       "environment": "conda",
       "python": "3.11",
