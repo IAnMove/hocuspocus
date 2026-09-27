@@ -125,7 +125,7 @@ def test_freeze_collects_sheet_sequence_ref_when_source_is_empty():
     )])
     snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
     assert snapshot["refs"] == [{"layerId": "sheet", "url": f"/api/v1/file/atlas.png?workspace={WORKSPACE}",
-                                 "kind": "image", "filename": "atlas.png", "workspace": WORKSPACE}]
+                                 "kind": "image", "sequence": True, "filename": "atlas.png", "workspace": WORKSPACE}]
 
 
 def test_freeze_rejects_sequence_only_layer_without_durable_frames():
