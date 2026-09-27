@@ -80,6 +80,12 @@ function vendorSteps(id) {
       message: `git clone --depth 1 --no-checkout ${vendor.url} ${vendor.path}`,
     }},
     {method: 'shell.run', params: {path: vendor.path, message: [
+      // Undo the Windows source patch so a new revision can check out cleanly;
+      // patch_windows_sources.py reapplies it before the native build.
+      // `git diff --quiet` is also true on a fresh --no-checkout clone.
+      ...(id === 'hunyuan3d21' ? [(files => `(git diff --quiet -- ${files} || git checkout -- ${files})`)(
+        ['grid_neighbor.cpp', 'rasterizer.cpp', 'rasterizer_gpu.cu']
+          .map(name => `hy3dpaint/custom_rasterizer/lib/custom_rasterizer_kernel/${name}`).join(' '))] : []),
       `git fetch --depth 1 origin ${vendor.revision}`, `git checkout --detach ${vendor.revision}`,
       `python "{{path.resolve(cwd, 'scripts/runtime_vendor.py')}}" ${id}`,
     ]}},
@@ -113,12 +119,27 @@ function engineSteps(engine, platform) {
   }})
   if (engine === 'wangp') run.push(...call('torch.js', {managed: true}))
   if (engine === 'hunyuan3d') {
-    run.push({method: 'shell.run', params: {...shell(engine, platform),
-      message: pip(engine, platform, 'install --no-build-isolation diso==0.1.4')}})
-    run.push(...hunyuanNative.nativeBuildSteps().filter(s => !s.when || s.when.includes(`'${platform}'`)).map(s => ({
-      ...s, params: {...s.params, ...shell(engine, platform, s.params.path, s.params.env),
-        message: s.params.message.startsWith('uv pip ') ? pip(engine, platform, s.params.message.slice(7), s.params.path) : s.params.message},
-    })))
+    // Windows builds load the CUDA-compatible MSVC toolset chosen by the probe
+    // (runtime_profiles.find_msvc); DISTUTILS_USE_SDK makes setuptools use it
+    // instead of its own vswhere lookup. Conda's CUDA keeps cudart.lib in
+    // Library/lib, not the lib/x64 torch passes to the linker, so it goes on
+    // LIB (vcvars64.bat keeps an existing LIB).
+    const msvc = platform === 'win32'
+      ? m => `{{local.runtime.msvc ? 'call "' + local.runtime.msvc.vcvars + '" -vcvars_ver=' + local.runtime.msvc.toolset + ' >nul && ' : ''}}${m}`
+      : m => m
+    const msvcEnv = platform === 'win32'
+      ? {DISTUTILS_USE_SDK: '1', LIB: "{{path.resolve(path.dirname(which('nvcc')), '../lib')}}"} : {}
+    const base = shell(engine, platform)
+    run.push({method: 'shell.run', params: {...base, env: {...base.env, ...msvcEnv},
+      message: msvc(pip(engine, platform, 'install --no-build-isolation diso==0.1.4'))}})
+    if (platform === 'win32') run.push({method: 'shell.run', params: {...base,
+      message: 'python app/services/hunyuan3d/patch_windows_sources.py'}})
+    run.push(...hunyuanNative.nativeBuildSteps().filter(s => !s.when || s.when.includes(`'${platform}'`)).map(s => {
+      const params = shell(engine, platform, s.params.path, {...s.params.env, ...msvcEnv})
+      return {...s, params: {...s.params, ...params,
+        message: msvc(s.params.message.startsWith('uv pip ') ? pip(engine, platform, s.params.message.slice(7), s.params.path) : s.params.message)},
+      }
+    }))
     run.push({when: "{{!exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1/hy3dpaint/ckpt/RealESRGAN_x4plus.pth')}}",
       method: 'fs.download', params: {
         url: 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth',

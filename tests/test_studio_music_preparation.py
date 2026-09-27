@@ -287,7 +287,7 @@ def test_language_guard_reuses_music_contract_without_rewriting_lyrics():
     params = frozen_params(lyrics_language="es", prompt="[Verse]\nThe night is singing through the server")
     with pytest.raises(HTTPException) as error:
         invoke(params)
-    assert "idioma" in error.value.detail["message"]
+    assert "requested language" in error.value.detail["message"]
 
     valid = frozen_params(lyrics_language="es", prompt="[Verse]\nLa noche canta")
     (native, _), _, _ = invoke(valid)

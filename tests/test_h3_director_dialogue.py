@@ -1831,6 +1831,48 @@ Eugenio:
             ],
         )
 
+    def test_story_treatment_front_matter_never_becomes_dialogue(self):
+        screenplay = """Title: THE GREAT GLITTER ESCAPE
+
+Logline: A tiny teddy bear marches through a glitter storm.
+
+Story Structure:
+- Setup: The bear stands still in a messy playroom.
+- Climax: A block flies past his head.
+
+Emotional Arc: The bear moves from trapped to stoic conviction.
+
+EXT. THE PLAYROOM - DAY
+
+The bear stands still.
+
+BUSTER
+I am the storm.
+"""
+
+        self.assertEqual(
+            _extract_h3_screenplay_dialogue(screenplay),
+            [{"speaker_name": "BUSTER", "spoken_text": "I am the storm."}],
+        )
+
+    def test_structural_labels_and_sound_effects_are_not_speakers(self):
+        screenplay = """Story Structure:
+- Setup: The bear stands still.
+
+Emotional Arc: The bear finds conviction.
+
+INT. PLAYROOM - DAY
+
+BOOM.
+
+A massive explosion of glitter erupts.
+
+CRASH!
+Blocks tumble.
+"""
+
+        self.assertEqual(_extract_h3_screenplay_dialogue(screenplay), [])
+
     def test_spanish_guillemets_keep_user_dialogue_verbatim_in_table_read(self):
         manifest = [{
             "speaker_name": "Eugenio",

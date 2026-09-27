@@ -100,7 +100,7 @@ def test_invalid_lyrics_language_blocks_enqueue_and_keeps_the_original(tmp_path)
         "output_folder": "night-shift",
         "idempotency_key": "cmd-guard",
     }
-    with pytest.raises(MusicSubmissionError, match="idioma") as caught:
+    with pytest.raises(MusicSubmissionError, match="requested language") as caught:
         submit_music_generation(workspace_dir=str(tmp_path), request=request)
     assert caught.value.details["lyrics"] == request["lyrics"]
     assert caught.value.details["language_guard"]["verdict"] == "invalid"

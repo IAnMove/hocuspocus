@@ -61,31 +61,31 @@ function fail(path: string, message: string): never {
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) fail(path, 'debe ser un objeto.')
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail(path, 'must be an object.')
   return value as Record<string, unknown>
 }
 
 function text(value: unknown, path: string, max: number, required = true): string {
-  if (typeof value !== 'string' || (required && !value.trim()) || value.length > max) fail(path, `debe ser texto de 1-${max} caracteres.`)
+  if (typeof value !== 'string' || (required && !value.trim()) || value.length > max) fail(path, `must be text of 1-${max} characters.`)
   return value
 }
 
 function safeId(value: unknown, path: string): string {
   const id = text(value, path, MAX_ID_LENGTH)
-  if (!/^[a-zA-Z0-9._-]+$/.test(id)) fail(path, 'sólo admite caracteres seguros de identificador.')
+  if (!/^[a-zA-Z0-9._-]+$/.test(id)) fail(path, 'only accepts safe identifier characters.')
   return id
 }
 
 function fileReference(value: unknown, path: string, extensions: readonly string[]): ShowcaseFileReference {
   const item = record(value, path)
   const url = text(item.url, `${path}.url`, 240)
-  if (!SHOWCASE_URL_PATTERN.test(url)) fail(`${path}.url`, 'debe ser una URL relativa de /scene-showcase/.')
+  if (!SHOWCASE_URL_PATTERN.test(url)) fail(`${path}.url`, 'must be a relative /scene-showcase/ URL.')
   const extension = url.slice(url.lastIndexOf('.') + 1)
-  if (!extensions.includes(extension)) fail(`${path}.url`, `extensión no permitida; se esperaba ${extensions.join(' o ')}.`)
+  if (!extensions.includes(extension)) fail(`${path}.url`, `extension not allowed; expected ${extensions.join(' or ')}.`)
   const sha256 = text(item.sha256, `${path}.sha256`, 64)
-  if (!SHA256_PATTERN.test(sha256)) fail(`${path}.sha256`, 'debe ser SHA-256 hexadecimal en minúsculas.')
-  if (typeof item.bytes !== 'number' || !Number.isSafeInteger(item.bytes) || item.bytes <= 0) fail(`${path}.bytes`, 'debe ser un entero positivo seguro.')
-  if (extension === 'json' && item.bytes > MAX_SCENE_JSON_BYTES) fail(`${path}.bytes`, 'el JSON de escena no puede superar 4 MiB.')
+  if (!SHA256_PATTERN.test(sha256)) fail(`${path}.sha256`, 'must be lowercase hexadecimal SHA-256.')
+  if (typeof item.bytes !== 'number' || !Number.isSafeInteger(item.bytes) || item.bytes <= 0) fail(`${path}.bytes`, 'must be a safe positive integer.')
+  if (extension === 'json' && item.bytes > MAX_SCENE_JSON_BYTES) fail(`${path}.bytes`, 'the scene JSON cannot exceed 4 MiB.')
   const sceneName = extension === 'json'
     ? text(item.sceneName, `${path}.sceneName`, MAX_TITLE_LENGTH)
     : item.sceneName === undefined ? undefined : text(item.sceneName, `${path}.sceneName`, MAX_TITLE_LENGTH)
@@ -96,8 +96,8 @@ function sourceAudio(value: unknown, path: string): ShowcaseSourceAudio {
   const item = record(value, path)
   const id = safeId(item.id, `${path}.id`)
   const filename = text(item.filename, `${path}.filename`, MAX_FILENAME_LENGTH)
-  if (/[/\\\0\r\n]/.test(filename)) fail(`${path}.filename`, 'no puede contener separadores ni controles.')
-  if (typeof item.duration !== 'number' || !Number.isFinite(item.duration) || item.duration < 0 || item.duration > 86_400) fail(`${path}.duration`, 'debe estar entre 0 y 86400 segundos.')
+  if (/[/\\\0\r\n]/.test(filename)) fail(`${path}.filename`, 'cannot contain separators or control characters.')
+  if (typeof item.duration !== 'number' || !Number.isFinite(item.duration) || item.duration < 0 || item.duration > 86_400) fail(`${path}.duration`, 'must be between 0 and 86400 seconds.')
   return { id, filename, duration: item.duration }
 }
 
@@ -107,41 +107,41 @@ function parseItem(value: unknown, index: number): ShowcaseItem {
   const id = safeId(item.id, `${path}.id`)
   const title = text(item.title, `${path}.title`, MAX_TITLE_LENGTH)
   const kind = item.kind
-  if (kind !== 'scene' && kind !== 'music_video') fail(`${path}.kind`, 'debe ser scene o music_video.')
+  if (kind !== 'scene' && kind !== 'music_video') fail(`${path}.kind`, 'must be scene or music_video.')
   const description = text(item.description, `${path}.description`, MAX_DESCRIPTION_LENGTH)
-  if (!Array.isArray(item.effects) || item.effects.length > MAX_EFFECTS) fail(`${path}.effects`, `debe contener como máximo ${MAX_EFFECTS} efectos.`)
+  if (!Array.isArray(item.effects) || item.effects.length > MAX_EFFECTS) fail(`${path}.effects`, `must contain at most ${MAX_EFFECTS} effects.`)
   const effects = item.effects.map((effect, effectIndex) => text(effect, `${path}.effects[${effectIndex}]`, MAX_EFFECT_LENGTH))
   const video = fileReference(item.video, `${path}.video`, ['mp4'])
   const poster = item.poster === undefined ? undefined : fileReference(item.poster, `${path}.poster`, ['png', 'jpg'])
   const scene = item.scene === undefined ? undefined : fileReference(item.scene, `${path}.scene`, ['json'])
   const shots = item.shots === undefined ? undefined : (() => {
-    if (!Array.isArray(item.shots) || item.shots.length > MAX_SHOTS) fail(`${path}.shots`, `debe contener como máximo ${MAX_SHOTS} planos.`)
+    if (!Array.isArray(item.shots) || item.shots.length > MAX_SHOTS) fail(`${path}.shots`, `must contain at most ${MAX_SHOTS} shots.`)
     return item.shots.map((shot, shotIndex) => {
       const parsed = record(shot, `${path}.shots[${shotIndex}]`)
       return { title: text(parsed.title, `${path}.shots[${shotIndex}].title`, MAX_TITLE_LENGTH), scene: fileReference(parsed.scene, `${path}.shots[${shotIndex}].scene`, ['json']) }
     })
   })()
   const sourceAudioValue = item.sourceAudio === undefined ? undefined : sourceAudio(item.sourceAudio, `${path}.sourceAudio`)
-  if (kind === 'scene' && !scene) fail(`${path}.scene`, 'las escenas necesitan una referencia JSON editable.')
-  if (kind === 'music_video' && !scene && (!shots || shots.length === 0)) fail(`${path}.shots`, 'un videoclip necesita una escena editable o al menos un plano guardado.')
-  if (item.imageProvider !== 'minimax') fail(`${path}.imageProvider`, 'debe ser minimax.')
-  if (item.imageModel !== 'image-01') fail(`${path}.imageModel`, 'debe ser image-01.')
-  if (item.approval !== 'pending') fail(`${path}.approval`, 'debe permanecer pending hasta una aprobación explícita.')
+  if (kind === 'scene' && !scene) fail(`${path}.scene`, 'scenes need an editable JSON reference.')
+  if (kind === 'music_video' && !scene && (!shots || shots.length === 0)) fail(`${path}.shots`, 'a music video needs an editable scene or at least one saved shot.')
+  if (item.imageProvider !== 'minimax') fail(`${path}.imageProvider`, 'must be minimax.')
+  if (item.imageModel !== 'image-01') fail(`${path}.imageModel`, 'must be image-01.')
+  if (item.approval !== 'pending') fail(`${path}.approval`, 'must stay pending until explicit approval.')
   return { id, title, kind, description, effects, video, ...(poster ? { poster } : {}), ...(scene ? { scene } : {}), ...(shots ? { shots } : {}), ...(sourceAudioValue ? { sourceAudio: sourceAudioValue } : {}), imageProvider: 'minimax', imageModel: 'image-01', approval: 'pending' }
 }
 
 /** Validates and returns a safe, typed manifest; it never downloads or mutates it. */
 export function parseShowcaseManifest(value: unknown): ShowcaseManifest {
   const manifest = record(value, 'manifest')
-  if (manifest.schema !== SHOWCASE_SCHEMA) fail('schema', `debe ser ${SHOWCASE_SCHEMA}.`)
-  if (manifest.version !== SHOWCASE_VERSION) fail('version', 'versión no soportada.')
+  if (manifest.schema !== SHOWCASE_SCHEMA) fail('schema', `must be ${SHOWCASE_SCHEMA}.`)
+  if (manifest.version !== SHOWCASE_VERSION) fail('version', 'unsupported version.')
   const title = text(manifest.title, 'title', MAX_TITLE_LENGTH)
   const description = text(manifest.description, 'description', MAX_DESCRIPTION_LENGTH)
-  if (!Array.isArray(manifest.items) || manifest.items.length > MAX_ITEMS) fail('items', `debe contener como máximo ${MAX_ITEMS} elementos.`)
+  if (!Array.isArray(manifest.items) || manifest.items.length > MAX_ITEMS) fail('items', `must contain at most ${MAX_ITEMS} items.`)
   const items = manifest.items.map(parseItem)
   const ids = new Set<string>()
   for (const item of items) {
-    if (ids.has(item.id)) fail('items', `id duplicado: ${item.id}.`)
+    if (ids.has(item.id)) fail('items', `duplicate id: ${item.id}.`)
     ids.add(item.id)
   }
   return { schema: SHOWCASE_SCHEMA, version: SHOWCASE_VERSION, title, description, items }

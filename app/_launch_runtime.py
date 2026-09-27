@@ -511,6 +511,9 @@ def _prepare_local_gpu_owner(
                 and str(llm_status.get("device") or "").startswith("cuda")
             ):
                 llm_service.unload_model()
+            # Ollama is a separate process on the same GPU; release any model
+            # Maestro used so it does not hold memory the next job needs.
+            llm_service.release_ollama_models()
         except Exception as exc:
             print(f"[Resources] Local CUDA LLM cleanup skipped: {exc}")
     # release_model() already flushes Torch caches and performs collection.
@@ -7465,6 +7468,7 @@ async def update_services_config(request: Request):
 
     services = wgp.server_config.setdefault("services", {})
     updated = {}
+    previous_llm_provider = _effective_llm_routing(services)[0]
 
     for key, value in body.items():
         if key not in ALLOWED_KEYS:
@@ -7494,6 +7498,23 @@ async def update_services_config(request: Request):
 
     wgp.server_config["services"] = services
 
+    # Switching to the internal server without naming a model must not keep the
+    # previous provider's model or URL: a MiniMax chat id forces MiniMax routing,
+    # so "local" would still call the MiniMax API without a key.
+    switched_to_local = (
+        "llm_provider" in body and "llm_model_id" not in body
+        and str(services.get("llm_provider") or "").strip().lower() == "local"
+        and previous_llm_provider != "local"
+    )
+    if switched_to_local:
+        from services.llm_service import MODEL_REGISTRY
+        current_model = services.get("llm_model_id") or _active_production_profile()["text"]["model"]
+        if current_model not in MODEL_REGISTRY:
+            services["llm_model_id"] = _DEFAULT_LLM_REPO
+            updated["llm_model_id"] = _DEFAULT_LLM_REPO
+        services["llm_remote_url"] = ""
+        updated["llm_remote_url"] = ""
+
     # Keep the global text profile and the legacy LLM controls coherent. API
     # keys remain solely in services; only credential-free routing is mirrored.
     if "llm_provider" in body or "llm_model_id" in body:
@@ -7507,6 +7528,8 @@ async def update_services_config(request: Request):
             )
             if services.get("llm_remote_url"):
                 profile["text"]["base_url"] = str(services.get("llm_remote_url") or "")
+            elif switched_to_local:
+                profile["text"]["base_url"] = ""
             wgp.server_config[_PRODUCTION_PROFILE_CONFIG_KEY] = _normalize_production_profile(profile)
         except ValueError:
             pass
@@ -8675,7 +8698,7 @@ async def upload_audio(file: UploadFile = File(...)):
     VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"}
     ALLOWED_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
 
-    ext = os.path.splitext(file.filename or "audio.wav")[1].lower()
+    ext = _upload_extension(file.filename, "audio.wav")
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
@@ -9907,17 +9930,19 @@ def director_pipeline_stop(pid: str):
 
 
 @api.post("/api/v1/director/pipeline/{pid}/resume")
-def director_pipeline_resume(pid: str):
+def director_pipeline_resume(pid: str, replan: bool = False):
     """Resume a crashed pipeline from its saved state.
 
     Reuses the planning (and start images when still on disk) that finished
     before the crash, then re-runs video generation — so a mid-run backend
-    crash doesn't throw away completed LLM work.
+    crash doesn't throw away completed LLM work. When planning failed, the
+    planner resumes from its last completed step; ``replan=true`` discards
+    those planning checkpoints and plans from scratch.
     """
     _init_pipeline()
     from services.director_pipeline import get_pipeline, resume_pipeline
     base = wgp.server_config.get("save_path", "outputs")
-    ok, message = resume_pipeline(pid, base)
+    ok, message = resume_pipeline(pid, base, replan=replan)
     if not ok:
         raise HTTPException(status_code=400, detail=message)
     pipeline = get_pipeline(pid) or {}
@@ -21718,6 +21743,17 @@ async def inpaint_endpoint(request: Request):
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")
 
+    # Read the source size up front: SAM pre-scaling below needs it.
+    try:
+        import decord
+        vr = decord.VideoReader(video_path)
+        fps = vr.get_avg_fps()
+        total_frames = len(vr)
+        src_h, src_w = vr[0].shape[:2]
+        del vr
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot read video: {e}")
+
     from services.inpaint_service import check_sam_status, parse_inpaint_intent, segment_video, unload_sam, ensure_sam_running, shutdown_sam
 
     start_time = float(body.get("start_time", 0))
@@ -21815,16 +21851,6 @@ async def inpaint_endpoint(request: Request):
         pass
 
     # Step 3: Build retake params with spatial mask
-    try:
-        import decord
-        vr = decord.VideoReader(video_path)
-        fps = vr.get_avg_fps()
-        total_frames = len(vr)
-        src_h, src_w = vr[0].shape[:2]
-        del vr
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Cannot read video: {e}")
-
     start_frame = max(0, int(start_time * fps))
     end_frame = int(end_time * fps) if end_time > 0 else total_frames
     end_frame = min(end_frame, total_frames)
@@ -27356,7 +27382,23 @@ def _comic_writing_llm(body: dict) -> dict | None:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
+def _story_music_cue_count(project: dict, project_type: str) -> int:
+    """Exact number of music cues a Story Lab project requires."""
+    if project_type == "music_video":
+        return 1
+    character_ids = {
+        str(item.get("id") or "").strip()
+        for item in project.get("characters", []) if isinstance(item, dict)
+    }
+    # One world cue, one presentation cue per character, three story songs.
+    return len(character_ids) + 4
+
+
+def _story_lab_schema(
+    scope: str,
+    project_type: str = "full_story",
+    music_cue_count: int | None = None,
+) -> dict:
     """Return the strict editable Story Lab payload requested for one stage."""
     string = {"type": "string"}
     string_array = {"type": "array", "items": string, "maxItems": 12}
@@ -27446,6 +27488,10 @@ def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
     beat_maximum = 8 if project_type == "quick_video" else 10 if project_type == "music_video" else 12 if project_type == "trailer" else 14
     music_minimum = 1 if project_type == "music_video" else 4
     music_maximum = 1 if project_type == "music_video" else 16
+    if music_cue_count:
+        # Pin the array length so grammar-constrained providers cannot return
+        # a different count than validation requires.
+        music_minimum = music_maximum = music_cue_count
     creative_brief = {
         "type": "object",
         "properties": {
@@ -27749,6 +27795,47 @@ def _normalize_story_stage_ids(
                 return "\n\n".join(sections)
             return str(value or "").strip()
 
+        section_names = {
+            "intro": "Intro", "verse": "Verse", "prechorus": "Pre Chorus",
+            "chorus": "Chorus", "postchorus": "Post Chorus",
+            "interlude": "Interlude", "bridge": "Bridge",
+            "transition": "Transition", "buildup": "Build Up", "break": "Break",
+            "hook": "Hook", "inst": "Inst", "instrumental": "Inst",
+            "solo": "Solo", "outro": "Outro",
+        }
+        section_pattern = (
+            r"(intro|verse|pre[\s-]?chorus|post[\s-]?chorus|chorus|interlude|"
+            r"bridge|transition|build[\s-]?up|break|hook|instrumental|inst|solo|outro)"
+        )
+        # A heading line such as "[Verse 1]", "Verse 1:", "(Chorus)" or
+        # "**Chorus**"; a lyric may follow a bracketed or colon heading.
+        heading_re = re.compile(
+            r"^\s*[*_#]*\s*(?:[\[(]\s*" + section_pattern + r"(?:\s*\d+)?\s*[\])]\s*:?"
+            r"|" + section_pattern + r"(?:\s*\d+)?\s*:"
+            r"|" + section_pattern + r"(?:\s*\d+)?(?=\s*[*_]*\s*$))\s*[*_]*\s*(.*)$",
+            re.IGNORECASE,
+        )
+
+        def canonical_lyrics(lyrics: str) -> str:
+            """Rewrite section-heading variants to MiniMax's exact tags."""
+            lines: list[str] = []
+            for line in str(lyrics or "").splitlines():
+                match = heading_re.match(line)
+                if not match:
+                    lines.append(line)
+                    continue
+                name = match.group(1) or match.group(2) or match.group(3)
+                token = re.sub(r"[^a-z]+", "", name.casefold())
+                lines.append(f"[{section_names.get(token, 'Verse')}]")
+                if match.group(4).strip():
+                    lines.append(match.group(4).strip())
+            text = "\n".join(lines).strip()
+            if text and not re.search(r"^\[(Verse|Chorus|Hook)\]\s*$", text, re.MULTILINE):
+                if "\n" not in text and "/" in text:
+                    text = re.sub(r"\s*/\s*", "\n", text)
+                text = f"[Verse]\n\n{text}"
+            return text[:3500].rstrip()
+
         characters = [
             character for character in project.get("characters", [])
             if isinstance(character, dict) and str(character.get("id") or "").strip()
@@ -27800,14 +27887,7 @@ def _normalize_story_stage_ids(
                     or "cinematic story song, expressive lead vocal, dynamic original production"
                 ).strip()
                 cue["style"] = style[:300]
-                lyrics = cue_lyrics(cue)[:3500].strip()
-                if lyrics and not re.search(
-                    r"^\[(Verse|Chorus|Hook)\]\s*$", lyrics, re.MULTILINE
-                ):
-                    if "\n" not in lyrics and "/" in lyrics:
-                        lyrics = re.sub(r"\s*/\s*", "\n", lyrics)
-                    lyrics = f"[Verse]\n\n{lyrics}"[:3500].rstrip()
-                cue["lyrics"] = lyrics
+                cue["lyrics"] = canonical_lyrics(cue_lyrics(cue)[:3500].strip())
                 cue["instrumental"] = False
                 requested_duration = creative_brief.get(
                     "durationSeconds", project_music.get("targetDurationSeconds")
@@ -27835,6 +27915,13 @@ def _normalize_story_stage_ids(
             elif kind == "world":
                 target = "world"
             cue["targetId"] = target
+            if (
+                project_type != "music_video"
+                and cue.get("instrumental") is False
+                and isinstance(cue.get("lyrics"), str)
+                and cue["lyrics"].strip()
+            ):
+                cue["lyrics"] = canonical_lyrics(cue["lyrics"])
             candidate = _story_id_token(cue.get("id")) or f"music-{kind or 'cue'}-{index + 1}"
             base = candidate
             suffix = 2
@@ -27995,7 +28082,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
             str(item.get("id") or "").strip()
             for item in project.get("characters", []) if isinstance(item, dict)
         }
-        expected_count = 1 if project_type == "music_video" else len(character_ids) + 4
+        expected_count = _story_music_cue_count(project, project_type)
         if len(cues) != expected_count:
             return f"music must contain exactly {expected_count} cues"
         required_cue = {
@@ -31058,6 +31145,7 @@ Music-specific contract:
 - Return exactly one instrumental ambient cue for targetId "world".
 - Return exactly one presentation cue for each of the {character_count} existing character IDs.
 - Return exactly three distinct vocal story songs covering different emotional/narrative angles.
+- The cues array therefore has exactly {_story_music_cue_count(project, project_type)} items in total.
 - referenceSong is an editable input example in "Title — Artist" form. Choose a useful,
   recognizable reference for tempo, instrumentation or emotional architecture only.
 - Every style prompt, melody concept and lyric must be newly written for this Story. Never
@@ -31162,7 +31250,13 @@ Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instr
         "You are HocusPocus Lab Story Architect: a professional story editor, character "
         "designer and production bible author. Return strict JSON only."
     )
-    schema = _story_lab_schema(schema_scope, project_type)
+    schema = _story_lab_schema(
+        schema_scope,
+        project_type,
+        music_cue_count=(
+            _story_music_cue_count(project, project_type) if scope == "music" else None
+        ),
+    )
     max_new_tokens = (
         2400 if scope == "music" and project_type == "music_video"
         else 6000 if scope == "music"
@@ -35930,7 +36024,10 @@ def delete_output(name: str):
     import gc
     from services.win_safe_files import safe_delete
     out_dir = _workspace_dir()
-    filepath = os.path.join(out_dir, name)
+    # `{name}` excludes "/", but an encoded "\" still reaches Windows joins.
+    filepath = _safe_join(out_dir, name)
+    if filepath is None:
+        raise HTTPException(status_code=400, detail="Invalid output name")
     if not os.path.isfile(filepath):
         return {"deleted": name}
 
@@ -35980,6 +36077,17 @@ def delete_output(name: str):
     return {"deleted": name}
 
 
+def _upload_extension(filename: str | None, default: str) -> str:
+    """Return a safe lowercase extension from a client-supplied upload name.
+
+    Browsers sometimes name re-uploaded blobs after their source URL, e.g.
+    ``photo.jpg?workspace=default``; the query must not reach the saved path.
+    """
+    name = re.split(r"[?#]", str(filename or ""), maxsplit=1)[0] or default
+    ext = os.path.splitext(os.path.basename(name))[1].lower()
+    return ext if re.fullmatch(r"\.[a-z0-9]{1,8}", ext) else ""
+
+
 @api.post("/api/v1/upload")
 async def upload_image(file: UploadFile = File(...)):
     """Upload an image or audio/video asset. Image was the original use;
@@ -35993,7 +36101,7 @@ async def upload_image(file: UploadFile = File(...)):
     upload_dir = os.path.join(os.getcwd(), "uploads")
     os.makedirs(upload_dir, exist_ok=True)
 
-    ext = os.path.splitext(file.filename or "img.png")[1].lower() or ".png"
+    ext = _upload_extension(file.filename, "img.png") or ".png"
     unique_name = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(upload_dir, unique_name)
 

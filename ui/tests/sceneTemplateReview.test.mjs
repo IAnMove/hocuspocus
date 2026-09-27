@@ -47,13 +47,13 @@ test('parses a fixed catalog and preserves decisions, versions, and notes', () =
 
 test('malformed JSON resets all choices to pending instead of approving anything', () => {
   const result = parseReviewChoicesResult('{not-json', catalogVersion, templates)
-  assert.match(result.warning, /JSON válido/)
+  assert.match(result.warning, /valid JSON/)
   assert.deepEqual(Object.values(result.state.choices).map(choice => choice.decision), ['pending', 'pending'])
 })
 
 test('a stale catalog version resets all decisions', () => {
   const result = parseReviewChoicesResult(fixedChoices(), 'catalog-2', templates)
-  assert.match(result.warning, /otra versión del catálogo/)
+  assert.match(result.warning, /another catalog version/)
   assert.deepEqual(Object.values(result.state.choices).map(choice => choice.decision), ['pending', 'pending'])
 })
 
@@ -68,7 +68,7 @@ test('unknown IDs and stale template versions are ignored without losing valid c
     },
   })
   const result = parseReviewChoicesResult(raw, catalogVersion, templates)
-  assert.match(result.warning, /IDs o versiones/)
+  assert.match(result.warning, /IDs or versions/)
   assert.equal(result.state.choices['cinema-reveal'].decision, 'keep')
   assert.equal(result.state.choices['space-chase'].decision, 'pending')
   assert.equal(result.state.choices.unknown, undefined)
@@ -94,7 +94,7 @@ test('updates known choices while clamping notes and rejects unknown IDs', () =>
 test('inaccessible storage fails closed and does not throw', () => {
   const inaccessible = { getItem: () => { throw new Error('blocked') } }
   const loaded = loadReviewChoicesResult(inaccessible, catalogVersion, templates)
-  assert.match(loaded.warning, /almacenamiento/)
+  assert.match(loaded.warning, /Storage/)
   assert.deepEqual(Object.values(loaded.state.choices).map(choice => choice.decision), ['pending', 'pending'])
 
   const failedWrite = { setItem: () => { throw new Error('blocked') } }

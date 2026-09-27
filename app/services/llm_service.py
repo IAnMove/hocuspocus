@@ -780,6 +780,136 @@ def _is_ollama_remote() -> bool:
     return looks_like_ollama(_remote_url)
 
 
+# Ollama's OpenAI-compatible endpoint ignores ``num_ctx`` and loads every
+# model with the server default (4096 tokens), even when the model supports
+# 128K. Story Lab prompts carry the overview, cast and world into later
+# stages, so the window filled up and generation stopped with empty or
+# truncated JSON. Ollama requests therefore go through the native /api/chat
+# endpoint, where the context size can be set per request. The floor stays
+# fixed so consecutive calls do not force Ollama to reload the model.
+_OLLAMA_MIN_NUM_CTX = 16384
+_OLLAMA_NUM_CTX_STEP = 8192
+
+
+def _ollama_native_payload(payload: dict) -> dict:
+    """Translate an OpenAI chat-completions payload into Ollama /api/chat form."""
+    messages = []
+    prompt_chars = 0
+    for message in payload.get("messages") or []:
+        content = message.get("content")
+        images = []
+        if isinstance(content, list):
+            texts = []
+            for part in content:
+                if part.get("type") == "text":
+                    texts.append(str(part.get("text") or ""))
+                elif part.get("type") == "image_url":
+                    url = str((part.get("image_url") or {}).get("url") or "")
+                    if url:
+                        images.append(url.split(",", 1)[1] if url.startswith("data:") else url)
+            content = "\n".join(texts)
+        content = str(content or "")
+        prompt_chars += len(content)
+        native_message = {"role": message.get("role", "user"), "content": content}
+        if images:
+            native_message["images"] = images
+        messages.append(native_message)
+
+    num_predict = int(
+        payload.get("max_completion_tokens") or payload.get("max_tokens") or 0
+    )
+    # ~3 characters per token is a conservative estimate for mixed prose/JSON.
+    needed = prompt_chars // 3 + max(num_predict, 0) + 512
+    num_ctx = max(
+        _OLLAMA_MIN_NUM_CTX,
+        -(-needed // _OLLAMA_NUM_CTX_STEP) * _OLLAMA_NUM_CTX_STEP,
+    )
+    options = {"num_ctx": num_ctx}
+    if num_predict > 0:
+        options["num_predict"] = num_predict
+    for key in ("temperature", "top_p", "top_k", "min_p", "seed",
+                "frequency_penalty", "presence_penalty", "repeat_penalty", "stop"):
+        if payload.get(key) is not None:
+            options[key] = payload[key]
+
+    native = {
+        "model": payload.get("model"),
+        "messages": messages,
+        "stream": bool(payload.get("stream")),
+        "options": options,
+        # Maestro asks for thinking explicitly when it wants it; otherwise a
+        # thinking model spends the output budget before emitting content.
+        "think": bool(payload.get("enable_thinking")),
+    }
+    response_format = payload.get("response_format") or {}
+    if response_format.get("type") == "json_schema":
+        schema = (response_format.get("json_schema") or {}).get("schema")
+        native["format"] = schema if schema else "json"
+    elif response_format.get("type") == "json_object":
+        native["format"] = response_format.get("schema") or "json"
+    return native
+
+
+# Ollama keeps a model in GPU memory for five minutes after its last request,
+# which starves a video render that starts right after story writing. Every
+# model Maestro sends to Ollama is remembered and released at GPU handoff.
+_ollama_models_in_use: set[tuple[str, str]] = set()
+_ollama_models_lock = threading.Lock()
+
+
+def _remember_ollama_model(base_url: str, model: str) -> None:
+    from .provider_profile import canonicalize_remote_url
+    origin = canonicalize_remote_url(base_url)
+    if origin and model:
+        with _ollama_models_lock:
+            _ollama_models_in_use.add((origin, str(model)))
+
+
+def release_ollama_models() -> list[str]:
+    """Ask Ollama to unload every model Maestro used; returns released names."""
+    with _ollama_models_lock:
+        models = sorted(_ollama_models_in_use)
+        _ollama_models_in_use.clear()
+    released: list[str] = []
+    for origin, model in models:
+        try:
+            # Documented unload: an empty generate request with keep_alive 0.
+            requests.post(
+                f"{origin}/api/generate",
+                json={"model": model, "keep_alive": 0},
+                timeout=(3, 30),
+            ).raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            print(f"[LLM] Could not release Ollama model {model}: {exc}")
+            continue
+        released.append(model)
+        print(f"[LLM] Released Ollama model {model} from GPU memory")
+    return released
+
+
+def _ollama_native_to_openai(data: dict, *, stream: bool = False) -> dict:
+    """Reshape an Ollama /api/chat response (or stream line) like OpenAI's."""
+    message = data.get("message") or {}
+    body = {"content": message.get("content") or ""}
+    if message.get("thinking"):
+        body["reasoning_content"] = message["thinking"]
+    choice = {"delta": body} if stream else {"message": {"role": "assistant", **body}}
+    if data.get("done"):
+        choice["finish_reason"] = data.get("done_reason") or "stop"
+    result = {"choices": [choice]}
+    if data.get("done"):
+        prompt_tokens = int(data.get("prompt_eval_count") or 0)
+        completion_tokens = int(data.get("eval_count") or 0)
+        result["usage"] = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        }
+    if data.get("error"):
+        result["error"] = data["error"]
+    return result
+
+
 def _is_deepseek_remote() -> bool:
     """Detect DeepSeek when it is configured through the OpenAI-compatible provider."""
     if _provider not in ("remote", "openai"):
@@ -2284,10 +2414,17 @@ def generate(
         )
 
     response_watcher = None
+    native_ollama = _is_ollama_remote()
     try:
+        if native_ollama:
+            from .provider_profile import ollama_chat_url
+            endpoint, request_payload = ollama_chat_url(_server_url()), _ollama_native_payload(payload)
+            _remember_ollama_model(_server_url(), request_payload.get("model"))
+        else:
+            endpoint, request_payload = f"{_server_url()}/v1/chat/completions", payload
         resp = requests.post(
-            f"{_server_url()}/v1/chat/completions",
-            json=payload,
+            endpoint,
+            json=request_payload,
             headers=_api_headers(),
             # (connect, read): fail fast if the server socket is gone;
             # allow a long read for actual generation.
@@ -2303,6 +2440,8 @@ def generate(
             abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
         )
         data = resp.json()
+        if native_ollama:
+            data = _ollama_native_to_openai(data)
         _raise_if_token_cancelled(
             cancellation_token, _provider,
             abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
@@ -2482,8 +2621,8 @@ def generate_openai_compatible(
                 },
             }
 
-    from .provider_profile import openai_chat_completions_url
-    endpoint = openai_chat_completions_url(base_url)
+    from .provider_profile import ollama_chat_url, openai_chat_completions_url
+    endpoint = ollama_chat_url(base_url) if is_ollama else openai_chat_completions_url(base_url)
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -2568,6 +2707,9 @@ def generate_openai_compatible(
                 int(request_payload["max_completion_tokens"]) * 2,
                 8192,
             )
+        if is_ollama:
+            request_payload = _ollama_native_payload(request_payload)
+            _remember_ollama_model(base_url, model_id)
         try:
             task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
 
@@ -2614,7 +2756,9 @@ def generate_openai_compatible(
                 # Some otherwise-compatible APIs do not implement OpenAI's
                 # structured response envelope. Retry once without it; Maestro
                 # still validates and repairs the returned JSON locally.
-                if response.status_code in (400, 422) and "response_format" in request_payload:
+                if response.status_code in (400, 422) and (
+                    "response_format" in request_payload or "format" in request_payload
+                ):
                     _stop_response_cancellation_watcher(response_watcher)
                     response_watcher = None
                     try:
@@ -2623,6 +2767,7 @@ def generate_openai_compatible(
                         pass
                     fallback_payload = dict(request_payload)
                     fallback_payload.pop("response_format", None)
+                    fallback_payload.pop("format", None)
                     response = requests.post(
                         endpoint,
                         json=fallback_payload,
@@ -2675,6 +2820,8 @@ def generate_openai_compatible(
                 abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
             )
             response_data = response.json()
+            if is_ollama:
+                response_data = _ollama_native_to_openai(response_data)
             base_response = response_data.get("base_resp") or {}
             if base_response.get("status_code") not in (None, 0):
                 detail = str(base_response.get("status_msg") or "MiniMax returned an error")
@@ -2961,10 +3108,17 @@ def generate_streaming(
     stream_usage = {}
     in_reasoning = False
     response_watcher = None
+    native_ollama = _is_ollama_remote()
     try:
+        if native_ollama:
+            from .provider_profile import ollama_chat_url
+            endpoint, request_payload = ollama_chat_url(_server_url()), _ollama_native_payload(payload)
+            _remember_ollama_model(_server_url(), request_payload.get("model"))
+        else:
+            endpoint, request_payload = f"{_server_url()}/v1/chat/completions", payload
         resp = requests.post(
-            f"{_server_url()}/v1/chat/completions",
-            json=payload,
+            endpoint,
+            json=request_payload,
             headers=_api_headers(),
             timeout=(10, 600),
             stream=True,
@@ -2985,13 +3139,21 @@ def generate_streaming(
                 cancellation_token, _provider,
                 abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
             )
-            if not line or not line.startswith("data: "):
-                continue
-            data_str = line[6:]  # strip "data: "
-            if data_str.strip() == "[DONE]":
-                break
+            if native_ollama:
+                # Native Ollama streams one JSON object per line.
+                if not line:
+                    continue
+                data_str = line
+            else:
+                if not line or not line.startswith("data: "):
+                    continue
+                data_str = line[6:]  # strip "data: "
+                if data_str.strip() == "[DONE]":
+                    break
             try:
                 chunk = _json_mod.loads(data_str)
+                if native_ollama:
+                    chunk = _ollama_native_to_openai(chunk, stream=True)
                 if chunk.get("usage"):
                     stream_usage = chunk["usage"]
                 delta = chunk.get("choices", [{}])[0].get("delta", {})

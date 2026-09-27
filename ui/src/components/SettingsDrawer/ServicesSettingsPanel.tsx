@@ -632,6 +632,14 @@ export function ServicesSettingsPanel() {
               if (newProvider === 'minimax') {
                 updates.llm_remote_url = servicesConfig.llm_remote_url || 'https://api.minimax.io'
               }
+              // Never carry another provider's model into the internal server:
+              // a MiniMax chat id would keep routing requests to the MiniMax API.
+              if (newProvider === 'local') {
+                const localModels = llmModels.filter(m => ((m as { provider?: string }).provider || 'local') === 'local')
+                if (localModels.length && !localModels.some(m => m.id === servicesConfig.llm_model_id)) {
+                  updates.llm_model_id = localModels[0].id
+                }
+              }
               // Auto-disable NSFW when switching to a public provider
               if (PUBLIC_PROVIDERS.has(newProvider) && servicesConfig.nsfw_mode) {
                 updates.nsfw_mode = false
@@ -713,6 +721,13 @@ export function ServicesSettingsPanel() {
             }}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
+            {/* Show a saved model the list does not offer instead of silently
+                displaying the first option, which looked selected but was never saved. */}
+            {servicesConfig.llm_model_id && filteredModels.length > 0 && !filteredModels.some(m => m.id === servicesConfig.llm_model_id) && (
+              <option value={servicesConfig.llm_model_id}>
+                {t('services.modelUnavailable', { model: servicesConfig.llm_model_id })}
+              </option>
+            )}
             {filteredModels.map(m => (
               <option key={m.id} value={m.id}>
                 {m.label} ({m.size_hint})

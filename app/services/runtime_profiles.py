@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import platform as host_platform
 import re
 import subprocess
@@ -58,6 +59,7 @@ def dependency_fingerprint(engine: str, platform: str) -> str:
         paths.append("app/scripts/install_gguf_kernels.py")
     if engine == "hunyuan3d":
         paths.append("app/services/hunyuan3d/build_mesh_painter.py")
+        paths.append("app/services/hunyuan3d/patch_windows_sources.py")
     if "/vendor/" not in spec["requirements"]:
         paths.append(spec["requirements"])
     digest = hashlib.sha256(f"{engine}:{platform}".encode())
@@ -123,6 +125,75 @@ def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = Non
             "engines": engines}
 
 
+# Engines whose Windows install compiles native code (Hunyuan3D: diso and the
+# mesh painter extensions). Kept here, not in profiles.json, because that file
+# feeds every engine's install fingerprint.
+WINDOWS_COMPILER_ENGINES = {"hunyuan3d"}
+MSVC_MISSING_REASON = (
+    "{label} needs the Microsoft C++ Build Tools to compile its native parts on Windows. "
+    "Install Visual Studio 2022 Build Tools with \"Desktop development with C++\" from "
+    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Install again."
+)
+MSVC_TOO_NEW_REASON = (
+    "{label} compiles CUDA 12.8 extensions, and CUDA 12.8 only accepts Visual Studio 2019 "
+    "or 2022 compilers (MSVC 14.2x-14.4x); only MSVC {found} was found. Install Visual "
+    "Studio 2022 Build Tools with \"Desktop development with C++\" alongside it from "
+    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Install again."
+)
+# nvcc 12.8 host_config.h rejects _MSC_VER >= 1950 (Visual Studio 2026).
+MSVC_CUDA_LIMIT = (14, 50)
+
+
+def _visual_studio_roots() -> list[Path]:
+    """Installations from vswhere plus the standard folders.
+
+    vswhere can list nothing while a toolset is on disk (an unregistered or
+    mid-registration instance), and setuptools then reports that Visual C++
+    is missing, so the folders are scanned as well.
+    """
+    roots: list[Path] = []
+    bases = {os.environ.get("ProgramFiles(x86)") or r"C:\Program Files (x86)",
+             os.environ.get("ProgramFiles") or r"C:\Program Files"}
+    for base in bases:
+        vswhere = Path(base) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+        if vswhere.is_file():
+            try:
+                listed = subprocess.run(
+                    [str(vswhere), "-all", "-prerelease", "-products", "*", "-property", "installationPath"],
+                    capture_output=True, text=True, timeout=15,
+                ).stdout
+                roots.extend(Path(line.strip()) for line in listed.splitlines() if line.strip())
+            except (OSError, subprocess.SubprocessError):
+                pass
+        roots.extend(sorted((Path(base) / "Microsoft Visual Studio").glob("*/*")))
+    unique: dict[str, Path] = {}
+    for root in roots:
+        unique.setdefault(os.path.normcase(str(root)), root)
+    return list(unique.values())
+
+
+def _msvc_toolsets() -> list[tuple[tuple[int, ...], str, Path]]:
+    """(version, toolset, vcvars64.bat) for each installed x64 MSVC toolset."""
+    found = []
+    for root in _visual_studio_roots():
+        vcvars = root / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
+        if not vcvars.is_file():
+            continue
+        for tools in (root / "VC" / "Tools" / "MSVC").glob("*"):
+            if (tools / "bin" / "Hostx64" / "x64" / "cl.exe").is_file():
+                found.append((_version(tools.name), tools.name, vcvars))
+    return sorted(found)
+
+
+def find_msvc() -> dict | None:
+    """Newest MSVC toolset that CUDA 12.8 accepts, as the vcvars call to use."""
+    usable = [item for item in _msvc_toolsets() if item[0][:2] < MSVC_CUDA_LIMIT]
+    if not usable:
+        return None
+    _version_key, toolset, vcvars = usable[-1]
+    return {"vcvars": str(vcvars), "toolset": toolset}
+
+
 def detect_profiles(*, platform: str | None = None, arch: str | None = None,
                     gpu: str | None = None, inspect_engines: set[str] | None = None) -> dict:
     driver = None
@@ -143,6 +214,20 @@ def detect_profiles(*, platform: str | None = None, arch: str | None = None,
     for name, item in result["engines"].items():
         if inspect_engines is None or name in inspect_engines:
             item["installed"] = installation_current(name, result["platform"]) if item["supported"] else False
+    # Only gate installs that have yet to happen: a working install stays usable.
+    needs_compiler = [item for name, item in result["engines"].items()
+                      if name in WINDOWS_COMPILER_ENGINES and item["supported"]
+                      and item.get("installed") is False]
+    if result["platform"] == "win32" and needs_compiler:
+        # Install steps load this toolset with vcvars64.bat before building.
+        result["msvc"] = find_msvc()
+        if result["msvc"] is None:
+            newest = _msvc_toolsets()
+            for item in needs_compiler:
+                item["supported"] = False
+                item["reason"] = (MSVC_TOO_NEW_REASON.format(label=item["label"], found=newest[-1][1])
+                                  if newest else MSVC_MISSING_REASON.format(label=item["label"]))
+            result["supported"] = all(e["supported"] for e in result["engines"].values() if e["required"])
     return result
 
 

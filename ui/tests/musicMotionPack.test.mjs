@@ -198,11 +198,11 @@ test('music motion compiler rejects missing, unknown, wrong-type, unsafe, and in
 
   const missingRequired = { ...valid }
   delete missingRequired.subject_2
-  assert.throws(() => compileCandidateScene(twoSubjectTemplate.id, missingRequired), /slot obligatorio subject_2/i)
+  assert.throws(() => compileCandidateScene(twoSubjectTemplate.id, missingRequired), /Required slot subject_2/i)
 
   assert.throws(
     () => compileCandidateScene(twoSubjectTemplate.id, { ...valid, unknown_slot: valid.subject_1 }),
-    /slot desconocido/i,
+    /unknown slot/i,
   )
 
   const propTemplate = MUSIC_MOTION_TEMPLATES.find(template => template.slots.some(slot => slot.id === 'prop_1'))
@@ -214,8 +214,8 @@ test('music motion compiler rejects missing, unknown, wrong-type, unsafe, and in
   )
 
   assert.throws(() => compileCandidateScene('music-motion-unknown', {}), /Unknown candidate scene template/i)
-  assert.throws(() => compileCandidateScene(twoSubjectTemplate.id, valid, { duration: Number.NaN }), /Duración/i)
-  assert.throws(() => compileCandidateScene(twoSubjectTemplate.id, valid, { duration: 13 }), /Duración/i)
+  assert.throws(() => compileCandidateScene(twoSubjectTemplate.id, valid, { duration: Number.NaN }), /Duration/i)
+  assert.throws(() => compileCandidateScene(twoSubjectTemplate.id, valid, { duration: 13 }), /Duration/i)
   assert.throws(() => compileCandidateScene(twoSubjectTemplate.id, {
     ...valid,
     subject_1: { ...valid.subject_1, source: 'blob:https://example.invalid/unsafe' },
@@ -248,7 +248,7 @@ test('musical identity slots reject repeated sources and canonical asset aliases
       ...bindings,
       subject_2: { ...bindings.subject_2, source: bindings.subject_1.source },
     }),
-    /subject_1.*subject_2.*source coincide/i,
+    /subject_1.*subject_2.*source matches/i,
   )
 
   assert.throws(
@@ -260,7 +260,7 @@ test('musical identity slots reject repeated sources and canonical asset aliases
         catalogAtAssignment: { ...bindings.subject_2.catalogAtAssignment, assetId: bindings.subject_1.catalogAtAssignment.assetId },
       },
     }),
-    /subject_1.*subject_2.*assetId canónico/i,
+    /subject_1.*subject_2.*canonical assetId/i,
   )
 
   assert.doesNotThrow(() => compileCandidateScene(template.id, {

@@ -19,7 +19,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE}${url}`, init)
   if (!response.ok) {
     const payload = await response.json().catch(() => ({})) as { detail?: string }
-    throw new Error(payload.detail || 'No se pudo actualizar el Workspace')
+    throw new Error(payload.detail || 'The Workspace could not be updated')
   }
   if (response.status === 204) return undefined as T
   return response.json()

@@ -130,7 +130,7 @@ def test_repair_strips_cjk_into_proposal_not_lyrics():
 
 
 def test_assert_does_not_repair_by_default():
-    with pytest.raises(ValueError, match="idioma"):
+    with pytest.raises(ValueError, match="requested language"):
         assert_lyrics_language(ENGLISH_CHORUS, "Español")
 
 

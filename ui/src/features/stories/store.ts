@@ -678,7 +678,7 @@ export async function commitStoryProjectMutation(
   let library: Awaited<ReturnType<typeof api.saveStoryLibrary>> | null = null
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const source = baseline.projects[projectId]
-    if (!source) throw new Error('La historia activa desapareció antes de poder guardarla.')
+    if (!source) throw new Error('The active story disappeared before it could be saved.')
     const project = mutate(source)
     try {
       const visibleId = useStoryStore.getState().project.id
@@ -698,7 +698,7 @@ export async function commitStoryProjectMutation(
       }
     }
   }
-  if (!library?.projects[projectId]) throw new Error('Story Lab guardó la biblioteca sin devolver la historia editada.')
+  if (!library?.projects[projectId]) throw new Error('Story Lab saved the library without returning the edited story.')
   return library
 }
 

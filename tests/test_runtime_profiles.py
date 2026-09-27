@@ -19,7 +19,7 @@ def test_windows_and_linux_choose_distinct_main_abis():
     assert win["supported"] and linux["supported"]
     assert win["engines"]["wangp"]["torch"] == "2.7.1"
     assert linux["engines"]["wangp"]["torch"] == "2.7.0"
-    assert win["engines"]["wangp"]["constraints"]["xformers"] == "0.0.31"
+    assert win["engines"]["wangp"]["constraints"]["xformers"] == "0.0.31.post1"
     assert "torchcodec" not in win["engines"]["wangp"]["constraints"]
     assert linux["engines"]["wangp"]["constraints"]["torchcodec"] == "0.5"
     assert not win["engines"]["rigging"]["supported"]
@@ -132,6 +132,7 @@ def test_native_helpers_affect_installation_fingerprint(tmp_path):
     import shutil
     source = tmp_path / "source"
     for name in ["app/runtime", "app/services/hunyuan3d/requirements.txt", "app/services/hunyuan3d/build_mesh_painter.py",
+                 "app/services/hunyuan3d/patch_windows_sources.py",
                  "runtime_install.js", "vendor_revisions.js", "hunyuan_native.js", "torch.js", "scripts/runtime_verify.py",
                  "scripts/runtime_pip.py", "scripts/runtime_failed.py", "scripts/runtime_vendor.py",
                  "app/services/runtime_sources.py"]:
@@ -266,3 +267,70 @@ def test_missing_vendor_files_and_changed_revisions_trigger_repair(tmp_path, mon
     git("add", "custom.py")
     git("commit", "-m", "different upstream revision")
     assert not sources.sources_current(["fixture"], tmp_path)
+
+
+def test_package_check_tolerates_only_allowed_wheel_tag_mismatches():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runtime_pip_check_test", ROOT / "scripts/runtime_pip.py")
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    header = "Using Python 3.10.20 environment at: app/env\nChecked 309 packages in 3ms\nFound 1 incompatibility\n"
+    assert helper.check_passes(header + "The package `decord` was built for a different platform\n")
+    assert helper.check_passes(header + "The package `bpy` was built for a different platform\n")
+    assert not helper.check_passes(header + "The package `torch` was built for a different platform\n")
+    assert not helper.check_passes(header + "The package `numpy` requires `python>=3.11`\n")
+
+
+
+def _detect_windows(installed: bool, toolsets: list) -> dict:
+    with patch.object(profiles.subprocess, "run", side_effect=OSError),             patch.object(profiles, "installation_current", return_value=installed),             patch.object(profiles, "_msvc_toolsets", return_value=toolsets) as probe:
+        result = profiles.detect_profiles(platform="win32", arch="x64", gpu="nvidia")
+    return result, probe
+
+
+def test_windows_hunyuan3d_install_is_skipped_with_a_reason_without_msvc():
+    result, _ = _detect_windows(installed=False, toolsets=[])
+    item = result["engines"]["hunyuan3d"]
+    assert item["supported"] is False
+    assert "Build Tools" in item["reason"] and "Desktop development with C++" in item["reason"]
+    assert result["engines"]["wangp"]["supported"] is True
+    assert result["supported"] is True  # Hunyuan3D is optional; the main install continues.
+
+
+def test_windows_hunyuan3d_rejects_a_compiler_cuda_12_8_cannot_use():
+    vs2026 = [((14, 51, 36231), "14.51.36231", Path("vs18/vcvars64.bat"))]
+    result, _ = _detect_windows(installed=False, toolsets=vs2026)
+    item = result["engines"]["hunyuan3d"]
+    assert item["supported"] is False
+    assert "14.51.36231" in item["reason"] and "2022" in item["reason"]
+
+
+def test_windows_hunyuan3d_uses_the_cuda_compatible_toolset_or_an_existing_install():
+    both = [((14, 29, 30133), "14.29.30133", Path("vs2019/vcvars64.bat")),
+            ((14, 51, 36231), "14.51.36231", Path("vs18/vcvars64.bat"))]
+    result, _ = _detect_windows(installed=False, toolsets=both)
+    assert result["engines"]["hunyuan3d"]["supported"] is True
+    assert result["msvc"] == {"vcvars": str(Path("vs2019/vcvars64.bat")), "toolset": "14.29.30133"}
+    result, probe = _detect_windows(installed=True, toolsets=[])
+    assert result["engines"]["hunyuan3d"]["supported"] is True
+    probe.assert_not_called()
+
+
+def test_msvc_toolsets_are_found_on_disk_when_vswhere_lists_nothing(tmp_path):
+    x86, x64 = tmp_path / "x86", tmp_path / "x64"
+    for base, install, toolset in ((x86, "2019/BuildTools", "14.29.30133"),
+                                   (x64, "18/Community", "14.51.36231")):
+        root = base / "Microsoft Visual Studio" / install
+        (root / "VC/Auxiliary/Build").mkdir(parents=True)
+        (root / "VC/Auxiliary/Build/vcvars64.bat").write_text("", encoding="utf-8")
+        cl = root / "VC/Tools/MSVC" / toolset / "bin/Hostx64/x64/cl.exe"
+        cl.parent.mkdir(parents=True)
+        cl.write_bytes(b"")
+    (x86 / "Microsoft Visual Studio/Installer").mkdir(parents=True)
+    (x86 / "Microsoft Visual Studio/Installer/vswhere.exe").write_bytes(b"")
+    empty = subprocess.CompletedProcess([], 0, stdout="")
+    with patch.dict(profiles.os.environ, {"ProgramFiles(x86)": str(x86), "ProgramFiles": str(x64)}),             patch.object(profiles.subprocess, "run", return_value=empty):
+        assert [item[1] for item in profiles._msvc_toolsets()] == ["14.29.30133", "14.51.36231"]
+        chosen = profiles.find_msvc()
+    assert chosen["toolset"] == "14.29.30133"
+    assert chosen["vcvars"].endswith(str(Path("2019/BuildTools/VC/Auxiliary/Build/vcvars64.bat")))

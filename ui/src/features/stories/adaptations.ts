@@ -25,6 +25,10 @@ export const DEFAULT_SHORT_FILM_DIRECTION =
   'Create a self-contained short-film episode inside this story world. Focus on one concrete incident and emotional turn that can be understood on its own. Preserve the master plot and ending; do not compress the whole source story into this film.'
 
 export const DEFAULT_TRAILER_DIRECTION =
+  'Sell the emotional promise of this story through a clear cinematic mini-arc. Introduce the protagonist, their desire and the central threat, and stop on the most irresistible unanswered question.'
+
+/** The previous, Spanish-only default; saved recipes that still hold it are upgraded. */
+export const LEGACY_SPANISH_TRAILER_DIRECTION =
   'Vende la promesa emocional de esta historia mediante un mini-arco cinematográfico claro. Presenta al protagonista, su deseo y la amenaza central, y detente ante la pregunta sin respuesta más irresistible.'
 
 const line = (label: string, value: string | undefined): string =>

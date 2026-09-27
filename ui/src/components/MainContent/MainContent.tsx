@@ -128,7 +128,7 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
               <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
                 {completedPanelTimings.map(item => (
                   <span key={`${item.panel_no}-${item.status}`}>
-                    Viñeta {item.panel_no}: {item.total_seconds!.toFixed(1)}s
+                    Panel {item.panel_no}: {item.total_seconds!.toFixed(1)}s
                   </span>
                 ))}
               </div>

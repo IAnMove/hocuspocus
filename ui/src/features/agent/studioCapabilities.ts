@@ -288,7 +288,7 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   useWhen: 'The user explicitly asks to generate or queue a pack of sound effects.',
   parameters: ['visual_style', 'theme', 'sfx_clips', 'model_type', 'negative_prompt', 'confirm'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'queue_sfx_pack' }, visual_style: { type: 'string' }, theme: { type: 'string' }, sfx_clips: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'object', additionalProperties: false, properties: { name: { type: 'string', minLength: 1, maxLength: 80 }, prompt: { type: 'string', minLength: 1, maxLength: 1_500 }, duration_seconds: { type: 'number', minimum: 0, maximum: 20 } }, required: ['name', 'prompt', 'duration_seconds'] } }, model_type: { type: 'string' }, negative_prompt: { type: 'string' }, confirm: { const: true } }, required: ['type', 'sfx_clips', 'confirm'] },
-  risk: 'compute', confirmation: 'required', progress: 'Encolando el pack de SFX…',
+  risk: 'compute', confirmation: 'required', progress: 'Queueing the SFX pack…',
   resolve: sfxAction,
   validate(action) { return action.confirm === true && action.clips.length > 0 ? validType('queue_sfx_pack', action) : ['confirmed SFX clips are required'] },
   async prepare(action) { return action },
@@ -305,7 +305,7 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   useWhen: 'The user asks to generate, start, launch or queue the prepared Studio media.',
   parameters: [],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'start_generation' }, confirm: { const: true } }, required: ['type', 'confirm'] },
-  risk: 'compute', confirmation: 'required', progress: 'Enviando la generación de Studio a la cola…',
+  risk: 'compute', confirmation: 'required', progress: 'Sending the Studio generation to the queue…',
   resolve(raw) { return raw.type === 'start_generation' && raw.confirm === true ? { type: 'start_generation', confirm: true } : null },
   validate(action) { return validType('start_generation', action) },
   async prepare(action) { return action },
@@ -339,7 +339,7 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   useWhen: 'The user asks to use, change or clear LoRAs in Studio Image or Video.',
   parameters: ['loras', 'replace_existing'],
   inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'configure_studio_loras' }, loras: { type: 'array' }, replace_existing: { type: 'boolean' } }, required: ['type'] },
-  risk: 'edit', confirmation: 'none', progress: 'Configurando LoRAs compatibles en Studio…',
+  risk: 'edit', confirmation: 'none', progress: 'Configuring compatible LoRAs in Studio…',
   resolve: lorasAction,
   validate(action) { return action.loras.length || action.replaceExisting ? validType('configure_studio_loras', action) : ['LoRA selections or replace_existing are required'] },
   async prepare(action) { return action },
@@ -360,7 +360,7 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
     properties: { type: { const: 'download_model' }, model_type: { type: 'string', minLength: 1, maxLength: 160 }, confirm: { const: true } },
     required: ['type', 'model_type', 'confirm'],
   },
-  risk: 'compute', confirmation: 'required', progress: 'Descargando el modelo elegido desde Settings…',
+  risk: 'compute', confirmation: 'required', progress: 'Downloading the chosen model from Settings…',
   resolve(raw) {
     const modelType = text(raw.model_type, 160)
     return raw.confirm === true && modelType ? { type: 'download_model', modelType, confirm: true } : null

@@ -366,7 +366,7 @@ export function ArchitectureViewer() {
         <section aria-labelledby="architecture-node-list" className="rounded-lg border border-border bg-bg-secondary/40 p-3">
           <h3 id="architecture-node-list" className="text-xs font-semibold text-text-primary">{t('architecture.nodes')} ({visibleNodes.length})</h3>
           <div className="mt-2 max-h-56 space-y-1 overflow-y-auto">
-            {visibleNodes.map(node => <button key={node.id} type="button" aria-pressed={selection?.kind === 'node' && selection.id === node.id} onClick={() => setSelection({ kind: 'node', id: node.id })} className="block w-full rounded-md border border-transparent px-2 py-1.5 text-left text-xs hover:border-border hover:bg-bg-hover aria-pressed:border-accent-blue/60 aria-pressed:bg-accent-blue/10"><span className="font-medium text-text-secondary">{node.label}</span><span className="ml-2 text-[10px] text-text-muted">{node.layer}</span></button>)}
+            {visibleNodes.map(node => <button key={node.id} type="button" aria-label={`${node.label} ${node.layer}`} aria-pressed={selection?.kind === 'node' && selection.id === node.id} onClick={() => setSelection({ kind: 'node', id: node.id })} className="block w-full rounded-md border border-transparent px-2 py-1.5 text-left text-xs hover:border-border hover:bg-bg-hover aria-pressed:border-accent-blue/60 aria-pressed:bg-accent-blue/10"><span className="font-medium text-text-secondary">{node.label}</span><span className="ml-2 text-[10px] text-text-muted">{node.layer}</span></button>)}
           </div>
         </section>
         <section aria-labelledby="architecture-edge-list" className="rounded-lg border border-border bg-bg-secondary/40 p-3">

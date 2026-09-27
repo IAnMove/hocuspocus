@@ -17,18 +17,18 @@ test('verifies actual SHA-256 bytes with the known abc vector; changed bytes fai
   const expected = { bytes: 3, sha256: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' }
   const buffer = text => new TextEncoder().encode(text).buffer
   await verifyReferenceBytes(buffer('abc'), expected)
-  await assert.rejects(verifyReferenceBytes(buffer('abd'), expected), /JSON cambió/)
-  await assert.rejects(verifyReferenceBytes(buffer('ab'), expected), /tamaño/)
+  await assert.rejects(verifyReferenceBytes(buffer('abd'), expected), /JSON changed/)
+  await assert.rejects(verifyReferenceBytes(buffer('ab'), expected), /size/)
 })
 
 test('rejects a non-matching download before reading bytes and never fetches remotely', async () => {
   let read = false
-  await assert.rejects(importApprovedReference({ size: 0, arrayBuffer: async () => { read = true; return new ArrayBuffer(0) } }, CANDIDATE_SCENE_TEMPLATES[0]), /tamaño/)
+  await assert.rejects(importApprovedReference({ size: 0, arrayBuffer: async () => { read = true; return new ArrayBuffer(0) } }, CANDIDATE_SCENE_TEMPLATES[0]), /size/)
   assert.equal(read, false)
 })
 
 test('even a same-sized edited reference is rejected rather than compiled as a replacement', async () => {
   const template = CANDIDATE_SCENE_TEMPLATES[0]
   const { bytes } = APPROVED_REFERENCE_JSON[template.id]
-  await assert.rejects(importApprovedReference({ size: bytes, arrayBuffer: async () => new ArrayBuffer(bytes) }, template), /JSON cambió/)
+  await assert.rejects(importApprovedReference({ size: bytes, arrayBuffer: async () => new ArrayBuffer(bytes) }, template), /JSON changed/)
 })

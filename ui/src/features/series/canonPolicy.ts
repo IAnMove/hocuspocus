@@ -27,6 +27,6 @@ export function shouldApproveCanonForExplicitEpisodeCreate(
   }
   return {
     approve: false,
-    reason: 'El canon de esta serie tiene cambios pendientes. Apruébalos en Series Lab → Biblia, o pide explícitamente aceptar esos cambios. Crear un episodio no aprueba canon ajeno.',
+    reason: 'This series\' canon has pending changes. Approve them in Series Lab → Bible, or explicitly ask to accept those changes. Creating an episode does not approve unrelated canon.',
   }
 }

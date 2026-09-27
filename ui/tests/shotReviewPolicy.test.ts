@@ -93,10 +93,10 @@ test('a concrete attemptId selects that historical take, not the latest take of 
   )
   assert.throws(
     () => explicitAttemptSelection([shot2, { id: 'shot-1', attempts: shot2.attempts }], 'take-1', hasAsset),
-    /exactamente un shot/,
+    /exactly one shot/,
   )
   assert.throws(
     () => explicitAttemptSelection([shot2], 'take-missing', hasAsset),
-    /no pertenece al shot 2/,
+    /does not belong to shot 2/,
   )
 })

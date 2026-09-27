@@ -338,8 +338,9 @@ export async function stopPipeline(pid: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to stop pipeline')
 }
 
-export async function resumePipeline(pid: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}/resume`, {
+export async function resumePipeline(pid: string, options: { replan?: boolean } = {}): Promise<void> {
+  const query = options.replan ? '?replan=true' : ''
+  const res = await fetch(`${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}/resume${query}`, {
     method: 'POST',
   })
   if (!res.ok) {

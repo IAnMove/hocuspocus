@@ -21,7 +21,7 @@ def format_ltx_prompt_progress(window: dict[str, int] | None) -> str:
         return ""
     if start < 1 or end < start or total < end:
         return ""
-    return f"Preparando textos {start}–{end} de {total}"
+    return f"Preparing prompts {start}–{end} of {total}"
 
 
 def schedule_ltx_prompt_windows(

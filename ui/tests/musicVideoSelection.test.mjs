@@ -49,14 +49,14 @@ test('a resumed pre-render label resolves the only persisted cue and candidate',
 test('an explicit unknown song never falls back to the only candidate', () => {
   assert.throws(
     () => resolveStoryMusicSelection(project, 'Canción que no existe', cue.title),
-    /No existe la canción/,
+    /There is no song/,
   )
 })
 
 test('an explicit unknown cue never falls back to the only cue', () => {
   assert.throws(
     () => resolveStoryMusicSelection(project, '', 'Cue antiguo que no existe'),
-    /No existe el cue/,
+    /There is no cue/,
   )
 })
 
@@ -92,7 +92,7 @@ test('a candidate ID disambiguates several versions sharing one cue title', () =
   assert.equal(selection.cue.id, cue.id)
   assert.throws(
     () => resolveStoryMusicSelection(twoVersions, '', cue.title, cue.id),
-    /usa su candidate_id exacto/,
+    /use its exact candidate_id/,
   )
 })
 
@@ -118,7 +118,7 @@ test('an explicit cue ID cannot select a candidate from another cue', () => {
       cue.id,
       otherCandidate.id,
     ),
-    /No existe la versión de canción con ID/,
+    /There is no song version with ID/,
   )
 })
 
@@ -167,7 +167,7 @@ test('pending candidates cannot be staged as a videoclip', () => {
       cue.id,
       pending.id,
     ),
-    /todavía se está generando/,
+    /is still generating/,
   )
 })
 
@@ -225,14 +225,14 @@ test('workspace B cannot adopt a candidate that only exists in workspace A', () 
   }
   assert.throws(
     () => resolveStoryMusicSelection(projectB, '', '', 'cue-b', candidate.id),
-    /No existe la versión de canción con ID/,
+    /There is no song version with ID/,
   )
 })
 
 test('synthetic story-song cue is refused unless the caller passed that exact id', () => {
   assert.throws(
     () => effectiveStoryMusicCue(project, undefined, candidate),
-    /no tiene un cue persistido/,
+    /has no saved cue/,
   )
   const synthetic = effectiveStoryMusicCue(project, undefined, candidate, 'story-song')
   assert.equal(synthetic.id, 'story-song')

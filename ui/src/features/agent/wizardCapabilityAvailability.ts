@@ -69,12 +69,12 @@ function missingDataReason(name: string, context: WizardAvailabilityContext): st
   const story = context.labs.story
   const series = context.labs.series
   if (STORY_NEEDS_PROJECT.has(name) && !story.project_id) {
-    return 'No hay un proyecto de Story Lab abierto; créalo o nómbralo antes de esta acción.'
+    return 'No Story Lab project is open; create or name it before this action.'
   }
   if (SERIES_NEEDS_EPISODE.has(name) && !series.episode_id) {
     return series.series_id
-      ? 'No hay un episodio abierto; nombra el episodio exacto o créalo con create_series_episode.'
-      : 'No hay una serie abierta. create_series_episode con create_if_missing=true puede crearla.'
+      ? 'No episode is open; name the exact episode or create it with create_series_episode.'
+      : 'No series is open. create_series_episode with create_if_missing=true can create it.'
   }
   return ''
 }
@@ -88,7 +88,7 @@ function classifyCapability(
     return {
       name,
       status: 'blocked',
-      reason: 'Hay una decisión pendiente del Wizard; no lanzo generación hasta resolverla.',
+      reason: 'There is a pending Wizard decision; I won\'t launch generation until it is resolved.',
     }
   }
   const missing = missingDataReason(name, context)
@@ -98,10 +98,10 @@ function classifyCapability(
     return {
       name,
       status: 'requires_navigation',
-      reason: `Puedo prepararlo abriendo ${destination}.`,
+      reason: `I can prepare it by opening ${destination}.`,
     }
   }
-  return { name, status: 'executable', reason: 'Lista para ejecutar en el contexto actual.' }
+  return { name, status: 'executable', reason: 'Ready to run in the current context.' }
 }
 
 export function deriveWizardCapabilityAvailability(
@@ -136,7 +136,7 @@ export function revalidateWizardCapability(
 ): WizardCapabilityAvailability {
   const definition = getCapability(actionType)
   if (!definition) {
-    return { name: actionType, status: 'blocked', reason: `${actionType} no está registrada.` }
+    return { name: actionType, status: 'blocked', reason: `${actionType} is not registered.` }
   }
   return classifyCapability(definition, context)
 }

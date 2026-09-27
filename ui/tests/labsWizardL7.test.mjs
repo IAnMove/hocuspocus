@@ -49,7 +49,7 @@ test('episode creation may approve only a brand-new canon base', async () => {
     previousCharacterCount: 3,
   })
   assert.equal(pending.approve, false)
-  assert.match(pending.reason, /canon ajeno/)
+  assert.match(pending.reason, /unrelated canon/)
   assert.equal(shouldApproveCanonForExplicitEpisodeCreate({
     createdSeries: false,
     previousApproval: 'approved',

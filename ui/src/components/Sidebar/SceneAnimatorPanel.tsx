@@ -13,7 +13,7 @@ import { paintKineticTexts, parseKineticTexts } from '../../lib/kineticText'
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ParseKeys } from 'i18next'
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
-import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
+import { createMp4Muxer } from '../../lib/mp4Muxer'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, fetchOutputs, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
@@ -2138,14 +2138,7 @@ export function SceneAnimatorPanel() {
     }
 
     const fxAudio = await supportsSceneAac() ? await mixFxAudio(current.sfx, current.duration) : undefined
-    const target = new ArrayBufferTarget()
-    const muxer = new Muxer({
-      target,
-      ...(fxAudio ? { audio: { codec: 'aac' as const, sampleRate: fxAudio.sampleRate, numberOfChannels: 1 } } : {}),
-      video: { codec: 'avc', width: current.width, height: current.height, frameRate: fps },
-      fastStart: 'in-memory',
-      firstTimestampBehavior: 'strict',
-    })
+    const muxer = await createMp4Muxer({ audio: Boolean(fxAudio) })
     let encoderError: Error | null = null
     const encoder = new VideoEncoder({
       output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
@@ -2174,8 +2167,7 @@ export function SceneAnimatorPanel() {
       await encoder.flush()
       if (encoderError) throw encoderError
       if (fxAudio) await encodeSpeechAudio(muxer, fxAudio)
-      muxer.finalize()
-      return new Blob([target.buffer], { type: 'video/mp4' })
+      return new Blob([await muxer.finalize()], { type: 'video/mp4' })
     } finally {
       encoder.close()
       exportStage.dispose()

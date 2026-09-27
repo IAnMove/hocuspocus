@@ -19,6 +19,6 @@ export async function fetchProductions(options: { limit?: number; offset?: numbe
   if (options.limit != null) params.set('limit', String(options.limit))
   if (options.offset != null) params.set('offset', String(options.offset))
   const response = await fetch(`${BASE}/api/v1/productions?${params}`, { cache: 'no-store', signal: options.signal })
-  if (!response.ok) throw new Error('No se pudieron cargar las Productions')
+  if (!response.ok) throw new Error('Productions could not be loaded')
   return response.json() as Promise<{ productions: ProductionCatalogItem[]; total: number }>
 }

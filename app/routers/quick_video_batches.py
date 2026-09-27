@@ -50,7 +50,7 @@ class QuickVideoBatchSettings(BaseModel):
     imageModel: str = Field(default="flux2_klein_9b", max_length=200)
     resolution: str = Field(default="480p", max_length=40)
     aspectRatio: str = Field(default="9:16", max_length=20)
-    spokenLanguage: str = Field(default="Español de España", max_length=120)
+    spokenLanguage: str = Field(default="English", max_length=120)
     visualStyle: str = Field(default="", max_length=8000)
     characterVisualStyle: str = Field(default="", max_length=8000)
     directVideoMasterPrompt: str = Field(default="", max_length=12000)
@@ -109,7 +109,16 @@ def _atomic_write(path: str, value: dict[str, Any]) -> None:
             json.dump(value, handle, ensure_ascii=False, separators=(",", ":"))
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        # Windows refuses to replace a file another thread is reading (for
+        # example a concurrent batch listing); the reader closes it quickly.
+        for attempt in range(20):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.05)
     finally:
         try:
             if os.path.isfile(temporary):

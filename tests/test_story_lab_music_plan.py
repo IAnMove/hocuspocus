@@ -21,11 +21,12 @@ def _load_functions(*names: str):
     return tuple(namespace[name] for name in names)
 
 
-_story_lab_schema, _story_id_token, _normalize_story_stage_ids, _story_stage_problem = _load_functions(
+_story_lab_schema, _story_id_token, _normalize_story_stage_ids, _story_stage_problem, _story_music_cue_count = _load_functions(
     "_story_lab_schema",
     "_story_id_token",
     "_normalize_story_stage_ids",
     "_story_stage_problem",
+    "_story_music_cue_count",
 )
 
 
@@ -101,6 +102,41 @@ class TestStoryLabMusicPlan(unittest.TestCase):
         invalid["music"]["cues"][3]["instrumental"] = True
         invalid["music"]["cues"][3]["lyrics"] = ""
         self.assertIn("must include vocals", _story_stage_problem(invalid, "music", self.project))
+
+    def test_heading_variants_become_exact_structural_tags(self):
+        result = copy.deepcopy(self.result)
+        result["music"]["cues"][3]["lyrics"] = (
+            "**Verse 1:**\nPaws on the carpet\n\n"
+            "[Pre-Chorus]\nHold the line\n\n"
+            "(Chorus) I am the storm\n\n"
+            "Bridge\nConfetti falls"
+        )
+        normalized = _normalize_story_stage_ids(result, "music", self.project)
+
+        self.assertEqual(
+            normalized["music"]["cues"][3]["lyrics"],
+            "[Verse]\nPaws on the carpet\n\n[Pre Chorus]\nHold the line\n\n"
+            "[Chorus]\nI am the storm\n\n[Bridge]\nConfetti falls",
+        )
+        self.assertIsNone(_story_stage_problem(normalized, "music", self.project))
+
+    def test_untagged_lyrics_gain_a_verse_tag(self):
+        result = copy.deepcopy(self.result)
+        result["music"]["cues"][4]["lyrics"] = "Tiny feet in the glitter\nWalking into light"
+        normalized = _normalize_story_stage_ids(result, "music", self.project)
+
+        self.assertTrue(normalized["music"]["cues"][4]["lyrics"].startswith("[Verse]\n\nTiny feet"))
+        self.assertIsNone(_story_stage_problem(normalized, "music", self.project))
+
+    def test_full_story_schema_pins_the_exact_cue_count(self):
+        project = {"projectType": "full_story", "characters": [{"id": "buster"}]}
+        count = _story_music_cue_count(project, "full_story")
+        schema = _story_lab_schema("music", "full_story", music_cue_count=count)
+        cues_schema = schema["properties"]["music"]["properties"]["cues"]
+
+        self.assertEqual(count, 5)
+        self.assertEqual(cues_schema["minItems"], 5)
+        self.assertEqual(cues_schema["maxItems"], 5)
 
     def test_music_video_mode_requests_and_accepts_one_vocal_story_song(self):
         schema = _story_lab_schema("music", "music_video")

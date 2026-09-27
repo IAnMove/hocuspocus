@@ -196,7 +196,7 @@ test('keyframed templates expose the actual endpoint poses to legacy editor cont
 
 test('compiler rejects repeated GLB sources and mismatched inline MIME types', () => {
   const pair = candidateDemoBindings('space-chase', 'coral')
-  assert.throws(() => compileCandidateScene('space-chase', { ...pair, prop: pair.hero }), /GLB.*repetid/i)
+  assert.throws(() => compileCandidateScene('space-chase', { ...pair, prop: pair.hero }), /GLB.*repeated/i)
   assert.throws(() => compileCandidateScene('space-chase', {
     ...pair, hero: { ...pair.hero, source: 'data:image/png;base64,AA==' },
   }), /MIME/i)
@@ -214,7 +214,7 @@ test('chorus camera pulses around its declared pose without discarding animation
   assert.equal(camera.animation.keyframes[0].scale, 1.04)
   assert.equal(camera.animation.keyframes.at(-1).scale, 1.04)
   assert.equal(Math.max(...camera.animation.keyframes.map(frame => frame.scale)), 1.04 * (1 + .09 * .6))
-  assert.throws(() => pulse({ duration: 4, bpm: 120, intensity: .6, bindings: {} }, camera), /keyframes existentes/i)
+  assert.throws(() => pulse({ duration: 4, bpm: 120, intensity: .6, bindings: {} }, camera), /existing keyframes/i)
 })
 
 test('all 24 builders have distinct motion fingerprints beyond asset sources and names', () => {
@@ -250,11 +250,11 @@ test('candidate compiler rejects unknown, incomplete, invalid, unsafe, and out-o
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', {}),
-    /slot obligatorio hero/i,
+    /Required slot hero/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', { ...valid, unknown: valid.hero }),
-    /slot desconocido/i,
+    /unknown slot/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', { ...valid, hero: { ...valid.hero, type: 'video' } }),
@@ -262,11 +262,11 @@ test('candidate compiler rejects unknown, incomplete, invalid, unsafe, and out-o
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', valid, { duration: Number.NaN }),
-    /Duración/i,
+    /Duration/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', valid, { duration: 13 }),
-    /Duración/i,
+    /Duration/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', { ...valid, hero: { ...valid.hero, source: 'blob:unsafe-preview' } }),

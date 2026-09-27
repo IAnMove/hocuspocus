@@ -33,7 +33,7 @@ class family_handler(UpstreamHandler):
         result["profiles_dir"] = ["h3_advanced_vdn"] if model_def.get('vdn') else ["h3_advanced"]
         if base_model_type != VIGGLE_ARCHITECTURE:
             # Keep the larger Qwen encoder off the default 24 GB GPU path.
-            result["text_encoder_URLs"] = pin_urls(["https://huggingface.co/DeepBeepMeep/MiniMax-H3/resolve/main/qwen3vl-32B-MiniMax-H3-Q4_K_M.gguf"])
+            result["text_encoder_URLs"] = pin_urls(["https://huggingface.co/DeepBeepMeep/MiniMax-H3/resolve/main/Qwen3-VL-32B-Instruct/qwen3vl-32B-MiniMax-H3-Q4_K_M.gguf"])
         result["wangp_1272_capabilities"] = {
             "viggle": base_model_type == VIGGLE_ARCHITECTURE,
             "two_phase": base_model_type != VIGGLE_ARCHITECTURE,

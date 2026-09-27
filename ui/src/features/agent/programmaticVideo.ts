@@ -45,14 +45,14 @@ export function reconcileProgrammaticVideoRequest(request: string, turn: AgentTu
   const value = instructionText(request)
   if (!VIDEO_CONTEXT.test(value) || !(PROGRAMMATIC.test(value) || PROVIDED.test(value)) || NEGATED.test(value)) return null
   if (QUESTION.test(value) || !clauses(value).some(part => !NEGATED_COMMAND.test(part) && REQUEST.test(part))) {
-    return { ...turn, reply: 'Puedes pedir: «Monta una escena con Video3D, sólo con mis assets, sin vídeo generativo». El Wizard prepara el formulario visible; desde allí revisas los recursos, montas la escena y la exportas. No se lanza ningún generador al preparar.', actions: [] }
+    return { ...turn, reply: 'You can ask: “Build a scene with Video3D, only with my assets, no generative video”. The Wizard prepares the visible form; from there you review the resources, assemble the scene and export it. No generator runs during preparation.', actions: [] }
   }
   const prepared = turn.actions.find(action => action.type === 'prepare_programmatic_video' && action.sceneCommand)
   if (prepared?.type === 'prepare_programmatic_video') {
     // Keep the exact shared command, but never a guessed Studio/Director GPU fallback.
     return {
       ...turn,
-      reply: 'Preparo Video3D con tu petición literal y sin vídeo generativo. No crearé recursos nuevos salvo permiso explícito. Revisa los assets y la receta en el formulario antes de montar o exportar; todavía no hay un vídeo terminado.',
+      reply: 'Preparing Video3D with your literal request and no generative video. I won\'t create new resources without explicit permission. Review the assets and recipe in the form before assembling or exporting; there is no finished video yet.',
       actions: [prepared],
     }
   }
@@ -65,7 +65,7 @@ export function reconcileProgrammaticVideoRequest(request: string, turn: AgentTu
   }
   return {
     ...turn,
-    reply: 'Preparo Video3D con tu petición literal y sin vídeo generativo. No crearé recursos nuevos salvo permiso explícito. Revisa los assets y la receta en el formulario antes de montar o exportar; todavía no hay un vídeo terminado.',
+    reply: 'Preparing Video3D with your literal request and no generative video. I won\'t create new resources without explicit permission. Review the assets and recipe in the form before assembling or exporting; there is no finished video yet.',
     actions: [{ type: 'prepare_programmatic_video', intent: request, generationPolicy: requestedProgrammaticPolicy(request), outputNames: [] }],
   }
 }
@@ -77,7 +77,7 @@ export function registerProgrammaticVideoCapability(register: typeof defineCapab
     useWhen: 'The user asks to compose/edit video with Video3D, the compositor, without generative video, or only supplied assets. Prefer this to prepare_video/start_generation or Director. Preserve literal dialogue and lyrics. Never claim a prepared form is a rendered video.',
     parameters: ['intent', 'output_names', 'scene_command'],
     inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'prepare_programmatic_video' }, intent: { type: 'string', minLength: 1, maxLength: 12000 }, scene_command: { type: 'object', description: 'Shared scene command: version=1, operation=scenes.effects.apply (input document,cues,replace), scenes.effects.showcase (input accepts ONLY dimension="2d" or "3d",sound:boolean,collection="all" or "anime",document; document optional to retain an existing scene), or scenes.speech.prepare (input document,slot_id,clip_id,workspace,audio_filename,text,start,end,offset,isolate_vocals optional boolean for installed-only local voice isolation). Supply the exact current document, never invent its objects or resource names.' }, output_names: { type: 'array', maxItems: 32, items: { type: 'string', maxLength: 300 } } }, required: ['type', 'intent'] },
-    risk: 'edit', confirmation: 'none', progress: 'Preparando el compositor sin lanzar generación…',
+    risk: 'edit', confirmation: 'none', progress: 'Preparing the compositor without launching generation…',
     resolve(raw) {
       if (typeof raw.intent !== 'string' || !raw.intent.trim()) return null
       const names = Array.isArray(raw.output_names) ? raw.output_names : []

@@ -97,7 +97,7 @@ function requireSavedCandidate(
   jobId?: string,
 ): GenerateStoryCueSongResult {
   const candidate = cueCandidate(project, cueId, candidateId)
-  if (!candidate) throw new Error('Story Lab guardó la canción sin devolver el candidato generado.')
+  if (!candidate) throw new Error('Story Lab saved the song without returning the generated candidate.')
   return {
     project,
     cueId,
@@ -125,7 +125,7 @@ async function persistCueCandidate(
     projectId,
     source => {
       const latestCue = source.music.cues.find(item => item.id === cueId)
-      if (!latestCue) throw new Error('El cue desapareció mientras se generaba el audio.')
+      if (!latestCue) throw new Error('The cue disappeared while the audio was generating.')
       const existing = latestCue.candidates.find(item => item.id === candidateId)
       const candidate = patch(source)
       const next = upsertCueMusicCandidate(
@@ -167,21 +167,21 @@ async function persistCueCandidate(
 }
 
 function requireOpenCue(project: StoryProject | undefined, cueId: string): { project: StoryProject; cue: StoryMusicCue } {
-  if (!project) throw new Error('La historia activa desapareció antes de generar la canción.')
+  if (!project) throw new Error('The active story disappeared before the song was generated.')
   const cue = project.music.cues.find(item => item.id === cueId)
-  if (!cue) throw new Error(`No existe el cue con ID “${cueId}” en “${project.title}”.`)
-  if (!cue.style.trim()) throw new Error(`“${cue.title}” necesita un estilo musical antes de generarse.`)
+  if (!cue) throw new Error(`There is no cue with ID “${cueId}” in “${project.title}”.`)
+  if (!cue.style.trim()) throw new Error(`“${cue.title}” needs a music style before it can be generated.`)
   if (!cue.instrumental && !cue.lyrics.trim()) {
-    throw new Error(`“${cue.title}” necesita letra antes de generarse.`)
+    throw new Error(`“${cue.title}” needs lyrics before it can be generated.`)
   }
   const blocked = musicCueBlock(cue, project.music.model)
   if (blocked?.key === 'music.promptOverLimit') {
     throw new Error(
-      `“${cue.title}” supera el límite de ${musicPromptLimit(project.music.model)} caracteres del modelo seleccionado.`,
+      `“${cue.title}” exceeds the selected model's ${musicPromptLimit(project.music.model)}-character limit.`,
     )
   }
   if (blocked?.key === 'notice.needsSectionTags') {
-    throw new Error(`“${cue.title}” necesita etiquetas de sección compatibles con MiniMax antes de generarse.`)
+    throw new Error(`“${cue.title}” needs MiniMax-compatible section tags before it can be generated.`)
   }
   return { project, cue }
 }
@@ -256,7 +256,7 @@ async function generateLocalStorySong(
     provenance: songGenerationProvenance(input, pending.id, version),
   })
   if (!rendered.filename || !rendered.audio_path) {
-    throw new Error('El modelo local terminó sin devolver un archivo de audio verificable.')
+    throw new Error('The local model finished without returning a verifiable audio file.')
   }
   const saved = await persistReadyCandidate(input, pending, {
     filename: rendered.filename,
@@ -337,7 +337,7 @@ async function generateRemoteStorySong(
     }, watchers)
   const rendered = result.candidates[0]
   if (!rendered?.filename || !rendered.source) {
-    throw new Error(result.message || 'MiniMax Music terminó sin devolver un archivo de audio verificable.')
+    throw new Error(result.message || 'MiniMax Music finished without returning a verifiable audio file.')
   }
   const saved = await persistReadyCandidate(input, pending, {
     filename: rendered.filename,

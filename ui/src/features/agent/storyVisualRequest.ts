@@ -72,11 +72,11 @@ export function reconcileStoryVisualRequest(request: string, turn: AgentTurn): A
     ? visualActions.includes(action)
     : ['create_story', 'update_story', 'open_story_section', 'open_tab'].includes(action.type))
   if (!actions.length) {
-    return { ...turn, reply: 'No he lanzado imágenes. La petición necesita una acción de Story Lab con alcance y nombres confirmados; no la sustituiré por una generación local en Studio.', actions: [] }
+    return { ...turn, reply: 'I have not launched images. The request needs a Story Lab action with a confirmed scope and names; I won\'t replace it with a local Studio generation.', actions: [] }
   }
   return {
     ...turn,
-    reply: 'Enviaré las imágenes solicitadas a Story Lab con sus nombres exactos y el proveedor guardado en ese proyecto. El resultado real aparecerá después de ejecutar cada acción.',
+    reply: 'I\'ll send the requested images to Story Lab with their exact names and the provider saved in that project. The real result will appear after each action runs.',
     actions,
   }
 }

@@ -1,6 +1,7 @@
 import { Palette, RefreshCcw, Sparkles } from 'lucide-react'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
 import { useUiTranslation } from '../../i18n'
+import { SpokenLanguageOptions } from '../../i18n/SpokenLanguageOptions'
 import {
   button, input, panel, requiredInput, Field, SectionHeader, requiredPreparationButton,
   type StoryLabSectionTabProps,
@@ -179,12 +180,7 @@ export function StoryOverviewTab({
           <label className="block text-[10px] text-violet-200">
             {t('overview.spokenLanguage')}
             <select className={`${input} mt-1`} value={project.spokenLanguage} onChange={event => patch(storySpokenLanguagePatch(project, event.target.value))}>
-              <option value="">{t('overview.spokenAuto')}</option>
-              <option value="Español de España">Español de España</option>
-              <option value="Español latinoamericano">Español latinoamericano</option>
-              <option value="English">English</option>
-              <option value="French">Français</option>
-              <option value="Italian">Italiano</option>
+              <SpokenLanguageOptions />
             </select>
             <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">{t('overview.spokenHint')}</span>
           </label>

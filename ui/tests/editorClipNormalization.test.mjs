@@ -62,7 +62,7 @@ test('corrupt numeric fields, enums, duplicate ids and inverted trims are repair
     has_audio: true, pixel_format: 'yuv420p', has_alpha: false,
     trimStart: 2, trimEnd: 9,
     volume: 1, muted: false, fit: 'fit', transition: 'none',
-    transitionDuration: 0.5, transitionText: 'Momentos después…', transitionTextSize: 100,
+    transitionDuration: 0.5, transitionText: 'Moments later…', transitionTextSize: 100,
   })
   for (const clip of result.clips) {
     assert.ok(Number.isFinite(clip.trimStart))

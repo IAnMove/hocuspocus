@@ -10,7 +10,11 @@ import type { ApiOutput } from '../../api/outputs'
 
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
-import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
+import {
+  resolveSupportedVideoFormat,
+  writingBaseUrlFromProfile,
+  writingProviderFromText,
+} from '../../lib/productionProfile'
 import { StoryLabNavigation } from './StoryLabNavigation'
 import { StoryRelationshipsTab } from './StoryRelationshipsTab'
 import { StoryWorldTab } from './StoryWorldTab'
@@ -478,6 +482,13 @@ export function StoryLabPanel() {
   const styleConversionCancelRequested = useRef(false)
   const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
+  const uploadPickerRef = useRef<HTMLDivElement>(null)
+  const referenceFileRef = useRef<HTMLInputElement>(null)
+  // The reference picker renders above the tabs; bring it into view when a
+  // card far down the page requests it, otherwise the click looks inert.
+  useEffect(() => {
+    if (uploadTarget) uploadPickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [uploadTarget])
   const imageItems = useWorkspaceImageOutputs(activeWorkspace)
   const projectOperationBusy = Boolean(activeProjectOperations[project.id])
   const musicCandidateOptions = useMemo(() => {
@@ -618,22 +629,10 @@ export function StoryLabPanel() {
 
   useEffect(() => {
     if (!project.provider.useGlobalProfile) return
-    const writingProvider: StoryWritingProvider = productionProfile.text.provider === 'minimax'
-      ? 'minimax'
-      : productionProfile.text.provider === 'openai'
-        ? 'openai'
-        : productionProfile.text.provider === 'deepseek'
-          ? 'deepseek'
-          : productionProfile.text.provider === 'openai-compatible'
-            ? 'openai-compatible'
-            : 'maestro'
-    const writingBaseUrl = writingProvider === 'minimax'
-      ? 'https://api.minimax.io/v1'
-      : writingProvider === 'openai'
-        ? 'https://api.openai.com'
-        : writingProvider === 'deepseek'
-          ? 'https://api.deepseek.com'
-          : project.provider.writingBaseUrl
+    // Shared with the other labs so every profile provider (including
+    // Ollama and Grok) reaches Story Lab instead of falling back to Maestro.
+    const writingProvider: StoryWritingProvider = writingProviderFromText(productionProfile.text.provider)
+    const writingBaseUrl = writingBaseUrlFromProfile(productionProfile) || project.provider.writingBaseUrl
     const imageProvider: StoryImageProvider = productionProfile.image.provider === 'minimax'
       ? 'minimax' : 'maestro'
     if (
@@ -1584,7 +1583,7 @@ export function StoryLabPanel() {
   useEffect(() => listenForAgentStoryVisualGeneration(async request => {
     const current = useStoryStore.getState().project
     if (current.id !== request.projectId) {
-      throw new Error('La historia cambió mientras se preparaba la generación visual; no he generado imágenes en otro proyecto.')
+      throw new Error('The story changed while the visual generation was being prepared; I have not generated images in another project.')
     }
     const requestedNames = new Set(request.targetNames.map(storyLookupName).filter(Boolean))
     const includeCharacters = request.scope === 'characters' || request.scope === 'all'
@@ -1599,23 +1598,23 @@ export function StoryLabPanel() {
       characters.filter(character => storyLookupName(character.name) === name).length
       + locations.filter(location => storyLookupName(location.name) === name).length
     ) > 1)
-    if (ambiguous.length) throw new Error(`Estos destinos visuales no son inequívocos: ${ambiguous.join(', ')}.`)
+    if (ambiguous.length) throw new Error(`These visual targets are ambiguous: ${ambiguous.join(', ')}.`)
     const matchedNames = new Set([
       ...characters.map(character => storyLookupName(character.name)),
       ...locations.map(location => storyLookupName(location.name)),
     ])
     const unknown = [...requestedNames].filter(name => !matchedNames.has(name))
-    if (unknown.length) throw new Error(`No existen estos destinos visuales en “${current.title}”: ${unknown.join(', ')}.`)
+    if (unknown.length) throw new Error(`These visual targets do not exist in “${current.title}”: ${unknown.join(', ')}.`)
 
     const targets: Array<{ target: { kind: 'world' | 'character' | 'location'; id?: string }; label: string; prompt: string }> = []
     if (request.scope === 'world' || (request.scope === 'all' && !requestedNames.size)) {
-      targets.push({ target: { kind: 'world' }, label: 'mundo', prompt: current.world.visualPrompt })
+      targets.push({ target: { kind: 'world' }, label: 'world', prompt: current.world.visualPrompt })
     }
     characters.forEach(character => targets.push({ target: { kind: 'character', id: character.id }, label: character.name, prompt: character.visualPrompt }))
     locations.forEach(location => targets.push({ target: { kind: 'location', id: location.id }, label: location.name, prompt: location.visualPrompt }))
-    if (!targets.length) throw new Error('La selección no contiene mundos, personajes ni localizaciones que puedan generarse.')
+    if (!targets.length) throw new Error('The selection contains no worlds, characters or locations that can be generated.')
     const missingPrompts = targets.filter(target => !target.prompt.trim()).map(target => target.label)
-    if (missingPrompts.length) throw new Error(`Falta visualPrompt para: ${missingPrompts.join(', ')}.`)
+    if (missingPrompts.length) throw new Error(`Missing visualPrompt for: ${missingPrompts.join(', ')}.`)
 
     const assetIdsBefore = new Set(Object.keys(current.assets))
     let completed = 0
@@ -1626,15 +1625,15 @@ export function StoryLabPanel() {
         projectId: request.projectId,
         onError: message => { failure = message },
       })
-      if (!ok) throw new Error(`${completed}/${targets.length} referencias terminadas. Falló “${item.label}”: ${failure || 'error de generación desconocido'}.`)
+      if (!ok) throw new Error(`${completed}/${targets.length} references finished. “${item.label}” failed: ${failure || 'unknown generation error'}.`)
       completed += 1
     }
     const assetsNav = resolveStoryLabNavigation('assets', current.projectType)
     if (assetsNav.ok) setTab(assetsNav.tab)
-    const message = `He generado y adjuntado ${completed} referencia${completed === 1 ? '' : 's'} visual${completed === 1 ? '' : 'es'} en “${current.title}”. Quedan en Draft dentro de Story Lab → Assets para que las revises y apruebes.`
+    const message = `I generated and attached ${completed} visual reference${completed === 1 ? '' : 's'} in “${current.title}”. They are in Draft in Story Lab → Assets for you to review and approve.`
     const latest = useStoryStore.getState().projects[request.projectId]
     const assetIds = latest ? Object.keys(latest.assets).filter(id => !assetIdsBefore.has(id)) : []
-    if (assetIds.length !== completed) throw new Error('Las referencias visuales terminaron sin poder correlacionar todos sus IDs de asset.')
+    if (assetIds.length !== completed) throw new Error('The visual references finished without all their asset IDs being linked.')
     setNotice({ kind: 'ok', text: t('notice.visualReferencesAttached', { count: completed, title: current.title }) })
     return { message, assetIds }
   }), [t])
@@ -1718,6 +1717,32 @@ export function StoryLabPanel() {
     } finally {
       setImageBusy('')
       endProjectOperation(sourceProjectId)
+    }
+  }
+
+  const uploadReferenceFiles = async (files: File[]) => {
+    const target = uploadTarget
+    const images = files.filter(file => file.type.startsWith('image/'))
+    if (!target || !images.length) return
+    const sourceProjectId = project.id
+    beginProjectOperation(sourceProjectId)
+    setImageBusy('upload')
+    try {
+      for (const file of images) {
+        const uploaded = await api.uploadImage(file)
+        addAsset({
+          id: storyId('asset'), name: file.name, source: uploaded.url, prompt: '',
+          provider: 'upload', createdAt: new Date().toISOString(),
+          approval: 'draft', variantKind: 'original',
+        }, target, false, sourceProjectId)
+      }
+      setUploadTarget(null)
+    } catch (error) {
+      setNotice({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setImageBusy('')
+      endProjectOperation(sourceProjectId)
+      if (referenceFileRef.current) referenceFileRef.current.value = ''
     }
   }
 
@@ -2199,7 +2224,7 @@ export function StoryLabPanel() {
           const entry = zip.file(path)
           if (!entry || !imported.assets[assetId]) continue
           const blob = await entry.async('blob')
-          const uploaded = await api.uploadImage(new File([blob], path.split('/').pop() || `${assetId}.png`, { type: blob.type }))
+          const uploaded = await api.uploadImage(new File([blob], path.split(/[?#]/, 1)[0].split('/').pop() || `${assetId}.png`, { type: blob.type }))
           imported.assets[assetId].source = uploaded.url
         }
       }
@@ -2879,7 +2904,7 @@ export function StoryLabPanel() {
       id: storyId('music-cue'),
       kind: 'story',
       targetId: current.id,
-      title: current.title.trim() ? `${current.title} · canción` : 'Nueva canción',
+      title: current.title.trim() ? `${current.title} · song` : 'New song',
       purpose: current.creativeBrief.songStory || current.music.brief || 'Tell this Story as a memorable song.',
       referenceSong: '',
       brief: current.music.brief || storySongBrief(current, current.music.targetDurationSeconds),
@@ -3829,6 +3854,8 @@ export function StoryLabPanel() {
       generateVisual,
       requestUpload: target => {
         setUploadTarget(target)
+        // Open the file dialog directly; the picker bar stays for library picks.
+        referenceFileRef.current?.click()
       },
       removeReference,
     }}>
@@ -3877,8 +3904,17 @@ export function StoryLabPanel() {
           {notice.text}
         </div>
       )}
+      <input
+        ref={referenceFileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        data-testid="story-reference-file"
+        onChange={event => { void uploadReferenceFiles(Array.from(event.target.files || [])) }}
+      />
       {uploadTarget && (
-        <div className="border-b border-border px-3 py-2">
+        <div ref={uploadPickerRef} className="border-b border-border px-3 py-2">
           <AssetInput
             label={t('world.addReference')}
             placeholder={t('world.addReference')}

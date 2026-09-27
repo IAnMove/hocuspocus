@@ -307,3 +307,140 @@ def test_pipeline_list_paginates_newest_first_without_opening_the_rest(tmp_path)
     assert [item["id"] for item in page] == ["newer"]
     rest = director_pipeline.list_pipeline_states(str(tmp_path), "default", limit=1, offset=1)
     assert [item["id"] for item in rest] == ["older"]
+
+
+def _write_preview_state_with_checkpoint(tmp_path, pipeline_id):
+    checkpoint = {
+        "version": 1,
+        "fingerprint": "abc",
+        "stages": {"h3_voice_bible": [], "screenplay": "INT. PLAYROOM - DAY"},
+    }
+    (tmp_path / f"_director_pipeline_{pipeline_id}.json").write_text(
+        json.dumps({
+            "pipeline_id": pipeline_id,
+            "status": "preview_ready",
+            "created_at": 10,
+            "preview_clips": [{"index": 0, "image_filename": "p.png"}],
+            "clips": [{
+                "index": 0,
+                "planned_clip": {"start": 0, "end": 3},
+                "video_prompt": "original",
+                "start_image_filename": "p.png",
+            }],
+            "output_files": [],
+            "planning_checkpoint": checkpoint,
+            "_params_snapshot": {
+                "pipeline_type": "comic_movie",
+                "comic_preflight_only": True,
+                "auto_mode": True,
+            },
+        }),
+        encoding="utf-8",
+    )
+    return checkpoint
+
+
+def test_resume_restores_planning_checkpoint_but_status_only_lists_stages(tmp_path):
+    pipeline_id = "checkpoint42"
+    checkpoint = _write_preview_state_with_checkpoint(tmp_path, pipeline_id)
+    try:
+        ok, _ = director_pipeline.resume_pipeline(pipeline_id, str(tmp_path))
+        assert ok
+        assert director_pipeline._pipelines[pipeline_id]["planning_checkpoint"] == checkpoint
+        public = director_pipeline.get_pipeline(pipeline_id)
+        assert "planning_checkpoint" not in public
+        assert public["planning_checkpoint_stages"] == ["h3_voice_bible", "screenplay"]
+    finally:
+        director_pipeline._pipelines.pop(pipeline_id, None)
+
+
+def test_replan_resume_discards_planning_checkpoint(tmp_path):
+    pipeline_id = "checkpoint43"
+    _write_preview_state_with_checkpoint(tmp_path, pipeline_id)
+    try:
+        ok, _ = director_pipeline.resume_pipeline(
+            pipeline_id, str(tmp_path), replan=True,
+        )
+        assert ok
+        assert director_pipeline._pipelines[pipeline_id]["planning_checkpoint"] is None
+    finally:
+        director_pipeline._pipelines.pop(pipeline_id, None)
+
+
+def test_saved_state_persists_planning_checkpoint(tmp_path):
+    pipeline_id = "checkpoint44"
+    checkpoint = {"version": 1, "fingerprint": "abc", "stages": {"screenplay": "x"}}
+    director_pipeline._pipelines[pipeline_id] = {
+        "id": pipeline_id,
+        "status": "failed",
+        "out_dir": str(tmp_path),
+        "params": {"pipeline_type": "short_film_story"},
+        "clip_plans": [],
+        "planning_checkpoint": checkpoint,
+    }
+    try:
+        assert director_pipeline._save_pipeline_state(pipeline_id)
+        saved = json.loads(
+            (tmp_path / f"_director_pipeline_{pipeline_id}.json").read_text(encoding="utf-8")
+        )
+        assert saved["planning_checkpoint"] == checkpoint
+    finally:
+        director_pipeline._pipelines.pop(pipeline_id, None)
+
+
+def _with_fake_video_models(models):
+    from types import SimpleNamespace
+
+    previous = director_pipeline._wgp
+    director_pipeline._wgp = SimpleNamespace(
+        get_model_def=lambda name: models.get(name),
+        save_path="outputs",
+        server_config={},
+    )
+    return previous
+
+
+_REF2VA = {"name": "H3 References", "director_video_strategy": "omni_reference"}
+
+
+def test_direct_video_with_reference_only_h3_model_is_rejected_before_planning(tmp_path):
+    import pytest
+
+    previous = _with_fake_video_models({"h3_ref": _REF2VA})
+    try:
+        params = {
+            "pipeline_type": "short_film_story",
+            "video_model": "h3_ref",
+            "music_video_treatment": {"generation_mode": "direct_video"},
+        }
+        with pytest.raises(director_pipeline.DirectorModelCompatibilityError, match="direct-video mode"):
+            director_pipeline._validate_director_visual_references(params, str(tmp_path))
+    finally:
+        director_pipeline._wgp = previous
+
+
+def test_reference_only_h3_model_accepts_a_character_image(tmp_path):
+    image = tmp_path / "bear.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 64)
+    previous = _with_fake_video_models({"h3_ref": _REF2VA})
+    try:
+        director_pipeline._validate_director_visual_references({
+            "pipeline_type": "short_film_story",
+            "video_model": "h3_ref",
+            "_director_shot_image_policy": "prompt_only",
+            "character_ref_paths": [str(image)],
+        }, str(tmp_path))
+    finally:
+        director_pipeline._wgp = previous
+
+
+def test_text_to_video_h3_model_needs_no_reference(tmp_path):
+    previous = _with_fake_video_models({"h3_t2v": {"name": "H3 Frames", "director_video_strategy": "bounded_start_end"}})
+    try:
+        director_pipeline._validate_director_visual_references({
+            "pipeline_type": "short_film_story",
+            "video_model": "h3_t2v",
+            "music_video_treatment": {"generation_mode": "direct_video"},
+        }, str(tmp_path))
+    finally:
+        director_pipeline._wgp = previous

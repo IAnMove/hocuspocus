@@ -16,7 +16,7 @@
             "platform": "NVIDIA CUDA",
             "backend": "Diffusers modular pipeline",
             "tier": "stable",
-            "note": "Con CPU offload puede caber en menos VRAM, pero la generación será mucho más lenta."
+            "note": "With CPU offload it can fit in less VRAM, but generation will be much slower."
         },
         "model_size_gb": 28,
         "required_model_assets": [

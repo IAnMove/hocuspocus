@@ -21,10 +21,11 @@ def _load_functions(*names: str):
     return tuple(namespace[name] for name in names)
 
 
-_story_id_token, _normalize_story_stage_ids, _story_stage_problem = _load_functions(
+_story_id_token, _normalize_story_stage_ids, _story_stage_problem, _story_music_cue_count = _load_functions(
     "_story_id_token",
     "_normalize_story_stage_ids",
     "_story_stage_problem",
+    "_story_music_cue_count",
 )
 
 

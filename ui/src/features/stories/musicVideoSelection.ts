@@ -59,13 +59,13 @@ function resolveCueIdentity(
   const requested = normalizeName(cueTitle)
   const requestedCandidateId = candidateId.trim()
   const cueById = cueId ? project.music.cues.find(item => item.id === cueId) : undefined
-  if (cueId && !cueById) throw new Error(`No existe el cue con ID “${cueId}” en “${project.title}”.`)
+  if (cueId && !cueById) throw new Error(`There is no cue with ID “${cueId}” in “${project.title}”.`)
   const candidates = cueById ? cueById.candidates : allCandidates(project)
   const titleMatches = requested
     ? candidates.filter(item => candidateAliases(item).includes(requested))
     : []
   if (titleMatches.length > 1 && !requestedCandidateId) {
-    throw new Error(`Hay varias versiones de canción llamadas “${cueTitle}”; usa su candidate_id exacto.`)
+    throw new Error(`There are several song versions called “${cueTitle}”; use its exact candidate_id.`)
   }
   const candidateFromTitle = titleMatches.length === 1 ? titleMatches[0] : undefined
   const candidateCue = candidateFromTitle
@@ -74,9 +74,9 @@ function resolveCueIdentity(
   const exactCues = requested
     ? project.music.cues.filter(item => normalizeName(item.title) === requested)
     : []
-  if (exactCues.length > 1) throw new Error(`Hay varios cues llamados “${cueTitle}”; usa el título exacto y único.`)
+  if (exactCues.length > 1) throw new Error(`There are several cues called “${cueTitle}”; use the exact, unique title.`)
   if (requested && !cueById && !candidateFromTitle && !exactCues.length) {
-    throw new Error(`No existe el cue “${cueTitle}” en “${project.title}”.`)
+    throw new Error(`There is no cue “${cueTitle}” in “${project.title}”.`)
   }
   const selectedCue = project.music.cues.find(item => (
     item.selectedCandidateId
@@ -98,25 +98,25 @@ function resolveCandidateIdentity(
   const requestedId = candidateId.trim()
   const byId = requestedId ? pool.find(item => item.id === requestedId) : undefined
   if (requestedId && !byId) {
-    throw new Error(`No existe la versión de canción con ID “${requestedId}” en “${project.title}”.`)
+    throw new Error(`There is no song version with ID “${requestedId}” in “${project.title}”.`)
   }
   const requestedSong = normalizeName(songName)
   if (requestedSong) {
     const matches = pool.filter(item => candidateAliases(item).includes(requestedSong))
-    if (matches.length > 1) throw new Error(`Hay varias canciones llamadas “${songName}”; usa el nombre exacto y único.`)
+    if (matches.length > 1) throw new Error(`There are several songs called “${songName}”; use the exact, unique name.`)
     if (byId && matches.length && matches[0].id !== byId.id) {
-      throw new Error(`La canción “${songName}” no coincide con la versión ${requestedId}.`)
+      throw new Error(`The song “${songName}” does not match version ${requestedId}.`)
     }
     const candidate = byId || matches[0]
     if (candidate) return candidate
-    throw new Error(`No existe la canción “${songName}” en “${project.title}”.`)
+    throw new Error(`There is no song “${songName}” in “${project.title}”.`)
   }
   if (byId || candidateFromTitle) return (byId || candidateFromTitle)!
   const selectedId = cue?.selectedCandidateId || project.music.selectedCandidateId
   const selected = selectedId ? pool.find(item => item.id === selectedId) : undefined
   if (selected) return selected
   if (pool.length === 1) return pool[0]
-  throw new Error(`Hay ${pool.length} canciones en “${project.title}”. Di el nombre exacto de la canción o del cue.`)
+  throw new Error(`There are ${pool.length} songs in “${project.title}”. Give the exact name of the song or cue.`)
 }
 
 export function resolveStoryMusicSelection(
@@ -131,7 +131,7 @@ export function resolveStoryMusicSelection(
   )
   const pool = scopedCue ? scopedCue.candidates : allCandidates(project, cue)
   if (!pool.length) {
-    throw new Error(`“${project.title}” no tiene ninguna canción candidata. Genera o importa una en Story Lab → Music.`)
+    throw new Error(`“${project.title}” has no candidate song. Generate or import one in Story Lab → Music.`)
   }
   const candidate = resolveCandidateIdentity(
     project, pool, cue, candidateFromTitle, songName, candidateId,
@@ -150,12 +150,12 @@ function assertReadyStoryMusicCandidate(candidate: StoryMusicCandidate): void {
   if (isReadyStoryMusicCandidate(candidate)) return
   const label = songLabel(candidate)
   if (candidate.status === 'pending') {
-    throw new Error(`La canción “${label}” todavía se está generando; espera a que quede lista antes de preparar el videoclip.`)
+    throw new Error(`The song “${label}” is still generating; wait until it is ready before preparing the music video.`)
   }
   if (candidate.status === 'failed') {
-    throw new Error(`La canción “${label}” falló y no se puede usar para un videoclip. Genera otra versión.`)
+    throw new Error(`The song “${label}” failed and cannot be used for a music video. Generate another version.`)
   }
-  throw new Error(`La canción “${label}” no tiene un archivo de audio.`)
+  throw new Error(`The song “${label}” has no audio file.`)
 }
 
 function assertPersistedMusicCue(
@@ -167,7 +167,7 @@ function assertPersistedMusicCue(
   const requestedCueId = cueId.trim()
   if (owningCue && owningCue.id !== SYNTHETIC_STORY_SONG_CUE_ID) return
   if (requestedCueId === SYNTHETIC_STORY_SONG_CUE_ID) return
-  throw new Error(`La canción “${songLabel(candidate)}” no pertenece a un cue persistido en “${project.title}”.`)
+  throw new Error(`The song “${songLabel(candidate)}” does not belong to a saved cue in “${project.title}”.`)
 }
 
 function syntheticStorySongCue(project: StoryProject, candidate: StoryMusicCandidate): StoryMusicCue {
@@ -198,7 +198,7 @@ export function effectiveStoryMusicCue(
 ): StoryMusicCue {
   if (cue && cue.id !== SYNTHETIC_STORY_SONG_CUE_ID) return cue
   if (requestedCueId.trim() !== SYNTHETIC_STORY_SONG_CUE_ID) {
-    throw new Error(`“${project.title}” no tiene un cue persistido para esta canción.`)
+    throw new Error(`“${project.title}” has no saved cue for this song.`)
   }
   return cue || syntheticStorySongCue(project, candidate)
 }

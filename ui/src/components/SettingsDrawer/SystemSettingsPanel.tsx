@@ -464,7 +464,7 @@ function CommunityMusicModelsSection() {
       {open && (
         <div className="mt-3 space-y-2">
           <p className="text-[10px] text-text-muted leading-relaxed">
-            Ports comunitarios del modelo oficial. Se muestran para comparar requisitos, pero no se pueden seleccionar hasta que exista un adaptador validado para HocusPocus.
+            Community ports of the official model. Shown to compare requirements, but they cannot be selected until a validated HocusPocus adapter exists.
           </p>
           {MINIMAX_MUSIC_COMMUNITY_MODELS.map(model => (
             <div key={model.id} className="rounded-lg border border-border bg-bg-tertiary/40 px-2.5 py-2">
@@ -476,7 +476,7 @@ function CommunityMusicModelsSection() {
                   target="_blank"
                   rel="noreferrer"
                   className="text-[10px] text-accent-blue hover:text-accent-blue-hover"
-                  title="Abrir repositorio"
+                  title="Open repository"
                 >
                   ↗
                 </a>
@@ -789,7 +789,7 @@ function DeveloperModeSection() {
       />
       <span>
         <span className="block text-xs text-text-primary">Developer mode</span>
-        <span className="block text-[10px] leading-relaxed text-text-muted">Shows internal tools such as Auditoría interna. Leave off for normal use.</span>
+        <span className="block text-[10px] leading-relaxed text-text-muted">Shows internal tools such as Internal audit. Leave off for normal use.</span>
       </span>
     </label>
   )

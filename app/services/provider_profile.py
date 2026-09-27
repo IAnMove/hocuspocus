@@ -99,6 +99,13 @@ def ollama_tags_url(url: str) -> str:
     return f"{origin}/api/tags"
 
 
+def ollama_chat_url(url: str) -> str:
+    origin = canonicalize_remote_url(url)
+    if not origin:
+        raise ValueError("An Ollama URL is required")
+    return f"{origin}/api/chat"
+
+
 def looks_like_ollama(url: str) -> bool:
     value = str(url or "").lower()
     return "ollama" in value or ":11434" in value

@@ -1,4 +1,4 @@
-import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
+import { createMp4Muxer } from '../../lib/mp4Muxer'
 import { encodeSpeechAudio } from './speech/encodeAudio'
 import { scene3dFrameCount, scene3dFrameTime } from './clock.ts'
 import { scene3dCopy } from './copy.ts'
@@ -68,14 +68,7 @@ export async function encodeWorld3DFrames(options: {
   copy.height = size.height
   const context = copy.getContext('2d')
   if (!context) throw new Error(scene3dCopy('stage.exportCanvasFailed'))
-  const target = new ArrayBufferTarget()
-  const muxer = new Muxer({
-    target,
-    video: { codec: 'avc', width: size.width, height: size.height, frameRate: plan.fps },
-    fastStart: 'in-memory',
-    audio: options.audio ? { codec: 'aac', numberOfChannels: 1, sampleRate: options.audio.sampleRate } : undefined,
-    firstTimestampBehavior: 'strict',
-  })
+  const muxer = await createMp4Muxer({ audio: Boolean(options.audio) })
   let encoderError: Error | null = null
   const encoder = new VideoEncoder({
     output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
@@ -99,8 +92,7 @@ export async function encodeWorld3DFrames(options: {
     }
     await encoder.flush()
     if (encoderError) throw encoderError
-    muxer.finalize()
-    return new Blob([target.buffer], { type: 'video/mp4' })
+    return new Blob([await muxer.finalize()], { type: 'video/mp4' })
   } finally {
     if (encoder.state !== 'closed') encoder.close()
   }

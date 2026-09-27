@@ -50,28 +50,28 @@ function songResult(
 export async function attachSong(command: AttachAlternativeSongCommand): Promise<CommandResult> {
   const videoclip = command.videoclipName.trim()
   const audio = command.audioOutputName.trim()
-  if (!videoclip) throw new Error('Indica el videoclip exacto.')
-  if (!audio) throw new Error('Indica el output de audio exacto.')
+  if (!videoclip) throw new Error('Give the exact music video.')
+  if (!audio) throw new Error('Give the exact audio output.')
   const result = await attachAlternativeSong(videoclip, audio, workspaceName())
   showVideoclips()
   return songResult(
     videoclip,
-    `He añadido “${audio}” como canción alternativa de “${videoclip}” (${result.adaptation === 'random_extras' ? 'extras aleatorios si hace falta' : 'se repetirá el videoclip si hace falta'}). Aún no he montado el vídeo.`,
+    `I added “${audio}” as an alternative song for “${videoclip}” (${result.adaptation === 'random_extras' ? 'random extras if needed' : 'the music video will repeat if needed'}). I have not assembled the video yet.`,
     { state: 'prepared' },
   )
 }
 
 export async function mountSong(command: MountAlternativeSongCommand): Promise<CommandResult> {
-  if (!command.confirm) throw new Error('Montar una canción alternativa requiere confirm=true.')
+  if (!command.confirm) throw new Error('Assembling an alternative song requires confirm=true.')
   const videoclip = command.videoclipName.trim()
   const audio = command.audioOutputName.trim()
-  if (!videoclip) throw new Error('Indica el videoclip exacto.')
-  if (!audio && !command.songId) throw new Error('Indica la canción exacta.')
+  if (!videoclip) throw new Error('Give the exact music video.')
+  if (!audio && !command.songId) throw new Error('Give the exact song.')
   let songId = command.songId?.trim() || ''
   if (!songId) {
     const attached = await attachAlternativeSong(videoclip, audio, workspaceName())
     const song = attached.song || attached.songs.find(item => item.audio_name === audio)
-    if (!song) throw new Error('No pude adjuntar la canción alternativa.')
+    if (!song) throw new Error('I couldn\'t attach the alternative song.')
     songId = song.id
   }
   const started = await mountAlternativeSong(videoclip, songId, {
@@ -81,7 +81,7 @@ export async function mountSong(command: MountAlternativeSongCommand): Promise<C
   showVideoclips()
   return songResult(
     videoclip,
-    `Estoy montando “${videoclip}” con “${started.song.audio_name}” (FFmpeg, sin regenerar planos). El resultado será “${started.output_name}”.`,
+    `Assembling “${videoclip}” with “${started.song.audio_name}” (FFmpeg, without regenerating shots). The result will be “${started.output_name}”.`,
     {
       state: 'running',
       taskId: started.task_id || started.job_id,
@@ -97,8 +97,8 @@ export async function trackSong(command: TrackAlternativeSongCommand): Promise<C
   if (mounting?.job_id) {
     const job = await fetchVideoEditorExport(mounting.job_id)
     const message = job.status === 'completed'
-      ? `El montaje de “${mounting.audio_name}” terminó: ${job.filename || mounting.mounted_output}.`
-      : `El montaje de “${mounting.audio_name}” está ${job.status}: ${job.message}`
+      ? `The assembly with “${mounting.audio_name}” finished: ${job.filename || mounting.mounted_output}.`
+      : `The assembly with “${mounting.audio_name}” is ${job.status}: ${job.message}`
     const failed = job.status === 'failed' || job.status === 'cancelled'
     return songResult(videoclipName, message, {
       state: job.status === 'completed' ? 'completed' : failed ? 'failed' : 'running',
@@ -110,12 +110,12 @@ export async function trackSong(command: TrackAlternativeSongCommand): Promise<C
   if (mounted?.mounted_output) {
     return songResult(
       videoclipName,
-      `La última canción alternativa montada es “${mounted.audio_name}” → “${mounted.mounted_output}”.`,
+      `The last assembled alternative song is “${mounted.audio_name}” → “${mounted.mounted_output}”.`,
       { outputName: mounted.mounted_output },
     )
   }
   const message = list.songs.length
-    ? `“${videoclipName}” tiene ${list.songs.length} canciones alternativas adjuntas y ninguna se está montando.`
-    : `“${videoclipName}” no tiene canciones alternativas todavía.`
+    ? `“${videoclipName}” has ${list.songs.length} alternative songs attached and none is being assembled.`
+    : `“${videoclipName}” has no alternative songs yet.`
   return songResult(videoclipName, message, { state: 'prepared' })
 }

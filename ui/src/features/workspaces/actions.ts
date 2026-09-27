@@ -20,7 +20,7 @@ function workspaceResult(name: string, message: string): CommandResult {
 
 function summaryOf(result: CommandResult): string {
   const summary = result.artifacts[0]?.metadata?.summary
-  return typeof summary === 'string' ? summary : 'Workspace listo.'
+  return typeof summary === 'string' ? summary : 'Workspace ready.'
 }
 
 async function authoritativeWorkspaces() {
@@ -31,47 +31,47 @@ async function authoritativeWorkspaces() {
 
 export async function selectAgentWorkspace(requestedName: string): Promise<CommandResult> {
   if (requestedName === '__uploads__') {
-    throw new Error('Uploads es una vista virtual de sólo lectura, no un workspace seleccionable para generar.')
+    throw new Error('Uploads is a read-only virtual view, not a workspace you can select for generation.')
   }
   const before = await authoritativeWorkspaces()
   const workspace = before.workspaces.find(item => normalized(item.name) === normalized(requestedName))
   if (!workspace) {
-    throw new Error(`No existe el workspace “${requestedName}”. Los disponibles son: ${before.workspaces.map(item => item.name).join(', ') || 'ninguno'}.`)
+    throw new Error(`There is no workspace “${requestedName}”. Available: ${before.workspaces.map(item => item.name).join(', ') || 'none'}.`)
   }
   if (before.active === workspace.name && useStore.getState().activeWorkspace === workspace.name) {
-    return workspaceResult(workspace.name, `El workspace “${workspace.name}” ya estaba activo.`)
+    return workspaceResult(workspace.name, `The workspace “${workspace.name}” was already active.`)
   }
   await useStore.getState().switchWorkspace(workspace.name)
   const after = await api.fetchWorkspaces()
   if (after.active !== workspace.name || useStore.getState().activeWorkspace !== workspace.name) {
-    throw new Error(`El backend no confirmó el cambio al workspace “${workspace.name}”; no afirmaré que se completó.`)
+    throw new Error(`The backend did not confirm the switch to workspace “${workspace.name}”; I won't claim it completed.`)
   }
   return workspaceResult(
     workspace.name,
-    `He cambiado al workspace “${workspace.name}”. El chat y las siguientes acciones continúan en ese contexto.`,
+    `I switched to workspace “${workspace.name}”. The chat and next actions continue in that context.`,
   )
 }
 
 export async function createAgentWorkspace(requestedName: string): Promise<CommandResult> {
   const name = requestedName.trim()
-  if (!name || name === '__uploads__') throw new Error('Ese nombre de workspace no es válido.')
+  if (!name || name === '__uploads__') throw new Error('That workspace name is not valid.')
   const before = await authoritativeWorkspaces()
   const existing = before.workspaces.find(item => normalized(item.name) === normalized(name))
   if (existing) {
     const selected = await selectAgentWorkspace(existing.name)
     return workspaceResult(
       existing.name,
-      `El workspace “${existing.name}” ya existía. ${summaryOf(selected)}`,
+      `The workspace “${existing.name}” already existed. ${summaryOf(selected)}`,
     )
   }
   await useStore.getState().createWorkspace(name)
   const after = await api.fetchWorkspaces()
   const created = after.workspaces.find(item => normalized(item.name) === normalized(name))
   if (!created || after.active !== created.name || useStore.getState().activeWorkspace !== created.name) {
-    throw new Error(`El backend no confirmó la creación y selección de “${name}”.`)
+    throw new Error(`The backend did not confirm creating and selecting “${name}”.`)
   }
   return workspaceResult(
     created.name,
-    `He creado y seleccionado el workspace “${created.name}”. El chat continúa aquí y las nuevas generaciones se guardarán en él.`,
+    `I created and selected the workspace “${created.name}”. The chat continues here and new generations will be saved in it.`,
   )
 }

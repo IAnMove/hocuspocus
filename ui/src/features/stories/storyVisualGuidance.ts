@@ -37,10 +37,10 @@ export function assertStoryVisualRecipeReady(project: StoryProject): void {
     const incomplete = charactersMissingVisualIdentities(project)
     if (incomplete.length) {
       const names = incomplete.map(character => character.name || 'Unnamed').join(', ')
-      throw new Error(`La receta con imágenes iniciales necesita identidades visuales aprobadas: ${names}.`)
+      throw new Error(`The start-image recipe needs approved visual identities: ${names}.`)
     }
   }
   if (storyRecipeRequiresApprovedReferences(mode) && approvedAttachedReferenceCount(project) === 0) {
-    throw new Error('La receta de referencias directas necesita al menos una imagen adjunta aprobada.')
+    throw new Error('The direct-reference recipe needs at least one approved attached image.')
   }
 }

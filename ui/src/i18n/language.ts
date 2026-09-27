@@ -16,6 +16,13 @@ export function detectUiLanguage(): UiLanguage {
   return DEFAULT_LANGUAGE
 }
 
+/** Content and spoken language that new projects start with, following the UI language. */
+export function defaultProjectLanguages(): { content: string; spoken: string } {
+  return detectUiLanguage() === 'es'
+    ? { content: 'Español', spoken: 'Español de España' }
+    : { content: 'English', spoken: 'English' }
+}
+
 export function persistUiLanguage(language: UiLanguage): void {
   safeStorageSet('local', LANGUAGE_STORAGE_KEY, language)
   if (typeof document !== 'undefined') document.documentElement.lang = language

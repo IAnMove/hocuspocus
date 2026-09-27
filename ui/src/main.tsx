@@ -9,7 +9,7 @@ const SceneTemplateReview = lazy(() => import('./features/sceneTemplates/SceneTe
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {window.location.pathname === '/scene-template-review'
-      ? <Suspense fallback={<p>Cargando galería de escenas…</p>}><SceneTemplateReview /></Suspense>
+      ? <Suspense fallback={<p>Loading scene gallery…</p>}><SceneTemplateReview /></Suspense>
       : <App />}
   </StrictMode>,
 )

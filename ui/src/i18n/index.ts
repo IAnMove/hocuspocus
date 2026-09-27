@@ -3,7 +3,7 @@ import { initReactI18next, useTranslation } from 'react-i18next'
 import { detectUiLanguage, persistUiLanguage } from './language'
 import { DEFAULT_LANGUAGE, NAMESPACES, resources, type UiLanguage } from './resources'
 
-export { LANGUAGE_STORAGE_KEY, detectUiLanguage, isUiLanguage, persistUiLanguage } from './language'
+export { LANGUAGE_STORAGE_KEY, defaultProjectLanguages, detectUiLanguage, isUiLanguage, persistUiLanguage } from './language'
 export { DEFAULT_LANGUAGE, NAMESPACES, UI_LANGUAGES, resources, type UiLanguage } from './resources'
 
 let started = false

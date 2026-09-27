@@ -501,13 +501,13 @@ def _load_time_card_font(size: int, *, bold: bool = True):
 
 def normalise_time_card_text(value: Any) -> str:
     """Keep intentional line breaks while making card text safe and predictable."""
-    raw = str(value or "Momentos después…").replace("\r\n", "\n").replace("\r", "\n")
+    raw = str(value or "Moments later…").replace("\r\n", "\n").replace("\r", "\n")
     lines = [" ".join(line.split()) for line in raw.split("\n")]
     while lines and not lines[0]:
         lines.pop(0)
     while lines and not lines[-1]:
         lines.pop()
-    return "\n".join(lines)[:240].rstrip() or "Momentos después…"
+    return "\n".join(lines)[:240].rstrip() or "Moments later…"
 
 
 def _time_card_text_width(draw, text: str, font) -> int:
@@ -558,7 +558,7 @@ def _wrap_time_card_text(draw, text: str, font, max_width: int) -> list[str]:
                     current = candidate
         if current:
             lines.append(current)
-    return lines or ["Momentos después…"]
+    return lines or ["Moments later…"]
 
 
 def _fit_time_card_text(
@@ -833,7 +833,7 @@ def _materialise_time_cards(
             _render_time_card_segment(
                 card_path,
                 style=str(transition["type"]),
-                text=str(transition.get("text") or "Momentos después…"),
+                text=str(transition.get("text") or "Moments later…"),
                 text_size=float(transition.get("text_size") or 100),
                 duration=float(transition["duration"]),
                 width=width,

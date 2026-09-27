@@ -8,6 +8,7 @@ import {
 } from '../../types/index.ts'
 import { normalizeStoryMusicModel } from './musicModel'
 import { normalizeLanguageIntent } from '../../lib/languageIntent'
+import { defaultProjectLanguages } from '../../i18n/language'
 import { defaultStoryProductionRecipe, normalizeStoryProductionRecipe } from './storyProductionRecipe'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
@@ -130,19 +131,19 @@ export function analyzeStoryPromptHealth(project: StoryProject): string[] {
     'bedroom', 'dormitorio', 'kitchen', 'cocina', 'sitting', 'sentado', 'typing', 'tecleando',
   ].filter(term => style.includes(term))
   if (sceneTerms.length >= 2) {
-    warnings.push(`El estilo/prompt maestro contiene escena o acción (${sceneTerms.slice(0, 4).join(', ')}). Muévela al argumento o a un plano concreto para que no se repita en todos los clips.`)
+    warnings.push(`The master style/prompt contains a scene or action (${sceneTerms.slice(0, 4).join(', ')}). Move it to the plot or a specific shot so it isn't repeated in every clip.`)
   }
   if (project.directVideoMasterPromptMode === 'custom' && project.directVideoMasterPrompt.length > 1200) {
-    warnings.push('El prompt maestro personalizado es muy largo; deja aquí sólo medio visual, paleta, iluminación y reglas de diseño.')
+    warnings.push('The custom master prompt is very long; keep only the visual medium, palette, lighting and design rules here.')
   }
   const beatTexts = project.beats.map(beat => `${beat.summary} ${beat.conflict} ${beat.turn}`.toLocaleLowerCase())
   const repeated = ['cafetería', 'cafe', 'café', 'ordenador', 'computer', 'laptop', 'pantalla', 'screen']
     .filter(term => beatTexts.length >= 3 && beatTexts.filter(textValue => textValue.includes(term)).length / beatTexts.length >= 0.6)
   if (repeated.length) {
-    warnings.push(`La mayoría de momentos repite ${repeated.join(', ')}. Reserva ese motivo para uno o dos bloques y añade localizaciones/acciones de contraste.`)
+    warnings.push(`Most moments repeat ${repeated.join(', ')}. Save that motif for one or two blocks and add contrasting locations/actions.`)
   }
   if (project.locationVariety === 'balanced' && project.projectType === 'music_video' && project.creativeBrief.setting.trim() && !project.world.locations.length) {
-    warnings.push('Sólo hay una localización concreta. Con “variedad equilibrada”, añade al menos dos entornos de contraste o deja el lugar como referencia no obligatoria.')
+    warnings.push('There is only one specific location. With “balanced variety”, add at least two contrasting settings or keep the place as an optional reference.')
   }
   return warnings
 }
@@ -378,6 +379,7 @@ function normalizeAsset(value: unknown, id: string): StoryVisualAsset | null {
 
 export function createStoryProject(projectType: StoryProject['projectType'] = 'full_story'): StoryProject {
   const now = new Date().toISOString()
+  const languages = defaultProjectLanguages()
   return {
     version: 1,
     id: storyId('story'),
@@ -399,11 +401,11 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
       quickFormat: 'dialogue',
       durationSeconds: projectType === 'quick_video' ? 15 : projectType === 'trailer' ? 60 : 90,
     },
-    language: 'Español',
-    spokenLanguage: 'Español de España',
+    language: languages.content,
+    spokenLanguage: languages.spoken,
     languageIntent: normalizeLanguageIntent(null, {
-      contentLanguage: 'Español',
-      spokenLanguage: 'Español de España',
+      contentLanguage: languages.content,
+      spokenLanguage: languages.spoken,
       technicalPromptLanguage: 'en',
     }),
     locationVariety: 'balanced',

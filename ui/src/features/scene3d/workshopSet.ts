@@ -54,8 +54,8 @@ export function paintWorkshop(root: Object3D | null, seconds: number, state = 'c
   if (!ctx) return
   ctx.fillStyle = '#07151d'; ctx.fillRect(0, 0, 1024, 576)
   ctx.fillStyle = '#243a46'; ctx.fillRect(0, 0, 1024, 64)
-  ctx.font = '24px monospace'; ctx.fillStyle = '#e5c99c'; ctx.fillText('gandalf@barrio  ~/la-ultima-rama', 30, 41)
-  const lines = state === 'error' ? ['> BUILD FAILED', '', '2 errors detected', 'contract.test: FAIL', '', '$ inspect --context', '> magic needs correction'] : state === 'success' ? ['> BUILD PASSED', '', '42 tests passed', '0 failed', '', '$ git push origin la-ultima-rama', '> servers online'] : ['const magia = await crear();', 'if (build.failed) {', '  await corregir(conCafe);', '}', '$ git add esperanza', '$ git commit -m "un intento mas"', '> compiling the impossible...'];
+  ctx.font = '24px monospace'; ctx.fillStyle = '#e5c99c'; ctx.fillText('gandalf@shire  ~/the-last-branch', 30, 41)
+  const lines = state === 'error' ? ['> BUILD FAILED', '', '2 errors detected', 'contract.test: FAIL', '', '$ inspect --context', '> magic needs correction'] : state === 'success' ? ['> BUILD PASSED', '', '42 tests passed', '0 failed', '', '$ git push origin the-last-branch', '> servers online'] : ['const magic = await create();', 'if (build.failed) {', '  await fix(withCoffee);', '}', '$ git add hope', '$ git commit -m "one more try"', '> compiling the impossible...'];
   const count = Math.floor(seconds * 21) % 250 + 14
   let remaining = count
   lines.forEach((line, i) => {

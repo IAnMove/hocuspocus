@@ -439,9 +439,9 @@ function workflowCard(workflow: WizardWorkflowRecord): WizardExecutionCard {
               : 'running'
   let message = workflow.recoverableError
   if (!message && workflow.state === 'awaiting_input') {
-    message = `Workflow “${workflow.type}” necesita información: ${workflow.pendingInput?.reason || 'falta una decisión.'}`
+    message = `Workflow “${workflow.type}” needs information: ${workflow.pendingInput?.reason || 'a decision is missing.'}`
   } else if (!message && workflow.state === 'completed') {
-    message = `Workflow “${workflow.type}” completado.`
+    message = `Workflow “${workflow.type}” completed.`
   } else if (!message) {
     message = `Workflow “${workflow.type}”: ${step?.kind || workflow.state} (${workflow.currentStep + 1}/${workflow.steps.length}).`
   }

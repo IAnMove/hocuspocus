@@ -71,3 +71,25 @@ def test_browser_mutations_require_a_same_host_origin():
     assert rejected.status_code == 403
     assert accepted.status_code == 200
     assert calls == [True]
+
+
+def test_delete_output_rejects_an_encoded_backslash_traversal(tmp_path):
+    from fastapi import HTTPException
+
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    outside = tmp_path / "keep.txt"
+    outside.write_text("keep", encoding="utf-8")
+    namespace = {"os": os, "HTTPException": HTTPException, "_workspace_dir": lambda: str(outputs)}
+    load_function("_safe_join", namespace)
+    load_function("delete_output", namespace)
+
+    # FastAPI decodes "..%5Ckeep.txt" into this name; "/" never reaches here.
+    name = f"..{os.sep}keep.txt"
+    try:
+        namespace["delete_output"](name)
+    except HTTPException as error:
+        assert error.status_code == 400
+    else:
+        raise AssertionError("traversal was not rejected")
+    assert outside.exists()

@@ -1575,6 +1575,10 @@ def _save_pipeline_state_locked(pid: str) -> bool:
         # not carry. resume_pipeline() rehydrates from here.
         "_params_snapshot": params,
     }
+    if p.get("planning_checkpoint"):
+        # Per-step planner results; lets resume skip completed LLM passes
+        # when planning itself failed before any shot was saved.
+        state["planning_checkpoint"] = p["planning_checkpoint"]
 
     filepath = os.path.join(out_dir, f"{_PIPELINE_FILE_PREFIX}{pid}.json")
     try:
@@ -1910,6 +1914,9 @@ def _summarize_pipeline_state_file(filepath: str, workspace_name: str) -> Option
             "preview_revision": data.get("preview_revision", 1),
             "workspace": workspace_name,
             "repair_status": (data.get("repair") or {}).get("status"),
+            "planning_checkpoint_stages": list(
+                ((data.get("planning_checkpoint") or {}).get("stages") or {})
+            ),
             "generation_details": _public_pipeline_generation_details(
                 _director_params_from_saved_state(data),
                 len(data.get("clips", [])),
@@ -4161,7 +4168,7 @@ def rerun_h3_segment(
                 str(video_params.get("h3_audio_prompt") or ""),
                 mode,
                 direct_video_master_prompt,
-                params.get("allow_clip_text") is True,
+                direct_params.get("allow_clip_text") is True,
             )
         clip["video_prompt"] = prompt_override
     elif prompt_override:
@@ -4226,7 +4233,7 @@ def rerun_h3_segment(
                     str(record.get("prompt") or ""),
                     plan=segment_plan,
                     audio_direction=str(video_params.get("h3_audio_prompt") or ""),
-                    allow_clip_text=params.get("allow_clip_text") is True,
+                    allow_clip_text=direct_params.get("allow_clip_text") is True,
                 )
             else:
                 prompt = format_minimax_h3_prompt(
@@ -5041,11 +5048,20 @@ def cancel_pipeline_repair(out_dir: str, pid: str) -> Optional[dict]:
     return snapshot
 
 
+def _summarize_planning_checkpoint(snapshot: dict) -> None:
+    """Replace the (large) planner checkpoint with its completed stage names."""
+    checkpoint = snapshot.pop("planning_checkpoint", None)
+    stages = (checkpoint or {}).get("stages") if isinstance(checkpoint, dict) else None
+    if stages:
+        snapshot["planning_checkpoint_stages"] = list(stages)
+
+
 def _pipeline_observer_snapshot(pipeline: dict) -> dict:
     """Build one immutable, non-sensitive snapshot for task publication."""
     snapshot = copy.deepcopy(pipeline)
     params = snapshot.pop("params", None)
     snapshot.pop("_llm_passes", None)
+    _summarize_planning_checkpoint(snapshot)
     snapshot["pipeline_type"] = snapshot.get("pipeline_type") or (
         params or {}
     ).get("pipeline_type", "")
@@ -5727,6 +5743,40 @@ def _accumulate_pipeline_time(pid: str, key: str, elapsed_sec: float) -> None:
 
 
 
+def _validate_director_visual_references(params: dict, out_dir: str) -> None:
+    """Reject an H3 Omni run that would reach video with nothing to reference.
+
+    The same check runs before each shot is rendered; running it at submission
+    keeps an impossible setup from spending the whole LLM planning phase first.
+    """
+    video_model = str(params.get("video_model") or "")
+    try:
+        model_def = (_wgp.get_model_def(video_model) or {}) if _wgp and video_model else {}
+    except Exception:
+        return
+    if video_strategy(model_def) != OMNI_REFERENCE:
+        return
+    if shot_images_required(_director_effective_shot_image_policy(params)):
+        return
+    manifest = _director_h3_reference_manifest(params, None, out_dir=out_dir)
+    if any(reference.get("type") in {"image", "video"} for reference in manifest):
+        return
+    name = model_def.get("name") or video_model
+    direct_video, _ = _direct_video_settings(params)
+    if direct_video:
+        raise DirectorModelCompatibilityError(
+            f"{name} generates from reference images, but direct-video mode sends "
+            "none. Choose a text-to-video MiniMax H3 model (for example "
+            "\"H3 Fused 4-Step — Frames\"), or switch to image-guided mode "
+            "with a character or location image."
+        )
+    raise DirectorModelCompatibilityError(
+        f"{name} needs at least one visual reference. Add a main, character or "
+        "location image, enable generated shot images, or choose a "
+        "text-to-video MiniMax H3 model."
+    )
+
+
 def start_pipeline(params: dict) -> str:
     """Start a new director pipeline. Returns pipeline_id."""
     pid = uuid.uuid4().hex[:8]
@@ -5787,6 +5837,7 @@ def start_pipeline(params: dict) -> str:
         out_dir = _wgp.save_path
         workspace = None
         print(f"[Pipeline] No workspace, using wgp.save_path={out_dir}")
+    _validate_director_visual_references(params, out_dir)
 
     now = time.time()
     pipeline = {
@@ -5836,6 +5887,7 @@ def get_pipeline(pid: str) -> Optional[dict]:
         p = _pipelines.get(pid)
         snapshot = dict(p) if p else None
     if snapshot:
+        _summarize_planning_checkpoint(snapshot)
         details = _public_pipeline_generation_details(
             snapshot.get("params"),
             len(snapshot.get("clip_plans") or []),
@@ -7303,11 +7355,18 @@ def _find_pipeline_state_file(pid: str, out_dir: str) -> Optional[str]:
     return None
 
 
-def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
+def resume_pipeline(
+    pid: str,
+    out_dir: str,
+    *,
+    replan: bool = False,
+) -> tuple[bool, str]:
     """Rehydrate a crashed pipeline from disk and re-run it.
 
     Reuses the planning (and start images, when their files still exist)
-    that completed before the crash; only the video phase re-runs. Returns
+    that completed before the crash; only the video phase re-runs. When
+    planning itself failed, the planner resumes from its last completed
+    LLM step unless ``replan`` asks for a fresh plan. Returns
     (ok, message). Requires a state file that carries the full params
     snapshot (written since the resume feature shipped) — older crash files
     can't be resumed faithfully and report so.
@@ -7330,13 +7389,18 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
             return False, "Pipeline is already running."
         _pipeline_starting.add(pid)
     try:
-        return _resume_pipeline_reserved(pid, out_dir)
+        return _resume_pipeline_reserved(pid, out_dir, replan=replan)
     finally:
         with _pipeline_lock:
             _pipeline_starting.discard(pid)
 
 
-def _resume_pipeline_reserved(pid: str, out_dir: str) -> tuple[bool, str]:
+def _resume_pipeline_reserved(
+    pid: str,
+    out_dir: str,
+    *,
+    replan: bool = False,
+) -> tuple[bool, str]:
     """Resume implementation after ``pid`` has been atomically reserved."""
     state_path = _find_pipeline_state_file(pid, out_dir)
     if not state_path:
@@ -7570,6 +7634,9 @@ def _resume_pipeline_reserved(pid: str, out_dir: str) -> tuple[bool, str]:
             "_source_preview_fingerprint"
         ),
         "_preview_run_type": params.get("_preview_run_type"),
+        "planning_checkpoint": (
+            None if replan else data.get("planning_checkpoint")
+        ),
     }
     with _pipeline_lock:
         _pipelines[pid] = pipeline
@@ -9585,6 +9652,15 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
                 if native_bounded else None
             ),
         })
+
+        def persist_planning_checkpoint(checkpoint: dict) -> None:
+            _update_pipeline(pid, planning_checkpoint=checkpoint)
+            _save_pipeline_state(pid)
+
+        with _pipeline_lock:
+            saved_checkpoint = (_pipelines.get(pid) or {}).get("planning_checkpoint")
+        planner_kwargs["planning_checkpoint"] = copy.deepcopy(saved_checkpoint)
+        planner_kwargs["planning_checkpoint_sink"] = persist_planning_checkpoint
     elif pipeline_type == "short_film_audio":
         planner_kwargs.update({
             "clips": planned_clips,

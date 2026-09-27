@@ -339,6 +339,6 @@ def assert_lyrics_language(
     )
     if not report["ok"]:
         raise ValueError(
-            "La letra no respeta el idioma solicitado: " + " ".join(report["reasons"])
+            "The lyrics do not match the requested language: " + " ".join(report["reasons"])
         )
     return report

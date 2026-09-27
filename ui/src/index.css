@@ -626,7 +626,7 @@ model-viewer.scene-animator-model {
 
 /* ─── Tokyo Night ─────────────────────────────────────────────────────── */
 [data-theme="tokyo-night"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 250, 243, 232;
   --hp-wizard-pale: 246, 231, 210;
   --hp-wizard-soft: 237, 209, 167;
@@ -662,7 +662,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(125, 207, 255, 0.2);
 }
 [data-theme="tokyo-day"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 250, 243, 232;
   --hp-wizard-pale: 246, 231, 210;
   --hp-wizard-soft: 237, 209, 167;
@@ -699,7 +699,7 @@ model-viewer.scene-animator-model {
 
 /* ─── Catppuccin ──────────────────────────────────────────────────────── */
 [data-theme="catppuccin"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 254, 251, 243;
   --hp-wizard-pale: 253, 246, 231;
   --hp-wizard-soft: 252, 238, 209;
@@ -735,7 +735,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(137, 180, 250, 0.2);
 }
 [data-theme="latte"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 254, 251, 243;
   --hp-wizard-pale: 253, 246, 231;
   --hp-wizard-soft: 252, 238, 209;
@@ -772,7 +772,7 @@ model-viewer.scene-animator-model {
 
 /* ─── Gruvbox ─────────────────────────────────────────────────────────── */
 [data-theme="gruvbox"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 254, 245, 224;
   --hp-wizard-pale: 254, 235, 193;
   --hp-wizard-soft: 252, 217, 134;
@@ -808,7 +808,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(254, 128, 25, 0.18);
 }
 [data-theme="gruvbox-day"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 254, 245, 224;
   --hp-wizard-pale: 254, 235, 193;
   --hp-wizard-soft: 252, 217, 134;
@@ -845,7 +845,7 @@ model-viewer.scene-animator-model {
 
 /* ─── Everforest ──────────────────────────────────────────────────────── */
 [data-theme="everforest"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 250, 245, 236;
   --hp-wizard-pale: 244, 235, 217;
   --hp-wizard-soft: 234, 216, 181;
@@ -881,7 +881,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(127, 187, 179, 0.18);
 }
 [data-theme="everforest-day"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 250, 245, 236;
   --hp-wizard-pale: 244, 235, 217;
   --hp-wizard-soft: 234, 216, 181;
@@ -918,7 +918,7 @@ model-viewer.scene-animator-model {
 
 /* ─── Rosé Pine ───────────────────────────────────────────────────────── */
 [data-theme="rose-pine"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 254, 246, 235;
   --hp-wizard-pale: 252, 236, 214;
   --hp-wizard-soft: 250, 219, 176;
@@ -954,7 +954,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(235, 111, 146, 0.2);
 }
 [data-theme="rose-pine-dawn"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 254, 246, 235;
   --hp-wizard-pale: 252, 236, 214;
   --hp-wizard-soft: 250, 219, 176;
@@ -991,7 +991,7 @@ model-viewer.scene-animator-model {
 
 /* ─── Kanagawa ────────────────────────────────────────────────────────── */
 [data-theme="kanagawa"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 251, 246, 237;
   --hp-wizard-pale: 248, 237, 218;
   --hp-wizard-soft: 240, 220, 184;
@@ -1027,7 +1027,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(126, 156, 216, 0.2);
 }
 [data-theme="lotus"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 251, 246, 237;
   --hp-wizard-pale: 248, 237, 218;
   --hp-wizard-soft: 240, 220, 184;
@@ -1064,7 +1064,7 @@ model-viewer.scene-animator-model {
 
 /* ─── Nord ────────────────────────────────────────────────────────────── */
 [data-theme="nord"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 252, 247, 238;
   --hp-wizard-pale: 249, 239, 220;
   --hp-wizard-soft: 243, 225, 188;
@@ -1100,7 +1100,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(129, 161, 193, 0.2);
 }
 [data-theme="nord-day"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 252, 247, 238;
   --hp-wizard-pale: 249, 239, 220;
   --hp-wizard-soft: 243, 225, 188;
@@ -1140,7 +1140,7 @@ model-viewer.scene-animator-model {
  * mood: a teal-black ground, which is why it is the only dark theme that
  * does not read as grey. */
 [data-theme="solarized"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 244, 237, 217;
   --hp-wizard-pale: 233, 220, 178;
   --hp-wizard-soft: 212, 187, 107;
@@ -1176,7 +1176,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(203, 75, 22, 0.2);
 }
 [data-theme="solarized-day"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 244, 237, 217;
   --hp-wizard-pale: 233, 220, 178;
   --hp-wizard-soft: 212, 187, 107;
@@ -1213,7 +1213,7 @@ model-viewer.scene-animator-model {
 
 /* ─── Dracula ─────────────────────────────────────────────────────────── */
 [data-theme="dracula"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 253, 254, 238;
   --hp-wizard-pale: 251, 254, 220;
   --hp-wizard-soft: 247, 252, 188;
@@ -1250,7 +1250,7 @@ model-viewer.scene-animator-model {
 }
 /* Alucard is Dracula's own light counterpart — warm paper, not an inversion. */
 [data-theme="alucard"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 253, 254, 238;
   --hp-wizard-pale: 251, 254, 220;
   --hp-wizard-soft: 247, 252, 188;
@@ -1287,7 +1287,7 @@ model-viewer.scene-animator-model {
 
 /* ─── Ayu ─────────────────────────────────────────────────────────────── */
 [data-theme="ayu"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 251, 244, 229;
   --hp-wizard-pale: 248, 232, 202;
   --hp-wizard-soft: 240, 212, 154;
@@ -1323,7 +1323,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(57, 186, 230, 0.2);
 }
 [data-theme="ayu-day"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 251, 244, 229;
   --hp-wizard-pale: 248, 232, 202;
   --hp-wizard-soft: 240, 212, 154;
@@ -1360,7 +1360,7 @@ model-viewer.scene-animator-model {
 
 /* ─── One ─────────────────────────────────────────────────────────────── */
 [data-theme="one"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 251, 246, 235;
   --hp-wizard-pale: 247, 236, 215;
   --hp-wizard-soft: 240, 218, 178;
@@ -1396,7 +1396,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(198, 120, 221, 0.2);
 }
 [data-theme="one-day"] {
-  /* La luz del mago toma el amarillo de esta paleta. */
+  /* The wizard's light takes this palette's yellow. */
   --hp-wizard-lit: 251, 246, 235;
   --hp-wizard-pale: 247, 236, 215;
   --hp-wizard-soft: 240, 218, 178;
@@ -1891,11 +1891,11 @@ input[type="range"]::-webkit-slider-thumb {
   position: absolute;
   left: 0;
   bottom: 0;
-  /* Una sola medida gobierna la escena: el tamaño del arte. Las motas se
-     dimensionan y viajan contra ella, así la coreografía es la misma en un
-     móvil y en un 4K en vez de moverse un número fijo de píxeles.
-     `svh` y no `dvh` porque la barra de direcciones del móvil cambia `dvh`
-     a media animación y la caja daba un salto. */
+  /* A single measure governs the scene: the size of the art. The motes are
+     sized and travel against it, so the choreography is the same on a phone
+     and on a 4K screen instead of moving a fixed number of pixels.
+     `svh` rather than `dvh` because the mobile address bar changes `dvh`
+     mid-animation and the box would jump. */
   --hp-intro-art: min(100svh, 66vw);
   width: var(--hp-intro-art);
   aspect-ratio: 1 / 1;
@@ -2019,8 +2019,8 @@ input[type="range"]::-webkit-slider-thumb {
 .hp-intro-mote {
   position: absolute;
   z-index: 3;
-  /* Proporcionales al arte, con un suelo para que no desaparezcan. El factor
-     sale de los 3px originales medidos sobre un arte de 1080px. */
+  /* Proportional to the art, with a floor so they never disappear. The factor
+     comes from the original 3px measured on 1080px art. */
   width: max(2px, calc(var(--hp-intro-art) * 0.0028));
   height: max(2px, calc(var(--hp-intro-art) * 0.0028));
   border-radius: 999px;
@@ -2079,10 +2079,10 @@ input[type="range"]::-webkit-slider-thumb {
   from { opacity: 0.7; transform: translate(-50%, -50%) scale(0.92); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
-/* Solo opacidad. El bloom se compone con mix-blend-mode: screen, y escalar
-   un elemento mezclado obliga al compositor a re-rasterizar el degradado y
-   rehacer la mezcla en cada fotograma. A 3,5% de escala la diferencia no se
-   ve; el coste sí se notaba en pantallas grandes. */
+/* Opacity only. The bloom is composited with mix-blend-mode: screen, and
+   scaling a blended element forces the compositor to re-rasterize the
+   gradient and redo the blend every frame. At 3.5% scale the difference is
+   invisible; the cost was noticeable on large screens. */
 @keyframes hp-intro-breathe {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.78; }

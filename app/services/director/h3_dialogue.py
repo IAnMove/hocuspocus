@@ -297,8 +297,13 @@ def _replace_first_outside_dialogue(
     prompt: str,
     needle: str,
     replacement: str,
+    min_start: int = 0,
 ) -> tuple[str, bool]:
-    """Replace an exact plain-text line without touching existing H3 tags."""
+    """Replace an exact plain-text line without touching existing H3 tags.
+
+    Matches before ``min_start`` are ignored so a later line can never be
+    tagged ahead of dialogue that already precedes it.
+    """
 
     if not needle:
         return prompt, False
@@ -313,6 +318,10 @@ def _replace_first_outside_dialogue(
     short_line = len(re.findall(r"\w+", normalized_needle)) <= 2
     cursor = 0
     for start, end in [*spans, (len(prompt), len(prompt))]:
+        if start < min_start:
+            cursor = max(end, min_start)
+            continue
+        cursor = max(cursor, min_start)
         for found in pattern.finditer(prompt, cursor, start):
             if short_line:
                 prefix = prompt[max(cursor, found.start() - 72):found.start()]
@@ -436,6 +445,16 @@ def _insert_visual_detail(prompt: str, label: str, detail: str) -> str:
     statement = f"{label}: {detail}"
     suffix = "" if statement.endswith((".", "!", "?")) else "."
     boundary = _H3_SOUND_BOUNDARY_RE.search(prompt)
+    spans, _ = _dialogue_spans(prompt)
+    last_dialogue_end = spans[-1][1] if spans else 0
+    if boundary and boundary.start() < last_dialogue_end:
+        # The detail carries later dialogue lines. When existing dialogue
+        # already sits past the sound boundary, insert after it so speaker
+        # order is preserved.
+        return (
+            f"{prompt[:last_dialogue_end].rstrip()} {statement}{suffix} "
+            f"{prompt[last_dialogue_end:].lstrip()}"
+        ).strip()
     if boundary:
         return (
             f"{prompt[:boundary.start()].rstrip()} {statement}{suffix} "
@@ -588,13 +607,20 @@ def compile_h3_vocal_contract(
             )
 
         mapped = _speaker_map(subjects or [])
+        placed_spans, _ = _dialogue_spans(prompt)
+        last_dialogue_end = placed_spans[-1][1] if placed_spans else 0
         for index in range(len(spans), len(valid_beats)):
             beat, words, tag = valid_beats[index]
-            prompt, replaced = _replace_first_outside_dialogue(
-                prompt, words, tag,
-            )
-            if replaced:
-                continue
+            # Once a line falls back to the appended performance section,
+            # later lines must follow it there to keep speaker order.
+            if not instructions:
+                prompt, replaced = _replace_first_outside_dialogue(
+                    prompt, words, tag, min_start=last_dialogue_end,
+                )
+                if replaced:
+                    placed_spans, _ = _dialogue_spans(prompt)
+                    last_dialogue_end = placed_spans[-1][1]
+                    continue
             speaker_id = _normalized_space(_field(beat, "speaker_id", ""))
             stable_id, speaker_name = mapped.get(
                 speaker_id,
@@ -1560,7 +1586,12 @@ def _label_ref2va_subjects_in_body(
         if not count:
             missing.append(f"{label} ({name}) is visible in the described blocking.")
     if missing:
-        result = f"{' '.join(missing)} {result}".strip()
+        # Keep the [Shot 1] marker first: the H3 contract requires the
+        # visual field to open with it.
+        marker = re.match(r"^\s*\[Shot\s+1\]\s*", result, flags=re.IGNORECASE)
+        head = marker.group(0).strip() if marker else ""
+        rest = result[marker.end():] if marker else result
+        result = " ".join(part for part in (head, *missing, rest) if part).strip()
     return result
 
 
@@ -2059,3 +2090,50 @@ def compile_h3_clip_plans(
         original.clear()
         original.update(candidate)
     return clip_plans
+
+
+_H3_PROMPT_SOUNDSCAPE_RE = re.compile(
+    r"(\boverall_soundscape\s*:\s*)(.*?)(?=\bnon_diegetic_music\s*:|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def scrub_h3_silent_shot_vocals(shot: MutableMapping[str, Any]) -> bool:
+    """Deterministically remove unstructured vocal cues from one silent shot.
+
+    Applies the same rewrites prompt compilation uses for silent shots, but to
+    the planner fields the vocal preflight audits.  Shots with exact dialogue
+    or song-driven audio are left untouched.  Returns True when a field changed.
+    """
+    beats = [
+        beat for beat in (shot.get("dialogue_beats") or [])
+        if isinstance(beat, Mapping) and normalize_h3_text(beat.get("spoken_text"))
+    ]
+    audio = shot.get("audio_plan") if isinstance(shot.get("audio_plan"), MutableMapping) else None
+    if beats or h3_audio_plan_wants_drive(audio, has_dialogue=False):
+        return False
+    before = copy.deepcopy(dict(shot))
+    prompt = str(shot.get("video_prompt") or "")
+    if prompt:
+        prompt = _H3_PROMPT_SOUNDSCAPE_RE.sub(
+            lambda match: match.group(1) + _sanitize_silent_soundscape(match.group(2)) + " ",
+            prompt,
+        )
+        shot["video_prompt"] = _sanitize_silent_visual_vocals(prompt)
+    for field in ("scene_goal", "ending_beat"):
+        if isinstance(shot.get(field), str):
+            shot[field] = _sanitize_silent_visual_vocals(shot[field])
+    if isinstance(shot.get("action_beats"), list):
+        shot["action_beats"] = [
+            _sanitize_silent_visual_vocals(beat) if isinstance(beat, str) else beat
+            for beat in shot["action_beats"]
+        ]
+    if audio is not None:
+        if isinstance(audio.get("ambience"), str):
+            audio["ambience"] = _sanitize_silent_soundscape(audio["ambience"])
+        if isinstance(audio.get("effects"), list):
+            audio["effects"] = [
+                effect for effect in audio["effects"]
+                if not h3_vocal_sound_cues(effect)
+            ]
+    return dict(shot) != before

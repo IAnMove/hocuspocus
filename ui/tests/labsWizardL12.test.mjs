@@ -112,7 +112,7 @@ test('L12: creating an episode does not incidentally approve pending canon', asy
     previousCharacterCount: 3,
   })
   assert.equal(pending.approve, false)
-  assert.match(pending.reason, /canon ajeno/)
+  assert.match(pending.reason, /unrelated canon/)
 })
 
 test('L12: a quoted dialogue replacement stays literal and finds affected shots', async () => {
