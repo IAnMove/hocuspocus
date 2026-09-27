@@ -182,5 +182,23 @@
     "outPoint": "Out point",
     "inTime": "In {{time}}",
     "outTime": "Out {{time}}"
+  },
+  "montage": {
+    "open": "Montages",
+    "openTitle": "Open an editable montage saved in this workspace",
+    "save": "Save montage",
+    "saveTitle": "Save the timeline, captions and voice-over as an editable montage in the workspace",
+    "saveAs": "Save a new revision of {{file}}",
+    "loading": "Loading montages…",
+    "none": "No montages in this workspace",
+    "summary": "{{clips}} clips · {{overlays}} overlays · {{cues}} audio cues · rev. {{revision}}",
+    "layers": "Timed layers: {{overlays}} overlays · {{cues}} audio cues",
+    "overlays": "Captions and images",
+    "audioCues": "Voice-over and audio",
+    "duck": "Duck music",
+    "start": "Start (s)",
+    "end": "End (s)",
+    "volume": "Volume",
+    "remove": "Remove"
   }
 }

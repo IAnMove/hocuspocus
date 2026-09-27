@@ -194,8 +194,10 @@ def test_publish_refuses_a_voiced_snapshot_even_if_preflight_is_bypassed(tmp_pat
 
 def test_owned_browser_script_uses_scene_clock_and_waits_for_assets():
     assert "world3d-render.html" in _OWNED_BROWSER_JS
-    assert "window.__world3dExport.load(scene, size)" in _OWNED_BROWSER_JS
-    assert "window.__world3dExport.frame(seconds)" in _OWNED_BROWSER_JS
+    # The page and bridge are parameters so Video 2D reuses the same owned browser.
+    assert "HOCUS_RENDER_BRIDGE || '__world3dExport'" in _OWNED_BROWSER_JS
+    assert "window[name].load(scene, size)" in _OWNED_BROWSER_JS
+    assert "window[name].frame(seconds)" in _OWNED_BROWSER_JS
     assert "/src/" not in _OWNED_BROWSER_JS
 
 

@@ -126,6 +126,12 @@ export async function startVideoEditorExport(payload: {
     transition_text: string
     transition_text_size: number
   }>
+  /** Timed image overlays (captions/titles) burned in after assembly. */
+  overlays?: Array<{ id: string; name: string; source: string; start: number; end: number; x: number; y: number; width: number; opacity: number; fade_in: number; fade_out: number }>
+  /** Timed audio cues (narration, stingers) mixed over clips and soundtrack. */
+  audio_cues?: Array<{ id: string; name: string; source: string; start: number; volume: number; trim_start: number; trim_end: number }>
+  /** 0–1 sidechain ducking of the existing mix while a cue plays. */
+  duck?: number
 }): Promise<VideoEditorExportJob> {
   const res = await fetch(`${BASE}/api/v1/video-editor/export`, {
     method: 'POST',
