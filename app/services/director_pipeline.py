@@ -7775,6 +7775,72 @@ def _director_trace_context(function):
     return wrapped
 
 
+def _clip_planned_silent(plan: dict) -> bool:
+    """True when the plan gives a clip no speech: ambient audio, no lines."""
+    beats = plan.get("_director_dialogue_beats") or []
+    if any(str((beat or {}).get("spoken_text") or "").strip() for beat in beats):
+        return False
+    return (plan.get("_director_audio_plan") or {}).get("mode") == "ambient_only"
+
+
+def _guard_h3_invented_speech(
+    pid: str,
+    params: dict,
+    clip_plans: list[dict],
+    output_files: list[str],
+    out_dir: str,
+) -> None:
+    """Mute speech H3 invented in silent clips, then rebuild the joined video.
+
+    Best effort: any failure is logged and the unmodified outputs are kept.
+    """
+    if not str(params.get("video_model") or "").startswith("minimax_h3"):
+        return
+    if params.get("h3_mute_invented_speech") is False:
+        return
+    slots = _clip_video_slots(output_files or [], len(clip_plans))
+    silent = [
+        (index, name) for index, name in enumerate(slots)
+        if name and _clip_planned_silent(clip_plans[index] or {})
+    ]
+    if not silent:
+        return
+    resolve = lambda name: name if os.path.isabs(name) else os.path.join(out_dir, name)
+    _update_pipeline(pid, progress={
+        "current": 0, "total": len(silent),
+        "message": "Checking silent clips for invented speech...",
+        "step": 0, "total_steps": 0,
+    })
+    try:
+        from services.h3_speech_guard import mute_invented_speech
+        muted = 0
+        for index, name in silent:
+            found = mute_invented_speech(resolve(name))
+            if found:
+                muted += 1
+                heard = " / ".join(text for _start, _end, text in found)[:120]
+                print(
+                    f"[Pipeline {pid}] Clip {index + 1}: muted invented speech "
+                    f"in {len(found)} span(s): {heard!r}"
+                )
+        if not muted:
+            print(f"[Pipeline {pid}] No invented speech in {len(silent)} silent clip(s).")
+            return
+        joined = [name for name in (output_files or []) if "_multiclip" in str(name).lower()]
+        clips = [resolve(name) for name in slots if name]
+        if joined and len(clips) > 1:
+            target = resolve(joined[-1])
+            root, ext = os.path.splitext(target)
+            rebuilt = f"{root}.speechguard{ext}"
+            if _wgp.concatenate_multi_clip_videos(clips, rebuilt, None):
+                os.replace(rebuilt, target)
+                print(f"[Pipeline {pid}] Rebuilt {os.path.basename(target)} from the cleaned clips.")
+            elif os.path.exists(rebuilt):
+                os.remove(rebuilt)
+    except Exception as exc:
+        print(f"[Pipeline {pid}] Invented-speech check skipped (non-fatal): {exc}")
+
+
 @_director_trace_context
 def _run_pipeline(pid: str, resume: bool = False):
     """Main pipeline thread — runs the full Director flow.
@@ -8741,6 +8807,10 @@ def _run_pipeline(pid: str, resume: bool = False):
             _update_pipeline(pid, **artifacts)
             _save_pipeline_state(pid)
             return
+
+        _guard_h3_invented_speech(
+            pid, params, clip_plans, output_files, pipeline_out_dir,
+        )
 
         completed_clip_videos = []
         if not params.get("seamless", True):
