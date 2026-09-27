@@ -38,6 +38,7 @@ export const KINETIC_TEXT_SCHEMA = {
         from: { type: 'number' }, to: { type: 'number' }, decimals: { type: 'integer', minimum: 0, maximum: 4 }, ease: { enum: ['linear', 'ease'] },
       }, required: ['from', 'to', 'decimals', 'ease'] },
       template: { type: 'string', maxLength: 80 },
+      beatPulse: { type: 'number', minimum: 0, maximum: 1 },
     },
   },
 } as const

@@ -3,13 +3,19 @@
 // scene2d renderer compute identical states for the same document and time.
 import { evaluateSceneLayer, getSceneLayerTiming, sceneLayerMotionProgress, sceneTimeToLayerTime } from '../sceneTimeline'
 import { boundedNumber, isVisualLayer, normalizedStrip, stripOffsets } from './layerStyle'
+import { applyBeatPulse, applyScenePath, beatEnvelope } from './motion'
 import type { AnimatorLayer, AnimatorScene, LayerState } from './types'
 
 export type SceneEvaluator = ReturnType<typeof createSceneEvaluator>
 
 /** `time` is scene progress in [0, 1], as used by the animator timeline. */
 export function createSceneEvaluator(scene: AnimatorScene) {
-  const baseLayerState = (layer: AnimatorLayer, time: number): LayerState => ({ ...evaluateSceneLayer(layer, sceneTimeToLayerTime(layer, time * scene.duration)), z: layer.z })
+  const baseLayerState = (layer: AnimatorLayer, time: number): LayerState => {
+    const seconds = time * scene.duration
+    const state = applyScenePath({ ...evaluateSceneLayer(layer, sceneTimeToLayerTime(layer, seconds)), z: layer.z }, layer, layer.animation.duration > 0 ? sceneLayerMotionProgress(layer, seconds) : time)
+    const pulse = layer.beatPulse
+    return pulse ? applyBeatPulse(state, pulse.amount, beatEnvelope(scene.rhythm, seconds, pulse.on)) : state
+  }
   const activeCameraLayer = () => [...scene.layers].filter(layer => layer.type === 'camera' && layer.visible).sort((a, b) => b.z - a.z)[0]
   const cameraState = (time: number): LayerState => {
     const camera = activeCameraLayer()

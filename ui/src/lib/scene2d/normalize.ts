@@ -2,7 +2,9 @@
 // the headless scene2d renderer. Character-kit synchronization stays in the editor.
 import { canonicalSceneFps } from '../sceneFps'
 import { normalizeFaceBinding } from '../cutoutDialogue'
+import { parseFinish } from './finish'
 import { lyricFields, parseKineticTexts } from '../kineticText'
+import { parsePath, parseRhythm, parseSequence } from './motion'
 import { getSceneLayerTiming, normalizeSceneEvents, normalizeSceneKeyframes, withNormalizedSceneTiming, withSceneKeyframes } from '../sceneTimeline'
 import type { SceneCurve } from '../../types'
 import { boundedNumber, finiteNumber, normalizedAtmosphere, normalizedEffects, normalizedStrip } from './layerStyle'
@@ -13,7 +15,7 @@ export const isAnimatorLayerType = (value: unknown): value is AnimatorLayerType 
 export const assignZ = (layers: AnimatorLayer[]) => layers.map((layer, index) => ({ ...layer, z: index * 10 }))
 export const normalizeZ = (layers: AnimatorLayer[]) => assignZ([...layers].sort((a, b) => a.z - b.z))
 
-export const dependencyTargets = (layer: AnimatorLayer) => [layer.relationship?.targetLayerId, layer.animation.orbit?.targetLayerId].filter((id): id is string => Boolean(id))
+export const dependencyTargets = (layer: AnimatorLayer) => [layer.relationship?.targetLayerId, layer.animation.orbit?.targetLayerId, layer.atmosphere?.emitter?.mode === 'layer' ? layer.atmosphere.emitter.targetLayerId : undefined].filter((id): id is string => Boolean(id))
 export const dependencyWouldCycleIn = (layers: AnimatorLayer[], layerId: string, targetId: string) => {
   const pending = [targetId]
   const visited = new Set<string>()
@@ -40,6 +42,20 @@ export const breakDependencyCycles = (layers: AnimatorLayer[]) => {
     if (withRelationshipChecked?.animation.orbit && dependencyWouldCycleIn(next, withRelationshipChecked.id, withRelationshipChecked.animation.orbit.targetLayerId)) {
       next = next.map(layer => layer.id === withRelationshipChecked.id ? { ...layer, animation: { ...layer.animation, orbit: undefined } } : layer)
     }
+  }
+  return next
+}
+export function dropEmitterCycles(layers: AnimatorLayer[]) {
+  let next = layers
+  for (let pass = 0; pass < layers.length; pass += 1) {
+    let changed = false
+    next = next.map(layer => {
+      const emitter = layer.atmosphere?.emitter
+      if (emitter?.mode !== 'layer' || !emitter.targetLayerId || !dependencyWouldCycleIn(next, layer.id, emitter.targetLayerId)) return layer
+      changed = true
+      return { ...layer, atmosphere: { ...layer.atmosphere!, emitter: { ...emitter, mode: 'frame' } } }
+    })
+    if (!changed) return next
   }
   return next
 }
@@ -146,6 +162,20 @@ function normalizeVisuals(raw: RawLayer, isCamera: boolean, isEffect: boolean) {
   }
 }
 
+function layerPath(rawLayer: RawLayer) {
+  const path = parsePath(rawLayer.animation?.path)
+  return path ? { path } : {}
+}
+
+function layerExtras(rawLayer: RawLayer) {
+  const sequence = parseSequence(rawLayer.sequence)
+  const pulse = rawLayer.beatPulse
+  const beatPulse = pulse && Number.isFinite(pulse.amount)
+    ? { amount: Math.max(0, Math.min(1, pulse.amount)), on: pulse.on === 'downbeats' ? 'downbeats' as const : 'beats' as const }
+    : undefined
+  return { ...(sequence ? { sequence } : {}), ...(beatPulse ? { beatPulse } : {}) }
+}
+
 function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLayer {
   if (!isAnimatorLayerType((rawLayer as { type?: unknown }).type)) throw new Error(`Unsupported scene layer type: ${String((rawLayer as { type?: unknown }).type ?? 'missing')}`)
   const isCamera = rawLayer.type === 'camera'
@@ -171,8 +201,10 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
       ...normalizeModelClip(rawLayer.animation, rawLayer.type === 'model3d'),
       shake: normalizeShake(rawLayer.animation?.shake, isCamera),
       orbit: normalizeOrbit(rawLayer, isCamera, context.visualIds),
+      ...layerPath(rawLayer),
     },
     missingAsset: isCamera || isEffect ? false : Boolean(rawLayer.missingAsset || !source.trim() || context.isMissing(source)),
+    ...layerExtras(rawLayer),
   } as AnimatorLayer
   const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
   const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
@@ -203,7 +235,9 @@ export function normalizeScene2D(raw: unknown): AnimatorScene {
   const incoming = raw as AnimatorScene
   if (!incoming || typeof incoming !== 'object' || incoming.version !== 1 || !Array.isArray(incoming.layers)) throw new Error('Use a version 1 Video 2D scene with layers.')
   const { width, height, layers: normalized } = normalizeScene2DLayers(incoming)
-  const layers = breakDependencyCycles(normalized)
+  const layers = dropEmitterCycles(breakDependencyCycles(normalized))
   const duration = Math.min(3600, Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed })))
-  return { ...incoming, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
+  const finish = parseFinish(incoming.finish)
+  const rhythm = parseRhythm(incoming.rhythm)
+  return { ...incoming, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), ...(finish ? { finish } : {}), ...(rhythm ? { rhythm } : {}), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
 }

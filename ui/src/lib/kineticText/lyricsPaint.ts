@@ -20,12 +20,13 @@ function wordPaint(word: LyricWord, seconds: number, mode: SceneLyrics['mode']) 
   return { pop, dy, clip, active: inside || seconds >= word.end }
 }
 
-export function paintSceneLyrics(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, lyrics?: SceneLyrics) {
+export function paintSceneLyrics(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, lyrics?: SceneLyrics, envelope = 0) {
   if (!lyrics) return
   const index = activeLine(lyrics.lines, seconds)
   if (index < 0) return
   const shown = lyrics.style.visibleLines === 2 ? lyrics.lines.slice(index, index + 2) : [lyrics.lines[index]]
-  const size = height * lyrics.style.size / 100
+  const pulse = 1 + (lyrics.style.beatPulse ?? 0) * envelope
+  const size = height * lyrics.style.size / 100 * pulse
   ctx.save()
   ctx.font = `${lyrics.style.weight ?? 700} ${size}px ${TEXT_FONT_STACK[lyrics.style.font]}`
   ctx.textAlign = lyrics.style.align
