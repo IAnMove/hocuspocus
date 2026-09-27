@@ -81,5 +81,6 @@
   "stopResponse": "Descartar respuesta",
   "responseDiscarded": "Respuesta descartada. Sus acciones propuestas no se ejecutarán. La consulta al LLM puede terminar en segundo plano.",
   "controlError": "No se pudo aplicar este control: {{message}}",
-  "openSection": "Abrir sección"
+  "openSection": "Abrir sección",
+  "welcome": "Saludos, creador. Soy el mago de HocusPocus: puedo consultar la cola, explicarte el estudio, llevarte a la sección adecuada y preparar o lanzar un vídeo cuando me lo pidas. Dime qué quieres conjurar. 🪄"
 }

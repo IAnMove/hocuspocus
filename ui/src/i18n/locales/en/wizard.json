@@ -81,5 +81,6 @@
   "stopResponse": "Discard response",
   "responseDiscarded": "Response discarded. Its proposed actions will not run. The LLM request may still finish in the background.",
   "controlError": "Could not apply this control: {{message}}",
-  "openSection": "Open section"
+  "openSection": "Open section",
+  "welcome": "Greetings, creator. I am the HocusPocus wizard: I can check the queue, explain the studio, take you to the right section, and prepare or start a video when you ask. Tell me what you would like to conjure. 🪄"
 }
