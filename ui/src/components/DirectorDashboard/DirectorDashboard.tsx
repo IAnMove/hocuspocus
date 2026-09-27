@@ -808,6 +808,22 @@ function DirectorDashboardInner() {
   const goodCount = selectedPipeline?.clips.filter(c => c.tag === 'good').length || 0
   const needsWorkCount = selectedPipeline?.clips.filter(c => c.tag === 'needs_work').length || 0
   const totalClips = selectedPipeline?.clips.length || 0
+  // Planning failed before any shot was saved, but some planner steps were:
+  // Resume continues from them, Re-plan discards them.
+  const planningCheckpointStages =
+    pipelineList.find(p => p.id === selectedPid)?.planning_checkpoint_stages || []
+  const resumesPlanning = totalClips === 0 && planningCheckpointStages.length > 0
+  const runResume = async (options?: { replan?: boolean }) => {
+    if (!selectedPipeline) return
+    setResuming(true); setRegenError(null)
+    try {
+      await resumePipeline(selectedPipeline.pipeline_id, options)
+    } catch (e) {
+      setRegenError(String(e instanceof Error ? e.message : e))
+    } finally {
+      setResuming(false)
+    }
+  }
   const isH3Pipeline = Boolean(
     selectedPipeline?.video_model?.startsWith('minimax_h3'),
   )
@@ -912,23 +928,28 @@ function DirectorDashboardInner() {
             </span>
             {(selectedPipeline.status === 'crashed' || selectedPipeline.status === 'failed') && (
               <button
-                onClick={async () => {
-                  if (!selectedPipeline) return
-                  setResuming(true); setRegenError(null)
-                  try {
-                    await resumePipeline(selectedPipeline.pipeline_id)
-                  } catch (e) {
-                    setRegenError(String(e instanceof Error ? e.message : e))
-                  } finally {
-                    setResuming(false)
-                  }
-                }}
+                onClick={() => void runResume()}
                 disabled={resuming || loading || repairBusy}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] bg-green-500/10 border border-green-500/30 rounded text-indicator-success hover:bg-green-500/20 disabled:opacity-40 transition-colors"
-                title={t('dashboard.resumeTitle')}
+                title={
+                  resumesPlanning
+                    ? t('dashboard.resumePlanningTitle', { count: planningCheckpointStages.length })
+                    : t('dashboard.resumeTitle')
+                }
               >
                 <Play size={10} />
                 {resuming ? t('dashboard.resuming') : tCommon('actions.resume')}
+              </button>
+            )}
+            {(selectedPipeline.status === 'crashed' || selectedPipeline.status === 'failed') && resumesPlanning && (
+              <button
+                onClick={() => void runResume({ replan: true })}
+                disabled={resuming || loading || repairBusy}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] bg-bg-tertiary border border-border rounded text-text-secondary hover:text-text-primary disabled:opacity-40 transition-colors"
+                title={t('dashboard.replanTitle')}
+              >
+                <RefreshCw size={10} />
+                {t('dashboard.replan')}
               </button>
             )}
             {selectedPipeline.status === 'preview_ready' && selectedPipeline.comic_id && (

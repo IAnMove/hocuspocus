@@ -1575,6 +1575,10 @@ def _save_pipeline_state_locked(pid: str) -> bool:
         # not carry. resume_pipeline() rehydrates from here.
         "_params_snapshot": params,
     }
+    if p.get("planning_checkpoint"):
+        # Per-step planner results; lets resume skip completed LLM passes
+        # when planning itself failed before any shot was saved.
+        state["planning_checkpoint"] = p["planning_checkpoint"]
 
     filepath = os.path.join(out_dir, f"{_PIPELINE_FILE_PREFIX}{pid}.json")
     try:
@@ -1910,6 +1914,9 @@ def _summarize_pipeline_state_file(filepath: str, workspace_name: str) -> Option
             "preview_revision": data.get("preview_revision", 1),
             "workspace": workspace_name,
             "repair_status": (data.get("repair") or {}).get("status"),
+            "planning_checkpoint_stages": list(
+                ((data.get("planning_checkpoint") or {}).get("stages") or {})
+            ),
             "generation_details": _public_pipeline_generation_details(
                 _director_params_from_saved_state(data),
                 len(data.get("clips", [])),
@@ -5041,11 +5048,20 @@ def cancel_pipeline_repair(out_dir: str, pid: str) -> Optional[dict]:
     return snapshot
 
 
+def _summarize_planning_checkpoint(snapshot: dict) -> None:
+    """Replace the (large) planner checkpoint with its completed stage names."""
+    checkpoint = snapshot.pop("planning_checkpoint", None)
+    stages = (checkpoint or {}).get("stages") if isinstance(checkpoint, dict) else None
+    if stages:
+        snapshot["planning_checkpoint_stages"] = list(stages)
+
+
 def _pipeline_observer_snapshot(pipeline: dict) -> dict:
     """Build one immutable, non-sensitive snapshot for task publication."""
     snapshot = copy.deepcopy(pipeline)
     params = snapshot.pop("params", None)
     snapshot.pop("_llm_passes", None)
+    _summarize_planning_checkpoint(snapshot)
     snapshot["pipeline_type"] = snapshot.get("pipeline_type") or (
         params or {}
     ).get("pipeline_type", "")
@@ -5836,6 +5852,7 @@ def get_pipeline(pid: str) -> Optional[dict]:
         p = _pipelines.get(pid)
         snapshot = dict(p) if p else None
     if snapshot:
+        _summarize_planning_checkpoint(snapshot)
         details = _public_pipeline_generation_details(
             snapshot.get("params"),
             len(snapshot.get("clip_plans") or []),
@@ -7303,11 +7320,18 @@ def _find_pipeline_state_file(pid: str, out_dir: str) -> Optional[str]:
     return None
 
 
-def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
+def resume_pipeline(
+    pid: str,
+    out_dir: str,
+    *,
+    replan: bool = False,
+) -> tuple[bool, str]:
     """Rehydrate a crashed pipeline from disk and re-run it.
 
     Reuses the planning (and start images, when their files still exist)
-    that completed before the crash; only the video phase re-runs. Returns
+    that completed before the crash; only the video phase re-runs. When
+    planning itself failed, the planner resumes from its last completed
+    LLM step unless ``replan`` asks for a fresh plan. Returns
     (ok, message). Requires a state file that carries the full params
     snapshot (written since the resume feature shipped) — older crash files
     can't be resumed faithfully and report so.
@@ -7330,13 +7354,18 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
             return False, "Pipeline is already running."
         _pipeline_starting.add(pid)
     try:
-        return _resume_pipeline_reserved(pid, out_dir)
+        return _resume_pipeline_reserved(pid, out_dir, replan=replan)
     finally:
         with _pipeline_lock:
             _pipeline_starting.discard(pid)
 
 
-def _resume_pipeline_reserved(pid: str, out_dir: str) -> tuple[bool, str]:
+def _resume_pipeline_reserved(
+    pid: str,
+    out_dir: str,
+    *,
+    replan: bool = False,
+) -> tuple[bool, str]:
     """Resume implementation after ``pid`` has been atomically reserved."""
     state_path = _find_pipeline_state_file(pid, out_dir)
     if not state_path:
@@ -7570,6 +7599,9 @@ def _resume_pipeline_reserved(pid: str, out_dir: str) -> tuple[bool, str]:
             "_source_preview_fingerprint"
         ),
         "_preview_run_type": params.get("_preview_run_type"),
+        "planning_checkpoint": (
+            None if replan else data.get("planning_checkpoint")
+        ),
     }
     with _pipeline_lock:
         _pipelines[pid] = pipeline
@@ -9585,6 +9617,15 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
                 if native_bounded else None
             ),
         })
+
+        def persist_planning_checkpoint(checkpoint: dict) -> None:
+            _update_pipeline(pid, planning_checkpoint=checkpoint)
+            _save_pipeline_state(pid)
+
+        with _pipeline_lock:
+            saved_checkpoint = (_pipelines.get(pid) or {}).get("planning_checkpoint")
+        planner_kwargs["planning_checkpoint"] = copy.deepcopy(saved_checkpoint)
+        planner_kwargs["planning_checkpoint_sink"] = persist_planning_checkpoint
     elif pipeline_type == "short_film_audio":
         planner_kwargs.update({
             "clips": planned_clips,

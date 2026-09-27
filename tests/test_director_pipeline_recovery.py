@@ -307,3 +307,82 @@ def test_pipeline_list_paginates_newest_first_without_opening_the_rest(tmp_path)
     assert [item["id"] for item in page] == ["newer"]
     rest = director_pipeline.list_pipeline_states(str(tmp_path), "default", limit=1, offset=1)
     assert [item["id"] for item in rest] == ["older"]
+
+
+def _write_preview_state_with_checkpoint(tmp_path, pipeline_id):
+    checkpoint = {
+        "version": 1,
+        "fingerprint": "abc",
+        "stages": {"h3_voice_bible": [], "screenplay": "INT. PLAYROOM - DAY"},
+    }
+    (tmp_path / f"_director_pipeline_{pipeline_id}.json").write_text(
+        json.dumps({
+            "pipeline_id": pipeline_id,
+            "status": "preview_ready",
+            "created_at": 10,
+            "preview_clips": [{"index": 0, "image_filename": "p.png"}],
+            "clips": [{
+                "index": 0,
+                "planned_clip": {"start": 0, "end": 3},
+                "video_prompt": "original",
+                "start_image_filename": "p.png",
+            }],
+            "output_files": [],
+            "planning_checkpoint": checkpoint,
+            "_params_snapshot": {
+                "pipeline_type": "comic_movie",
+                "comic_preflight_only": True,
+                "auto_mode": True,
+            },
+        }),
+        encoding="utf-8",
+    )
+    return checkpoint
+
+
+def test_resume_restores_planning_checkpoint_but_status_only_lists_stages(tmp_path):
+    pipeline_id = "checkpoint42"
+    checkpoint = _write_preview_state_with_checkpoint(tmp_path, pipeline_id)
+    try:
+        ok, _ = director_pipeline.resume_pipeline(pipeline_id, str(tmp_path))
+        assert ok
+        assert director_pipeline._pipelines[pipeline_id]["planning_checkpoint"] == checkpoint
+        public = director_pipeline.get_pipeline(pipeline_id)
+        assert "planning_checkpoint" not in public
+        assert public["planning_checkpoint_stages"] == ["h3_voice_bible", "screenplay"]
+    finally:
+        director_pipeline._pipelines.pop(pipeline_id, None)
+
+
+def test_replan_resume_discards_planning_checkpoint(tmp_path):
+    pipeline_id = "checkpoint43"
+    _write_preview_state_with_checkpoint(tmp_path, pipeline_id)
+    try:
+        ok, _ = director_pipeline.resume_pipeline(
+            pipeline_id, str(tmp_path), replan=True,
+        )
+        assert ok
+        assert director_pipeline._pipelines[pipeline_id]["planning_checkpoint"] is None
+    finally:
+        director_pipeline._pipelines.pop(pipeline_id, None)
+
+
+def test_saved_state_persists_planning_checkpoint(tmp_path):
+    pipeline_id = "checkpoint44"
+    checkpoint = {"version": 1, "fingerprint": "abc", "stages": {"screenplay": "x"}}
+    director_pipeline._pipelines[pipeline_id] = {
+        "id": pipeline_id,
+        "status": "failed",
+        "out_dir": str(tmp_path),
+        "params": {"pipeline_type": "short_film_story"},
+        "clip_plans": [],
+        "planning_checkpoint": checkpoint,
+    }
+    try:
+        assert director_pipeline._save_pipeline_state(pipeline_id)
+        saved = json.loads(
+            (tmp_path / f"_director_pipeline_{pipeline_id}.json").read_text(encoding="utf-8")
+        )
+        assert saved["planning_checkpoint"] == checkpoint
+    finally:
+        director_pipeline._pipelines.pop(pipeline_id, None)

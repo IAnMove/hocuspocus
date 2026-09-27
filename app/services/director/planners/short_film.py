@@ -2586,8 +2586,91 @@ def _video_character_name_rules(preserve_names: bool) -> str:
 - NOT "Ava looks annoyed" → YES "the woman from the reference image looks annoyed"."""
 
 
+_PLANNING_CHECKPOINT_VERSION = 1
+# Stages in execution order. Regenerating a stage invalidates every later one.
+_PLANNING_CHECKPOINT_STAGES = (
+    "h3_voice_bible",
+    "screenplay",
+    "h3_dialogue_manifest",
+    "h3_pass2_raw",
+    "h3_pass2_repair_raw",
+    "h3_shot_dicts",
+)
+
+
+def _planning_checkpoint_fingerprint(inputs: dict) -> str:
+    import hashlib
+
+    encoded = json.dumps(inputs, sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 class ShortFilmPlanner(BasePlanner):
     skill_type = "short_film"
+
+    # ── Resumable planning checkpoints ───────────────────────────
+    # Each expensive LLM step stores its result so a failed pipeline can
+    # resume from the step that failed instead of re-running the screenplay
+    # and shot planning. Checkpoints are only reused when every planning
+    # input matches the run that produced them.
+
+    def _init_planning_checkpoint(self, saved, sink, *, fingerprint_inputs: dict) -> None:
+        fingerprint = _planning_checkpoint_fingerprint(fingerprint_inputs)
+        stages: dict = {}
+        if isinstance(saved, dict) and saved.get("stages"):
+            if (
+                saved.get("version") == _PLANNING_CHECKPOINT_VERSION
+                and saved.get("fingerprint") == fingerprint
+            ):
+                stages = copy.deepcopy(saved["stages"])
+            else:
+                print(
+                    "[ShortFilmPlanner] Saved planning checkpoint does not "
+                    "match this request; planning from scratch."
+                )
+        self._planning_checkpoint = {
+            "version": _PLANNING_CHECKPOINT_VERSION,
+            "fingerprint": fingerprint,
+            "stages": stages,
+        }
+        self._planning_checkpoint_sink = sink if callable(sink) else None
+
+    def _reuse_planning_stage(self, key: str) -> tuple[bool, Any]:
+        checkpoint = getattr(self, "_planning_checkpoint", None) or {}
+        stages = checkpoint.get("stages") or {}
+        if key not in stages:
+            return False, None
+        print(f"[ShortFilmPlanner] Resume: reusing saved {key} checkpoint.")
+        return True, copy.deepcopy(stages[key])
+
+    def _save_planning_stage(self, key: str, value: Any) -> None:
+        checkpoint = getattr(self, "_planning_checkpoint", None)
+        if checkpoint is None:
+            return
+        try:
+            stored = json.loads(json.dumps(value, ensure_ascii=False))
+        except (TypeError, ValueError) as exc:
+            print(f"[ShortFilmPlanner] Could not checkpoint {key}: {exc}")
+            return
+        stages = checkpoint["stages"]
+        position = _PLANNING_CHECKPOINT_STAGES.index(key)
+        for later in _PLANNING_CHECKPOINT_STAGES[position + 1:]:
+            stages.pop(later, None)
+        stages[key] = stored
+        sink = getattr(self, "_planning_checkpoint_sink", None)
+        if sink:
+            try:
+                sink(copy.deepcopy(checkpoint))
+            except Exception as exc:
+                print(f"[ShortFilmPlanner] Could not persist {key} checkpoint: {exc}")
+
+    def _checkpointed(self, key: str, produce):
+        reused, value = self._reuse_planning_stage(key)
+        if reused:
+            return value
+        value = produce()
+        self._save_planning_stage(key, value)
+        return value
 
     def plan(
         self,
@@ -2648,6 +2731,32 @@ class ShortFilmPlanner(BasePlanner):
         self._preserve_video_character_names = (
             self._video_model.lower().startswith("minimax_h3")
             and shot_image_policy in {"prompt_only", "direct_references"}
+        )
+
+        self._init_planning_checkpoint(
+            kwargs.get("planning_checkpoint"),
+            kwargs.get("planning_checkpoint_sink"),
+            fingerprint_inputs={
+                "story_description": story_description,
+                "reference_image_path": reference_image_path,
+                "characters": characters,
+                "target_duration": target_duration,
+                "target_scenes": target_scenes,
+                "narrative_mode": narrative_mode,
+                "fps": fps,
+                "frames_steps": frames_steps,
+                "frames_minimum": frames_minimum,
+                "frames_maximum": frames_maximum,
+                "visual_style": visual_style,
+                "preserve_visual_style": preserve_visual_style,
+                "video_model": self._video_model,
+                "image_model": self._image_model,
+                "shot_image_policy": shot_image_policy,
+                "character_ref_paths": self._character_ref_paths_raw,
+                "location_ref_paths": self._location_ref_paths_raw,
+                "nsfw": kwargs.get("nsfw", False),
+                "polish_block": kwargs.get("polish_block", ""),
+            },
         )
 
         # Normalize speaker_mappings: frontend sends list, we need dict
@@ -3632,9 +3741,12 @@ WHY THIS MATTERS:
         h3_character_block = ""
         if is_h3_native:
             print("[ShortFilmPlanner] Pass 0: Building H3 character voice bible...")
-            h3_voice_bible = self._build_h3_character_voice_bible(
-                story_description=story_description,
-                char_profiles=char_profiles,
+            h3_voice_bible = self._checkpointed(
+                "h3_voice_bible",
+                lambda: self._build_h3_character_voice_bible(
+                    story_description=story_description,
+                    char_profiles=char_profiles,
+                ),
             )
             voice_bible_text = _format_h3_voice_bible(h3_voice_bible)
             h3_character_block = """
@@ -3693,15 +3805,18 @@ H3 CHARACTER-AUTHENTICITY RULES:
         # reasoning gets its own pool and doesn't count against this
         # cap.
         _output_token_cap = max(2000, max_total_words * 3)
-        screenplay = self._generate_streaming(
-            prompt=pass1_user,
-            system_prompt=pass1_system,
-            max_new_tokens=_output_token_cap,
-            temperature=0.8,
-            thinking_budget=16384,
-            image_paths=image_paths or [],
-            frequency_penalty=0.15,
-            presence_penalty=0.05,
+        screenplay = self._checkpointed(
+            "screenplay",
+            lambda: self._generate_streaming(
+                prompt=pass1_user,
+                system_prompt=pass1_system,
+                max_new_tokens=_output_token_cap,
+                temperature=0.8,
+                thinking_budget=16384,
+                image_paths=image_paths or [],
+                frequency_penalty=0.15,
+                presence_penalty=0.05,
+            ),
         )
 
         print(f"[ShortFilmPlanner] Screenplay: {len(screenplay)} chars")
@@ -3746,11 +3861,13 @@ H3 CHARACTER-AUTHENTICITY RULES:
                     "[ShortFilmPlanner] Pass 1.5: Running H3 character "
                     "table read before dialogue lock..."
                 )
-                screenplay_dialogue_manifest = (
-                    self._run_h3_character_table_read(
+                extracted_manifest = screenplay_dialogue_manifest
+                screenplay_dialogue_manifest = self._checkpointed(
+                    "h3_dialogue_manifest",
+                    lambda: self._run_h3_character_table_read(
                         story_description=story_description,
                         screenplay=screenplay,
-                        manifest=screenplay_dialogue_manifest,
+                        manifest=extracted_manifest,
                         voice_bible=h3_voice_bible,
                         max_spoken_words=max_spoken_words,
                         maximum_line_words=max(
@@ -3760,7 +3877,7 @@ H3 CHARACTER-AUTHENTICITY RULES:
                                 * _H3_DIALOGUE_WORDS_PER_SECOND
                             )),
                         ),
-                    )
+                    ),
                 )
                 assert_no_minor_content(
                     "\n".join(
@@ -5985,6 +6102,26 @@ SCREENPLAY:
             )
             return candidate, fitted_schedule, mode
 
+        def finish_native_shots(verified_shot_dicts: list[dict]):
+            shots = self._convert_story_shots(
+                verified_shot_dicts,
+                char_profiles,
+                has_reference,
+                fps,
+                frames_steps,
+                frames_minimum,
+                frames_maximum=frames_maximum,
+            )
+            title = verified_shot_dicts[0].get("title") if verified_shot_dicts else None
+            self._last_title = title
+            return shots, title
+
+        # A verified shot list is the last expensive step; conversion after it
+        # is deterministic, so a resume can skip Pass 2 and its repairs.
+        reused_shots, saved_shot_dicts = self._reuse_planning_stage("h3_shot_dicts")
+        if reused_shots and saved_shot_dicts:
+            return finish_native_shots(saved_shot_dicts)
+
         image_paths = self._build_all_image_paths(
             reference_image_path, has_reference
         )
@@ -5994,14 +6131,17 @@ SCREENPLAY:
             f"{shot_count_low}-{shot_count_high} shots)..."
         )
         planner_token_budget = _h3_planner_token_budget(target_duration)
-        raw_shot_dicts = self._call_llm_json(
-            user_prompt=pass2_user,
-            system_prompt=pass2_system,
-            max_tokens=planner_token_budget,
-            thinking_budget=None,
-            temperature=0.4,
-            image_paths=image_paths,
-            json_schema=schema,
+        raw_shot_dicts = self._checkpointed(
+            "h3_pass2_raw",
+            lambda: self._call_llm_json(
+                user_prompt=pass2_user,
+                system_prompt=pass2_system,
+                max_tokens=planner_token_budget,
+                thinking_budget=None,
+                temperature=0.4,
+                image_paths=image_paths,
+                json_schema=schema,
+            ),
         )
         structure_issues = _h3_native_structure_issues(
             raw_shot_dicts,
@@ -6110,14 +6250,17 @@ VOCAL SEMANTIC REPAIR:
                 "whole-plan repair "
                 "before generation."
             )
-            repaired_raw = self._call_llm_json(
-                user_prompt=repair_user,
-                system_prompt=pass2_system,
-                max_tokens=planner_token_budget,
-                thinking_budget=0,
-                temperature=0.3,
-                image_paths=image_paths,
-                json_schema=_configure_native_schema(repair_max_items),
+            repaired_raw = self._checkpointed(
+                "h3_pass2_repair_raw",
+                lambda: self._call_llm_json(
+                    user_prompt=repair_user,
+                    system_prompt=pass2_system,
+                    max_tokens=planner_token_budget,
+                    thinking_budget=0,
+                    temperature=0.3,
+                    image_paths=image_paths,
+                    json_schema=_configure_native_schema(repair_max_items),
+                ),
             )
             recovered_tail_fields = _complete_h3_truncated_tail(
                 repaired_raw,
@@ -6402,19 +6545,8 @@ VOCAL SEMANTIC REPAIR:
         assert_no_minor_content(
             collect_pass2_text(shot_dicts), source="shot list (H3 native Pass 2)"
         )
-
-        shots = self._convert_story_shots(
-            shot_dicts,
-            char_profiles,
-            has_reference,
-            fps,
-            frames_steps,
-            frames_minimum,
-            frames_maximum=frames_maximum,
-        )
-        title = shot_dicts[0].get("title") if shot_dicts else None
-        self._last_title = title
-        return shots, title
+        self._save_planning_stage("h3_shot_dicts", shot_dicts)
+        return finish_native_shots(shot_dicts)
 
     def _convert_story_shots(
         self,

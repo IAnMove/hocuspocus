@@ -1950,4 +1950,6 @@ export interface PipelineListItem {
   workspace: string
   error?: string | null
   repair_status?: PipelineRepairStatus | null
+  /** Planner steps saved before a failure; Resume skips these LLM passes. */
+  planning_checkpoint_stages?: string[]
 }

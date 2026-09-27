@@ -1428,7 +1428,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice {
   rerunClipVideo: (pid: string, clipIndex: number, prompt?: string) => Promise<unknown>
   rerunH3Segment: (pid: string, clipIndex: number, segmentIndex: number, prompt?: string) => Promise<unknown>
   rejoinPipelineClips: (pid: string) => Promise<unknown>
-  resumePipeline: (pid: string) => Promise<void>
+  resumePipeline: (pid: string, options?: { replan?: boolean }) => Promise<void>
   deletePipeline: (pid: string) => Promise<void>
   loadDirectorFromPipeline: (pid: string) => Promise<void>
 
@@ -3314,10 +3314,10 @@ export const useStore = create<AppState>((set, get) => {
       throw e
     }
   },
-  resumePipeline: async (pid: string) => {
+  resumePipeline: async (pid: string, options?: { replan?: boolean }) => {
     // Kick the crashed pipeline back into running server-side, then close
     // the Dashboard and reconnect the Director view to it so progress shows.
-    await api.resumePipeline(pid)
+    await api.resumePipeline(pid, options)
     set({
       dashboardOpen: false,
       pipelineId: pid,

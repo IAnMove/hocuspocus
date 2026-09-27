@@ -9927,17 +9927,19 @@ def director_pipeline_stop(pid: str):
 
 
 @api.post("/api/v1/director/pipeline/{pid}/resume")
-def director_pipeline_resume(pid: str):
+def director_pipeline_resume(pid: str, replan: bool = False):
     """Resume a crashed pipeline from its saved state.
 
     Reuses the planning (and start images when still on disk) that finished
     before the crash, then re-runs video generation — so a mid-run backend
-    crash doesn't throw away completed LLM work.
+    crash doesn't throw away completed LLM work. When planning failed, the
+    planner resumes from its last completed step; ``replan=true`` discards
+    those planning checkpoints and plans from scratch.
     """
     _init_pipeline()
     from services.director_pipeline import get_pipeline, resume_pipeline
     base = wgp.server_config.get("save_path", "outputs")
-    ok, message = resume_pipeline(pid, base)
+    ok, message = resume_pipeline(pid, base, replan=replan)
     if not ok:
         raise HTTPException(status_code=400, detail=message)
     pipeline = get_pipeline(pid) or {}

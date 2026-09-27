@@ -2708,7 +2708,7 @@ class TestDirectorCancellation(unittest.TestCase):
         release = threading.Event()
         first_result: list[tuple[bool, str]] = []
 
-        def reserved_resume(_pid: str, _out_dir: str):
+        def reserved_resume(_pid: str, _out_dir: str, **_kwargs):
             entered.set()
             release.wait(timeout=2)
             return True, "resumed"
