@@ -1879,8 +1879,25 @@
       "light": "Luz sobre personajes"
     }
   },
+  "examples": {
+    "title": "Colecciones de ejemplos opcionales",
+    "help": "Explorar no inicia descargas. Elige una colección para instalarla y usarla sin conexión. Puedes seguir usando tus propios archivos.",
+    "collection": "Colección de ejemplos",
+    "choose": "Elige una colección",
+    "installed": "Instalada — disponible sin conexión",
+    "download": "Descargar · {{size}}",
+    "progress": "Descargando {{size}} / {{total}}",
+    "cancel": "Cancelar descarga",
+    "cancelled": "Descarga cancelada. Se conservan las colecciones completadas.",
+    "error": "No se pudieron cargar o descargar los ejemplos. Comprueba la conexión e inténtalo de nuevo.",
+    "retry": "Actualizar / reintentar",
+    "open": "Abrir galería {{name}}",
+    "catalog": "Contenido de la biblioteca",
+    "templates": "Plantillas",
+    "examples": "Ejemplos y variantes"
+},
   "shotLibrary": {
-    "optionalExamples": "Los recursos de ejemplo se descargan al abrir una vista previa o usar una plantilla. Después quedan disponibles sin conexión.",
+    "optionalExamples": "Las plantillas reutilizables usan tus recursos. Las escenas ilustradas están en Ejemplos y variantes; los proyectos anteriores siguen siendo compatibles.",
     "change": "Cambiar plano",
     "use": "Usar este plano",
     "cancel": "Cancelar",

@@ -127,3 +127,35 @@ test('the saved view and recents survive bad or stale storage', async () => {
   assert.deepEqual(readRecentShots(), ['sea-deck'])
   assert.deepEqual(rememberRecentShot('two-shot'), ['two-shot', 'sea-deck'])
 })
+
+test('core catalog needs no optional media and all legacy templates remain usable', async () => {
+  const { CORE_TEMPLATES, templateCollections, exampleCollections } = await import('../src/features/scene3d/templateCatalog')
+  const { SCENE3D_TEMPLATES, applyScene3DTemplate } = await import('../src/features/scene3d/templates')
+  assert.equal(CORE_TEMPLATES.length, 32)
+  for (const item of CORE_TEMPLATES) assert.deepEqual(templateCollections(item.id), [], item.id)
+  assert.equal(SCENE3D_TEMPLATES.length, 288)
+  for (const item of SCENE3D_TEMPLATES) assert.equal(applyScene3DTemplate(item.id).templateId, item.id)
+  assert.deepEqual(exampleCollections({ slots: [{ sourceUrl: '/examples/creative/image.png?v=1' }], face: '/examples/face-pack/mouth.png', own: '/api/v1/assets/mine' }), ['creative', 'face-pack'])
+})
+
+test('browsing examples and selecting a variant only requests catalog metadata', async () => {
+  const { screen, fireEvent, cleanup, waitFor } = await import('@testing-library/react')
+  const original = globalThis.fetch
+  const requests: string[] = []
+  globalThis.fetch = (async (url, options) => {
+    requests.push(`${options?.method ?? 'GET'} ${url}`)
+    return new Response(JSON.stringify({ collections: [], job: null }), { status: 200 })
+  }) as typeof fetch
+  try {
+    const calls = await openLibrary()
+    assert.equal(document.querySelectorAll('[data-shot-card]').length, 32)
+    assert.deepEqual(requests, [])
+    fireEvent.click(screen.getByRole('button', { name: 'Examples and variants' }))
+    await waitFor(() => assert.ok(requests.length > 0))
+    assert.equal(document.querySelectorAll('[data-shot-card]').length, 256)
+    fireEvent.click(screen.getByTestId('world3d-template-creative-ocean-window'))
+    assert.deepEqual(calls.templates, [])
+    assert.ok(requests.every(value => value === 'GET /api/v1/examples'))
+    assert.equal(document.querySelector('img[src^="/examples/"]'), null)
+  } finally { cleanup(); globalThis.fetch = original }
+})

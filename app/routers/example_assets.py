@@ -5,11 +5,40 @@ import mimetypes
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 
+from services.example_collections import CollectionDownloads
 from services.example_assets import ExampleAssets, ExampleUnavailable, example_assets
 
 
 def create_example_assets_router(assets: ExampleAssets = example_assets) -> APIRouter:
     router = APIRouter(tags=["optional-examples"])
+    downloads = CollectionDownloads(assets)
+
+    @router.get("/api/v1/examples")
+    def catalog():
+        return downloads.catalog()
+
+    @router.post("/api/v1/examples/install", status_code=202)
+    def install(body: dict, request: Request):
+        if request.headers.get("X-Hocus-Action") != "install-examples":
+            raise HTTPException(403, "Explicit download action required")
+        names = body.get("collections")
+        if not isinstance(names, list) or not names or len(names) > 32 or any(not isinstance(n, str) or n not in assets.collections for n in names):
+            raise HTTPException(422, "Choose known example collections")
+        try:
+            return downloads.start(names)
+        except RuntimeError as error:
+            raise HTTPException(409, str(error)) from error
+
+    @router.delete("/api/v1/examples/install/{job_id}")
+    def cancel(job_id: str, request: Request):
+        if request.headers.get("X-Hocus-Action") != "install-examples":
+            raise HTTPException(403, "Explicit download action required")
+        try:
+            downloads.cancel(job_id)
+        except KeyError:
+            raise HTTPException(404, "Unknown download") from None
+        return {"status": "cancelling"}
+
 
     @router.get("/examples/{asset_path:path}")
     @router.head("/examples/{asset_path:path}", include_in_schema=False)
@@ -31,7 +60,7 @@ def create_example_assets_router(assets: ExampleAssets = example_assets) -> APIR
         try:
             path = assets.resolve(name)
         except ExampleUnavailable as error:
-            raise HTTPException(503, str(error), headers={"Cache-Control": "no-store", "Retry-After": "30"}) from error
+            raise HTTPException(409, str(error), headers={"Cache-Control": "no-store"}) from error
         return FileResponse(path, media_type=media_type, headers=headers)
 
     return router

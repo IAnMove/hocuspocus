@@ -1,19 +1,13 @@
-"""Optional example media, fetched individually from a pinned public revision.
+"""Optional example media installed only by an explicit collection download.
 
-Importing this module or starting the server never downloads examples. Only
-manifest-listed resources can be requested; verified files remain usable offline.
+GET requests and server startup never download examples. Only manifest-listed
+resources can be served; verified installed files remain usable offline.
 """
 from __future__ import annotations
 
 import hashlib
-from http.client import HTTPException as HTTPClientError
 import json
-import os
 from pathlib import Path
-import tempfile
-from threading import Lock, Semaphore
-from urllib.parse import quote
-from urllib.request import urlopen
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = APP_ROOT / "resources" / "example_assets.json"
@@ -28,8 +22,7 @@ class ExampleAssets:
         self.cache = cache
         self.revision = manifest["revision"]
         self.files = manifest["files"]
-        self._locks = [Lock() for _ in range(64)]
-        self._downloads = Semaphore(4)
+        self.collections = manifest.get("collections", {})
         self._verified: dict[str, tuple] = {}
 
     def entry(self, name: str) -> dict:
@@ -64,36 +57,33 @@ class ExampleAssets:
             return None
 
     def resolve(self, name: str) -> Path:
-        entry = self.entry(name)
-        lock = self._locks[int(entry["sha256"][:8], 16) % len(self._locks)]
-        with lock:
-            existing = self.cached(name)
-            if existing:
-                return existing
-            temporary = None
-            try:
-                with self._downloads:
-                    self.cache.mkdir(parents=True, exist_ok=True)
-                    url = f"https://raw.githubusercontent.com/IAnMove/hocuspocus/{self.revision}/ui/public/examples/{quote(name, safe='/')}"
-                    digest, size = hashlib.sha256(), 0
-                    with urlopen(url, timeout=30) as response, tempfile.NamedTemporaryFile(dir=self.cache, suffix=".partial", delete=False) as output:
-                        temporary = Path(output.name)
-                        while chunk := response.read(1024 * 1024):
-                            size += len(chunk)
-                            if size > entry["size"]:
-                                raise ExampleUnavailable("Example download exceeds its declared size")
-                            digest.update(chunk)
-                            output.write(chunk)
-                    if size != entry["size"] or digest.hexdigest() != entry["sha256"]:
-                        raise ExampleUnavailable("Example download failed verification")
-                    target = self._target(name)
-                    os.replace(temporary, target)
-                    return target
-            except (OSError, ValueError, HTTPClientError) as error:
-                raise ExampleUnavailable("Example unavailable. Connect to the internet and retry; downloaded examples work offline.") from error
-            finally:
-                if temporary is not None:
-                    temporary.unlink(missing_ok=True)
+        existing = self.cached(name)
+        if existing:
+            return existing
+        raise ExampleUnavailable("Download this example collection from the shot library first.")
+
+    def installed(self, collection: str) -> bool:
+        pack = self.collections[collection]
+        receipt = self.cache / (collection + ".installed.json")
+        try:
+            if json.loads(receipt.read_text())["sha256"] != pack["archive"]["sha256"]:
+                return False
+            return all(self.cached(name) is not None for name in pack["files"])
+        except (OSError, ValueError, KeyError):
+            return False
+
+    def closure(self, collections: list[str]) -> list[str]:
+        found = set()
+        def visit(name):
+            if name in found:
+                return
+            pack = self.collections[name]
+            found.add(name)
+            for dependency in pack["dependencies"]:
+                visit(dependency)
+        for name in collections:
+            visit(name)
+        return sorted(found)
 
 
 def load_example_assets() -> ExampleAssets:

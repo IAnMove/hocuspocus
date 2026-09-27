@@ -57,6 +57,12 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
   // A fixed camera and a single background isolate media movement from camera/actors.
   scene.slots = scene.slots.filter(slot => slot.id === 'background')
   scene.camera.framing = undefined
+  const stillUrl = '/api/v1/uploads/background-still.png'
+  const still = await readFile(new URL('../../public/character-kit-presets/mouths/minimal-line/closed.png', import.meta.url))
+  await page.route(`**${stillUrl}`, route => route.fulfill({ contentType: 'image/png', body: still }))
+  await page.route('**/api/v1/outputs/thumbnail/background-still.png*', route => route.fulfill({ contentType: 'image/png', body: still }))
+  scene.slots[0].sourceUrl = stillUrl
+  scene.slots[0].screen = undefined
   await workspace.getByLabel('Open shot JSON').setInputFiles({ name: 'ocean.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(scene)) })
   const controls = workspace.getByTestId('scene3d-screen-controls')
   await controls.getByLabel('Animate this layer').check()

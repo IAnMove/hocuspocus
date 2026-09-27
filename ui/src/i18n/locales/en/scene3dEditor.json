@@ -1879,8 +1879,25 @@
       "light": "Light on actors"
     }
   },
+  "examples": {
+    "title": "Optional example collections",
+    "help": "Nothing downloads while browsing. Choose a collection to install; downloaded media works offline. You can keep using your own files.",
+    "collection": "Example collection",
+    "choose": "Choose a collection",
+    "installed": "Installed — available offline",
+    "download": "Download · {{size}}",
+    "progress": "Downloading {{size}} / {{total}}",
+    "cancel": "Cancel download",
+    "cancelled": "Download cancelled. Completed collections are kept.",
+    "error": "Could not load or download the examples. Check the connection and try again.",
+    "retry": "Refresh / retry",
+    "open": "Open {{name}} gallery",
+    "catalog": "Library content",
+    "templates": "Templates",
+    "examples": "Examples and variants"
+},
   "shotLibrary": {
-    "optionalExamples": "Example media downloads when you open a preview or use a template. Downloaded resources remain available offline.",
+    "optionalExamples": "Reusable shots use your own media. Authored looks are under Examples and variants; older projects remain compatible.",
     "change": "Change shot",
     "use": "Use this shot",
     "cancel": "Cancel",

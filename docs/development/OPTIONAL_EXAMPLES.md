@@ -1,42 +1,65 @@
-# Optional example media
+# Optional example collections
 
-Example media is no longer stored in the current Git tree or copied into the UI build. The removal saves about 1,501 MiB from each source checkout and another copy from each production UI build. Small collection guides remain under `docs/examples`.
+Example media is absent from the current Git tree and UI build. This saves about 1,501 MiB from each source checkout and another copy from each production UI build. Small collection guides remain under `docs/examples`.
 
 ## User behavior
 
-- Installation, UI build and server startup do not download any example media.
-- `/examples/...` URLs used by saved projects, templates and gallery pages continue to work. The backend downloads only the requested file on first use, then serves its cached copy, including video range requests.
-- Opening a preview can download its image; using a scene can download its referenced images, video or audio. Opening a complete gallery can load several previews. Full exported movies and archives are downloaded only when requested.
-- The first use requires internet access to GitHub. An unavailable or invalid download returns 503 and can be retried. Verified cached resources work offline.
-- Cache location: `app/cache/examples/`. Stop the app and remove this directory to reclaim all optional media. Nothing in workspaces or model folders is touched.
+- Installation, build, startup, library browsing and schematic previews never download example media.
+- **Video 3D → Shot library → Templates** contains 32 reusable shot compositions that work with the user's own media. **Examples and variants** holds the remaining 256 authored looks. All 288 existing template IDs remain supported, including saved projects and recent shots.
+- Select an example or collection, check the download size, then press **Download**. The size includes missing shared dependencies, counted once. Progress and cancellation are available. Completed collections remain installed when another download is cancelled or fails.
+- Saved scenes referencing missing `/examples/...` resources offer the same download controls in the editor. After completion, the current scene reloads its media. Users can also replace these resources with their own files.
+- Only an explicit install POST starts network transfers. GET and HEAD never fetch external content. Missing media returns 409 with installation instructions; unknown paths return 404.
+- Downloaded resources work offline, including video range requests and installed gallery pages. Gallery links to other collections may require installing those separately.
+- Cache location: `app/cache/examples/`. Stop the app and remove this directory to reclaim optional media. Workspaces and model folders are unaffected.
 - Vite development mode proxies `/examples` to the backend, like `/api`.
 
 ## Source and integrity
 
-`app/resources/example_assets.json` pins the public repository revision and lists the size and SHA-256 of every allowed file. Resources currently come from the immutable archived revision on `raw.githubusercontent.com/IAnMove/hocuspocus`. This needs no new release, account or upload. It is a transitional host: keep that revision accessible until a dedicated asset release/store replaces it.
+The [optional resource release](https://github.com/IAnMove/hocuspocus/releases/tag/example-assets-v1) hosts 19 ZIP collections outside Git. This resource prerelease does not replace the latest application release. It preserves the original media quality; ZIP compression is not a promise of smaller video files.
 
-Requests cannot select arbitrary network locations or filesystem paths. Downloads are bounded by the declared size, hashed, written to temporary files and atomically published. Concurrent requests for the same file share the completed result; partial or corrupt files are never served. HEAD requests only return manifest metadata.
+`app/resources/example_assets.json` pins archive URLs, sizes and SHA-256 checksums, file checksums, and dependencies. Its `revision` records the original source snapshot. Runtime downloads use release assets, not historical Git blobs.
 
-Example filenames are not cache paths: local storage is content-addressed. The manifest includes HTML and scripts for the existing review galleries as well as images and media. They come from the same pinned, reviewed repository snapshot.
+The installer bounds each transfer, verifies the complete archive and every file, rejects unexpected paths or duplicate entries, and stages content before publishing it. Paths inside ZIPs never become extraction paths: storage uses flat content-addressed filenames. Partial downloads are cleaned up. Corrupt cached content is detected and can be downloaded again. One collection job runs at a time per application process.
 
-## Important: source tree versus Git history
+API:
 
-Deleting files in this PR does **not** erase their historical blobs. A normal full `git clone` can still download the old media. No history rewrite or force-push is included in this change.
+- `GET /api/v1/examples`: collection availability, required download sizes and current job.
+- `POST /api/v1/examples/install`, JSON `{"collections":["creative"]}` and header `X-Hocus-Action: install-examples`: start an explicit download; returns 202. Unknown collections return 422; a running job returns 409.
+- `DELETE /api/v1/examples/install/{job_id}` with the same header: request cancellation. A pending network read may take up to its 30-second timeout to settle.
+- `GET /examples/{path}`: serve verified installed content only.
 
-After this change reaches the branch being installed, a lightweight fresh checkout can use:
+The HTML and scripts in gallery packages come from the same recorded repository snapshot as their media.
+
+## Source tree versus Git history
+
+Deleting files does **not** erase historical blobs. A full `git clone` can still download old media. No history rewrite or force-push is included.
+
+After this change reaches the installed branch, a lightweight fresh checkout can use:
 
 ```sh
 git clone --depth 1 --single-branch --branch main https://github.com/IAnMove/hocuspocus.git
 ```
 
-The current upstream Pinokio Download flow already runs `git clone --depth 1 --single-branch` in `prepareLauncherDownload` and `cloneLauncherRemoteRepo` ([source](https://github.com/pinokiocomputer/pinokiod/blob/add4a674ad1ba95bb62ec427fce519fe5bf0e9bf/server/index.js#L9374)). Other paths, including `script.download` and checkpoint installation, still use a full clone. This was verified in upstream source, not on the user's installed macOS version. Check a specific installation from its repository directory with `git rev-parse --is-shallow-repository`; `true` confirms it has a shallow history. A fresh clone through that shallow Download flow benefits once the example-removal change reaches the default branch. Existing full clones are not automatically shrunk by updating.
+The upstream Pinokio Download flow already runs `git clone --depth 1 --single-branch` in `prepareLauncherDownload` and `cloneLauncherRemoteRepo` ([source](https://github.com/pinokiocomputer/pinokiod/blob/add4a674ad1ba95bb62ec427fce519fe5bf0e9bf/server/index.js#L9374)). Other paths, including `script.download` and checkpoint installation, still use a full clone. This was verified in upstream source, not on the user's installed macOS version. Check a specific installation with `git rev-parse --is-shallow-repository`; `true` confirms shallow history. Existing full clones are not automatically shrunk by updating.
 
-A source ZIP of that new revision also excludes historical files. The Pinokio repository clone happens before this application's `install.js`, so changing `install.js` cannot shrink that initial transfer. Distribution must use a shallow clone or a source archive, or the repository history must be migrated separately.
-
-A future history cleanup must preserve the archived examples at an independent asset release/store **first**, update and verify the manifest's source, then coordinate rewritten branches, open PRs and existing clones. Do not delete the current pinned revision before migrating its media. Simply deleting old merged branches does not remove blobs reachable from `main`.
+A source ZIP of the new revision also excludes history. Pinokio clones this repository before `install.js`, so that script cannot reduce the initial transfer. Deleting old branches does not remove blobs reachable from `main`. Any future history migration must separately coordinate branches, open PRs and existing clones; the independent resource release must be retained.
 
 ## Maintaining the catalog
 
-Do not add large examples back to `ui/public/examples/`; the path is ignored. Development media-generation scripts may still write there locally, but those results are not distribution inputs. Publish a separately versioned asset collection and update its metadata deliberately. Keep the manifest and its integrity tests in Git.
+Do not add examples back to `ui/public/examples/`; it is ignored. Media-generation scripts may write there locally, but that folder is not a distribution input. Keep the manifest and integrity tests in Git.
 
-The tiny TV-head GLB in `ui/tests/fixtures` is an offline renderer test fixture, not shipped UI content.
+To create a new resource version from media matching the manifest:
+
+```sh
+python scripts/package_example_assets.py \
+  --source /path/to/archived/examples \
+  --output /path/outside/repository/collections \
+  --manifest app/resources/example_assets.json \
+  --release-base https://github.com/IAnMove/hocuspocus/releases/download/example-assets-v2
+```
+
+The builder validates input checksums and records cross-collection file references. Publish all resulting ZIPs plus a copy of the manifest, verify the release sizes/checksums and test an actual download before shipping the updated manifest. Never overwrite assets belonging to an existing version.
+
+`templateCatalog.ts` selects core templates by distinct shot purpose, camera movement or layout; illustrated variants stay in the examples view. Adding a core template requires keeping it free of optional-media references. Do not remove legacy IDs merely to simplify the visible catalog.
+
+The tiny TV-head GLB in `ui/tests/fixtures` is an offline renderer test fixture, not shipped UI content. Export E2E tests supply their own media and never depend on optional examples.
