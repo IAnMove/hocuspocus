@@ -386,3 +386,61 @@ def test_saved_state_persists_planning_checkpoint(tmp_path):
         assert saved["planning_checkpoint"] == checkpoint
     finally:
         director_pipeline._pipelines.pop(pipeline_id, None)
+
+
+def _with_fake_video_models(models):
+    from types import SimpleNamespace
+
+    previous = director_pipeline._wgp
+    director_pipeline._wgp = SimpleNamespace(
+        get_model_def=lambda name: models.get(name),
+        save_path="outputs",
+        server_config={},
+    )
+    return previous
+
+
+_REF2VA = {"name": "H3 References", "director_video_strategy": "omni_reference"}
+
+
+def test_direct_video_with_reference_only_h3_model_is_rejected_before_planning(tmp_path):
+    import pytest
+
+    previous = _with_fake_video_models({"h3_ref": _REF2VA})
+    try:
+        params = {
+            "pipeline_type": "short_film_story",
+            "video_model": "h3_ref",
+            "music_video_treatment": {"generation_mode": "direct_video"},
+        }
+        with pytest.raises(director_pipeline.DirectorModelCompatibilityError, match="direct-video mode"):
+            director_pipeline._validate_director_visual_references(params, str(tmp_path))
+    finally:
+        director_pipeline._wgp = previous
+
+
+def test_reference_only_h3_model_accepts_a_character_image(tmp_path):
+    image = tmp_path / "bear.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 64)
+    previous = _with_fake_video_models({"h3_ref": _REF2VA})
+    try:
+        director_pipeline._validate_director_visual_references({
+            "pipeline_type": "short_film_story",
+            "video_model": "h3_ref",
+            "_director_shot_image_policy": "prompt_only",
+            "character_ref_paths": [str(image)],
+        }, str(tmp_path))
+    finally:
+        director_pipeline._wgp = previous
+
+
+def test_text_to_video_h3_model_needs_no_reference(tmp_path):
+    previous = _with_fake_video_models({"h3_t2v": {"name": "H3 Frames", "director_video_strategy": "bounded_start_end"}})
+    try:
+        director_pipeline._validate_director_visual_references({
+            "pipeline_type": "short_film_story",
+            "video_model": "h3_t2v",
+            "music_video_treatment": {"generation_mode": "direct_video"},
+        }, str(tmp_path))
+    finally:
+        director_pipeline._wgp = previous

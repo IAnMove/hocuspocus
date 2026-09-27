@@ -5743,6 +5743,40 @@ def _accumulate_pipeline_time(pid: str, key: str, elapsed_sec: float) -> None:
 
 
 
+def _validate_director_visual_references(params: dict, out_dir: str) -> None:
+    """Reject an H3 Omni run that would reach video with nothing to reference.
+
+    The same check runs before each shot is rendered; running it at submission
+    keeps an impossible setup from spending the whole LLM planning phase first.
+    """
+    video_model = str(params.get("video_model") or "")
+    try:
+        model_def = (_wgp.get_model_def(video_model) or {}) if _wgp and video_model else {}
+    except Exception:
+        return
+    if video_strategy(model_def) != OMNI_REFERENCE:
+        return
+    if shot_images_required(_director_effective_shot_image_policy(params)):
+        return
+    manifest = _director_h3_reference_manifest(params, None, out_dir=out_dir)
+    if any(reference.get("type") in {"image", "video"} for reference in manifest):
+        return
+    name = model_def.get("name") or video_model
+    direct_video, _ = _direct_video_settings(params)
+    if direct_video:
+        raise DirectorModelCompatibilityError(
+            f"{name} generates from reference images, but direct-video mode sends "
+            "none. Choose a text-to-video MiniMax H3 model (for example "
+            "\"H3 Fused 4-Step — Frames\"), or switch to image-guided mode "
+            "with a character or location image."
+        )
+    raise DirectorModelCompatibilityError(
+        f"{name} needs at least one visual reference. Add a main, character or "
+        "location image, enable generated shot images, or choose a "
+        "text-to-video MiniMax H3 model."
+    )
+
+
 def start_pipeline(params: dict) -> str:
     """Start a new director pipeline. Returns pipeline_id."""
     pid = uuid.uuid4().hex[:8]
@@ -5803,6 +5837,7 @@ def start_pipeline(params: dict) -> str:
         out_dir = _wgp.save_path
         workspace = None
         print(f"[Pipeline] No workspace, using wgp.save_path={out_dir}")
+    _validate_director_visual_references(params, out_dir)
 
     now = time.time()
     pipeline = {
