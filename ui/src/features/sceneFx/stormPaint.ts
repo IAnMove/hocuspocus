@@ -1,4 +1,5 @@
 import { fxRandom } from './types'
+import { withAlpha } from './color'
 import { glow, TAU, type FxPainter } from './energyBrush'
 import { boltChannels, strikeState, type BoltChannel } from './lightningBolt'
 
@@ -43,7 +44,7 @@ function skyFlash(ctx: CanvasRenderingContext2D, color: string, amount: number) 
   const { width, height } = ctx.canvas
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0)
   const gradient = ctx.createRadialGradient(x, y, 0, x, y, Math.max(width, height) * .9)
-  gradient.addColorStop(0, color); gradient.addColorStop(1, color + '00')
+  gradient.addColorStop(0, color); gradient.addColorStop(1, withAlpha(color, '00'))
   ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = Math.min(.55, amount * .45)
   ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height)
   ctx.restore()
@@ -98,7 +99,7 @@ export const laserBeam: FxPainter = (ctx, cue, time, progress) => {
   ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = fade
   for (const [scale, alpha, color] of [[5, .12, cue.color], [2.4, .35, cue.color], [1, .9, cue.color], [.35, 1, '#ffffff']] as const) {
     const gradient = ctx.createLinearGradient(0, -width * scale, 0, width * scale)
-    gradient.addColorStop(0, color + '00'); gradient.addColorStop(.5, color); gradient.addColorStop(1, color + '00')
+    gradient.addColorStop(0, withAlpha(color, '00')); gradient.addColorStop(.5, color); gradient.addColorStop(1, withAlpha(color, '00'))
     ctx.globalAlpha = fade * alpha; ctx.fillStyle = gradient
     ctx.fillRect(start, -width * scale, end - start, width * scale * 2)
   }
@@ -173,7 +174,7 @@ export const snowFall: FxPainter = (ctx, cue, time) => {
 
 function puff(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string, alpha: number) {
   const gradient = ctx.createRadialGradient(x, y - radius * .2, 0, x, y, radius)
-  gradient.addColorStop(0, color); gradient.addColorStop(.55, color + 'aa'); gradient.addColorStop(1, color + '00')
+  gradient.addColorStop(0, color); gradient.addColorStop(.55, withAlpha(color, 'aa')); gradient.addColorStop(1, withAlpha(color, '00'))
   ctx.globalAlpha = alpha; ctx.fillStyle = gradient
   ctx.beginPath(); ctx.arc(x, y, radius, 0, TAU); ctx.fill()
 }
