@@ -57,8 +57,9 @@ test('optional floor finishes survive save/reopen and preserve old defaults', ()
   assert.equal(cinematicReflectorVisible({ ...base, floorStyle: 'road' }), false)
 })
 
-test('all fantasy presets reopen with bundled resources and independent camera/effect documents', () => {
+test('all fantasy presets reopen with cataloged optional resources and independent camera/effect documents', () => {
   assert.equal(DARK_FANTASY_IDS.length, 60)
+  const assets = JSON.parse(fs.readFileSync(new URL('../../app/resources/example_assets.json', import.meta.url), 'utf8')).files
   const cameras = new Set()
   for (const id of DARK_FANTASY_IDS) {
     assert.ok(SCENE3D_TEMPLATES.some(template => template.id === id))
@@ -73,7 +74,7 @@ test('all fantasy presets reopen with bundled resources and independent camera/e
     for (const slot of parsed.slots) {
       const source = slot.media === 'screen' ? slot.screen.sourceUrl : slot.sourceUrl
       assert.ok(source.startsWith('/examples/dark-fantasy/') || source.startsWith('/examples/dark-stillness/') || source.startsWith('/examples/moving-cutouts/'))
-      assert.ok(fs.existsSync(new URL('../public' + source, import.meta.url)))
+      assert.ok(assets[source.slice('/examples/'.length)], source)
     }
     cameras.add(JSON.stringify(parsed.camera))
     doc.slots[0].position[0] = 999

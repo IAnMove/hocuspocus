@@ -1,3 +1,5 @@
+import { ExampleDownloads } from './ExampleDownloads'
+import { exampleCollections } from './templateCatalog'
 import { CinematicControls, AppearanceControls } from './CinematicControls'
 import { PixelWorldControls } from './PixelWorldControls'
 import { addTv, applyScreenToAllTvs } from './pixel/pixelEdits'
@@ -325,6 +327,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
 
   return (
     <div className="flex w-full flex-col gap-2" data-testid="scene3d-workspace">
+      <ExampleDownloads required={exampleCollections(sceneDoc)} disabled={editingLocked} onInstalled={() => { if (!exportingRef.current) bumpGeneration() }} />
       <SceneSpeechAudio document={sceneDoc} seconds={seconds} playing={playing && !exporting} />
       {sceneDoc.production && <p className="rounded-lg border border-border bg-bg-secondary p-3 text-sm" data-testid="speech-production-origin">
         {editorT(`speech.kind.${sceneDoc.production.kind}`)} · {sceneDoc.production.title}
@@ -536,6 +539,7 @@ function WorkspaceStageColumn({
           <Scene3DInteraction enabled={!playing && !exporting && (Boolean(selectedWorldSfxId) || Boolean(selected))}
             width={sceneDoc.width} height={sceneDoc.height} onMode={setTransformMode}>
             <Scene3DStage
+              key={generation}
               ref={stageRef}
               document={sceneDoc}
               sceneSeconds={seconds}

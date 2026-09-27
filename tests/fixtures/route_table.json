@@ -3513,13 +3513,53 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/examples",
+      "endpoint": "catalog",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/example_assets.py",
+      "ordinal": 351
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/examples/install",
+      "endpoint": "install",
+      "status_code": 202,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/example_assets.py",
+      "ordinal": 352
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/examples/install/{job_id}",
+      "endpoint": "cancel",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/example_assets.py",
+      "ordinal": 353
+    },
+    {
+      "method": "GET",
+      "path": "/examples/{asset_path:path}",
+      "endpoint": "get_example",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/example_assets.py",
+      "ordinal": 354
+    },
+    {
+      "method": "GET",
       "path": "/",
       "endpoint": "index",
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 351
+      "ordinal": 355
     }
   ]
 }

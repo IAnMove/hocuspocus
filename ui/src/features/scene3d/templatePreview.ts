@@ -1,4 +1,4 @@
-import { applyScene3DTemplate } from './templates.ts'
+import { previewTemplateDocument } from './templateCatalog.ts'
 import { dropDressing, syncDressing } from './dressing.ts'
 import {
   applyLight,
@@ -85,7 +85,7 @@ function tick(now: number) {
   }
   const watcher = list[cursor % list.length]
   cursor++
-  const doc = applyScene3DTemplate(watcher.id)
+  const doc = previewTemplateDocument(watcher.id)
   const slots = visibleSlots(doc.slots)
   attachPreviewDressing(pack, doc.dressing)
   applyLight(pack.dir, doc.light)

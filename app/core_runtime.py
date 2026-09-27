@@ -661,6 +661,9 @@ api.include_router(create_llm_prompt_router(
 
 
 _app_dir = os.path.dirname(os.path.abspath(__file__))
+from routers.example_assets import create_example_assets_router
+api.include_router(create_example_assets_router())
+
 _ui_dist = os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))
 _ui_ready = build_status()["ready"]
 if _ui_ready:

@@ -127,3 +127,60 @@ test('the saved view and recents survive bad or stale storage', async () => {
   assert.deepEqual(readRecentShots(), ['sea-deck'])
   assert.deepEqual(rememberRecentShot('two-shot'), ['two-shot', 'sea-deck'])
 })
+
+test('main catalog retains advanced templates, every pixel world and legacy IDs', async () => {
+  const { CORE_TEMPLATES, TEMPLATE_VARIANT_GROUPS, exampleCollections } = await import('../src/features/scene3d/templateCatalog')
+  const { SCENE3D_TEMPLATES, applyScene3DTemplate } = await import('../src/features/scene3d/templates')
+  assert.equal(CORE_TEMPLATES.length, 243)
+  const primary = new Set(CORE_TEMPLATES.map(item => item.id))
+  const grouped = new Set(TEMPLATE_VARIANT_GROUPS.flatMap(group => [...group]))
+  for (const item of SCENE3D_TEMPLATES) {
+    if (!grouped.has(item.id)) assert.ok(primary.has(item.id), item.id)
+    if (item.tags?.includes('pixel') || item.id.startsWith('dark-psx-')) assert.ok(primary.has(item.id), item.id)
+  }
+  assert.equal(CORE_TEMPLATES.filter(item => item.tags?.includes('pixel')).length, 57)
+  for (const group of TEMPLATE_VARIANT_GROUPS) {
+    assert.ok(primary.has(group[0]))
+    for (const id of group.slice(1)) assert.ok(!primary.has(id), id)
+  }
+  assert.equal(SCENE3D_TEMPLATES.length, 288)
+  for (const item of SCENE3D_TEMPLATES) assert.equal(applyScene3DTemplate(item.id).templateId, item.id)
+  assert.deepEqual(exampleCollections({ slots: [{ sourceUrl: '/examples/creative/image.png?v=1' }], face: '/examples/face-pack/mouth.png', own: '/api/v1/assets/mine' }), ['creative', 'face-pack'])
+})
+
+test('browsing examples and selecting a variant only requests catalog metadata', async () => {
+  const { screen, fireEvent, cleanup, waitFor } = await import('@testing-library/react')
+  const original = globalThis.fetch
+  const requests: string[] = []
+  globalThis.fetch = (async (url, options) => {
+    requests.push(`${options?.method ?? 'GET'} ${url}`)
+    return new Response(JSON.stringify({ collections: [], job: null }), { status: 200 })
+  }) as typeof fetch
+  try {
+    const calls = await openLibrary()
+    assert.equal(document.querySelectorAll('[data-shot-card]').length, 243)
+    assert.deepEqual(requests, [])
+    fireEvent.click(screen.getByRole('button', { name: 'Examples and variants' }))
+    await waitFor(() => assert.ok(requests.length > 0))
+    assert.equal(document.querySelectorAll('[data-shot-card]').length, 45)
+    fireEvent.click(screen.getByTestId('world3d-template-creative-vermilion-museum'))
+    assert.deepEqual(calls.templates, [])
+    assert.ok(requests.every(value => value === 'GET /api/v1/examples'))
+    assert.equal(document.querySelector('img[src^="/examples/"]'), null)
+  } finally { cleanup(); globalThis.fetch = original }
+})
+
+
+test('schematic previews strip every portal, speech and appearance media loader', async () => {
+  const { previewTemplateDocument } = await import('../src/features/scene3d/templateCatalog')
+  const { SCENE3D_TEMPLATES } = await import('../src/features/scene3d/templates')
+  for (const { id } of SCENE3D_TEMPLATES) {
+    const doc = previewTemplateDocument(id)
+    for (const slot of doc.slots) {
+      assert.equal(slot.speech, undefined, id)
+      assert.equal(slot.appearance, undefined, id)
+      assert.equal(slot.screen, undefined, id)
+    }
+    for (const effect of doc.worldSfx ?? []) assert.equal(effect.sourceUrl, undefined, id)
+  }
+})

@@ -334,6 +334,7 @@ function exactCatalog(): Record<string, ReturnType<typeof json> | { sse: true }>
         is_downloaded: false,
       }],
     }),
+    'GET /api/v1/examples': json({ collections: [], job: null }),
     'GET /api/v1/model-visibility': json({
       configured: true,
       enabled_models: ['minimax_h3_legacy'],
