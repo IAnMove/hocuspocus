@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +29,9 @@ def command(engine: str, arguments: list[str]) -> tuple[list[str], dict[str, str
     if not uv:
         raise RuntimeError("Pinokio's uv executable is unavailable")
     env = isolated_environment(Path(sys.executable))
+    if sys.platform == "win32" and engine == "hunyuan3d" and "--no-build-isolation" in arguments:
+        from windows_toolchain import build_environment
+        env = build_environment(env, cuda=spec["cuda"])
     env["PIP_CONFIG_FILE"] = os.devnull
     constraints = ROOT / spec["constraintFile"]
     env["PIP_CONSTRAINT"] = str(constraints)
@@ -50,8 +55,20 @@ def main() -> None:
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     arguments = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
-    cmd, env = command(args.engine, arguments)
-    result = subprocess.run(cmd, env=env)
+    rasterizer = ROOT / "app/services/hunyuan3d/vendor/Hunyuan3D-2.1/hy3dpaint/custom_rasterizer"
+    # A regular wheel from a temporary source copy has no dependency on the
+    # temporary directory after installation. Keep the pinned checkout untouched.
+    with ExitStack() as cleanup:
+        if (sys.platform == "win32" and args.engine == "hunyuan3d"
+                and Path.cwd().resolve() == rasterizer.resolve()
+                and arguments == ["install", "--no-build-isolation", "-e", "."]):
+            from windows_toolchain import prepare_rasterizer
+            temporary = cleanup.enter_context(tempfile.TemporaryDirectory(prefix="hocus-native-"))
+            source = Path(temporary) / "rasterizer"
+            prepare_rasterizer(rasterizer, source)
+            arguments = ["install", "--no-build-isolation", str(source)]
+        cmd, env = command(args.engine, arguments)
+        result = subprocess.run(cmd, env=env)
     if result.returncode:
         raise SystemExit("Error: HOCUS_RUNTIME_FAILED. Package operation failed; environment was not verified.")
 

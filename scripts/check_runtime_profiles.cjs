@@ -34,7 +34,11 @@ for (const platform of ['linux', 'win32']) {
     }
   }
   const all = JSON.stringify(steps)
+  const preflight = runtime.preflight().filter(step => step.method === 'shell.run' &&
+    (!step.when || render(step.when, ctx) === 'true'))
+  assert.equal(JSON.stringify(preflight).includes('windows_toolchain.py'), platform === 'win32')
   if (platform === 'win32') {
+    assert(all.includes('uninstall torchcodec flash-attn'), 'Repair must remove incompatible external attention')
     assert(!all.includes('targets/x86_64-linux'))
     assert(!all.includes('bash compile_mesh_painter'))
     assert(all.includes('build_mesh_painter.py'))
@@ -80,12 +84,25 @@ async function checkUiLaunchers() {
     assert.equal(plan.run[1].next, null, 'A failed UI child must stop setup/start')
   }
   const menu = require('../pinokio').menu
+  const flatten = items => items.flatMap(item => [item, ...flatten(item.menu || [])])
   const info = {exists: () => true, running: () => false, local: () => ({})}
   const repair = (await menu({}, info)).find(item => item.href === 'ui_build.js')
   assert.equal(repair.params.force, true)
   const busy = await menu({}, {...info, running: name => name === 'ui_build.js'})
   assert.equal(busy[0].href, 'ui_build.js')
   assert.equal(busy[0].default, true)
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    const entries = flatten(await menu({platform, arch: 'x64', gpu: 'nvidia'}, info))
+    assert.equal(entries.some(item => item.href === 'sam_install.js'), platform !== 'darwin')
+    assert.equal(entries.some(item => item.href === 'rigging_install.js'), platform === 'linux')
+    assert(entries.some(item => item.href === 'start.js'), 'Existing Start must remain accessible')
+  }
+  const unknown = flatten(await menu({}, info))
+  assert(unknown.some(item => item.href === 'sam_install.js'), 'Unknown hardware must not hide features')
+  const pending = flatten(await menu({platform: 'win32', arch: 'unknown', gpu: 'unknown'}, info))
+  assert(pending.some(item => item.href === 'sam_install.js'))
+  const amd = flatten(await menu({platform: 'linux', gpu: 'amd'}, info))
+  assert(!amd.some(item => item.href === 'rigging_install.js'))
   console.log('React repair/start/menu contract: PASS')
 }
 checkUiLaunchers().catch(error => { console.error(error); process.exitCode = 1 })

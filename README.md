@@ -193,6 +193,19 @@ Every step can also start from an existing image, video, audio file or GLB.
 
 AMD GPUs and macOS are **not** supported (CUDA kernels). First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D compiles native extensions: on Windows you want CUDA Toolkit and Visual Studio Build Tools.
 
+For Windows Hunyuan3D, use **CUDA Toolkit 12.8** and a compatible x64 MSVC
+toolset: VS 2022 v143 (14.3x/14.4x) or VS 2019 v142, with a Windows SDK.
+Install/Update automatically discovers and activates a compatible installed
+toolset, even alongside VS 18 / MSVC 14.50+; the latter alone is incompatible
+with this CUDA recipe. A preflight reports missing build prerequisites before
+large downloads. Both NVIDIA and Pinokio/conda CUDA library layouts work.
+The Hunyuan3D 2.1 Windows build also applies its required 64-bit integer fixes
+in a temporary source copy, leaving the vendor checkout unchanged.
+After correcting prerequisites, retry **Install** without Reset.
+Optional SAM/UniRig launcher entries are hidden for known unsupported hardware
+or operating systems; unknown hardware detection does not hide existing Start.
+This does not add macOS/MPS support or hide features inside the studio UI.
+
 ## Install
 
 1. Install [Pinokio](https://pinokio.computer).
