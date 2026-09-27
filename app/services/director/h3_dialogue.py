@@ -297,8 +297,13 @@ def _replace_first_outside_dialogue(
     prompt: str,
     needle: str,
     replacement: str,
+    min_start: int = 0,
 ) -> tuple[str, bool]:
-    """Replace an exact plain-text line without touching existing H3 tags."""
+    """Replace an exact plain-text line without touching existing H3 tags.
+
+    Matches before ``min_start`` are ignored so a later line can never be
+    tagged ahead of dialogue that already precedes it.
+    """
 
     if not needle:
         return prompt, False
@@ -313,6 +318,10 @@ def _replace_first_outside_dialogue(
     short_line = len(re.findall(r"\w+", normalized_needle)) <= 2
     cursor = 0
     for start, end in [*spans, (len(prompt), len(prompt))]:
+        if start < min_start:
+            cursor = max(end, min_start)
+            continue
+        cursor = max(cursor, min_start)
         for found in pattern.finditer(prompt, cursor, start):
             if short_line:
                 prefix = prompt[max(cursor, found.start() - 72):found.start()]
@@ -436,6 +445,16 @@ def _insert_visual_detail(prompt: str, label: str, detail: str) -> str:
     statement = f"{label}: {detail}"
     suffix = "" if statement.endswith((".", "!", "?")) else "."
     boundary = _H3_SOUND_BOUNDARY_RE.search(prompt)
+    spans, _ = _dialogue_spans(prompt)
+    last_dialogue_end = spans[-1][1] if spans else 0
+    if boundary and boundary.start() < last_dialogue_end:
+        # The detail carries later dialogue lines. When existing dialogue
+        # already sits past the sound boundary, insert after it so speaker
+        # order is preserved.
+        return (
+            f"{prompt[:last_dialogue_end].rstrip()} {statement}{suffix} "
+            f"{prompt[last_dialogue_end:].lstrip()}"
+        ).strip()
     if boundary:
         return (
             f"{prompt[:boundary.start()].rstrip()} {statement}{suffix} "
@@ -588,13 +607,20 @@ def compile_h3_vocal_contract(
             )
 
         mapped = _speaker_map(subjects or [])
+        placed_spans, _ = _dialogue_spans(prompt)
+        last_dialogue_end = placed_spans[-1][1] if placed_spans else 0
         for index in range(len(spans), len(valid_beats)):
             beat, words, tag = valid_beats[index]
-            prompt, replaced = _replace_first_outside_dialogue(
-                prompt, words, tag,
-            )
-            if replaced:
-                continue
+            # Once a line falls back to the appended performance section,
+            # later lines must follow it there to keep speaker order.
+            if not instructions:
+                prompt, replaced = _replace_first_outside_dialogue(
+                    prompt, words, tag, min_start=last_dialogue_end,
+                )
+                if replaced:
+                    placed_spans, _ = _dialogue_spans(prompt)
+                    last_dialogue_end = placed_spans[-1][1]
+                    continue
             speaker_id = _normalized_space(_field(beat, "speaker_id", ""))
             stable_id, speaker_name = mapped.get(
                 speaker_id,
@@ -1560,7 +1586,12 @@ def _label_ref2va_subjects_in_body(
         if not count:
             missing.append(f"{label} ({name}) is visible in the described blocking.")
     if missing:
-        result = f"{' '.join(missing)} {result}".strip()
+        # Keep the [Shot 1] marker first: the H3 contract requires the
+        # visual field to open with it.
+        marker = re.match(r"^\s*\[Shot\s+1\]\s*", result, flags=re.IGNORECASE)
+        head = marker.group(0).strip() if marker else ""
+        rest = result[marker.end():] if marker else result
+        result = " ".join(part for part in (head, *missing, rest) if part).strip()
     return result
 
 

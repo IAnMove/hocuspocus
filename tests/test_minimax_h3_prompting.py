@@ -127,3 +127,45 @@ def test_h3_no_text_lock_removes_conflicting_structured_shot_fields():
     assert "anomalía detectada" not in prompt
     assert "¿Quién soy?" not in prompt
     assert "<d>[Spanish] ¿Dónde está la semilla?</d>" in prompt
+
+
+def test_ref2va_unnamed_subject_note_keeps_shot_marker_first():
+    from app.services.director.h3_dialogue import _label_ref2va_subjects_in_body
+
+    body = _label_ref2va_subjects_in_body(
+        "[Shot 1] The bear walks out of the glitter cloud.",
+        [{"speaker_name": "Teddy Bear (V.O.)"}],
+    )
+
+    assert body.startswith("[Shot 1] <Subject 1> (Teddy Bear (V.O.))")
+    assert body.count("[Shot 1]") == 1
+
+
+def _bear_beat(text):
+    return {"speaker_id": "bear", "spoken_text": text}
+
+
+def test_vocal_contract_does_not_tag_later_line_before_existing_dialogue():
+    from app.services.director.h3_dialogue import compile_h3_vocal_contract
+
+    prompt, _ = compile_h3_vocal_contract(
+        'Buster whispers "Keep moving." as blocks fall. '
+        "He growls <d>[English] I am the storm.</d>",
+        [{"character_id": "bear", "speaker_name": "Buster"}],
+        [_bear_beat("I am the storm."), _bear_beat("Keep moving.")],
+    )
+
+    assert prompt.index("I am the storm.</d>") < prompt.index("Keep moving.</d>")
+
+
+def test_vocal_contract_appends_after_dialogue_past_sound_boundary():
+    from app.services.director.h3_dialogue import compile_h3_vocal_contract
+
+    prompt, _ = compile_h3_vocal_contract(
+        "Buster walks forward. overall_soundscape: glitter hiss, "
+        "<d>[English] Onward.</d>",
+        [{"character_id": "bear", "speaker_name": "Buster"}],
+        [_bear_beat("Onward."), _bear_beat("Nothing stops me.")],
+    )
+
+    assert prompt.index("Onward.</d>") < prompt.index("Nothing stops me.</d>")
