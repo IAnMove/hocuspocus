@@ -36702,7 +36702,8 @@ api.include_router(create_world3d_export_router(_world3d_export))
 from services.scene2d_export import Scene2DExportService, command_catalog as scene2d_export_catalog, command_handlers as scene2d_export_handlers
 from routers.scene2d_export import create_scene2d_export_router
 _scene2d_export = Scene2DExportService(workspace_dir=_workspace_dir, registry_for=_task_registry,
-                                       app_url=os.environ.get("HOCUS_APP_URL", ""))
+                                       app_url=os.environ.get("HOCUS_APP_URL", ""),
+                                       uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"))
 bind_world3d_renderer_origin(api, _scene2d_export)
 api.include_router(create_scene2d_export_router(_scene2d_export))
 from services.montage_documents import MontageStore
