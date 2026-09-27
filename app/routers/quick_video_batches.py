@@ -109,7 +109,16 @@ def _atomic_write(path: str, value: dict[str, Any]) -> None:
             json.dump(value, handle, ensure_ascii=False, separators=(",", ":"))
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        # Windows readers can temporarily deny replacement of the destination.
+        # Keep the old JSON intact until an atomic replacement succeeds.
+        for attempt in range(20):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if os.name != "nt" or attempt == 19:
+                    raise
+                time.sleep(0.05)
     finally:
         try:
             if os.path.isfile(temporary):
