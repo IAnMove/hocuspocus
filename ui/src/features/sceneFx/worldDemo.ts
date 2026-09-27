@@ -100,10 +100,18 @@ export function worldSfxDemoDocument(id: WorldSfxDemoId): Scene3DDocument {
   return worldSfxDepthDocument()
 }
 
-/** Stock demos may replace an empty stage. Authored actors, voices and cues stay. */
+const STOCK_DEMO_ID = /^(?:demo|duel|mix)-/
+
+function stockDemoOnly(document: Scene3DDocument): boolean {
+  const cues = [...(document.worldSfx ?? []), ...(document.sfx ?? [])]
+  if (!cues.length || !cues.every(cue => STOCK_DEMO_ID.test(String(cue.id)))) return false
+  return !sceneHasAuthoredContent({ ...document, worldSfx: [], sfx: [] })
+}
+
+/** Stock demos may replace an empty stage or another stock demo. Authored actors, voices and cues stay. */
 export function applyWorldSfxDemo(current: Scene3DDocument, id: WorldSfxDemoId): { mode: 'retain' | 'replace'; document: Scene3DDocument } {
   const demo = worldSfxDemoDocument(id)
-  if (!sceneHasAuthoredContent(current)) {
+  if (!sceneHasAuthoredContent(current) || stockDemoOnly(current)) {
     return { mode: 'replace', document: { ...demo, width: current.width, height: current.height, fps: current.fps } }
   }
   return {
