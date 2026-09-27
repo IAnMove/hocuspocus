@@ -6,6 +6,7 @@ import {
   h3MaximumFrames,
   h3WindowMaximumFrames,
   requestedVideoFrames,
+  restoredH3ExtendedDuration,
   supportsH3ExtendedDuration,
 } from '../src/lib/h3ExtendedDuration.ts'
 
@@ -69,4 +70,22 @@ test('30s H3 submit does not inherit the catalog 15s ceiling', () => {
   assert.equal(requestedVideoFrames(30, h3Submit, false, alignFrameCount), 345)
   assert.equal(requestedVideoFrames(30, h3Submit, true, alignFrameCount), H3_EXPERIMENTAL_MAX_FRAMES)
   assert.equal(requestedVideoFrames(5, h3Submit, true, alignFrameCount), 124)
+})
+
+test('Load Settings restores the 30s flag and infers it from a 719-frame sidecar', () => {
+  assert.equal(restoredH3ExtendedDuration({
+    model_type: 'minimax_h3', minimax_h3_extended_duration: true, video_length: H3_EXPERIMENTAL_MAX_FRAMES,
+  }, h3), true)
+  assert.equal(restoredH3ExtendedDuration({
+    model_type: 'minimax_h3', video_length: H3_EXPERIMENTAL_MAX_FRAMES,
+  }, h3), true)
+  assert.equal(restoredH3ExtendedDuration({
+    model_type: 'minimax_h3', video_length: 345,
+  }, h3), false)
+  assert.equal(restoredH3ExtendedDuration({
+    model_type: 'minimax_h3', minimax_h3_extended_duration: true,
+  }), true)
+  assert.equal(restoredH3ExtendedDuration({
+    model_type: 'wan_2_2_i2v', minimax_h3_extended_duration: true, video_length: H3_EXPERIMENTAL_MAX_FRAMES,
+  }, { architecture: 'wan', model_type: 'wan_2_2_i2v', frames_maximum: 345 }), false)
 })

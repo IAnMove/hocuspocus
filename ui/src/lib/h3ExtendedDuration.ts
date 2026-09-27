@@ -54,6 +54,24 @@ export function h3AlignmentOptions<T extends H3DurationOptions>(
   return { ...options, frames_maximum: h3MaximumFrames(options, extended) }
 }
 
+/** Restore the opt-in 30s pass from a sidecar. Infer it when frames exceed the catalog 15s ceiling. */
+export function restoredH3ExtendedDuration(
+  params: { minimax_h3_extended_duration?: unknown; video_length?: unknown; model_type?: unknown },
+  options?: H3DurationOptions,
+): boolean {
+  const modelType = String(options?.model_type || params.model_type || '')
+  if (!supportsH3ExtendedDuration({
+    architecture: options?.architecture || modelType,
+    model_type: modelType,
+    audio_only: options?.audio_only,
+    minimax_h3_viggle: options?.minimax_h3_viggle,
+  })) return false
+  if (params.minimax_h3_extended_duration === true) return true
+  const frames = Number(params.video_length)
+  const catalogMax = options?.frames_maximum
+  return Number.isFinite(frames) && catalogMax != null && frames > catalogMax
+}
+
 export function requestedVideoFrames(
   durationSeconds: number,
   options: AlignableDurationOptions | null | undefined,

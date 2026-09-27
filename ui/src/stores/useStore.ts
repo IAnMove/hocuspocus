@@ -8,6 +8,7 @@ import {
   h3MaximumFrames,
   h3WindowMaximumFrames,
   requestedVideoFrames,
+  restoredH3ExtendedDuration,
   supportsH3ExtendedDuration,
 } from '../lib/h3ExtendedDuration'
 import { isInstructionSpeechModel } from '../lib/instructionSpeech'
@@ -8954,6 +8955,7 @@ export const useStore = create<AppState>((set, get) => {
     newParams.minimax_h3_planning_style = p.minimax_h3_planning_style === 'creative' ? 'creative' : 'faithful'
     newParams.minimax_h3_audio_policy = p.minimax_h3_audio_policy === 'legacy' ? 'legacy' : 'native'
     newParams.minimax_h3_reference_sequence = p.minimax_h3_reference_sequence === true
+    newParams.minimax_h3_extended_duration = restoredH3ExtendedDuration(p, get().modelOptions)
     Object.assign(newParams, restoreSemanticBridgeSettings(p, modelType))
     newParams.h3_reference_context = typeof p.h3_reference_context === 'string' ? p.h3_reference_context : undefined
     newParams.self_refiner_setting = (p.self_refiner_setting as number) ?? undefined
