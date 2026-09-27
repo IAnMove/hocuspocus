@@ -207,3 +207,24 @@ def test_edit_video_marks_gallery_images_as_still_spatial_inputs():
     assert isinstance(still_image, ast.Call)
     assert isinstance(still_image.func, ast.Name) and still_image.func.id == 'has_image_file_extension'
     assert [arg.id for arg in still_image.args if isinstance(arg, ast.Name)] == ['video_source']
+
+
+@pytest.mark.parametrize('prompt_type,has_source,invalid', [('VO', False, True), ('VOAY', True, True), ('VO', True, False)])
+def test_aligned_pose_validation_reports_invalid_inputs(prompt_type, has_source, invalid):
+    from types import SimpleNamespace
+    messages = []
+    tree = ast.parse((ROOT / 'app/wgp.py').read_text(encoding='utf-8'))
+    block = next(node for node in ast.walk(tree) if isinstance(node, ast.If)
+                 and isinstance(node.test, ast.BoolOp)
+                 and ast.unparse(node.test) == "'V' in video_prompt_type and 'O' in video_prompt_type")
+    wrapper = ast.parse('def validate():\n    pass').body[0]
+    wrapper.body = [block]
+    namespace = {
+        'video_prompt_type': prompt_type, 'image_start': object() if has_source else None,
+        'video_source': None, 'all_letters': lambda value, chars: all(c in value for c in chars),
+        'any_letters': lambda value, chars: any(c in value for c in chars),
+        'gr': SimpleNamespace(Info=messages.append), 'ret': lambda: 'rejected',
+    }
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[wrapper], type_ignores=[])), '<pose-validation>', 'exec'), namespace)
+    assert namespace['validate']() == ('rejected' if invalid else None)
+    assert bool(messages) == invalid

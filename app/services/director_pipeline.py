@@ -3952,7 +3952,7 @@ def rerun_h3_segment(
                 str(video_params.get("h3_audio_prompt") or ""),
                 mode,
                 direct_video_master_prompt,
-                params.get("allow_clip_text") is True,
+                direct_params.get("allow_clip_text") is True,
             )
         clip["video_prompt"] = prompt_override
     elif prompt_override:
@@ -4017,7 +4017,7 @@ def rerun_h3_segment(
                     str(record.get("prompt") or ""),
                     plan=segment_plan,
                     audio_direction=str(video_params.get("h3_audio_prompt") or ""),
-                    allow_clip_text=params.get("allow_clip_text") is True,
+                    allow_clip_text=direct_params.get("allow_clip_text") is True,
                 )
             else:
                 prompt = format_minimax_h3_prompt(

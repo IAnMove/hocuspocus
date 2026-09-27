@@ -21755,6 +21755,17 @@ async def inpaint_endpoint(request: Request):
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")
 
+    # Read the source size up front: SAM pre-scaling below needs it.
+    try:
+        import decord
+        vr = decord.VideoReader(video_path)
+        fps = vr.get_avg_fps()
+        total_frames = len(vr)
+        src_h, src_w = vr[0].shape[:2]
+        del vr
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot read video: {e}")
+
     from services.inpaint_service import check_sam_status, parse_inpaint_intent, segment_video, unload_sam, ensure_sam_running, shutdown_sam
 
     start_time = float(body.get("start_time", 0))
@@ -21852,16 +21863,6 @@ async def inpaint_endpoint(request: Request):
         pass
 
     # Step 3: Build retake params with spatial mask
-    try:
-        import decord
-        vr = decord.VideoReader(video_path)
-        fps = vr.get_avg_fps()
-        total_frames = len(vr)
-        src_h, src_w = vr[0].shape[:2]
-        del vr
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Cannot read video: {e}")
-
     start_frame = max(0, int(start_time * fps))
     end_frame = int(end_time * fps) if end_time > 0 else total_frames
     end_frame = min(end_frame, total_frames)

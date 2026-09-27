@@ -182,6 +182,12 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
+      "file": "tests/test_inpaint_preparation.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "symbol_importable",
+      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
+    },
+    {
       "file": "tests/test_job_lifecycle_wiring.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
