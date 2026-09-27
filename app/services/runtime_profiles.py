@@ -252,7 +252,7 @@ def detect_profiles(*, platform: str | None = None, arch: str | None = None,
                 item["supported"] = False
                 item["reason"] = (MSVC_TOO_NEW_REASON.format(label=item["label"], found=newest[-1][1])
                                   if newest else MSVC_MISSING_REASON.format(label=item["label"]))
-            result["supported"] = all(e["supported"] for e in result["engines"].values() if e["required"])
+            # Only optional engines were gated; preserve platform-aware core support.
     return result
 
 

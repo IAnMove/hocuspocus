@@ -10,6 +10,7 @@ runtime_sources.sources_current tolerates.
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -38,7 +39,34 @@ def patch_source(name: str, source: str) -> str:
     return _LONG_POINTER.sub("int64_t* ", source)
 
 
+def restore_sources(kernel: Path = KERNEL) -> None:
+    """Undo only this installer's patch, never unrelated user modifications."""
+    vendor = kernel.parents[3]
+    pending = []
+    for name in PATCHED:
+        path = kernel / name
+        if not path.is_file():  # A fresh --no-checkout clone has no source files.
+            continue
+        relative = path.relative_to(vendor).as_posix()
+        original = subprocess.check_output(["git", "show", f"HEAD:{relative}"], cwd=vendor)
+        current = path.read_bytes()
+        # Git on Windows may check out CRLF even when blobs use LF.
+        original_text = original.decode("utf-8").replace("\r\n", "\n")
+        current_text = current.decode("utf-8").replace("\r\n", "\n")
+        if current_text == original_text:
+            continue
+        if current_text != patch_source(name, original_text):
+            raise RuntimeError(f"Preserving modified Hunyuan3D source: {path}. Reconcile it before Update.")
+        restored = original_text.replace("\n", "\r\n") if b"\r\n" in current else original_text
+        pending.append((path, restored.encode("utf-8")))
+    for path, original in pending:
+        path.write_bytes(original)
+
+
 def main() -> None:
+    if sys.argv[1:] == ["--restore"]:
+        restore_sources()
+        return
     for name in PATCHED:
         path = KERNEL / name
         if not path.is_file():

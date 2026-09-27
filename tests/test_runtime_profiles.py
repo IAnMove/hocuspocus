@@ -335,3 +335,11 @@ def test_msvc_toolsets_are_found_on_disk_when_vswhere_lists_nothing(tmp_path):
         chosen = profiles.find_msvc()
     assert chosen["toolset"] == "14.29.30133"
     assert chosen["vcvars"].endswith(str(Path("2019/BuildTools/VC/Auxiliary/Build/vcvars64.bat")))
+
+
+def test_non_windows_profiles_never_probe_msvc():
+    for platform, arch, gpu in [("linux", "x64", "nvidia"), ("darwin", "arm64", "apple")]:
+        with patch.object(profiles.subprocess, "run", side_effect=OSError), \
+                patch.object(profiles, "installation_current", return_value=False), \
+                patch.object(profiles, "find_msvc", side_effect=AssertionError("Windows only")):
+            assert profiles.detect_profiles(platform=platform, arch=arch, gpu=gpu)["supported"]

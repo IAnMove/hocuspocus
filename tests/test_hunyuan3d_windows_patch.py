@@ -28,3 +28,38 @@ def test_rasterizer_uses_int64_depth_buffer_pointers():
     patched = patch.patch_source("rasterizer_gpu.cu", source)
     assert "(int64_t)maxint" in patched and "data_ptr<int64_t>()" in patched
     assert "torch::ones({height, width}" in patched  # Only grid_neighbor sizes are recast.
+
+
+def test_restore_is_idempotent_and_preserves_unrelated_edits(tmp_path):
+    import subprocess
+    import pytest
+
+    vendor = tmp_path / "vendor"
+    kernel = vendor / "hy3dpaint/custom_rasterizer/lib/custom_rasterizer_kernel"
+    kernel.mkdir(parents=True)
+    original = "long* depth = data.data_ptr<long>();\n"
+    for name in patch.PATCHED:
+        (kernel / name).write_text(original)
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=vendor, check=True, capture_output=True)
+    git("init")
+    git("add", ".")
+    git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+        "-c", "commit.gpgsign=false", "commit", "-m", "fixture")
+    for name in patch.PATCHED:
+        (kernel / name).write_bytes(patch.patch_source(name, original).replace("\n", "\r\n").encode())
+    changed = kernel / patch.PATCHED[-1]
+    changed.write_bytes(changed.read_bytes() + b"// user customization\r\n")
+    with pytest.raises(RuntimeError, match="Preserving modified"):
+        patch.restore_sources(kernel)
+    # Validate all paths before restoring any; no partial rollback on a conflict.
+    assert b"int64_t" in (kernel / patch.PATCHED[0]).read_bytes()
+    assert b"user customization" in changed.read_bytes()
+    changed.write_text(patch.patch_source(changed.name, original))
+    patch.restore_sources(kernel)
+    patch.restore_sources(kernel)
+    assert all((kernel / name).read_text() == original for name in patch.PATCHED)
+
+
+def test_restore_before_initial_checkout_is_a_noop(tmp_path):
+    patch.restore_sources(tmp_path / "vendor/hy3dpaint/custom_rasterizer/lib/kernel")

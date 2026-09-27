@@ -90,12 +90,10 @@ function vendorSteps(id) {
       message: `git clone --depth 1 --no-checkout ${vendor.url} ${vendor.path}`,
     }},
     {method: 'shell.run', params: {path: vendor.path, message: [
-      // Undo the Windows source patch so a new revision can check out cleanly;
-      // patch_windows_sources.py reapplies it before the native build.
-      // `git diff --quiet` is also true on a fresh --no-checkout clone.
-      ...(id === 'hunyuan3d21' ? [(files => `(git diff --quiet -- ${files} || git checkout -- ${files})`)(
-        ['grid_neighbor.cpp', 'rasterizer.cpp', 'rasterizer_gpu.cu']
-          .map(name => `hy3dpaint/custom_rasterizer/lib/custom_rasterizer_kernel/${name}`).join(' '))] : []),
+      // Restore only our exact patch; preserve user/vendor modifications.
+      ...(id === 'hunyuan3d21' ? [
+        `python "{{path.resolve(cwd, 'app/services/hunyuan3d/patch_windows_sources.py')}}" --restore`,
+      ] : []),
       `git fetch --depth 1 origin ${vendor.revision}`, `git checkout --detach ${vendor.revision}`,
       `python "{{path.resolve(cwd, 'scripts/runtime_vendor.py')}}" ${id}`,
     ]}},
