@@ -21,11 +21,12 @@ def _load_functions(*names: str):
     return tuple(namespace[name] for name in names)
 
 
-_story_lab_schema, _story_id_token, _normalize_story_stage_ids, _story_stage_problem = _load_functions(
+_story_lab_schema, _story_id_token, _normalize_story_stage_ids, _story_stage_problem, _story_music_cue_count = _load_functions(
     "_story_lab_schema",
     "_story_id_token",
     "_normalize_story_stage_ids",
     "_story_stage_problem",
+    "_story_music_cue_count",
 )
 
 
@@ -101,6 +102,16 @@ class TestStoryLabMusicPlan(unittest.TestCase):
         invalid["music"]["cues"][3]["instrumental"] = True
         invalid["music"]["cues"][3]["lyrics"] = ""
         self.assertIn("must include vocals", _story_stage_problem(invalid, "music", self.project))
+
+    def test_full_story_schema_pins_the_exact_cue_count(self):
+        project = {"projectType": "full_story", "characters": [{"id": "buster"}]}
+        count = _story_music_cue_count(project, "full_story")
+        schema = _story_lab_schema("music", "full_story", music_cue_count=count)
+        cues_schema = schema["properties"]["music"]["properties"]["cues"]
+
+        self.assertEqual(count, 5)
+        self.assertEqual(cues_schema["minItems"], 5)
+        self.assertEqual(cues_schema["maxItems"], 5)
 
     def test_music_video_mode_requests_and_accepts_one_vocal_story_song(self):
         schema = _story_lab_schema("music", "music_video")

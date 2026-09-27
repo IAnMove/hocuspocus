@@ -27379,7 +27379,23 @@ def _comic_writing_llm(body: dict) -> dict | None:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
+def _story_music_cue_count(project: dict, project_type: str) -> int:
+    """Exact number of music cues a Story Lab project requires."""
+    if project_type == "music_video":
+        return 1
+    character_ids = {
+        str(item.get("id") or "").strip()
+        for item in project.get("characters", []) if isinstance(item, dict)
+    }
+    # One world cue, one presentation cue per character, three story songs.
+    return len(character_ids) + 4
+
+
+def _story_lab_schema(
+    scope: str,
+    project_type: str = "full_story",
+    music_cue_count: int | None = None,
+) -> dict:
     """Return the strict editable Story Lab payload requested for one stage."""
     string = {"type": "string"}
     string_array = {"type": "array", "items": string, "maxItems": 12}
@@ -27469,6 +27485,10 @@ def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
     beat_maximum = 8 if project_type == "quick_video" else 10 if project_type == "music_video" else 12 if project_type == "trailer" else 14
     music_minimum = 1 if project_type == "music_video" else 4
     music_maximum = 1 if project_type == "music_video" else 16
+    if music_cue_count:
+        # Pin the array length so grammar-constrained providers cannot return
+        # a different count than validation requires.
+        music_minimum = music_maximum = music_cue_count
     creative_brief = {
         "type": "object",
         "properties": {
@@ -28018,7 +28038,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
             str(item.get("id") or "").strip()
             for item in project.get("characters", []) if isinstance(item, dict)
         }
-        expected_count = 1 if project_type == "music_video" else len(character_ids) + 4
+        expected_count = _story_music_cue_count(project, project_type)
         if len(cues) != expected_count:
             return f"music must contain exactly {expected_count} cues"
         required_cue = {
@@ -31081,6 +31101,7 @@ Music-specific contract:
 - Return exactly one instrumental ambient cue for targetId "world".
 - Return exactly one presentation cue for each of the {character_count} existing character IDs.
 - Return exactly three distinct vocal story songs covering different emotional/narrative angles.
+- The cues array therefore has exactly {_story_music_cue_count(project, project_type)} items in total.
 - referenceSong is an editable input example in "Title — Artist" form. Choose a useful,
   recognizable reference for tempo, instrumentation or emotional architecture only.
 - Every style prompt, melody concept and lyric must be newly written for this Story. Never
@@ -31185,7 +31206,13 @@ Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instr
         "You are HocusPocus Lab Story Architect: a professional story editor, character "
         "designer and production bible author. Return strict JSON only."
     )
-    schema = _story_lab_schema(schema_scope, project_type)
+    schema = _story_lab_schema(
+        schema_scope,
+        project_type,
+        music_cue_count=(
+            _story_music_cue_count(project, project_type) if scope == "music" else None
+        ),
+    )
     max_new_tokens = (
         2400 if scope == "music" and project_type == "music_video"
         else 6000 if scope == "music"
