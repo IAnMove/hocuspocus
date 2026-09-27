@@ -1,0 +1,164 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-ice",
+  "title": "Dark Fantasy · La santa de hielo",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
+  "createdAt": "2026-09-14T17:00:00Z",
+  "includeAssets": true,
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-ice",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#b9f9ff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "backdrop",
+      "floorColor": "#24323d",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/08-ice.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 22.63726695290731
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          0.25,
+          0,
+          0
+        ],
+        "scale": 1.5,
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "snow",
+        "kind": "snow",
+        "position": {
+          "x": 0,
+          "y": 0.2,
+          "z": 0
+        },
+        "color": "#daefff",
+        "scale": 2.8,
+        "intensity": 0.8,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "frost",
+        "kind": "ice_burst",
+        "position": {
+          "x": -1.4,
+          "y": 0.08,
+          "z": -1.5
+        },
+        "color": "#64d9f8",
+        "scale": 0.8,
+        "intensity": 0.55,
+        "start": 2,
+        "end": 4.5,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "cold-haze",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.05,
+          "z": -1
+        },
+        "color": "#71a4ba",
+        "scale": 2.7,
+        "intensity": 0.35,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        0.42000000000000004,
+        2.7,
+        8.64
+      ],
+      "look": [
+        0.0,
+        1.95,
+        0.0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.11333333333333334,
+          0.8000000000000002,
+          5.76
+        ],
+        "to": [
+          -0.11333333333333334,
+          0.8000000000000002,
+          5.4399999999999995
+        ],
+        "lookFrom": [
+          -0.16666666666666666,
+          0.3,
+          0.0
+        ],
+        "lookTo": [
+          -0.16666666666666666,
+          0.3,
+          0.0
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    }
+  }
+}

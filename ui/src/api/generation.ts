@@ -308,6 +308,7 @@ export async function submitToolRevoice(params: {
 }
 
 export async function submitToolRemoveBackground(params: {
+  temporal_smoothing?: boolean
   asset_id?: string
   source?: string
   source_workspace?: string

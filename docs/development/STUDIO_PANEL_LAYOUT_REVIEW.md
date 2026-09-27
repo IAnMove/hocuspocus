@@ -1,9 +1,26 @@
 # Revisión pendiente de la distribución de paneles de Studio
 
 Fecha: 7 de septiembre de 2026. Origen: prueba manual del flujo Viggle.
-Estado: **distribución general aplazada; sin rediseño global aprobado**.
+Estado: **dirección concretada el 11/09/2026** — Wizard lateral plegable; Generación directa y Director en el área principal. Implementación en `feat/unified-main-workspace-20260911`.
+
+## Destinos (antes → después)
+
+| Destino | Antes | Después |
+|---|---|---|
+| Ask to the Wizard | Columna izquierda plegable | Igual; al plegarlo el área principal ocupa el ancho |
+| Generación directa | Columna fija 420px + galería | Formulario en el área principal; resultados al lado en XL |
+| Biblioteca (imágenes/vídeos/…) | `mediaFilter` compartido con el generador | Destino `section`: solo galería; el prompt se conserva |
+| Director | Columna 420px; oculto en Estudios hasta #323/#326 | Área principal; abrir Director siempre lo muestra |
+| Comic Director | Cómics + sidebar Director | Director en el área principal (incluye panel de cómic) |
+| Story Lab, Series, 2.5D, 3D, Animate, personajes, Replace | Área principal | Igual, sin columna de generación |
+| Ajustes / Productions | Overlay | Overlay |
+| Móvil | Overlay de generación; Wizard aparte | Una columna; Wizard bajo demanda |
+
+`visibleWorkspaceSurface()` separa generate / director / section. `sidebarOpen` + `sidebarMode` siguen siendo el contrato de apertura; ya no montan una columna permanente.
 El usuario pidió documentar el problema para revisar la distribución después de
-las pruebas de Viggle.
+las pruebas de Viggle. El encargo de unificación del 11/09/2026 concreta esa
+revisión: no ampliar la columna de 420px, sino trasladar el trabajo al área
+principal.
 
 Actualización de la misma sesión: al probar la guía, el usuario concretó un cambio
 acotado para Viggle: una sección destacada **Reemplazar personaje**, junto a Vídeo

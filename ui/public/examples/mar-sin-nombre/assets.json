@@ -1,0 +1,366 @@
+{
+  "sailor-master.jpg": {
+    "jobId": "minimax-image-a4bb4f9bd864",
+    "filename": "2026-09-16-14h50m42s_minimax-comic_574bec9f.jpg",
+    "source": "/api/v1/file/2026-09-16-14h50m42s_minimax-comic_574bec9f.jpg",
+    "kind": "image",
+    "sha256": "5b4d51bae9f7a4757ccd5d36e190bdb4f890e8b6dc282f9853747ebdcf685e46"
+  },
+  "sailor-lookout.jpg": {
+    "jobId": "minimax-image-bfb9da2d1464",
+    "filename": "2026-09-16-14h56m16s_minimax-comic_66c872db.jpg",
+    "source": "/api/v1/file/2026-09-16-14h56m16s_minimax-comic_66c872db.jpg",
+    "kind": "image",
+    "sha256": "79c3692e065a2f66041b4f64aa65db1569e388fe7dc3ba157e992be4f6c1fbd6"
+  },
+  "sailor-lantern.jpg": {
+    "jobId": "minimax-image-29223683e454",
+    "filename": "2026-09-16-14h56m36s_minimax-comic_3349c24f.jpg",
+    "source": "/api/v1/file/2026-09-16-14h56m36s_minimax-comic_3349c24f.jpg",
+    "kind": "image",
+    "sha256": "1425677932ce3bd5c63c10fa1a5a77a2db967d8f0262615fd2266de2f5b233c4"
+  },
+  "sailor-relief.jpg": {
+    "jobId": "minimax-image-e1bd8719bf22",
+    "filename": "2026-09-16-14h56m55s_minimax-comic_72dcdd9a.jpg",
+    "source": "/api/v1/file/2026-09-16-14h56m55s_minimax-comic_72dcdd9a.jpg",
+    "kind": "image",
+    "sha256": "9e3f8397527858116b2e5ff49b3105074cc8a5822c69725327337a07f55d91e8"
+  },
+  "sailor-rear.jpg": {
+    "jobId": "minimax-image-0df04536392f",
+    "filename": "2026-09-16-14h59m53s_minimax-comic_5848f7e5.jpg",
+    "source": "/api/v1/file/2026-09-16-14h59m53s_minimax-comic_5848f7e5.jpg",
+    "kind": "image",
+    "sha256": "bfef65b63c97f0b377038577a143765c537349eed620e9345d8af2c64b24e1d1"
+  },
+  "cabin.jpg": {
+    "jobId": "minimax-image-27b009309208",
+    "filename": "2026-09-16-14h51m00s_minimax-comic_76ddbffa.jpg",
+    "source": "/api/v1/file/2026-09-16-14h51m00s_minimax-comic_76ddbffa.jpg",
+    "kind": "image",
+    "sha256": "8be395bd01da0a8e69f3ee3b8a92831368156e4fe9a06fee0ebb2243575590d2"
+  },
+  "deck.jpg": {
+    "jobId": "minimax-image-f162cb768b75",
+    "filename": "2026-09-16-14h51m20s_minimax-comic_d157863d.jpg",
+    "source": "/api/v1/file/2026-09-16-14h51m20s_minimax-comic_d157863d.jpg",
+    "kind": "image",
+    "sha256": "11ca6807eaa09d38773d9ad3c6b76bbc9725b62001235efa240be09a8bfe3b33"
+  },
+  "cofa-v2.jpg": {
+    "jobId": "minimax-image-0d6f52c0cb37",
+    "filename": "2026-09-16-14h57m12s_minimax-comic_fd354d81.jpg",
+    "source": "/api/v1/file/2026-09-16-14h57m12s_minimax-comic_fd354d81.jpg",
+    "kind": "image",
+    "sha256": "946d6ab44db38b2010a8c6190d0abec70476ff288d2e4feefe388f505bb4583c"
+  },
+  "bucket.jpg": {
+    "jobId": "minimax-image-92604c37f9ce",
+    "filename": "2026-09-16-14h53m50s_minimax-comic_66fb91e9.jpg",
+    "source": "/api/v1/file/2026-09-16-14h53m50s_minimax-comic_66fb91e9.jpg",
+    "kind": "image",
+    "sha256": "6284c7ebae5ba489a21bd552ee979ad9a5ae4ec97043c914e86859c67cf6e1a4"
+  },
+  "lantern.jpg": {
+    "jobId": "minimax-image-b2799cd3dcc6",
+    "filename": "2026-09-16-14h54m07s_minimax-comic_b41211dc.jpg",
+    "source": "/api/v1/file/2026-09-16-14h54m07s_minimax-comic_b41211dc.jpg",
+    "kind": "image",
+    "sha256": "fff79a9b37ad88ac13c76d2f0ff0c2462aa52ae935a274ded3d687a37f06ebca"
+  },
+  "rigging.jpg": {
+    "jobId": "minimax-image-088cebb21db5",
+    "filename": "2026-09-16-14h54m23s_minimax-comic_bfff96f8.jpg",
+    "source": "/api/v1/file/2026-09-16-14h54m23s_minimax-comic_bfff96f8.jpg",
+    "kind": "image",
+    "sha256": "d7a757c5cd3741659a7c95dd2be0c95bfab3023dbe7dfcc32b640692d2f96b56"
+  },
+  "sail.jpg": {
+    "jobId": "minimax-image-c5cf1876a20f",
+    "filename": "2026-09-16-14h54m42s_minimax-comic_178041e8.jpg",
+    "source": "/api/v1/file/2026-09-16-14h54m42s_minimax-comic_178041e8.jpg",
+    "kind": "image",
+    "sha256": "b30d820ee6c075b11e6606aa6f57a70329712921742e4a76186da94827a5b63a"
+  },
+  "rail.jpg": {
+    "jobId": "minimax-image-21833d46c6cd",
+    "filename": "2026-09-16-14h54m59s_minimax-comic_171ba19a.jpg",
+    "source": "/api/v1/file/2026-09-16-14h54m59s_minimax-comic_171ba19a.jpg",
+    "kind": "image",
+    "sha256": "cf722fcd6d04cdb2a18f1cfca4df1818d8af36981de2e3860d32f058b140aa61"
+  },
+  "chart-table.jpg": {
+    "jobId": "minimax-image-4cd7e39ae073",
+    "filename": "2026-09-16-14h55m18s_minimax-comic_ddf2fc57.jpg",
+    "source": "/api/v1/file/2026-09-16-14h55m18s_minimax-comic_ddf2fc57.jpg",
+    "kind": "image",
+    "sha256": "12afe5b08945441d7b52d6ce2c02da7e7d075852ba0000fdedac01ec8ecde99e"
+  },
+  "caravel.jpg": {
+    "jobId": "minimax-image-d3d54cea2cce",
+    "filename": "2026-09-16-14h55m36s_minimax-comic_6a37d30e.jpg",
+    "source": "/api/v1/file/2026-09-16-14h55m36s_minimax-comic_6a37d30e.jpg",
+    "kind": "image",
+    "sha256": "f08a67f5afceb62eac05a6e81200fb1b3ac97210786a9b493d6d546e04d3f48d"
+  },
+  "sea-moon.jpg": {
+    "jobId": "minimax-image-379d4b497a8a",
+    "filename": "2026-09-16-14h51m59s_minimax-comic_7aec56b0.jpg",
+    "source": "/api/v1/file/2026-09-16-14h51m59s_minimax-comic_7aec56b0.jpg",
+    "kind": "image",
+    "sha256": "09800cfbf420d935a0dce630073262bf2942d7126c312f5ed17fccf597f71c96"
+  },
+  "sea-leviathan.jpg": {
+    "jobId": "minimax-image-d8d850ea9fbd",
+    "filename": "2026-09-16-14h52m18s_minimax-comic_5f3db263.jpg",
+    "source": "/api/v1/file/2026-09-16-14h52m18s_minimax-comic_5f3db263.jpg",
+    "kind": "image",
+    "sha256": "01c3715eeeec3beb3452ca71865f446869928b74ef230fd30b1266ec4a1e070d"
+  },
+  "sea-blood-v2.jpg": {
+    "jobId": "minimax-image-27f3ac7cad7c",
+    "filename": "2026-09-16-14h57m29s_minimax-comic_1c43b706.jpg",
+    "source": "/api/v1/file/2026-09-16-14h57m29s_minimax-comic_1c43b706.jpg",
+    "kind": "image",
+    "sha256": "4f60866c63f84e096c6db8e62846b08f3151f63bf2783d5064fa4111b8846b95"
+  },
+  "sea-prism-v2.jpg": {
+    "jobId": "minimax-image-5c2530587bf3",
+    "filename": "2026-09-16-14h57m48s_minimax-comic_422e7b79.jpg",
+    "source": "/api/v1/file/2026-09-16-14h57m48s_minimax-comic_422e7b79.jpg",
+    "kind": "image",
+    "sha256": "23fc5e3d89a3360fb67f3448ef8c9f6b10f2151a573e3c6e8d183769d09ae4ab"
+  },
+  "sea-stars.jpg": {
+    "jobId": "minimax-image-92e6c22ecc86",
+    "filename": "2026-09-16-14h53m09s_minimax-comic_30711df6.jpg",
+    "source": "/api/v1/file/2026-09-16-14h53m09s_minimax-comic_30711df6.jpg",
+    "kind": "image",
+    "sha256": "05e75385c10115ef741701a0ae510547108e20fab688e93a67ee03c4f0927129"
+  },
+  "sea-dawn.jpg": {
+    "jobId": "minimax-image-61ab739952c1",
+    "filename": "2026-09-16-14h53m32s_minimax-comic_caca74a2.jpg",
+    "source": "/api/v1/file/2026-09-16-14h53m32s_minimax-comic_caca74a2.jpg",
+    "kind": "image",
+    "sha256": "51d2ff4e97cf6d75fe28055004bdb3ad8c3d340adac08338298b55317d5d1a5c"
+  },
+  "sea-moon-motion.mp4": {
+    "jobId": "d335c726",
+    "filename": "2026-09-16-14h57m44s_seed916800_Strictly LOCKED stationary camera, no camera pan, no tilt, no zoom, no cuts. Preserve this artistic.mp4",
+    "source": "/api/v1/file/2026-09-16-14h57m44s_seed916800_Strictly%20LOCKED%20stationary%20camera%2C%20no%20camera%20pan%2C%20no%20tilt%2C%20no%20zoom%2C%20no%20cuts.%20Preserve%20this%20artistic.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "6855e6b0d650fab0daa6f10ebf276d7889adfe4e9be074aa1def4195119f2617"
+  },
+  "sea-leviathan-motion.mp4": {
+    "jobId": "e3403776",
+    "filename": "2026-09-16-14h58m52s_seed916801_Strictly LOCKED stationary camera, no camera pan, no tilt, no zoom, no cuts. Preserve this artistic.mp4",
+    "source": "/api/v1/file/2026-09-16-14h58m52s_seed916801_Strictly%20LOCKED%20stationary%20camera%2C%20no%20camera%20pan%2C%20no%20tilt%2C%20no%20zoom%2C%20no%20cuts.%20Preserve%20this%20artistic.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "eaf56800351a17fd72d434297c76d425346ef05134616de646400bbe469f0183"
+  },
+  "sea-stars-motion.mp4": {
+    "jobId": "8c7d9ae1",
+    "filename": "2026-09-16-14h59m57s_seed916802_Strictly LOCKED stationary camera, no camera pan, no tilt, no zoom, no cuts. Preserve this artistic.mp4",
+    "source": "/api/v1/file/2026-09-16-14h59m57s_seed916802_Strictly%20LOCKED%20stationary%20camera%2C%20no%20camera%20pan%2C%20no%20tilt%2C%20no%20zoom%2C%20no%20cuts.%20Preserve%20this%20artistic.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "a6cd6cea8e7759e5460a4649c5b0384bb1b9856e4e5273c6aed35cf8cd07ca5e"
+  },
+  "sea-dawn-motion.mp4": {
+    "jobId": "1d04a823",
+    "filename": "2026-09-16-15h02m13s_seed916803_Strictly LOCKED stationary camera, no camera pan, no tilt, no zoom, no cuts. Preserve this artistic.mp4",
+    "source": "/api/v1/file/2026-09-16-15h02m13s_seed916803_Strictly%20LOCKED%20stationary%20camera%2C%20no%20camera%20pan%2C%20no%20tilt%2C%20no%20zoom%2C%20no%20cuts.%20Preserve%20this%20artistic.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "24a8b7a9e5f0b3432e4d07452680f3561baeb5d4a42e6e90be7084ba70f126cc"
+  },
+  "sea-blood-v2-motion.mp4": {
+    "jobId": "0bf34d69",
+    "filename": "2026-09-16-15h01m08s_seed916820_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+    "source": "/api/v1/file/2026-09-16-15h01m08s_seed916820_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "8c585e1e1648693e4bbcc57c00bdcceccde493a791bbdd560c3aed62636f610d"
+  },
+  "sailor-master-cutout.png": {
+    "jobId": "333f0f4e",
+    "filename": "2026-09-16-14h50m42s_minimax-comic_574bec9f.no-background-bc9d279a.png",
+    "source": "/api/v1/file/2026-09-16-14h50m42s_minimax-comic_574bec9f.no-background-bc9d279a.png?workspace=default",
+    "kind": "image",
+    "sha256": "ca07e005fdaf79e34e192c8ff006b0a92efa3b8749ad3c779a537de453bcddfb"
+  },
+  "sailor-lookout-cutout.png": {
+    "jobId": "3d7cf579",
+    "filename": "2026-09-16-14h56m16s_minimax-comic_66c872db.no-background-54e12f04.png",
+    "source": "/api/v1/file/2026-09-16-14h56m16s_minimax-comic_66c872db.no-background-54e12f04.png?workspace=default",
+    "kind": "image",
+    "sha256": "104d4838d4dcfeea8da0a54a331856572350c2202b251b71495b640e48318a60"
+  },
+  "sea-prism-v2-motion.mp4": {
+    "jobId": "390c2611",
+    "filename": "2026-09-16-15h03m24s_seed916821_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+    "source": "/api/v1/file/2026-09-16-15h03m24s_seed916821_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "d2d875a076dabe0e49a1617ea78fd92b150c6753c2c3af034219e72ac11fa8c2"
+  },
+  "sail-motion.mp4": {
+    "jobId": "4fee264d",
+    "filename": "2026-09-16-15h04m36s_seed916822_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+    "source": "/api/v1/file/2026-09-16-15h04m36s_seed916822_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "4729918e16a57b3177610420c3f7b9dd70ef38a537379d93cf0f53140c075b97"
+  },
+  "lantern-motion.mp4": {
+    "jobId": "484e4b6e",
+    "filename": "2026-09-16-15h05m48s_seed916823_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+    "source": "/api/v1/file/2026-09-16-15h05m48s_seed916823_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "9feb47e310e7ffaf6b41b1cfc3d4fecd52d3a2f1204a3e9e622c3884be7a0bee"
+  },
+  "bucket-motion.mp4": {
+    "jobId": "a183e6d5",
+    "filename": "2026-09-16-15h06m44s_seed916824_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+    "source": "/api/v1/file/2026-09-16-15h06m44s_seed916824_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "27ed871b4657dad9994e97db9fc9e56179e1dd87c22cb59d121a75094d163b09"
+  },
+  "sailor-lantern-cutout.png": {
+    "jobId": "72cf9b67",
+    "filename": "2026-09-16-14h56m36s_minimax-comic_3349c24f.no-background-9ff1d86f.png",
+    "source": "/api/v1/file/2026-09-16-14h56m36s_minimax-comic_3349c24f.no-background-9ff1d86f.png?workspace=default",
+    "kind": "image",
+    "sha256": "92cca04002624af92aa45470566c5936f4e6f769f4f1225fe48b4245ebf511d7"
+  },
+  "sailor-relief-cutout.png": {
+    "jobId": "be785b30",
+    "filename": "2026-09-16-14h56m55s_minimax-comic_72dcdd9a.no-background-7b14afff.png",
+    "source": "/api/v1/file/2026-09-16-14h56m55s_minimax-comic_72dcdd9a.no-background-7b14afff.png?workspace=default",
+    "kind": "image",
+    "sha256": "72487319f2a7d67ef0701da205a028e8181132a9569e215537bcd25edc90affc"
+  },
+  "bucket-cutout.png": {
+    "jobId": "1c5ed2d2",
+    "filename": "2026-09-16-14h53m50s_minimax-comic_66fb91e9.no-background-41209b2d.png",
+    "source": "/api/v1/file/2026-09-16-14h53m50s_minimax-comic_66fb91e9.no-background-41209b2d.png?workspace=default",
+    "kind": "image",
+    "sha256": "99f56185f9f607ca991afcb864130b38cf9c8ed1e15feb380443f2372f2991ba"
+  },
+  "lantern-cutout.png": {
+    "jobId": "97320a2f",
+    "filename": "2026-09-16-14h54m07s_minimax-comic_b41211dc.no-background-22c5ae20.png",
+    "source": "/api/v1/file/2026-09-16-14h54m07s_minimax-comic_b41211dc.no-background-22c5ae20.png?workspace=default",
+    "kind": "image",
+    "sha256": "087b44790a0a2d5cc12980c6b1b877064c2ffb7a84b55544a2dfb20786596e8f"
+  },
+  "sailor-rear-cutout.png": {
+    "jobId": "fda12e87",
+    "filename": "2026-09-16-14h59m53s_minimax-comic_5848f7e5.no-background-93c2f726.png",
+    "source": "/api/v1/file/2026-09-16-14h59m53s_minimax-comic_5848f7e5.no-background-93c2f726.png?workspace=default",
+    "kind": "image",
+    "sha256": "a5d8a0ba5295bf61aa6ad279b9c71c77fa0b2a49f8545ab757ab70c056794e6e"
+  },
+  "sailor-lookout-motion.mp4": {
+    "jobId": "32075b18",
+    "filename": "2026-09-16-15h08m03s_seed916825_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+    "source": "/api/v1/file/2026-09-16-15h08m03s_seed916825_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "7903ecc26663a27a571c4b23c625eb2c906385de519c2c51122035bd1757f508"
+  },
+  "sailor-relief-motion.mp4": {
+    "jobId": "11b83f8e",
+    "filename": "2026-09-16-15h09m16s_seed916826_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+    "source": "/api/v1/file/2026-09-16-15h09m16s_seed916826_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.mp4?workspace=default",
+    "kind": "video",
+    "sha256": "6a868f132ab61c8b7f00f552d8dae5b1262572d99c359366859d277e1172184c"
+  },
+  "rigging-cutout.png": {
+    "jobId": "546393e6",
+    "filename": "2026-09-16-14h54m23s_minimax-comic_bfff96f8.no-background-57b938ec.png",
+    "source": "/api/v1/file/2026-09-16-14h54m23s_minimax-comic_bfff96f8.no-background-57b938ec.png?workspace=default",
+    "kind": "image",
+    "sha256": "2181f953f26bb5d929d9c77e0d5e7a174364ebfcff6b4f26f78bd39ce4e61d1b"
+  },
+  "sail-cutout.png": {
+    "jobId": "c3c6662b",
+    "filename": "2026-09-16-14h54m42s_minimax-comic_178041e8.no-background-2bca2e07.png",
+    "source": "/api/v1/file/2026-09-16-14h54m42s_minimax-comic_178041e8.no-background-2bca2e07.png?workspace=default",
+    "kind": "image",
+    "sha256": "78b3117e075eb7c889eafe9a77608b50d03b26458001bd3bde6f9ffde3ad264e"
+  },
+  "rail-cutout.png": {
+    "jobId": "523fef3f",
+    "filename": "2026-09-16-14h54m59s_minimax-comic_171ba19a.no-background-e9c0be2c.png",
+    "source": "/api/v1/file/2026-09-16-14h54m59s_minimax-comic_171ba19a.no-background-e9c0be2c.png?workspace=default",
+    "kind": "image",
+    "sha256": "bba9dabe624d94b9d9e4a5bce78c7121c589a54c611517cc813bd6d640895d91"
+  },
+  "chart-table-cutout.png": {
+    "jobId": "a33b782a",
+    "filename": "2026-09-16-14h55m18s_minimax-comic_ddf2fc57.no-background-7c0c86dd.png",
+    "source": "/api/v1/file/2026-09-16-14h55m18s_minimax-comic_ddf2fc57.no-background-7c0c86dd.png?workspace=default",
+    "kind": "image",
+    "sha256": "b274cf863d479b5dc7d2f7149e03903828a15cc37ddc349bff3f3518a01854e9"
+  },
+  "caravel-cutout.png": {
+    "jobId": "8d355c65",
+    "filename": "2026-09-16-14h55m36s_minimax-comic_6a37d30e.no-background-86cd83a3.png",
+    "source": "/api/v1/file/2026-09-16-14h55m36s_minimax-comic_6a37d30e.no-background-86cd83a3.png?workspace=default",
+    "kind": "image",
+    "sha256": "74d457f6f7db83c858425813d9bbdf85a0e6dad534b8bab551b4f1fde8e27b26"
+  },
+  "cofa-v2-cutout.png": {
+    "jobId": "3b4ea135",
+    "filename": "2026-09-16-14h57m12s_minimax-comic_fd354d81.no-background-9efaccf1.png",
+    "source": "/api/v1/file/2026-09-16-14h57m12s_minimax-comic_fd354d81.no-background-9efaccf1.png?workspace=default",
+    "kind": "image",
+    "sha256": "dd4d28abe3371b9c7d79cd5ce27bb2443f767f9b0cb4ae571e754c452f561ab6"
+  },
+  "mast.jpg": {
+    "jobId": "minimax-image-07f6ceb3fbe7",
+    "filename": "2026-09-16-15h14m53s_minimax-comic_8524531a.jpg",
+    "source": "/api/v1/file/2026-09-16-15h14m53s_minimax-comic_8524531a.jpg",
+    "kind": "image",
+    "sha256": "6bf42d664f1934f213f28aeb7c9a1c3c5653d6a99dd9494784ff05daaa2d4b33"
+  },
+  "sail-alpha.webm": {
+    "jobId": "2a854e32",
+    "filename": "2026-09-16-15h04m36s_seed916822_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-bc0c4f32.webm",
+    "source": "/api/v1/file/2026-09-16-15h04m36s_seed916822_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.no-background-bc0c4f32.webm?workspace=default",
+    "kind": "video",
+    "sha256": "cd38f78a2c49846efecd06b495f321770884d081e3c39b6df23eff9455872495"
+  },
+  "lantern-alpha.webm": {
+    "jobId": "182bb95f",
+    "filename": "2026-09-16-15h05m48s_seed916823_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-e7a87cc7.webm",
+    "source": "/api/v1/file/2026-09-16-15h05m48s_seed916823_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.no-background-e7a87cc7.webm?workspace=default",
+    "kind": "video",
+    "sha256": "d737d478a5d87bd5f228c406c70cbf06b78a87b17d7f9a154c95acd1744029ec"
+  },
+  "mast-cutout.png": {
+    "jobId": "95f311fe",
+    "filename": "2026-09-16-15h14m53s_minimax-comic_8524531a.no-background-b9832ca9.png",
+    "source": "/api/v1/file/2026-09-16-15h14m53s_minimax-comic_8524531a.no-background-b9832ca9.png?workspace=default",
+    "kind": "image",
+    "sha256": "54f8efe039d5897cb8511ac9f3fc6d64ce827d74b008643acb9bf0ad2100589b"
+  },
+  "bucket-alpha.webm": {
+    "jobId": "ec4244bc",
+    "filename": "2026-09-16-15h06m44s_seed916824_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-9be7766b.webm",
+    "source": "/api/v1/file/2026-09-16-15h06m44s_seed916824_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.no-background-9be7766b.webm?workspace=default",
+    "kind": "video",
+    "sha256": "33b8e2887d3cd6db31e28d3a7fd6bbe73c6f2a0afcda3dcccfdc161e988e556a"
+  },
+  "sailor-lookout-alpha.webm": {
+    "jobId": "f3a31d35",
+    "filename": "2026-09-16-15h08m03s_seed916825_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-5246f116.webm",
+    "source": "/api/v1/file/2026-09-16-15h08m03s_seed916825_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.no-background-5246f116.webm?workspace=default",
+    "kind": "video",
+    "sha256": "f1eb1f2343b117e61250c161d360c62a29c8f74792b43350d2d2e779b382b2da"
+  },
+  "sailor-relief-alpha.webm": {
+    "jobId": "7b63e1c8",
+    "filename": "2026-09-16-15h09m16s_seed916826_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-72e47eb7.webm",
+    "source": "/api/v1/file/2026-09-16-15h09m16s_seed916826_STRICTLY%20LOCKED%20camera%2C%20no%20pan%2C%20tilt%2C%20camera%20zoom%20or%20reframing%2C%20no%20cuts.%20Preserve%20the%20painterly%20illu.no-background-72e47eb7.webm?workspace=default",
+    "kind": "video",
+    "sha256": "935fcc0be2b9c21c2bf3b9e3873eac11e98d9772aa69c1bc755d55a67f3ff02c"
+  }
+}

@@ -82,6 +82,7 @@ export function worldSfxMixedDocument(): Scene3DDocument {
     { id: 'mix-portal', kind: 'summoning_gate', start: 0, end: 10, position: { x: 2.4, y: 1.15, z: -1.1 }, rotation: { x: 0, y: 25, z: 0 }, scale: 1.5, color: '#bb77ff', seed: 6, sound: true, volume: 0.16 },
     { id: 'mix-shock', kind: 'shockwave', start: 3.2, end: 6.4, anchor: { slotId: 'subject_1' }, scale: 1.3, color: '#77ddff', seed: 14, sound: true, volume: 0.2 },
     { id: 'mix-lightning', kind: 'lightning', start: 4, end: 7.5, anchor: { slotId: 'subject_2', offset: { x: 0, y: 1.4, z: 0 } }, target: { slotId: 'subject_1', offset: { x: 0, y: 1.1, z: 0 } }, scale: 1, color: '#cceeff', seed: 31, sound: true, volume: 0.18 },
+    { id: 'mix-blast', kind: 'explosion', start: 6.1, end: 8.6, position: { x: 1.6, y: 0.4, z: 0.2 }, scale: 1.4, color: '#ff6a32', seed: 44, sound: true, volume: 0.28 },
   ])
   document.sfx = [
     { id: 'mix-speed', kind: 'speedlines', start: 0.4, end: 10, x: 50, y: 50, size: 130, intensity: 0.9, color: '#ffffff', seed: 2, sound: false, volume: 0, rotation: -8 },

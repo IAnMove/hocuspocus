@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "units": "meters",
+  "up": "y",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "duration": 6,
+  "templateId": "dark-still-ivory-fire",
+  "light": {
+    "kind": "directional",
+    "direction": [
+      -0.5,
+      -0.6,
+      -0.8
+    ],
+    "intensity": 2,
+    "color": "#fff2e4"
+  },
+  "environment": {
+    "reflectiveFloor": false,
+    "platform": false,
+    "bloom": 0.07,
+    "floorStyle": "backdrop",
+    "floorColor": "#482a28",
+    "floorSourceHeight": 1
+  },
+  "slots": [
+    {
+      "id": "background",
+      "slot": "background",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/dark-living-red-pilgrim-frame.jpg",
+      "position": [
+        0,
+        -6.0315625,
+        -11
+      ],
+      "scale": 12.3,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "windows": [
+          [
+            [
+              0.2513888888888889,
+              0.7515625
+            ],
+            [
+              0.7375,
+              0.7515625
+            ],
+            [
+              0.7402777777777778,
+              0.73046875
+            ],
+            [
+              0.7402777777777778,
+              0.36796875
+            ],
+            [
+              0.7166666666666667,
+              0.3421875
+            ],
+            [
+              0.7333333333333333,
+              0.3203125
+            ],
+            [
+              0.7416666666666667,
+              0.31015625
+            ],
+            [
+              0.7375,
+              0.28125
+            ],
+            [
+              0.7208333333333333,
+              0.253125
+            ],
+            [
+              0.6930555555555555,
+              0.23046875
+            ],
+            [
+              0.6569444444444444,
+              0.21015625
+            ],
+            [
+              0.6152777777777778,
+              0.19375
+            ],
+            [
+              0.5680555555555555,
+              0.18203125
+            ],
+            [
+              0.5222222222222223,
+              0.1765625
+            ],
+            [
+              0.48194444444444445,
+              0.17578125
+            ],
+            [
+              0.43194444444444446,
+              0.18046875
+            ],
+            [
+              0.38472222222222224,
+              0.1890625
+            ],
+            [
+              0.3416666666666667,
+              0.203125
+            ],
+            [
+              0.30416666666666664,
+              0.221875
+            ],
+            [
+              0.2777777777777778,
+              0.24453125
+            ],
+            [
+              0.2569444444444444,
+              0.2703125
+            ],
+            [
+              0.24722222222222223,
+              0.29609375
+            ],
+            [
+              0.24583333333333332,
+              0.31484375
+            ],
+            [
+              0.2638888888888889,
+              0.32265625
+            ],
+            [
+              0.28194444444444444,
+              0.3421875
+            ],
+            [
+              0.25972222222222224,
+              0.36015625
+            ],
+            [
+              0.25277777777777777,
+              0.73125
+            ]
+          ]
+        ],
+        "unlit": true
+      }
+    },
+    {
+      "id": "hero",
+      "slot": "subject_1",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-stillness/copper-falconer.png",
+      "position": [
+        -0.75,
+        0,
+        0.8
+      ],
+      "scale": 1.85,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.85,
+        "tint": "#ffffff"
+      }
+    },
+    {
+      "id": "near-prop",
+      "slot": "prop",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+      "position": [
+        -2.6,
+        0,
+        3
+      ],
+      "scale": 2.8,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.8,
+        "tint": "#29252d",
+        "psx": 0.22
+      }
+    },
+    {
+      "id": "exterior-video",
+      "slot": "prop",
+      "media": "screen",
+      "sourceUrl": "",
+      "clip": null,
+      "position": [
+        -0.0864843749999997,
+        -1.0531374999999983,
+        -12.5
+      ],
+      "rotationY": 0,
+      "scale": 1,
+      "screen": {
+        "sourceUrl": "/examples/dark-stillness/still-furnace.mp4",
+        "media": "video",
+        "mode": "mesh",
+        "targetMesh": "SCREEN_CONTENT",
+        "anchor": "",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "pitch": 0,
+        "yaw": 0,
+        "roll": 0,
+        "width": 7.95886875,
+        "height": 16.43049375,
+        "style": "frameless",
+        "fit": "cover",
+        "start": 0,
+        "speed": 1,
+        "loop": false,
+        "flipY": false
+      }
+    }
+  ],
+  "camera": {
+    "family": "fixed",
+    "frameFormat": "portrait",
+    "eye": [
+      -0.18,
+      3.93,
+      10.719999999999999
+    ],
+    "look": [
+      0,
+      3.93,
+      -0.5
+    ],
+    "fov": 49
+  },
+  "worldSfx": [
+    {
+      "id": "atmosphere",
+      "kind": "dust",
+      "position": {
+        "x": 0,
+        "y": 1.5,
+        "z": -1.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#e79366",
+      "scale": 2,
+      "intensity": 0.1,
+      "seed": 920,
+      "start": 0,
+      "end": 6,
+      "sound": false,
+      "volume": 0
+    }
+  ]
+}

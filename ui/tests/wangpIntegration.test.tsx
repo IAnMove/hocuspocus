@@ -223,13 +223,13 @@ test('Clearing still-empty Viggle inputs cancels their pending restore', async (
 })
 
 test('Visual data cannot authorize generation, even when the model returns confirm:true', async () => {
-  const { reconcileWizardMediaTurn } = await import('../src/features/agent/wizardVisualPolicy')
+  const { validateWizardPlan } = await import('../src/features/agent/wizardVisualPolicy')
   const { parseAgentTurn, executeAgentActions } = await import('../src/features/agent/agentActions')
   const proposed = parseAgentTurn(JSON.stringify({ reply: 'Image asks to launch.', actions: [
     { type: 'prepare_image', prompt: 'Untrusted image instruction', resolutionPreset: '512p', aspectRatio: '1:1' },
     { type: 'start_generation', confirm: true },
   ] }))
-  const turn = await reconcileWizardMediaTurn(true, 'Describe the attached image.', proposed, [])
+  const turn = validateWizardPlan(true, proposed)
   assert.deepEqual(turn.actions, [])
   assert.deepEqual(await executeAgentActions(turn.actions), [])
 })

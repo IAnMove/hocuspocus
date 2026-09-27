@@ -36,6 +36,7 @@ class RemoveBackgroundRequest(BaseModel):
     source: str | None = Field(default=None, max_length=1200)
     source_workspace: str | None = Field(default=None, max_length=160)
     workspace: str | None = Field(default=None, max_length=160)
+    temporal_smoothing: bool = True
     instruction: str = Field(default="", max_length=2_000)
     provenance: dict[str, Any] = Field(default_factory=dict)
 
@@ -390,7 +391,7 @@ def job_response(
         "generation_details": {
             "model_type": "rembg-u2net",
             "model_name": "rembg U2Net",
-            "generation_mode": "image",
+            "generation_mode": accepted.get("params", {}).get("generation_mode", "image"),
             "source_asset_id": source_asset_id,
             "source_filename": source_filename,
         },

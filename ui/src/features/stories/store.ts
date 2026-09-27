@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import * as api from '../../api/client'
+import { createTijeralStoryProject, TIJERAL_STORY_ID } from '../cutPaper/storyProject'
 import { changedSections, createStoryProject, normalizeStoryProject } from './model'
-import { mergeStoryLibraries } from './library'
+import { mergeStoryLibraries, rebaseStoryMutationBaseline } from './library'
 import type { StoryLibraryConflict, StoryLibraryData } from './library'
 import {
   libraryHasPendingSongs,
@@ -315,6 +316,7 @@ interface StoryState {
   beginProjectOperation: (id: string) => void
   endProjectOperation: (id: string) => void
   newProject: (projectType?: StoryProjectType) => void
+  loadTijeralExample: (workspace?: string) => void
   duplicateProject: (id?: string) => void
   openProject: (id: string) => void
   deleteProject: (id: string) => void
@@ -512,6 +514,24 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       activeProjectOperations: { ...state.activeProjectOperations, [id]: count - 1 },
     }
   }),
+  loadTijeralExample: (workspace = 'default') => set(state => {
+    const existing = Object.values(state.projects).find(item => item.id === TIJERAL_STORY_ID)
+    const fresh = createTijeralStoryProject(workspace)
+    const project = existing
+      ? {
+        ...existing,
+        characters: existing.characters.map(character => {
+          const bundled = fresh.characters.find(item => item.id === character.id)
+          return character.characterKitRef || !bundled ? character : { ...character, characterKitRef: bundled.characterKitRef }
+        }),
+      }
+      : fresh
+    return {
+      project,
+      projects: { ...state.projects, [project.id]: project },
+      dirty: true,
+    }
+  }),
   newProject: projectType => set(state => {
     const fresh = createStoryProject(projectType)
     // New projects inherit the production profile. Keep the dormant explicit
@@ -692,9 +712,24 @@ export async function commitStoryProjectMutation(
     } catch (error) {
       if (!(error instanceof api.StoryLibraryRevisionError) || attempt === 2) throw error
       const remote = await api.fetchStoryLibrary(workspace)
+      const live = useStoryStore.getState()
+      const remoteLibrary = normalizeLibrary(remote) || {
+        version: 2 as const,
+        revision: Number.isInteger(remote.revision) ? remote.revision : 0,
+        activeId: typeof remote.activeId === 'string' ? remote.activeId : '',
+        projects: remote.projects || {},
+      }
+      const localLibrary = live.workspace === workspace
+        ? buildLibrary(live.project, live.projects, live.libraryRevision)
+        : buildLibrary(
+          current.projects[projectId] || Object.values(current.projects)[0],
+          current.projects,
+          current.libraryRevision,
+        )
+      const rebased = rebaseStoryMutationBaseline(projectId, localLibrary, remoteLibrary)
       baseline = {
-        libraryRevision: remote.revision,
-        projects: remote.projects,
+        libraryRevision: rebased.revision,
+        projects: rebased.projects,
       }
     }
   }
@@ -709,22 +744,35 @@ export async function saveStoryProjectMutation(
   mutate: (project: StoryProject) => StoryProject,
 ): Promise<StoryProject> {
   const library = await commitStoryProjectMutation(workspace, current, projectId, mutate)
-  const visibleId = useStoryStore.getState().project.id
+  const latest = useStoryStore.getState()
+  const saved = library.projects[projectId]
+  const remoteOnly = Object.fromEntries(
+    Object.entries(library.projects).filter(([id]) => !latest.projects[id]),
+  )
+  const localOnly = Object.fromEntries(
+    Object.entries(latest.projects).filter(([id]) => !library.projects[id]),
+  )
+  const projects = {
+    ...latest.projects,
+    ...remoteOnly,
+    [projectId]: saved,
+  }
+  const visibleId = latest.project.id
   useStoryStore.setState({
     workspace,
-    project: library.projects[visibleId] || library.projects[projectId],
-    projects: library.projects,
+    project: projects[visibleId] || saved,
+    projects,
     libraryRevision: library.revision,
-    dirty: false,
+    dirty: Object.keys(localOnly).length > 0,
     hydrated: false,
     loading: false,
     saveError: null,
     libraryConflicts: [],
   })
   await useStoryStore.getState().loadWorkspace(workspace)
-  return useStoryStore.getState().projects[projectId] || library.projects[projectId]
+  return useStoryStore.getState().projects[projectId] || saved
 }
 
 export { createStoryProject, normalizeStoryProject, storyId } from './model'
-export { mergeStoryLibraries } from './library'
+export { mergeStoryLibraries, rebaseStoryMutationBaseline } from './library'
 export type { StoryLibraryConflict, StoryLibraryData } from './library'

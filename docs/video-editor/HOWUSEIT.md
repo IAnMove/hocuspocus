@@ -6,7 +6,7 @@ This is not MiniMax H3 and not the 3D compositor. The editor **never regenerates
 
 UI tab: **Video Editor** (`mediaFilter: videoeditor`). Code: `ui/src/features/video-editor/`. Render: `app/services/video_editor.py`. HTTP: `app/_launch_runtime.py`. Mix kinds: `app/services/output_result_kind.py`.
 
-Related: [3D Video compositor](../3d-video-compositor/HOWUSEIT.md) §5.8, [Workspaces / Director threads](../workspaces/HOWUSEIT.md).
+Related: [Studio Tools](../tools/HOWUSEIT.md) (upscale / revoice / rembg), [3D Video compositor](../3d-video-compositor/HOWUSEIT.md) §5.8, [Workspaces / Director threads](../workspaces/HOWUSEIT.md).
 
 ---
 

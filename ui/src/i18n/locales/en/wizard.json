@@ -14,13 +14,14 @@
   "outputs": "Outputs: {{names}}",
   "assets": "Assets: {{ids}}",
   "openTarget": "Open destination",
+  "viewInActivity": "View in Activity",
   "viewErrors": "View errors",
   "retryPending": "Retry pending",
   "removeBackgroundTitle": "Remove background",
   "removeBackgroundQueued": "I opened Tools and queued background removal for “{{name}}”.",
-  "removeBackgroundInvalidAsset": "The exact selected asset is not an image.",
+  "removeBackgroundInvalidAsset": "The exact selected asset is not an image or video.",
   "removeBackgroundNoLocation": "The exact image has no available file location.",
-  "removeBackgroundMissingSource": "Choose an exact image from the library or provide a canonical source path.",
+  "removeBackgroundMissingSource": "Choose an exact image or video from the library or provide a canonical source path.",
   "upscaleTitle": "Upscale media",
   "upscaleQueued": "I opened Tools and queued {{kind}} upscaling for “{{name}}”.",
   "upscaleInvalidAsset": "The exact selected asset is not a {{kind}}.",
@@ -68,6 +69,7 @@
     "reported": "Reported"
   },
   "rejectionReason": {
+    "invalid_intent": "The assistant did not return a valid interpretation of your intent. Retry your request.",
     "invalid_action": "Unknown action, missing required parameters or invalid values.",
     "invalid_action_list": "The proposed actions must be a list.",
     "action_limit": "The proposal exceeds the number of actions allowed in one turn.",
@@ -75,5 +77,9 @@
     "duplicate_generation": "A generation was already requested in this turn.",
     "request_policy": "The action was excluded or replaced while checking your request and context.",
     "visual_evidence_only": "The attached media was analyzed; that analysis did not authorize this action."
-  }
+  },
+  "stopResponse": "Discard response",
+  "responseDiscarded": "Response discarded. Its proposed actions will not run. The LLM request may still finish in the background.",
+  "controlError": "Could not apply this control: {{message}}",
+  "openSection": "Open section"
 }

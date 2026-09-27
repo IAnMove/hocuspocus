@@ -5,6 +5,7 @@ import { useStore } from '../../stores/useStore'
 import { testLlmConnection } from '../../api/client'
 
 const McpSettingsPanel = lazy(() => import('./McpSettingsPanel').then(module => ({ default: module.McpSettingsPanel })))
+const ProductionProfileSettings = lazy(() => import('./ProductionProfileSettings').then(module => ({ default: module.ProductionProfileSettings })))
 
 function ApiKeyField({ label, maskedValue, isSet, onSave }: {
   label: string
@@ -269,10 +270,6 @@ export function ServicesSettingsPanel() {
   const servicesConfig = useStore(s => s.servicesConfig)
   const servicesConfigLoading = useStore(s => s.servicesConfigLoading)
   const updateConfig = useStore(s => s.updateServicesConfig)
-  const savedProductionProfile = useStore(s => s.productionProfile)
-  const productionProfileConfigured = useStore(s => s.productionProfileConfigured)
-  const productionProfileLoading = useStore(s => s.productionProfileLoading)
-  const updateProductionProfile = useStore(s => s.updateProductionProfile)
   const systemConfig = useStore(s => s.systemConfig)
   const updateSystemConfig = useStore(s => s.updateSystemConfig)
   const llmStatus = useStore(s => s.llmStatus)
@@ -285,8 +282,6 @@ export function ServicesSettingsPanel() {
   })
   const pendingLlmConfig = useRef<Promise<void>>(Promise.resolve())
   const [llmConfigSaving, setLlmConfigSaving] = useState(false)
-  const [productionProfileDraft, setProductionProfile] = useState<typeof savedProductionProfile | null>(null)
-  const productionProfile = productionProfileDraft ?? savedProductionProfile
   if (servicesConfigLoading && !servicesConfig) {
     return <div className="text-xs text-text-muted py-4 text-center">{tCommon('status.loading')}</div>
   }
@@ -305,8 +300,16 @@ export function ServicesSettingsPanel() {
 
   const handleRefreshModels = async () => {
     setRefreshing(true)
-    await loadLlmModels()
-    setRefreshing(false)
+    try {
+      await pendingLlmConfig.current
+      const latest = useStore.getState().servicesConfig
+      await loadLlmModels({
+        provider: latest?.llm_provider || provider,
+        url: latest?.llm_remote_url,
+      })
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   const resetLlmTest = () => {
@@ -354,249 +357,7 @@ export function ServicesSettingsPanel() {
 
       {/* LLM Provider */}
       <div className="space-y-4">
-        <div className="space-y-3 rounded-xl border border-border bg-bg-secondary/40 p-3">
-          <div>
-            <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">
-              {t('services.profileTitle')}
-            </h3>
-            <p className="text-[10px] text-text-muted mt-1">
-              {t('services.profileHint')}
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-[10px] text-text-muted">
-              {t('services.textProvider')}
-              <select
-                value={productionProfile.text.provider}
-                onChange={e => setProductionProfile({
-                  ...productionProfile,
-                  text: {
-                    ...productionProfile.text,
-                    provider: e.target.value as typeof productionProfile.text.provider,
-                    base_url: e.target.value === 'ollama'
-                      ? (productionProfile.text.base_url || 'http://127.0.0.1:11434')
-                      : e.target.value === 'grok'
-                        ? 'https://api.x.ai'
-                        : e.target.value === 'minimax'
-                          ? 'https://api.minimax.io'
-                          : productionProfile.text.base_url,
-                  },
-                })}
-                disabled={productionProfileLoading}
-                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-              >
-                <option value="local">{t('services.providers.local')}</option>
-                <option value="ollama">{t('services.providers.ollama')}</option>
-                <option value="minimax">{t('services.providers.minimax')}</option>
-                <option value="grok">{t('services.providers.grok')}</option>
-                <option value="remote">{t('services.providers.remote')}</option>
-                <option value="openai">{t('services.providers.openai')}</option>
-                <option value="anthropic">{t('services.providers.anthropic')}</option>
-                <option value="deepseek">{t('services.providers.deepseek')}</option>
-              </select>
-            </label>
-            <label className="text-[10px] text-text-muted">
-              {t('services.textModel')}
-              <input
-                value={productionProfile.text.model}
-                onChange={e => setProductionProfile({
-                  ...productionProfile,
-                  text: { ...productionProfile.text, model: e.target.value },
-                })}
-                disabled={productionProfileLoading}
-                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-              />
-            </label>
-            <label className="text-[10px] text-text-muted">
-              {t('services.imageProviderModel')}
-              <div className="mt-1 flex gap-1">
-                <select
-                  value={productionProfile.image.provider}
-                  onChange={e => setProductionProfile({
-                    ...productionProfile,
-                    image: { ...productionProfile.image, provider: e.target.value as typeof productionProfile.image.provider },
-                  })}
-                  disabled={productionProfileLoading}
-                  className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                >
-                  <option value="minimax">{t('services.providers.minimaxImage')}</option>
-                  <option value="local">{t('services.providers.localGeneric')}</option>
-                  <option value="maestro">{t('services.providers.maestro')}</option>
-                </select>
-                <input
-                  value={productionProfile.image.model}
-                  onChange={e => setProductionProfile({
-                    ...productionProfile,
-                    image: { ...productionProfile.image, model: e.target.value },
-                  })}
-                  disabled={productionProfileLoading}
-                  className="min-w-0 flex-1 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                />
-              </div>
-            </label>
-            <label className="text-[10px] text-text-muted">
-              {t('services.musicProviderModel')}
-              <div className="mt-1 flex gap-1">
-                <select
-                  value={productionProfile.music.provider}
-                  onChange={e => setProductionProfile({
-                    ...productionProfile,
-                    music: {
-                      ...productionProfile.music,
-                      provider: e.target.value as typeof productionProfile.music.provider,
-                      model: e.target.value === 'minimax' ? 'music-3.0' : 'ace_step_v1_5_xl_sft_lm_4b',
-                    },
-                  })}
-                  disabled={productionProfileLoading}
-                  className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                >
-                  <option value="local">{t('services.providers.aceLocal')}</option>
-                  <option value="minimax">{t('services.providers.minimaxMusic')}</option>
-                  <option value="maestro">{t('services.providers.maestro')}</option>
-                </select>
-                <input
-                  value={productionProfile.music.model}
-                  onChange={e => setProductionProfile({
-                    ...productionProfile,
-                    music: { ...productionProfile.music, model: e.target.value },
-                  })}
-                  disabled={productionProfileLoading}
-                  className="min-w-0 flex-1 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                />
-              </div>
-              {productionProfile.music.provider === 'minimax' && (
-                <p className="mt-1 text-[10px] text-amber-300">{t('services.minimaxMusicWarn')}</p>
-              )}
-            </label>
-            <label className="text-[10px] text-text-muted">
-              {t('services.model3dProviderModel')}
-              <div className="mt-1 flex gap-1">
-                <select
-                  value={productionProfile.model3d?.provider || 'local'}
-                  onChange={e => setProductionProfile({
-                    ...productionProfile,
-                    model3d: {
-                      ...(productionProfile.model3d || { provider: 'local', model: 'hunyuan3d-2mini-turbo' }),
-                      provider: e.target.value as NonNullable<typeof productionProfile.model3d>['provider'],
-                    },
-                  })}
-                  disabled={productionProfileLoading}
-                  className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                >
-                  <option value="local">{t('services.providers.hunyuanLocal')}</option>
-                  <option value="meshy">{t('services.providers.meshy')}</option>
-                  <option value="hi3d">{t('services.providers.hi3d')}</option>
-                </select>
-                <input
-                  value={productionProfile.model3d?.model || 'hunyuan3d-2mini-turbo'}
-                  onChange={e => setProductionProfile({
-                    ...productionProfile,
-                    model3d: {
-                      ...(productionProfile.model3d || { provider: 'local', model: 'hunyuan3d-2mini-turbo' }),
-                      model: e.target.value,
-                    },
-                  })}
-                  disabled={productionProfileLoading}
-                  className="min-w-0 flex-1 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                />
-              </div>
-            </label>
-          </div>
-          <label className="text-[10px] text-text-muted block">
-            {t('services.videoModel')}
-            <input
-              value={productionProfile.video.model}
-              onChange={e => setProductionProfile({
-                ...productionProfile,
-                video: { ...productionProfile.video, model: e.target.value },
-              })}
-              disabled={productionProfileLoading}
-              className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-            />
-          </label>
-          <div className="grid grid-cols-4 gap-2">
-            <label className="text-[10px] text-text-muted">
-              {t('services.resolution')}
-              <select
-                value={productionProfile.video.settings.resolution}
-                onChange={e => setProductionProfile({
-                  ...productionProfile,
-                  video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, resolution: e.target.value as typeof productionProfile.video.settings.resolution } },
-                })}
-                disabled={productionProfileLoading}
-                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-              >
-                {['480p', '540p', '720p', '768p', '1080p'].map(value => <option key={value}>{value}</option>)}
-              </select>
-            </label>
-            <label className="text-[10px] text-text-muted">
-              {t('services.canvas')}
-              <select
-                value={productionProfile.video.settings.aspectRatio}
-                onChange={e => setProductionProfile({
-                  ...productionProfile,
-                  video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, aspectRatio: e.target.value as typeof productionProfile.video.settings.aspectRatio } },
-                })}
-                disabled={productionProfileLoading}
-                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-              >
-                {['16:9', '9:16', '1:1', '4:3', '3:4'].map(value => <option key={value}>{value}</option>)}
-              </select>
-            </label>
-            <label className="text-[10px] text-text-muted">
-              {t('services.steps')}
-              <input
-                type="number"
-                value={productionProfile.video.settings.steps}
-                onChange={e => setProductionProfile({
-                  ...productionProfile,
-                  video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, steps: Number(e.target.value) } },
-                })}
-                disabled={productionProfileLoading}
-                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-              />
-            </label>
-            <label className="text-[10px] text-text-muted">
-              {t('services.flowAudioShift')}
-              <div className="mt-1 flex gap-1">
-                <input
-                  type="number"
-                  value={productionProfile.video.settings.flowShift}
-                  onChange={e => setProductionProfile({
-                    ...productionProfile,
-                    video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, flowShift: Number(e.target.value) } },
-                  })}
-                  disabled={productionProfileLoading}
-                  className="min-w-0 w-1/2 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                />
-                <input
-                  type="number"
-                  value={productionProfile.video.settings.audioShift}
-                  onChange={e => setProductionProfile({
-                    ...productionProfile,
-                    video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, audioShift: Number(e.target.value) } },
-                  })}
-                  disabled={productionProfileLoading}
-                  className="min-w-0 w-1/2 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                />
-              </div>
-            </label>
-          </div>
-          <p className="text-[10px] text-text-muted">
-            {productionProfileConfigured ? t('services.profileSaved') : t('services.profileDefaults')}
-            {' '}{t('services.profileSizeHint')}
-          </p>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              disabled={productionProfileLoading || JSON.stringify(productionProfile) === JSON.stringify(savedProductionProfile)}
-              onClick={() => void updateProductionProfile(productionProfile).then(() => setProductionProfile(null))}
-              className="rounded-lg bg-accent-blue px-3 py-1.5 text-xs text-white disabled:opacity-40"
-            >
-              {productionProfileLoading ? t('services.saving') : t('services.saveProfile')}
-            </button>
-          </div>
-        </div>
+        <Suspense fallback={null}><ProductionProfileSettings /></Suspense>
         <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('services.llmTitle')}</h3>
 
         <div className="flex items-center justify-between">
@@ -696,7 +457,7 @@ export function ServicesSettingsPanel() {
             </label>
             {!isLocal && (
               <button
-                onClick={handleRefreshModels}
+                onClick={() => void handleRefreshModels()}
                 disabled={refreshing}
                 className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5 disabled:opacity-50"
               >

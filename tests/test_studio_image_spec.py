@@ -36,6 +36,18 @@ def command(*, intent_id="studio-image-1", **param_overrides):
     }
 
 
+@pytest.mark.parametrize("profile", [-1, 1, 2, 3, 3.5, 4, 4.5, 5, None])
+def test_native_numeric_memory_profiles_are_preserved(profile):
+    frozen = freeze_studio_image_spec(command(override_profile=profile))
+    assert frozen["original"]["input"]["params"]["override_profile"] == profile
+
+
+@pytest.mark.parametrize("profile", [True, False, "-1", "4.5", 0, 6, 3.2])
+def test_invalid_memory_profiles_are_rejected(profile):
+    with pytest.raises(StudioImageSpecError, match="override_profile"):
+        freeze_studio_image_spec(command(override_profile=profile))
+
+
 def test_v2_error_keeps_v1_error_compatibility_for_shared_adapters():
     assert issubclass(StudioImageSpecError, ImageGenerationSpecError)
 

@@ -1,4 +1,4 @@
-import { cancelJob, fetchJobStatus, submitGeneration } from '../api/client'
+import { adoptAudio, cancelJob, fetchJobStatus, submitGeneration } from '../api/client'
 
 const AUDIO_FILE = /\.(wav|mp3|m4a|aac|flac|ogg)$/i
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
@@ -14,6 +14,7 @@ export type SceneSpeechDependencies = {
   submitGeneration: typeof submitGeneration
   fetchJobStatus: typeof fetchJobStatus
   cancelJob?: typeof cancelJob
+  adoptAudio?: typeof adoptAudio
   now?: () => number
   wait?: (ms: number) => Promise<void>
 }
@@ -32,7 +33,7 @@ type SceneSpeechOptions = {
 /** Generate one speech clip with the currently selected HocusPocus audio model. */
 export async function generateSceneSpeechClip(
   options: SceneSpeechOptions,
-  deps: SceneSpeechDependencies = { submitGeneration, fetchJobStatus, cancelJob },
+  deps: SceneSpeechDependencies = { submitGeneration, fetchJobStatus, cancelJob, adoptAudio },
 ): Promise<SceneSpeechClip> {
   const submitted = await submitSpeech(options, deps)
   return awaitSpeechOutput(options, deps, submitted)
@@ -46,6 +47,16 @@ async function submitSpeech(options: SceneSpeechOptions, deps: SceneSpeechDepend
   options.signal?.throwIfAborted()
   const voice = options.voice ? (await import('./characterVoice')).parseCharacterVoice(options.voice) : undefined
   if (voice && voice.model !== model) throw new Error('The selected voice belongs to a different speech model.')
+  let referencePath: string | undefined
+  if (voice?.model === 'qwen3_tts_base') {
+    const sourceWorkspace = new URLSearchParams(voice.referenceAudio.split('?')[1]).get('workspace') ?? options.workspace
+    const reference = await (deps.adoptAudio ?? adoptAudio)({ audio_path: voice.referenceAudio,
+      ...(sourceWorkspace ? { workspace: sourceWorkspace } : {}) })
+    referencePath = reference.path
+    if (!referencePath) throw new Error('The reference recording is no longer available.')
+    // Only the owned generation is cancellable; adopting a stored file never creates a job.
+    options.signal?.throwIfAborted()
+  }
   const submitted = await deps.submitGeneration({
     model_type: model,
     generation_mode: 'audio',
@@ -56,7 +67,9 @@ async function submitSpeech(options: SceneSpeechOptions, deps: SceneSpeechDepend
     duration_seconds: Math.max(1, options.durationSeconds),
     _audio_sub_mode: 'speech',
     ...(options.workspace ? { workspace: options.workspace } : {}),
-    ...(voice ? { model_mode: voice.voiceId, alt_prompt: voice.instructions ?? '' } : {}),
+    ...(voice?.model === 'qwen3_tts_base'
+      ? { model_mode: voice.language, audio_prompt_type: 'A', audio_guide: referencePath, alt_prompt: voice.transcript }
+      : voice ? { model_mode: voice.voiceId, alt_prompt: voice.instructions ?? '' } : {}),
   })
   return { prompt, model, jobId: submitted.job_id }
 }

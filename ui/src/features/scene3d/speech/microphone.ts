@@ -4,7 +4,7 @@ export type MicrophoneCallbacks = {
   onError: (error: unknown) => void
 }
 /** Owns only this recording's stream. Aborting also handles late permission grants. */
-export async function recordMicrophone(signal: AbortSignal, callbacks: MicrophoneCallbacks): Promise<() => void> {
+export async function recordMicrophone(signal: AbortSignal, callbacks: MicrophoneCallbacks, maxSeconds = 90): Promise<() => void> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
   const stopTracks = () => stream.getTracks().forEach(track => track.stop())
   if (signal.aborted) { stopTracks(); return () => {} }
@@ -30,7 +30,7 @@ export async function recordMicrophone(signal: AbortSignal, callbacks: Microphon
   }
   try {
     recorder.start(250)
-    timer = setTimeout(stop, 90000)
+    timer = setTimeout(stop, Math.min(90, Math.max(1, maxSeconds)) * 1000)
     callbacks.onRecording()
   } catch (error) { cleanup(); throw error }
   return stop

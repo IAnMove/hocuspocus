@@ -1,0 +1,148 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-moonlake",
+  "title": "Dark Fantasy · El lago de dos lunas",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
+  "createdAt": "2026-09-14T17:00:00Z",
+  "includeAssets": true,
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-moonlake",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "backdrop",
+      "floorColor": "#152a34",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/04-lake.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 22.352848976728364
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          -1.25,
+          0,
+          -0.8
+        ],
+        "scale": 1.3,
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "lake-mist",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.04,
+          "z": -0.5
+        },
+        "color": "#708dac",
+        "scale": 3,
+        "intensity": 0.4,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "ripples",
+        "kind": "splash",
+        "position": {
+          "x": -1.25,
+          "y": 0.015,
+          "z": -0.8
+        },
+        "color": "#a9cbf4",
+        "scale": 2,
+        "intensity": 0.5,
+        "start": 0.3,
+        "end": 4.7,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        0.21999999999999997,
+        2.7,
+        10.239999999999997
+      ],
+      "look": [
+        0.0,
+        2.0300000000000002,
+        -0.8
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          1.1307692307692307,
+          1.076923076923077,
+          8.49230769230769
+        ],
+        "to": [
+          0.8692307692307691,
+          1.076923076923077,
+          8.123076923076923
+        ],
+        "lookFrom": [
+          0.9615384615384615,
+          0.5615384615384615,
+          0.0
+        ],
+        "lookTo": [
+          0.9615384615384615,
+          0.5615384615384615,
+          0.0
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    }
+  }
+}

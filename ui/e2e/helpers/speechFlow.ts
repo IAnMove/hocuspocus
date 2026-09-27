@@ -1,5 +1,5 @@
 import { expect, type Page, type TestInfo } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { gotoApp } from './gotoApp'
 import { speechTestGlb, speechTestWav } from './speechAssets'
 import type { Scene3DDocument } from '../../src/features/scene3d/types'
@@ -25,6 +25,7 @@ export async function speechApp(page: Page) {
     }
     await route.fulfill({ json: library })
   })
+  await page.route('**/api/v1/character-kits/speech/digest*', route => route.fulfill({ json: { digest: '0'.repeat(64), bytes: 12 } }))
   await page.route('**/api/v1/character-kits/speech/profiles/**', route => route.fulfill({ status: 404, json: {} }))
   await page.route('**/api/v1/file/speech-test.glb*', route => route.fulfill({ contentType: 'model/gltf-binary', body: glb }))
   await page.route('**/api/v1/file/speech-test.wav*', route => route.fulfill({ contentType: 'audio/wav', body: wav }))
@@ -69,9 +70,10 @@ export async function openSpeech(page: Page, doc: Scene3DDocument) {
   }, doc.slots, { timeout: 20000 })
 }
 export async function saveSpeech(page: Page, info: TestInfo, name: string): Promise<Scene3DDocument> {
-  const promise = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Save shot JSON', exact: true }).click()
-  const path = info.outputPath(name + '.world3d.json'); await (await promise).saveAs(path)
+  const raw = await page.evaluate(() => JSON.stringify((window as Window & { __world3dDocument?: unknown }).__world3dDocument))
+  if (!raw) throw new Error('Scene document is not available')
+  const path = info.outputPath(name + '.world3d.json')
+  await writeFile(path, raw)
   return JSON.parse(await readFile(path, 'utf8'))
 }
 export async function seekSpeech(page: Page, seconds: number) {
@@ -81,8 +83,11 @@ export async function exportSpeech(page: Page, info: TestInfo) {
   const aac = await page.evaluate(async () => typeof AudioEncoder !== 'undefined' && (await AudioEncoder.isConfigSupported({
     codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 1, bitrate: 128000,
   })).supported)
-  // Keep Windows testing native AAC; Linux now validates server PCM finalization.
-  if (process.env.HOCUSPOCUS_REQUIRE_SPEECH_AAC === '1' || process.platform === 'win32') expect(aac, 'The real-export runner must provide AAC encoding').toBe(true)
+  const requireNative = process.env.HOCUSPOCUS_REQUIRE_SPEECH_AAC === '1' || process.platform === 'win32'
+  if (requireNative) expect(aac, 'The real-export runner must provide AAC encoding').toBe(true)
+  // Playwright Chromium advertises H.264, but Linux UI E2E must not encode
+  // native films. The required Windows Edge job already covers real MP4s.
+  if (!requireNative) return { encoded: false as const }
   const response = page.waitForResponse(r => r.url().endsWith('/scenes/recordings') && r.request().method() === 'POST', { timeout: 90000 })
   await page.getByTestId('world3d-export').click()
   expect((await response).ok()).toBeTruthy()

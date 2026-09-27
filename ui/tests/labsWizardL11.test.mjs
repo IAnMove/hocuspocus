@@ -32,7 +32,10 @@ test('L11 Series Review and Story genre/tone labels come from catalogs', () => {
 
   assert.match(review, /t\('review.playAll'\)/)
   assert.match(review, /t\('review.joinClips'\)/)
-  assert.match(review, /t\('review.generateMissing'\)/)
+  const renderActions = readFileSync(new URL('../src/features/series/SeriesRenderActions.tsx', import.meta.url), 'utf8')
+  assert.match(renderActions, /t\('renderActions.generate',/)
+  assert.equal(enSeries.renderActions.generate, 'Generate AI draft takes ({{count}})')
+  assert.equal(esSeries.renderActions.generate, 'Generar borradores con IA ({{count}})')
   assert.equal(review.includes('>Play all<') || review.includes('>Join clips<'), false)
   assert.equal(enSeries.review.playAll, 'Play all')
   assert.equal(esSeries.review.playAll, 'Reproducir todo')

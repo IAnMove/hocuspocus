@@ -64,3 +64,13 @@ class GenerationTaskTimer:
                 "seconds": round(now - self._phase_started_at, 3),
             }
         )
+
+
+def inference_progress_clock(job: dict, message: str, step: int, now: float) -> dict:
+    """Anchor ETA to sampling, excluding model loading and reference encoding."""
+    if "denoising" not in str(message).lower():
+        return {}
+    previous = str(job.get("phase") or "").lower()
+    if "denoising" not in previous or step < int(job.get("step") or 0) or not job.get("inference_started_at"):
+        return {"inference_started_at": now, "inference_start_step": step}
+    return {}

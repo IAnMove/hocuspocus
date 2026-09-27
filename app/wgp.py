@@ -35,6 +35,7 @@ import json
 import numpy as np
 import importlib
 from shared.utils import notification_sound
+from shared.utils.weight_variants import installed_weight_variant
 from shared.utils.loras_mutipliers import preparse_loras_multipliers, parse_loras_multipliers
 from shared.utils.utils import convert_tensor_to_image, save_image, get_video_info, get_file_creation_date, convert_image_to_video, calculate_new_dimensions, convert_image_to_tensor, calculate_dimensions_and_resize_image, rescale_and_crop, get_video_frame, resize_and_remove_background, rgb_bw_to_rgba_mask, to_rgb_tensor
 from shared.utils.utils import calculate_new_dimensions, get_outpainting_frame_location, get_outpainting_full_area_dimensions
@@ -770,6 +771,8 @@ def validate_settings(state, model_type, single_prompt, inputs):
         return None, None, None, None
 
     model_def = get_model_def(model_type)
+    from models.minimax_h3.duration import apply_h3_duration_override
+    model_def = apply_h3_duration_override(inputs, model_def or {})
     model_handler = get_model_handler(model_type)
     image_outputs = inputs["image_mode"] > 0
     any_steps_skipping = (
@@ -2117,7 +2120,7 @@ def update_generation_status(html_content):
     if(html_content):
         return gr.update(value=html_content)
 
-family_handlers = ["models.h3_advanced.handler", "models.sensenova_u1.handler", "models.wan.wan_handler", "models.wan.ovi_handler", "models.wan.df_handler", "models.hyvideo.hunyuan_handler", "models.ltx_video.ltxv_handler", "models.ltx2.ltx2_handler", "models.ltx2.scenema_audio_handler", "models.ltx2.ltx_audio_tts_handler", "models.minimax_h3.minimax_h3_handler", "models.longcat.longcat_handler", "models.flux.flux_handler", "models.qwen.qwen_handler", "models.kandinsky5.kandinsky_handler",  "models.z_image.z_image_handler", "models.krea2.krea2_handler", "models.hidream.hidream_handler", "models.TTS.ace_step_handler", "models.TTS.chatterbox_handler", "models.TTS.qwen3_handler", "models.TTS.yue_handler", "models.TTS.heartmula_handler", "models.TTS.kugelaudio_handler", "models.TTS.minimax_music3_handler", "models.TTS.index_tts2_handler"]
+family_handlers = ["models.h3_advanced.handler", "models.sensenova_u1.handler", "models.wan.wan_handler", "models.wan.ovi_handler", "models.wan.df_handler", "models.hyvideo.hunyuan_handler", "models.ltx_video.ltxv_handler", "models.ltx2.ltx2_handler", "models.ltx2.scenema_audio_handler", "models.ltx2.ltx_audio_tts_handler", "models.minimax_h3.minimax_h3_handler", "models.longcat.longcat_handler", "models.flux.flux_handler", "models.qwen.qwen_handler", "models.kandinsky5.kandinsky_handler",  "models.z_image.z_image_handler", "models.krea2.krea2_handler", "models.hidream.hidream_handler", "models.TTS.ace_step_handler", "models.TTS.chatterbox_handler", "models.TTS.qwen3_handler", "models.TTS.yue_handler", "models.TTS.heartmula_handler", "models.TTS.kugelaudio_handler", "models.TTS.minimax_music3_handler", "models.TTS.index_tts2_handler", "models.TTS.auk.auk_handler", "models.TTS.yue2.yue2_handler"]
 DEFAULT_LORA_ROOT = "loras"
 
 def register_family_lora_args(parser, lora_root):
@@ -3133,7 +3136,7 @@ def get_model_filename(model_type, quantization ="int8", dtype_policy = "", modu
         else:
             raw_filename = choices[0]
 
-    return raw_filename
+    return installed_weight_variant(raw_filename, choices, models_def.get(model_type), get_local_model_filename)
 
 def get_transformer_dtype(model_type, transformer_dtype_policy):
     base_model_type = get_base_model_type(model_type)
@@ -3681,7 +3684,7 @@ def get_local_model_filename(model_filename, use_locator = True, extra_paths = N
     
 
 
-def process_files_def(repoId = None, sourceFolderList = None, fileList = None, targetFolderList = None, revision = None):
+def process_files_def(repoId = None, sourceFolderList = None, fileList = None, targetFolderList = None, revision = None, independent_files = False):
     if targetFolderList is None:
         targetFolderList = [None] * len(sourceFolderList)
     for targetFolder, sourceFolder, files in zip(targetFolderList, sourceFolderList,fileList ):
@@ -3699,6 +3702,18 @@ def process_files_def(repoId = None, sourceFolderList = None, fileList = None, t
                 )
         else:
             folder_parts = [p for p in (targetFolder, sourceFolder) if p]
+            if independent_files:
+                # Standalone weights loaded with locate_file need not share a
+                # directory. An unrelated local variant must not force a second
+                # download of weights already present in a linked model root.
+                for onefile in files:
+                    key = os.path.join(*folder_parts, onefile)
+                    if fl.locate_file(key, error_if_none=False) is None:
+                        kwargs = dict(repo_id=repoId, revision=revision, filename=onefile, local_dir=local_dir)
+                        if sourceFolder:
+                            kwargs['subfolder'] = sourceFolder
+                        hf_download_with_public_fallback(**kwargs)
+                continue
             if folder_parts:
                 # Folder-based file sets must stay self-contained within ONE
                 # root. A per-file check across all roots would download only
@@ -4509,7 +4524,7 @@ def build_callback(state, pipe, send_cmd, status, num_inference_steps, preview_m
     _cumulative_total_locked = [False]  # once locked, total won't grow from overrides
     _current_pass_steps = [num_inference_steps]  # steps in current pass
     _first_override = [True]      # first override sets pass 1 (not an accumulation)
-    def callback(step_idx = -1, latent = None, force_refresh = True, read_state = False, override_num_inference_steps = -1, pass_no = -1, preview_meta=preview_meta, denoising_extra ="", progress_unit = None, total_steps_hint = -1):
+    def callback(step_idx = -1, latent = None, force_refresh = True, read_state = False, override_num_inference_steps = -1, pass_no = -1, preview_meta=preview_meta, denoising_extra ="", progress_unit = None, total_steps_hint = -1, phase_override = None):
         in_pause = False
         with gen_lock:
             process_status = gen.get("process_status", None)
@@ -4600,6 +4615,8 @@ def build_callback(state, pipe, send_cmd, status, num_inference_steps, preview_m
                 phase = "Aborting"    
             elif gen.get("early_stop", False):
                 phase = "Early Stop in progress"
+            elif phase_override is not None:
+                phase = phase_override
             elif step_idx  == num_inference_steps:
                 phase = "VAE Decoding"    
             else:
@@ -6642,6 +6659,7 @@ def concatenate_multi_clip_videos(
         from services.mix_concat import (
             build_hard_concat_filter,
             concat_with_tail_hold_and_crossfade,
+            driving_soundtrack_bound,
             probe_audio_flags,
             probe_duration_seconds,
             should_use_hold_crossfade,
@@ -6650,6 +6668,7 @@ def concatenate_multi_clip_videos(
         from app.services.mix_concat import (
             build_hard_concat_filter,
             concat_with_tail_hold_and_crossfade,
+            driving_soundtrack_bound,
             probe_audio_flags,
             probe_duration_seconds,
             should_use_hold_crossfade,
@@ -6734,18 +6753,30 @@ def concatenate_multi_clip_videos(
     else:
         filter_inputs = "".join(f"[{i}:v]" for i in range(n))
         filter_str = f"{filter_inputs}concat=n={n}:v=1:a=0[outv]"
-        if audio_path and (audio_start_sec > 0 or pad_audio):
+        if audio_path:
+            # Always pad the driving soundtrack before -shortest. Mapping the
+            # raw song used to stop encoding when the mp3 ended, discarding
+            # the tail of the concatenated video (4s of clips + 1s song → 1s
+            # movie). Bound apad so its infinite stream cannot stall concat.
             audio_filters = []
             if audio_start_sec > 0:
                 audio_filters.append(
                     f"atrim=start={audio_start_sec:.6f}"
                 )
             audio_filters.append("asetpts=PTS-STARTPTS")
+            audio_filters.append("apad")
             if pad_audio:
-                audio_filters.append("apad")
                 audio_filters.append(
                     f"atrim=duration={audio_duration_sec:.6f}"
                 )
+            else:
+                clip_secs = [
+                    probe_duration_seconds(path, ffmpeg_bin) or 1.0
+                    for path in valid_paths
+                ]
+                # audio_start_sec is atrim=start on the song, not video to drop.
+                bound = driving_soundtrack_bound(clip_secs)
+                audio_filters.append(f"atrim=duration={bound:.6f}")
             filter_str += (
                 f";[{n}:a]"
                 + ",".join(audio_filters)
@@ -6758,12 +6789,7 @@ def concatenate_multi_clip_videos(
         # Keep one pristine continuous soundtrack, but trim any leading time
         # omitted by the Director plan. This avoids both lip-sync offset and
         # the audible boundary blips caused by concatenating native clip audio.
-        audio_map = (
-            "[outa]"
-            if audio_start_sec > 0 or pad_audio
-            else f"{n}:a:0"
-        )
-        cmd += ["-map", audio_map]
+        cmd += ["-map", "[outa]"]
         cmd += ["-c:a", "aac", "-shortest"]
 
     # Force constant frame rate to prevent cumulative timing drift.
@@ -7413,6 +7439,7 @@ def generate_video(
     minimax_h3_semantic_bridge_alpha=0.0,
     minimax_h3_semantic_bridge_magnitude="per_token",
     minimax_h3_multi_window=True,
+    minimax_h3_extended_duration=False,
     h3_reference_context="",
     wangp_processor_settings=None,
     attention_sparsity=1.3,
@@ -7460,7 +7487,11 @@ def generate_video(
         audio_file_settings_list = gen["audio_file_settings_list"]
 
 
-    model_def = get_model_def(model_type) 
+    model_def = get_model_def(model_type)
+    from models.minimax_h3.duration import h3_duration_model_def
+    model_def = h3_duration_model_def(model_def or {}, {
+        "minimax_h3_extended_duration": minimax_h3_extended_duration,
+    })
     is_image = image_mode > 0
     audio_only = model_def.get("audio_only", False)
     duration_def = model_def.get("duration_slider", None)

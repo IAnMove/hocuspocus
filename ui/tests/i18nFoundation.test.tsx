@@ -305,9 +305,9 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
   assert.deepEqual(forbiddenLiterals(), [])
 })
 
-test('resources register the extraInfo, storyLab and videoEditor namespaces', async () => {
+test('resources register the extraInfo, storyLab, videoEditor and help namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)
@@ -316,13 +316,15 @@ test('resources register the extraInfo, storyLab and videoEditor namespaces', as
   assert.ok('shell' in resources.es)
   assert.ok('videoEditor' in resources.en)
   assert.ok('videoEditor' in resources.es)
+  assert.equal(resources.en.help.button, 'Help')
+  assert.equal(resources.es.help.button, 'Ayuda')
 })
 
 test('Extra info chrome and the Assets inspector use the activity catalog', async () => {
   const fs = await import('node:fs/promises')
   const files = [
     '../src/components/MainContent/VideoExtraInfoDialog.tsx',
-    '../src/components/MainContent/MediaFeedItem.tsx',
+    '../src/components/MainContent/OutputActionBar.tsx',
     '../src/components/MainContent/VideoInfoBar.tsx',
     '../src/features/assets/AssetsPanel.tsx',
   ]

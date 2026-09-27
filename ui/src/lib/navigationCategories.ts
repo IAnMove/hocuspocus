@@ -1,10 +1,19 @@
-import type { MediaFilter } from '../types'
+import type { GenerationMode, MediaFilter } from '../types'
 
 export const NAVIGATION_CATEGORIES = [
   'direct-generation', 'studios', 'production', 'media',
 ] as const
 
 export type NavigationCategory = typeof NAVIGATION_CATEGORIES[number]
+
+export const DIRECT_GENERATION_MEDIA: Record<GenerationMode, MediaFilter> = {
+  image: 'images',
+  video: 'videos',
+  audio: 'audio',
+  model3d: 'model3d',
+  avatar: 'avatars',
+  tools: 'all',
+}
 
 const STUDIOS = new Set<MediaFilter>([
   'stories', 'series', 'comics', 'scene3d', 'world3d', 'animate3d', 'characters', 'character-replacement',
@@ -21,6 +30,52 @@ export function categoryForMediaFilter(filter: MediaFilter): NavigationCategory 
   if (PRODUCTION.has(filter)) return 'production'
   if (MEDIA.has(filter)) return 'media'
   return null
+}
+
+/** Direct generation lives in its own top-level destination. Studio workspaces
+ *  already have large controls. Comic Director is the exception: it is the
+ *  comics workspace plus the Director sidebar. */
+export function hidesDirectGenerationSidebar(filter: MediaFilter, sidebarMode: 'studio' | 'director'): boolean {
+  if (!STUDIOS.has(filter)) return false
+  if (sidebarMode === 'director' && filter === 'comics') return false
+  return true
+}
+
+/** Director is not Direct Generation, but the same sidebar host unmounts on
+ *  studio filters. Film/music staging already uses the gallery (`all`);
+ *  Comic Director stays on comics. */
+export function revealDirectorWorkspace(state: {
+  mediaFilter: MediaFilter
+  setSidebarMode: (mode: 'studio' | 'director') => void
+  setSidebarOpen: (open: boolean) => void
+  setMediaFilter: (filter: MediaFilter) => void
+}): void {
+  state.setSidebarMode('director')
+  state.setSidebarOpen(true)
+  if (hidesDirectGenerationSidebar(state.mediaFilter, 'director')) {
+    state.setMediaFilter('all')
+  }
+}
+
+export type WorkspaceSurface = 'generate' | 'director' | 'section'
+
+/** Direct generation and Director occupy the main workspace, not a permanent
+ *  420px column. Library/studio filters are a separate destination. */
+export function visibleWorkspaceSurface(state: {
+  mediaFilter: MediaFilter
+  sidebarMode: 'studio' | 'director'
+  sidebarOpen: boolean
+  settingsOpen?: boolean
+  dashboardOpen?: boolean
+}): WorkspaceSurface {
+  if (state.settingsOpen || state.dashboardOpen) return 'section'
+  if (state.sidebarMode === 'director' && state.sidebarOpen && !hidesDirectGenerationSidebar(state.mediaFilter, 'director')) {
+    return 'director'
+  }
+  if (state.sidebarMode === 'studio' && state.sidebarOpen && !hidesDirectGenerationSidebar(state.mediaFilter, 'studio')) {
+    return 'generate'
+  }
+  return 'section'
 }
 
 export function categoryForNavigationDestination(destination: string): NavigationCategory | null {

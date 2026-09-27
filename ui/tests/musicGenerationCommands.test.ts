@@ -158,6 +158,7 @@ test('music builder preserves literal fields, collection provenance and detached
   assert.deepEqual(STUDIO_MUSIC_MODEL_TYPES, [
     'ace_step_v1_5_xl_sft_lm_4b',
     'minimax_music3',
+    'yue2',
   ])
 
   source.prompt = 'changed after freeze'

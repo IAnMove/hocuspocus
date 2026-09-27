@@ -5,6 +5,7 @@ export const IMAGE_PRESENTATION_EVENT = 'hocuspocus:studio-image-presentation'
 export const IMAGE_RESULT_EVENT = 'hocuspocus:studio-image-result'
 export interface ImagePresentation {
   command: ImageGenerationCommand
+  target?: HTMLElement
   active: boolean
   respond: (error?: string) => void
 }
@@ -33,7 +34,7 @@ export async function presentStudioImageCommand(command: ImageGenerationCommand)
   const root = await mountedPanel()
   await new Promise<void>((resolve, reject) => {
     const request: ImagePresentation = {
-      command: structuredClone(command), active: true,
+      command: structuredClone(command), target: root, active: true,
       respond: error => {
         if (!request.active) return
         request.active = false

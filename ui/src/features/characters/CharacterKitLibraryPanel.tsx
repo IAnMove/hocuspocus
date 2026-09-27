@@ -2,6 +2,7 @@ import { Loader2, Trash2 } from 'lucide-react'
 import type { CharacterKit, CharacterKitAlphaStatus, CharacterKitLibrary, CharacterMouthState } from '../../lib/characterKit'
 import { useUiTranslation } from '../../i18n'
 import { CharacterKitFaceRigPanel } from './CharacterKitFaceRigPanel'
+import { characterKitStillSource } from '../../lib/characterKit'
 import {
   characterKitNextStep,
   characterKitOpeningTab,
@@ -98,7 +99,7 @@ export function CharacterKitLibraryPanel({
               onClick={() => onSelectKit(structuredClone(kit), characterKitOpeningTab(kit))}
               className={`overflow-hidden rounded border p-1 text-left ${draft?.id === kit.id ? 'border-emerald-300 bg-emerald-400/10' : 'border-border bg-black/10'}`}
             >
-              {kit.base?.source && <img src={kit.base.source} alt="" className="mb-1 aspect-square w-full rounded bg-bg-active object-contain" />}
+              {characterKitStillSource(kit) && <img src={characterKitStillSource(kit)} alt="" className="mb-1 aspect-square w-full rounded bg-bg-active object-contain" />}
               <span className="block truncate text-[10px] text-emerald-100">{kit.name}</span>
               <span className="block text-[8px] text-text-muted">{t('library.bodyCount', { count: characterKitPoseOptions(kit).length })}</span>
             </button>

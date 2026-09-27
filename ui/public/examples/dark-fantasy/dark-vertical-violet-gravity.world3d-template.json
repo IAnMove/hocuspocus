@@ -1,0 +1,188 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-vertical-violet-gravity",
+  "title": "Dark Fantasy · Gravedad violeta",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
+  "includeAssets": true,
+  "createdAt": "2026-09-14T19:30:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-violet-gravity",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "backdrop",
+      "floorColor": "#24323d",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-violet-gravity.jpg",
+        "position": [
+          0,
+          -8.2,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          0.25,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -2.1,
+          0,
+          3
+        ],
+        "scale": 2.7,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#402c58",
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "energy_orb",
+        "kind": "energy_orb",
+        "position": {
+          "x": 0.8,
+          "y": 2.8,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#e29eff",
+        "scale": 0.3,
+        "intensity": 0.6,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 0.8,
+          "z": -1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#b99bdb",
+        "scale": 2.3,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.17000000000000007,
+        2.7224999999999997,
+        10.44
+      ],
+      "look": [
+        0.0,
+        3.0,
+        -1.0
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.04848484848484845,
+          0.6499999999999999,
+          6.327272727272727
+        ],
+        "to": [
+          -0.2545454545454545,
+          0.6499999999999999,
+          6.036363636363636
+        ],
+        "lookFrom": [
+          -0.15151515151515152,
+          0.8181818181818185,
+          -0.6060606060606061
+        ],
+        "lookTo": [
+          -0.15151515151515152,
+          0.8181818181818185,
+          -0.6060606060606061
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    }
+  }
+}

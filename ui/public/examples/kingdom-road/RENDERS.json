@@ -1,0 +1,103 @@
+{
+  "renderer": "HocusPocus native Video 3D + Video Editor",
+  "musicGenerator": "YuE2",
+  "musicAnalysisJob": "audio-analysis-ea419a522095",
+  "maxMusicCutErrorSeconds": 0.039334,
+  "uniqueJourneyBackgrounds": 35,
+  "musicTemplateCompositions": 40,
+  "items": [
+    {
+      "id": "alba",
+      "file": "alba.mp4",
+      "sha256": "f39c33c92596c8ad035291f4ca8e38adcffc7d2e5780bd13bef77c002038dff6",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "duration": "129.866667",
+            "nb_frames": "3896"
+          },
+          {
+            "codec_name": "aac",
+            "r_frame_rate": "0/0",
+            "duration": "129.866000",
+            "nb_frames": "6089"
+          }
+        ],
+        "format": {
+          "duration": "129.866667",
+          "size": "50996954"
+        }
+      },
+      "nativeJob": "video-edit-d433d6c526f1",
+      "nativeFilename": "2026-09-16-03h26m00s_Que_tu_veas_el_alba_-_YuE2_-_40_mundos.mp4",
+      "fullDecode": "passed"
+    },
+    {
+      "id": "skate",
+      "file": "skate.mp4",
+      "sha256": "051758785745d414aa909936f040d357522c1ce13b496f1525146836bf25c438",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 540,
+            "height": 960,
+            "r_frame_rate": "30/1",
+            "duration": "224.000000",
+            "nb_frames": "6720"
+          },
+          {
+            "codec_name": "aac",
+            "r_frame_rate": "0/0",
+            "duration": "224.000000",
+            "nb_frames": "10501"
+          }
+        ],
+        "format": {
+          "duration": "224.000000",
+          "size": "69543917"
+        }
+      },
+      "nativeJob": "video-edit-386144125d71",
+      "nativeFilename": "2026-09-16-03h37m33s_Calzada_infinita_-_35_mundos_-_compartir.mp4",
+      "fullDecode": "passed"
+    },
+    {
+      "id": "dragon",
+      "file": "dragon.mp4",
+      "sha256": "fa62f99d39b5e6891ef9d0c955f1f51f97276b3f56a1ceb4bac7e39fe19634ed",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "duration": "168.000000",
+            "nb_frames": "5040"
+          },
+          {
+            "codec_name": "aac",
+            "r_frame_rate": "0/0",
+            "duration": "168.000000",
+            "nb_frames": "7876"
+          }
+        ],
+        "format": {
+          "duration": "168.000000",
+          "size": "95420849"
+        }
+      },
+      "nativeJob": "video-edit-8b9823d17fd0",
+      "nativeFilename": "2026-09-16-03h41m07s_El_jinete_PSX_-_35_reinos_-_2m48.mp4",
+      "fullDecode": "passed"
+    }
+  ]
+}

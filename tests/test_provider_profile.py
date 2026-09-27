@@ -72,6 +72,11 @@ class TestOllamaModelListing(unittest.TestCase):
         ids = [item["id"] for item in models if item.get("provider") == "ollama"]
         self.assertEqual(ids, ["gemma3:4b", "llama3.2:3b"])
 
+    def test_deepseek_catalog_lists_v4_models(self):
+        models = llm_service.get_available_models(provider="deepseek")
+        ids = [item["id"] for item in models if item.get("provider") == "deepseek"]
+        self.assertEqual(ids, ["deepseek-v4-pro", "deepseek-v4-flash"])
+
 
 class TestRemote3D(unittest.TestCase):
     def test_meshy_image_to_3d_polls_and_downloads(self):

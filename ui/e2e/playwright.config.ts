@@ -27,7 +27,7 @@ export default defineConfig({
     command: `npm run build && npx vite preview --host 127.0.0.1 --port ${port} --strictPort`,
     cwd: uiRoot,
     url: baseURL,
-    reuseExistingServer: false,
-    timeout: 180_000,
+    reuseExistingServer: !process.env.CI,
+    timeout: 360_000,
   },
 })

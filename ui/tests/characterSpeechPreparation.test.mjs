@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
+import { CHARACTER_MOUTH_STATES } from '../src/lib/characterMouthStates.ts'
 import { speechPreparationReadiness } from '../src/lib/characterSpeechPreparation.ts'
 
 const sourceAsset = (id, reviewState = 'approved', source = `${id}.png`, extra = {}) => ({
@@ -35,7 +36,7 @@ const metadata = (overrides = {}) => ({
   ...overrides,
 })
 
-test('returns all four mouth rows in fixed order and marks empty sources missing', () => {
+test('returns all nine mouth rows in fixed order and marks empty sources missing', () => {
   const kit = baseKit({ mouth: {
     closed: sourceAsset('closed'),
     small: sourceAsset('small'),
@@ -50,6 +51,7 @@ test('returns all four mouth rows in fixed order and marks empty sources missing
     { state: 'small', status: 'approved' },
     { state: 'wide', status: 'missing' },
     { state: 'round', status: 'missing' },
+    ...CHARACTER_MOUTH_STATES.slice(4).map(state => ({ state, status: 'missing' })),
   ])
   assert.equal(readiness.poseApproved, true)
   assert.equal(readiness.previewReady, true)
@@ -70,7 +72,7 @@ test('maps pending, rejected and approved assets while requiring a reviewed pose
   const readiness = speechPreparationReadiness(kit, '   ')
 
   assert.equal(readiness.poseApproved, false)
-  assert.deepEqual(readiness.rows.map(row => row.status), ['approved', 'pending', 'rejected', 'approved'])
+  assert.deepEqual(readiness.rows.slice(0, 4).map(row => row.status), ['approved', 'pending', 'rejected', 'approved'])
   assert.equal(readiness.previewReady, false)
   assert.equal(readiness.complete, false)
 })
@@ -97,6 +99,7 @@ test('requires a closed state and at least one open state for preview, and all s
       small: sourceAsset('small'),
       wide: sourceAsset('wide'),
       round: sourceAsset('round'),
+      ...Object.fromEntries(CHARACTER_MOUTH_STATES.slice(4).map(state => [state, sourceAsset(state)])),
     },
   }, 'base')
   assert.equal(allApproved.previewReady, true)
@@ -118,6 +121,7 @@ test('marks stale face patches incompatible even when their review state is appr
     { state: 'small', status: 'incompatible' },
     { state: 'wide', status: 'approved' },
     { state: 'round', status: 'approved' },
+    ...CHARACTER_MOUTH_STATES.slice(4).map(state => ({ state, status: 'missing' })),
   ])
   assert.equal(readiness.poseApproved, true)
   assert.equal(readiness.previewReady, false)
@@ -147,4 +151,20 @@ test('a pose with no source is not approved even when its review state is approv
   assert.equal(readiness.poseApproved, false)
   assert.equal(readiness.previewReady, false)
   assert.equal(readiness.complete, false)
+})
+
+test('every extended slot must be approved and match the current pose', () => {
+  const mouth = Object.fromEntries(CHARACTER_MOUTH_STATES.map(state => [state, sourceAsset(state)]))
+  const kit = baseKit({ mouth })
+  assert.equal(speechPreparationReadiness(kit, 'base').complete, true)
+  for (const state of CHARACTER_MOUTH_STATES.slice(4)) {
+    for (const reviewState of ['pending', 'rejected']) {
+      const draft = { ...kit, mouth: { ...mouth, [state]: sourceAsset(state, reviewState) } }
+      assert.equal(speechPreparationReadiness(draft, 'base').complete, false)
+    }
+    const missing = { ...kit, mouth: { ...mouth, [state]: undefined } }
+    assert.equal(speechPreparationReadiness(missing, 'base').complete, false)
+    const stale = { ...kit, mouth: { ...mouth, [state]: sourceAsset(state, 'approved', state + '.png', { facePatch: metadata({ poseSource: 'old.png' }) }) } }
+    assert.equal(speechPreparationReadiness(stale, 'base').complete, false)
+  }
 })

@@ -675,6 +675,20 @@ def test_model_validation_rejects_bad_resolution_and_missing_files(tmp_path, par
     assert error.value.detail["code"] == code
 
 
+def test_missing_image_weights_identify_the_model_and_files():
+    with pytest.raises(HTTPException) as error:
+        validate_image_model(
+            {"model_type": "qwen_image_21_uncensored_gguf_q6_k", "resolution": "1024x1024"},
+            model_definition=lambda _: {"image_outputs": True, "name": "Qwen Image 2.1 GGUF Q6_K"},
+            model_downloaded=lambda _: False,
+            missing_model_files=lambda _: ["qwen-image-2.1-Q6_K.gguf"],
+        )
+    assert error.value.status_code == 409
+    assert error.value.detail["missing_files"] == ["qwen-image-2.1-Q6_K.gguf"]
+    assert "Qwen Image 2.1 GGUF Q6_K" in error.value.detail["message"]
+    assert "qwen-image-2.1-Q6_K.gguf" in error.value.detail["message"]
+
+
 def test_service_rejects_unsupported_fields_and_workspace_paths_before_native_prepare(tmp_path):
     native = FakeNative(tmp_path)
     service = native.service()

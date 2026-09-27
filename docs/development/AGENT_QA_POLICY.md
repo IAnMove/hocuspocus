@@ -31,6 +31,11 @@ The workflow already emits these names. They were not removed.
 3. `UI E2E boot (Chromium + simulated API)`
 4. `CI required`
 
+Python tests are duration-sharded as `Python tests A` and `Python tests B`.
+Those jobs, Windows speech E2E, and the compile/docs guard are all inputs to
+`CI required`. Caches, shard membership and the fail-closed local selector
+are in [CI_CACHE_AND_SHARDS.md](CI_CACHE_AND_SHARDS.md).
+
 `CI required` is the aggregator from P2: cancelled, skipped or failed
 dependencies are not success. The **GitHub required context** to enforce is
 the job name `CI required`, not the workflow title `CI`. A job that exists

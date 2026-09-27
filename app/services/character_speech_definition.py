@@ -2,7 +2,41 @@
 import json
 import math
 import re
-from urllib.parse import urlsplit, parse_qsl
+from urllib.parse import urlsplit, parse_qsl, unquote
+
+CHARACTER_VOICE_LANGUAGES = {"auto", "chinese", "english", "japanese", "korean", "german", "french", "russian", "portuguese", "spanish", "italian"}
+
+
+def _voice_reference_query(kind, raw):
+    if kind == "uploads":
+        if raw is not None:
+            raise ValueError("Upload references cannot contain query parameters.")
+        return
+    query = parse_qsl(raw or "", keep_blank_values=True)
+    if (len(query) != 1 or query[0][0] != "workspace"
+            or not re.fullmatch(r"[A-Za-z0-9_. -]{1,120}", query[0][1]) or query[0][1] in {".", ".."}):
+        raise ValueError("The reference recording needs its source workspace.")
+
+
+def normalize_character_voice_reference(value):
+    """Persistent same-origin audio only, with an explicit source workspace."""
+    if not isinstance(value, str) or not value or len(value) > 1200 or re.search(r"\s|[\\#]", value):
+        raise ValueError("Import a local reference recording first.")
+    match = re.fullmatch(r"/api/v1/(uploads|file)/([^?]+)(?:\?(.+))?", value)
+    if not match:
+        raise ValueError("Use a persistent local reference recording.")
+    if re.search(r"%(?![0-9a-fA-F]{2})", value):
+        raise ValueError("Invalid reference recording URL.")
+    try:
+        path = unquote(match[2], errors="strict")
+        unquote(match[3] or "", errors="strict")
+    except UnicodeDecodeError as error:
+        raise ValueError("Invalid reference recording URL.") from error
+    if (re.search(r"[\x00-\x1f\x7f\\%?#]", path) or any(not part or part.startswith(".") for part in path.split("/"))
+            or not re.search(r"\.(wav|mp3|m4a|aac|flac|ogg|opus)$", path, re.I)):
+        raise ValueError("Choose a local audio recording.")
+    _voice_reference_query(match[1], match[3])
+    return value
 
 
 def _asset_fields(value):
@@ -93,7 +127,23 @@ def normalize_speech3d(value):
     return result
 
 
+def _voice_text(value, limit):
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= limit
+
+
+def _normalize_reference_voice(value):
+    if (set(value) != {"provider", "model", "voiceId", "name", "referenceAudio", "transcript", "language"}
+            or value.get("provider") != "local" or value.get("voiceId") != "reference"
+            or not _voice_text(value.get("name"), 120) or not _voice_text(value.get("transcript"), 4000)
+            or not isinstance(value.get("language"), str) or value["language"] not in CHARACTER_VOICE_LANGUAGES):
+        raise ValueError("Add a named local reference recording, its transcript and a supported language.")
+    return {**value, "name": value["name"].strip(), "transcript": value["transcript"].strip(),
+            "referenceAudio": normalize_character_voice_reference(value["referenceAudio"])}
+
+
 def normalize_character_voice(value):
+    if isinstance(value, dict) and value.get("model") == "qwen3_tts_base":
+        return _normalize_reference_voice(value)
     if not isinstance(value, dict) or set(value) - {"provider", "model", "voiceId", "instructions"}:
         raise ValueError("Store voice preferences only, never credentials.")
     if value.get("provider") != "local" or value.get("model") != "qwen3_tts_customvoice":

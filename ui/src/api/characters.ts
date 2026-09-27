@@ -14,6 +14,9 @@ export async function saveCharacterKit(
   library: import('../lib/characterKit').CharacterKitLibrary,
   kit: import('../lib/characterKit').CharacterKit,
 ): Promise<import('../lib/characterKit').CharacterKitLibrary> {
+  const { prepareCharacterRestPose } = await import('../lib/characterRestPose')
+  const { uploadImage, getFileUrl } = await import('./client')
+  kit = await prepareCharacterRestPose(kit, workspace, uploadImage, (filename, sourceWorkspace) => getFileUrl(filename, sourceWorkspace))
   const response = await fetch(`${BASE}/api/v1/character-kits/library/kits/${encodeURIComponent(kit.id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

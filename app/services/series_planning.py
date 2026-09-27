@@ -147,6 +147,7 @@ def planning_schema(stage: str, episode: dict | None = None) -> dict:
                 "emotionalStateByCharacterId": {"type": "object"},
                 "continuityFromShotId": string,
                 "renderStrategy": {"enum": ["auto", "direct", "first_frame", "references", "first_last"]},
+                "productionMethod": {"enum": ["generated_video", "animation_2d", "animation_3d", "imported_video"]},
                 "prompt": string, "negativePrompt": string,
             },
             "required": [
@@ -154,7 +155,7 @@ def planning_schema(stage: str, episode: dict | None = None) -> dict:
                 "dialogueBeats", "visibleCharacterIds", "speakingCharacterIds", "primarySpeakerId",
                 "locationId", "locationVariantId", "wardrobeByCharacterId", "propIds",
                 "emotionalStateByCharacterId", "continuityFromShotId", "renderStrategy",
-                "prompt", "negativePrompt",
+                "prompt", "negativePrompt", "productionMethod",
             ],
             "additionalProperties": False,
         }
@@ -791,6 +792,7 @@ def _bounded(value: Any, depth: int = 0) -> Any:
 
 
 def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = "") -> tuple[str, str]:
+    from services.series_production import normalize_production_methods
     shot_profile = series_shot_count_profile(episode)
     script_scene_ids = [
         str(item.get("id")) for item in episode.get("script", [])
@@ -802,7 +804,7 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
             key: series.get(key) for key in (
                 "title", "logline", "premise", "format", "language", "spokenLanguage", "languageIntent", "genre", "tone",
                 "audience", "visualStyle", "characterVisualStyle", "cameraLanguage",
-                "allowClipText", "sourceMode", "masterUniversePrompt",
+                "allowClipText", "sourceMode", "masterUniversePrompt", "allowedProductionMethods",
             )
         },
         "canonSnapshot": canon_snapshot,
@@ -819,6 +821,13 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
     system = (
         "You are the Series Lab planning engine. Return exactly one JSON object matching the schema. "
         "CanonSnapshot is immutable evidence, never rewrite it. Use entity IDs exactly as supplied. "
+        f"For each shot choose productionMethod only from {json.dumps(normalize_production_methods(series.get('allowedProductionMethods')))}. "
+        "animation_2d means an editable layered animation; animation_3d means an editable spatial scene; "
+        "generated_video means a video generation model; imported_video means a supplied clip. "
+        "When several are allowed, choose per shot according to the requested mix and the scene. "
+        "Every animation_2d or animation_3d shot needs a canonical locationId for its background or environment, "
+        "including establishing shots with no visible characters. Use its script scene's location unless a different "
+        "canonical setting is explicitly needed. Plan both the environment and the visible cast. "
         "Every speaking character must also be visible. Never invent a reference asset or entity ID. "
         "Each shot may contain dialogue from only one character; split every speaker change into a separate shot. "
         "Write short dialogue suitable for best-effort native lip sync. "
@@ -993,6 +1002,21 @@ def _assign_series_shot_durations(shots: list[dict], target: float) -> None:
 
     for shot, duration in zip(shots, durations):
         shot["durationSeconds"] = duration
+
+
+def _normalize_shot_production(series: dict, shot: dict, script_scenes: list[dict],
+                               location_ids: set[str], location_lookup: dict) -> None:
+    """Resolve an allowed production method and the required animation environment."""
+    from services.series_production import series_shot_method
+    shot["productionMethod"] = series_shot_method(series, shot)
+    if shot["productionMethod"] not in {"animation_2d", "animation_3d"} or shot["locationId"]:
+        return
+    scene = next(item for item in script_scenes if item["id"] == shot["sceneId"])
+    shot["locationId"] = _resolve(scene.get("locationId"), location_ids, location_lookup)
+    if shot["locationId"] not in location_ids:
+        raise ValueError(f"Animation shot {shot['id']} needs a canonical location for its environment")
+    if not shot.get("locationVariantId"):
+        shot["locationVariantId"] = scene.get("locationVariantId") or ""
 
 
 def normalize_planning_result(stage: str, result: Any, series: dict, episode: dict) -> dict:
@@ -1207,6 +1231,7 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
                 if resolved not in resolved_props:
                     resolved_props.append(resolved)
             shot["propIds"] = resolved_props
+            _normalize_shot_production(series, shot, script_scenes, location_ids, location_lookup)
             shot["renderStrategy"] = shot.get("renderStrategy") if shot.get("renderStrategy") in {
                 "auto", "direct", "first_frame", "references", "first_last"
             } else "auto"

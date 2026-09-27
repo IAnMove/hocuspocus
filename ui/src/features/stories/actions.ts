@@ -9,6 +9,7 @@ import {
 import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
 import { applyLegacyStoryLanguage, applyStoryLanguageIntent, seedStoryLanguageIntent } from './languageIntent'
+import { storyJobKey, storyResultKey } from './storyLabSession'
 import { applyMusicVideoDirectVideoDefaults, resolveMusicVideoVisualStyle } from './musicVideoLook'
 import {
   assertStorySongFidelity,
@@ -675,8 +676,8 @@ export async function generateStorySectionDraft(
   }
   useStoryStore.setState({ project, dirty: false })
   const visibleSection = action.scope === 'all' ? 'overview' : action.scope
-  const resultKey = `maestro-story-plan-result:${workspace}:${project.id}`
-  const jobKey = `maestro-story-plan-job:${workspace}:${project.id}`
+  const resultKey = storyResultKey(workspace, project.id)
+  const jobKey = storyJobKey(workspace, project.id)
   window.localStorage.setItem(resultKey, JSON.stringify({
     scope: action.scope,
     generateImagesAfterApply: false,
@@ -752,8 +753,8 @@ export async function applyStoredStoryProposal(action: ApplyStoryProposalCommand
   if (current.activeProjectOperations[target.id]) {
     throw new Error(`La historia “${target.title}” tiene una operación activa.`)
   }
-  const resultKey = `maestro-story-plan-result:${workspace}:${target.id}`
-  const jobKey = `maestro-story-plan-job:${workspace}:${target.id}`
+  const resultKey = storyResultKey(workspace, target.id)
+  const jobKey = storyJobKey(workspace, target.id)
   let saved: { scope?: unknown; result?: unknown } | null = null
   try {
     saved = JSON.parse(window.localStorage.getItem(resultKey) || 'null')

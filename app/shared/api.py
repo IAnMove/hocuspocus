@@ -897,6 +897,8 @@ class WanGPSession:
             return "inference_stage_3"
         if "loading model" in lowered or lowered.startswith("loading"):
             return "loading_model"
+        if "encoding reference" in lowered or "encoding source" in lowered:
+            return "encoding_images"
         if "enhancing prompt" in lowered or "encoding prompt" in lowered or "encoding" in lowered:
             return "encoding_text"
         if "vae decoding" in lowered or "decoding" in lowered:
@@ -912,7 +914,7 @@ class WanGPSession:
         if total_steps is None or total_steps <= 0 or current_step is None:
             if phase == "loading_model":
                 return 10
-            if phase == "encoding_text":
+            if phase in ("encoding_text", "encoding_images"):
                 return 18
             if phase == "inference_stage_1":
                 return 25
@@ -930,7 +932,7 @@ class WanGPSession:
         ratio = max(0.0, min(1.0, current_step / total_steps))
         if phase == "loading_model":
             return min(15, 5 + int(ratio * 10))
-        if phase == "encoding_text":
+        if phase in ("encoding_text", "encoding_images"):
             return min(22, 12 + int(ratio * 10))
         if phase == "inference_stage_1":
             return min(68, 20 + int(ratio * 48))

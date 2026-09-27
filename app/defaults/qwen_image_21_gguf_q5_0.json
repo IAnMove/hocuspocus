@@ -1,0 +1,30 @@
+{
+    "model": {
+        "name": "Qwen Image 2.1 GGUF Q5_0 7B",
+        "architecture": "qwen_image_21",
+        "description": "DiT GGUF Q5_0 (5.1 GB). Middle rung between Q4_K and Q8_0. Same 2.1 VAE and Qwen3-VL-8B encoder. No Lightning distill for 2.1 yet. License follows Qwen Research License.",
+        "selector_help": "Lighter than Q8 when you want GGUF but not Q4 artifacts. On a 4090 prefer INT8 ConvRot. Default 1024.",
+        "URLs": [
+            "https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/resolve/main/qwen_image_2.1-Q5_0.gguf"
+        ],
+        "preload_URLs": "qwen_image_21",
+        "license_name": "Qwen Research License",
+        "license_url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
+        "resource_requirements": {
+            "vram_gb": 12,
+            "ram_gb": 24,
+            "storage_gb": 16,
+            "platform": "NVIDIA / AMD",
+            "backend": "GGUF Q5_0",
+            "tier": "experimental",
+            "note": "Good GGUF compromise. INT8 ConvRot is still the 4090 pick."
+        },
+        "attention": {"<89": "sdpa"},
+        "image_outputs": true
+    },
+    "prompt": "A neon shop sign that reads QWEN IMAGE 2.1, rainy night, reflections on wet pavement",
+    "resolution": "1024x1024",
+    "num_inference_steps": 40,
+    "guidance_scale": 1,
+    "batch_size": 1
+}

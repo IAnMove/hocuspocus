@@ -8,6 +8,9 @@ import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES }
 import type { NarrativeSceneControls, NarrativeSceneId, NarrativeTemplateInput } from './sceneNarrative'
 import { parseSceneGenerationPolicy, sceneGenerationPolicyFields, SCENE_GENERATION_POLICIES } from './sceneGenerationPolicy'
 import type { SceneGenerationPolicy } from './sceneGenerationPolicy'
+import { canonicalSceneFps } from './sceneFps.ts'
+import { parseCutoutLipSync, CUTOUT_LIP_SYNC_SCHEMA, planPhoneticCutoutDialogue } from './cutoutPhonetic'
+import { CHARACTER_MOUTH_STATES } from './characterMouthStates'
 
 const GRADE_MOODS: readonly SceneGradeMood[] = ['calm', 'tense', 'dreamy', 'heroic']
 const GRADE_PALETTES: readonly SceneGradePalette[] = ['natural', 'cool', 'warm', 'neon']
@@ -71,7 +74,8 @@ const parseDialogueBeats = (raw: unknown): SceneRecipeDialogueBeat[] | undefined
     const confidence: SceneRecipeDialogueBeat['confidence'] = beat.confidence === 'aligned-audio' || beat.confidence === 'energy-fallback'
       ? beat.confidence
       : 'known-text'
-    return { id, text, start, end, mouthLayerIds, audioTrackId: asString(beat.audioTrackId) || undefined, confidence }
+    return { id, text, start, end, mouthLayerIds, audioTrackId: asString(beat.audioTrackId) || undefined, confidence,
+      ...(beat.lipSync ? { lipSync: parseCutoutLipSync(beat.lipSync) } : {}) }
   })
   return beats.length ? beats : undefined
 }
@@ -196,6 +200,7 @@ export interface SceneRecipeDialogueBeat {
   mouthLayerIds: string[]
   audioTrackId?: string
   confidence: 'known-text' | 'aligned-audio' | 'energy-fallback'
+  lipSync?: import('./cutoutPhonetic').CutoutLipSync
 }
 
 export interface SceneRecipe {
@@ -213,7 +218,7 @@ export interface SceneRecipe {
     texts?: KineticText[]
     width?: number
     height?: number
-    fps?: 30 | 60
+    fps?: 24 | 30 | 60
     duration?: number
     /**
      * Emotional and colour temperature for the whole scene. Without these the
@@ -415,7 +420,7 @@ const recipeLayerSchema = {
       properties: {
         poseLayerId: { type: 'string', minLength: 1, maxLength: 80 },
         role: { enum: ['mouth', 'blink'] },
-        state: { enum: ['closed', 'small', 'wide', 'round', 'blink'] },
+        state: { enum: [...CHARACTER_MOUTH_STATES, 'blink', 'open'] },
       },
       required: ['poseLayerId', 'role'],
       additionalProperties: false,
@@ -579,8 +584,9 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         properties: {
           id: { type: 'string', minLength: 1, maxLength: 120 }, text: { type: 'string', minLength: 1, maxLength: 2000 },
           start: { type: 'number', minimum: 0, maximum: 60 }, end: { type: 'number', minimum: .01, maximum: 60 },
-          mouthLayerIds: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 120 } },
+          mouthLayerIds: { type: 'array', minItems: 1, maxItems: 9, items: { type: 'string', minLength: 1, maxLength: 120 } },
           audioTrackId: { type: 'string', minLength: 1, maxLength: 120 }, confidence: { enum: ['known-text', 'aligned-audio', 'energy-fallback'] },
+          lipSync: CUTOUT_LIP_SYNC_SCHEMA,
         }, required: ['id', 'text', 'start', 'end', 'mouthLayerIds', 'confidence'],
       },
     },
@@ -624,7 +630,7 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         texts: KINETIC_TEXT_SCHEMA,
         width: { type: 'integer', minimum: 256, maximum: 3840 },
         height: { type: 'integer', minimum: 256, maximum: 3840 },
-        fps: { enum: [30, 60] },
+        fps: { enum: [24, 30, 60] },
         duration: { type: 'number', minimum: 0.5, maximum: 60 },
         mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] },
         palette: { enum: ['natural', 'cool', 'warm', 'neon'] },
@@ -1279,7 +1285,7 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
       ...kineticTextFields(sceneRaw.texts),
       width: Math.round(boundedNumber(sceneRaw.width, 1280, 256, 3840)),
       height: Math.round(boundedNumber(sceneRaw.height, 720, 256, 3840)),
-      fps: sceneRaw.fps === 60 ? 60 : 30,
+      fps: canonicalSceneFps(sceneRaw.fps),
       duration: boundedNumber(sceneRaw.duration, shots?.[0]?.duration || 5, 0.5, 60),
       // Unknown values fall through as undefined rather than throwing: a
       // mistyped mood should cost the grade, not the whole recipe.
@@ -1459,6 +1465,13 @@ function compileRecipeAudio(recipe: SceneRecipe, resolved: Record<string, string
   })
 }
 
+function appendRecipeMouthFrames(byLayer: Map<string, SceneKeyframe[]>, generated: Record<string, SceneKeyframe[]>, start: number) {
+  for (const [id, frames] of Object.entries(generated)) {
+    const previous = byLayer.get(id) ?? []
+    byLayer.set(id, [...previous, ...(previous.length && start > 0 ? frames.filter(frame => frame.time > 0) : frames)])
+  }
+}
+
 function compileRecipeDialogue(
   layers: SceneLayer[],
   beats: SceneRecipeDialogueBeat[] | undefined,
@@ -1488,11 +1501,9 @@ function compileRecipeDialogue(
     const start = Math.max(0, Math.min(duration, beat.start))
     const end = Math.max(start + 1 / Math.max(1, fps), Math.min(duration, beat.end))
     if (start >= duration) continue
-    const plan = planCutoutDialogue(beat.text, start, Math.min(duration, end), fps)
+    const plan = planPhoneticCutoutDialogue(beat, duration) ?? planCutoutDialogue(beat.text, start, Math.min(duration, end), fps)
     const generated = applyCutoutDialogue(mouthLayers, plan)
-    for (const [layerId, frames] of Object.entries(generated)) {
-      framesByLayer.set(layerId, [...(framesByLayer.get(layerId) ?? []), ...frames])
-    }
+    appendRecipeMouthFrames(framesByLayer, generated, plan.start)
     appliedBeats.push({ ...beat, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(generated) })
   }
   if (!framesByLayer.size) return { layers, beats: appliedBeats }
@@ -1615,7 +1626,7 @@ export function compileSceneRecipe(
   // track before compilation, so a remaining unresolved source is a hard
   // failure with a nameable cause rather than a silently mute export.
   const audioTracks = compileRecipeAudio(recipe, resolved, duration)
-  const dialogue = compileRecipeDialogue(layers, recipe.dialogueBeats, recipe.scene.fps === 60 ? 60 : 30, duration)
+  const dialogue = compileRecipeDialogue(layers, recipe.dialogueBeats, canonicalSceneFps(recipe.scene.fps), duration)
   return {
     version: 1,
     name: recipe.name,
@@ -1624,7 +1635,7 @@ export function compileSceneRecipe(
     ...sceneGenerationPolicyFields(recipe.generationPolicy),
     width: recipe.scene.width || 1280,
     height: recipe.scene.height || 720,
-    fps: recipe.scene.fps === 60 ? 60 : 30,
+    fps: canonicalSceneFps(recipe.scene.fps),
     duration,
     composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' },
     layers: dialogue.layers,

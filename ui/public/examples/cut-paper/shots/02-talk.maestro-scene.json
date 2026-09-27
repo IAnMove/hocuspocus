@@ -1,0 +1,2453 @@
+{
+  "version": 1,
+  "name": "Tijeral · plano 2 cola fría",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "duration": 40,
+  "layers": [
+    {
+      "id": "camera",
+      "name": "Camera",
+      "type": "camera",
+      "source": "",
+      "visible": true,
+      "locked": false,
+      "z": 100,
+      "transform": {
+        "x": 50,
+        "y": 50,
+        "scale": 1,
+        "opacity": 1,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 50,
+          "y": 50,
+          "scale": 1,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "end": {
+          "x": 50,
+          "y": 50,
+          "scale": 1.04,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "ease",
+        "keyframes": [
+          {
+            "id": "camera-0",
+            "time": 0,
+            "x": 50,
+            "y": 50,
+            "scale": 1,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "ease"
+          },
+          {
+            "id": "camera-40000",
+            "time": 40,
+            "x": 50,
+            "y": 50,
+            "scale": 1.04,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "ease"
+          }
+        ]
+      }
+    },
+    {
+      "id": "location-plaza",
+      "name": "Location plaza",
+      "type": "image",
+      "source": "/examples/cut-paper/locations/plaza.png",
+      "visible": true,
+      "locked": false,
+      "z": 0,
+      "transform": {
+        "x": 50,
+        "y": 50,
+        "scale": 1,
+        "opacity": 1,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 50,
+          "y": 50,
+          "scale": 1,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "end": {
+          "x": 50,
+          "y": 50,
+          "scale": 1,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "location-plaza-0",
+            "time": 0,
+            "x": 50,
+            "y": 50,
+            "scale": 1,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "location-plaza-40000",
+            "time": 40,
+            "x": 50,
+            "y": 50,
+            "scale": 1,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "fill": true,
+      "parallax": 0.15
+    },
+    {
+      "id": "puppet-nilo",
+      "name": "Nilo Carda pose",
+      "type": "image",
+      "source": "/examples/cut-paper/puppets/nilo-body.png",
+      "visible": true,
+      "locked": false,
+      "z": 32,
+      "transform": {
+        "x": 36,
+        "y": 62,
+        "scale": 0.42,
+        "opacity": 1,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 36,
+          "y": 62,
+          "scale": 0.42,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "end": {
+          "x": 36,
+          "y": 62,
+          "scale": 0.42,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-nilo-0",
+            "time": 0,
+            "x": 36,
+            "y": 62,
+            "scale": 0.42,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-40000",
+            "time": 40,
+            "x": 36,
+            "y": 62,
+            "scale": 0.42,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "parallax": 1,
+      "effects": {
+        "shadow": 0.25,
+        "blendMode": "normal",
+        "mask": "none",
+        "maskRadius": 12,
+        "blur": 0,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0,
+        "glow": 0
+      }
+    },
+    {
+      "id": "puppet-nilo-mouth-closed",
+      "name": "Nilo Carda mouth closed",
+      "type": "image",
+      "source": "/examples/cut-paper/mouths/paper-closed.png",
+      "visible": true,
+      "locked": false,
+      "z": 40,
+      "transform": {
+        "x": 36.3612,
+        "y": 54.629,
+        "scale": 0.05039999999999999,
+        "opacity": 0,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 36.3612,
+          "y": 54.629,
+          "scale": 0.05039999999999999,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "end": {
+          "x": 36.3612,
+          "y": 54.629,
+          "scale": 0.05039999999999999,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-0",
+            "time": 0,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-6000",
+            "time": 6,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-6140",
+            "time": 6.14,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-6560",
+            "time": 6.5600000000000005,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-6820",
+            "time": 6.82,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-7020",
+            "time": 7.02,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-7720",
+            "time": 7.72,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-8280",
+            "time": 8.28,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-8660",
+            "time": 8.66,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-8720",
+            "time": 8.72,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-9020",
+            "time": 9.02,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-9080",
+            "time": 9.08,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-9540",
+            "time": 9.54,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-9660",
+            "time": 9.66,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-9920",
+            "time": 9.92,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-10440",
+            "time": 10.440000000000001,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-25000",
+            "time": 25,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-dialogue-26737",
+            "time": 26.737000000000002,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-closed-40000",
+            "time": 40,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "relationship": {
+        "type": "parent",
+        "targetLayerId": "puppet-nilo"
+      },
+      "faceBinding": {
+        "poseLayerId": "puppet-nilo",
+        "role": "mouth",
+        "state": "closed"
+      }
+    },
+    {
+      "id": "puppet-nilo-mouth-small",
+      "name": "Nilo Carda mouth small",
+      "type": "image",
+      "source": "/examples/cut-paper/mouths/paper-small.png",
+      "visible": true,
+      "locked": false,
+      "z": 40,
+      "transform": {
+        "x": 36.3612,
+        "y": 54.629,
+        "scale": 0.05039999999999999,
+        "opacity": 0,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 36.3612,
+          "y": 54.629,
+          "scale": 0.05039999999999999,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "end": {
+          "x": 36.3612,
+          "y": 54.629,
+          "scale": 0.05039999999999999,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-0",
+            "time": 0,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-6000",
+            "time": 6,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-6140",
+            "time": 6.14,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-6560",
+            "time": 6.5600000000000005,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-6820",
+            "time": 6.82,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-7020",
+            "time": 7.02,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-7720",
+            "time": 7.72,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-8280",
+            "time": 8.28,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-8660",
+            "time": 8.66,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-8720",
+            "time": 8.72,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-9020",
+            "time": 9.02,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-9080",
+            "time": 9.08,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-9540",
+            "time": 9.54,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-9660",
+            "time": 9.66,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-9920",
+            "time": 9.92,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-10440",
+            "time": 10.440000000000001,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-25000",
+            "time": 25,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-dialogue-26737",
+            "time": 26.737000000000002,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-small-40000",
+            "time": 40,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "relationship": {
+        "type": "parent",
+        "targetLayerId": "puppet-nilo"
+      },
+      "faceBinding": {
+        "poseLayerId": "puppet-nilo",
+        "role": "mouth",
+        "state": "small"
+      }
+    },
+    {
+      "id": "puppet-nilo-mouth-wide",
+      "name": "Nilo Carda mouth wide",
+      "type": "image",
+      "source": "/examples/cut-paper/mouths/paper-wide.png",
+      "visible": true,
+      "locked": false,
+      "z": 40,
+      "transform": {
+        "x": 36.3612,
+        "y": 54.629,
+        "scale": 0.05039999999999999,
+        "opacity": 0,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 36.3612,
+          "y": 54.629,
+          "scale": 0.05039999999999999,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "end": {
+          "x": 36.3612,
+          "y": 54.629,
+          "scale": 0.05039999999999999,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-0",
+            "time": 0,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-6000",
+            "time": 6,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-6140",
+            "time": 6.14,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-6560",
+            "time": 6.5600000000000005,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-6820",
+            "time": 6.82,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-7020",
+            "time": 7.02,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-7720",
+            "time": 7.72,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-8280",
+            "time": 8.28,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-8660",
+            "time": 8.66,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-8720",
+            "time": 8.72,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-9020",
+            "time": 9.02,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-9080",
+            "time": 9.08,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-9540",
+            "time": 9.54,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-9660",
+            "time": 9.66,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-9920",
+            "time": 9.92,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-10440",
+            "time": 10.440000000000001,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-25000",
+            "time": 25,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-dialogue-26737",
+            "time": 26.737000000000002,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-wide-40000",
+            "time": 40,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "relationship": {
+        "type": "parent",
+        "targetLayerId": "puppet-nilo"
+      },
+      "faceBinding": {
+        "poseLayerId": "puppet-nilo",
+        "role": "mouth",
+        "state": "wide"
+      }
+    },
+    {
+      "id": "puppet-nilo-mouth-round",
+      "name": "Nilo Carda mouth round",
+      "type": "image",
+      "source": "/examples/cut-paper/mouths/paper-round.png",
+      "visible": true,
+      "locked": false,
+      "z": 40,
+      "transform": {
+        "x": 36.3612,
+        "y": 54.629,
+        "scale": 0.05039999999999999,
+        "opacity": 0,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 36.3612,
+          "y": 54.629,
+          "scale": 0.05039999999999999,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "end": {
+          "x": 36.3612,
+          "y": 54.629,
+          "scale": 0.05039999999999999,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-0",
+            "time": 0,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-6000",
+            "time": 6,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-6140",
+            "time": 6.14,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-6560",
+            "time": 6.5600000000000005,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-6820",
+            "time": 6.82,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-7020",
+            "time": 7.02,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-7720",
+            "time": 7.72,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-8280",
+            "time": 8.28,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-8660",
+            "time": 8.66,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-8720",
+            "time": 8.72,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-9020",
+            "time": 9.02,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-9080",
+            "time": 9.08,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-9540",
+            "time": 9.54,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-9660",
+            "time": 9.66,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-9920",
+            "time": 9.92,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-10440",
+            "time": 10.440000000000001,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-25000",
+            "time": 25,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-dialogue-26737",
+            "time": 26.737000000000002,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-nilo-mouth-round-40000",
+            "time": 40,
+            "x": 36.3612,
+            "y": 54.629,
+            "scale": 0.05039999999999999,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "relationship": {
+        "type": "parent",
+        "targetLayerId": "puppet-nilo"
+      },
+      "faceBinding": {
+        "poseLayerId": "puppet-nilo",
+        "role": "mouth",
+        "state": "round"
+      }
+    },
+    {
+      "id": "puppet-berta",
+      "name": "Berta Miga pose",
+      "type": "image",
+      "source": "/examples/cut-paper/puppets/berta-body.png",
+      "visible": true,
+      "locked": false,
+      "z": 42,
+      "transform": {
+        "x": 62,
+        "y": 64,
+        "scale": 0.38,
+        "opacity": 1,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 62,
+          "y": 64,
+          "scale": 0.38,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "end": {
+          "x": 62,
+          "y": 64,
+          "scale": 0.38,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-berta-0",
+            "time": 0,
+            "x": 62,
+            "y": 64,
+            "scale": 0.38,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-40000",
+            "time": 40,
+            "x": 62,
+            "y": 64,
+            "scale": 0.38,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "parallax": 1,
+      "effects": {
+        "shadow": 0.25,
+        "blendMode": "normal",
+        "mask": "none",
+        "maskRadius": 12,
+        "blur": 0,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0,
+        "glow": 0
+      }
+    },
+    {
+      "id": "puppet-berta-mouth-closed",
+      "name": "Berta Miga mouth closed",
+      "type": "image",
+      "source": "/examples/cut-paper/mouths/paper-closed.png",
+      "visible": true,
+      "locked": false,
+      "z": 50,
+      "transform": {
+        "x": 62.0646,
+        "y": 57.711,
+        "scale": 0.041800000000000004,
+        "opacity": 0,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 62.0646,
+          "y": 57.711,
+          "scale": 0.041800000000000004,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "end": {
+          "x": 62.0646,
+          "y": 57.711,
+          "scale": 0.041800000000000004,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-0",
+            "time": 0,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-17000",
+            "time": 17,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-17400",
+            "time": 17.4,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-17880",
+            "time": 17.88,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-18060",
+            "time": 18.06,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-18660",
+            "time": 18.66,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-18920",
+            "time": 18.92,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-19180",
+            "time": 19.18,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-19620",
+            "time": 19.62,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-31000",
+            "time": 31,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-31380",
+            "time": 31.38,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-32100",
+            "time": 32.1,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-32300",
+            "time": 32.3,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-32640",
+            "time": 32.64,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-dialogue-33320",
+            "time": 33.32,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-closed-40000",
+            "time": 40,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "relationship": {
+        "type": "parent",
+        "targetLayerId": "puppet-berta"
+      },
+      "faceBinding": {
+        "poseLayerId": "puppet-berta",
+        "role": "mouth",
+        "state": "closed"
+      }
+    },
+    {
+      "id": "puppet-berta-mouth-small",
+      "name": "Berta Miga mouth small",
+      "type": "image",
+      "source": "/examples/cut-paper/mouths/paper-small.png",
+      "visible": true,
+      "locked": false,
+      "z": 50,
+      "transform": {
+        "x": 62.0646,
+        "y": 57.711,
+        "scale": 0.041800000000000004,
+        "opacity": 0,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 62.0646,
+          "y": 57.711,
+          "scale": 0.041800000000000004,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "end": {
+          "x": 62.0646,
+          "y": 57.711,
+          "scale": 0.041800000000000004,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-berta-mouth-small-dialogue-0",
+            "time": 0,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-17000",
+            "time": 17,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-17400",
+            "time": 17.4,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-17880",
+            "time": 17.88,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-18060",
+            "time": 18.06,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-18660",
+            "time": 18.66,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-18920",
+            "time": 18.92,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-19180",
+            "time": 19.18,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-19620",
+            "time": 19.62,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-31000",
+            "time": 31,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-31380",
+            "time": 31.38,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-32100",
+            "time": 32.1,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-32300",
+            "time": 32.3,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-32640",
+            "time": 32.64,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-dialogue-33320",
+            "time": 33.32,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-small-40000",
+            "time": 40,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "relationship": {
+        "type": "parent",
+        "targetLayerId": "puppet-berta"
+      },
+      "faceBinding": {
+        "poseLayerId": "puppet-berta",
+        "role": "mouth",
+        "state": "small"
+      }
+    },
+    {
+      "id": "puppet-berta-mouth-wide",
+      "name": "Berta Miga mouth wide",
+      "type": "image",
+      "source": "/examples/cut-paper/mouths/paper-wide.png",
+      "visible": true,
+      "locked": false,
+      "z": 50,
+      "transform": {
+        "x": 62.0646,
+        "y": 57.711,
+        "scale": 0.041800000000000004,
+        "opacity": 0,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 62.0646,
+          "y": 57.711,
+          "scale": 0.041800000000000004,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "end": {
+          "x": 62.0646,
+          "y": 57.711,
+          "scale": 0.041800000000000004,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-0",
+            "time": 0,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-17000",
+            "time": 17,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-17400",
+            "time": 17.4,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-17880",
+            "time": 17.88,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-18060",
+            "time": 18.06,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-18660",
+            "time": 18.66,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-18920",
+            "time": 18.92,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-19180",
+            "time": 19.18,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-19620",
+            "time": 19.62,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-31000",
+            "time": 31,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-31380",
+            "time": 31.38,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-32100",
+            "time": 32.1,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-32300",
+            "time": 32.3,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-32640",
+            "time": 32.64,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-dialogue-33320",
+            "time": 33.32,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-wide-40000",
+            "time": 40,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "relationship": {
+        "type": "parent",
+        "targetLayerId": "puppet-berta"
+      },
+      "faceBinding": {
+        "poseLayerId": "puppet-berta",
+        "role": "mouth",
+        "state": "wide"
+      }
+    },
+    {
+      "id": "puppet-berta-mouth-round",
+      "name": "Berta Miga mouth round",
+      "type": "image",
+      "source": "/examples/cut-paper/mouths/paper-round.png",
+      "visible": true,
+      "locked": false,
+      "z": 50,
+      "transform": {
+        "x": 62.0646,
+        "y": 57.711,
+        "scale": 0.041800000000000004,
+        "opacity": 0,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 62.0646,
+          "y": 57.711,
+          "scale": 0.041800000000000004,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "end": {
+          "x": 62.0646,
+          "y": 57.711,
+          "scale": 0.041800000000000004,
+          "opacity": 0,
+          "rotation": 0
+        },
+        "duration": 40,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "puppet-berta-mouth-round-dialogue-0",
+            "time": 0,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-17000",
+            "time": 17,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-17400",
+            "time": 17.4,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-17880",
+            "time": 17.88,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-18060",
+            "time": 18.06,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-18660",
+            "time": 18.66,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-18920",
+            "time": 18.92,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-19180",
+            "time": 19.18,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-19620",
+            "time": 19.62,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-31000",
+            "time": 31,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-31380",
+            "time": 31.38,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-32100",
+            "time": 32.1,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-32300",
+            "time": 32.3,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-32640",
+            "time": 32.64,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-dialogue-33320",
+            "time": 33.32,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "puppet-berta-mouth-round-40000",
+            "time": 40,
+            "x": 62.0646,
+            "y": 57.711,
+            "scale": 0.041800000000000004,
+            "opacity": 0,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "relationship": {
+        "type": "parent",
+        "targetLayerId": "puppet-berta"
+      },
+      "faceBinding": {
+        "poseLayerId": "puppet-berta",
+        "role": "mouth",
+        "state": "round"
+      }
+    },
+    {
+      "id": "sticker-ice",
+      "name": "Papel cebolla",
+      "type": "image",
+      "source": "/examples/cut-paper/props/onion-paper.png",
+      "visible": true,
+      "locked": false,
+      "z": 8,
+      "transform": {
+        "x": 50,
+        "y": 58,
+        "scale": 0.22,
+        "opacity": 1,
+        "rotation": -6
+      },
+      "animation": {
+        "start": {
+          "x": 50,
+          "y": 58,
+          "scale": 0.22,
+          "opacity": 1,
+          "rotation": -6
+        },
+        "end": {
+          "x": 50,
+          "y": 58,
+          "scale": 0.22,
+          "opacity": 1,
+          "rotation": -6
+        },
+        "duration": 40,
+        "curve": "ease",
+        "keyframes": [
+          {
+            "id": "ice-0",
+            "time": 0,
+            "x": 50,
+            "y": 58,
+            "scale": 0.22,
+            "opacity": 1,
+            "rotation": -6,
+            "curve": "hold"
+          },
+          {
+            "id": "sticker-ice-40000",
+            "time": 40,
+            "x": 50,
+            "y": 58,
+            "scale": 0.22,
+            "opacity": 1,
+            "rotation": -6,
+            "curve": "hold"
+          }
+        ]
+      },
+      "parallax": 0.4
+    }
+  ],
+  "generationPolicy": "provided_only",
+  "dialogueBeats": [
+    {
+      "id": "nilo-1-0",
+      "text": "La",
+      "start": 6,
+      "end": 6.14,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-1",
+      "text": "fuente",
+      "start": 6.14,
+      "end": 6.5600000000000005,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-2",
+      "text": "no",
+      "start": 6.5600000000000005,
+      "end": 6.82,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-3",
+      "text": "está",
+      "start": 6.82,
+      "end": 7.02,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-4",
+      "text": "congelada",
+      "start": 7.02,
+      "end": 7.72,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-5",
+      "text": "Alguien",
+      "start": 8.28,
+      "end": 8.66,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-6",
+      "text": "le",
+      "start": 8.66,
+      "end": 8.72,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-7",
+      "text": "pegó",
+      "start": 8.72,
+      "end": 9.02,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-8",
+      "text": "un",
+      "start": 9.02,
+      "end": 9.08,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-9",
+      "text": "cuadrado",
+      "start": 9.08,
+      "end": 9.54,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-10",
+      "text": "de",
+      "start": 9.54,
+      "end": 9.66,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-11",
+      "text": "papel",
+      "start": 9.66,
+      "end": 9.92,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-1-12",
+      "text": "cebolla",
+      "start": 9.92,
+      "end": 10.440000000000001,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-1-0",
+      "text": "Pues",
+      "start": 17,
+      "end": 17.4,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-1-1",
+      "text": "sabe",
+      "start": 17.4,
+      "end": 17.88,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-1-2",
+      "text": "a",
+      "start": 17.88,
+      "end": 18.06,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-1-3",
+      "text": "hielo",
+      "start": 18.06,
+      "end": 18.66,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-1-4",
+      "text": "Lo",
+      "start": 18.92,
+      "end": 19.18,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-1-5",
+      "text": "probé",
+      "start": 19.18,
+      "end": 19.62,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-1",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "nilo-2-0",
+      "text": "Berta, eso es cola.",
+      "start": 25,
+      "end": 26.737000000000002,
+      "mouthLayerIds": [
+        "puppet-nilo-mouth-closed",
+        "puppet-nilo-mouth-small",
+        "puppet-nilo-mouth-wide",
+        "puppet-nilo-mouth-round"
+      ],
+      "audioTrackId": "vo-nilo-2",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-2-0",
+      "text": "Cola",
+      "start": 31,
+      "end": 31.38,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-2",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-2-1",
+      "text": "fría",
+      "start": 31.38,
+      "end": 32.1,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-2",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-2-2",
+      "text": "Como",
+      "start": 32.3,
+      "end": 32.64,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-2",
+      "confidence": "aligned-audio"
+    },
+    {
+      "id": "berta-2-3",
+      "text": "hielo",
+      "start": 32.64,
+      "end": 33.32,
+      "mouthLayerIds": [
+        "puppet-berta-mouth-closed",
+        "puppet-berta-mouth-small",
+        "puppet-berta-mouth-wide",
+        "puppet-berta-mouth-round"
+      ],
+      "audioTrackId": "vo-berta-2",
+      "confidence": "aligned-audio"
+    }
+  ],
+  "texts": [],
+  "audioTracks": [
+    {
+      "id": "vo-nilo-1",
+      "filename": "vo-nilo-nilo-1.wav",
+      "name": "nilo · La fuente no está congel",
+      "kind": "speech",
+      "startTime": 6,
+      "volume": 1
+    },
+    {
+      "id": "vo-berta-1",
+      "filename": "vo-berta-berta-1.wav",
+      "name": "berta · Pues sabe a hielo. Lo pr",
+      "kind": "speech",
+      "startTime": 17,
+      "volume": 1
+    },
+    {
+      "id": "vo-nilo-2",
+      "filename": "vo-nilo-nilo-2.wav",
+      "name": "nilo · Berta, eso es cola.",
+      "kind": "speech",
+      "startTime": 25,
+      "volume": 1
+    },
+    {
+      "id": "vo-berta-2",
+      "filename": "vo-berta-berta-2.wav",
+      "name": "berta · Cola fría. Como hielo.",
+      "kind": "speech",
+      "startTime": 31,
+      "volume": 1
+    }
+  ]
+}

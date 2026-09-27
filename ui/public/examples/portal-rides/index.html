@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark">
+  <title>Portal Rides · HocusPocus</title>
+  <link rel="stylesheet" href="../perspective-lab/review.css"><link rel="stylesheet" href="../moving-cutouts/dark.css"><link rel="stylesheet" href="rides.css">
+  <script type="module" src="../perspective-lab/review.js"></script>
+</head>
+<body data-review-key="hocuspocus:portal-rides:v1" data-collection="hocuspocus-portal-rides-20260916" data-report-filename="mis-valoraciones-portal-rides.json">
+<header>
+  <nav><a class="brand" href="/">✦ HOCUSPOCUS</a><a href="../skate-portal-v2/">El experimento anterior ↗</a></nav>
+  <div class="intro"><div><p class="eyebrow">UN VIAJE · VARIAS CAPAS</p><h1>El mundo cambia.<br>El viaje sigue.</h1></div><div class="lead"><p>Una carretera que baja del mar al cielo. Un caballero que vuela del hielo al fuego.</p><p>Dos escenas verticales: personajes en movimiento, paisajes independientes y una puerta que crece hasta ocupar el encuadre.</p><p><a href="#grid">Ver los dos clips ↓</a></p></div></div>
+  <div class="instructions"><span>01 <b>Reproduce</b> los viajes.</span><span>02 <b>Valora</b> el resultado.</span><span>03 <b>Abre</b> las capas en Vídeo 3D.</span></div>
+</header>
+<main>
+  <div class="toolbar">
+    <label>Mostrar<select id="filter"><option value="all">Los dos viajes</option><option value="pending">Sin evaluar</option><option value="keep">Me encantan</option><option value="refine">Para retocar</option><option value="discard">Descartadas</option></select></label>
+    <label>Estilo<select id="style"><option value="all">Todos</option><option value="sin filtro">Sin filtro PSX</option></select></label>
+    <span id="progress" role="status">Cargando colección…</span><button id="export" class="export">Descargar mis valoraciones ↓</button>
+  </div>
+  <p id="storage" class="storage">Tus valoraciones se guardan en este navegador. Puedes descargarlas para compartirlas.</p>
+  <div id="grid" class="grid" aria-label="Los dos viajes para evaluar"></div><p id="empty" hidden>No hay propuestas con estos filtros.</p>
+  <section class="edit-help"><p class="eyebrow">GUARDADOS EN HOCUSPOCUS · CAPAS EDITABLES</p><h2>La carretera pertenece al viaje.</h2><p>En la bajada, el asfalto y sus marcas avanzan de forma continua. El salto mantiene su ritmo natural y el portal cambia el paisaje al fondo. La cámara conserva su orientación.</p><p>En el vuelo, el caballero y el dragón forman una capa transparente. El castillo, la lava, la bruma cercana y la puerta tienen su propio movimiento.</p><p>Descarga <b>Plano</b> y ábrelo en <b>Estudios → Vídeo 3D → Cargar plano</b>. También puedes importar la <b>Plantilla reutilizable</b> en Mis escenarios. Los dos están guardados en la biblioteca local como <b>Portal Rides</b>.</p><p>Para ajustar la bajada: <b>Escenario cinematográfico → Calzada infinita</b> permite cambiar velocidad, pendiente y continuidad entre planos. En la capa del personaje, <b>Apariencia → Inclinación</b> gira la imagen desde su apoyo. Los puntos del portal están en <b>Efectos → Trayectoria animada</b>.</p><p>La bajada dura 6,5 segundos y el vuelo 5,1 segundos. No llevan sonido. El movimiento se generó con MiniMax H3 y pasó por RIFE y Quitar fondo dentro de HocusPocus. Vídeo 3D compone y exporta el resultado. Son estudios visuales; las capas conservan los pequeños defectos que pueda tener el recorte automático.</p></section>
+  <section class="edit-help"><h2>Llévate los vídeos.</h2><p><a href="downhill.mp4" download>Descargar Downhill (MP4) ↓</a> · <a href="ash-rider.mp4" download>Descargar Ash Rider (MP4) ↓</a></p></section>
+</main>
+<footer><a href="/">Volver a HocusPocus ↗</a><span>Personajes, vídeo, interpolación, recorte y render en HocusPocus.</span></footer>
+<dialog id="viewer" aria-label="Vista ampliada del viaje"><div class="viewer-head"><h2 id="viewer-title"></h2><button id="close" aria-label="Cerrar vista ampliada">Cerrar ✕</button></div><video id="large-video" controls loop playsinline preload="none"></video><div class="viewer-foot"><button id="previous">← Anterior</button><span id="viewer-count"></span><button id="next">Siguiente →</button></div></dialog>
+</body></html>

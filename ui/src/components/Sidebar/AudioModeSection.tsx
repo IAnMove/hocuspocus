@@ -1,3 +1,5 @@
+import { isInstructionSpeechModel } from '../../lib/instructionSpeech'
+import { InstructionAudioControls } from './InstructionAudioControls'
 import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -31,6 +33,7 @@ export function AudioModeSection() {
   const setTtsVoiceFile = useStore(s => s.setTtsVoiceFile)
   const setDurationSeconds = useStore(s => s.setDurationSeconds)
 
+  if (isInstructionSpeechModel(params.model_type)) return <InstructionAudioControls />
   if (!modelOptions?.audio_prompt_type_sources) return null
 
   const isAudioOnly = modelOptions.audio_only

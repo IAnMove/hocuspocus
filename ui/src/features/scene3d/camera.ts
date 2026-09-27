@@ -44,6 +44,39 @@ export function unitProgress(sceneSeconds: number, duration: number): number {
   return u * u * (3 - 2 * u)
 }
 
+/** Landscape-authored cameras are adapted with these invertible scales for 9:16. */
+export const MOBILE_CAMERA = {
+  fovScale: 1.22,
+  distance: 1.2,
+  extraY: 0.14,
+  lateral: 0.82,
+  orbitHeight: 1.08,
+} as const
+
+const MOBILE_RUNTIME_FAMILIES = new Set(['chase', 'hood', 'wing', 'front', 'side', 'pursuit'])
+
+export function scaleEyeForMobile(eye: Vec3, look: Vec3, invert = false): Vec3 {
+  if (invert) {
+    const delta: Vec3 = [eye[0] - look[0], eye[1] - look[1] - MOBILE_CAMERA.extraY, eye[2] - look[2]]
+    return [
+      look[0] + delta[0] / MOBILE_CAMERA.distance,
+      look[1] + delta[1] / MOBILE_CAMERA.distance,
+      look[2] + delta[2] / MOBILE_CAMERA.distance,
+    ]
+  }
+  const delta = vecSub(eye, look)
+  return [
+    look[0] + delta[0] * MOBILE_CAMERA.distance,
+    look[1] + delta[1] * MOBILE_CAMERA.distance + MOBILE_CAMERA.extraY,
+    look[2] + delta[2] * MOBILE_CAMERA.distance,
+  ]
+}
+
+function mobileRuntimeEye(camera: Scene3DCamera, eye: Vec3, look: Vec3): Vec3 {
+  if (camera.frameFormat !== 'portrait' || camera.eyeOffset || !MOBILE_RUNTIME_FAMILIES.has(camera.family)) return eye
+  return scaleEyeForMobile(eye, look)
+}
+
 export function orbitEye(look: Vec3, radius: number, height: number, azimuthRad: number): Vec3 {
   const r = Number.isFinite(radius) && radius > 0 ? radius : 4
   const h = Number.isFinite(height) ? height : 1.6
@@ -104,26 +137,26 @@ export function cameraEyeAtTime(
   }
   if (camera.family === 'chase') {
     const sway = Math.sin(sceneSeconds * 1.35) * 0.16
-    return [0.28 + sway, 1.18, 5.45]
+    return mobileRuntimeEye(camera, [0.28 + sway, 1.18, 5.45], look)
   }
   if (camera.family === 'hood') {
     const bump = Math.sin(sceneSeconds * 10) * 0.03
-    return [0, 1.04 + bump, -0.85]
+    return mobileRuntimeEye(camera, [0, 1.04 + bump, -0.85], look)
   }
   if (camera.family === 'wing') {
-    return [5.15, 0.95, 1.65]
+    return mobileRuntimeEye(camera, [5.15, 0.95, 1.65], look)
   }
   if (camera.family === 'front') {
-    return [look[0], look[1] - 0.08, look[2] + 4.05]
+    return mobileRuntimeEye(camera, [look[0], look[1] - 0.08, look[2] + 4.05], look)
   }
   if (camera.family === 'side') {
-    return [look[0], look[1] - 0.18, look[2] + 3.55]
+    return mobileRuntimeEye(camera, [look[0], look[1] - 0.18, look[2] + 3.55], look)
   }
   if (camera.family === 'follow') {
     return [look[0], look[1] + 0.35, look[2] + radius]
   }
   if (camera.family === 'pursuit') {
-    return [look[0] - 2.1, look[1] + 0.15, look[2] + 2.8]
+    return mobileRuntimeEye(camera, [look[0] - 2.1, look[1] + 0.15, look[2] + 2.8], look)
   }
   if (camera.family === 'reveal') {
     return lerp3([camera.eye[0], camera.eye[1] - 1.35, camera.eye[2] + 1.1], camera.eye, s)

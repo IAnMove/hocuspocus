@@ -1,4 +1,4 @@
-import { EXPRESSIONS, VISEMES, defaultSpeech, type FacePlacement, type MouthCue, type Scene3DSpeech, type SpeechClip, type Scene3DSoundtrack, type Viseme } from './types'
+import { EXPRESSIONS, VISEMES, defaultSpeech, type Expression, type ExpressionCue, type FacePlacement, type MouthCue, type Scene3DSpeech, type SpeechClip, type Scene3DSoundtrack, type Viseme } from './types'
 import { parseScene3DSourceRef } from '../slotSource'
 
 const RHUBARB: Record<string, Viseme> = { X: 'rest', A: 'M', B: 'I', C: 'E', D: 'A', E: 'O', F: 'U', G: 'F', H: 'L' }
@@ -15,9 +15,23 @@ export function parseMouthCues(raw: unknown): MouthCue[] {
     const shape = cue.value ?? cue.shape
     const viseme = (typeof shape === 'string' ? RHUBARB[shape] : undefined) ?? cue.viseme
     if (!VISEMES.includes(viseme as Viseme) || !finite(cue.start, 0, 600) || !finite(cue.end, 0, 600) || cue.end <= cue.start) throw new Error('Invalid mouth cue.')
-    return { start: cue.start, end: cue.end, viseme: viseme as Viseme }
+    if (cue.manual !== undefined && cue.manual !== true) throw new Error('Invalid mouth cue.')
+    return { start: cue.start, end: cue.end, viseme: viseme as Viseme, ...(cue.manual === true ? { manual: true as const } : {}) }
   }).sort((a, b) => a.start - b.start)
   if (cues.some((cue, index) => index > 0 && cue.start < cues[index - 1].end - 1e-6)) throw new Error('Overlapping mouth cues.')
+  return cues
+}
+export function parseExpressionCues(raw: unknown): ExpressionCue[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > 10000) throw new Error('Invalid expression cues (maximum 10,000).')
+  const cues = raw.map(entry => {
+    const cue = object(entry)
+    const expression = cue.expression
+    if (!EXPRESSIONS.includes(expression as Expression) || !finite(cue.start, 0, 600) || !finite(cue.end, 0, 600) || cue.end <= cue.start) throw new Error('Invalid expression cue.')
+    if (cue.manual !== undefined && cue.manual !== true) throw new Error('Invalid expression cue.')
+    return { start: cue.start, end: cue.end, expression: expression as Expression, ...(cue.manual === true ? { manual: true as const } : {}) }
+  }).sort((a, b) => a.start - b.start)
+  if (cues.some((cue, index) => index > 0 && cue.start < cues[index - 1].end - 1e-6)) throw new Error('Overlapping expression cues.')
   return cues
 }
 export function validFace(value: unknown): value is FacePlacement {
@@ -48,7 +62,7 @@ export function parseSpeech(raw: unknown): Scene3DSpeech | undefined {
   const data = object(raw), defaults = defaultSpeech()
   if (data.version !== 1 || typeof data.enabled !== 'boolean') throw new Error('Invalid speech configuration.')
   if (data.face !== undefined && !validFace(data.face)) throw new Error('Invalid face placement.')
-  const ref = (key: 'audio' | 'atlas') => {
+  const ref = (key: 'audio' | 'atlas' | 'facePack') => {
     if (data[key] === undefined) return undefined
     const parsed = parseScene3DSourceRef(data[key])
     if (!parsed || !safeMediaUrl(parsed.url)) throw new Error('Invalid speech asset.')
@@ -58,9 +72,13 @@ export function parseSpeech(raw: unknown): Scene3DSpeech | undefined {
     if (!finite(data[key], min, max)) throw new Error('Invalid speech timing or level.')
   }
   const clips = data.clips === undefined ? undefined : parseSpeechClips(data.clips)
+  const facePack = ref('facePack')
+  const expressionCues = data.expressionCues === undefined ? undefined : parseExpressionCues(data.expressionCues)
   return { ...defaults, ...speechAppearance(data, defaults), ...speechRange(data), ...(clips ? { clips } : {}),
     version: 1, enabled: data.enabled, face: data.face as FacePlacement | undefined,
-    audio: ref('audio'), atlas: ref('atlas'), cues: parseMouthCues(data.cues), start: data.start as number, offset: data.offset as number,
+    audio: ref('audio'), atlas: ref('atlas'), ...(facePack ? { facePack } : {}),
+    cues: parseMouthCues(data.cues), ...(expressionCues && expressionCues.length ? { expressionCues } : {}),
+    start: data.start as number, offset: data.offset as number,
     gain: data.gain as number, strength: data.strength as number }
 }
 export function parseSpeechClips(raw: unknown): SpeechClip[] {
@@ -101,6 +119,20 @@ export function cueAt(cues: readonly MouthCue[], time: number): Viseme {
   let lo = 0, hi = cues.length - 1, found: MouthCue | undefined
   while (lo <= hi) { const mid = (lo + hi) >> 1; if (cues[mid].start <= time) { found = cues[mid]; lo = mid + 1 } else hi = mid - 1 }
   return found && time < found.end ? found.viseme : 'rest'
+}
+export function expressionCueAt(cues: readonly ExpressionCue[], time: number, fallback: Expression): Expression {
+  let lo = 0, hi = cues.length - 1, found: ExpressionCue | undefined
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (cues[mid].start <= time) { found = cues[mid]; lo = mid + 1 } else hi = mid - 1 }
+  return found && time < found.end ? found.expression : fallback
+}
+export function expressionAt(speech: Scene3DSpeech, sceneSeconds: number): Expression {
+  if (speech.clips) {
+    const clip = speech.clips.find(item => sceneSeconds >= item.start && sceneSeconds < (item.end ?? 600))
+    return clip ? expressionAt({ ...speech, ...clip, clips: undefined }, sceneSeconds) : speech.expression
+  }
+  const time = sceneSeconds - speech.start + speech.offset
+  if (!speech.enabled || sceneSeconds < speech.start || sceneSeconds >= (speech.end ?? Infinity)) return speech.expression
+  return expressionCueAt(speech.expressionCues ?? [], time, speech.expression)
 }
 /** Pure time sampling, including seeking backwards and rendering frames out of order. */
 export function mouthAt(speech: Scene3DSpeech, sceneSeconds: number): { a: number; b: number; mix: number } {

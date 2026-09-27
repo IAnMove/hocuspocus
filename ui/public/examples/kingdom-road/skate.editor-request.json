@@ -1,0 +1,359 @@
+{
+  "name": "Calzada infinita - 35 mundos - 3m44",
+  "workspace": "default",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "clips": [
+    {
+      "name": "CLIP 01 — Calzada infinita · Coast",
+      "source": "/api/v1/file/2026-09-16-02h52m43s_world3d-scene_29f251.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 02 — Calzada infinita · Clouds",
+      "source": "/api/v1/file/2026-09-16-02h54m54s_world3d-scene_78f6b0.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 03 — Calzada infinita · Neon",
+      "source": "/api/v1/file/2026-09-16-02h56m17s_world3d-scene_ec61f0.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 04 — Calzada infinita · Cobalt Crater",
+      "source": "/api/v1/file/2026-09-16-02h58m28s_world3d-scene_783f76.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 05 — Calzada infinita · Coral Radio",
+      "source": "/api/v1/file/2026-09-16-03h03m33s_world3d-scene_0e3938.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 06 — Calzada infinita · Amber Ice",
+      "source": "/api/v1/file/2026-09-16-03h10m17s_world3d-scene_9ceef0.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 07 — Calzada infinita · Rose Orbit",
+      "source": "/api/v1/file/2026-09-16-03h10m38s_world3d-scene_6cabb3.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 08 — Calzada infinita · Ocean Window",
+      "source": "/api/v1/file/2026-09-16-03h10m59s_world3d-scene_ddd5ef.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 09 — Calzada infinita · Scarlet Tide",
+      "source": "/api/v1/file/2026-09-16-03h11m21s_world3d-scene_b1f1ba.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 10 — Calzada infinita · Glass Orchard",
+      "source": "/api/v1/file/2026-09-16-03h11m42s_world3d-scene_969e6a.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 11 — Calzada infinita · Furnace",
+      "source": "/api/v1/file/2026-09-16-03h12m02s_world3d-scene_f807a4.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 12 — Calzada infinita · Moon",
+      "source": "/api/v1/file/2026-09-16-03h12m20s_world3d-scene_56fa4e.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 13 — Calzada infinita · Snow",
+      "source": "/api/v1/file/2026-09-16-03h17m32s_world3d-scene_105fa0.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 14 — Calzada infinita · Sea",
+      "source": "/api/v1/file/2026-09-16-03h17m52s_world3d-scene_f60dc6.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 15 — Calzada infinita · Last Aqueduct",
+      "source": "/api/v1/file/2026-09-16-03h19m02s_world3d-scene_c735ca.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 16 — Calzada infinita · Antler Moon",
+      "source": "/api/v1/file/2026-09-16-03h19m41s_world3d-scene_815dc1.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 17 — Calzada infinita · Winter Shoulder",
+      "source": "/api/v1/file/2026-09-16-03h20m14s_world3d-scene_fc7332.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 18 — Calzada infinita · Thorn Crown",
+      "source": "/api/v1/file/2026-09-16-03h20m47s_world3d-scene_2e44c9.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 19 — Calzada infinita · Moon Grave",
+      "source": "/api/v1/file/2026-09-16-03h23m36s_world3d-scene_faf135.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 20 — Calzada infinita · Black Tide",
+      "source": "/api/v1/file/2026-09-16-03h24m09s_world3d-scene_80de62.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 21 — Calzada infinita · Violet Oracle",
+      "source": "/api/v1/file/2026-09-16-03h24m44s_world3d-scene_022408.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 22 — Calzada infinita · Hollow Saint",
+      "source": "/api/v1/file/2026-09-16-03h25m19s_world3d-scene_9f037a.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 23 — Calzada infinita · Copper Trees",
+      "source": "/api/v1/file/2026-09-16-03h25m53s_world3d-scene_710768.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 24 — Calzada infinita · Ember Heart",
+      "source": "/api/v1/file/2026-09-16-03h26m29s_world3d-scene_3ff10c.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 25 — Calzada infinita · Final Gate",
+      "source": "/api/v1/file/2026-09-16-03h27m01s_world3d-scene_0442eb.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 26 — Calzada infinita · Sleeping Titan",
+      "source": "/api/v1/file/2026-09-16-03h32m20s_world3d-scene_cb2293.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 27 — Calzada infinita · Drowned King",
+      "source": "/api/v1/file/2026-09-16-03h32m53s_world3d-scene_453519.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 28 — Calzada infinita · Red Pilgrim",
+      "source": "/api/v1/file/2026-09-16-03h33m13s_world3d-scene_077366.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 29 — Calzada infinita · Jade Dragon",
+      "source": "/api/v1/file/2026-09-16-03h33m34s_world3d-scene_626329.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 30 — Calzada infinita · Bell Of Ash",
+      "source": "/api/v1/file/2026-09-16-03h33m54s_world3d-scene_3e1041.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 31 — Calzada infinita · Sand Library",
+      "source": "/api/v1/file/2026-09-16-03h34m13s_world3d-scene_a17098.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 32 — Calzada infinita · Fungal Throne",
+      "source": "/api/v1/file/2026-09-16-03h34m31s_world3d-scene_efc59b.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 33 — Calzada infinita · Golden Ruin",
+      "source": "/api/v1/file/2026-09-16-03h34m48s_world3d-scene_baf4e8.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 34 — Calzada infinita · Storm Bridge",
+      "source": "/api/v1/file/2026-09-16-03h35m20s_world3d-scene_c0304d.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 35 — Calzada infinita · Knight Passage",
+      "source": "/api/v1/file/2026-09-16-03h35m51s_world3d-scene_100ceb.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 6.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    }
+  ]
+}

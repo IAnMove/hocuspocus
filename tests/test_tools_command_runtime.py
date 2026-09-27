@@ -154,6 +154,8 @@ def test_native_task_projection_identifies_upscale_for_activity(tmp_path, capabi
                       and node.name == "_generation_task_fields")
     namespace = {
         "time": time,
+        "os": __import__("os"),
+        "_workspace_dir": lambda workspace: str(Path("/tmp/activity-test") / workspace),
         "_public_generation_details": lambda params: params,
         "_task_status": lambda status: status,
         "_task_timestamp": lambda job, key: job.get(key),

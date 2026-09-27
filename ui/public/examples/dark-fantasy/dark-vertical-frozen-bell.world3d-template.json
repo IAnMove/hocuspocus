@@ -1,0 +1,166 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-vertical-frozen-bell",
+  "title": "Dark Fantasy · La campana de hielo",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
+  "includeAssets": true,
+  "createdAt": "2026-09-14T19:30:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-frozen-bell",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "backdrop",
+      "floorColor": "#152a34",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-frozen-bell.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          0.2,
+          0,
+          0
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "far-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          0,
+          0,
+          -3
+        ],
+        "scale": 4.2,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#436875",
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "snow",
+        "kind": "snow",
+        "position": {
+          "x": 0,
+          "y": 0.5,
+          "z": 1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#dcffff",
+        "scale": 2.2,
+        "intensity": 0.6,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.32,
+        2.9699999999999998,
+        10.24
+      ],
+      "look": [
+        0.0,
+        4.05,
+        -1.0
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.06666666666666665,
+          0.6499999999999998,
+          5.688888888888889
+        ],
+        "to": [
+          -0.12222222222222223,
+          0.6499999999999998,
+          5.422222222222222
+        ],
+        "lookFrom": [
+          -0.11111111111111112,
+          1.25,
+          -0.5555555555555556
+        ],
+        "lookTo": [
+          -0.11111111111111112,
+          1.25,
+          -0.5555555555555556
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "name": "Tijeral · plano 1 plaza",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "duration": 6,
+  "layers": [
+    {
+      "id": "camera",
+      "name": "Camera",
+      "type": "camera",
+      "source": "",
+      "visible": true,
+      "locked": false,
+      "z": 100,
+      "transform": {
+        "x": 50,
+        "y": 50,
+        "scale": 1,
+        "opacity": 1,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 50,
+          "y": 50,
+          "scale": 1,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "end": {
+          "x": 50,
+          "y": 50,
+          "scale": 1.04,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "duration": 6,
+        "curve": "ease",
+        "keyframes": [
+          {
+            "id": "camera-0",
+            "time": 0,
+            "x": 50,
+            "y": 50,
+            "scale": 1,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "ease"
+          },
+          {
+            "id": "camera-6000",
+            "time": 6,
+            "x": 50,
+            "y": 50,
+            "scale": 1.04,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "ease"
+          }
+        ]
+      }
+    },
+    {
+      "id": "location-plaza",
+      "name": "Location plaza",
+      "type": "image",
+      "source": "/examples/cut-paper/locations/plaza.png",
+      "visible": true,
+      "locked": false,
+      "z": 0,
+      "transform": {
+        "x": 50,
+        "y": 50,
+        "scale": 1,
+        "opacity": 1,
+        "rotation": 0
+      },
+      "animation": {
+        "start": {
+          "x": 50,
+          "y": 50,
+          "scale": 1,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "end": {
+          "x": 50,
+          "y": 50,
+          "scale": 1,
+          "opacity": 1,
+          "rotation": 0
+        },
+        "duration": 6,
+        "curve": "hold",
+        "keyframes": [
+          {
+            "id": "location-plaza-0",
+            "time": 0,
+            "x": 50,
+            "y": 50,
+            "scale": 1,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          },
+          {
+            "id": "location-plaza-6000",
+            "time": 6,
+            "x": 50,
+            "y": 50,
+            "scale": 1,
+            "opacity": 1,
+            "rotation": 0,
+            "curve": "hold"
+          }
+        ]
+      },
+      "fill": true,
+      "parallax": 0.15
+    },
+    {
+      "id": "sticker-ice",
+      "name": "Papel cebolla",
+      "type": "image",
+      "source": "/examples/cut-paper/props/onion-paper.png",
+      "visible": true,
+      "locked": false,
+      "z": 8,
+      "transform": {
+        "x": 50,
+        "y": 58,
+        "scale": 0.22,
+        "opacity": 1,
+        "rotation": -6
+      },
+      "animation": {
+        "start": {
+          "x": 50,
+          "y": 58,
+          "scale": 0.22,
+          "opacity": 1,
+          "rotation": -6
+        },
+        "end": {
+          "x": 50,
+          "y": 58,
+          "scale": 0.22,
+          "opacity": 1,
+          "rotation": -6
+        },
+        "duration": 6,
+        "curve": "ease",
+        "keyframes": [
+          {
+            "id": "ice-0",
+            "time": 0,
+            "x": 50,
+            "y": 58,
+            "scale": 0.22,
+            "opacity": 1,
+            "rotation": -6,
+            "curve": "hold"
+          },
+          {
+            "id": "sticker-ice-6000",
+            "time": 6,
+            "x": 50,
+            "y": 58,
+            "scale": 0.22,
+            "opacity": 1,
+            "rotation": -6,
+            "curve": "hold"
+          }
+        ]
+      },
+      "parallax": 0.4
+    }
+  ],
+  "generationPolicy": "provided_only",
+  "dialogueBeats": [],
+  "texts": [
+    {
+      "id": "title",
+      "text": "Tijeral",
+      "start": 0.4,
+      "end": 3.6,
+      "preset": "rise",
+      "x": 50,
+      "y": 12,
+      "size": 7,
+      "color": "#1d2b5a",
+      "rotation": 0
+    }
+  ],
+  "audioTracks": []
+}

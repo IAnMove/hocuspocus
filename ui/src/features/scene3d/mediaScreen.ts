@@ -1,7 +1,9 @@
 import { durableScene3DSourceUrl, parseScene3DSourceRef } from './slotSource.ts'
 import type { Scene3DSourceRef } from './types.ts'
+import { parseImagePoses, type ImagePose } from './imagePoseSequence'
+import { loopedMediaTime, parseMediaLoop, type MediaLoop } from './mediaLoop'
 
-export type MediaScreen = {
+export type MediaScreen = MediaLoop & {
   sourceUrl: string
   sourceRef?: Scene3DSourceRef
   media: 'image' | 'video'
@@ -14,12 +16,16 @@ export type MediaScreen = {
   roll: number
   width: number
   height: number
-  style: 'monitor' | 'billboard' | 'frameless'
+  style: 'monitor' | 'billboard' | 'frameless' | 'crt'
+  /** Colour shift of a CRT, in degrees, so a wall of TVs is not uniform. */
+  hue?: number
   fit: 'contain' | 'cover'
   start: number
   speed: number
   loop: boolean
   flipY: boolean
+  transparent?: boolean
+  poseSequence?: ImagePose[]
 }
 
 export const defaultMediaScreen = (): MediaScreen => ({
@@ -60,31 +66,55 @@ export function defaultModelScreen(nodeNames: readonly string[] = [], meshNames:
   return { ...defaultMediaScreen(), mode: 'mesh', targetMesh: pickScreenAnchor(meshNames) || meshNames[0] || 'SCREEN_CONTENT' }
 }
 
-export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
-  if (!raw || typeof raw !== 'object') return undefined
-  const value = raw as Partial<MediaScreen>, defaults = defaultMediaScreen()
-  const sourceUrl = durableScene3DSourceUrl(value.sourceUrl ?? '')
-  const mode = value.mode === 'plane' ? 'plane' : 'mesh'
-  const plane = mode === 'plane'
+function parseScreenStyle(value: unknown): MediaScreen['style'] {
+  return value === 'billboard' || value === 'frameless' || value === 'crt' ? value : 'monitor'
+}
+
+function parseScreenFit(value: unknown): MediaScreen['fit'] {
+  return value === 'cover' ? 'cover' : 'contain'
+}
+
+function parseScreenGeometry(value: Partial<MediaScreen>, defaults: MediaScreen, plane: boolean) {
   return {
-    sourceUrl, sourceRef: sourceUrl ? parseScene3DSourceRef(value.sourceRef) : undefined,
-    media: value.media === 'video' ? 'video' : 'image', mode,
     targetMesh: typeof value.targetMesh === 'string' ? value.targetMesh : defaults.targetMesh,
     anchor: typeof value.anchor === 'string' ? value.anchor.slice(0, 120) : '',
-    offset: parseOffset(value.offset), pitch: bounded(value.pitch, 0, -Math.PI, Math.PI),
-    yaw: bounded(value.yaw, 0, -Math.PI, Math.PI), roll: bounded(value.roll, 0, -Math.PI, Math.PI),
+    offset: parseOffset(value.offset),
+    pitch: bounded(value.pitch, 0, -Math.PI, Math.PI),
+    yaw: bounded(value.yaw, 0, -Math.PI, Math.PI),
+    roll: bounded(value.roll, 0, -Math.PI, Math.PI),
     width: bounded(value.width, plane ? 0.32 : 4, 0.02, 80),
     height: bounded(value.height, plane ? 0.22 : 3, 0.02, 80),
-    style: value.style === 'billboard' || value.style === 'frameless' ? value.style : 'monitor',
-    fit: value.fit === 'cover' ? 'cover' : 'contain',
-    start: bounded(value.start, 0, 0, 86400), speed: bounded(value.speed, 1, 0.05, 8),
-    loop: value.loop !== false, flipY: value.flipY === true,
   }
 }
 
-export function mediaScreenTime(seconds: number, duration: number, screen: Pick<MediaScreen, 'start' | 'speed' | 'loop'>) {
+function parseHue(value: unknown): { hue?: number } {
+  return typeof value === 'number' && Number.isFinite(value) && value ? { hue: Math.max(-180, Math.min(180, value)) } : {}
+}
+
+export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const value = raw as Partial<MediaScreen>, defaults = defaultMediaScreen()
+  const poseSequence = value.media === 'video' ? undefined : parseImagePoses(value.poseSequence)
+  const sourceUrl = poseSequence?.[0].sourceUrl || durableScene3DSourceUrl(value.sourceUrl ?? '')
+  const mode = value.mode === 'plane' ? 'plane' : 'mesh'
+  return {
+    sourceUrl, sourceRef: sourceUrl ? parseScene3DSourceRef(value.sourceRef) : undefined,
+    media: value.media === 'video' ? 'video' : 'image', mode,
+    ...parseScreenGeometry(value, defaults, mode === 'plane'),
+    style: parseScreenStyle(value.style), fit: parseScreenFit(value.fit),
+    start: bounded(value.start, 0, 0, 86400), speed: bounded(value.speed, 1, 0.05, 8),
+    loop: value.loop !== false, flipY: value.flipY === true,
+    ...(value.transparent || poseSequence ? { transparent: true } : {}),
+    ...parseHue(value.hue),
+    ...(poseSequence ? { poseSequence } : {}),
+    ...parseMediaLoop(value),
+  }
+}
+
+export function mediaScreenTime(seconds: number, duration: number, screen: Pick<MediaScreen, 'start' | 'speed' | 'loop'> & MediaLoop) {
   if (!Number.isFinite(duration) || duration <= 0) return 0
-  const time = screen.start + Math.max(0, seconds) * screen.speed
+  const time = Math.max(screen.start, screen.loopRange?.[0] ?? 0) + (Math.max(0, seconds) + (screen.timeOffset ?? 0)) * screen.speed
+  if (screen.loop && (screen.loopRange || screen.pingPong)) return loopedMediaTime(time, duration, screen)
   return screen.loop ? ((time % duration) + duration) % duration : Math.min(time, Math.max(0, duration - .001))
 }
 
@@ -98,5 +128,6 @@ export function mediaScreenMountKey(screen?: MediaScreen) {
   return JSON.stringify([
     screen.sourceUrl, screen.media, screen.mode, screen.targetMesh, screen.anchor,
     screen.offset, screen.pitch, screen.yaw, screen.roll, screen.width, screen.height, screen.style, screen.fit, screen.flipY,
+    Boolean(screen.transparent), screen.poseSequence?.map(pose => pose.sourceUrl), screen.hue ?? 0,
   ])
 }

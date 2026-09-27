@@ -2,7 +2,7 @@ import { Mesh, MeshStandardMaterial, SRGBColorSpace, TextureLoader, type BufferG
 import { EXPRESSIONS, blinkAt } from './eyes'
 import { createAtlas, faceMaterial } from './mouths'
 import { faceMeshes } from './calibration'
-import { mouthAt } from './track'
+import { expressionAt, mouthAt } from './track'
 import type { Scene3DSpeech } from './types'
 
 export class SpeechFaceRuntime {
@@ -54,7 +54,7 @@ export class SpeechFaceRuntime {
       }
     }
     if (!this.binding || !speech?.face) return
-    const u = this.binding.uniforms, f = speech.face, m = mouthAt(speech, seconds), e = EXPRESSIONS[speech.expression]
+    const u = this.binding.uniforms, f = speech.face, m = mouthAt(speech, seconds), e = EXPRESSIONS[expressionAt(speech, seconds)]
     u.faceCenter.value.fromArray(f.center); u.faceSize.value.fromArray(f.size); u.skinColor.value.fromArray(f.skin)
     u.cleanSkin.value = speech.clean ? 1 : 0; u.mouthStrength.value = speech.strength
     u.mouthA.value = m.a; u.mouthB.value = m.b; u.mouthMix.value = m.mix

@@ -22,12 +22,14 @@ Examples:
 
 - `Wan2.1 Text2video 14B`
 - `Qwen Image 20B`
+- `Qwen Image 2.1`
 - `TTS HeartMuLa OSS 3B`
 
 Practical use:
 
 - For `Wan2.1 Text2video 14B`, the prompt is your whole scene description.
 - For `Qwen Image 20B`, the prompt can also describe posters, signs, or images with a lot of visible text, because this model is especially good at rendering long text inside images.
+- For `Qwen Image 2.1`, the same model does text-to-image and edit: native 2K, up to 10 identity references, a local mask, outpaint, and RGBA transparency. Describe the finished picture, or the change to the source.
 - For `TTS HeartMuLa OSS 3B`, the prompt is usually lyrics, while the extra tags field steers the musical style.
 
 ### Text + image models

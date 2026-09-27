@@ -169,6 +169,47 @@ test('workflow failures persist and explicit resume retries only the current ste
   assert.equal(calls, 2)
 })
 
+test('cancel during execute keeps the submitted task and does not start the next step', async () => {
+  const { WizardWorkflowRuntime } = await import('../src/features/agent/wizardWorkflowRuntime.ts')
+  const persistence = memoryPersistence()
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  let nextCalls = 0
+  const runtime = new WizardWorkflowRuntime(persistence)
+  runtime.register({
+    type: 'slow-complete',
+    steps: [
+      { stepId: 'first', kind: 'first', async execute() { await gate; return { state: 'completed', taskId: 'task-first' } } },
+      { stepId: 'next', kind: 'next', async execute() { nextCalls += 1; return { state: 'completed' } } },
+    ],
+  })
+  await runtime.open('demo')
+  const started = runtime.start({
+    workflowId: 'workflow-inflight', type: 'slow-complete', workspace: 'demo', userRequest: 'Stop now',
+  })
+  await new Promise((resolve, reject) => {
+    const timer = setInterval(() => {
+      if (runtime.get('workflow-inflight')?.steps[0]?.state === 'running') {
+        clearInterval(timer)
+        resolve()
+      }
+    }, 5)
+    setTimeout(() => { clearInterval(timer); reject(new Error('step never started')) }, 1000)
+  })
+  const cancelling = runtime.cancel('workflow-inflight')
+  release()
+  const startedResult = await started
+  const cancelled = await cancelling
+  assert.equal(startedResult.state, 'cancelled')
+  assert.equal(cancelled.state, 'cancelled')
+  assert.equal(cancelled.steps[0].state, 'cancelled')
+  assert.equal(cancelled.steps[0].taskId, 'task-first')
+  assert.equal(nextCalls, 0)
+  await runtime.handleTaskEvent(taskEvent(11, 'task-first', 'completed'))
+  assert.equal(runtime.get('workflow-inflight').state, 'cancelled')
+  assert.equal(nextCalls, 0)
+})
+
 test('waiting workflow cancellation is durable and does not run its next step', async () => {
   const { WizardWorkflowRuntime } = await import('../src/features/agent/wizardWorkflowRuntime.ts')
   const persistence = memoryPersistence()

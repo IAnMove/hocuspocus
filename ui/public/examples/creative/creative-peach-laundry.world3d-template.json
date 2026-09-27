@@ -1,0 +1,164 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "creative-peach-laundry",
+  "title": "Lavandería de medianoche",
+  "description": "Composición vertical con apoyo, cámara suave y PSX selectivo en props.",
+  "includeAssets": true,
+  "createdAt": "2026-09-14T19:00:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-peach-laundry",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#244953",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/peach-laundry.jpg",
+        "position": [
+          0,
+          -9.946734209920322,
+          -11
+        ],
+        "scale": 14.046734209920322,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -0.2,
+          0,
+          0
+        ],
+        "scale": 1.25,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.01999999999999999,
+        3.6,
+        10.55
+      ],
+      "look": [
+        -0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.176,
+          1.8800000000000001,
+          8.440000000000001
+        ],
+        "to": [
+          -0.144,
+          1.8800000000000001,
+          8.040000000000001
+        ],
+        "lookFrom": [
+          0.096,
+          0.7600000000000001,
+          -0.4
+        ],
+        "lookTo": [
+          0.096,
+          0.7600000000000001,
+          -0.4
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffb4a0",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 50,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

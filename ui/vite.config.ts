@@ -23,6 +23,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
+      input: { index: 'index.html', world3d: 'world3d-render.html' },
       output: {
         manualChunks(id) {
           if (

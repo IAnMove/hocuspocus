@@ -1,0 +1,268 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-living-bell-of-ash",
+  "title": "La campana de ceniza",
+  "description": "Un campanario carbonizado se abre sobre un desierto de ceniza y oro.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T14:25:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-living-bell-of-ash",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#272529",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-bell-of-ash-frame.jpg",
+        "position": [
+          0,
+          -7.434531249999999,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.36944444444444446,
+                0.69453125
+              ],
+              [
+                0.625,
+                0.69453125
+              ],
+              [
+                0.6236111111111111,
+                0.3453125
+              ],
+              [
+                0.6180555555555556,
+                0.3203125
+              ],
+              [
+                0.6041666666666666,
+                0.29453125
+              ],
+              [
+                0.5847222222222223,
+                0.27109375
+              ],
+              [
+                0.5611111111111111,
+                0.2515625
+              ],
+              [
+                0.5319444444444444,
+                0.23359375
+              ],
+              [
+                0.5,
+                0.21953125
+              ],
+              [
+                0.4666666666666667,
+                0.23359375
+              ],
+              [
+                0.4375,
+                0.25234375
+              ],
+              [
+                0.4125,
+                0.2734375
+              ],
+              [
+                0.3902777777777778,
+                0.29765625
+              ],
+              [
+                0.375,
+                0.32265625
+              ],
+              [
+                0.37083333333333335,
+                0.35390625
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.35,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.88,
+          "tint": "#c9cbd0",
+          "psx": 0.16
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "position": [
+          2.6,
+          0,
+          3
+        ],
+        "scale": 3.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.03843749999999987,
+          -0.8548,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-fantasy/dark-living-bell-of-ash-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 4.102049999999999,
+          "height": 13.554600000000002,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.18,
+        3.93,
+        10.84
+      ],
+      "look": [
+        0,
+        3.93,
+        -0.5
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "feet",
+        "from": [
+          0.5407407407407407,
+          2.911111111111111,
+          8.029629629629628
+        ],
+        "to": [
+          0.37777777777777777,
+          2.911111111111111,
+          7.829629629629629
+        ],
+        "lookFrom": [
+          0.40740740740740744,
+          2.911111111111111,
+          -0.37037037037037035
+        ],
+        "lookTo": [
+          0.40740740740740744,
+          2.911111111111111,
+          -0.37037037037037035
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#eda642",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 917,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

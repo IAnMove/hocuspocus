@@ -62,8 +62,7 @@ export function ToolsPanel() {
   const sourceItems = useMemo(
     () => catalogAssets
       .filter(asset => (
-        tool === 'remove_background' ? asset.kind === 'image'
-          : tool === 'revoice' ? asset.kind === 'video'
+        tool === 'revoice' ? asset.kind === 'video'
             : asset.kind === 'image' || asset.kind === 'video'
       ))
       .map(asset => catalogItemToOutput(asset, activeWorkspace))
@@ -85,7 +84,7 @@ export function ToolsPanel() {
       return
     }
     const source = resolveToolSource(item, catalogAssets, activeWorkspace)
-    if ((tool === 'remove_background' && source.kind !== 'image') || (tool === 'revoice' && source.kind !== 'video')) {
+    if ((tool === 'remove_background' && source.kind !== 'image' && source.kind !== 'video') || (tool === 'revoice' && source.kind !== 'video')) {
       setSourceUploadError(true)
       return
     }
@@ -116,7 +115,7 @@ export function ToolsPanel() {
   const canRun =
     (tool === 'upscale' && (hasVideoSource || hasImageSource)) ||
     (tool === 'revoice' && hasVideoSource && hasRefs) ||
-    (tool === 'remove_background' && hasImageSource)
+    (tool === 'remove_background' && (hasImageSource || hasVideoSource))
   const flashvsrOff = flashvsrMode === 0 && method.startsWith('flashvsr')
   const commandSource = (() => {
     if (sourceAssetId) return sourceAssetId
@@ -175,6 +174,8 @@ export function ToolsPanel() {
           {t('tools.removeBackgroundNeedsSource')}
         </p>
       )}
+
+      {tool === 'remove_background' && hasVideoSource && <p className="text-xs text-text-muted">{t('tools.removeBackgroundVideoHint')}</p>}
 
       <ToolsParamsPanel
         tool={tool}

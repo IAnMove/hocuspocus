@@ -33,14 +33,18 @@ def _version(value: str) -> tuple[int, ...]:
     return (parts + (0, 0, 0))[:3]
 
 
-def recipe(engine: str, platform: str) -> dict:
+def recipe(engine: str, platform: str, arch: str | None = None) -> dict:
     base = copy.deepcopy(catalog()["engines"][engine])
     override = base.pop("windows", {}) if platform == "win32" else {}
     base.pop("windows", None)
     pins = {**base["constraints"], **override.get("constraints", {})}
     base.update(override)
     base["constraints"] = {k: v for k, v in pins.items() if v is not None}
-    base["id"] = f"{platform}-x64-nvidia-{engine}"
+    arch = normalize_arch(arch or ("arm64" if platform == "darwin" else "x64"))
+    if base.get("cuda"):
+        base["id"] = f"{platform}-x64-nvidia-{engine}"
+    else:
+        base["id"] = f"{platform}-{arch}-core-{engine}"
     base["engine"] = engine
     base["constraintFile"] = f"app/runtime/constraints/{platform}-{engine}.txt"
     return base
@@ -73,7 +77,8 @@ def installation_current(engine: str, platform: str) -> bool:
         if not isinstance(receipt, dict):
             return False
         matches = (receipt.get("fingerprint") == dependency_fingerprint(engine, platform)
-                   and receipt.get("profile") == spec["id"] and receipt.get("cudaCalculation") is True)
+                   and receipt.get("profile") == spec["id"]
+                   and receipt.get("cudaCalculation") is bool(spec.get("cuda")))
         if not matches:
             return False
         from services.runtime_sources import sources_current
@@ -91,35 +96,55 @@ def installation_current(engine: str, platform: str) -> bool:
         return False
 
 
+def _common_reason(manifest: dict, platform: str, arch: str, gpu: str) -> str | None:
+    if platform == "darwin" and arch == "arm64":
+        return None
+    if platform not in manifest["platforms"]:
+        return f"No installation recipe for {platform}. Supported: Windows, Linux and Apple Silicon."
+    if arch not in manifest["architectures"]:
+        return f"No installation recipe for architecture {arch}; x64 is required."
+    if gpu not in manifest["accelerators"]:
+        return "Local AI installation currently requires NVIDIA; CPU/AMD/Intel/MPS recipes are not enabled."
+    return None
+
+
+def _engine_support(definition: dict, platform: str, arch: str, driver: str | None, common: str | None, manifest: dict) -> tuple[str | None, str | None, str | None]:
+    macos_core = platform == "darwin" and arch == "arm64"
+    reason = common
+    warning = None
+    if macos_core and definition.get("cuda"):
+        reason = "Local NVIDIA engine; hidden on Apple Silicon core/remote."
+    elif not reason and platform not in definition["platforms"]:
+        reason = definition.get("unsupportedReason", "No compatible engine recipe.")
+    minimum = None
+    if definition.get("cuda"):
+        minimum = manifest["driverMinimum"][definition["cuda"]].get(platform)
+    if not reason and driver and minimum and _version(driver) < _version(minimum):
+        reason = f"{definition['label']} needs NVIDIA driver >= {minimum} for CUDA {definition['cuda']} (detected {driver})."
+    if not reason and not driver and definition.get("cuda"):
+        warning = "NVIDIA driver version could not be verified; the runtime check must confirm CUDA before use."
+    return reason, warning, minimum
+
+
 def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = None) -> dict:
     """Pure selection; unknown/unsupported capabilities never silently use CUDA."""
     arch = normalize_arch(arch)
     gpu = (gpu or "unknown").lower()
     manifest = catalog()
-    common = None
-    if platform not in manifest["platforms"]:
-        common = f"No installation recipe for {platform}. Supported: Windows and Linux."
-    elif arch not in manifest["architectures"]:
-        common = f"No installation recipe for architecture {arch}; x64 is required."
-    elif gpu not in manifest["accelerators"]:
-        common = "Local AI installation currently requires NVIDIA; CPU/AMD/Intel/MPS recipes are not enabled."
+    common = _common_reason(manifest, platform, arch, gpu)
     engines = {}
     for name, definition in manifest["engines"].items():
-        selected = recipe(name, platform)
-        reason = common
-        warning = None
-        if not reason and platform not in definition["platforms"]:
-            reason = definition.get("unsupportedReason", "No compatible engine recipe.")
-        minimum = manifest["driverMinimum"][definition["cuda"]].get(platform)
-        if not reason and driver and minimum and _version(driver) < _version(minimum):
-            reason = f"{definition['label']} needs NVIDIA driver >= {minimum} for CUDA {definition['cuda']} (detected {driver})."
-        if not reason and not driver:
-            warning = "NVIDIA driver version could not be verified; the runtime check must confirm CUDA before use."
-        engines[name] = {**selected, "supported": reason is None, "reason": reason,
+        reason, warning, minimum = _engine_support(definition, platform, arch, driver, common, manifest)
+        engines[name] = {**recipe(name, platform, arch), "supported": reason is None, "reason": reason,
                          "warning": warning, "driverMinimum": minimum}
+    required = [
+        engines[name]["supported"]
+        for name, definition in manifest["engines"].items()
+        if definition.get("required") and platform in definition.get("platforms", [])
+    ]
     return {"version": manifest["version"], "revision": manifest["revision"],
             "platform": platform, "architecture": arch, "gpu": gpu, "driver": driver,
-            "supported": all(e["supported"] for e in engines.values() if e["required"]),
+            "supported": all(required) if required else False,
             "engines": engines}
 
 

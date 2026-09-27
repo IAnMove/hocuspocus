@@ -1,0 +1,311 @@
+{
+  "method": "HocusPocus Video3D public export + VideoEditor assembly",
+  "sourceGeneration": "../skate-portal/provenance.json",
+  "exports": [
+    {
+      "clip": 1,
+      "title": "01 · La chispa encuentra al patinador",
+      "saved": {
+        "name": "2026-09-15-23h21m10s_world3d-scene_d16d26.mp4",
+        "url": "/api/v1/file/2026-09-15-23h21m10s_world3d-scene_d16d26.mp4",
+        "workspace": "default"
+      },
+      "bytes": 907692,
+      "elapsedSeconds": 39.19,
+      "scene": {
+        "name": "Portal-Ride-Tres-mundos-01-01-La-chispa-encuentra-al-patinador-e60ad37083ba4d859ad0bcb24eb80050.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Portal-Ride-Tres-mundos-01-01-La-chispa-encuentra-al-patinador-e60ad37083ba4d859ad0bcb24eb80050.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Portal-Ride-Tres-mundos-01-01-La-chispa-encuentra-al-patinador-e60ad37083ba4d859ad0bcb24eb80050.world3d.scene.preview.png?workspace=default"
+      },
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "duration": "2.400000",
+            "nb_read_frames": "72"
+          }
+        ]
+      }
+    },
+    {
+      "clip": 2,
+      "title": "02 · El salto abre el cielo",
+      "saved": {
+        "name": "2026-09-15-23h21m48s_world3d-scene_6d0ca5.mp4",
+        "url": "/api/v1/file/2026-09-15-23h21m48s_world3d-scene_6d0ca5.mp4",
+        "workspace": "default"
+      },
+      "bytes": 903834,
+      "elapsedSeconds": 36.2,
+      "scene": {
+        "name": "Portal-Ride-Tres-mundos-02-02-El-salto-abre-el-cielo-449903ae9c174d499a7d952cdcaac79f.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Portal-Ride-Tres-mundos-02-02-El-salto-abre-el-cielo-449903ae9c174d499a7d952cdcaac79f.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Portal-Ride-Tres-mundos-02-02-El-salto-abre-el-cielo-449903ae9c174d499a7d952cdcaac79f.world3d.scene.preview.png?workspace=default"
+      },
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "duration": "1.666016",
+            "nb_read_frames": "50"
+          }
+        ]
+      }
+    },
+    {
+      "clip": 3,
+      "title": "03 · Otro salto sobre las nubes",
+      "saved": {
+        "name": "2026-09-15-23h22m33s_world3d-scene_3fbb49.mp4",
+        "url": "/api/v1/file/2026-09-15-23h22m33s_world3d-scene_3fbb49.mp4",
+        "workspace": "default"
+      },
+      "bytes": 1143377,
+      "elapsedSeconds": 45.22,
+      "scene": {
+        "name": "Portal-Ride-Tres-mundos-03-03-Otro-salto-sobre-las-nubes-357dca09fad7473e95691d8ffb017506.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Portal-Ride-Tres-mundos-03-03-Otro-salto-sobre-las-nubes-357dca09fad7473e95691d8ffb017506.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Portal-Ride-Tres-mundos-03-03-Otro-salto-sobre-las-nubes-357dca09fad7473e95691d8ffb017506.world3d.scene.preview.png?workspace=default"
+      },
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "duration": "2.000000",
+            "nb_read_frames": "60"
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "title": "04 · Aterrizar en el neón",
+      "saved": {
+        "name": "2026-09-15-23h23m17s_world3d-scene_a5b440.mp4",
+        "url": "/api/v1/file/2026-09-15-23h23m17s_world3d-scene_a5b440.mp4",
+        "workspace": "default"
+      },
+      "bytes": 1119746,
+      "elapsedSeconds": 45.23,
+      "scene": {
+        "name": "Portal-Ride-Tres-mundos-04-04-Aterrizar-en-el-ne-n-7e67c4a3d6264e139098da48809ba86f.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Portal-Ride-Tres-mundos-04-04-Aterrizar-en-el-ne-n-7e67c4a3d6264e139098da48809ba86f.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Portal-Ride-Tres-mundos-04-04-Aterrizar-en-el-ne-n-7e67c4a3d6264e139098da48809ba86f.world3d.scene.preview.png?workspace=default"
+      },
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "duration": "1.666667",
+            "nb_read_frames": "50"
+          }
+        ]
+      }
+    },
+    {
+      "clip": 5,
+      "title": "05 · La puerta de neón",
+      "saved": {
+        "name": "2026-09-15-23h23m59s_world3d-scene_527a3c.mp4",
+        "url": "/api/v1/file/2026-09-15-23h23m59s_world3d-scene_527a3c.mp4",
+        "workspace": "default"
+      },
+      "bytes": 1145826,
+      "elapsedSeconds": 39.22,
+      "scene": {
+        "name": "Portal-Ride-Tres-mundos-05-05-La-puerta-de-ne-n-af6c05adea3b46a88b3466dec573d9b7.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Portal-Ride-Tres-mundos-05-05-La-puerta-de-ne-n-af6c05adea3b46a88b3466dec573d9b7.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Portal-Ride-Tres-mundos-05-05-La-puerta-de-ne-n-af6c05adea3b46a88b3466dec573d9b7.world3d.scene.preview.png?workspace=default"
+      },
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "duration": "2.000000",
+            "nb_read_frames": "60"
+          }
+        ]
+      }
+    },
+    {
+      "clip": 6,
+      "title": "06 · Volver por el último portal",
+      "saved": {
+        "name": "2026-09-15-23h24m36s_world3d-scene_94f85e.mp4",
+        "url": "/api/v1/file/2026-09-15-23h24m36s_world3d-scene_94f85e.mp4",
+        "workspace": "default"
+      },
+      "bytes": 890639,
+      "elapsedSeconds": 39.21,
+      "scene": {
+        "name": "Portal-Ride-Tres-mundos-06-06-Volver-por-el-ltimo-portal-f3091ee75abb44ff8c210027d1e3b4f7.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Portal-Ride-Tres-mundos-06-06-Volver-por-el-ltimo-portal-f3091ee75abb44ff8c210027d1e3b4f7.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Portal-Ride-Tres-mundos-06-06-Volver-por-el-ltimo-portal-f3091ee75abb44ff8c210027d1e3b4f7.world3d.scene.preview.png?workspace=default"
+      },
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "duration": "1.666667",
+            "nb_read_frames": "50"
+          }
+        ]
+      }
+    },
+    {
+      "clip": 7,
+      "title": "07 · De vuelta, ruedas en el suelo",
+      "saved": {
+        "name": "2026-09-15-23h25m09s_world3d-scene_bcefa6.mp4",
+        "url": "/api/v1/file/2026-09-15-23h25m09s_world3d-scene_bcefa6.mp4",
+        "workspace": "default"
+      },
+      "bytes": 636298,
+      "elapsedSeconds": 33.22,
+      "scene": {
+        "name": "Portal-Ride-Tres-mundos-07-07-De-vuelta-ruedas-en-el-suelo-907daeea018741a480e78e3c57e80d43.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Portal-Ride-Tres-mundos-07-07-De-vuelta-ruedas-en-el-suelo-907daeea018741a480e78e3c57e80d43.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Portal-Ride-Tres-mundos-07-07-De-vuelta-ruedas-en-el-suelo-907daeea018741a480e78e3c57e80d43.world3d.scene.preview.png?workspace=default"
+      },
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "duration": "1.800000",
+            "nb_read_frames": "54"
+          }
+        ]
+      }
+    }
+  ],
+  "assembly": {
+    "job_id": "video-edit-6bfcf6e17e66",
+    "task_id": "task-video-editor-video-edit-6bfcf6e17e66",
+    "root_task_id": "task-video-editor-video-edit-6bfcf6e17e66",
+    "parent_task_id": null,
+    "workspace": "default",
+    "status": "completed",
+    "phase": "completed",
+    "progress": 100,
+    "current": 100,
+    "total": 100,
+    "message": "Video export complete",
+    "filename": "2026-09-15-23h25m34s_Portal_Ride_Tres_mundos_vertical.mp4",
+    "url": "/api/v1/file/2026-09-15-23h25m34s_Portal_Ride_Tres_mundos_vertical.mp4",
+    "output_files": [
+      "2026-09-15-23h25m34s_Portal_Ride_Tres_mundos_vertical.mp4"
+    ],
+    "result": {
+      "duration": 13.2,
+      "frames": 396,
+      "fps": 30,
+      "clip_count": 7,
+      "transitions": [
+        {
+          "type": "none",
+          "duration": 0.0,
+          "text": "Momentos después…",
+          "text_size": 100.0
+        },
+        {
+          "type": "none",
+          "duration": 0.0,
+          "text": "Momentos después…",
+          "text_size": 100.0
+        },
+        {
+          "type": "none",
+          "duration": 0.0,
+          "text": "Momentos después…",
+          "text_size": 100.0
+        },
+        {
+          "type": "none",
+          "duration": 0.0,
+          "text": "Momentos después…",
+          "text_size": 100.0
+        },
+        {
+          "type": "none",
+          "duration": 0.0,
+          "text": "Momentos después…",
+          "text_size": 100.0
+        },
+        {
+          "type": "none",
+          "duration": 0.0,
+          "text": "Momentos después…",
+          "text_size": 100.0
+        }
+      ],
+      "audio_seconds": 13.2
+    },
+    "error": null,
+    "provider": "local",
+    "model": "FFmpeg",
+    "server_origin": "local",
+    "resource_lane": "local_cpu:ffmpeg",
+    "resource_requirements": [
+      "local_cpu:ffmpeg"
+    ],
+    "acquired_resources": [],
+    "created_at": 1789507534.9007301,
+    "queued_at": 1789507534.9007301,
+    "updated_at": 1789507538.605001,
+    "started_at": 1789507534.9318426,
+    "finished_at": 1789507538.6049922
+  },
+  "probe": {
+    "programs": [],
+    "streams": [
+      {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "13.200000",
+        "nb_read_frames": "396"
+      },
+      {
+        "r_frame_rate": "0/0",
+        "duration": "13.200000",
+        "nb_read_frames": "619"
+      }
+    ]
+  },
+  "elapsedRenderSeconds": 277.49
+}

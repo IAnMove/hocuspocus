@@ -163,16 +163,16 @@ def test_tools_route_records_user_panel_cutouts_as_tools_not_studio(tmp_path):
     assert jobs[0]["provenance"]["tool"] == "tools"
 
 
-def test_tools_route_rejects_non_image_asset_and_traversal(tmp_path):
+def test_tools_route_rejects_unsupported_asset_and_traversal(tmp_path):
     uploads = tmp_path / "uploads"
     workspace = tmp_path / "outputs"
     uploads.mkdir()
     workspace.mkdir()
     jobs = []
-    video_asset = {
-        "id": "asset_video",
-        "kind": "video",
-        "locations": [{"workspace_id": "default", "filename": "clip.mp4"}],
+    audio_asset = {
+        "id": "asset_audio",
+        "kind": "audio",
+        "locations": [{"workspace_id": "default", "filename": "clip.wav"}],
     }
     app = FastAPI()
     app.include_router(create_tools_router(
@@ -180,13 +180,13 @@ def test_tools_route_rejects_non_image_asset_and_traversal(tmp_path):
         list_workspaces=lambda: [{"name": "default"}],
         workspace_dir=lambda _name: str(workspace),
         uploads_dir=lambda: str(uploads),
-        asset_finder=lambda asset_id: video_asset if asset_id == "asset_video" else None,
+        asset_finder=lambda asset_id: audio_asset if asset_id == "asset_audio" else None,
         register_job=lambda job: jobs.append(job) or job,
         start_remove_background=lambda _job: None,
     ))
     client = FastApiTestClient(app)
 
-    assert client.post("/api/v1/tools/remove-background", json={"asset_id": "asset_video"}).status_code == 400
+    assert client.post("/api/v1/tools/remove-background", json={"asset_id": "asset_audio"}).status_code == 400
     assert client.post("/api/v1/tools/remove-background", json={"source": "../source.png"}).status_code == 400
     assert client.post("/api/v1/tools/remove-background", json={"source": "/api/v1/uploads/../source.png"}).status_code == 400
     assert not jobs

@@ -1,0 +1,787 @@
+{
+  "version": 1,
+  "collection": "hocuspocus-dark-worlds-20260915",
+  "renderer": "HocusPocus native Video 3D export",
+  "items": [
+    {
+      "id": "dark-living-sleeping-titan",
+      "native": {
+        "clip": 1,
+        "title": "El titán dormido",
+        "saved": {
+          "name": "2026-09-15-18h47m08s_world3d-dark-living-sleeping-titan_83f0f2.mp4",
+          "url": "/api/v1/file/2026-09-15-18h47m08s_world3d-dark-living-sleeping-titan_83f0f2.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2219897,
+        "elapsedSeconds": 51.34,
+        "scene": {
+          "name": "Umbrales-de-gigantes-01-El-tit-n-dormido-c7f5451d080f4c838476dfc3b7d97f86.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-01-El-tit-n-dormido-c7f5451d080f4c838476dfc3b7d97f86.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-01-El-tit-n-dormido-c7f5451d080f4c838476dfc3b7d97f86.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "e87d9da4f21600bed97dbd467ded11c33a69611fdd82ca28104bf810e93905b7",
+      "file": "clip-01.mp4",
+      "bytes": 2219897
+    },
+    {
+      "id": "dark-living-bell-of-ash",
+      "native": {
+        "clip": 2,
+        "title": "La campana de ceniza",
+        "saved": {
+          "name": "2026-09-15-16h38m39s_world3d-dark-living-bell-of-ash_063208.mp4",
+          "url": "/api/v1/file/2026-09-15-16h38m39s_world3d-dark-living-bell-of-ash_063208.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2427961,
+        "elapsedSeconds": 66.61,
+        "scene": {
+          "name": "Umbrales-de-gigantes-02-La-campana-de-ceniza-c8e7c833f85348708580c3075cc3bc48.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-02-La-campana-de-ceniza-c8e7c833f85348708580c3075cc3bc48.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-02-La-campana-de-ceniza-c8e7c833f85348708580c3075cc3bc48.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "4c3b03836ea4c9eef96347468cb0c8d19324bdcac1e01d29b86afd9aa918760a",
+      "file": "clip-02.mp4",
+      "bytes": 2427961
+    },
+    {
+      "id": "dark-living-antler-moon",
+      "native": {
+        "clip": 3,
+        "title": "La luna entre astas",
+        "saved": {
+          "name": "2026-09-15-16h39m44s_world3d-dark-living-antler-moon_bd5432.mp4",
+          "url": "/api/v1/file/2026-09-15-16h39m44s_world3d-dark-living-antler-moon_bd5432.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2323486,
+        "elapsedSeconds": 70.91,
+        "scene": {
+          "name": "Umbrales-de-gigantes-03-La-luna-entre-astas-116035d3655d40bdb72add799fb44d70.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-03-La-luna-entre-astas-116035d3655d40bdb72add799fb44d70.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-03-La-luna-entre-astas-116035d3655d40bdb72add799fb44d70.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "9cff26a86d7f52c33726ae8bc90c669e15897541ec085ef40ce312b0660e332c",
+      "file": "clip-03.mp4",
+      "bytes": 2323486
+    },
+    {
+      "id": "dark-living-drowned-king",
+      "native": {
+        "clip": 4,
+        "title": "El rey sumergido",
+        "saved": {
+          "name": "2026-09-15-16h40m56s_world3d-dark-living-drowned-king_e1b2ed.mp4",
+          "url": "/api/v1/file/2026-09-15-16h40m56s_world3d-dark-living-drowned-king_e1b2ed.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2135983,
+        "elapsedSeconds": 66.82,
+        "scene": {
+          "name": "Umbrales-de-gigantes-04-El-rey-sumergido-9316ef881e91405bb62063a208777bbe.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-04-El-rey-sumergido-9316ef881e91405bb62063a208777bbe.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-04-El-rey-sumergido-9316ef881e91405bb62063a208777bbe.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "9cdb3a5fc95a62f9ae36bd01d0e48f17b6bdd12f6358ad14fd4c603e5350853d",
+      "file": "clip-04.mp4",
+      "bytes": 2135983
+    },
+    {
+      "id": "dark-living-red-pilgrim",
+      "native": {
+        "clip": 5,
+        "title": "El peregrino rojo",
+        "saved": {
+          "name": "2026-09-15-17h40m18s_world3d-dark-living-red-pilgrim_c94cbe.mp4",
+          "url": "/api/v1/file/2026-09-15-17h40m18s_world3d-dark-living-red-pilgrim_c94cbe.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2264024,
+        "elapsedSeconds": 71.93,
+        "scene": {
+          "name": "Umbrales-de-gigantes-05-El-peregrino-rojo-b2f24b0cc11e42819a51e766b6fdc199.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-05-El-peregrino-rojo-b2f24b0cc11e42819a51e766b6fdc199.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-05-El-peregrino-rojo-b2f24b0cc11e42819a51e766b6fdc199.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "1d0acc214d322d46ce2702d58390957e7d43bad87783046bbc5d511d4d0e2e83",
+      "file": "clip-05.mp4",
+      "bytes": 2264024
+    },
+    {
+      "id": "dark-living-last-aqueduct",
+      "native": {
+        "clip": 6,
+        "title": "El último acueducto",
+        "saved": {
+          "name": "2026-09-15-17h41m30s_world3d-dark-living-last-aqueduct_46fa80.mp4",
+          "url": "/api/v1/file/2026-09-15-17h41m30s_world3d-dark-living-last-aqueduct_46fa80.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2282262,
+        "elapsedSeconds": 72.3,
+        "scene": {
+          "name": "Umbrales-de-gigantes-06-El-ltimo-acueducto-6e5e32bc06e6495f81f2f910d66ccb92.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-06-El-ltimo-acueducto-6e5e32bc06e6495f81f2f910d66ccb92.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-06-El-ltimo-acueducto-6e5e32bc06e6495f81f2f910d66ccb92.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "07a984a273b216fa14b9ad0a55483066d7888b0ca4d4850cb2955e3aefb518af",
+      "file": "clip-06.mp4",
+      "bytes": 2282262
+    },
+    {
+      "id": "dark-living-ember-heart",
+      "native": {
+        "clip": 7,
+        "title": "Corazón de brasa",
+        "saved": {
+          "name": "2026-09-15-18h05m56s_world3d-dark-living-ember-heart_3c81b4.mp4",
+          "url": "/api/v1/file/2026-09-15-18h05m56s_world3d-dark-living-ember-heart_3c81b4.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2381404,
+        "elapsedSeconds": 75.44,
+        "scene": {
+          "name": "Umbrales-de-gigantes-07-Coraz-n-de-brasa-a805848f9ed948668186a3a0c40ab6f2.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-07-Coraz-n-de-brasa-a805848f9ed948668186a3a0c40ab6f2.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-07-Coraz-n-de-brasa-a805848f9ed948668186a3a0c40ab6f2.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "0902e1c8102cac32d63805861f4a2190cca76e3c553f2c5aba50c906378a2115",
+      "file": "clip-07.mp4",
+      "bytes": 2381404
+    },
+    {
+      "id": "dark-living-violet-oracle",
+      "native": {
+        "clip": 8,
+        "title": "El oráculo violeta",
+        "saved": {
+          "name": "2026-09-15-18h07m10s_world3d-dark-living-violet-oracle_46a8ef.mp4",
+          "url": "/api/v1/file/2026-09-15-18h07m10s_world3d-dark-living-violet-oracle_46a8ef.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2486550,
+        "elapsedSeconds": 72.39,
+        "scene": {
+          "name": "Umbrales-de-gigantes-08-El-or-culo-violeta-ddcebd774aa94caf857b14358e5cdf1f.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-08-El-or-culo-violeta-ddcebd774aa94caf857b14358e5cdf1f.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-08-El-or-culo-violeta-ddcebd774aa94caf857b14358e5cdf1f.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "76b92517f97efaa0710d1634290022691b4c0ddc3463b6e52527f65ba3636533",
+      "file": "clip-08.mp4",
+      "bytes": 2486550
+    },
+    {
+      "id": "dark-living-winter-shoulder",
+      "native": {
+        "clip": 9,
+        "title": "Sobre el hombro del invierno",
+        "saved": {
+          "name": "2026-09-15-18h08m25s_world3d-dark-living-winter-shoulder_54ebe7.mp4",
+          "url": "/api/v1/file/2026-09-15-18h08m25s_world3d-dark-living-winter-shoulder_54ebe7.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2165539,
+        "elapsedSeconds": 75.47,
+        "scene": {
+          "name": "Umbrales-de-gigantes-09-Sobre-el-hombro-del-invierno-9181004cfea44df6900da277ab272823.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-09-Sobre-el-hombro-del-invierno-9181004cfea44df6900da277ab272823.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-09-Sobre-el-hombro-del-invierno-9181004cfea44df6900da277ab272823.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "d57d2f4ab454c988c85d58ca12d01a5ddc9cf2946bfeb65d9b95b6083adc666b",
+      "file": "clip-09.mp4",
+      "bytes": 2165539
+    },
+    {
+      "id": "dark-living-thorn-crown",
+      "native": {
+        "clip": 10,
+        "title": "La corona de espinas",
+        "saved": {
+          "name": "2026-09-15-18h09m40s_world3d-dark-living-thorn-crown_469e92.mp4",
+          "url": "/api/v1/file/2026-09-15-18h09m40s_world3d-dark-living-thorn-crown_469e92.mp4",
+          "workspace": "default"
+        },
+        "bytes": 3069122,
+        "elapsedSeconds": 75.42,
+        "scene": {
+          "name": "Umbrales-de-gigantes-10-La-corona-de-espinas-6108e6902f164b198a6ac2ab8d4d307b.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-10-La-corona-de-espinas-6108e6902f164b198a6ac2ab8d4d307b.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-10-La-corona-de-espinas-6108e6902f164b198a6ac2ab8d4d307b.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "79cdcd6a99bf1cd0de926332954e7da42889cbae6cd4fe136a1ce2d507ee4849",
+      "file": "clip-10.mp4",
+      "bytes": 3069122
+    },
+    {
+      "id": "dark-living-black-tide",
+      "native": {
+        "clip": 11,
+        "title": "La marea negra",
+        "saved": {
+          "name": "2026-09-15-18h10m48s_world3d-dark-living-black-tide_349452.mp4",
+          "url": "/api/v1/file/2026-09-15-18h10m48s_world3d-dark-living-black-tide_349452.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2408932,
+        "elapsedSeconds": 66.37,
+        "scene": {
+          "name": "Umbrales-de-gigantes-11-La-marea-negra-0ad58ecf3770448ab8cf113a4966517a.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-11-La-marea-negra-0ad58ecf3770448ab8cf113a4966517a.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-11-La-marea-negra-0ad58ecf3770448ab8cf113a4966517a.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "5731b37d5e06207d588d13b06ad3a5995d2e0758d9aec4b44322462e4045ecb6",
+      "file": "clip-11.mp4",
+      "bytes": 2408932
+    },
+    {
+      "id": "dark-living-golden-ruin",
+      "native": {
+        "clip": 12,
+        "title": "La ruina dorada",
+        "saved": {
+          "name": "2026-09-15-18h19m31s_world3d-dark-living-golden-ruin_d2afb5.mp4",
+          "url": "/api/v1/file/2026-09-15-18h19m31s_world3d-dark-living-golden-ruin_d2afb5.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2307715,
+        "elapsedSeconds": 92.22,
+        "scene": {
+          "name": "Umbrales-de-gigantes-12-La-ruina-dorada-cb42f3bba8794546ba1f5cc9d6f6209c.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-12-La-ruina-dorada-cb42f3bba8794546ba1f5cc9d6f6209c.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-12-La-ruina-dorada-cb42f3bba8794546ba1f5cc9d6f6209c.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "a71e51c9fb6855677331c3af06a2f7d0407ca06aa9a13e1d7f51c981ea69a166",
+      "file": "clip-12.mp4",
+      "bytes": 2307715
+    },
+    {
+      "id": "dark-living-hollow-saint",
+      "native": {
+        "clip": 13,
+        "title": "El santo hueco",
+        "saved": {
+          "name": "2026-09-15-18h20m39s_world3d-dark-living-hollow-saint_610bf7.mp4",
+          "url": "/api/v1/file/2026-09-15-18h20m39s_world3d-dark-living-hollow-saint_610bf7.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1692149,
+        "elapsedSeconds": 69.41,
+        "scene": {
+          "name": "Umbrales-de-gigantes-13-El-santo-hueco-e0372289c2a040939f5e0003c911314f.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-13-El-santo-hueco-e0372289c2a040939f5e0003c911314f.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-13-El-santo-hueco-e0372289c2a040939f5e0003c911314f.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "2530076564b005541a00123c06ea46492510bcbac9338bcb44a34c9a16ec3b59",
+      "file": "clip-13.mp4",
+      "bytes": 1692149
+    },
+    {
+      "id": "dark-living-fungal-throne",
+      "native": {
+        "clip": 14,
+        "title": "El trono del micelio",
+        "saved": {
+          "name": "2026-09-15-18h21m55s_world3d-dark-living-fungal-throne_68f573.mp4",
+          "url": "/api/v1/file/2026-09-15-18h21m55s_world3d-dark-living-fungal-throne_68f573.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2347968,
+        "elapsedSeconds": 75.45,
+        "scene": {
+          "name": "Umbrales-de-gigantes-14-El-trono-del-micelio-cdebefdf93844b818e56eab9f6872c92.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-14-El-trono-del-micelio-cdebefdf93844b818e56eab9f6872c92.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-14-El-trono-del-micelio-cdebefdf93844b818e56eab9f6872c92.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "a66022facffcdeb1fc9f0a41a756f073324fe69971ffe9275b246201b34bc8c8",
+      "file": "clip-14.mp4",
+      "bytes": 2347968
+    },
+    {
+      "id": "dark-living-storm-bridge",
+      "native": {
+        "clip": 15,
+        "title": "El puente de la tormenta",
+        "saved": {
+          "name": "2026-09-15-18h22m57s_world3d-dark-living-storm-bridge_0856b1.mp4",
+          "url": "/api/v1/file/2026-09-15-18h22m57s_world3d-dark-living-storm-bridge_0856b1.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2283375,
+        "elapsedSeconds": 60.33,
+        "scene": {
+          "name": "Umbrales-de-gigantes-15-El-puente-de-la-tormenta-1a828bca5fad49a28f7cb077562556ed.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-15-El-puente-de-la-tormenta-1a828bca5fad49a28f7cb077562556ed.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-15-El-puente-de-la-tormenta-1a828bca5fad49a28f7cb077562556ed.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "46b22390c99cb296c8fb49c82f3ff504f5ab9c8ff7560e1560f593f9d118f7ec",
+      "file": "clip-15.mp4",
+      "bytes": 2283375
+    },
+    {
+      "id": "dark-living-sand-library",
+      "native": {
+        "clip": 16,
+        "title": "Los nombres bajo la arena",
+        "saved": {
+          "name": "2026-09-15-18h24m01s_world3d-dark-living-sand-library_2e8a29.mp4",
+          "url": "/api/v1/file/2026-09-15-18h24m01s_world3d-dark-living-sand-library_2e8a29.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1972074,
+        "elapsedSeconds": 63.41,
+        "scene": {
+          "name": "Umbrales-de-gigantes-16-Los-nombres-bajo-la-arena-7b67e3699ade45868feeed787f390c2b.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-16-Los-nombres-bajo-la-arena-7b67e3699ade45868feeed787f390c2b.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-16-Los-nombres-bajo-la-arena-7b67e3699ade45868feeed787f390c2b.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "7cc316f84029a4d8a02c8a7392f27a21affbff6dbf4d363753dbcb8de97a9ca8",
+      "file": "clip-16.mp4",
+      "bytes": 1972074
+    },
+    {
+      "id": "dark-living-jade-dragon",
+      "native": {
+        "clip": 17,
+        "title": "El dragón de jade",
+        "saved": {
+          "name": "2026-09-15-18h25m18s_world3d-dark-living-jade-dragon_40db4a.mp4",
+          "url": "/api/v1/file/2026-09-15-18h25m18s_world3d-dark-living-jade-dragon_40db4a.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2066650,
+        "elapsedSeconds": 78.39,
+        "scene": {
+          "name": "Umbrales-de-gigantes-17-El-drag-n-de-jade-476c4091980a49d7b1711049a297052f.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-17-El-drag-n-de-jade-476c4091980a49d7b1711049a297052f.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-17-El-drag-n-de-jade-476c4091980a49d7b1711049a297052f.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "7201f16df389c992dbf1287ab8c3f2ffceaecd2d3372e8eba9e388c3a8c6c8fb",
+      "file": "clip-17.mp4",
+      "bytes": 2066650
+    },
+    {
+      "id": "dark-living-moon-grave",
+      "native": {
+        "clip": 18,
+        "title": "La tumba de la luna",
+        "saved": {
+          "name": "2026-09-15-18h26m35s_world3d-dark-living-moon-grave_d42bfe.mp4",
+          "url": "/api/v1/file/2026-09-15-18h26m35s_world3d-dark-living-moon-grave_d42bfe.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2313852,
+        "elapsedSeconds": 78.43,
+        "scene": {
+          "name": "Umbrales-de-gigantes-18-La-tumba-de-la-luna-cd3fd8f54904420fa9dd0d915802f8eb.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-18-La-tumba-de-la-luna-cd3fd8f54904420fa9dd0d915802f8eb.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-18-La-tumba-de-la-luna-cd3fd8f54904420fa9dd0d915802f8eb.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "c3cf8b9d9b30f5556dbfe02c63b77707c58d76e0db40973c96d756b29b0a9c14",
+      "file": "clip-18.mp4",
+      "bytes": 2313852
+    },
+    {
+      "id": "dark-living-copper-trees",
+      "native": {
+        "clip": 19,
+        "title": "El bosque de cobre",
+        "saved": {
+          "name": "2026-09-15-18h28m03s_world3d-dark-living-copper-trees_830dba.mp4",
+          "url": "/api/v1/file/2026-09-15-18h28m03s_world3d-dark-living-copper-trees_830dba.mp4",
+          "workspace": "default"
+        },
+        "bytes": 3612192,
+        "elapsedSeconds": 87.48,
+        "scene": {
+          "name": "Umbrales-de-gigantes-19-El-bosque-de-cobre-8fc38f266aa24030adf4eb1b90d6a5eb.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-19-El-bosque-de-cobre-8fc38f266aa24030adf4eb1b90d6a5eb.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-19-El-bosque-de-cobre-8fc38f266aa24030adf4eb1b90d6a5eb.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "aa4560b121b9ea6d16e4c99e775be529495ea380ca491931ab400f6087135e61",
+      "file": "clip-19.mp4",
+      "bytes": 3612192
+    },
+    {
+      "id": "dark-living-final-gate",
+      "native": {
+        "clip": 20,
+        "title": "La puerta del último gigante",
+        "saved": {
+          "name": "2026-09-15-18h29m12s_world3d-dark-living-final-gate_63ed9c.mp4",
+          "url": "/api/v1/file/2026-09-15-18h29m12s_world3d-dark-living-final-gate_63ed9c.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2060868,
+        "elapsedSeconds": 69.38,
+        "scene": {
+          "name": "Umbrales-de-gigantes-20-La-puerta-del-ltimo-gigante-4fbe796d1d5e4ddcb9698a1807907104.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Umbrales-de-gigantes-20-La-puerta-del-ltimo-gigante-4fbe796d1d5e4ddcb9698a1807907104.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Umbrales-de-gigantes-20-La-puerta-del-ltimo-gigante-4fbe796d1d5e4ddcb9698a1807907104.world3d.scene.preview.png?workspace=default"
+        }
+      },
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "sha256": "d8fb38a3e7e49a2f91b237a3c57e288560046493b50d4247bad009862b88dcd5",
+      "file": "clip-20.mp4",
+      "bytes": 2060868
+    }
+  ]
+}

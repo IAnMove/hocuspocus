@@ -6,8 +6,9 @@ import { characterFacePatchPrompt, registerCharacterFacePatch, type FacePatchMet
 import { prepareCharacterFacePatch } from '../../lib/prepareCharacterFacePatch'
 import { faceRigOverlayPreviewStyle, type CharacterKitFaceRigState } from '../../lib/characterKitFaceRig'
 import type { CharacterFaceAnchor, CharacterKit, CharacterKitAsset, CharacterMouthState } from '../../lib/characterKit'
+import { CHARACTER_MOUTH_STATES } from '../../lib/characterMouthStates'
 
-const MOUTH_STATES = ['closed', 'small', 'wide', 'round'] as const
+const MOUTH_STATES = CHARACTER_MOUTH_STATES
 const ACCEPTED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp'])
 type PreparedPatch = Awaited<ReturnType<typeof prepareCharacterFacePatch>>
 type PrepareService = (poseSource: string, variant: File, anchor: CharacterFaceAnchor) => Promise<PreparedPatch>
@@ -201,6 +202,8 @@ function useCharacterFacePatchController(props: CharacterFacePatchPanelProps): C
     small: t('faceRig.states.small'),
     wide: t('faceRig.states.wide'),
     round: t('faceRig.states.round'),
+    pressed: t('faceRig.states.pressed'), medium: t('faceRig.states.medium'), pucker: t('faceRig.states.pucker'),
+    bite: t('faceRig.states.bite'), tongue: t('faceRig.states.tongue'),
     'open-eyes': t('faceRig.states.open-eyes'),
     blink: t('faceRig.states.blink'),
   }

@@ -75,6 +75,20 @@ def write_image(path: Path, color=(40, 80, 120)):
     Image.new("RGB", (17, 11), color).save(path)
 
 
+@pytest.mark.parametrize("identity", ["asset_saved", "/api/v1/assets/asset_saved"])
+def test_saved_asset_identity_restores_a_browser_url_in_its_source_workspace(resources_fixture, monkeypatch, identity):
+    fixture = resources_fixture
+    write_image(fixture["source"] / "reference.png")
+    url = "/api/v1/file/reference.png?workspace=source"
+    seen = []
+    def asset_url(value):
+        seen.append(value)
+        return url
+    monkeypatch.setattr(fixture["service"], "_asset_url", asset_url)
+    assert fixture["service"].canonicalize_legacy(identity) == url
+    assert seen == ["asset_saved"]
+
+
 def canonical_upload(name):
     return f"/api/v1/uploads/{name}"
 
@@ -171,10 +185,72 @@ def test_canonicalize_legacy_uses_exact_contained_absolute_path_and_does_not_ado
     assert service.canonicalize_legacy(str(output)) == "/api/v1/file/same.png?workspace=output"
     with pytest.raises(ValueError):
         service.canonicalize_legacy("same.png")
+    unique = fixture["output"] / "unique-edit.png"
+    write_image(unique)
+    assert service.canonicalize_legacy("unique-edit.png") == "/api/v1/file/unique-edit.png?workspace=output"
+    assert service.canonicalize_legacy("/api/v1/file/unique-edit.png?workspace=output") == (
+        "/api/v1/file/unique-edit.png?workspace=output"
+    )
+    assert service.canonicalize_legacy(
+        "http://192.168.1.87:42010/api/v1/file/unique-edit.png?workspace=output"
+    ) == "/api/v1/file/unique-edit.png?workspace=output"
+    nested = fixture["uploads"].parent / ".pinokio-temp"
+    nested.mkdir()
+    relative = nested / "picked.jpg"
+    write_image(relative)
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(fixture["uploads"].parent)
+    try:
+        adopted = service.canonicalize_legacy(".pinokio-temp/picked.jpg")
+    finally:
+        monkeypatch.undo()
+    assert adopted.startswith("/api/v1/uploads/")
     outside = fixture["uploads"].parent / "outside.png"
     write_image(outside)
     with pytest.raises(ValueError):
         service.canonicalize_legacy(str(outside))
+
+
+def test_canonicalize_legacy_maps_gallery_output_urls_to_workspace_files(resources_fixture):
+    fixture = resources_fixture
+    default = fixture["output"].parent / "default-workspace"
+    default.mkdir()
+    fixture["workspaces"]["default"] = default
+    picture = default / "gallery.png"
+    write_image(picture)
+    service = fixture["service"]
+    assert service.canonicalize_legacy("/api/v1/outputs/gallery.png") == (
+        "/api/v1/file/gallery.png?workspace=default"
+    )
+    assert service.canonicalize_legacy("/api/v1/outputs/thumbnail/gallery.png?v=1") == (
+        "/api/v1/file/gallery.png?workspace=default"
+    )
+    assert service.canonicalize_legacy("/api/v1/file/gallery.png") == (
+        "/api/v1/file/gallery.png?workspace=default"
+    )
+
+
+def test_local_media_roots_never_include_the_filesystem_root(resources_fixture):
+    roots = resources_fixture["service"]._local_media_roots()
+    assert Path.cwd().resolve() in roots
+    assert all(len(root.parts) > 1 for root in roots)
+
+
+def test_canonicalize_legacy_rejects_absolute_cwd_file_and_root_relative_passwd(resources_fixture, tmp_path, monkeypatch):
+    service = resources_fixture["service"]
+    leak = Path("/etc/passwd")
+    if leak.is_file():
+        with pytest.raises(ValueError):
+            service.canonicalize_legacy(str(leak))
+        with pytest.raises(ValueError):
+            service.canonicalize_legacy("etc/passwd")
+    app = tmp_path / "app"
+    app.mkdir()
+    secret = app / "secret.png"
+    write_image(secret)
+    monkeypatch.chdir(app)
+    with pytest.raises(ValueError, match="outside known media"):
+        service.canonicalize_legacy(str(secret))
 
 
 def test_canonicalize_legacy_rejects_symlink_outside_known_media_roots(resources_fixture, tmp_path):

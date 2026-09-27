@@ -10,8 +10,88 @@ Object.assign(globalThis, { window: dom.window, document: dom.window.document,
   localStorage: dom.window.localStorage, Event: dom.window.Event, CustomEvent: dom.window.CustomEvent })
 window.matchMedia = () => ({ matches: false }) as MediaQueryList
 const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
-const { reconcileWizardMediaTurn } = await import('../src/features/agent/wizardVisualPolicy.ts')
+const { validateWizardPlan } = await import('../src/features/agent/wizardVisualPolicy.ts')
 const t = (key: string, options?: Record<string, unknown>) => String(i18n.t(key, { ns: 'wizard', lng: 'en', ...options }))
+
+test('the planner supplies the interpretation and its question survives navigation receipts', () => {
+  const question = '¿Qué mundo te gustaría explorar con esos personajes y para qué público?'
+  const proposed = parseAgentTurn(JSON.stringify({ reply: 'He creado invented-series.',
+    intent: { kind: 'clarification', execution: 'none', goal: 'Develop an animated episodic project', question },
+    actions: [{ type: 'open_tab', tab: 'series_lab' }],
+  }))
+  const turn = validateWizardPlan(false, proposed)
+  const results: AgentActionResult[] = [{ action: turn.actions[0], ok: true, message: 'Opened Series Lab.',
+    commandResult: { commandId: 'navigation', status: 'completed', entities: [], artifacts: [], taskIds: [], pipelineIds: [] } }]
+  for (const receipts of [[], results]) {
+    const reply = formatWizardTurnReply(turn, receipts, t)
+    assert.ok(reply.startsWith(question))
+    assert.doesNotMatch(reply, /No action was executed|invented-series/)
+    assert.equal(wizardTurnVisualState(turn, receipts), 'idle')
+  }
+})
+
+test('a clarification cannot execute a model-proposed creation while waiting for input', () => {
+  const turn = validateWizardPlan(false, parseAgentTurn(JSON.stringify({ reply: 'Created!',
+    intent: { kind: 'clarification', execution: 'none', goal: 'Develop a series', question: '¿Qué tono prefieres?' },
+    actions: [{ type: 'open_tab', tab: 'series_lab' },
+      { type: 'create_series_episode', series_title: 'Invented', episode_premise: 'Invented premise', create_if_missing: true }],
+  })))
+  assert.deepEqual(turn.actions, [{ type: 'open_tab', tab: 'series_lab' }])
+  assert.equal(turn.rejections?.[0].code, 'request_policy')
+  assert.match(formatWizardTurnReply(turn, [], t), /¿Qué tono prefieres\?/)
+  assert.doesNotMatch(formatWizardTurnReply(turn, [], t), /Created!/)
+})
+
+test('a contextual creative delegation keeps the specific plan without inventing a canned example', () => {
+  const turn = validateWizardPlan(false, parseAgentTurn(JSON.stringify({ reply: 'Done.',
+    intent: { kind: 'action', execution: 'prepare', goal: 'Invent the pilot from the earlier astronomy premise', question: '' },
+    actions: [{ type: 'create_series_episode', series_title: 'Órbita de bolsillo',
+      series_premise: 'Una familia vive en un observatorio flotante.', episode_title: 'La luna se muda',
+      episode_premise: 'La pequeña astrónoma descubre que la luna ha cambiado de vecino.', create_if_missing: true }],
+  })))
+  assert.equal(turn.actions.length, 1)
+  const episode = turn.actions[0]
+  assert.equal(episode.type, 'create_series_episode')
+  if (episode.type !== 'create_series_episode') throw new Error('Expected episode creation')
+  assert.equal(episode.seriesTitle, 'Órbita de bolsillo')
+  assert.equal(episode.episodeTitle, 'La luna se muda')
+  assert.doesNotMatch(formatWizardTurnReply(turn, [], t), /Done\./)
+})
+
+test('a clarification retains its question but cannot gain compute scope from contradictory model fields', () => {
+  const turn = validateWizardPlan(false, parseAgentTurn(JSON.stringify({ reply: 'Rendered!',
+    intent: { kind: 'clarification', execution: 'run', goal: 'Choose the visual world', question: '¿Cómo imaginas ese mundo?' },
+    actions: [{ type: 'prepare_image', prompt: 'invented' }, { type: 'start_generation', confirm: true }],
+  })))
+  assert.equal(turn.intent?.execution, 'none')
+  assert.deepEqual(turn.actions, [])
+  assert.match(formatWizardTurnReply(turn, [], t), /¿Cómo imaginas ese mundo\?/)
+  assert.doesNotMatch(formatWizardTurnReply(turn, [], t), /Rendered|No action was executed/)
+})
+
+test('missing or invalid semantic intent fails closed with an actionable explanation', async () => {
+  const { wizardLlmRequestSchema } = await import('../src/features/agent/agentActions.ts')
+  assert.ok((wizardLlmRequestSchema().required as string[]).includes('intent'))
+  for (const intent of [undefined, { kind: 'completed', goal: 'Made it', question: '' },
+    { kind: 'clarification', execution: 'none', goal: 'Plan a series', question: '' }, { kind: 'action', execution: 'run', goal: '', question: '' }]) {
+    const turn = validateWizardPlan(false, parseAgentTurn(JSON.stringify({ reply: 'Done!', intent,
+      actions: [{ type: 'open_tab', tab: 'series_lab' }] })))
+    assert.deepEqual(turn.actions, [])
+    assert.ok(turn.rejections?.some(item => item.code === 'invalid_intent'))
+    assert.match(formatWizardTurnReply(turn, [], t), /valid interpretation of your intent/)
+    assert.doesNotMatch(formatWizardTurnReply(turn, [], t), /Done!/)
+  }
+})
+
+test('preparation scope rejects proposed computation without recognizing command words', () => {
+  const turn = validateWizardPlan(false, parseAgentTurn(JSON.stringify({ reply: 'Launched!',
+    intent: { kind: 'action', execution: 'prepare', goal: 'Prepare a still while leaving rendering for later', question: '' },
+    actions: [{ type: 'prepare_image', prompt: 'a lighthouse in the fog' }, { type: 'start_generation', confirm: true }],
+  })))
+  assert.deepEqual(turn.actions.map(action => action.type), ['prepare_image'])
+  assert.equal(turn.rejections?.[0].actionType, 'start_generation')
+  assert.equal(turn.rejections?.[0].code, 'request_policy')
+})
 
 test('rejected create_story exposes the rejection and never displays the invented result', () => {
   const turn = parseAgentTurn(JSON.stringify({ reply: 'I created story-invented successfully.',
@@ -48,15 +128,16 @@ test('oversized proposals preserve the execution limit and report truncation', (
   assert.equal(turn.rejections?.filter(item => item.code === 'action_limit').length, 1)
 })
 
-test('media policy and request reconciliation retain exclusions instead of silently dropping them', async () => {
-  const proposal = parseAgentTurn(JSON.stringify({ reply: 'Generated a video.', actions: [
+test('media policy and interpreted conversation retain exclusions instead of silently dropping them', () => {
+  const proposal = parseAgentTurn(JSON.stringify({ reply: 'Generated a video.',
+    intent: { kind: 'conversation', execution: 'none', goal: 'Explain the video tools', question: '' }, actions: [
     { type: 'create_story', title: 'Missing premise' },
     { type: 'prepare_video', prompt: 'clouds' }, { type: 'start_generation', confirm: true },
   ] }))
-  const visual = await reconcileWizardMediaTurn(true, 'Describe the attached screenshot.', proposal)
+  const visual = validateWizardPlan(true, proposal)
   assert.deepEqual(visual.actions, [])
   assert.deepEqual(visual.rejections?.map(item => item.code), ['invalid_action', 'visual_evidence_only', 'visual_evidence_only'])
-  const explanation = await reconcileWizardMediaTurn(false, 'How do I generate a video?', proposal)
+  const explanation = validateWizardPlan(false, proposal)
   assert.equal(explanation.actions.filter(item => item.type === 'start_generation').length, 0)
   assert.ok(explanation.rejections?.some(item => item.code === 'request_policy'))
   assert.doesNotMatch(formatWizardTurnReply(explanation, [], t), /Generated a video/)
@@ -99,27 +180,17 @@ test('failed and awaiting-input results keep real messages without an invented s
 
 test('informational conversation is preserved while navigation requires its own result', () => {
   const reply = 'Collections group existing assets.'
-  assert.equal(formatWizardTurnReply({ reply, actions: [] }, [], t, 'What are collections?'), reply)
-  assert.equal(formatWizardTurnReply({ reply, actions: [] }, [], t, '¿Cómo funcionan las colecciones?'), reply)
-  // Accented qué/por qué used to fail JS `\b` and show a false empty-turn receipt.
-  assert.equal(formatWizardTurnReply({ reply, actions: [] }, [], t, 'Qué son las colecciones?'), reply)
-  assert.equal(formatWizardTurnReply({ reply, actions: [] }, [], t, '¿Qué son las colecciones?'), reply)
-  assert.equal(formatWizardTurnReply({ reply, actions: [] }, [], t, 'Por qué no aparecen las colecciones?'), reply)
-  assert.equal(formatWizardTurnReply({ reply, actions: [] }, [], t, '¿Por qué falló la generación?'), reply)
+  const turn: AgentTurn = { reply, actions: [], intent: { kind: 'conversation', execution: 'none', goal: 'Explain collections', question: '' } }
+  assert.equal(formatWizardTurnReply(turn, [], t), reply)
   assert.match(formatWizardTurnReply({ reply, actions: [{ type: 'open_tab', tab: 'workspaces' }] }, [], t), /No action was executed/)
 })
 
 test('empty and omitted actions never claim creation in response to an action request', () => {
   for (const payload of [{ actions: [] }, {}]) {
     const turn = parseAgentTurn(JSON.stringify({ reply: 'Created invented-999.', ...payload }))
-    for (const request of ['Create Nightwatch using my settings.', 'Can you create a collection?', 'Crea un proyecto Nightwatch.',
-      'Hola, crea un proyecto Nightwatch.', 'Hi, create Nightwatch.',
-      'Can you explain collections and create Nightwatch?', 'What are collections? Create one named Nightwatch.',
-      'Explica las colecciones y crea Nightwatch.', 'Qué son las colecciones? Crea una llamada Nightwatch.', '']) {
-      const reply = formatWizardTurnReply(turn, [], t, request)
-      assert.match(reply, /No action was executed/)
-      assert.doesNotMatch(reply, /invented-999|Created/)
-    }
+    const reply = formatWizardTurnReply(turn, [], t)
+    assert.match(reply, /No action was executed/)
+    assert.doesNotMatch(reply, /invented-999|Created/)
   }
 })
 
@@ -167,23 +238,16 @@ test('rejection copy is translated in Spanish', () => {
   assert.doesNotMatch(reply, /Creado\./)
 })
 
-test('a Flux image retry cannot inherit Comics from a general assistant inventory', async () => {
-  const request = 'Retry exactly once now because the previous Flux image task failed from temporary VRAM pressure and is finished. No other generation is active. Create exactly one image in the isolated release-audit-20260909 workspace: a small amber observatory on a snowy mountain ridge beneath a clear star field, cinematic concept art. Use the installed Flux 2 Klein 9B image model and set aspect ratio 1:1. Enqueue this retry and show the real result.'
-  const turn = await reconcileWizardMediaTurn(false, request, {
+test('an interpreted Flux retry keeps the exact task chosen by the planner', () => {
+  const turn = validateWizardPlan(false, {
     reply: 'I finished a comic.', actions: [{ type: 'retry_task', taskId: 'task-generation-67506a65', confirm: true }],
-  }, [
-    { role: 'user', text: 'Show me what this app can do.' },
-    { role: 'assistant', text: 'Available studios include Comics, Comic Director, Studio and Story Lab.' },
-    { role: 'user', text: 'Create one Flux image.' },
-  ])
+    intent: { kind: 'action', execution: 'run', goal: 'Retry the failed Flux image task', question: '' },
+  })
   assert.deepEqual(turn.actions, [{ type: 'retry_task', taskId: 'task-generation-67506a65', confirm: true }])
 })
 
-test('an older comic request cannot override a more recent explicit Studio task', async () => {
-  const turn = await reconcileWizardMediaTurn(false, 'Retry the latest failed task.', { reply: '', actions: [] }, [
-    { role: 'user', text: 'Create a comic.' },
-    { role: 'user', text: 'Now create a Flux image in Studio.' },
-    { role: 'assistant', text: 'The task failed.' },
-  ])
-  assert.deepEqual(turn.actions, [{ type: 'retry_task', taskId: 'latest', confirm: true }])
+test('an empty interpreted plan cannot manufacture a retry from previous messages', () => {
+  const turn = validateWizardPlan(false, { reply: '', actions: [],
+    intent: { kind: 'action', execution: 'run', goal: 'Retry the latest failed task', question: '' } })
+  assert.deepEqual(turn.actions, [])
 })

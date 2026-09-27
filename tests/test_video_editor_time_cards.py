@@ -33,7 +33,7 @@ def test_time_card_boundary_expands_into_a_real_inserted_segment(tmp_path: Path)
         {"type": "crossfade", "duration": 0.5, "text": ""},
     ]
 
-    with patch.object(video_editor, "_render_time_card_segment") as render_card:
+    with patch("services.video_editor_time_cards._render_time_card_segment") as render_card:
         expanded_segments, expanded_durations, expanded_transitions = (
             video_editor._materialise_time_cards(
                 segments,

@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "title": "Portal Ride · Tres mundos",
+  "items": [
+    {
+      "id": "skate-portal-v2-01",
+      "number": 1,
+      "title": "La chispa encuentra al patinador",
+      "description": "El portal aparece de la nada, recorre una espiral y se coloca junto al patinador.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 2.4,
+      "video": "plano-01.mp4",
+      "poster": "plano-01.png",
+      "scene": "plano-01.world3d.json",
+      "template": "plano-01.world3d-template.json",
+      "actorVideo": "../skate-portal/skate-jump.webm",
+      "tag": "Vídeo 3D · portal animado"
+    },
+    {
+      "id": "skate-portal-v2-02",
+      "number": 2,
+      "title": "El salto abre el cielo",
+      "description": "Crece durante el salto hasta revelar la carretera del cielo.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 1.6666666666666667,
+      "video": "plano-02.mp4",
+      "poster": "plano-02.png",
+      "scene": "plano-02.world3d.json",
+      "template": "plano-02.world3d-template.json",
+      "actorVideo": "../skate-portal/skate-jump.webm",
+      "tag": "Vídeo 3D · portal animado"
+    },
+    {
+      "id": "skate-portal-v2-03",
+      "number": 3,
+      "title": "Otro salto sobre las nubes",
+      "description": "Las ruedas aterrizan sobre el puente; aparece la siguiente puerta.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 2.0,
+      "video": "plano-03.mp4",
+      "poster": "plano-03.png",
+      "scene": "plano-03.world3d.json",
+      "template": "plano-03.world3d-template.json",
+      "actorVideo": "../skate-portal/skate-jump.webm",
+      "tag": "Vídeo 3D · portal animado"
+    },
+    {
+      "id": "skate-portal-v2-04",
+      "number": 4,
+      "title": "Aterrizar en el neón",
+      "description": "El neón llena el encuadre sin ampliar el paisaje.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 1.6666666666666667,
+      "video": "plano-04.mp4",
+      "poster": "plano-04.png",
+      "scene": "plano-04.world3d.json",
+      "template": "plano-04.world3d-template.json",
+      "actorVideo": "../skate-portal/skate-jump.webm",
+      "tag": "Vídeo 3D · portal animado"
+    },
+    {
+      "id": "skate-portal-v2-05",
+      "number": 5,
+      "title": "La puerta de neón",
+      "description": "La última chispa vuelve a buscar al patinador.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 2.0,
+      "video": "plano-05.mp4",
+      "poster": "plano-05.png",
+      "scene": "plano-05.world3d.json",
+      "template": "plano-05.world3d-template.json",
+      "actorVideo": "../skate-portal/skate-jump.webm",
+      "tag": "Vídeo 3D · portal animado"
+    },
+    {
+      "id": "skate-portal-v2-06",
+      "number": 6,
+      "title": "Volver por el último portal",
+      "description": "El salto abre el mar y alinea el suelo del regreso.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 1.6666666666666667,
+      "video": "plano-06.mp4",
+      "poster": "plano-06.png",
+      "scene": "plano-06.world3d.json",
+      "template": "plano-06.world3d-template.json",
+      "actorVideo": "../skate-portal/skate-jump.webm",
+      "tag": "Vídeo 3D · portal animado"
+    },
+    {
+      "id": "skate-portal-v2-07",
+      "number": 7,
+      "title": "De vuelta, ruedas en el suelo",
+      "description": "El patinador termina el aterrizaje y continúa sobre la costa.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 1.8,
+      "video": "plano-07.mp4",
+      "poster": "plano-07.png",
+      "scene": "plano-07.world3d.json",
+      "template": "plano-07.world3d-template.json",
+      "actorVideo": "../skate-portal/skate-jump.webm",
+      "tag": "Vídeo 3D · portal animado"
+    }
+  ]
+}

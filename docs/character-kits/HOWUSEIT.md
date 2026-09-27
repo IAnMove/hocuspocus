@@ -12,7 +12,9 @@ UI: **3D Video** sidebar (`SceneAnimatorPanel` → Character Kits). Code:
 `app/_launch_runtime.py`.
 
 Related: [3D Video compositor](../3d-video-compositor/HOWUSEIT.md),
-[Character Creator orbit](../3d-video-compositor/HOWUSEIT.md#54-hunyuan3d-mesh).
+[Character Creator orbit](../3d-video-compositor/HOWUSEIT.md#54-hunyuan3d-mesh),
+[Studio Tools rembg](../tools/HOWUSEIT.md) (general image background removal;
+Face Rig cleanup is a different endpoint).
 
 ---
 
@@ -66,8 +68,9 @@ without creating or moving files. See the
    frame. Defaults are mouth `{ offsetX: 0, offsetY: -18, scale: 0.05,
    rotation: 0 }` and eyes `{ offsetX: 0, offsetY: -28, scale: 0.12,
    rotation: 0 }`. Bounds are offset ±200, scale 0.001–20, rotation ±360.
-7. **`lookNotes` is UI-only:** style and trait notes help the current editor
-   build prompts, but `normalize_character_kit` strips the field on save.
+7. **`lookNotes` persist:** style and trait notes are stored on the kit
+   (max 4000 characters) and shown when Story Lab or Series links the
+   character. Face Rig still uses them to build overlay prompts.
 8. **Delete is record-only:** deleting a kit removes its library entry, not its
    pose PNGs, cleaned overlays, or scene layers.
 
@@ -83,6 +86,9 @@ CharacterKit
   identityReference?, base?, poses{}
   mouth { closed?, small?, wide?, round? }
   eyes { open?, blink? }
+  voice? { provider: local, model: qwen3_tts_customvoice, voiceId, instructions? }
+  lookNotes?
+  speech3d? { model, digest, settings? }
   anchors { [poseId]: { mouth, mouthStates?, eyes? } }
   provenance[]
 ```
@@ -343,7 +349,8 @@ The response includes `filename`, public `source`, `original`, `width`,
   guidance prevents this, but a manually edited JSON can still be inconsistent.
 - Naming overlays without mouth/viseme tokens or `faceBinding`. Discovery has
   a legacy label fallback; mounted kits set semantic bindings explicitly.
-- Expecting `lookNotes` to survive Save kit.
+- Expecting Story Lab’s acting-notes field to be the TTS engine. TTS lives
+  on the kit (`voice`); the story row is casting notes for this plot.
 - Running cleanup on a full-body pose when you intended to clean only one
   overlay; the endpoint crops the opaque bounding box.
 - Trying Face Rig from Character Creator object mode; it is rejected on purpose.

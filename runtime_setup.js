@@ -9,7 +9,8 @@ module.exports = {
     {when: "{{!exists('app/postprocessing/seedvc/__init__.py')}}", method: 'shell.run', params: {
       message: runtime.guarded('git clone --depth 1 --branch v1.0.0 https://github.com/Blizaine/maestro-seedvc app/postprocessing/seedvc'),
     }},
-    ...runtime.installEngines(['wangp', 'hunyuan3d', 'minimax_h3']),
+    ...runtime.installEngines(['core', 'wangp', 'hunyuan3d', 'minimax_h3']),
+    ...runtime.call('speech_install.js'),
     ...runtime.call('sam_install.js').map(step => ({...step,
       when: `{{args.update && exists('app/services/sam/env') && local.runtime.engines.sam.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,
     })),

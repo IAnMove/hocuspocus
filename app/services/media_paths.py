@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterable
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 
 class MediaPathNotAllowed(ValueError):
@@ -31,12 +33,40 @@ def _is_contained(path: str, root: str) -> bool:
         return False
 
 
+def _canonical_media_path(value: str, uploads_root: str, workspace_root: str, workspace_name: str | None):
+    """Resolve the declared API root, without same-name fallback across roots."""
+    if any(ord(char) <= 32 or char in "\\#" for char in value) or re.search(r"%(?![0-9a-fA-F]{2})", value):
+        raise MediaPathNotAllowed("Invalid canonical media reference")
+    parsed = urlsplit(value)
+    upload_prefix, file_prefix = "/api/v1/uploads/", "/api/v1/file/"
+    if parsed.path.startswith(upload_prefix):
+        if parsed.query:
+            raise MediaPathNotAllowed("Upload references cannot contain query parameters")
+        root, relative = uploads_root, parsed.path[len(upload_prefix):]
+    elif parsed.path.startswith(file_prefix):
+        query = parse_qsl(parsed.query, keep_blank_values=True)
+        if len(query) != 1 or query[0] != ("workspace", workspace_name):
+            raise MediaPathNotAllowed("The reference workspace does not match its declared root")
+        root, relative = workspace_root, parsed.path[len(file_prefix):]
+    else:
+        raise MediaPathNotAllowed("Unsupported canonical media root")
+    try:
+        relative = unquote(relative, errors="strict")
+    except UnicodeDecodeError as error:
+        raise MediaPathNotAllowed("Invalid canonical media reference") from error
+    if (any(ord(char) < 32 or ord(char) == 127 or char == "\\" for char in relative)
+            or any(part in {"", ".", ".."} for part in relative.split("/"))):
+        raise MediaPathNotAllowed("Media path is not allowed")
+    return os.path.join(root, relative), root
+
+
 def resolve_permitted_media_path(
     value: str,
     *,
     uploads_root: str,
     workspace_root: str,
     kinds: Iterable[str] = ("audio", "video"),
+    workspace_name: str | None = None,
 ) -> str:
     """Resolve a media path contained in uploads or one workspace.
 
@@ -57,7 +87,12 @@ def resolve_permitted_media_path(
         raise MediaPathNotAllowed("Media roots are not available")
 
     raw = value.strip()
-    if os.path.isabs(raw) or os.path.splitdrive(raw)[0]:
+    if raw.startswith("/api/"):
+        canonical, declared_root = _canonical_media_path(raw, roots[0], roots[1], workspace_name)
+        # A canonical file may not follow a symlink into the other allowed root.
+        roots = (declared_root,)
+        raw_candidates = (canonical,)
+    elif os.path.isabs(raw) or os.path.splitdrive(raw)[0]:
         raw_candidates = (raw,)
     else:
         raw_candidates = (raw, *(os.path.join(root, raw) for root in roots))
@@ -165,4 +200,3 @@ def resolve_story_cover_audio(
         workspace_root=workspace_root,
         kinds=("audio",),
     )
-

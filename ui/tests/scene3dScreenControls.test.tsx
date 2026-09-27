@@ -48,3 +48,33 @@ test('placement fields use the same limits as reopening a scene', async () => {
     assert.equal(parseMediaScreen(next)?.yaw, next.yaw)
   } finally { cleanup() }
 })
+
+test('a cutout character can enable, time, align and reorder held poses in the editor', async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { Scene3DScreenControls } = await import('../src/features/scene3d/Scene3DScreenControls')
+  const slot: Scene3DSlot = { id: 'knight', slot: 'subject_1', media: 'image', surface: 'cutout', sourceUrl: '/knight.png', clip: null,
+    position: [0, 0, 0], rotationY: 0, scale: 1 }
+  let saved: MediaScreen | undefined
+  function Harness({ disabled = false }) {
+    const [value, setValue] = React.useState<MediaScreen>()
+    return <Scene3DScreenControls slot={{ ...slot, screen: value }} meshes={[]} items={[]} disabled={disabled} workspace="example"
+      onChange={next => { saved = parseMediaScreen(next); setValue(saved) }} onChoose={() => {}} onRemove={() => {}} />
+  }
+  try {
+    const view = render(<Harness />)
+    fireEvent.click(screen.getByLabelText('Animate this layer'))
+    fireEvent.click(screen.getByLabelText('Held poses'))
+    assert.equal(saved?.poseSequence?.[0].sourceUrl, '/knight.png')
+    assert.equal(saved?.transparent, true)
+    fireEvent.change(screen.getByLabelText('Duration (s) 1'), { target: { value: '1.4' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add pose' }))
+    fireEvent.change(screen.getByLabelText('Relative height 2'), { target: { value: '.5' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Move earlier' })[1])
+    assert.deepEqual(saved?.poseSequence?.map(p => p.height), [.5, .9])
+    assert.deepEqual(saved?.poseSequence?.map(p => p.duration), [1.4, 1.4])
+    assert.equal(parseMediaScreen(JSON.parse(JSON.stringify(saved)))?.poseSequence?.length, 2)
+    assert.ok(screen.getByLabelText('Playback speed'))
+    view.rerender(<Harness disabled />)
+    assert.equal((screen.getByRole('button', { name: 'Add pose' }) as HTMLButtonElement).disabled, true)
+  } finally { cleanup() }
+})

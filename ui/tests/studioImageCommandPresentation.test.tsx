@@ -409,3 +409,21 @@ test('recovery reload reuses the exact intention after 503 and keeps its receipt
     cleanup()
   }
 })
+
+test('frozen image request acknowledges in its target panel after a later model selection', { concurrency: false }, async () => {
+  const { render, waitFor, cleanup, act } = await import('@testing-library/react')
+  const { presentStudioImageCommand } = await import('../src/features/studio/imageCommandPresentation.ts')
+  // A stale/hidden host must not reject the event meant for the visible host.
+  render(<StudioImageCommandPanel workspace="studio-ack-workspace" model="stale-model" visible={false} onRecovered={async () => undefined} />)
+  render(<StudioImageCommandPanel workspace="studio-ack-workspace" model="qwen_image_21" visible onRecovered={async () => undefined} />)
+  const frozen = command('frozen-model-after-upload')
+  try {
+    let pending!: Promise<void>
+    await act(async () => { pending = presentStudioImageCommand(frozen); await Promise.resolve() })
+    await waitFor(() => assert.equal(document.querySelector('[data-studio-image-ready="true"]')?.getAttribute('data-studio-image-command'), frozen.intent_id))
+    await act(async () => { await flushAnimationFrames() })
+    await pending
+    assert.match(document.querySelector('[data-studio-image-ready="true"]')?.textContent || '', /pi_flux2/)
+    assert.equal(document.querySelector('[data-studio-image-ready="false"]')?.getAttribute('data-studio-image-command'), null)
+  } finally { cleanup() }
+})

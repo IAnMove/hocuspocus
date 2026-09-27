@@ -444,7 +444,24 @@ test('composed slices bind without as-never casts at the useStore call site', as
   assert.match(composition, /bindSlice\(set, get, createGallerySlice\)/)
   assert.match(composition, /bindSlice\(set, get, createLlmSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createStudioConfigurationSlice/)
+  assert.match(composition, /bindSlice\(set, get, createStudioMusicSlice/)
   assert.doesNotMatch(composition, /as never/)
+})
+
+test('Studio music slice owns song-writer state without owning startGeneration', async () => {
+  const { createStudioMusicSlice } = await import('../src/stores/studioMusicSlice.ts')
+  let state = { musicDescription: '', musicInstrumental: false }
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  const music = createStudioMusicSlice(set, () => state)
+  music.setMusicDescription('harbor')
+  music.setMusicInstrumental(true)
+  assert.equal(state.musicDescription, 'harbor')
+  assert.equal(state.musicInstrumental, true)
+  assert.equal('startGeneration' in music, false)
+  assert.equal('jobs' in music, false)
 })
 
 test('useStore keeps Director actions available through its existing public facade', async () => {

@@ -1,0 +1,64 @@
+import { readFileSync } from 'node:fs'
+import { expect, test } from '@playwright/test'
+import { closeApp, gotoApp } from '../helpers/gotoApp'
+import { createCharacterKit, type CharacterKitLibrary } from '../../src/lib/characterKit'
+import type { SeriesLibrary } from '../../src/features/series/types'
+
+test('approved old takes expose draft regeneration and link directly to missing character assets', async ({ page }) => {
+  const session = await gotoApp(page)
+  const series = (JSON.parse(readFileSync(new URL('../../../docs/series-lab/example-series-library-v1.json', import.meta.url), 'utf8')) as SeriesLibrary).seriesById.series_signal
+  series.allowedProductionMethods = ['animation_2d']
+  const episode = Object.values(series.episodesById)[0]
+  const template = episode.shots[0]
+  const library: CharacterKitLibrary = { version: 1, revision: 1, activeId: '', kits: {} }
+  for (const [index, character] of series.characters.entries()) {
+    const kit = createCharacterKit(character.name)
+    kit.base = { id: 'base', name: 'Base', source: '/fixture-body.svg', kind: 'image', alphaStatus: 'transparent', reviewState: 'pending' }
+    if (index !== 0) kit.base = undefined
+    kit.anchors.base = { mouth: { offsetX: 0, offsetY: -20, scale: .08, rotation: 0 } }
+    for (const state of ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const) kit.mouth[state] = {
+      id: state, name: state, source: `/character-kit-presets/mouths/minimal-line/${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved',
+    }
+    library.kits[kit.id] = kit
+    character.voiceProfile = { characterKitRef: { workspace: 'default', id: kit.id } }
+  }
+  series.assets.video = { ...Object.values(series.assets)[0], id: 'video', kind: 'video', uri: 'fixture.mp4',
+    metadata: { productionMethod: 'animation_2d', sceneFilename: 'fixture.json' } }
+  series.assets['saved-master'] = { ...series.assets.video, id: 'saved-master', uri: 'fixture-master.mp4',
+    ownerType: 'episode', ownerId: episode.id }
+  episode.latestAssemblyAssetId = 'saved-master'
+  episode.shots = series.characters.map((character, index) => ({ ...template, id: `shot-${index}`, order: index + 1,
+    productionMethod: 'animation_2d', approvedAttemptId: `take-${index}`, visibleCharacterIds: [character.id],
+    dialogueBeats: [{ ...template.dialogueBeats[0], id: `beat-${index}`, characterId: character.id, text: 'Hello.' }],
+    attempts: [{ ...template.attempts[0], id: `take-${index}`, status: 'completed', outputAssetIds: ['video'] }] }))
+  await page.route('**/api/v1/series/**', async route => {
+    expect(route.request().method()).toBe('GET')
+    const path = new URL(route.request().url()).pathname
+    await route.fulfill({ json: path.endsWith('/library')
+      ? { schemaVersion: 1, workspace: 'default', seriesOrder: [series.id], seriesById: { [series.id]: series } }
+      : path.endsWith('/recovery') ? { jobs: [] } : series })
+  })
+  await page.route('**/api/v1/character-kits/library**', route => route.fulfill({ json: library }))
+  await page.route('**/fixture-body.svg', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><circle cx="128" cy="128" r="100" fill="#fab"/></svg>' }))
+  await page.getByRole('tab', { name: 'Series Lab', exact: true }).click()
+  await page.getByRole('button', { name: '5 · Results', exact: true }).click()
+  await expect(page.getByRole('link', { name: 'Watch full episode' })).toHaveAttribute('href', /fixture-master\.mp4\?workspace=default/)
+  await expect(page.getByRole('link', { name: 'Download joined episode' })).toBeVisible()
+  await page.getByRole('button', { name: '4 · Shots', exact: true }).click()
+  const panel = page.getByRole('region', { name: '2D shots', exact: true })
+  await expect(panel.getByText('2 2D shots already have video.')).toBeVisible()
+  await expect(panel.getByRole('button', { name: /^Generate all/ })).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: 'Regenerate all (1)' })).toBeEnabled()
+  await expect(panel.getByText(/preserves recorded audio and edits/)).toBeVisible()
+  await expect(panel.getByText(/Save a valid base image/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Regenerate this shot', exact: true })).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Render selection (0)', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: /Shot 1 method/ })).toBeHidden()
+  await page.getByText('Edit shot', { exact: true }).first().click()
+  await expect(page.getByRole('combobox', { name: 'Shot 1 method', exact: true })).toBeVisible()
+  await page.getByText('Production settings', { exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: /2D animation/ })).toBeVisible()
+  await panel.getByRole('button', { name: series.characters[1].name, exact: true }).click()
+  await expect(page.getByTestId('character-name')).toHaveValue(series.characters[1].name)
+  await closeApp(page, session)
+})

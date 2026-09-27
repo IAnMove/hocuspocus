@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from services.image_generation_commands import command_error
 from services.studio_image_resources import validate_lora_multipliers
 from services.studio_speech_spec import SPEECH_MODEL_TYPES
+from services.auk_speech_contract import prepare_auk_speech
 
 
 _AUDIO_REFERENCE_FIELDS = tuple(
@@ -490,6 +491,7 @@ def prepare_studio_speech(params, *, model_definition, model_downloaded, resourc
             raise ValueError("input.params.model_type must be a string")
         definition = _definition_for(model_definition, model_type)
         _validate_speech_model(model_type, definition, model_downloaded)
+        prepare_auk_speech(working, definition)
         phases = _sampling(working, definition)
         _model_mode(working, definition)
         _duration(working, definition)

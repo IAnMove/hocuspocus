@@ -30,7 +30,7 @@ const screenshot = async name => {
   await page.screenshot({ path: path.join(output, name + '.jpg'), type: 'jpeg', quality: 90 })
 }
 try {
-  await page.addInitScript(() => { localStorage.setItem('hocuspocus-ui-language', 'es'); localStorage.setItem('hocuspocus_welcome_seen_v1', '1') })
+  await page.addInitScript(() => { localStorage.setItem('hocuspocus-ui-language', 'es'); localStorage.setItem('hocuspocus_welcome_seen_v1', '1'); localStorage.setItem('hocuspocus_welcome_seen_v2', '453') })
   await page.goto(base)
   await page.getByRole('button', { name: 'Estudios', exact: true }).click({ timeout: 30000 })
   await page.getByRole('tab', { name: 'Vídeo 3D', exact: true }).click()

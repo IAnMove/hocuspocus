@@ -1,0 +1,181 @@
+{
+  "renderer": "HocusPocus native Video 3D export",
+  "clips": [
+    {
+      "id": "dark-still-salt-sea",
+      "title": "Sal sobre el mar",
+      "video": "dark-still-salt-sea.mp4",
+      "sha256": "7c5862a910160cca5b38e84624991852ec019294d269983bb3239cfac1933095",
+      "bytes": 1142288,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 69.59,
+      "intentId": "dark-stillness-native-20260915-01",
+      "taskId": "world3d-export-6e8aebb7d0174268",
+      "published": {
+        "name": "2026-09-15-19h33m58s_world3d-dark-still-salt-sea_7c36fe.mp4",
+        "url": "/api/v1/file/2026-09-15-19h33m58s_world3d-dark-still-salt-sea_7c36fe.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "dark-still-still-flame",
+      "title": "La llama inmóvil",
+      "video": "dark-still-still-flame.mp4",
+      "sha256": "09456493511b591a8d81dd2528f41238b98dbe31d725b349350b3bac0c755a5d",
+      "bytes": 1124675,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 66.54,
+      "intentId": "dark-stillness-native-20260915-02",
+      "taskId": "world3d-export-6c421433901645bc",
+      "published": {
+        "name": "2026-09-15-19h35m05s_world3d-dark-still-still-flame_078c3c.mp4",
+        "url": "/api/v1/file/2026-09-15-19h35m05s_world3d-dark-still-still-flame_078c3c.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "dark-still-winter-vigil",
+      "title": "La vigilia blanca",
+      "video": "dark-still-winter-vigil.mp4",
+      "sha256": "2b5e94e94d22c63eda1c782008869cc6378f8a0e83f35216080dab5a515217fb",
+      "bytes": 787860,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 63.59,
+      "intentId": "dark-stillness-native-20260915-03",
+      "taskId": "world3d-export-4d56f93a174d4957",
+      "published": {
+        "name": "2026-09-15-19h36m08s_world3d-dark-still-winter-vigil_369179.mp4",
+        "url": "/api/v1/file/2026-09-15-19h36m08s_world3d-dark-still-winter-vigil_369179.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "dark-still-moth-moon",
+      "title": "La polilla y la luna",
+      "video": "dark-still-moth-moon.mp4",
+      "sha256": "c9908d8bf3a62671f4384e38d685b127d404264a06e553b17ab215c58b39c6d2",
+      "bytes": 792011,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 63.51,
+      "intentId": "dark-stillness-native-20260915-04",
+      "taskId": "world3d-export-70087ebd7a5d4900",
+      "published": {
+        "name": "2026-09-15-19h37m10s_world3d-dark-still-moth-moon_0fc631.mp4",
+        "url": "/api/v1/file/2026-09-15-19h37m10s_world3d-dark-still-moth-moon_0fc631.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "dark-still-ivory-fire",
+      "title": "Marfil contra incendio",
+      "video": "dark-still-ivory-fire.mp4",
+      "sha256": "ab2e4d39f7668ee97315ebd60810dfbd1b80f377ff1debef5381d7f4c12eae73",
+      "bytes": 1329800,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 69.56,
+      "intentId": "dark-stillness-native-20260915-05",
+      "taskId": "world3d-export-f1573c0d9df345de",
+      "published": {
+        "name": "2026-09-15-19h38m20s_world3d-dark-still-ivory-fire_3756ac.mp4",
+        "url": "/api/v1/file/2026-09-15-19h38m20s_world3d-dark-still-ivory-fire_3756ac.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "dark-still-two-distances",
+      "title": "Dos distancias",
+      "video": "dark-still-two-distances.mp4",
+      "sha256": "22699ef75be079ef73b98acc9d0da8b6427ed2b9a976f0b5a4e3548b231ba125",
+      "bytes": 1062438,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 63.5,
+      "intentId": "dark-stillness-native-20260915-06",
+      "taskId": "world3d-export-0ba967e2d00c4188",
+      "published": {
+        "name": "2026-09-15-19h39m24s_world3d-dark-still-two-distances_2e56bc.mp4",
+        "url": "/api/v1/file/2026-09-15-19h39m24s_world3d-dark-still-two-distances_2e56bc.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "dark-still-copper-night",
+      "title": "Cobre sobre violeta",
+      "video": "dark-still-copper-night.mp4",
+      "sha256": "234fd3579de6a492836ecbb39f49d643e0843522853fdc3843ef23d1e9f7efdc",
+      "bytes": 897234,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 60.49,
+      "intentId": "dark-stillness-native-20260915-07",
+      "taskId": "world3d-export-ac0f74230a934b09",
+      "published": {
+        "name": "2026-09-15-19h40m25s_world3d-dark-still-copper-night_577c5f.mp4",
+        "url": "/api/v1/file/2026-09-15-19h40m25s_world3d-dark-still-copper-night_577c5f.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "dark-still-time-wounds",
+      "title": "El tiempo pesa",
+      "video": "dark-still-time-wounds.mp4",
+      "sha256": "e0fc6186736561584e153df95e6f49d943f48e3b13908318915d880fd4bed112",
+      "bytes": 884644,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "8.000000",
+        "nb_frames": "240"
+      },
+      "elapsedSeconds": 105.98,
+      "intentId": "dark-stillness-native-20260915-08",
+      "taskId": "world3d-export-57b8a73af6674c3c",
+      "published": {
+        "name": "2026-09-15-19h42m12s_world3d-dark-still-time-wounds_07403c.mp4",
+        "url": "/api/v1/file/2026-09-15-19h42m12s_world3d-dark-still-time-wounds_07403c.mp4",
+        "workspace": "default"
+      }
+    }
+  ]
+}

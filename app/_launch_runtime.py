@@ -1088,6 +1088,7 @@ def _resolve_request_media_path(
             uploads_root=os.path.join(os.getcwd(), "uploads"),
             workspace_root=_workspace_dir(workspace),
             kinds=kinds,
+            workspace_name=workspace or _get_active_workspace(),
         )
     except MediaPathNotAllowed:
         raise HTTPException(status_code=400, detail="Media path is not allowed") from None
@@ -1251,6 +1252,22 @@ def _model_weight_groups(model_type: str, owned_only: bool = False) -> list:
             if group:
                 groups.append(group)
     return groups
+
+
+def _missing_image_model_files(model_type: str) -> list[str]:
+    """Explain readiness using the same checkpoint roots and variant groups."""
+    missing = [" or ".join(_variant_group_filenames(group))
+               for group in _model_weight_groups(model_type) if not _variant_group_downloaded(group)]
+    definition = wgp.get_model_def(model_type) or {}
+    required = list(definition.get("required_model_assets", []))
+    if definition.get("vision_encoder_filename"):
+        required.append(definition["vision_encoder_filename"])
+    missing.extend(path for path in required if wgp.fl.locate_file(path, error_if_none=False) is None)
+    for url in wgp.get_model_recursive_prop(model_type, "loras", return_list=True):
+        filename = url.split("/")[-1]
+        if not os.path.isfile(wgp.resolve_lora_path(model_type, filename)):
+            missing.append(filename)
+    return list(dict.fromkeys(name for name in missing if name))
 
 
 def _check_model_downloaded(model_type: str) -> bool:
@@ -6479,6 +6496,7 @@ def _minimax_h3_runtime_advisory(model_def: dict) -> dict | None:
 @api.get("/api/v1/model-options/{model_type}")
 def get_model_options(model_type: str):
     """Return UI-relevant model options for dynamic rendering."""
+    from services.image_edit_workflow import image_edit_capabilities
     if _is_legacy_h3_model(model_type):
         return dict(minimax_h3_service.MODEL_OPTIONS)
     if model_type in model3d_service.MODEL_BY_ID:
@@ -6640,6 +6658,11 @@ def get_model_options(model_type: str):
         # Image reference options
         "background_removal_label": md.get("background_removal_label"),
         "max_image_refs": md.get("max_image_refs"),
+        "inpaint_support": bool(md.get("inpaint_support", False)),
+        "image_ref_inpaint": bool(md.get("image_ref_inpaint", False)),
+        **image_edit_capabilities(md),
+        "model_name": md.get("name") or model_type,
+        "native_rgba": bool(md.get("native_rgba", False)),
         "sample_solvers": solvers,
 
         # Self refiner
@@ -9043,6 +9066,7 @@ _AUDIO_ANALYSIS_STEPS = {
     "extracting_vocals": 5,
     "loading_transcription_model": 5,
     "transcribing": 6,
+    "aligning_lyrics": 7,
     "loading_diarization_model": 7,
     "identifying_speakers": 8,
     "finalizing": 9,
@@ -9511,6 +9535,16 @@ async def director_classify_sections(request: Request):
         return {"sections": sections, "method": "heuristic"}
 
     try:
+        timed_structure = audio_analysis.structure_from_aligned_lyrics(
+            analysis.get("lyric_timeline") or []
+        )
+        if timed_structure:
+            updated = audio_analysis.replace_sections_with_structure(analysis, timed_structure)
+            return {
+                "sections": updated["sections"],
+                "song_structure": timed_structure,
+                "method": "lyrics_timeline",
+            }
         tagged_structure = llm_service.structure_from_tagged_lyrics(lyrics_hint, duration)
         if tagged_structure:
             updated = audio_analysis.replace_sections_with_structure(analysis, tagged_structure)
@@ -9935,6 +9969,9 @@ def director_pipeline_resume(pid: str):
 
 
 # ── Director Pipeline Dashboard ───────────────────────────────────────────
+
+from routers.director_review import create_director_review_router
+api.include_router(create_director_review_router(_workspace_dir))
 
 @api.get("/api/v1/director/pipelines")
 def list_saved_pipelines(limit: int = 0, offset: int = 0):
@@ -24566,7 +24603,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                         print(f"\n  [ERROR] {data}")
                         in_status_line = False
                         task_error = True
-                        update_job(job, message=f"Error: {data}")
+                        update_job(job, error=str(data), message=f"Error: {data}")
                     elif cmd == "progress":
                         job["last_progress_at"] = time.time()
                         if isinstance(data, list) and len(data) >= 2:
@@ -24629,6 +24666,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                                 msg = data[1] if len(data) > 1 else str(data[0])
                                 total = 0
                                 progress_updates.update(step=0, total_steps=0)
+                            from shared.utils.generation_timing import inference_progress_clock
+                            progress_updates.update(inference_progress_clock(job, msg, step, time.time()))
                             progress_updates.update(message=msg, phase=msg, last_progress_at=time.time())
                             if not update_job(job, **progress_updates):
                                 continue
@@ -25377,7 +25416,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 step=0,
                 total_steps=0,
                 phase="",
-                message="Done" if success else "Generation failed",
+                message="Done" if success else (job.get("error") or "Generation failed"),
             )
             return success and job.get("status") == "completed"
 
@@ -26561,53 +26600,16 @@ def _character_kit_conflict(exc) -> HTTPException:
     )
 
 
-@api.get("/api/v1/character-kits/library")
-def get_character_kit_library(workspace: str | None = None):
-    """Load reusable cutout characters from one workspace."""
-    from services.character_kit_library import read_character_kit_library
+from routers.character_kit_library import (
+    _bind_character_kit_library_runtime,
+    create_character_kit_library_router,
+)
 
-    try:
-        return read_character_kit_library(_workspace_dir(_character_kit_workspace(workspace)))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail=f"Could not read Character Kits: {exc}") from exc
-
-
-@api.patch("/api/v1/character-kits/library/kits/{kit_id}")
-def patch_character_kit_library_item(kit_id: str, body: dict):
-    """Atomically create or update one kit without replacing its neighbours."""
-    from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit
-
-    try:
-        return patch_character_kit(
-            _workspace_dir(_character_kit_workspace(body.get("workspace"))),
-            kit_id,
-            body.get("kit"),
-            base_revision=body.get("baseRevision"),
-            make_active=body.get("makeActive") is not False,
-        )
-    except CharacterKitRevisionConflict as exc:
-        raise _character_kit_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@api.delete("/api/v1/character-kits/library/kits/{kit_id}")
-def delete_character_kit_library_item(kit_id: str, body: dict):
-    """Delete one kit under the same compare-and-swap contract."""
-    from services.character_kit_library import CharacterKitRevisionConflict, delete_character_kit
-
-    try:
-        return delete_character_kit(
-            _workspace_dir(_character_kit_workspace(body.get("workspace"))),
-            kit_id,
-            base_revision=body.get("baseRevision"),
-        )
-    except CharacterKitRevisionConflict as exc:
-        raise _character_kit_conflict(exc) from exc
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Character Kit not found") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+_bind_character_kit_library_runtime(
+    workspace_dir=lambda workspace: _workspace_dir(_character_kit_workspace(workspace)),
+    conflict=_character_kit_conflict,
+)
+api.include_router(create_character_kit_library_router())
 
 
 from routers.character_kit_face import create_character_kit_face_router
@@ -28262,71 +28264,19 @@ def _require_series_deletion_ready(
         raise HTTPException(status_code=409, detail=exc.detail()) from exc
 
 
-@api.get("/api/v1/series/library")
-def get_series_library(workspace: str | None = None):
-    """Load the authoritative Series Lab library for one workspace."""
-    target_workspace = _series_library_workspace(workspace)
-    try:
-        with _series_library_lock:
-            return _read_series_workspace(target_workspace)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail=f"Could not read the Series Lab library: {exc}") from exc
+from routers.series_library import (
+    _bind_series_library_runtime,
+    create_series_library_router,
+)
 
-
-@api.put("/api/v1/series/library")
-def put_series_library(body: dict):
-    """Atomically replace a Series library; resource endpoints are preferred."""
-    target_workspace = _series_library_workspace(body.get("workspace"))
-    try:
-        with _series_library_lock:
-            return _write_series_workspace(target_workspace, body.get("library"))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Could not save the Series Lab library: {exc}") from exc
-
-
-@api.get("/api/v1/series")
-def list_series_projects(workspace: str | None = None):
-    target_workspace = _series_library_workspace(workspace)
-    with _series_library_lock:
-        library = _read_series_workspace(target_workspace)
-    return {
-        "workspaceId": target_workspace,
-        "seriesOrder": library["seriesOrder"],
-        "series": [library["seriesById"][item] for item in library["seriesOrder"]],
-    }
-
-
-@api.post("/api/v1/series")
-def create_series_project_endpoint(body: dict):
-    from services.series_library import create_series_project, normalize_series_project
-
-    workspace = _series_library_workspace(body.get("workspace"))
-    try:
-        with _series_library_lock:
-            library = _read_series_workspace(workspace)
-            raw_series = body.get("series")
-            series = (
-                normalize_series_project(raw_series, str(raw_series.get("id") or ""), workspace)
-                if isinstance(raw_series, dict)
-                else create_series_project(workspace, title=str(body.get("title") or "Untitled series"))
-            )
-            if series["id"] in library["seriesById"]:
-                raise HTTPException(status_code=409, detail="A Series Lab project with this id already exists")
-            library["seriesById"][series["id"]] = series
-            library["seriesOrder"].append(series["id"])
-            stored = _write_series_workspace(workspace, library)
-            return stored["seriesById"][series["id"]]
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@api.get("/api/v1/series/{series_id}")
-def get_series_project_endpoint(series_id: str, workspace: str | None = None):
-    target_workspace = _series_library_workspace(workspace)
-    with _series_library_lock:
-        return _series_project_or_404(_read_series_workspace(target_workspace), series_id)
+_bind_series_library_runtime(
+    resolve_workspace=_series_library_workspace,
+    library_lock=_series_library_lock,
+    read_library=_read_series_workspace,
+    write_library=_write_series_workspace,
+    project_or_404=_series_project_or_404,
+)
+api.include_router(create_series_library_router())
 
 
 @api.put("/api/v1/series/{series_id}")
@@ -28546,6 +28496,7 @@ def delete_series_episode_endpoint(series_id: str, episode_id: str, workspace: s
 def import_series_asset_endpoint(series_id: str, body: dict):
     """Copy a Maestro upload into the authoritative workspace asset tree."""
     import shutil
+    from services.series_production import attach_series_import, existing_generated_reference
 
     workspace = _series_library_workspace(body.get("workspace"))
     source = _story_import_upload_path(str(body.get("uploadPath") or ""))
@@ -28569,6 +28520,9 @@ def import_series_asset_endpoint(series_id: str, body: dict):
         library = _read_series_workspace(workspace)
         series = copy.deepcopy(_series_project_or_404(library, series_id))
         entity = None
+        existing = existing_generated_reference(series, owner_type, owner_id, extra_metadata)
+        if existing and body.get("asTake") is not True:
+            return {"asset": existing, "series": series}
         collection_name = {
             "character": "characters", "location": "locations", "prop": "props",
         }.get(owner_type)
@@ -28586,8 +28540,6 @@ def import_series_asset_endpoint(series_id: str, body: dict):
             for shot in episode.get("shots", []) if isinstance(shot, dict)
         ):
             raise HTTPException(status_code=404, detail="Series shot not found")
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        shutil.copy2(source, destination)
         asset = {
             "id": asset_id, "workspaceId": workspace, "kind": kind,
             "uri": relative, "ownerType": owner_type, "ownerId": owner_id,
@@ -28603,15 +28555,12 @@ def import_series_asset_endpoint(series_id: str, body: dict):
                 }),
             },
         }
-        series.setdefault("assets", {})[asset_id] = asset
-        if entity is not None:
-            refs = entity.get("referenceAssetIds") if isinstance(entity.get("referenceAssetIds"), list) else []
-            entity["referenceAssetIds"] = [*refs, asset_id]
-            if owner_type == "character" and not entity.get("primaryReferenceAssetId"):
-                entity["primaryReferenceAssetId"] = asset_id
-            entity["approval"] = "draft"
-            series.setdefault("canon", {})["approval"] = "draft"
-            series["canon"]["approvedAt"] = ""
+        try:
+            attach_series_import(series, asset, as_take=body.get("asTake") is True, source_path=source)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        shutil.copy2(source, destination)
         now = _series_iso_now()
         series["revision"] = int(series.get("revision") or 1) + 1
         series["updatedAt"] = now
@@ -28658,6 +28607,26 @@ def commit_series_canon_endpoint(series_id: str, episode_id: str, body: dict):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/references/refresh")
+def refresh_series_episode_references(series_id: str, episode_id: str, body: dict):
+    from services.series_library import SeriesConflictError
+    from services.series_production import refresh_episode_references
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        try:
+            series = refresh_episode_references(_series_project_or_404(library, series_id), episode_id, int(body.get("baseRevision", -1)))
+        except SeriesConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        series["updatedAt"] = _series_iso_now()
+        series["episodesById"][episode_id]["updatedAt"] = series["updatedAt"]
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    return stored["seriesById"][series_id]
 
 
 @api.post("/api/v1/series/{series_id}/canon/approve")
@@ -29745,6 +29714,7 @@ def _series_asset_local_path(workspace: str, asset: dict) -> str:
 
 def _series_render_context(job: dict, item: dict) -> tuple[dict, dict, dict, dict]:
     from services.series_library import series_for_episode_snapshot
+    from services.series_production import series_shot_method
     workspace = str(job["workspace"])
     with _series_library_lock:
         library = _read_series_workspace(workspace)
@@ -29758,6 +29728,8 @@ def _series_render_context(job: dict, item: dict) -> tuple[dict, dict, dict, dic
         ), None)
         if not isinstance(shot, dict):
             raise ValueError("Series shot no longer exists")
+        if series_shot_method(series, shot) != "generated_video":
+            raise ValueError("This shot no longer permits model video generation")
         attempt = next((
             value for value in shot.get("attempts", [])
             if isinstance(value, dict) and value.get("id") == item.get("attemptId")
@@ -30096,6 +30068,7 @@ def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
 
 @api.post("/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
 def start_series_episode_render(series_id: str, episode_id: str, body: dict):
+    from services.series_production import series_shot_method
     from services.series_library import append_shot_render_attempt, series_for_episode_snapshot
     from services.series_reference_router import route_shot_references
     from services.series_render import (
@@ -30123,10 +30096,11 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         routing_series = series_for_episode_snapshot(series, episode)
         try:
             candidates = _series_render_candidates(episode, body)
+            candidates = [shot for shot in candidates if series_shot_method(series, shot) == "generated_video"]
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not candidates:
-            raise HTTPException(status_code=400, detail="No unapproved Series shots match this render request")
+            raise HTTPException(status_code=400, detail="No permitted unapproved generated-video shots match this request. Prepare animation shots in their editor or import a completed take.")
         if any(bool(shot.get("dialogueBeats")) for shot in candidates) and not series.get(
             "bestEffortLipSyncAcknowledged"
         ):
@@ -30796,94 +30770,17 @@ def put_wizard_workflows(body: dict):
         ) from exc
 
 
-@api.get("/api/v1/stories/library")
-def get_story_library(workspace: str | None = None):
-    """Load the durable Story Lab library for one workspace."""
-    from services.story_library import read_story_library
+from routers.story_library import (
+    _bind_story_library_runtime,
+    create_story_library_router,
+)
 
-    target_workspace = _story_library_workspace(workspace)
-    try:
-        with _story_library_lock:
-            return read_story_library(_workspace_dir(target_workspace))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not read the Story Lab library: {exc}",
-        ) from exc
-
-
-@api.put("/api/v1/stories/library")
-def put_story_library(body: dict):
-    """Atomically replace a workspace Story Lab library."""
-    from services.story_library import StoryLibraryRevisionConflict, write_story_library
-
-    target_workspace = _story_library_workspace(body.get("workspace"))
-    library = body.get("library")
-    base_revision = body.get("baseRevision")
-    try:
-        with _story_library_lock:
-            return write_story_library(
-                _workspace_dir(target_workspace),
-                library,
-                base_revision=base_revision,
-            )
-    except StoryLibraryRevisionConflict as exc:
-        raise _story_library_revision_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not save the Story Lab library: {exc}",
-        ) from exc
-
-
-@api.patch("/api/v1/stories/library/projects/{project_id}")
-def patch_story_library_project(project_id: str, body: dict):
-    """Atomically update one Story while preserving unrelated projects."""
-    from services.story_library import (
-        StoryLibraryRevisionConflict,
-        patch_story_project,
-    )
-
-    workspace = _story_library_workspace(body.get("workspace"))
-    try:
-        with _story_library_lock:
-            return patch_story_project(
-                _workspace_dir(workspace),
-                project_id,
-                body.get("project"),
-                base_revision=body.get("baseRevision"),
-                make_active=body.get("makeActive") is True,
-            )
-    except StoryLibraryRevisionConflict as exc:
-        raise _story_library_revision_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@api.delete("/api/v1/stories/library/projects/{project_id}")
-def delete_story_library_project(project_id: str, body: dict):
-    """Atomically delete one Story while preserving unrelated projects."""
-    from services.story_library import (
-        StoryLibraryRevisionConflict,
-        delete_story_project,
-    )
-
-    workspace = _story_library_workspace(body.get("workspace"))
-    try:
-        with _story_library_lock:
-            return delete_story_project(
-                _workspace_dir(workspace),
-                project_id,
-                base_revision=body.get("baseRevision"),
-            )
-    except StoryLibraryRevisionConflict as exc:
-        raise _story_library_revision_conflict(exc) from exc
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Story project not found") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+_bind_story_library_runtime(
+    workspace_dir=lambda workspace: _workspace_dir(_story_library_workspace(workspace)),
+    library_lock=_story_library_lock,
+    conflict=_story_library_revision_conflict,
+)
+api.include_router(create_story_library_router())
 
 
 def _story_import_upload_path(value: str) -> str:
@@ -31928,238 +31825,27 @@ def _run_minimax_music_job(job_id: str) -> None:
     )
 
 
-def _reserve_story_music_submission(body: dict, workspace: str):
-    """Persist command/task/candidate IDs before the MiniMax worker starts."""
-    from services.music_submission import (
-        MusicSubmissionConflict,
-        MusicSubmissionError,
-        submit_music_generation,
-    )
+from routers.story_music import (
+    cancel_story_music_candidates_job,
+    create_story_music_router,
+)
 
-    try:
-        return submit_music_generation(
-            workspace_dir=_workspace_dir(workspace),
-            request={**body, "output_folder": workspace, "workspace": workspace},
-        )
-    except MusicSubmissionConflict as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except MusicSubmissionError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-
-@api.post("/api/v1/stories/music-candidates/jobs", status_code=202)
-def start_story_music_candidates_job(body: dict):
-    """Start observable MiniMax Music generation and return immediately."""
-    from services import minimax_music_service
-
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
-    try:
-        execution_mode.validate_remote_provider(workspace, "minimax-music")
-    except execution_mode.ExecutionModeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    model = str(body.get("model") or "music-3.0").strip()
-    if model not in minimax_music_service.ALLOWED_MODELS:
-        raise HTTPException(status_code=400, detail=f"Unsupported MiniMax Music model: {model}")
-    try:
-        count = max(1, min(3, int(body.get("count") or 2)))
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="MiniMax Music candidate count must be an integer from 1 to 3",
-        ) from exc
-    prompt = str(body.get("prompt") or "").strip()[:300]
-    lyrics = str(body.get("lyrics") or "").strip()[:3500]
-    instrumental = bool(body.get("instrumental"))
-    if not prompt:
-        raise HTTPException(status_code=400, detail="A music style prompt is required")
-    if model not in minimax_music_service.COVER_MODELS and not instrumental and not lyrics:
-        raise HTTPException(status_code=400, detail="Lyrics are required for a vocal song")
-    reference_audio_path = None
-    if model in minimax_music_service.COVER_MODELS:
-        reference_audio_path = _story_cover_reference_path(
-            str(body.get("reference_audio_filename") or ""),
-            workspace,
-        )
-        if not reference_audio_path:
-            raise HTTPException(
-                status_code=400,
-                detail="Upload a valid reference song before generating a cover",
-            )
-
-    reserved = _reserve_story_music_submission(body, workspace) or {}
-    if reserved.get("replay"):
-        existing = _load_minimax_music_job(str(reserved.get("job_id") or ""))
-        if existing:
-            public = _public_minimax_music_job(existing)
-            public["replay"] = True
-            return public
-        # Reservation survived but the MiniMax job did not: start the worker
-        # again with the reserved IDs instead of returning a dead 202.
-    job_id = str(reserved.get("job_id") or f"minimax-music-{uuid.uuid4().hex[:12]}")
-    task_id = str(reserved.get("task_id") or f"task-minimax-music-{job_id}")
-    now = time.time()
-    children = []
-    for index in range(count):
-        child_job_id = f"{job_id}-candidate-{index + 1}"
-        child_task_id = f"{task_id}-candidate-{index + 1}"
-        children.append({
-            "jobId": child_job_id,
-            "taskId": child_task_id,
-            "rootTaskId": task_id,
-            "parentTaskId": task_id,
-            "workspace": workspace,
-            "status": "queued",
-            "phase": "queued",
-            "message": f"MiniMax Music candidate {index + 1}/{count} queued",
-            "current": 0,
-            "total": 1,
-            "progress": 0,
-            "provider": "minimax",
-            "model": model,
-            "server_origin": "https://api.minimax.io",
-            "resource_lane": "remote:https://api.minimax.io",
-            "acquired_resources": [],
-            "output_files": [],
-            "result": None,
-            "error": None,
-            "createdAt": now,
-            "updatedAt": now,
-        })
-    job = {
-        "jobId": job_id,
-        "taskId": task_id,
-        "rootTaskId": task_id,
-        "workspace": workspace,
-        "status": "queued",
-        "phase": "queued",
-        "message": f"{count} MiniMax Music candidate(s) queued",
-        "current": 0,
-        "total": count,
-        "progress": 0,
-        "provider": "minimax",
-        "model": model,
-        "server_origin": "https://api.minimax.io",
-        "resource_lane": "remote:https://api.minimax.io",
-        "acquired_resources": [],
-        "output_files": [],
-        "candidates": [],
-        "result": None,
-        "error": None,
-        "children": children,
-        "createdAt": now,
-        "updatedAt": now,
-        "_cancel_requested": False,
-        "request": {
-            "prompt": prompt,
-            "lyrics": lyrics,
-            "instrumental": instrumental,
-            "model": model,
-            "reference_audio_path": reference_audio_path,
-        },
-        "generationId": reserved.get("generation_id"),
-        "commandId": reserved.get("command_id"),
-        "candidateId": reserved.get("candidate_id"),
-        "idempotencyKey": reserved.get("idempotency_key"),
-    }
-    with _minimax_music_jobs_lock:
-        existing_live = _minimax_music_jobs.get(job_id)
-        if existing_live is not None:
-            # Same reserved job_id is already in flight (concurrent replay
-            # missed the checkpoint). Do not start a second worker.
-            public = _public_minimax_music_job(existing_live)
-            public["replay"] = True
-            return public
-        _minimax_music_jobs[job_id] = job
-        _persist_minimax_music_job(job)
-    _publish_minimax_music_job(job)
-    threading.Thread(
-        target=_run_minimax_music_job,
-        args=(job_id,),
-        name=f"minimax-music-{job_id[-6:]}",
-        daemon=True,
-    ).start()
-    return _public_minimax_music_job(job)
-
-
-@api.get("/api/v1/stories/music-candidates/jobs/{job_id}")
-def get_story_music_candidates_job(job_id: str):
-    job = _load_minimax_music_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="MiniMax Music job not found")
-    return _public_minimax_music_job(job)
-
-
-@api.post("/api/v1/stories/music-candidates/jobs/{job_id}/cancel")
-def cancel_story_music_candidates_job(job_id: str):
-    job = _load_minimax_music_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="MiniMax Music job not found")
-    if str(job.get("status") or "") in _MINIMAX_MUSIC_TERMINAL:
-        return _public_minimax_music_job(job)
-    with _minimax_music_jobs_lock:
-        live = _minimax_music_jobs[job_id]
-        live["_cancel_requested"] = True
-        waiting = str(live.get("status") or "") in {
-            "created", "queued", "waiting_resource",
-        }
-    if waiting:
-        _finish_unstarted_music_children(
-            job_id, 0, "Cancelled before this candidate started",
-        )
-        updated = _minimax_music_job_update(
-            job_id, status="cancelled", phase="cancelled",
-            message="Cancelled before the provider call", finishedAt=time.time(),
-            acquired_resources=[],
-        )
-    else:
-        updated = _minimax_music_job_update(
-            job_id, status="cancelling", phase="cancelling",
-            message="Cancellation requested; waiting for the active MiniMax request…",
-        )
-    return _public_minimax_music_job(updated or job)
-
-
-@api.post("/api/v1/stories/music-candidates")
-async def generate_story_music_candidates(body: dict):
-    """Compatibility endpoint for older clients; new clients use durable jobs."""
-    from services import minimax_music_service
-
-    services = wgp.server_config.get("services", {})
-    workspace = str(body.get("workspace") or _get_active_workspace())
-    execution_mode.validate_remote_provider(workspace, "minimax-music")
-    model = str(body.get("model") or "music-3.0").strip()
-    reference_audio_path = None
-    if model in {"music-cover", "music-cover-free"}:
-        reference_audio_path = _story_cover_reference_path(
-            str(body.get("reference_audio_filename") or ""),
-            workspace,
-        )
-        if not reference_audio_path:
-            raise HTTPException(status_code=400, detail="Upload a valid reference song before generating a cover")
-    try:
-        candidates = await asyncio.to_thread(
-            minimax_music_service.generate_candidates,
-            api_key=str(__import__("services.provider_profile", fromlist=["resolve_minimax_key"]).resolve_minimax_key(services, "music") or ""),
-            prompt=str(body.get("prompt") or ""),
-            lyrics=str(body.get("lyrics") or ""),
-            count=int(body.get("count") or 2),
-            output_dir=_workspace_dir(workspace),
-            instrumental=bool(body.get("instrumental")),
-            model=model,
-            reference_audio_path=reference_audio_path,
-        )
-    except minimax_music_service.MiniMaxMusicError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    return {
-        "candidates": [
-            {
-                **candidate,
-                "source": f"/api/v1/file/{candidate['filename']}",
-            }
-            for candidate in candidates
-        ]
-    }
+api.include_router(create_story_music_router(
+    get_active_workspace=_get_active_workspace,
+    workspace_dir=_workspace_dir,
+    story_cover_reference_path=_story_cover_reference_path,
+    load_minimax_music_job=_load_minimax_music_job,
+    persist_minimax_music_job=_persist_minimax_music_job,
+    publish_minimax_music_job=_publish_minimax_music_job,
+    public_minimax_music_job=_public_minimax_music_job,
+    run_minimax_music_job=_run_minimax_music_job,
+    minimax_music_jobs=_minimax_music_jobs,
+    minimax_music_jobs_lock=_minimax_music_jobs_lock,
+    minimax_music_terminal=_MINIMAX_MUSIC_TERMINAL,
+    finish_unstarted_music_children=_finish_unstarted_music_children,
+    minimax_music_job_update=_minimax_music_job_update,
+    wgp_module=wgp,
+))
 
 
 @api.post("/api/v1/stories/translate-lyrics")
@@ -33535,6 +33221,9 @@ _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
 _MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
     os.path.dirname(_app_dir), "cache", "media-thumbnails"
 )
+from services.media_dimensions import configure as _configure_media_facts, note_preview as _note_media_preview
+
+_configure_media_facts(_MEDIA_THUMBNAIL_CACHE_DIR)
 
 
 def _resolve_output_file(filename: str, workspace: str | None = None) -> str | None:
@@ -33545,7 +33234,7 @@ def _resolve_output_file(filename: str, workspace: str | None = None) -> str | N
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = ""):
+def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = ""):
     """List generated output files (newest first) from the active workspace.
 
     Supports pagination via limit/offset query params.
@@ -33655,6 +33344,10 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             # 3D preview sidecars are served as card thumbnails, not gallery items.
             if name.endswith(".preview.png"):
                 continue
+            # Atomic image writes keep a media extension for PIL. They are
+            # incomplete until renamed and must never become gallery tiles.
+            if re.search(r"\.tmp_[0-9a-f]{8}\.[^.]+$", name):
+                continue
             filepath = os.path.join(out_dir, name)
             if not os.path.isfile(filepath):
                 continue
@@ -33693,6 +33386,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 "mode": meta.get("generation_mode"),
                 "edit_sub_mode": params.get("edit_sub_mode"),
                 "multi_clip_info": params.get("multi_clip_info"),
+                "resolution": params.get("resolution"),
                 "result_kind": classify_output_result_kind(name, params, meta),
                 "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
                 # Output sidecars are written only after the generated asset
@@ -33733,6 +33427,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             }
 
     # Second pass: build the file list using the cached sidecar data.
+    from services.media_dimensions import listing_fields as media_listing_fields
     files = []
     for name, filepath, ext, mtime in raw_entries:
         is_scene = name.endswith(".scene.json")
@@ -33785,8 +33480,24 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             ),
         })
 
+    def listed_result(selected, total):
+        # Read image headers and schedule colour/size work only for this page,
+        # not the entire workspace on every gallery heartbeat.
+        for item in selected:
+            item.update(media_listing_fields(
+                item["type"], os.path.join(out_dir, item["name"]),
+                item["size"], item["created_at"],
+                (sidecar_cache.get(item["name"]) or {}).get("resolution"),
+            ))
+        return {"outputs": selected, "total": total}
+
     if media_type:
         files = [item for item in files if item["type"] == media_type]
+    # Ordered before paging so every page follows the gallery's chosen order.
+    if order == "oldest":
+        files.reverse()
+    elif order == "favorites":
+        files.sort(key=lambda item: not item["favorite"])
 
     wanted_kind = str(result_kind or "").strip()
     if wanted_kind:
@@ -33800,7 +33511,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             if item.get("type") == "video"
             and result_kind_matches_filter(item.get("result_kind"), wanted_kind)
         ]
-        return {"outputs": files, "total": len(files)}
+        return listed_result(files, len(files))
 
     # Special filters: return ALL matches, bypass pagination
     if edits_only:
@@ -33808,10 +33519,10 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             item for item in files
             if item.get("edit_sub_mode") or item.get("mode") == "avatar"
         ]
-        return {"outputs": files, "total": len(files)}
+        return listed_result(files, len(files))
     if favorites_only:
         files = [f for f in files if f["favorite"]]
-        return {"outputs": files, "total": len(files)}
+        return listed_result(files, len(files))
     if multiclip_only:
         # 1. Explicit multiclip files
         multiclips = [f for f in files if "multiclip" in f["name"].lower() and f["type"] == "video"]
@@ -33851,7 +33562,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         combined = multiclips + sw_finals
         combined.sort(key=lambda f: f["created_at"], reverse=True)
         print(f"[Multiclip] Result: {len(multiclips)} multiclips + {len(sw_finals)} sliding window finals = {len(combined)} total")
-        return {"outputs": combined, "total": len(combined)}
+        return listed_result(combined, len(combined))
     if search:
         from services.search_index import get_search_index
         idx = get_search_index()
@@ -33859,26 +33570,39 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         # Combine index results with filename fallback (in case index missed
         # a file that was created between index builds)
         query_lower = search.lower()
-        files = [f for f in files if f["name"] in matching_names or query_lower in f["name"].lower()]
-        return {"outputs": files, "total": len(files)}
+        # The index is keyed by sidecar stem ("clip" for clip.mp4 and
+        # clip.meta.json); comparing full names never matched a prompt.
+        files = [
+            f for f in files
+            if os.path.splitext(f["name"])[0] in matching_names or query_lower in f["name"].lower()
+        ]
+        return listed_result(files, len(files))
 
     total = len(files)
     if limit > 0:
         files = files[offset:offset + limit]
-    return {"outputs": files, "total": total}
+    return listed_result(files, total)
+
+
+def _resolve_gallery_file(filename: str, workspace: str | None = None) -> str | None:
+    """An output in ``workspace``, or an upload for the virtual Uploads view."""
+    if workspace == "__uploads__":
+        source = _safe_join(os.path.join(os.getcwd(), "uploads"), filename)
+        return source if source and os.path.isfile(source) else None
+    return _resolve_output_file(filename, workspace)
+
+
+from routers.output_facts import create_output_facts_router  # noqa: E402
+
+api.include_router(create_output_facts_router(_resolve_gallery_file))
 
 
 @api.get("/api/v1/outputs/thumbnail/{filename:path}")
-def serve_output_thumbnail(filename: str, workspace: str | None = None):
+def serve_output_thumbnail(filename: str, workspace: str | None = None, size: str | None = None):
     """Lazily create one small static preview for an image or video output."""
-    from services.media_thumbnails import ensure_media_thumbnail
+    from services.media_thumbnails import FITTED_THUMBNAIL_SIZES, ensure_fitted_thumbnail, ensure_media_thumbnail
 
-    if workspace == "__uploads__":
-        source = _safe_join(os.path.join(os.getcwd(), "uploads"), filename)
-        if source and not os.path.isfile(source):
-            source = None
-    else:
-        source = _resolve_output_file(filename, workspace)
+    source = _resolve_gallery_file(filename, workspace)
     if not source:
         raise HTTPException(status_code=404, detail="Output not found")
     extension = os.path.splitext(source)[1].lower()
@@ -33886,17 +33610,19 @@ def serve_output_thumbnail(filename: str, workspace: str | None = None):
     video_extensions = {".mp4", ".webm", ".gif", ".mov", ".mkv", ".avi", ".m4v"}
     if extension not in image_extensions | video_extensions:
         raise HTTPException(status_code=400, detail="This output has no media thumbnail")
+    if size is not None and size not in FITTED_THUMBNAIL_SIZES:
+        raise HTTPException(status_code=400, detail="Unknown thumbnail size")
     try:
-        thumbnail = ensure_media_thumbnail(
-            source,
-            _MEDIA_THUMBNAIL_CACHE_DIR,
-            is_video=extension in video_extensions,
-        )
+        is_video = extension in video_extensions
+        thumbnail = (ensure_fitted_thumbnail(source, _MEDIA_THUMBNAIL_CACHE_DIR, is_video=is_video, size=size)
+                     if size else ensure_media_thumbnail(source, _MEDIA_THUMBNAIL_CACHE_DIR, is_video=is_video))
+        if size:
+            _note_media_preview(source, thumbnail)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not create thumbnail: {exc}") from exc
     return FileResponse(
         thumbnail,
-        media_type="image/jpeg",
+        media_type="image/webp" if thumbnail.endswith(".webp") else "image/jpeg",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
 
@@ -35837,7 +35563,7 @@ async def move_output(name: str, request: Request):
     if target_ws != "default" and not _re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', target_ws):
         raise HTTPException(status_code=400, detail="Invalid workspace name")
 
-    src_dir = _workspace_dir()
+    src_dir = _workspace_dir(body.get("source_workspace") or None)
     dst_dir = _workspace_dir(target_ws)
     if os.path.realpath(src_dir) == os.path.realpath(dst_dir):
         raise HTTPException(status_code=400, detail="Already in that workspace")
@@ -35914,7 +35640,7 @@ async def move_output(name: str, request: Request):
 
 
 @api.delete("/api/v1/outputs/{name}")
-def delete_output(name: str):
+def delete_output(name: str, workspace: str | None = None):
     """Delete an output file and its sidecar metadata.
 
     Uses safe_delete() which handles Windows file-lock edge cases:
@@ -35926,12 +35652,16 @@ def delete_output(name: str):
         3. As a last resort returns {"deleted": False, "reason": "locked"}
            — but with share-delete on the serve side this is now nearly
            impossible to reach in normal use.
+
+    ``workspace`` is the folder the gallery was listing. Without it the
+    active workspace is used, which is wrong if another tab switched
+    folders while a batch delete was still in flight.
     """
     import gc
     from services.win_safe_files import safe_delete
-    out_dir = _workspace_dir()
-    filepath = os.path.join(out_dir, name)
-    if not os.path.isfile(filepath):
+    out_dir = _workspace_dir(workspace)
+    filepath = _safe_join(out_dir, name)
+    if filepath is None or not os.path.isfile(filepath):
         return {"deleted": name}
 
     # Hint the GC to drop any lingering references (e.g. PIL image
@@ -36217,6 +35947,7 @@ def _upsert_canonical_task(
 
 
 def _generation_task_fields(job: dict) -> dict:
+    from services.activity_media import activity_reference_images
     legacy_id = str(job.get("id") or "")
     workspace = str(job.get("workspace") or "default")
     details = _public_generation_details(job.get("params"))
@@ -36236,6 +35967,11 @@ def _generation_task_fields(job: dict) -> dict:
     )
     task_metadata = {
         "adapter": "generation", "generation_details": details,
+        "display_prompt": details.get("prompt", ""),
+        "reference_images": activity_reference_images(params, workspace,
+            uploads_dir=os.path.join(os.getcwd(), "uploads"), workspace_dir=_workspace_dir(workspace)),
+        "inference_started_at": job.get("inference_started_at"),
+        "inference_start_step": job.get("inference_start_step"),
         "owner_pipeline_id": owner_id,
         "actor": provenance.get("actor") or "unknown",
         "tool": provenance.get("tool") or "studio",
@@ -36913,6 +36649,15 @@ from services.scene_commands import SceneCommands, command_catalog as scene_comm
 from routers.scene_commands import create_scene_commands_router
 _scene_commands = SceneCommands(_workspace_dir)
 api.include_router(create_scene_commands_router(_scene_commands))
+from routers.world3d_export import create_world3d_export_router, bind_world3d_renderer_origin
+from services.world3d_export import World3DExportService, command_catalog as world3d_export_catalog, command_handlers as world3d_export_handlers
+_world3d_export = World3DExportService(
+    workspace_dir=_workspace_dir,
+    registry_for=_task_registry,
+    app_url=os.environ.get("HOCUS_APP_URL", ""),
+)
+bind_world3d_renderer_origin(api, _world3d_export)
+api.include_router(create_world3d_export_router(_world3d_export))
 
 from services.mcp_access import McpAccess
 from routers.mcp_access import create_mcp_access_router
@@ -36921,15 +36666,30 @@ api.include_router(create_mcp_access_router(_mcp_access))
 
 _image_generation_commands = create_image_generation_commands(globals())
 api.include_router(create_image_generation_commands_router(_image_generation_commands))
+from routers.wizard_workflow_executor import create_wizard_workflow_executor_router
+from services.wizard_workflow_executor import WizardWorkflowExecutor, catalog as wizard_workflow_catalog, command_handlers as wizard_workflow_command_handlers
+_wizard_workflow_executor = WizardWorkflowExecutor(
+    workspace_dir=_workspace_dir,
+    submit_command=_image_generation_commands.submit,
+    command_receipt=_image_generation_commands.receipt,
+    get_task=lambda workspace, task_id: _task_registry(workspace).get(task_id),
+)
+api.include_router(create_wizard_workflow_executor_router(_wizard_workflow_executor, list_workspaces=_list_workspaces))
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
     handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **_scene_commands.handlers()},
+              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers()},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values())],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog()],
 ))
+from routers.system_capabilities import create_system_capabilities_router
+api.include_router(create_system_capabilities_router())
+
+# Optional production renderer: pass a callable that drives the existing
+# Video 3D exportFlow through a process-owned headless browser. Closing a
+# user tab must not join or kill that worker.
 
 # ============================================================================
 # Serve React build at /
@@ -37057,7 +36817,8 @@ def run_server():
     install_quiet_access_filter()
 
     try:
-        uvicorn.run(api, host=host, port=port)
+        from services.server_lifecycle import run_until_stopped
+        run_until_stopped(api, host=host, port=port)
     except OSError as e:
         # The probe above narrows this to a genuine race (port taken in the
         # window between probe and uvicorn's own bind). Still fail loudly and

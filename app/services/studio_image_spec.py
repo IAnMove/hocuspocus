@@ -590,7 +590,7 @@ class StudioImageParams(_ClosedModel):
     progressive_stage3_steps: _NonNegativeInt | None = None
     progressive_stage3_sigma: _Finite | None = None
     progressive_stage3_image_weight: _Finite | None = None
-    override_profile: _ShortText | None = None
+    override_profile: _Finite | None = None
     override_attention: _ShortText | None = None
     temperature: _Finite | None = None
     top_p: _Finite | None = None
@@ -609,6 +609,13 @@ class StudioImageParams(_ClosedModel):
     outpaint_official_stack: StrictBool | None = None
     custom_settings: StudioImageCustomSettings | None = None
     wangp_processor_settings: WangpProcessorSettings | None = None
+
+    @field_validator("override_profile")
+    @classmethod
+    def _memory_profile(cls, value):
+        if value is not None and value not in (-1, 1, 2, 3, 3.5, 4, 4.5, 5):
+            raise ValueError("override_profile must be -1 or a supported memory profile (1, 2, 3, 3.5, 4, 4.5, 5)")
+        return value
 
     @field_validator("minimax_h3_turbo_mode")
     @classmethod

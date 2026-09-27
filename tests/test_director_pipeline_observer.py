@@ -291,3 +291,19 @@ def test_preview_recovery_publishes_rehydrated_and_terminal_snapshots(
         assert pipeline._pipelines[pid]["root_task_id"] == f"root-{pid}"
     finally:
         pipeline._pipelines.pop(pid, None)
+
+
+def test_observer_helpers_come_from_pipeline_observer():
+    from services.director import pipeline_observer
+
+    assert pipeline._notify_pipeline_snapshot is pipeline_observer._notify_pipeline_snapshot
+    assert pipeline._observer_task_ids is pipeline_observer._observer_task_ids
+    assert pipeline._pipeline_observer_snapshot is pipeline_observer._pipeline_observer_snapshot
+
+
+def test_observer_task_ids_accept_registry_and_explicit_payloads():
+    from services.director.pipeline_observer import _observer_task_ids
+
+    assert _observer_task_ids(None) == (None, None)
+    assert _observer_task_ids({"id": "task-a", "root_id": "root-a"}) == ("task-a", "root-a")
+    assert _observer_task_ids({"task_id": "task-b"}) == ("task-b", "task-b")

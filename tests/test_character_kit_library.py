@@ -95,3 +95,18 @@ def test_character_kit_delete_preserves_other_kits(tmp_path):
 
 def test_empty_library_has_stable_contract():
     assert empty_character_kit_library() == {"version": 1, "revision": 0, "activeId": "", "kits": {}}
+
+
+def test_pose_dimensions_survive_library_normalization():
+    value = kit()
+    value["base"].update(width=864, height=1152)
+    restored = normalize_character_kit(json.loads(json.dumps(normalize_character_kit(value))))
+    assert (restored["base"]["width"], restored["base"]["height"]) == (864, 1152)
+
+
+@pytest.mark.parametrize("width,height", [(0, 800), (True, 800), (1.5, 800), (800, None), (800, 65537)])
+def test_pose_dimensions_reject_invalid_sizes(width, height):
+    value = kit()
+    value["base"].update(width=width, height=height)
+    with pytest.raises(ValueError, match="pixel dimension"):
+        normalize_character_kit(value)

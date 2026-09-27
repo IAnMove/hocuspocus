@@ -50,7 +50,7 @@ export async function fetchCanonicalTasks(
   status: 'active' | 'all' = 'all',
 ): Promise<{ workspace: string; tasks: CanonicalTask[]; latest_event_id: number }> {
   const query = new URLSearchParams({ workspace, status, limit: '300' })
-  const res = await fetch(`${BASE}/api/v1/tasks?${query}`)
+  const res = await fetch(`${BASE}/api/v1/tasks?${query}`, { signal: AbortSignal.timeout(15_000) })
   if (!res.ok) throw new Error('Failed to fetch HocusPocus tasks')
   return res.json()
 }

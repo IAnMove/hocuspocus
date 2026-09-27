@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, CheckCircle2, ImagePlus, Loader2, Sparkles, Square } from 'lucide-react'
 import * as api from '../../api/client'
-import { generateImageAsset } from '../../lib/imageGeneration'
+import { generateSeriesReferenceImage, seriesReferencePrompt } from './referenceImages'
 import { useStore } from '../../stores/useStore'
 import { SeriesField, SectionCard, seriesStatusLabel } from './components'
 import { greenButton, inputClass, primaryButton, secondaryButton, selectClass, textareaClass } from './styles'
@@ -14,9 +14,11 @@ import {
   seriesProviderFieldsFromProfile,
 } from '../../lib/productionProfile'
 import { SeriesSetupVideoFields } from './SeriesSetupVideoFields'
+import { SeriesProductionMethods } from './SeriesProductionMethods'
+import type { SeriesReferenceRoom } from './shotReferences'
 
 export function SeriesSetupPanel({
-  workspace, series, update, saveNow, replaceSeries, job, setJob,
+  workspace, series, update, saveNow, replaceSeries, job, setJob, onOpenReferences,
 }: {
   workspace: string
   series: SeriesProject
@@ -25,6 +27,7 @@ export function SeriesSetupPanel({
   replaceSeries: (series: SeriesProject) => void
   job: SeriesJobStatus | null
   setJob: (job: SeriesJobStatus | null) => void
+  onOpenReferences?: (room: SeriesReferenceRoom) => void
 }) {
   const { t } = useUiTranslation('seriesLab')
   const productionProfile = useStore(state => state.productionProfile)
@@ -114,38 +117,20 @@ export function SeriesSetupPanel({
     let current = applied
     const targets = [
       ...applied.characters.filter(item => !item.referenceAssetIds.length).map(item => ({
-        ownerType: 'character' as const, ownerId: item.id, name: item.name,
-        prompt: [applied.visualStyle, applied.characterVisualStyle, item.identityLock, item.appearance, 'One character identity portrait, clear face, no text, no contact sheet.'].filter(Boolean).join(' '),
-        referenceRole: 'primary_portrait', kind: 'character' as const,
+        kind: 'character' as const, id: item.id, name: item.name,
       })),
       ...applied.locations.filter(item => !item.referenceAssetIds.length).map(item => ({
-        ownerType: 'location' as const, ownerId: item.id, name: item.name,
-        prompt: [applied.visualStyle, item.description, 'One canonical establishing image, no people unless explicitly required, no text, no contact sheet.'].filter(Boolean).join(' '),
-        referenceRole: 'location_reference', kind: 'location' as const,
+        kind: 'location' as const, id: item.id, name: item.name,
       })),
     ]
     for (let index = 0; index < targets.length; index += 1) {
       const target = targets[index]
-      setProgress(t('setup.generatingImage', { current: index + 1, total: targets.length, name: target.name }))
-      const generated = await generateImageAsset(
-        applied.provider.imageProvider === 'minimax' ? 'minimax' : 'maestro',
-        target.prompt, applied.provider.imageModel, undefined, '',
-        { panelId: `series-${applied.id}-${target.ownerId}`, aspectRatio: '1:1' },
-      )
-      const response = await fetch(generated.source)
-      if (!response.ok) throw new Error(t('setup.imageUnavailable', { name: target.name }))
-      const blob = await response.blob()
-      const upload = await api.uploadImage(new File(
-        [blob], generated.name || `${target.ownerId}.png`, { type: blob.type || 'image/png' },
-      ))
-      const imported = await api.importSeriesAsset(workspace, applied.id, {
-        uploadPath: upload.path, name: generated.name || target.name,
-        ownerType: target.ownerType, ownerId: target.ownerId, kind: target.kind,
-        referenceRole: target.referenceRole,
-        metadata: {
-          prompt: target.prompt, model: generated.model,
-          provider: applied.provider.imageProvider, createdAt: generated.createdAt,
-        },
+      const progress = t('setup.generatingImage', { current: index + 1, total: targets.length, name: target.name })
+      setProgress(progress)
+      const imported = await generateSeriesReferenceImage(workspace, current, target, {
+        prompt: seriesReferencePrompt(current, target), beforeImport: saveNow,
+        onPreparingPrompt: () => setProgress(`${target.name} · ${t('references.preparingLocation')}`),
+        onPromptPrepared: () => setProgress(progress),
       })
       current = imported.series
       replaceSeries(current)
@@ -275,6 +260,7 @@ export function SeriesSetupPanel({
         </div>
       </SectionCard>
 
+      <SeriesProductionMethods series={series} update={update} onOpenReferences={onOpenReferences} />
       <SectionCard title={t('providers.title')} description={t('providers.description')}>
         <div className="mb-3 grid max-w-xl grid-cols-2 gap-2">
           <button type="button" className={`${secondaryButton} ${series.provider.useGlobalProfile ? 'border-violet-400 text-violet-200' : ''}`} onClick={useGlobalProfile}>{t('providers.useGlobal')}</button>

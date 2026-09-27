@@ -825,7 +825,7 @@ export async function classifySections(params: {
 }): Promise<{
   sections: import('../types').AudioSection[]
   song_structure: { label: string; display_label: string; start: number }[]
-  method: 'lyrics_hint' | 'llm' | 'heuristic'
+  method: 'lyrics_timeline' | 'lyrics_hint' | 'llm' | 'heuristic'
 }> {
   const res = await fetch(`${BASE}/api/v1/director/classify-sections`, {
     method: 'POST',

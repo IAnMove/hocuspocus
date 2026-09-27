@@ -343,7 +343,7 @@ function assertMusicParams(value: unknown): asserts value is StudioMusicParams {
   assertCatalogValue(value, paramsSchema, 'input.params')
   requiredText(value.prompt, 'input.params.prompt', MAX_PROMPT_LENGTH)
   // ACE-Step's caption is optional; MiniMax requires it before admission.
-  if (value.model_type === 'minimax_music3') {
+  if (value.model_type === 'minimax_music3' || value.model_type === 'yue2') {
     requiredText(value.alt_prompt, 'input.params.alt_prompt', MAX_PROMPT_LENGTH)
   }
   requiredText(value.model_type, 'input.params.model_type', MAX_WORKSPACE_LENGTH)

@@ -1,0 +1,766 @@
+{
+  "title": "Que tú veas el alba · película musical",
+  "workspace": "default",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "analysisJob": "audio-analysis-ea419a522095",
+  "bpm": 92.3,
+  "shots": [
+    {
+      "number": 1,
+      "title": "El titán dormido",
+      "sourceId": "dark-living-sleeping-titan",
+      "document": {
+        "duration": 2.7333333333333334
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.1333333333333333,
+      "timelineStart": 0.0,
+      "timelineEnd": 2.7333333333333334,
+      "detectedBeatEnd": 2.717,
+      "beatErrorSeconds": 0.01633333333333331,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-sleeping-titan.world3d-template.json"
+    },
+    {
+      "number": 2,
+      "title": "La campana de ceniza",
+      "sourceId": "dark-living-bell-of-ash",
+      "document": {
+        "duration": 2.466666666666667
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.8666666666666667,
+      "timelineStart": 2.7333333333333334,
+      "timelineEnd": 5.2,
+      "detectedBeatEnd": 5.201,
+      "beatErrorSeconds": -0.0009999999999994458,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-bell-of-ash.world3d-template.json"
+    },
+    {
+      "number": 3,
+      "title": "La luna entre astas",
+      "sourceId": "dark-living-antler-moon",
+      "document": {
+        "duration": 2.6333333333333333
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.033333333333333,
+      "timelineStart": 5.2,
+      "timelineEnd": 7.833333333333333,
+      "detectedBeatEnd": 7.825,
+      "beatErrorSeconds": 0.00833333333333286,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-antler-moon.world3d-template.json"
+    },
+    {
+      "number": 4,
+      "title": "El rey sumergido",
+      "sourceId": "dark-living-drowned-king",
+      "document": {
+        "duration": 2.7666666666666666
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.1666666666666665,
+      "timelineStart": 7.833333333333333,
+      "timelineEnd": 10.6,
+      "detectedBeatEnd": 10.588,
+      "beatErrorSeconds": 0.012000000000000455,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-drowned-king.world3d-template.json"
+    },
+    {
+      "number": 5,
+      "title": "El peregrino rojo",
+      "sourceId": "dark-living-red-pilgrim",
+      "document": {
+        "duration": 2.6666666666666665
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.066666666666667,
+      "timelineStart": 10.6,
+      "timelineEnd": 13.266666666666667,
+      "detectedBeatEnd": 13.282,
+      "beatErrorSeconds": -0.015333333333332533,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-red-pilgrim.world3d-template.json"
+    },
+    {
+      "number": 6,
+      "title": "El último acueducto",
+      "sourceId": "dark-living-last-aqueduct",
+      "document": {
+        "duration": 2.6333333333333333
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.033333333333333,
+      "timelineStart": 13.266666666666667,
+      "timelineEnd": 15.9,
+      "detectedBeatEnd": 15.906,
+      "beatErrorSeconds": -0.006000000000000227,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-last-aqueduct.world3d-template.json"
+    },
+    {
+      "number": 7,
+      "title": "El oráculo violeta",
+      "sourceId": "dark-living-violet-oracle",
+      "document": {
+        "duration": 2.8
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.2,
+      "timelineStart": 15.9,
+      "timelineEnd": 18.7,
+      "detectedBeatEnd": 18.715,
+      "beatErrorSeconds": -0.015000000000000568,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-violet-oracle.world3d-template.json"
+    },
+    {
+      "number": 8,
+      "title": "La corona de espinas",
+      "sourceId": "dark-living-thorn-crown",
+      "document": {
+        "duration": 2.8
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.2,
+      "timelineStart": 18.7,
+      "timelineEnd": 21.5,
+      "detectedBeatEnd": 21.502,
+      "beatErrorSeconds": -0.0019999999999988916,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-thorn-crown.world3d-template.json"
+    },
+    {
+      "number": 9,
+      "title": "El santo hueco",
+      "sourceId": "dark-living-hollow-saint",
+      "document": {
+        "duration": 2.566666666666667
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "timelineStart": 21.5,
+      "timelineEnd": 24.066666666666666,
+      "detectedBeatEnd": 24.056,
+      "beatErrorSeconds": 0.010666666666665492,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-hollow-saint.world3d-template.json"
+    },
+    {
+      "number": 10,
+      "title": "El trono del micelio",
+      "sourceId": "dark-living-fungal-throne",
+      "document": {
+        "duration": 2.566666666666667
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "timelineStart": 24.066666666666666,
+      "timelineEnd": 26.633333333333333,
+      "detectedBeatEnd": 26.633,
+      "beatErrorSeconds": 0.0003333333333337407,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-fungal-throne.world3d-template.json"
+    },
+    {
+      "number": 11,
+      "title": "La princesa cautiva",
+      "sourceId": "captive",
+      "document": {
+        "duration": 5.333333333333333
+      },
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.541666666666667,
+      "timelineStart": 26.633333333333333,
+      "timelineEnd": 31.966666666666665,
+      "detectedBeatEnd": 31.974,
+      "beatErrorSeconds": -0.00733333333333519
+    },
+    {
+      "number": 12,
+      "title": "El caminante de ceniza",
+      "sourceId": "dark-motion-knight-passage",
+      "document": {
+        "duration": 2.6
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "timelineStart": 31.966666666666665,
+      "timelineEnd": 34.56666666666667,
+      "detectedBeatEnd": 34.551,
+      "beatErrorSeconds": 0.01566666666666805,
+      "template": "/examples/moving-cutouts/dark-motion-knight-passage.world3d-template.json"
+    },
+    {
+      "number": 13,
+      "title": "El jinete PSX · Coast",
+      "sourceId": "dragon1",
+      "document": {
+        "duration": 2.533333333333333
+      },
+      "trim_start": 1.2,
+      "trim_end": 3.7333333333333334,
+      "timelineStart": 34.56666666666667,
+      "timelineEnd": 37.1,
+      "detectedBeatEnd": 37.105,
+      "beatErrorSeconds": -0.0049999999999954525
+    },
+    {
+      "number": 14,
+      "title": "Sobre el hombro del invierno",
+      "sourceId": "dark-living-winter-shoulder",
+      "document": {
+        "duration": 2.3666666666666667
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.7666666666666666,
+      "timelineStart": 37.1,
+      "timelineEnd": 39.46666666666667,
+      "detectedBeatEnd": 39.474,
+      "beatErrorSeconds": -0.007333333333328085,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-winter-shoulder.world3d-template.json"
+    },
+    {
+      "number": 15,
+      "title": "El bosque de cobre",
+      "sourceId": "dark-living-copper-trees",
+      "document": {
+        "duration": 2.6
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "timelineStart": 39.46666666666667,
+      "timelineEnd": 42.06666666666667,
+      "detectedBeatEnd": 42.075,
+      "beatErrorSeconds": -0.00833333333333286,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-copper-trees.world3d-template.json"
+    },
+    {
+      "number": 16,
+      "title": "Corazón de brasa",
+      "sourceId": "dark-living-ember-heart",
+      "document": {
+        "duration": 2.6
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "timelineStart": 42.06666666666667,
+      "timelineEnd": 44.666666666666664,
+      "detectedBeatEnd": 44.652,
+      "beatErrorSeconds": 0.014666666666663275,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-ember-heart.world3d-template.json"
+    },
+    {
+      "number": 17,
+      "title": "La puerta del último gigante",
+      "sourceId": "dark-living-final-gate",
+      "document": {
+        "duration": 2.5
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.9,
+      "timelineStart": 44.666666666666664,
+      "timelineEnd": 47.166666666666664,
+      "detectedBeatEnd": 47.183,
+      "beatErrorSeconds": -0.01633333333333553,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-final-gate.world3d-template.json"
+    },
+    {
+      "number": 18,
+      "title": "La promesa cumplida",
+      "sourceId": "rescue",
+      "document": {
+        "duration": 5.133333333333334
+      },
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.333333333333333,
+      "timelineStart": 47.166666666666664,
+      "timelineEnd": 52.3,
+      "detectedBeatEnd": 52.315,
+      "beatErrorSeconds": -0.015000000000000568
+    },
+    {
+      "number": 19,
+      "title": "El tiempo pesa",
+      "sourceId": "dark-still-time-wounds",
+      "document": {
+        "duration": 2.6
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "timelineStart": 52.3,
+      "timelineEnd": 54.9,
+      "detectedBeatEnd": 54.915,
+      "beatErrorSeconds": -0.015000000000000568,
+      "template": "/examples/dark-stillness/dark-still-time-wounds.world3d-template.json"
+    },
+    {
+      "number": 20,
+      "title": "El jinete PSX · Amber Ice",
+      "sourceId": "dragon6",
+      "document": {
+        "duration": 2.6
+      },
+      "trim_start": 1.2,
+      "trim_end": 3.8,
+      "timelineStart": 54.9,
+      "timelineEnd": 57.5,
+      "detectedBeatEnd": 57.493,
+      "beatErrorSeconds": 0.006999999999997897
+    },
+    {
+      "number": 21,
+      "title": "La ruina dorada",
+      "sourceId": "dark-living-golden-ruin",
+      "document": {
+        "duration": 2.533333333333333
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.933333333333333,
+      "timelineStart": 57.5,
+      "timelineEnd": 60.03333333333333,
+      "detectedBeatEnd": 60.047,
+      "beatErrorSeconds": -0.013666666666665606,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-golden-ruin.world3d-template.json"
+    },
+    {
+      "number": 22,
+      "title": "El precio del alba",
+      "sourceId": "farewell",
+      "document": {
+        "duration": 4.966666666666667
+      },
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.166666666666667,
+      "timelineStart": 60.03333333333333,
+      "timelineEnd": 65.0,
+      "detectedBeatEnd": 64.993,
+      "beatErrorSeconds": 0.007000000000005002
+    },
+    {
+      "number": 23,
+      "title": "Sal sobre el mar",
+      "sourceId": "dark-still-salt-sea",
+      "document": {
+        "duration": 2.7666666666666666
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.1666666666666665,
+      "timelineStart": 65.0,
+      "timelineEnd": 67.76666666666667,
+      "detectedBeatEnd": 67.779,
+      "beatErrorSeconds": -0.012333333333330643,
+      "template": "/examples/dark-stillness/dark-still-salt-sea.world3d-template.json"
+    },
+    {
+      "number": 24,
+      "title": "El puente de la tormenta",
+      "sourceId": "dark-living-storm-bridge",
+      "document": {
+        "duration": 2.7666666666666666
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.1666666666666665,
+      "timelineStart": 67.76666666666667,
+      "timelineEnd": 70.53333333333333,
+      "detectedBeatEnd": 70.542,
+      "beatErrorSeconds": -0.008666666666670153,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-storm-bridge.world3d-template.json"
+    },
+    {
+      "number": 25,
+      "title": "Los nombres bajo la arena",
+      "sourceId": "dark-living-sand-library",
+      "document": {
+        "duration": 2.6
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "timelineStart": 70.53333333333333,
+      "timelineEnd": 73.13333333333334,
+      "detectedBeatEnd": 73.12,
+      "beatErrorSeconds": 0.013333333333335418,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-sand-library.world3d-template.json"
+    },
+    {
+      "number": 26,
+      "title": "El dragón de jade",
+      "sourceId": "dark-living-jade-dragon",
+      "document": {
+        "duration": 2.566666666666667
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "timelineStart": 73.13333333333334,
+      "timelineEnd": 75.7,
+      "detectedBeatEnd": 75.697,
+      "beatErrorSeconds": 0.0030000000000001137,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-jade-dragon.world3d-template.json"
+    },
+    {
+      "number": 27,
+      "title": "El precio del alba",
+      "sourceId": "farewell",
+      "document": {
+        "duration": 4.933333333333334
+      },
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.125,
+      "timelineStart": 75.7,
+      "timelineEnd": 80.63333333333334,
+      "detectedBeatEnd": 80.62,
+      "beatErrorSeconds": 0.013333333333335418
+    },
+    {
+      "number": 28,
+      "title": "La marea negra",
+      "sourceId": "dark-living-black-tide",
+      "document": {
+        "duration": 2.566666666666667
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "timelineStart": 80.63333333333334,
+      "timelineEnd": 83.2,
+      "detectedBeatEnd": 83.197,
+      "beatErrorSeconds": 0.0030000000000001137,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-black-tide.world3d-template.json"
+    },
+    {
+      "number": 29,
+      "title": "La tumba de la luna",
+      "sourceId": "dark-living-moon-grave",
+      "document": {
+        "duration": 1.3
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "timelineStart": 83.2,
+      "timelineEnd": 84.5,
+      "detectedBeatEnd": 84.4974149659864,
+      "beatErrorSeconds": 0.0025850340136059913,
+      "template": "/examples/dark-worlds/../dark-fantasy/dark-living-moon-grave.world3d-template.json"
+    },
+    {
+      "number": 30,
+      "title": "La llama inmóvil",
+      "sourceId": "dark-still-still-flame",
+      "document": {
+        "duration": 1.2666666666666666
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.6666666666666667,
+      "timelineStart": 84.5,
+      "timelineEnd": 85.76666666666667,
+      "detectedBeatEnd": 85.775,
+      "beatErrorSeconds": -0.008333333333339965,
+      "template": "/examples/dark-stillness/dark-still-still-flame.world3d-template.json"
+    },
+    {
+      "number": 31,
+      "title": "La vigilia blanca",
+      "sourceId": "dark-still-winter-vigil",
+      "document": {
+        "duration": 1.3
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "timelineStart": 85.76666666666667,
+      "timelineEnd": 87.06666666666666,
+      "detectedBeatEnd": 87.05160997732426,
+      "beatErrorSeconds": 0.015056689342401341,
+      "template": "/examples/dark-stillness/dark-still-winter-vigil.world3d-template.json"
+    },
+    {
+      "number": 32,
+      "title": "La polilla y la luna",
+      "sourceId": "dark-still-moth-moon",
+      "document": {
+        "duration": 1.3
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "timelineStart": 87.06666666666666,
+      "timelineEnd": 88.36666666666666,
+      "detectedBeatEnd": 88.352,
+      "beatErrorSeconds": 0.01466666666665617,
+      "template": "/examples/dark-stillness/dark-still-moth-moon.world3d-template.json"
+    },
+    {
+      "number": 33,
+      "title": "Marfil contra incendio",
+      "sourceId": "dark-still-ivory-fire",
+      "document": {
+        "duration": 1.2666666666666666
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.6666666666666667,
+      "timelineStart": 88.36666666666666,
+      "timelineEnd": 89.63333333333334,
+      "detectedBeatEnd": 89.62902494331065,
+      "beatErrorSeconds": 0.004308390022686126,
+      "template": "/examples/dark-stillness/dark-still-ivory-fire.world3d-template.json"
+    },
+    {
+      "number": 34,
+      "title": "Dos distancias",
+      "sourceId": "dark-still-two-distances",
+      "document": {
+        "duration": 1.2666666666666666
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.6666666666666667,
+      "timelineStart": 89.63333333333334,
+      "timelineEnd": 90.9,
+      "detectedBeatEnd": 90.906,
+      "beatErrorSeconds": -0.006000000000000227,
+      "template": "/examples/dark-stillness/dark-still-two-distances.world3d-template.json"
+    },
+    {
+      "number": 35,
+      "title": "Cobre sobre violeta",
+      "sourceId": "dark-still-copper-night",
+      "document": {
+        "duration": 1.3
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "timelineStart": 90.9,
+      "timelineEnd": 92.2,
+      "detectedBeatEnd": 92.20643990929705,
+      "beatErrorSeconds": -0.0064399092970433,
+      "template": "/examples/dark-stillness/dark-still-copper-night.world3d-template.json"
+    },
+    {
+      "number": 36,
+      "title": "Marea tras el muro",
+      "sourceId": "creative-scarlet-tide-motion",
+      "document": {
+        "duration": 1.3
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "timelineStart": 92.2,
+      "timelineEnd": 93.5,
+      "detectedBeatEnd": 93.484,
+      "beatErrorSeconds": 0.016000000000005343,
+      "template": "/examples/living-worlds/../creative/creative-scarlet-tide-motion.world3d-template.json"
+    },
+    {
+      "number": 37,
+      "title": "Órbita de terciopelo",
+      "sourceId": "creative-rose-orbit-motion",
+      "document": {
+        "duration": 1.0666666666666667
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.4666666666666666,
+      "timelineStart": 93.5,
+      "timelineEnd": 94.56666666666666,
+      "detectedBeatEnd": 94.57487528344672,
+      "beatErrorSeconds": -0.00820861678005258,
+      "template": "/examples/living-worlds/../creative/creative-rose-orbit-motion.world3d-template.json"
+    },
+    {
+      "number": 38,
+      "title": "La casa del huerto",
+      "sourceId": "creative-glass-orchard-motion",
+      "document": {
+        "duration": 1.3
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "timelineStart": 94.56666666666666,
+      "timelineEnd": 95.86666666666666,
+      "detectedBeatEnd": 95.852,
+      "beatErrorSeconds": 0.01466666666665617,
+      "template": "/examples/living-worlds/../creative/creative-glass-orchard-motion.world3d-template.json"
+    },
+    {
+      "number": 39,
+      "title": "El precio del alba",
+      "sourceId": "farewell",
+      "document": {
+        "duration": 5.133333333333334
+      },
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.333333333333333,
+      "timelineStart": 95.86666666666666,
+      "timelineEnd": 101.0,
+      "detectedBeatEnd": 100.984,
+      "beatErrorSeconds": 0.016000000000005343
+    },
+    {
+      "number": 40,
+      "title": "Ella sigue viviendo",
+      "sourceId": "princess",
+      "document": {
+        "duration": 4.866666666666666
+      },
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.083333333333333,
+      "timelineStart": 101.0,
+      "timelineEnd": 105.86666666666666,
+      "detectedBeatEnd": 105.906,
+      "beatErrorSeconds": -0.03933333333334588
+    },
+    {
+      "number": 41,
+      "title": "Ventana al deshielo",
+      "sourceId": "creative-amber-ice-motion",
+      "document": {
+        "duration": 2.6333333333333333
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.033333333333333,
+      "timelineStart": 105.86666666666666,
+      "timelineEnd": 108.5,
+      "detectedBeatEnd": 108.484,
+      "beatErrorSeconds": 0.016000000000005343,
+      "template": "/examples/living-worlds/../creative/creative-amber-ice-motion.world3d-template.json"
+    },
+    {
+      "number": 42,
+      "title": "Radio de las mareas",
+      "sourceId": "creative-coral-radio-motion",
+      "document": {
+        "duration": 2.533333333333333
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.933333333333333,
+      "timelineStart": 108.5,
+      "timelineEnd": 111.03333333333333,
+      "detectedBeatEnd": 111.038,
+      "beatErrorSeconds": -0.0046666666666652645,
+      "template": "/examples/living-worlds/../creative/creative-coral-radio-motion.world3d-template.json"
+    },
+    {
+      "number": 43,
+      "title": "Observatorio del núcleo",
+      "sourceId": "creative-cobalt-crater-motion",
+      "document": {
+        "duration": 1.3
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "timelineStart": 111.03333333333333,
+      "timelineEnd": 112.33333333333333,
+      "detectedBeatEnd": 112.33814058956916,
+      "beatErrorSeconds": -0.004807256235835666,
+      "template": "/examples/living-worlds/../creative/creative-cobalt-crater-motion.world3d-template.json"
+    },
+    {
+      "number": 44,
+      "title": "Hacia las brasas",
+      "sourceId": "dark-motion-knight-embers",
+      "document": {
+        "duration": 1.3
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "timelineStart": 112.33333333333333,
+      "timelineEnd": 113.63333333333334,
+      "detectedBeatEnd": 113.638,
+      "beatErrorSeconds": -0.0046666666666652645,
+      "template": "/examples/moving-cutouts/dark-motion-knight-embers.world3d-template.json"
+    },
+    {
+      "number": 45,
+      "title": "Calzada infinita · Neon",
+      "sourceId": "skate3",
+      "document": {
+        "duration": 2.566666666666667
+      },
+      "trim_start": 1.2,
+      "trim_end": 3.7666666666666666,
+      "timelineStart": 113.63333333333334,
+      "timelineEnd": 116.2,
+      "detectedBeatEnd": 116.216,
+      "beatErrorSeconds": -0.015999999999991132
+    },
+    {
+      "number": 46,
+      "title": "Sal y velocidad",
+      "sourceId": "creative-motion-skate-coast",
+      "document": {
+        "duration": 1.3
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "timelineStart": 116.2,
+      "timelineEnd": 117.5,
+      "detectedBeatEnd": 117.49297052154195,
+      "beatErrorSeconds": 0.0070294784580511305,
+      "template": "/examples/moving-cutouts/creative-motion-skate-coast.world3d-template.json"
+    },
+    {
+      "number": 47,
+      "title": "La ciudad pasa",
+      "sourceId": "creative-motion-skate-neon",
+      "document": {
+        "duration": 1.3333333333333333
+      },
+      "trim_start": 0.4,
+      "trim_end": 1.7333333333333334,
+      "timelineStart": 117.5,
+      "timelineEnd": 118.83333333333333,
+      "detectedBeatEnd": 118.84,
+      "beatErrorSeconds": -0.006666666666674814,
+      "template": "/examples/moving-cutouts/creative-motion-skate-neon.world3d-template.json"
+    },
+    {
+      "number": 48,
+      "title": "Carretera de nubes",
+      "sourceId": "creative-motion-skate-clouds",
+      "document": {
+        "duration": 2.7333333333333334
+      },
+      "trim_start": 0.4,
+      "trim_end": 3.1333333333333333,
+      "timelineStart": 118.83333333333333,
+      "timelineEnd": 121.56666666666666,
+      "detectedBeatEnd": 121.556,
+      "beatErrorSeconds": 0.010666666666665492,
+      "template": "/examples/moving-cutouts/creative-motion-skate-clouds.world3d-template.json"
+    },
+    {
+      "number": 49,
+      "title": "El mar al otro lado",
+      "sourceId": "creative-motion-skate-portal",
+      "document": {
+        "duration": 2.566666666666667
+      },
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "timelineStart": 121.56666666666666,
+      "timelineEnd": 124.13333333333334,
+      "detectedBeatEnd": 124.134,
+      "beatErrorSeconds": -0.000666666666660376,
+      "template": "/examples/moving-cutouts/creative-motion-skate-portal.world3d-template.json"
+    },
+    {
+      "number": 50,
+      "title": "Ella sigue viviendo",
+      "sourceId": "princess",
+      "document": {
+        "duration": 5.733333333333333
+      },
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.958333333333333,
+      "timelineStart": 124.13333333333334,
+      "timelineEnd": 129.86666666666667,
+      "detectedBeatEnd": 129.9,
+      "beatErrorSeconds": -0.03333333333333144
+    }
+  ],
+  "audioStart": 0,
+  "audioEnd": 129.879,
+  "sourceAssets": {
+    "song": {
+      "upload": {
+        "url": "/api/v1/file/2026-09-16-02h51m14s_seed916502_%5BVerse%5DEn%20la%20torre%20de%20obsidianauna%20princesa%20espera%20el%20sol.Un%20caballero%20va%20a%20buscarla%2Csin%20ej%C3%A9rci.wav?workspace=default"
+      },
+      "format": {
+        "duration": "129.87866666666667",
+        "tags": {
+          "title": "Que tú veas el alba"
+        }
+      }
+    }
+  }
+}

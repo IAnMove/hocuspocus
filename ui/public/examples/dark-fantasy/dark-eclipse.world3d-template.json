@@ -1,0 +1,164 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-eclipse",
+  "title": "Dark Fantasy · El último sol",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
+  "createdAt": "2026-09-14T17:00:00Z",
+  "includeAssets": true,
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-eclipse",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "backdrop",
+      "floorColor": "#28232b",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/10-eclipse.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2.0999999999999996,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 24
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.45,
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "black-sun",
+        "kind": "black_hole",
+        "position": {
+          "x": 0,
+          "y": 4.9,
+          "z": -4
+        },
+        "color": "#ffe8c4",
+        "scale": 3.8,
+        "intensity": 0.7,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "red-dust",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.1999999999999993,
+          "z": -1
+        },
+        "color": "#973d43",
+        "scale": 3.3,
+        "intensity": 0.5,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "last-embers",
+        "kind": "sparks",
+        "position": {
+          "x": 0,
+          "y": 1.0999999999999996,
+          "z": 0.5
+        },
+        "color": "#f09545",
+        "scale": 2,
+        "intensity": 0.45,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        0.52,
+        2.7,
+        9.340000000000002
+      ],
+      "look": [
+        0.0,
+        2.2999999999999994,
+        -1.0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.3586206896551724,
+          0.8620689655172415,
+          6.4413793103448285
+        ],
+        "to": [
+          0.12413793103448273,
+          0.8620689655172415,
+          6.110344827586207
+        ],
+        "lookFrom": [
+          0.0,
+          0.5862068965517239,
+          -0.6896551724137931
+        ],
+        "lookTo": [
+          0.0,
+          0.5862068965517239,
+          -0.6896551724137931
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    }
+  }
+}

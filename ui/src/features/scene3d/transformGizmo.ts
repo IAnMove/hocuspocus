@@ -1,7 +1,7 @@
 import { Object3D, Raycaster, Vector2 } from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { worldAnchorOffsetFromSlotRoot, worldSfxIdFromObject } from '../sceneFx/worldRuntime'
-import type { GpuWorld } from './gpu'
+import { renderWorld, type GpuWorld } from './gpu'
 import type { Scene3DSlot } from './types'
 import type { WorldSfx } from '../sceneFx/world'
 
@@ -37,7 +37,7 @@ export function createTransformGizmo(world: GpuWorld, onChange: (id: string, pat
   let allowed = true
   let mode: TransformMode = 'translate'
   let attachedAnchorSlotId: string | undefined
-  const redraw = () => world.renderer.render(world.scene, world.camera)
+  const redraw = () => renderWorld(world)
   let uniformScale = 1
   const objectChange = () => {
     if (!allowed || !selectedId) return
@@ -58,7 +58,7 @@ export function createTransformGizmo(world: GpuWorld, onChange: (id: string, pat
     if (!allowed || controls.axis || event.button !== 0) return
     const rect = canvas.getBoundingClientRect()
     raycaster.setFromCamera(new Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), world.camera)
-    const slotTargets = [...world.slots.entries()].filter(([, slot]) => slot.kind === 'model')
+    const slotTargets = [...world.slots.entries()].filter(([, slot]) => slot.root.visible)
     const worldTargets = [...(world.worldSfx?.values() ?? [])].filter(item => item.root.visible).map(item => item.root)
     const hits = raycaster.intersectObjects([...worldTargets, ...slotTargets.map(([, slot]) => slot.root)], true)
     const hit = hits[0]
@@ -81,7 +81,7 @@ export function createTransformGizmo(world: GpuWorld, onChange: (id: string, pat
       allowed = enabled
       mode = nextMode
       controls.enabled = enabled
-      if ((!slot && !worldCue) || slot?.media === 'image' || !enabled) { controls.pointerUp(null); controls.detach(); return }
+      if ((!slot && !worldCue) || (slot?.media === 'image' && (slot.surface === 'environment' || slot.loop?.cylinder === true)) || !enabled) { controls.pointerUp(null); controls.detach(); return }
       worldAxes = Boolean(worldCue)
       attachedAnchorSlotId = worldCue?.anchor?.slotId
       const id = worldCue ? WORLD_SFX_SELECT_PREFIX + worldCue.id : slot!.id

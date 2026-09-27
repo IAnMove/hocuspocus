@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import { FolderOpen, X } from 'lucide-react'
 import type { ApiOutput } from '../../api/outputs'
 import type { AssetKind } from '../../api/assets'
-import { checkCompatibility, outputToPickerItem } from '../../features/asset-picker/adapters.ts'
-import { isSameRef, type AssetConstraints, type CatalogSort, type PickerItem } from '../../features/asset-picker/types.ts'
+import { checkCompatibility, outputToPickerItem, pickerItemToOutput } from '../../features/asset-picker/adapters.ts'
+import { assetRefKey, isSameRef, type AssetConstraints, type CatalogSort, type PickerItem } from '../../features/asset-picker/types.ts'
 import {
   confirmExplorerItem,
   explorerCanConfirm,
@@ -29,6 +29,7 @@ type BodyProps = {
   status?: 'ready' | 'loading' | 'error'
   onRetry?: () => void
   onChoose: (item: ApiOutput | null) => void
+  onChooseMany?: (items: ApiOutput[]) => void
   onClose: () => void
 }
 
@@ -46,6 +47,7 @@ function AssetExplorerBody({
   status = 'ready',
   onRetry,
   onChoose,
+  onChooseMany,
   onClose,
 }: BodyProps) {
   const { t } = useUiTranslation('common')
@@ -54,6 +56,7 @@ function AssetExplorerBody({
   const [sort, setSort] = useState<CatalogSort>('created_desc')
   const [kind, setKind] = useState<AssetKind | ''>('')
   const [retry, setRetry] = useState(0)
+  const [checked, setChecked] = useState<PickerItem[]>([])
   const catalogRemote = Boolean(remote && workspaceId)
   const remotePage = useRemoteCatalogPage({
     enabled: catalogRemote,
@@ -98,6 +101,10 @@ function AssetExplorerBody({
     ? list.visible.some(item => isSameRef(item.ref, selected.ref) && item.url === selected.url)
     : true
   const emptyLabel = list.emptyLabelIsNoResults ? t('explorer.noResults') : t('explorer.empty')
+  const canConfirmMany = checked.length > 0 && checked.every((item, index) =>
+    (!constraints || checkCompatibility(item, constraints, index).allowed)
+    && (catalogRemote || localItems.some(current => isSameRef(current.ref, item.ref) && current.url === item.url)),
+  )
   const confirm = (item: PickerItem | null) => {
     confirmExplorerItem(catalogRemote, items, list.pickerItems, item, workspaceId || '', constraints, onChoose, onClose)
   }
@@ -141,6 +148,12 @@ function AssetExplorerBody({
             emptyLabel={emptyLabel}
             onRetry={catalogRemote ? () => setRetry(value => value + 1) : onRetry}
             onPick={item => setPicked({ workspaceId: workspaceId || '', item })}
+            checked={new Set(checked.map(item => assetRefKey(item.ref)))}
+            onToggle={onChooseMany ? item => setChecked(previous => {
+              if (previous.some(value => isSameRef(value.ref, item.ref))) return previous.filter(value => !isSameRef(value.ref, item.ref))
+              if (constraints && !checkCompatibility(item, constraints, previous.length).allowed) return previous
+              return [...previous, item]
+            }) : undefined}
           />
         </div>
         <aside className="flex min-h-[200px] flex-col overflow-y-auto rounded-lg border border-border bg-bg-tertiary p-2">
@@ -156,11 +169,18 @@ function AssetExplorerBody({
         total={list.footerTotal}
         safePage={list.safePage}
         pages={list.pages}
-        canConfirm={Boolean(selected) && compatibility.allowed && stillInCatalog}
+        canConfirm={onChooseMany ? canConfirmMany : Boolean(selected) && compatibility.allowed && stillInCatalog}
         onCancel={onClose}
         onPage={setPage}
-        onConfirm={() => selected && confirm(selected)}
+        onConfirm={() => {
+          if (onChooseMany) {
+            if (!canConfirmMany) return
+            onChooseMany(checked.map(pickerItemToOutput).filter((item): item is ApiOutput => item !== null))
+            onClose()
+          } else if (selected) confirm(selected)
+        }}
       />
+      {onChooseMany && <p role="status" className="px-4 pb-2 text-xs text-text-secondary">{t('explorer.selectedCount', { count: checked.length })}</p>}
     </div>
   )
 }
@@ -181,7 +201,7 @@ export function AssetExplorerDialog({
     >
       {open ? (
         <AssetExplorerBody
-          key={`${title}:${body.selected?.asset_id || body.selected?.url || body.selectedName || ''}`}
+          key={`${body.workspaceId || ''}:${title}:${body.selected?.asset_id || body.selected?.url || body.selectedName || ''}`}
           title={title}
           onClose={onClose}
           {...body}

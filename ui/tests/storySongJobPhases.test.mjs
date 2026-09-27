@@ -215,6 +215,61 @@ test('upsertCueMusicCandidate keeps the user-selected song', async () => {
   assert.equal(next.music.cues[0].candidates.length, 2)
 })
 
+test('overlaySavedCueCandidates keeps a server-only sibling cue', async () => {
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const { overlaySavedCueCandidates } = await import('../src/features/stories/musicWorkflowState.ts')
+  const base = createStoryProject('music_video')
+  const opening = cueFixture(base, { id: 'cue-opening', title: 'Opening' })
+  const creditsSong = {
+    id: 'song-credits',
+    name: 'credits.wav',
+    source: '/api/v1/file/credits.wav',
+    prompt: 'credits',
+    lyrics: '[Verse]\nFin',
+    provider: 'local',
+    model: 'ace_step_v1_5_xl_sft_lm_4b',
+    durationSeconds: 20,
+    createdAt: '2026-09-21T00:00:00.000Z',
+    status: 'ready',
+  }
+  const live = normalizeStoryProject({
+    ...base,
+    music: { ...base.music, cues: [opening] },
+  })
+  const pending = {
+    id: 'song-opening',
+    name: '',
+    source: '',
+    prompt: opening.style,
+    lyrics: opening.lyrics,
+    provider: 'local',
+    model: 'ace_step_v1_5_xl_sft_lm_4b',
+    durationSeconds: 30,
+    createdAt: '2026-09-21T00:00:01.000Z',
+    status: 'pending',
+  }
+  const saved = normalizeStoryProject({
+    ...live,
+    music: {
+      ...live.music,
+      cues: [
+        { ...opening, candidates: [pending], selectedCandidateId: pending.id },
+        {
+          ...cueFixture(base, { id: 'cue-credits', title: 'Créditos', targetId: `${base.id}-credits` }),
+          candidates: [creditsSong],
+          selectedCandidateId: creditsSong.id,
+        },
+      ],
+    },
+  })
+  const merged = overlaySavedCueCandidates(live, saved)
+  const ids = merged.music.cues.map(cue => cue.id)
+  assert.deepEqual(ids, ['cue-opening', 'cue-credits'])
+  assert.equal(merged.music.cues[0].candidates[0].id, pending.id)
+  assert.equal(merged.music.cues[1].candidates[0].id, creditsSong.id)
+  assert.equal(merged.music.cues[1].candidates[0].source, creditsSong.source)
+})
+
 test('reusableInFlightSongCandidate prefers a pending row with jobId', async () => {
   const { reusableInFlightSongCandidate } = await import('../src/features/stories/storySongJobPhases.ts')
   const first = {

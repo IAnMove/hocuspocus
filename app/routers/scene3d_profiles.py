@@ -1,7 +1,9 @@
 """Workspace-scoped, content-addressed face calibration. No audio or model bytes."""
 from __future__ import annotations
+import hashlib
 import json
 import os
+import re
 import threading
 import uuid
 from pathlib import Path
@@ -10,6 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from services.character_speech_definition import face_settings
 
 _lock = threading.Lock()
+MAX_MODEL_BYTES = 64 * 1024 * 1024
+_WORKSPACE = re.compile(r"^[A-Za-z0-9_. -]{1,120}$")
+_DIGEST = re.compile(r"^[a-f0-9]{64}$")
 
 class ProfileWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -29,17 +34,51 @@ class ProfileWrite(BaseModel):
     def face_only(cls, value):
         return face_settings(value)
 
+def _contained(path: str, root: str) -> bool:
+    try:
+        return os.path.normcase(os.path.commonpath((path, root))) == os.path.normcase(root)
+    except (TypeError, ValueError, OSError):
+        return False
+
+
+def stored_glb_digest(workspace_dir, workspace: str, filename: str) -> tuple[str, int]:
+    if not _WORKSPACE.fullmatch(workspace) or workspace in {".", ".."}:
+        raise HTTPException(400, "Invalid profile scope.")
+    if not isinstance(filename, str) or not filename or filename != os.path.basename(filename) or "/" in filename or "\\" in filename:
+        raise HTTPException(400, "Invalid model filename.")
+    if not filename.lower().endswith(".glb"):
+        raise HTTPException(400, "Only GLB models have a face calibration identity.")
+    root = os.path.realpath(os.path.abspath(workspace_dir(workspace)))
+    path = os.path.realpath(os.path.abspath(os.path.join(root, filename)))
+    if path == root or not _contained(path, root):
+        raise HTTPException(400, "Invalid model filename.")
+    if not os.path.isfile(path):
+        raise HTTPException(404, "Model file was not found in this workspace.")
+    size = os.path.getsize(path)
+    if size > MAX_MODEL_BYTES:
+        raise HTTPException(413, "Model exceeds 64 MB.")
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest(), size
+
+
 def create_scene3d_profiles_router(workspace_dir):
     router = APIRouter()
 
     def target(workspace: str, digest: str):
-        import re
-        if not re.fullmatch(r"[a-f0-9]{64}", digest) or not re.fullmatch(r"[A-Za-z0-9_. -]{1,120}", workspace) or workspace in {".", ".."}:
+        if not _DIGEST.fullmatch(digest) or not _WORKSPACE.fullmatch(workspace) or workspace in {".", ".."}:
             raise HTTPException(400, "Invalid profile scope.")
         return Path(workspace_dir(workspace)).resolve() / ".speech3d-profiles" / (digest + ".json")
 
     def read(path):
         return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+    @router.get("/speech/digest")
+    def digest_model(workspace: str, filename: str):
+        digest, size = stored_glb_digest(workspace_dir, workspace, filename)
+        return {"digest": digest, "bytes": size}
 
     @router.get("/speech/profiles/{digest}")
     def get_profile(digest: str, workspace: str):

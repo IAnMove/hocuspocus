@@ -1,0 +1,317 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "creative-cobalt-crater-motion",
+  "title": "Observatorio del núcleo",
+  "description": "Lava animada al otro lado de un observatorio. Ventanal, interior y personajes en capas independientes.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T12:07:21.489208+00:00",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-cobalt-crater-motion",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#16274b",
+      "floorSourceHeight": 0.2
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/cobalt-moon.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.24861111111111112,
+                0.33125
+              ],
+              [
+                0.7569444444444444,
+                0.33125
+              ],
+              [
+                0.7972222222222223,
+                0.36015625
+              ],
+              [
+                0.8347222222222223,
+                0.40234375
+              ],
+              [
+                0.8527777777777777,
+                0.4453125
+              ],
+              [
+                0.85,
+                0.490625
+              ],
+              [
+                0.8305555555555556,
+                0.53515625
+              ],
+              [
+                0.7958333333333333,
+                0.578125
+              ],
+              [
+                0.7430555555555556,
+                0.6203125
+              ],
+              [
+                0.6819444444444445,
+                0.6578125
+              ],
+              [
+                0.6166666666666667,
+                0.68828125
+              ],
+              [
+                0.5541666666666667,
+                0.70703125
+              ],
+              [
+                0.4986111111111111,
+                0.715625
+              ],
+              [
+                0.44305555555555554,
+                0.71328125
+              ],
+              [
+                0.3861111111111111,
+                0.6984375
+              ],
+              [
+                0.3277777777777778,
+                0.67109375
+              ],
+              [
+                0.27361111111111114,
+                0.63515625
+              ],
+              [
+                0.22777777777777777,
+                0.590625
+              ],
+              [
+                0.19305555555555556,
+                0.546875
+              ],
+              [
+                0.16944444444444445,
+                0.50234375
+              ],
+              [
+                0.16111111111111112,
+                0.45703125
+              ],
+              [
+                0.16944444444444445,
+                0.41484375
+              ],
+              [
+                0.19583333333333333,
+                0.3765625
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.6,
+          0,
+          2.0
+        ],
+        "scale": 1.6,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.10998355078347635,
+          -5.217806422376148,
+          -14
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/creative/cobalt-crater-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 17.526978652854854,
+          "height": 17.31581023535058,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          -0.00799999999999998,
+          1.23,
+          5.84
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff8142",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 322,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

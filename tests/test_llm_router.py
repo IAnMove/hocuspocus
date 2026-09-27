@@ -96,6 +96,48 @@ def test_generate_returns_llm_text_without_loading_wgp():
     generate.assert_called_once()
 
 
+def test_generate_can_use_scoped_series_writer_without_changing_the_global_model():
+    app = FastAPI()
+    loaded = []
+    requests = []
+    def writer(body):
+        requests.append(body)
+        return {"model": "series-writer", "base_url": "http://writer.example/v1", "api_key": "test"}
+    app.include_router(_core_router(ensure_llm_loaded=lambda: loaded.append(True), comic_writing_llm=writer))
+    client = TestClient(app)
+    schema = {"type": "object", "properties": {"environment": {"type": "string"}}}
+    with patch("services.llm_service.generate_openai_compatible", return_value='{"environment":"Empty diner"}') as generate:
+        response = client.post("/api/v1/llm/generate", json={
+            "prompt": "Prepare the location", "writingProvider": "minimax", "writingModel": "series-writer",
+            "system_prompt": "Remove occupants", "json_schema": schema,
+        })
+    assert response.status_code == 200
+    assert response.json() == {"text": '{"environment":"Empty diner"}'}
+    assert requests[0]["writingProvider"] == "minimax"
+    assert not loaded
+    assert generate.call_args.kwargs["model_id"] == "series-writer"
+    assert generate.call_args.kwargs["json_schema"] == schema
+    assert generate.call_args.kwargs["system_prompt"] == "Remove occupants"
+
+
+def test_list_llm_models_forwards_url_query_to_the_catalog():
+    app = FastAPI()
+    app.include_router(_core_router())
+    client = TestClient(app)
+    with patch("services.llm_service.get_available_models", return_value=[
+        {"id": "qwen3:32b", "label": "qwen3:32b (Ollama)", "size_hint": "ollama", "provider": "ollama"},
+    ]) as catalog:
+        response = client.get("/api/v1/llm/models", params={
+            "provider": "ollama",
+            "url": "http://192.168.1.10:11434",
+        })
+    assert response.status_code == 200
+    assert response.json()["models"][0]["id"] == "qwen3:32b"
+    catalog.assert_called_once()
+    assert catalog.call_args.kwargs["provider"] == "ollama"
+    assert catalog.call_args.kwargs["remote_url"] == "http://192.168.1.10:11434"
+
+
 def test_plan_h3_windows_rejects_non_h3_models():
     app = FastAPI()
     app.include_router(_prompt_router(get_model_def=lambda _model_type: {"architecture": "ltx2"}))

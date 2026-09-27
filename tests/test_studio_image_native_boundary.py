@@ -11,7 +11,8 @@ from tests.test_image_generation_commands import FakeNative, _command, _run
 
 
 @pytest.mark.parametrize("new_family", [False, True])
-def test_source_workspace_image_survives_native_preparation(tmp_path, new_family):
+@pytest.mark.parametrize("image_mode", [1, 2])
+def test_source_workspace_image_survives_native_preparation(tmp_path, new_family, image_mode):
     folders = {name: tmp_path / name for name in ("source", "destination", "uploads")}
     for folder in folders.values():
         folder.mkdir()
@@ -22,7 +23,7 @@ def test_source_workspace_image_survives_native_preparation(tmp_path, new_family
         list_workspaces=lambda: [{"name": name} for name in ("source", "destination")],
         lora_search_dirs=lambda _: [], lora_compatible=lambda *_: True,
     )
-    params = {"image_mode": 1, "video_prompt_type": "I", "canonical_image_refs": True,
+    params = {"image_mode": image_mode, "video_prompt_type": "I", "canonical_image_refs": True,
               "image_refs": ["/api/v1/file/same.png?workspace=source"]}
     prepared, identities = resources.prepare_media(params)
     prepare_generation_inputs(prepared, {"image_outputs": True, "wangp_1272": new_family},

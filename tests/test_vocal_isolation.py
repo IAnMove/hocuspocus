@@ -5,10 +5,19 @@ import subprocess
 import pytest
 from services import vocal_isolation as vocals
 from services.scene3d_speech import SpeechAnalysisUnavailable
+from services.speech_analysis_cache import reset_runtime_state
 from services.vocal_isolation_worker import installed_separator
 from services.vocal_isolation_worker import inference_input
 import io
 import wave
+
+
+@pytest.fixture(autouse=True)
+def _speech_analysis_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("SPEECH_ANALYSIS_CACHE_DIR", str(tmp_path / "speech-cache"))
+    reset_runtime_state()
+    yield
+    reset_runtime_state()
 
 
 def wav(seconds=1):

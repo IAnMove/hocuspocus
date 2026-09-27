@@ -18,19 +18,21 @@ export function paintWorld3DExportFrame(
 }
 
 export function startWorld3DExport(
-  handle: Pick<Scene3DStageHandle, 'beginExport' | 'setExportSize'>,
+  handle: Pick<Scene3DStageHandle, 'beginExport' | 'setExportSize' | 'setExportQuality'>,
   document: Scene3DDocument,
   size: { width: number; height: number },
 ): Scene3DDocument {
   const snapshot = cloneScene3DDocument(document)
   handle.beginExport(snapshot)
   handle.setExportSize(size.width, size.height)
+  handle.setExportQuality(true)
   return snapshot
 }
 
 export function finishWorld3DExport(
-  handle: Pick<Scene3DStageHandle, 'endExport' | 'restoreSize'>,
+  handle: Pick<Scene3DStageHandle, 'endExport' | 'restoreSize' | 'setExportQuality'>,
 ): void {
+  handle.setExportQuality(false)
   handle.endExport()
   handle.restoreSize()
 }

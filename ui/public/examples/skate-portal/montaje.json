@@ -1,0 +1,49 @@
+{
+  "name": "Salto_entre_mundos_vertical",
+  "workspace": "default",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "clips": [
+    {
+      "name": "CLIP 01 — 01 · La puerta junto al mar",
+      "source": "/api/v1/file/2026-09-15-22h34m06s_world3d-scene_4f2523.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 2.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 02 — 02 · Despegar",
+      "source": "/api/v1/file/2026-09-15-22h35m00s_world3d-scene_204fe9.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 1.2,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 03 — 03 · Caer en otro cielo",
+      "source": "/api/v1/file/2026-09-15-22h39m20s_world3d-scene_58b0f5.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 1.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 04 — 04 · Seguir rodando",
+      "source": "/api/v1/file/2026-09-15-22h44m59s_world3d-scene_b2b200.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 2.2,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    }
+  ]
+}

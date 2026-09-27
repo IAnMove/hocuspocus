@@ -332,6 +332,9 @@ function normalizeRelationship(value: unknown, index: number): StoryRelationship
 
 function normalizeBeat(value: unknown, index: number): StoryBeat {
   const item = value && typeof value === 'object' ? value as Partial<StoryBeat> : {}
+  const link = item.sceneLink && typeof item.sceneLink === 'object' ? item.sceneLink : undefined
+  const href = text(link?.href)
+  const editor = link?.editor === 'video3d' ? 'video3d' as const : link?.editor === 'video2d' ? 'video2d' as const : undefined
   return {
     id: text(item.id) || `beat-${index + 1}`,
     stage: text(item.stage, `Beat ${index + 1}`),
@@ -340,6 +343,7 @@ function normalizeBeat(value: unknown, index: number): StoryBeat {
     goal: text(item.goal),
     conflict: text(item.conflict),
     turn: text(item.turn),
+    ...(href && editor ? { sceneLink: { editor, href, label: text(link?.label) || undefined } } : {}),
   }
 }
 

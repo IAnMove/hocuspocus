@@ -86,7 +86,39 @@ def managed_turbo_downloads() -> dict:
     }
 
 
+def normalize_studio_h3_policy(body: dict, model_def: dict | None = None) -> dict:
+    """Effective Studio H3 policy on the generation request.
+
+    Invalid planning/audio enums fall back. Semantic Bridge stays off unless a
+    supported model supplies alpha in (0, 1]. Spoken prompt text is not rewritten.
+    """
+    model = str(
+        body.get("model_type")
+        or (model_def or {}).get("architecture")
+        or ""
+    )
+    if not model.startswith("minimax_h3"):
+        return body
+    style = str(body.get("minimax_h3_planning_style") or "faithful").strip().lower()
+    body["minimax_h3_planning_style"] = style if style in {"faithful", "creative"} else "faithful"
+    policy = str(body.get("minimax_h3_audio_policy") or "native").strip().lower()
+    body["minimax_h3_audio_policy"] = policy if policy in {"native", "legacy"} else "native"
+    supported = model in {"minimax_h3", "minimax_h3_full"}
+    try:
+        alpha = float(body.get("minimax_h3_semantic_bridge_alpha") or 0)
+    except (TypeError, ValueError):
+        alpha = 0.0
+    if not supported or alpha < 0 or alpha > 1:
+        alpha = 0.0
+    body["minimax_h3_semantic_bridge_alpha"] = alpha
+    magnitude = body.get("minimax_h3_semantic_bridge_magnitude")
+    if magnitude not in {"global", "none", "per_token"}:
+        body["minimax_h3_semantic_bridge_magnitude"] = "per_token"
+    return body
+
+
 def normalize_h3_runtime_request(body: dict, model_def: dict) -> bool:
+    normalize_studio_h3_policy(body, model_def)
     from models.minimax_h3.turbo import normalize_minimax_h3_turbo_request
     if model_def.get("minimax_h3_fused_turbo"):
         from models.minimax_h3.fused_turbo import normalize_fused_h3_request

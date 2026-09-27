@@ -110,6 +110,8 @@ export function ExplorerGallery({
   emptyLabel,
   onRetry,
   onPick,
+  checked,
+  onToggle,
 }: {
   status: 'ready' | 'loading' | 'error'
   visible: PickerItem[]
@@ -117,6 +119,8 @@ export function ExplorerGallery({
   emptyLabel: string
   onRetry?: () => void
   onPick: (item: PickerItem) => void
+  checked?: ReadonlySet<string>
+  onToggle?: (item: PickerItem) => void
 }) {
   const { t } = useUiTranslation('common')
   if (status === 'loading') {
@@ -138,17 +142,18 @@ export function ExplorerGallery({
       {visible.map(item => {
         const active = selected ? isSameRef(selected.ref, item.ref) && selected.url === item.url : false
         return (
+          <div key={`${assetRefKey(item.ref)}:${item.url}`}>
           <button
             key={`${assetRefKey(item.ref)}:${item.url}`}
             type="button"
             title={item.filename}
             aria-pressed={active}
             onClick={() => onPick(item)}
-            className={`overflow-hidden rounded-lg border text-left ${active ? 'border-accent-blue ring-1 ring-accent-blue/40' : 'border-border hover:border-accent-blue/50'}`}
+            className={`w-full overflow-hidden rounded-lg border text-left ${active ? 'border-accent-blue ring-1 ring-accent-blue/40' : 'border-border hover:border-accent-blue/50'}`}
           >
             <div className="flex aspect-square items-center justify-center bg-black/40">
               {item.thumbnailUrl ? (
-                <img src={item.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                <img src={item.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
               ) : (
                 <KindGlyph kind={item.kind} size={22} />
               )}
@@ -156,6 +161,8 @@ export function ExplorerGallery({
             <div className="truncate px-1.5 pt-1 text-[9px] text-text-secondary">{item.title}</div>
             <div className="truncate px-1.5 pb-1 text-[8px] text-text-muted">{formatCreatedDate(item.createdAt)}</div>
           </button>
+          {onToggle && <label className="flex items-center gap-2 text-xs"><input type="checkbox" aria-label={item.filename} checked={checked?.has(assetRefKey(item.ref)) ?? false} onChange={() => onToggle(item)} />{t('explorer.selectItem')}</label>}
+          </div>
         )
       })}
     </div>

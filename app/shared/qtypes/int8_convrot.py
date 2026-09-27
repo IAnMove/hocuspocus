@@ -630,7 +630,38 @@ def apply_pre_quantization(
     ]
     for key in markers:
         state_dict.pop(key, None)
-    return quantization_map or {}, []
+    embeddings = {}
+    for name, module in model.named_modules():
+        if not isinstance(module, torch.nn.Embedding):
+            continue
+        # MMGP replaces Embedding during requantization. Its generic QEmbedding
+        # dequantizes E @ H, but (unlike Linear) has no activation to rotate.
+        # Invert the symmetric, orthogonal H on the selected rows afterwards.
+        group = state_dict.pop(name + ".convrot_group_size", None)
+        size = int(group.item()) if group is not None else 0
+        if size:
+            if size < 4 or math.log(size, 4) % 1 != 0 or module.embedding_dim % size:
+                raise ValueError(f"Invalid ConvRot embedding group {size} for '{name}' ({module.embedding_dim} features)")
+        if size or hasattr(module, "_convrot_embedding_hook"):
+            embeddings[name] = size
+
+    def restore_embedding_basis(loaded_model):
+        for name, size in embeddings.items():
+            module = loaded_model.get_submodule(name)
+            previous = getattr(module, "_convrot_embedding_hook", None)
+            if previous is not None:
+                previous.remove()
+                del module._convrot_embedding_hook
+            if size:
+                module._convrot_embedding_hook = module.register_forward_hook(
+                    functools.partial(_unrotate_embedding, group_size=size)
+                )
+
+    return quantization_map or {}, [restore_embedding_basis] if embeddings else []
+
+
+def _unrotate_embedding(module, inputs, output, *, group_size):
+    return _rotate_activation(output, group_size)
 
 
 def detect_quantization_label_from_filename(filename, verboseLevel=0):

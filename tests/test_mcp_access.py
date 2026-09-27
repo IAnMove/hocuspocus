@@ -1,5 +1,6 @@
 import os
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -8,18 +9,29 @@ from routers.wangp_mcp import create_wangp_mcp_router
 from services.mcp_access import McpAccess
 
 
-def client_for(tmp_path, environment=lambda: ''):
+MCP_ENDPOINTS = ('/api/v1/mcp', '/api/v1/wangp/mcp')
+
+
+def client_for(tmp_path, environment=lambda: '', profile='full'):
     access = McpAccess(tmp_path / 'private.json', env_token=environment)
     app = FastAPI()
     app.include_router(create_mcp_access_router(access))
-    app.include_router(create_wangp_mcp_router(handlers={}, token_getter=access.token, journal_path=str(tmp_path / 'journal.db')))
+    if profile == 'core':
+        from routers.core_mcp import create_core_mcp_router
+        app.include_router(create_core_mcp_router(access))
+    else:
+        app.include_router(create_wangp_mcp_router(handlers={}, token_getter=access.token, journal_path=str(tmp_path / 'journal.db')))
     return access, TestClient(app, base_url='http://127.0.0.1:8080')
 
 
-def test_toggle_token_rotation_revocation_and_private_storage(tmp_path):
-    access, client = client_for(tmp_path)
+@pytest.mark.parametrize('endpoint', MCP_ENDPOINTS)
+@pytest.mark.parametrize('profile', ('full', 'core'))
+def test_toggle_token_rotation_revocation_and_private_storage(tmp_path, endpoint, profile):
+    access, client = client_for(tmp_path, profile=profile)
     headers = {'Origin': 'http://127.0.0.1:8080'}
-    assert not client.get('/api/v1/settings/mcp').json()['enabled']
+    status = client.get('/api/v1/settings/mcp').json()
+    assert not status['enabled']
+    assert status['endpoint'] == '/api/v1/mcp'
     created = client.put('/api/v1/settings/mcp', json={'enabled': True}, headers=headers)
     assert created.status_code == 200
     token = created.json()['token']
@@ -29,7 +41,7 @@ def test_toggle_token_rotation_revocation_and_private_storage(tmp_path):
     if os.name != 'nt':
         assert access.path.stat().st_mode & 0o777 == 0o600
     def ping(key):
-        return client.post('/api/v1/wangp/mcp', headers={'Authorization': 'Bearer ' + key}, json={'jsonrpc': '2.0', 'id': 1, 'method': 'ping'})
+        return client.post(endpoint, headers={'Authorization': 'Bearer ' + key}, json={'jsonrpc': '2.0', 'id': 1, 'method': 'ping'})
     assert ping(token).status_code == 200
     assert McpAccess(access.path, env_token=lambda: '').token() == token
     replacement = client.put('/api/v1/settings/mcp', json={'enabled': True, 'rotate': True}, headers=headers).json()['token']
@@ -56,7 +68,8 @@ def test_env_precedence_toggle_and_no_environment_secret_disclosure(tmp_path):
     assert not access.token()
 
 
-def test_shared_lan_mcp_uses_its_own_token_without_unlocking_other_apis(tmp_path, monkeypatch):
+@pytest.mark.parametrize('endpoint', MCP_ENDPOINTS)
+def test_shared_lan_mcp_uses_its_own_token_without_unlocking_other_apis(tmp_path, monkeypatch, endpoint):
     from services.lan_auth import LanAuthMiddleware
     monkeypatch.setenv('PINOKIO_SHARE_LOCAL', 'true')
     monkeypatch.setenv('LOREFRAME_LAN_AUTH', 'true')
@@ -69,8 +82,8 @@ def test_shared_lan_mcp_uses_its_own_token_without_unlocking_other_apis(tmp_path
     app.include_router(create_wangp_mcp_router(handlers={}, token_getter=access.token, journal_path=str(tmp_path / 'journal.db')))
     client = TestClient(app, base_url='http://192.168.1.87:8080')
     message = {'jsonrpc': '2.0', 'id': 1, 'method': 'ping'}
-    assert client.post('/api/v1/wangp/mcp', json=message).status_code == 401
-    assert client.post('/api/v1/wangp/mcp', json=message, headers={'Authorization': 'Bearer ' + token}).status_code == 200
+    assert client.post(endpoint, json=message).status_code == 401
+    assert client.post(endpoint, json=message, headers={'Authorization': 'Bearer ' + token}).status_code == 200
     assert client.get('/api/v1/settings/mcp', headers={'Authorization': 'Bearer ' + token}).status_code == 401
     access.update(False)
-    assert client.post('/api/v1/wangp/mcp', json=message, headers={'Authorization': 'Bearer ' + token}).status_code == 503
+    assert client.post(endpoint, json=message, headers={'Authorization': 'Bearer ' + token}).status_code == 503

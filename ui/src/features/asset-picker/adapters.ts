@@ -1,4 +1,4 @@
-import { getServerMediaReference, type ApiOutput } from '../../api/outputs'
+import { getOutputThumbnailUrl, getServerMediaReference, type ApiOutput } from '../../api/outputs'
 import type { AssetCatalogItem, AssetKind } from '../../api/assets'
 import { displayAssetTitle, knownCreatedAt } from './titles.ts'
 import type { AssetConstraints, AssetRef, Compatibility, PickerItem } from './types.ts'
@@ -10,6 +10,11 @@ const OUTPUT_KIND: Record<ApiOutput['type'], AssetKind> = {
   model3d: 'model3d',
   scene: 'scene',
   comic: 'document',
+}
+
+export function pickerThumbnailUrl(filename: string, workspace: string): string {
+  const url = getOutputThumbnailUrl(filename, workspace)
+  return `${url}${url.includes('?') ? '&' : '?'}size=sm`
 }
 
 export function catalogLocation(item: AssetCatalogItem, workspaceId: string) {
@@ -44,7 +49,8 @@ export function catalogItemToPickerItem(
     createdAt,
     sizeBytes: item.size_bytes,
     url: location?.url || item.url,
-    thumbnailUrl: item.kind === 'image' ? (location?.url || item.url) : '',
+    thumbnailUrl: item.kind === 'image' || item.kind === 'video'
+      ? pickerThumbnailUrl(filename, ref.workspaceId) : '',
   }
 }
 
@@ -70,7 +76,8 @@ export function catalogItemToOutput(item: AssetCatalogItem, workspaceId: string)
     created_at: item.created_at,
     completed_at: item.completed_at,
     url: location.url || item.url,
-    thumbnail_url: item.kind === 'image' ? (location.url || item.url) : '',
+    thumbnail_url: item.kind === 'image' || item.kind === 'video'
+      ? pickerThumbnailUrl(location.filename || item.filename, location.workspace_id || workspaceId) : '',
     asset_id: item.id,
     workspace_id: location.workspace_id || workspaceId,
     path: location.filename || item.filename,
@@ -116,7 +123,10 @@ export function outputToPickerItem(item: ApiOutput, workspaceId: string): Picker
     createdAt,
     sizeBytes: item.size,
     url: item.url,
-    thumbnailUrl: item.thumbnail_url || (item.type === 'image' ? item.url : ''),
+    thumbnailUrl: (item.type === 'image' || item.type === 'video') && scope
+      && !/^(blob:|data:|local-edit:)/.test(item.url)
+      ? pickerThumbnailUrl(item.name, scope)
+      : item.thumbnail_url || '',
   }
 }
 

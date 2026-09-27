@@ -36,6 +36,47 @@ from services.job_lifecycle import (
     snapshot_job,
 )
 from services.operation_logging import log_operation, operation_scope
+from services.director.pipeline_locks import (
+    PipelineBusyError,
+    _claim_pipeline_delete,
+    _claim_pipeline_operation,
+    _claim_pipeline_operation_locked,
+    _exclusive_pipeline_operation,
+    _release_pipeline_delete,
+    _release_pipeline_operation,
+)
+from services.director.pipeline_observer import (
+    _notify_pipeline_snapshot,
+    _observer_task_ids,
+    _pipeline_observer_snapshot,
+)
+from services.director.pipeline_reconcile import (
+    _normalize_interrupted_repair,
+    _reconcile_pipeline_state_file,
+    mark_stale_running_pipeline,
+)
+from services.director.comic_identity import (
+    _comic_preflight_fingerprint,
+    _comic_shot,
+    _comic_shot_seed,
+    _stable_comic_shot_id,
+)
+from services.director.pipeline_repair_plan import (
+    _persist_repair_state,
+    _persist_repair_state_unlocked,
+    _plan_pipeline_repair,
+    _repair_queue_message,
+    _repair_start_result,
+)
+from services.director.h3_story_contracts import (
+    _h3_apply_identity_contract,
+    _h3_apply_portrait_composition_contract,
+    _h3_apply_reference_contract,
+    _h3_format_audio_policy,
+    _h3_parse_optimized_prompts,
+    _h3_preserve_audio_contract,
+    _h3_validated_candidate,
+)
 from services.director_model_compat import (
     DIRECTOR_PIPELINE_TYPES,
     assess_director_model,
@@ -133,10 +174,6 @@ _CANCELLED_ARTIFACT_FIELDS = {
     "_clip_video_files",
     "_clip_timings",
 }
-
-class PipelineBusyError(RuntimeError):
-    """Raised when a Dashboard mutation conflicts with active pipeline work."""
-
 
 class DirectorModelCompatibilityError(ValueError):
     """Raised before Director submits work to an incompatible model."""
@@ -651,76 +688,6 @@ def _director_native_window_frames(
     )
 
 
-def _claim_pipeline_operation_locked(pid: str) -> bool:
-    """Reserve a terminal pipeline while ``_pipeline_lock`` is held."""
-    if (
-        pid in _pipeline_threads
-        or bool(_pipeline_child_jobs.get(pid))
-        or pid in _pipeline_starting
-        or pid in _pipeline_operations
-        or pid in _pipeline_deleting
-        or _pipelines.get(pid, {}).get("status") in {
-            "queued", "planning", "running", "paused",
-        }
-    ):
-        return False
-    _pipeline_operations.add(pid)
-    return True
-
-
-def _claim_pipeline_operation(pid: str) -> bool:
-    """Reserve a terminal pipeline for one Dashboard mutation."""
-    with _pipeline_lock:
-        return _claim_pipeline_operation_locked(pid)
-
-
-def _release_pipeline_operation(pid: str) -> None:
-    with _pipeline_lock:
-        _pipeline_operations.discard(pid)
-
-
-def _claim_pipeline_delete(pid: str) -> bool:
-    """Reserve deletion before taking the state-file lock."""
-    with _pipeline_lock:
-        pipeline = _pipelines.get(pid)
-        if (
-            pid in _pipeline_threads
-            or bool(_pipeline_child_jobs.get(pid))
-            or pid in _pipeline_starting
-            or pid in _pipeline_operations
-            or pid in _pipeline_deleting
-            or (
-                pipeline
-                and pipeline.get("status") in {
-                    "queued", "planning", "running", "paused",
-                }
-            )
-        ):
-            return False
-        _pipeline_deleting.add(pid)
-        return True
-
-
-def _release_pipeline_delete(pid: str) -> None:
-    with _pipeline_lock:
-        _pipeline_deleting.discard(pid)
-
-
-def _exclusive_pipeline_operation(function):
-    """Keep delete/resume/live saves away from a Dashboard media mutation."""
-    @wraps(function)
-    def wrapped(out_dir: str, pid: str, *args, **kwargs):
-        if not _claim_pipeline_operation(pid):
-            raise PipelineBusyError(
-                "Pipeline is still active; try again shortly.",
-            )
-        try:
-            return function(out_dir, pid, *args, **kwargs)
-        finally:
-            _release_pipeline_operation(pid)
-    return wrapped
-
-
 # ── Reference art-style lock ────────────────────────────────────────────
 # Flux Klein only honors a reference's art style when the MEDIUM IS NAMED
 # AT THE START of the prompt ("Maintain the same black and white hand
@@ -868,63 +835,7 @@ def _normalise_master_seed(params: dict) -> int:
     return value
 
 
-def _comic_shot(params: dict, index: int) -> dict:
-    shots = params.get("comic_shots") or []
-    return (
-        shots[index]
-        if index < len(shots) and isinstance(shots[index], dict)
-        else {}
-    )
 
-
-def _stable_comic_shot_id(
-    params: dict,
-    index: int,
-    plan: Optional[dict] = None,
-) -> str:
-    """Resolve the stable identity used for seeds, edits and PRE diffs."""
-    plan = plan or {}
-    metadata = plan.get("metadata") if isinstance(plan.get("metadata"), dict) else {}
-    shot = _comic_shot(params, index)
-    for source in (plan, metadata, shot):
-        for key in ("shot_id", "primary_source_panel_id", "panel_id", "id"):
-            value = str(source.get(key) or "").strip()
-            if value:
-                return value
-        panel_ids = source.get("source_panel_ids")
-        if isinstance(panel_ids, list) and panel_ids:
-            values = [
-                str(item).strip()
-                for item in panel_ids
-                if str(item).strip()
-            ]
-            if values:
-                return "+".join(values)
-    page = shot.get("page_number")
-    panel = shot.get("panel_number")
-    return f"comic-shot-{page or 0}-{panel or index + 1}"
-
-
-def _comic_shot_seed(
-    params: dict,
-    index: int,
-    plan: Optional[dict] = None,
-) -> int:
-    """Derive a reproducible seed from master seed and stable shot ID."""
-    plan = plan or {}
-    metadata = plan.get("metadata") if isinstance(plan.get("metadata"), dict) else {}
-    shot = _comic_shot(params, index)
-    for source in (plan, metadata, shot):
-        try:
-            explicit = int(source.get("seed"))
-        except (TypeError, ValueError):
-            continue
-        if explicit >= 0:
-            return explicit
-    master = _normalise_master_seed(params)
-    shot_id = _stable_comic_shot_id(params, index, plan)
-    digest = hashlib.sha256(f"{master}:{shot_id}".encode("utf-8")).digest()
-    return int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
 
 
 def _is_ltx_distilled(video_model: str) -> bool:
@@ -961,37 +872,6 @@ def _effective_ltx_runtime(video_model: str, video_params: dict) -> dict:
         "requested_guidance_scale": requested_guidance,
         "guidance_note": "",
     }
-
-
-def _comic_preflight_fingerprint(
-    params: dict,
-    clip_plans: list[dict],
-    planned_clips: list[dict],
-    clip_images: Optional[list[str]] = None,
-    out_dir: Optional[str] = None,
-) -> str:
-    """Fingerprint every input that can change what Comic PRE promises."""
-    source_paths = params.get("provided_clip_image_paths") or []
-    prepared = [
-        _file_identity(os.path.join(out_dir or "", str(filename or "")))
-        for filename in (clip_images or [])
-    ]
-    contract = {
-        "comic_id": params.get("comic_id"),
-        "master_seed": _normalise_master_seed(params),
-        "video_model": params.get("video_model"),
-        "video_params": params.get("video_params") or {},
-        "video_loras": params.get("video_loras") or {},
-        "video_image_fit": params.get("video_image_fit"),
-        "comic_motion_fidelity": params.get("comic_motion_fidelity"),
-        "comic_end_frame_mode": params.get("comic_end_frame_mode"),
-        "comic_shots": params.get("comic_shots") or [],
-        "clip_plans": clip_plans,
-        "planned_clips": planned_clips,
-        "sources": [_file_identity(path) for path in source_paths],
-        "prepared": prepared,
-    }
-    return _json_fingerprint(contract)
 
 
 def _map_completed_clip_videos(
@@ -1586,40 +1466,7 @@ def _save_pipeline_state_locked(pid: str) -> bool:
         return False
 
 
-def _normalize_interrupted_repair(state: dict, pid: str) -> bool:
-    """Mark a persisted active repair interrupted when its worker is gone.
 
-    Browser reloads leave the non-daemon worker registered, so they continue
-    normally.  A Maestro process restart removes the registry; changing the
-    saved status makes that distinction visible and leaves Repair available as
-    an idempotent resume-from-disk operation.
-    """
-    repair = state.get("repair")
-    if not isinstance(repair, dict):
-        return False
-    if repair.get("status") not in _REPAIR_ACTIVE_STATUSES:
-        return False
-    operation_id = repair.get("operation_id")
-    with _pipeline_lock:
-        control = _pipeline_repairs.get(pid)
-        worker_present = bool(
-            control
-            and control.get("operation_id") == operation_id
-        )
-    if worker_present:
-        return False
-
-    now = time.time()
-    repair.update({
-        "status": "interrupted",
-        "phase": "interrupted",
-        "clip_index": None,
-        "message": "Repair was interrupted when HocusPocus Lab stopped. Start Repair again to continue.",
-        "error": "HocusPocus Lab stopped before the repair finished.",
-        "updated_at": now,
-        "completed_at": now,
-    })
-    return True
 
 
 def _pipeline_media_for_job(pid: str, out_dir: str, expected_clips: int) -> Optional[dict]:
@@ -1806,58 +1653,7 @@ def _h3_checkpoint_is_complete(data: dict, out_dir: str) -> bool:
     return True
 
 
-def _reconcile_pipeline_state_file(filepath: str, data: dict) -> dict:
-    """Promote a timed-out checkpoint when its generation actually finished."""
-    data = _ensure_h3_segment_state(data, os.path.dirname(filepath))
-    pid = str(data.get("pipeline_id") or "")
-    clips = data.get("clips") if isinstance(data.get("clips"), list) else []
-    if not pid or not clips:
-        return data
-    recovered = _pipeline_media_for_job(pid, os.path.dirname(filepath), len(clips))
-    if not recovered:
-        return data
 
-    already_reconciled = (
-        data.get("status") == "completed"
-        and recovered["final"] in (data.get("output_files") or [])
-        and all(
-            clip.get("video_filename") == recovered["clips"][index]
-            for index, clip in enumerate(clips)
-        )
-    )
-    if already_reconciled:
-        return data
-
-    for index, clip in enumerate(clips):
-        clip["video_filename"] = recovered["clips"][index]
-    data["status"] = "completed"
-    data["output_files"] = [recovered["final"]]
-    data["completed_at"] = max(
-        float(data.get("completed_at") or 0),
-        float(recovered["created_at"] or 0),
-    )
-    data["recovered_at"] = time.time()
-    data["recovery_note"] = (
-        "Recovered completed generation outputs after the Director supervisor "
-        "timed out."
-    )
-
-    temp_path = f"{filepath}.{uuid.uuid4().hex[:8]}.tmp"
-    try:
-        with open(temp_path, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2, ensure_ascii=False, default=str)
-        os.replace(temp_path, filepath)
-        print(
-            f"[Pipeline {pid}] Recovered {len(clips)} clip videos and final "
-            f"movie {recovered['final']} from job {recovered['job_id']}"
-        )
-    finally:
-        try:
-            if os.path.isfile(temp_path):
-                os.remove(temp_path)
-        except OSError:
-            pass
-    return data
 
 
 def _summarize_pipeline_state_file(filepath: str, workspace_name: str) -> Optional[dict]:
@@ -1873,16 +1669,9 @@ def _summarize_pipeline_state_file(filepath: str, workspace_name: str) -> Option
             # that this stale list snapshot then overwrote.
             pid = data.get("pipeline_id", "")
             changed = _normalize_interrupted_repair(data, pid)
-
-            # Detect stale "running" pipelines while retaining the
-            # same serialization boundary as repair normalization.
-            status = data.get("status", "unknown")
-            with _pipeline_lock:
-                pipeline_present = pid in _pipelines
-            if status == "running" and not pipeline_present:
-                data["status"] = "crashed"
-                status = "crashed"
+            if mark_stale_running_pipeline(data, pid):
                 changed = True
+            status = data.get("status", "unknown")
             if changed:
                 _write_pipeline_json_unlocked(filepath, data)
         clip_count = (
@@ -2192,8 +1981,10 @@ def _backfill_clip_video_attempts(state: dict, state_dir: str) -> dict:
             selected = ""
         clip["selected_video_filename"] = selected or None
         if selected:
+            # A Studio selection is the playback authority, but it does not
+            # refresh inputs. Image reruns keep video_stale so Rejoin/export
+            # cannot assemble a take that no longer matches the start frame.
             clip["video_filename"] = selected
-            clip["video_stale"] = False
         clip["video_attempts"] = sorted(
             attempts_by_clip[index].values(),
             key=lambda item: (float(item.get("created_at") or 0), item["filename"]),
@@ -4356,6 +4147,19 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
     state = _ensure_h3_segment_state(state)
     clips = state.get("clips", [])
     video_files = []
+    # Image reruns keep video_stale on the clip even when a Studio selection or
+    # H3 segment list still points at playable files. Gate Rejoin before the
+    # H3 branch, which otherwise treats those files as current.
+    stale_clip_numbers = [
+        str(index + 1)
+        for index, clip in enumerate(clips)
+        if clip.get("video_stale")
+    ]
+    if stale_clip_numbers:
+        raise ValueError(
+            "Regenerate stale video clip(s) "
+            f"{', '.join(stale_clip_numbers)} before rejoining."
+        )
     legacy_h3_segments = (
         _is_sequential_h3_model(state.get("video_model"))
         and any(clip.get("h3_segments") for clip in clips)
@@ -4390,17 +4194,6 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
         if stale:
             raise ValueError("Regenerate stale H3 continuations before rejoining the final video")
     else:
-        stale_clip_numbers = [
-            str(index + 1)
-            for index, clip in enumerate(clips)
-            if clip.get("video_stale")
-        ]
-        if stale_clip_numbers:
-            raise ValueError(
-                "Regenerate stale video clip(s) "
-                f"{', '.join(stale_clip_numbers)} before rejoining."
-            )
-
         if shot_images_required(_saved_pipeline_shot_image_policy(state)):
             invalid_start_numbers = _invalid_saved_media_numbers(
                 [clip.get("start_image_filename") for clip in clips],
@@ -4514,148 +4307,6 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
         }
     except Exception as e:
         raise RuntimeError(f"Rejoin failed: {e}")
-
-
-def _plan_pipeline_repair(out_dir: str, pid: str, state: dict) -> dict:
-    """Build a deterministic repair plan from recorded files on disk."""
-    pipeline_file = _find_pipeline_file(out_dir, pid)
-    if not pipeline_file:
-        raise ValueError(f"Pipeline {pid} not found")
-    clip_out_dir = os.path.dirname(pipeline_file)
-    clips = state.get("clips") or []
-
-    requires_shot_images = shot_images_required(
-        _saved_pipeline_shot_image_policy(state)
-    )
-    invalid_images = (
-        {
-            number - 1
-            for number in _invalid_saved_media_numbers(
-                [clip.get("start_image_filename") for clip in clips],
-                len(clips),
-                clip_out_dir,
-                "image",
-            )
-        }
-        if requires_shot_images
-        else set()
-    )
-    invalid_videos = {
-        number - 1
-        for number in _invalid_saved_media_numbers(
-            [clip.get("video_filename") for clip in clips],
-            len(clips),
-            clip_out_dir,
-            "video",
-        )
-    }
-    image_indices = sorted(invalid_images)
-    video_indices = sorted(
-        invalid_videos
-        | invalid_images
-        | {
-            index
-            for index, clip in enumerate(clips)
-            if clip.get("video_stale")
-        }
-    )
-
-    missing_image_prompts = [
-        index + 1 for index in image_indices
-        if not str(clips[index].get("image_prompt") or "").strip()
-    ]
-    if missing_image_prompts:
-        labels = ", ".join(str(index) for index in missing_image_prompts)
-        raise ValueError(
-            f"Missing image prompt for repair clip(s) {labels}."
-        )
-    missing_video_prompts = [
-        index + 1 for index in video_indices
-        if not str(clips[index].get("video_prompt") or "").strip()
-    ]
-    if missing_video_prompts:
-        labels = ", ".join(str(index) for index in missing_video_prompts)
-        raise ValueError(
-            f"Missing video prompt for repair clip(s) {labels}."
-        )
-
-    should_rejoin = len(clips) >= 2
-    return {
-        "image_indices": image_indices,
-        "video_indices": video_indices,
-        "should_rejoin": should_rejoin,
-        "clip_count": len(clips),
-        "total": (
-            len(image_indices)
-            + len(video_indices)
-            + (1 if should_rejoin else 0)
-        ),
-    }
-
-
-def _repair_queue_message(plan: dict) -> str:
-    parts = []
-    image_count = len(plan["image_indices"])
-    video_count = len(plan["video_indices"])
-    if image_count:
-        parts.append(f"{image_count} image{'s' if image_count != 1 else ''}")
-    if video_count:
-        parts.append(f"{video_count} video{'s' if video_count != 1 else ''}")
-    if plan["should_rejoin"]:
-        parts.append("final join")
-    return "Queued " + (", ".join(parts) if parts else "repair check")
-
-
-def _persist_repair_state_unlocked(
-    out_dir: str,
-    pid: str,
-    control: dict,
-    *,
-    replace: bool = False,
-    **updates,
-) -> Optional[dict]:
-    """Persist repair status while the caller holds control['state_lock']."""
-    operation_id = control["operation_id"]
-    now = time.time()
-
-    def _update(state):
-        existing = state.get("repair")
-        if (
-            not replace
-            and isinstance(existing, dict)
-            and existing.get("operation_id") != operation_id
-        ):
-            return
-        repair = {} if replace else dict(existing or {})
-        repair.update(updates)
-        repair["operation_id"] = operation_id
-        repair["updated_at"] = now
-        state["repair"] = repair
-
-    saved = _update_saved_pipeline(out_dir, pid, _update)
-    repair = (saved or {}).get("repair")
-    if not isinstance(repair, dict) or repair.get("operation_id") != operation_id:
-        return None
-    snapshot = dict(repair)
-    with _pipeline_lock:
-        current = _pipeline_repairs.get(pid)
-        if current is control:
-            current["snapshot"] = snapshot
-    return snapshot
-
-
-def _persist_repair_state(
-    out_dir: str,
-    pid: str,
-    control: dict,
-    *,
-    replace: bool = False,
-    **updates,
-) -> Optional[dict]:
-    with control["state_lock"]:
-        return _persist_repair_state_unlocked(
-            out_dir, pid, control, replace=replace, **updates,
-        )
 
 
 def _raise_if_repair_cancelled(control: dict) -> None:
@@ -4878,20 +4529,6 @@ def _run_pipeline_repair_after_ready(
     _run_pipeline_repair(out_dir, pid, control, plan)
 
 
-def _repair_start_result(pid: str, control: dict) -> dict:
-    """Wait for an atomic start reservation to publish its first snapshot."""
-    ready_event = control.get("ready_event")
-    if ready_event is not None:
-        ready_event.wait()
-    start_error = control.get("start_error")
-    if start_error is not None:
-        raise start_error
-    return {
-        "pipeline_id": pid,
-        "repair": dict(control.get("snapshot") or {}),
-    }
-
-
 def start_pipeline_repair(out_dir: str, pid: str) -> dict:
     """Start or reconnect to a server-owned repair batch."""
     with _pipeline_lock:
@@ -5039,85 +4676,6 @@ def cancel_pipeline_repair(out_dir: str, pid: str) -> Optional[dict]:
             cancel_requested=True,
         )
     return snapshot
-
-
-def _pipeline_observer_snapshot(pipeline: dict) -> dict:
-    """Build one immutable, non-sensitive snapshot for task publication."""
-    snapshot = copy.deepcopy(pipeline)
-    params = snapshot.pop("params", None)
-    snapshot.pop("_llm_passes", None)
-    snapshot["pipeline_type"] = snapshot.get("pipeline_type") or (
-        params or {}
-    ).get("pipeline_type", "")
-    # ``params`` is intentionally omitted from observer snapshots because it
-    # may contain prompts and provider details. Provenance is the portable,
-    # non-sensitive identity contract needed by the task adapter, so project
-    # and song-to-video references must survive that projection.
-    if isinstance(params, dict) and isinstance(params.get("provenance"), dict):
-        snapshot["provenance"] = copy.deepcopy(params["provenance"])
-    details = _public_pipeline_generation_details(
-        params,
-        len(snapshot.get("clip_plans") or []),
-    )
-    if details:
-        snapshot["generation_details"] = details
-    return snapshot
-
-
-def _observer_task_ids(result) -> tuple[Optional[str], Optional[str]]:
-    """Accept both TaskRegistry records and explicit observer ID payloads."""
-    if not isinstance(result, dict):
-        return None, None
-    task_id = str(
-        result.get("task_id") or result.get("id") or ""
-    ).strip()
-    root_task_id = str(
-        result.get("root_task_id")
-        or result.get("root_id")
-        or task_id
-        or ""
-    ).strip()
-    return task_id or None, root_task_id or None
-
-
-def _notify_pipeline_snapshot(
-    pid: str,
-    snapshot: Optional[dict] = None,
-) -> Optional[dict]:
-    """Publish a pipeline snapshot without holding Director's registry lock.
-
-    The callback is deliberately best-effort: task observability must never
-    stop a render.  A callback may return either the canonical TaskRegistry
-    record (``id``/``root_id``) or explicit ``task_id``/``root_task_id``
-    fields.  Retaining those IDs on the pipeline lets nested LLM calls attach
-    themselves to the Director root from inside the background worker.
-    """
-    with _pipeline_lock:
-        observer = _pipeline_state_observer
-        if snapshot is None:
-            pipeline = _pipelines.get(pid)
-            snapshot = copy.deepcopy(pipeline) if pipeline else None
-    if observer is None or snapshot is None:
-        return None
-
-    public_snapshot = _pipeline_observer_snapshot(snapshot)
-    workspace = str(public_snapshot.get("workspace") or "default")
-    try:
-        result = observer(public_snapshot, workspace)
-    except Exception as exc:
-        print(f"[Pipeline {pid}] State observer warning (non-fatal): {exc}")
-        return None
-
-    task_id, root_task_id = _observer_task_ids(result)
-    if task_id or root_task_id:
-        with _pipeline_lock:
-            pipeline = _pipelines.get(pid)
-            if pipeline is not None:
-                if task_id:
-                    pipeline["task_id"] = task_id
-                if root_task_id:
-                    pipeline["root_task_id"] = root_task_id
-    return result if isinstance(result, dict) else None
 
 
 def init(
@@ -12425,10 +11983,15 @@ def _run_comic_renderer_pipeline(
         "concatenate_multi_clip_videos",
         None,
     )
+    # Comic assembly is hard-cut only (see comic_edit_transition forced to
+    # "none" below). Recast/repaint/outpaint pass audio_duration_sec so
+    # concatenate() skips freeze-tail + crossfade. Without that lock, two
+    # shots become hold+xfade and the timeline is longer than the storyboard.
     if not callable(concatenate) or not concatenate(
         clip_paths,
         final_path,
         None,
+        audio_duration_sec=sum(durations),
     ):
         raise RuntimeError(
             "All comic shots passed validation, but final hard-cut assembly "
@@ -12598,69 +12161,7 @@ def _h3_sentence_windows(prompt: str, segment_count: int) -> list[str]:
     return windows
 
 
-def _h3_apply_reference_contract(prompt: str, reference_mode: str) -> str:
-    text = str(prompt or "").strip()
-    exact = "Use the supplied image as the exact first frame."
-    exact_pattern = r"use the supplied images? as the exact first frame\."
-    if reference_mode == "references":
-        replacement = (
-            "Use the supplied images as visual references for identity, wardrobe, "
-            "environment and style. Compose a new opening frame from that reference set."
-        )
-        text, replacements = re.subn(exact_pattern, replacement, text, flags=re.I)
-        if not replacements and "compose a new opening frame" not in text.casefold():
-            text = f"{replacement} {text}".strip()
-        return text
-    authority = (
-        "The visible wardrobe and environment in that first frame are authoritative; "
-        "ignore later wording that conflicts with their colors or design."
-    )
-    if "visible wardrobe and environment" not in text.casefold():
-        remainder = re.sub(exact_pattern, "", text, flags=re.I).strip()
-        text = f"{exact} {authority} {remainder}".strip()
-    return text
 
-
-def _h3_apply_identity_contract(prompt: str) -> str:
-    """Keep recurring faces stable when H3 has to reveal them after occlusion."""
-    text = str(prompt or "").strip()
-    marker = "Same faces and wardrobe throughout"
-    if marker.casefold() in text.casefold():
-        return text
-    identity = "Same faces and wardrobe throughout."
-    parts = re.split(r"\bAudio\s*:", text, maxsplit=1, flags=re.I)
-    if len(parts) == 2:
-        return f"{parts[0].strip()} {identity}\nAudio: {parts[1].strip()}".strip()
-    return f"{text} {identity}".strip()
-
-
-def _h3_apply_portrait_composition_contract(prompt: str, resolution: str) -> str:
-    """Tell H3 to compose for the actual tall canvas instead of letterboxing."""
-    text = str(prompt or "").strip()
-    try:
-        width, height = (
-            int(value) for value in str(resolution or "").lower().split("x", 1)
-        )
-    except (TypeError, ValueError):
-        return text
-    marker = "PORTRAIT COMPOSITION LOCK:"
-    if height <= width or marker.casefold() in text.casefold():
-        return text
-    contract = (
-        f"{marker} Compose natively for the full {width}x{height} vertical portrait "
-        "canvas. Stage subjects and camera movement for the tall frame; never place "
-        "a horizontal landscape frame, letterbox bars, rotated image, or sideways "
-        "composition inside it."
-    )
-    parts = re.split(
-        r"(?im)^\s*overall_soundscape\s*:", text, maxsplit=1,
-    )
-    if len(parts) == 2:
-        return (
-            f"{parts[0].rstrip()} {contract}\n\n"
-            f"overall_soundscape: {parts[1].lstrip()}"
-        )
-    return f"{text} {contract}".strip()
 
 
 def _h3_authored_segment_windows(prompts: list[str], segment_count: int) -> list[str]:
@@ -12690,14 +12191,7 @@ def _h3_authored_segment_windows(prompts: list[str], segment_count: int) -> list
     return windows
 
 
-def _h3_format_audio_policy(*sources) -> str:
-    for source in sources:
-        if not isinstance(source, dict):
-            continue
-        value = source.get("h3_audio_policy") or source.get("minimax_h3_audio_policy")
-        if value:
-            return str(value)
-    return "native"
+
 
 
 def _minimax_h3_segment_prompt(
@@ -12797,74 +12291,6 @@ def _minimax_h3_segment_prompt(
             plan,
         ),
     )
-
-
-def _h3_parse_optimized_prompts(response: str) -> list[dict]:
-    """Parse the grammar-constrained H3 validator response defensively."""
-    text = re.sub(r"```(?:json)?\s*|```", "", str(response or ""), flags=re.I).strip()
-    try:
-        parsed = json.loads(text)
-    except (TypeError, json.JSONDecodeError):
-        match = re.search(r"\[[\s\S]*\]", text)
-        if not match:
-            return []
-        try:
-            parsed = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return []
-    if isinstance(parsed, dict):
-        parsed = parsed.get("segments") or []
-    return [item for item in parsed if isinstance(item, dict)] if isinstance(parsed, list) else []
-
-
-def _h3_preserve_audio_contract(candidate: str, draft: str) -> str:
-    """Accept visual phrasing from the validator while keeping authored audio verbatim."""
-    if "overall_soundscape:" in draft and "non_diegetic_music:" in draft:
-        draft_audio = draft.split("overall_soundscape:", 1)[1]
-        candidate_visual = candidate.split("overall_soundscape:", 1)[0].rstrip()
-        return f"{candidate_visual}\noverall_soundscape:{draft_audio}".strip()
-    draft_parts = re.split(r"\bAudio\s*:", draft, maxsplit=1, flags=re.I)
-    if len(draft_parts) != 2:
-        return candidate.strip()
-    visual = re.split(r"\bAudio\s*:", candidate, maxsplit=1, flags=re.I)[0].strip()
-    return f"{visual}\nAudio: {draft_parts[1].strip()}".strip()
-
-
-def _h3_validated_candidate(candidate: str, draft: str, reference_mode: str) -> str:
-    """Reject optimizer drift and reapply contracts the LLM is not allowed to alter."""
-    candidate = _h3_preserve_audio_contract(str(candidate or ""), draft)
-    if "overall_soundscape:" not in draft:
-        candidate = _h3_apply_reference_contract(candidate, reference_mode)
-        if len(candidate) < max(40, len(draft) // 3) or len(candidate) > max(6000, len(draft) * 2):
-            return ""
-        if "audio:" not in candidate.casefold():
-            return ""
-        for quoted in re.findall(r'"([^"\n]+)"', draft):
-            if quoted not in candidate:
-                return ""
-        if reference_mode == "references" and "exact first frame" in candidate.casefold():
-            return ""
-        if reference_mode == "first_frame" and "exact first frame" not in candidate.casefold():
-            return ""
-        return candidate
-    if len(candidate) < max(40, len(draft) // 3) or len(candidate) > max(6000, len(draft) * 2):
-        return ""
-    try:
-        from services.director.minimax_h3_prompting import is_structured_h3_prompt
-    except ImportError:
-        from app.services.director.minimax_h3_prompting import is_structured_h3_prompt
-    if not is_structured_h3_prompt(candidate, reference_mode):
-        return ""
-    if "visual style lock:" in draft.casefold() and "visual style lock:" not in candidate.casefold():
-        return ""
-    for spoken in re.findall(r"<d>\[[^\]]+\]\s*([^<]+)</d>", draft):
-        if spoken not in candidate:
-            return ""
-    if reference_mode == "references" and "fully referenced" in candidate.casefold():
-        return ""
-    if reference_mode == "first_frame" and "at 0.00 seconds" not in candidate.casefold():
-        return ""
-    return candidate
 
 
 def _optimize_minimax_h3_story_prompts(

@@ -1,0 +1,39 @@
+{
+    "model": {
+        "name": "Qwen Image 2.1 BF16 7B",
+        "architecture": "qwen_image_21",
+        "description": "Full BF16 DiT (14.2 GB) plus BF16 Qwen3-VL-8B (17.5 GB) and the 2.1 RGBA VAE. Highest fidelity, native 2K. On a 4090 the encoder must offload; peak BF16 resident is ~30 GB. Prefer INT8 ConvRot unless you are comparing quality. License: Qwen Research License.",
+        "selector_help": "Quality reference, not the 4090 daily driver. BF16 T2I on 4090 needs encoder offload (SGLang ~22.7 GiB with offload; fully resident BF16 does not fit 24 GB). Use this to A/B against INT8. First download about 33 GB.",
+        "URLs": [
+            "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_bf16.safetensors"
+        ],
+        "preload_URLs": "qwen_image_21",
+        "license_name": "Qwen Research License",
+        "license_url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
+        "resource_requirements": {
+            "vram_gb": 24,
+            "ram_gb": 48,
+            "storage_gb": 33,
+            "platform": "NVIDIA CUDA",
+            "backend": "BF16",
+            "tier": "stable",
+            "note": "4090 can run it with encoder offload. 48 GB GPUs keep the full stack resident."
+        },
+        "xresolutions": [
+            ["2048x2048 (1:1)", "2048x2048"],
+            ["2400x1792 (4:3)", "2400x1792"],
+            ["1792x2400 (3:4)", "1792x2400"],
+            ["2528x1696 (3:2)", "2528x1696"],
+            ["1696x2528 (2:3)", "1696x2528"],
+            ["2752x1536 (16:9)", "2752x1536"],
+            ["1536x2752 (9:16)", "1536x2752"]
+        ],
+        "attention": {"<89": "sdpa"},
+        "image_outputs": true
+    },
+    "prompt": "A neon shop sign that reads QWEN IMAGE 2.1, rainy night, reflections on wet pavement",
+    "resolution": "2048x2048",
+    "num_inference_steps": 40,
+    "guidance_scale": 1,
+    "batch_size": 1
+}

@@ -12,6 +12,11 @@ pull request shows the current hotspots, the 0–100 quality score and the
 delta versus the PR base. The job that runs the ratchet does not get
 comment permissions.
 
+After UI dependencies install successfully, CI still runs UI tests, lint and
+the build when the ratchet fails. Their individual results remain visible;
+any failed validation, including the ratchet, still fails `CI required`.
+Cancelling the run or failing dependency installation skips those later checks.
+
 The PR table starts with a transparent quality score from 0 to 100 and its
 change against the PR's exact base commit. Higher is better. The score combines
 cyclomatic health (45%), concentration in the largest files (25%), oversized
@@ -48,7 +53,8 @@ If `ui/node_modules` is absent, the normal report still works but warns that UI
 complexity is unavailable.
 
 CI compares a pull request with the exact code-health report generated from
-its base commit. The committed baseline remains the repository trend
+its base commit. The release integration rule below only changes the unit for
+the two cumulative growth budgets. The committed baseline remains the repository trend
 dashboard and is used when running the check outside a pull request:
 
 ```bash
@@ -107,3 +113,63 @@ were complete. Exceptions live in `scripts/code_health_exceptions.json` and
 must include path, rule, reason, owner, issue and expiry; there is no global
 hotspot waiver. New-function complexity caps are not enabled until current
 symbols are measured separately.
+
+## Release integration: development → main
+
+Ordinary feature PRs and pushes keep the existing single-change ratchet.
+For a release PR whose actual source is `development` and base is `main`,
+`check_code_health_pr_base.sh` invokes `code_health_integration.py`.
+Both PR repositories must also match GitHub's current repository identity;
+a fork branch named `development` keeps the ordinary ratchet.
+
+- Production LOC and the number of functions at complexity 15+ must stay within
+  the unchanged budget at **every first-parent integration**. Splitting a release
+  into many commits does not permit any individual step to exceed its budget;
+  a later reduction cannot erase an earlier aggregate-budget failure.
+- Maximum complexity, per-file complexity, large-file growth, new-file limits,
+  policy, scope and complete measurements remain mandatory between the **exact
+  main base and final candidate**. An intermediate local hotspot can be repaired
+  before release; its historical finding stays in the report and the final
+  tree must satisfy the original base limits. There is no local-rule waiver.
+- The report retains the full cumulative LOC/function deltas and quality score
+  against main. The baseline and exception file are never rewritten.
+
+The verifier requires full Git history, exact source/base SHAs, contiguous
+first-parent ancestry and a checked-out candidate tree equal to the source
+tree. The main base must have the same tree as the integration merge-base
+(publication-only merge history is allowed). It rejects dirty product files,
+missing blobs, omitted measurements, and changes to the analyzer, policy,
+ESLint configuration or UI dependency manifests anywhere in the chain.
+Changes to `scripts.test` are allowed because measurement invokes ESLint
+directly; all other manifest fields, install hooks and the lockfile must remain
+identical. Historical blob metrics must reproduce the gate's base and candidate
+measurements exactly. Unsupported history or measurement changes fail closed and require
+separate review; branch labels alone are insufficient to pass.
+
+Unique source blobs are analyzed once with the existing Python AST counter and
+ESLint complexity rule, then reconstructed into each exact commit's product
+paths. This avoids rerunning full UI analysis for unchanged code at every merge.
+The `code-health-report` artifact includes `code-health-integration.json` with
+every checkpoint SHA, tree, aggregate metrics, historical findings and verdict.
+CI fetches complete history when necessary. Local reproduction uses exact SHAs:
+
+```bash
+BASE_BRANCH=main SOURCE_BRANCH=development \
+GITHUB_REPOSITORY=IAnMove/hocuspocus \
+BASE_REPOSITORY=IAnMove/hocuspocus SOURCE_REPOSITORY=IAnMove/hocuspocus \
+BASE_SHA=<main-base-sha> SOURCE_HEAD_SHA=<candidate-sha> \
+bash scripts/check_code_health_pr_base.sh
+```
+
+The integration that introduced the explosion effects had two historical
+hotspot regressions. Separating material/particle animation and replacing
+effect-default branches with a defaults table repairs those current functions;
+the release rule still checks their final complexity against main.
+
+The same rule applies to the ensuing canonical `push` to `main` only when its
+`before` SHA equals the first parent of a two-parent merge, the published tree
+equals its second parent's tree, and that second parent belongs to a freshly
+fetched `origin/development` history. Thus publishing the verified development
+tree keeps the same gate. Fast-forward/squash commits, changed merge trees,
+unrelated second parents and ambiguous metadata keep the ordinary ratchet;
+missing history or a failed fetch cannot produce a pass.

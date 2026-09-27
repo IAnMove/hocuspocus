@@ -1,0 +1,137 @@
+{
+  "renderer": "HocusPocus native Video 3D export",
+  "clips": [
+    {
+      "id": "dark-motion-knight-passage",
+      "title": "El caminante de ceniza",
+      "video": "dark-motion-knight-passage.mp4",
+      "sha256": "127fcdcaff802f2309f56b9cc53da26902c64e9bc3998eefe942261f6e96ff12",
+      "bytes": 3309468,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 93.36,
+      "intentId": "moving-cutouts-native-20260915-01",
+      "taskId": "world3d-export-41d5c3f6df4c4774",
+      "published": {
+        "name": "2026-09-15-21h26m35s_world3d-dark-motion-knight-passage_b8a175.mp4",
+        "url": "/api/v1/file/2026-09-15-21h26m35s_world3d-dark-motion-knight-passage_b8a175.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "dark-motion-knight-embers",
+      "title": "Hacia las brasas",
+      "video": "dark-motion-knight-embers.mp4",
+      "sha256": "127e55642459123db43f263e25cdc7caf4d32c86ed81114e5a76265ce2b33adc",
+      "bytes": 1756005,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 93.36,
+      "intentId": "moving-cutouts-native-20260915-02",
+      "taskId": "world3d-export-14ea1ce329b5442f",
+      "published": {
+        "name": "2026-09-15-21h28m08s_world3d-dark-motion-knight-embers_28288a.mp4",
+        "url": "/api/v1/file/2026-09-15-21h28m08s_world3d-dark-motion-knight-embers_28288a.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "creative-motion-skate-coast",
+      "title": "Sal y velocidad",
+      "video": "creative-motion-skate-coast.mp4",
+      "sha256": "602c5dafa5e82efd1e26127afdd7e1c78b5f80c7e92619c828e0b61f0bc0232f",
+      "bytes": 2399521,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 93.36,
+      "intentId": "moving-cutouts-native-20260915-03",
+      "taskId": "world3d-export-df3b4432e0d74497",
+      "published": {
+        "name": "2026-09-15-21h29m42s_world3d-creative-motion-skate-coast_7bc813.mp4",
+        "url": "/api/v1/file/2026-09-15-21h29m42s_world3d-creative-motion-skate-coast_7bc813.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "creative-motion-skate-neon",
+      "title": "La ciudad pasa",
+      "video": "creative-motion-skate-neon.mp4",
+      "sha256": "d1c02150d9599f95fe4b4ace060f9cc2d4f46f8983fec9caef40da0c833cb25f",
+      "bytes": 3619254,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 99.38,
+      "intentId": "moving-cutouts-native-20260915-04",
+      "taskId": "world3d-export-b98bca0e6350486d",
+      "published": {
+        "name": "2026-09-15-21h31m23s_world3d-creative-motion-skate-neon_f1fa65.mp4",
+        "url": "/api/v1/file/2026-09-15-21h31m23s_world3d-creative-motion-skate-neon_f1fa65.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "creative-motion-skate-clouds",
+      "title": "Carretera de nubes",
+      "video": "creative-motion-skate-clouds.mp4",
+      "sha256": "9bb25d165ec8f8acd521a9c5b37432a3b7ba5e30c5e752ad299e71d153e224fe",
+      "bytes": 3121976,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 99.35,
+      "intentId": "moving-cutouts-native-20260915-05",
+      "taskId": "world3d-export-88fb5538b126439f",
+      "published": {
+        "name": "2026-09-15-21h33m01s_world3d-creative-motion-skate-clouds_d4ee8a.mp4",
+        "url": "/api/v1/file/2026-09-15-21h33m01s_world3d-creative-motion-skate-clouds_d4ee8a.mp4",
+        "workspace": "default"
+      }
+    },
+    {
+      "id": "creative-motion-skate-portal",
+      "title": "El mar al otro lado",
+      "video": "creative-motion-skate-portal.mp4",
+      "sha256": "c7d8d7dd3caff9ab31d5a7eff03a0af3673993cf3a5046632c412693aaa10655",
+      "bytes": 1774934,
+      "videoProperties": {
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "30/1",
+        "duration": "6.000000",
+        "nb_frames": "180"
+      },
+      "elapsedSeconds": 78.32,
+      "intentId": "moving-cutouts-native-20260915-06",
+      "taskId": "world3d-export-cd97d808f3b04758",
+      "published": {
+        "name": "2026-09-15-21h34m21s_world3d-creative-motion-skate-portal_1568ac.mp4",
+        "url": "/api/v1/file/2026-09-15-21h34m21s_world3d-creative-motion-skate-portal_1568ac.mp4",
+        "workspace": "default"
+      }
+    }
+  ]
+}

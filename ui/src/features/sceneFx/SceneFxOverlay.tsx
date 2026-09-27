@@ -4,18 +4,21 @@ import { paintSceneFx } from './paint'
 import { scheduleFx } from './audio'
 import type { SceneFx } from './types'
 
-export function SceneFxOverlay({ cues, soundCues, seconds, width, height, playing = false, speed = 1, duration }: {
+export function SceneFxOverlay({ cues, soundCues, seconds, width, height, playing = false, speed = 1, duration, getSource }: {
   cues?: SceneFx[]; soundCues?: SceneFx[]; seconds: number; width: number; height: number; playing?: boolean; speed?: number; duration: number
+  getSource?: () => CanvasImageSource | null
 }) {
   const ref = useRef<HTMLCanvasElement>(null), audio = useRef<AudioContext | null>(null)
   const transport = useRef({ seconds, playing })
+  const getSourceRef = useRef(getSource)
   const [blocked, setBlocked] = useState(false)
   const { t } = useUiTranslation('sceneFx')
   useEffect(() => { transport.current = { seconds, playing } }, [seconds, playing])
+  useEffect(() => { getSourceRef.current = getSource }, [getSource])
   useEffect(() => {
     const ctx = ref.current?.getContext('2d')
     if (!ctx) return
-    ctx.clearRect(0, 0, width, height); paintSceneFx(ctx, width, height, seconds, cues)
+    ctx.clearRect(0, 0, width, height); paintSceneFx(ctx, width, height, seconds, cues, getSourceRef.current?.() ?? null)
   }, [cues, seconds, width, height])
   useEffect(() => {
     const audible = soundCues ?? cues

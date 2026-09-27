@@ -80,6 +80,16 @@ hasta 90 s / 3 MB. Un proceso, dos hilos y timeout de 90 s. No acepta rutas ni
 URLs externas. El editor convierte el audio antes de enviarlo. Una voz existente
 puede durar hasta 600 s / 32 MB; se analizan fragmentos de hasta 90 s.
 
+La separación vocal y Rhubarb reutilizan una caché por contenido del audio,
+versión de herramienta, parámetros y ventana analizada. Las solicitudes
+simultáneas comparten el trabajo; ventanas distintas mantienen resultados
+independientes. La mezcla final conserva la banda sonora original.
+La caché usa `cache/speech-analysis/` o `SPEECH_ANALYSIS_CACHE_DIR`, con límites
+configurables `SPEECH_ANALYSIS_CACHE_MAX_BYTES` (128 MiB) y
+`SPEECH_ANALYSIS_CACHE_MAX_ENTRIES` (64). Los fallos no publican entradas
+parciales. La separación opcional requiere sus modelos ya instalados: estas
+operaciones no descargan modelos para completar el análisis.
+
 Exportación con voces: hasta 180 segundos de salida, 1280×720, mezcla mono a
 48 kHz. La velocidad se aplica una sola vez, también al tono. El documento se
 congela durante la exportación. Si el navegador no codifica AAC, envía PCM junto

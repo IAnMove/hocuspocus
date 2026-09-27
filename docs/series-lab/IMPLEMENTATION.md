@@ -64,3 +64,78 @@ app/env/bin/python -m pytest -q tests
 ```
 
 Broader Story Lab, Director, job lifecycle and Video Editor regression suites are required before release.
+
+## Reference images and mixed production
+
+In **Canon → Characters / Locations**, **Generate reference image** uses the subject description and the series visual style. The prompt can be edited before submission. Generation uses the configured image provider and the existing image job queue. A pending job can reconnect from the same browser without submitting another generation. Images are copied into the series asset library with their prompt, provider and job provenance. Choose the primary character image or remove a reference from its card; removing a reference preserves its file and earlier episode evidence.
+
+Location references use a dedicated empty-environment prompt. Before a new location image job, the series writing model extracts the physical setting and environment rendering style, removing character-design instructions and occupants even when mentioned in the location description. **Prepare environment prompt** previews that editable result without generating an image. The same preparation is used by the Setup and Shots reference batches. Failed preparation does not submit an image; reconnecting an existing image job preserves its original prompt. Locations use 16:9 framing, an explicit zero-occupant instruction and clean local model defaults so an old character reference cannot leak in from Studio. The scoped writer uses `/api/v1/llm/generate` with optional `writingProvider`, `writingModel` and `writingBaseUrl`, preserving the configured global model.
+
+Review the result and approve the canon. New episodes capture those references automatically. For an existing pilot, click **Use approved references in this episode** directly in Shots (the Episode room also retains its refresh action). This updates the matching characters' and locations' reference images, preserving the episode's frozen story, dialogue and existing takes. Active rendering and stale revisions block this update.
+
+**Setup → Allowed production methods** stores a nonempty `allowedProductionMethods` list:
+
+| Value | Shot workflow |
+| --- | --- |
+| `generated_video` | Automatic video-model rendering with the configured H3 variant. |
+| `animation_2d` | Open the episode references as editable character/background layers in Video 2D. |
+| `animation_3d` | Open an editable spatial composition using reference image planes; models can be assigned in Video 3D. |
+| `imported_video` | Import a completed clip from another workflow or generator. |
+
+Select several methods to permit a mixed episode. The planner chooses `productionMethod` per shot from that list; each shot can be reassigned manually. Existing legacy shots retain `generated_video`. H3 batch rendering processes only permitted model-video shots, and checks the permission again before running queued shots. Native/imported shot durations are editable independently of H3 duration quantization.
+
+The same production-method checkboxes are available at the top of **Shots**, including in existing series. Enabling a method adds it to every shot's selector. To reassign an existing episode, choose the enabled method in **Method for shots without a take**, then click **Apply to shots without a take**. This updates eligible shots in the current episode, preserving completed/approved takes and queued/running/cancelling attempts. Each shot's **Configure series methods** link returns to the checkboxes. Changing the allowed list alone preserves existing shot assignments.
+
+**Generate all** runs the existing Scene Animator automatically: prepare source-keyed transparent cutouts, generate each dialogue line with the exact linked Character Kit voice, measure its audio, extend the shot when needed, save editable keyframes and audio, export, then import a completed but unapproved take. It skips existing drafts/finals and active attempts. A visible batch banner offers stop-after-current-shot. Keep the browser tab open; completed takes persist independently and retry processes only missing takes. This is basic limited-animation blocking. Dialogue preflight requires the exact linked kit's approved base and four compatible, approved mouth states with saved placement. Missing setup links to Character Creator. The compositor mounts mouth overlays parented to the exact Series character layer and compiles held keyframes from offline phonetic analysis of each isolated recording. Four-state rigs use compatible fallbacks; nine-state rigs retain additional articulation. A wiped base uses its own source-keyed transparent derivative; the original image and its cutout cannot replace the mouthless pose. The batch does not create mouth rigs or complex acting.
+
+**Generate all / Regenerate all** is the main 2D action. Generate processes missing shots; regenerate explicitly creates new versions of all permitted, inactive 2D shots, including current, approved and silent shots. Each shot has a matching **Regenerate this shot** action that scopes the batch to its exact ID. Existing saved scenes retain recorded audio and authored motion while refreshing the saved mouth setup; a shot without an editable scene uses the normal draft preparation path. Draft regeneration accepts structurally complete saved pending base/mouth assets; missing, rejected or incompatible assets block only their affected shots and link to Character Creator. Initial generation retains its approval checks. The batch appends unapproved takes and never changes character approvals or approved originals. A persisted receipt links to History, where new versions are labeled; assembly uses approved originals until the user chooses a replacement. Opening a generated shot previews its latest completed, non-rejected version. Production settings are grouped once, each card has a single **Edit shot** disclosure, ready reference preparation and irrelevant AI controls are hidden, and 2D voice/mouth settings link directly to Character Creator. The narrower changed-mouth planner remains available internally for selective updates. Offscreen speakers keep their audio without animating another character.
+
+Character cards expose the same background-removal operation. A derived Series asset records the original source ID and cleanup job ID; the approved identity image and canon are preserved. Changing the source requires a new cutout. The saved scene filename accompanies each automatic take, so opening its production editor reloads its actual animation/audio.
+
+The per-shot 2D/3D buttons also prepare scenes; further animation, model assignment, facial rigs and export can be completed in those editors. Import the exported video back into its shot using **Import video as a take**. The server verifies the video stream and duration, appends a completed take, and preserves earlier takes and approval. Approve the imported take in Review to include it in the normal episode assembly.
+
+Both animation methods require an approved environment image and approved images for every visible character in the episode snapshot. Setup shows environment/cast preparation counts and links to their Bible cards. Each animation shot displays the assigned environment, its optional variant and the exact reference previews; preparation stays disabled until all required images are available. Video assets, derived thumbnails and unapproved references do not satisfy this requirement. Establishing shots can have an empty cast, but still need an environment. When a planning response omits an animation shot's location, it inherits its script scene's canonical location; a plan without either is rejected. Shots also shows **Generate all missing references**, which generates only the characters and locations used by this episode that lack an image. It deduplicates subjects across shots and skips completed imports on retry. Generation does not approve canon or replace the episode snapshot. **Review and approve canon**, then **Use approved references in this episode**, complete the workflow. References that already exist in the series are labelled as available for incorporation rather than missing images.
+
+The normal project PUT API persists `allowedProductionMethods`; episode/shot updates persist `productionMethod`. To refresh approved references in an existing episode, POST `/api/v1/series/{seriesId}/episodes/{episodeId}/references/refresh` with `workspace` and the current series `baseRevision`:
+
+```javascript
+const result = await fetch(`${base}/api/v1/series/${seriesId}/episodes/${episodeId}/references/refresh`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ workspace: 'default', baseRevision: series.revision }),
+});
+if (!result.ok) throw new Error(await result.text());
+const updated = await result.json();
+```
+
+```python
+response = requests.post(f'{base}/api/v1/series/{series_id}/episodes/{episode_id}/references/refresh',
+    json={'workspace': 'default', 'baseRevision': series['revision']})
+response.raise_for_status()
+updated = response.json()
+```
+
+```bash
+curl -X POST "$BASE/api/v1/series/$SERIES_ID/episodes/$EPISODE_ID/references/refresh" \
+  -H 'Content-Type: application/json' \
+  -d '{"workspace":"default","baseRevision":12}'
+```
+
+Import a completed take using the existing `/api/v1/series/{seriesId}/assets/import` endpoint with `ownerType: "shot"`, `ownerId: shotId`, `kind: "video"`, `asTake: true`, and an `uploadPath` returned by `/api/v1/upload`. Both imports and reference refresh are supported by the full and core runtimes. The automatic H3 renderer remains part of the full runtime.
+
+## Reusable character voice and lip-sync configuration
+
+**Canon → Characters** owns the setup entry for each series character. It reports voice, 2D mouth-pack and 3D face-calibration readiness separately. An empty library no longer leaves the user with only an unlinked selector: **Configure in Character Creator** navigates to a dedicated, spacious editor in the Character Creator tab with the exact character name and reference image as a draft. Identity selection is locked to that subject. Voice and model drafts survive studio-tab navigation; the 2D workshop retains its existing scoped recovery. The sticky **Save everything and return to Series Lab** button merges voice/model fields with the mounted mouth workshop (or its scoped recovery draft) in one revision-checked Character Kit write, awaits the Series link, then returns to the source character and episode. Failed saves retain drafts and do not navigate. A fully saved session can yield to another character when navigating by studio tabs; unsaved sessions remain protected. Saving persists a Character Kit and its exact workspace/id link in the series. Editing that link opens the same identity; it never matches or merges characters by name. The compact Series card keeps a visible selector for linking an existing library character and separate readiness indicators for voice and lip sync. Saving links only the original series/workspace/character; changed selections are never silently overwritten.
+
+Voice-only characters do not need a GLB. The 3D model is optional; configuring the 3D face still requires a verified GLB. The 2D workshop opens the saved character's exact ID and keeps its recovery draft separate from other characters and the general workshop. A missing image or unprepared mouth remains visibly pending. Opening or saving settings does not generate audio, images or video. The 2D workshop includes a prerecorded English sample and its bundled Rhubarb timing; playback uses the current draft mouth shapes without upload, TTS jobs or approval changes. The generic sample voice is distinct from the configured character voice. Eyes/blinking live in an optional collapsed section; missing eye overlays use the drawn eyes. **Apply placement to all mouths** copies the selected mouth transform and does not freeze animation.
+
+Dialogue-shot speech controls open the same Character Creator destination directly. The advanced voice table links to the corresponding character card. The 3D speech workflow consumes the linked kit's model, face settings and local TTS preset. 2D mouth preparation continues through the existing workshop and compositor. Native-audio AI video does not consume the local TTS voice ID; its provider generates the voice. Scene audio and existing takes remain independent of character settings.
+
+### Render actions and approval guidance
+
+**Shots** and **Results** report reference readiness separately from video takes: not created, awaiting review, or approved. Missing reference names open the exact character/location card, and pending-take links select their shot or review slot. Approving a character image does not create a video take.
+
+**Generate AI draft takes** creates unapproved takes only for shots assigned to permitted AI video generation. Results shows method-specific shortcuts for 2D/3D preparation and importing clips. Its history and playback actions send native/imported shots to their production controls instead of the AI regeneration form. Empty AI requests are blocked before submission in both the UI and Wizard. Failed retries use the latest attempt; explicit per-shot AI regeneration can still append an alternative while retaining an existing approved take. The automatic 2D batch runs those editor steps and imports its outputs; manual 2D/3D exports can still be imported and reviewed individually.
+
+## Phonetic 2D speech and resting faces
+
+Automatic 2D generation and regeneration analyze isolated recordings with the shared offline Rhubarb service. Saved scene beats retain nine-position phonetic cues and their audio/text provenance; four-state kits use compatible fallbacks. All configured visible actors use the saved mouthless base and resting mouth, including listeners and silent shots. Saving Character Creator also composes a reusable resting still. Twenty new reusable styles and ZIP downloads are included. See [speech quality, mouth packs and API](../character-kits/SPEECH_QUALITY.md).

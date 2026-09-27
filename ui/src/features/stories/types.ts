@@ -135,6 +135,13 @@ export interface StoryRelationship {
   evolution: string
 }
 
+/** Opens the beat as an editable Video 2D or Video 3D scene instead of a baked MP4. */
+export type StoryBeatSceneLink = {
+  editor: 'video2d' | 'video3d'
+  href: string
+  label?: string
+}
+
 export interface StoryBeat {
   id: string
   stage: string
@@ -143,6 +150,7 @@ export interface StoryBeat {
   goal: string
   conflict: string
   turn: string
+  sceneLink?: StoryBeatSceneLink
 }
 
 export interface StoryProduction {

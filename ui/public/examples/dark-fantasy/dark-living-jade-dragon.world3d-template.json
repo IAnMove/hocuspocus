@@ -1,0 +1,224 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-living-jade-dragon",
+  "title": "El dragón de jade",
+  "description": "Un pabellón oscuro ante montañas verdes y un dragón petrificado.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T14:25:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-living-jade-dragon",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#293f38",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-jade-dragon-frame.jpg",
+        "position": [
+          0,
+          -6.089218749999999,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.35694444444444445,
+                0.74921875
+              ],
+              [
+                0.6444444444444445,
+                0.74921875
+              ],
+              [
+                0.6430555555555556,
+                0.3046875
+              ],
+              [
+                0.35694444444444445,
+                0.3046875
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "position": [
+          0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.35,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.88,
+          "tint": "#c9cbd0"
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 3.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e",
+          "psx": 0.22
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.009609374999999967,
+          -0.7948374999999999,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-fantasy/dark-living-jade-dragon-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 4.614806250000001,
+          "height": 12.685143750000002,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.93,
+        10.719999999999999
+      ],
+      "look": [
+        0,
+        3.93,
+        -0.5
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "feet",
+        "from": [
+          -0.5407407407407407,
+          2.911111111111111,
+          7.94074074074074
+        ],
+        "to": [
+          -0.37777777777777777,
+          2.911111111111111,
+          7.74074074074074
+        ],
+        "lookFrom": [
+          -0.40740740740740744,
+          2.911111111111111,
+          -0.37037037037037035
+        ],
+        "lookTo": [
+          -0.40740740740740744,
+          2.911111111111111,
+          -0.37037037037037035
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#8de3b5",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 932,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { Check, Loader2 } from 'lucide-react'
 import * as api from '../../api/client'
+import { revealDirectorWorkspace } from '../../lib/navigationCategories'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import { AssetInput } from '../asset-picker/AssetInput.tsx'
@@ -9,6 +10,9 @@ import { useWorkspaceImageOutputs } from '../../lib/labsImagePick'
 import type { ApiOutput } from '../../api/outputs'
 
 import { generateImageAsset } from '../../lib/imageGeneration'
+import { fetchCharacterKitLibrary } from '../../api/characters'
+import { characterKitStillSource } from '../../lib/characterKit'
+import { seedTijeralCharacterKits } from '../cutPaper/characterKits.ts'
 import { MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
 import { StoryLabNavigation } from './StoryLabNavigation'
@@ -93,6 +97,14 @@ import {
   cueCandidateFromOutput,
 } from './storyAudioPick'
 import { listenForAgentStoryDraft, listenForAgentStorySection, listenForAgentStoryVisualGeneration } from '../../lib/uiBus'
+import {
+  clearStoryLabSession,
+  draftPaths,
+  persistStoryLabJob,
+  persistStoryLabSessionRecord,
+  readStoryLabSessionRecord,
+  useStoryLabSession,
+} from './storyLabSession'
 
 const storyLookupName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
 const CHARACTER_IDENTITY_REFERENCE_LOCK = [
@@ -199,18 +211,6 @@ type StyledReferenceTarget = {
   label: string
   prompt: string
 }
-type PendingDraft = {
-  scope: StoryGenerationScope
-  result: Record<string, unknown>
-  selected: string[]
-  replaceCollections: boolean
-  generateImagesAfterApply: boolean
-}
-const storyJobKey = (workspace: string, projectId: string) =>
-  `maestro-story-plan-job:${workspace}:${projectId}`
-const storyResultKey = (workspace: string, projectId: string) =>
-  `maestro-story-plan-result:${workspace}:${projectId}`
-
 function storyStyledReferenceTargets(
   project: StoryProject,
   options: { includeLocations: boolean; existingOnly: boolean },
@@ -243,63 +243,6 @@ function storyStyledReferenceTargets(
   return targets
 }
 
-function draftPaths(result: Record<string, unknown>): string[] {
-  const paths: string[] = []
-  if (result.overview && typeof result.overview === 'object') {
-    Object.entries(result.overview as Record<string, unknown>).forEach(([key, value]) => {
-      if (key === 'creativeBrief' && value && typeof value === 'object') {
-        Object.keys(value).forEach(field => paths.push(`overview.creativeBrief.${field}`))
-      } else {
-        paths.push(`overview.${key}`)
-      }
-    })
-  }
-  if (result.world && typeof result.world === 'object') {
-    Object.keys(result.world).forEach(key => paths.push(`world.${key}`))
-  }
-  if (Array.isArray(result.characters)) {
-    result.characters.forEach((item, index) => {
-      if (item && typeof item === 'object') {
-        const record = item as Record<string, unknown>
-        const id = String(record.id || index)
-        Object.keys(record)
-          .filter(key => !['id', 'referenceAssetIds', 'primaryReferenceAssetId', 'approval'].includes(key))
-          .forEach(key => paths.push(`characters.${id}.${key}`))
-      }
-    })
-  }
-  if (Array.isArray(result.relationships)) {
-    result.relationships.forEach((item, index) => {
-      if (item && typeof item === 'object') {
-        const record = item as Record<string, unknown>
-        const id = String(record.id || index)
-        Object.keys(record).filter(key => key !== 'id')
-          .forEach(key => paths.push(`relationships.${id}.${key}`))
-      }
-    })
-  }
-  const structure = Array.isArray(result.structure) ? result.structure
-    : Array.isArray(result.beats) ? result.beats : []
-  structure.forEach((item, index) => {
-    if (item && typeof item === 'object') {
-      const record = item as Record<string, unknown>
-      const id = String(record.id || index)
-      Object.keys(record).filter(key => key !== 'id')
-        .forEach(key => paths.push(`structure.${id}.${key}`))
-    }
-  })
-  const music = result.music && typeof result.music === 'object'
-    ? result.music as Record<string, unknown> : null
-  if (music && Array.isArray(music.cues)) {
-    music.cues.forEach((item, index) => {
-      if (!item || typeof item !== 'object') return
-      const record = item as Record<string, unknown>
-      paths.push(`music.${String(record.id || index)}`)
-    })
-  }
-  return paths
-}
-
 export function StoryLabPanel() {
   const { t } = useUiTranslation('storyLab')
   const project = useStoryStore(state => state.project)
@@ -314,6 +257,7 @@ export function StoryLabPanel() {
   const loadWorkspace = useStoryStore(state => state.loadWorkspace)
   const openProject = useStoryStore(state => state.openProject)
   const duplicateProject = useStoryStore(state => state.duplicateProject)
+  const loadTijeralExample = useStoryStore(state => state.loadTijeralExample)
   const deleteProject = useStoryStore(state => state.deleteProject)
   const patch = useStoryStore(state => state.patchProject)
   const update = useStoryStore(state => state.updateProject)
@@ -445,24 +389,23 @@ export function StoryLabPanel() {
   const setMusicProductionMode = (value: StoryProductionRecipe['musicProductionMode']) => patchRecipe({ musicProductionMode: value })
   const [musicTrailerRange, setMusicTrailerRange] = useState({ start: 0, end: 0, duration: 0 })
   const [jobProgress, setJobProgress] = useState('')
-  const [recoveryJobId, setRecoveryJobId] = useState(() =>
-    window.localStorage.getItem(storyJobKey(activeWorkspace, project.id)) || '')
-  const [pendingDraft, setPendingDraft] = useState<PendingDraft | null>(() => {
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(storyResultKey(activeWorkspace, project.id)) || 'null')
-      if (!saved?.result) return null
-      return {
-        scope: saved.scope || 'all',
-        result: saved.result,
-        selected: draftPaths(saved.result),
-        replaceCollections: true,
-        generateImagesAfterApply: saved.generateImagesAfterApply === true,
-      }
-    } catch {
-      return null
-    }
-  })
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const {
+    recoveryJobId,
+    setRecoveryJobId,
+    pendingDraft,
+    setPendingDraft,
+    generationAbortRef,
+  } = useStoryLabSession({
+    workspace: activeWorkspace,
+    projectId: project.id,
+    revision: agentDraftRevision,
+    loadWorkspace,
+    getStoryGenerationStatus: api.getStoryGenerationStatus,
+    onRecoveredServerResult: () => {
+      setNotice({ kind: 'ok', text: t('notice.recoveredServerResult') })
+    },
+  })
   const [smartAssetBusy, setSmartAssetBusy] = useState(false)
   const [smartAssetDescription, setSmartAssetDescription] = useState('')
   const [pendingSmartAssets, setPendingSmartAssets] = useState<PendingSmartAsset[]>([])
@@ -476,7 +419,6 @@ export function StoryLabPanel() {
   const musicQueueCancelRequested = useRef(false)
   const activeMusicJobId = useRef('')
   const styleConversionCancelRequested = useRef(false)
-  const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
   const imageItems = useWorkspaceImageOutputs(activeWorkspace)
   const projectOperationBusy = Boolean(activeProjectOperations[project.id])
@@ -774,62 +716,6 @@ export function StoryLabPanel() {
     writingBaseUrl: project.provider.writingBaseUrl,
   }
 
-  useEffect(() => {
-    loadWorkspace(activeWorkspace)
-  }, [activeWorkspace, loadWorkspace])
-
-  useEffect(() => {
-    const savedJobId = window.localStorage.getItem(storyJobKey(activeWorkspace, project.id)) || ''
-    setRecoveryJobId(savedJobId)
-    let hasLocalResult = false
-    let savedScope: StoryGenerationScope = 'all'
-    let generateImagesAfterApply = false
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(storyResultKey(activeWorkspace, project.id)) || 'null')
-      hasLocalResult = Boolean(saved?.result)
-      savedScope = saved?.scope || 'all'
-      generateImagesAfterApply = saved?.generateImagesAfterApply === true
-      setPendingDraft(saved?.result ? {
-        scope: savedScope,
-        result: saved.result,
-        selected: draftPaths(saved.result),
-        replaceCollections: true,
-        generateImagesAfterApply,
-      } : null)
-    } catch {
-      setPendingDraft(null)
-    }
-    let disposed = false
-    if (savedJobId && !hasLocalResult) {
-      void api.getStoryGenerationStatus(savedJobId).then(status => {
-        const result = status.status === 'completed' ? status.result?.result : null
-        if (disposed || !result) return
-        const recovered = {
-          jobId: savedJobId,
-          scope: savedScope,
-          result,
-          generateImagesAfterApply,
-        }
-        window.localStorage.setItem(
-          storyResultKey(activeWorkspace, project.id),
-          JSON.stringify(recovered),
-        )
-        setPendingDraft({
-          scope: savedScope,
-          result,
-          selected: draftPaths(result),
-          replaceCollections: true,
-          generateImagesAfterApply,
-        })
-        setNotice({ kind: 'ok', text: t('notice.recoveredServerResult') })
-      }).catch(() => {
-        // The visible Resume control remains available for failed, cancelled,
-        // temporarily unreachable, or still-running checkpoints.
-      })
-    }
-    return () => { disposed = true }
-  }, [activeWorkspace, agentDraftRevision, project.id, t])
-
   const openStorySection = (target: StoryTab) => {
     const resolved = resolveStoryLabNavigation(target, project.projectType)
     if (resolved.ok) setTab(resolved.tab)
@@ -1094,8 +980,7 @@ export function StoryLabPanel() {
       return next
     })
     setPendingDraft(null)
-    window.localStorage.removeItem(storyResultKey(activeWorkspace, projectId))
-    window.localStorage.removeItem(storyJobKey(activeWorkspace, projectId))
+    clearStoryLabSession(activeWorkspace, projectId)
     if (useStoryStore.getState().project.id === projectId) setRecoveryJobId('')
     const characterCount = Array.isArray(result.characters) ? result.characters.length : 0
     const world = result.world && typeof result.world === 'object'
@@ -1267,10 +1152,10 @@ export function StoryLabPanel() {
     )
     let activeJobId = ''
     const sourceProjectId = project.id
-    window.localStorage.setItem(storyResultKey(activeWorkspace, project.id), JSON.stringify({
+    persistStoryLabSessionRecord(activeWorkspace, project.id, {
       scope,
       generateImagesAfterApply: options.generateImages === true,
-    }))
+    })
     try {
       const resolvedWriting = resolveStoryWritingProvider(productionProfile, project)
       const effectiveProvider: StoryProject['provider'] = project.provider.useGlobalProfile
@@ -1301,7 +1186,7 @@ export function StoryLabPanel() {
         activity.handoff(`Continuing as recoverable job ${progress.jobId}`)
         activeJobId = progress.jobId
         setRecoveryJobId(progress.jobId)
-        window.localStorage.setItem(storyJobKey(activeWorkspace, project.id), progress.jobId)
+        persistStoryLabJob(activeWorkspace, project.id, progress.jobId)
         setJobProgress(`${progress.message} ${progress.total ? `${progress.current}/${progress.total}` : ''}`)
         activity.update(
           progress.message,
@@ -1311,12 +1196,12 @@ export function StoryLabPanel() {
         )
       }, controller.signal)
       setInstruction('')
-      window.localStorage.setItem(storyResultKey(activeWorkspace, project.id), JSON.stringify({
+      persistStoryLabSessionRecord(activeWorkspace, project.id, {
         jobId: activeJobId,
         scope,
         result,
         generateImagesAfterApply: options.generateImages === true,
-      }))
+      })
       if (useStoryStore.getState().project.id !== sourceProjectId) {
         setNotice({ kind: 'ok', text: t('notice.generationSavedElsewhere') })
         return
@@ -1389,13 +1274,10 @@ export function StoryLabPanel() {
         writingBaseUrl: resolvedWriting.baseUrl,
       })
       if (useStoryStore.getState().project.id !== sourceProjectId) return
-      let generateImagesAfterApply = false
-      try {
-        const saved = JSON.parse(window.localStorage.getItem(storyResultKey(activeWorkspace, project.id)) || 'null')
-        generateImagesAfterApply = saved?.generateImagesAfterApply === true
-      } catch {
-        // Resume remains safe as a text-only draft when legacy recovery metadata is malformed.
-      }
+      // Resume remains safe as a text-only draft when legacy recovery metadata is malformed.
+      const generateImagesAfterApply = readStoryLabSessionRecord(
+        activeWorkspace, project.id,
+      )?.generateImagesAfterApply === true
       setPendingDraft({
         scope: 'all',
         result,
@@ -1403,12 +1285,12 @@ export function StoryLabPanel() {
         replaceCollections: true,
         generateImagesAfterApply,
       })
-      window.localStorage.setItem(storyResultKey(activeWorkspace, project.id), JSON.stringify({
+      persistStoryLabSessionRecord(activeWorkspace, project.id, {
         jobId: recoveryJobId,
         scope: 'all',
         result,
         generateImagesAfterApply,
-      }))
+      })
       setNotice({ kind: 'ok', text: t('notice.recoveredDraftReady') })
     } catch (error) {
       const message = (error as Error).message
@@ -1496,7 +1378,7 @@ export function StoryLabPanel() {
       renderStyle,
       current.enforceVisualStyle,
     )
-    const primaryReference = options.usePrimaryReference !== false && character?.primaryReferenceAssetId
+    let primaryReference = options.usePrimaryReference !== false && character?.primaryReferenceAssetId
       ? current.assets[character.primaryReferenceAssetId]?.source
       : undefined
     const effectivePrompt = [
@@ -1511,6 +1393,17 @@ export function StoryLabPanel() {
     setImageBusy(key)
     if (!options.quiet) setNotice(null)
     try {
+      if (options.usePrimaryReference !== false && character?.characterKitRef) {
+        try {
+          const library = await fetchCharacterKitLibrary(character.characterKitRef.workspace)
+          const still = library.kits[character.characterKitRef.id]
+            ? characterKitStillSource(library.kits[character.characterKitRef.id])
+            : undefined
+          if (still) primaryReference = still
+        } catch {
+          /* Story still remains the fallback when the library is offline. */
+        }
+      }
       if (existingJobId) options.onJobSubmitted?.(existingJobId)
       const generated = await generateImageAsset(
         effectiveImageProvider,
@@ -3371,7 +3264,7 @@ export function StoryLabPanel() {
       }
       director.setDirectorResolution(storyVideoResolution)
       director.setDirectorAspectRatio(storyVideoAspectRatio)
-      director.setSidebarMode('director')
+      revealDirectorWorkspace(director)
       director.setDirectorSkill('music_video')
       director.setDirectorAutoMode(false)
       director.setDirectorShotImageGuidance(project.musicVideoGenerationMode === 'direct_video' || project.musicVideoGenerationMode === 'direct_references' ? 'prompt_only' : 'auto')
@@ -3870,6 +3763,12 @@ export function StoryLabPanel() {
         onNewProject={newProject}
         onDuplicate={() => duplicateProject()}
         onDelete={() => deleteProject(project.id)}
+        onLoadTijeralExample={() => {
+          loadTijeralExample(activeWorkspace)
+          void seedTijeralCharacterKits(activeWorkspace).catch(error => {
+            setNotice({ kind: 'error', text: (error as Error).message })
+          })
+        }}
       />
 
       {notice && (
@@ -3957,8 +3856,7 @@ export function StoryLabPanel() {
                     </button>
                     <button className={button} onClick={() => {
                       setPendingDraft(null)
-                      window.localStorage.removeItem(storyResultKey(activeWorkspace, project.id))
-                      window.localStorage.removeItem(storyJobKey(activeWorkspace, project.id))
+                      clearStoryLabSession(activeWorkspace, project.id)
                       setRecoveryJobId('')
                     }}>{t('draft.discard')}</button>
                     <details className="text-[10px] text-text-muted">

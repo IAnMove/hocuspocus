@@ -41,6 +41,17 @@ function catalogItem(overrides: Partial<AssetCatalogItem> & Pick<AssetCatalogIte
   }
 }
 
+test('catalog and legacy images use bounded thumbnails, preserving originals only for explicit preview', () => {
+  const item = catalogItem({ id: 'large', filename: 'large image.png' })
+  const picked = catalogItemToPickerItem(item, 'default')
+  assert.equal(picked.url, item.url)
+  assert.equal(picked.thumbnailUrl, '/api/v1/outputs/thumbnail/large%20image.png?workspace=default&size=sm')
+  const output = catalogItemToOutput(item, 'default')!
+  assert.equal(output.thumbnail_url, picked.thumbnailUrl)
+  const legacy = outputToPickerItem({ ...output, thumbnail_url: item.url }, 'default')
+  assert.equal(legacy.thumbnailUrl, picked.thumbnailUrl)
+})
+
 test('voice refs keep the uploads/audio subfolder the backend can resolve', () => {
   const uploaded = voiceRefFromOutput({
     name: '9f2.wav',

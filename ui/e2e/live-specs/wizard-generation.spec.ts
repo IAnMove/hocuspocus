@@ -19,6 +19,7 @@ async function openApp(page: Page) {
   page.setDefaultTimeout(20_000)
   await page.addInitScript(() => {
     window.localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
+    window.localStorage.setItem('hocuspocus_welcome_seen_v2', '453')
   })
   await page.goto('/')
   const skip = page.getByRole('button', { name: 'Skip' })

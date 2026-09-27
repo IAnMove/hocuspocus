@@ -1,0 +1,344 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-living-fungal-throne",
+  "title": "El trono del micelio",
+  "description": "Un reino subterráneo mezcla hongos luminosos y piedra funeraria.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T14:25:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-living-fungal-throne",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#293c38",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-fungal-throne-frame.jpg",
+        "position": [
+          0,
+          -6.531250000000002,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.22916666666666666,
+                0.73125
+              ],
+              [
+                0.7638888888888888,
+                0.73125
+              ],
+              [
+                0.7638888888888888,
+                0.58125
+              ],
+              [
+                0.7847222222222222,
+                0.5296875
+              ],
+              [
+                0.7652777777777777,
+                0.53984375
+              ],
+              [
+                0.7680555555555556,
+                0.36953125
+              ],
+              [
+                0.7541666666666667,
+                0.34296875
+              ],
+              [
+                0.7694444444444445,
+                0.32734375
+              ],
+              [
+                0.7680555555555556,
+                0.303125
+              ],
+              [
+                0.7555555555555555,
+                0.27734375
+              ],
+              [
+                0.7319444444444444,
+                0.2515625
+              ],
+              [
+                0.7,
+                0.2296875
+              ],
+              [
+                0.6625,
+                0.2125
+              ],
+              [
+                0.6194444444444445,
+                0.19765625
+              ],
+              [
+                0.5708333333333333,
+                0.18828125
+              ],
+              [
+                0.5222222222222223,
+                0.18359375
+              ],
+              [
+                0.4791666666666667,
+                0.184375
+              ],
+              [
+                0.42916666666666664,
+                0.1890625
+              ],
+              [
+                0.38055555555555554,
+                0.19765625
+              ],
+              [
+                0.3375,
+                0.21171875
+              ],
+              [
+                0.3,
+                0.2296875
+              ],
+              [
+                0.26805555555555555,
+                0.25
+              ],
+              [
+                0.24583333333333332,
+                0.2734375
+              ],
+              [
+                0.23194444444444445,
+                0.29921875
+              ],
+              [
+                0.22916666666666666,
+                0.32578125
+              ],
+              [
+                0.24305555555555555,
+                0.3453125
+              ],
+              [
+                0.2388888888888889,
+                0.35859375
+              ],
+              [
+                0.22361111111111112,
+                0.3671875
+              ],
+              [
+                0.22777777777777777,
+                0.4203125
+              ],
+              [
+                0.23472222222222222,
+                0.43671875
+              ],
+              [
+                0.22083333333333333,
+                0.46328125
+              ],
+              [
+                0.225,
+                0.55078125
+              ],
+              [
+                0.24166666666666667,
+                0.56796875
+              ],
+              [
+                0.23055555555555557,
+                0.58671875
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          -0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.35,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.88,
+          "tint": "#c9cbd0",
+          "psx": 0.16
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "position": [
+          2.6,
+          0,
+          3
+        ],
+        "scale": 3.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.03843749999999987,
+          -0.9977874999999994,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-fantasy/dark-living-fungal-throne-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 9.0512625,
+          "height": 15.62791875,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.18,
+        3.93,
+        10.84
+      ],
+      "look": [
+        0,
+        3.93,
+        -0.5
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "feet",
+        "from": [
+          0.5407407407407407,
+          2.911111111111111,
+          8.029629629629628
+        ],
+        "to": [
+          0.37777777777777777,
+          2.911111111111111,
+          7.829629629629629
+        ],
+        "lookFrom": [
+          0.40740740740740744,
+          2.911111111111111,
+          -0.37037037037037035
+        ],
+        "lookTo": [
+          0.40740740740740744,
+          2.911111111111111,
+          -0.37037037037037035
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#9aed88",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 929,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

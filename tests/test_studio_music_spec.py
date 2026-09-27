@@ -230,7 +230,7 @@ def test_schema_is_closed_and_exposes_only_local_models():
     params = schema["input"]["$defs"]["StudioMusicParams"]
     assert params["additionalProperties"] is False
     assert "_music_description" in params["properties"]
-    assert schema["music_model_types"] == ["ace_step_v1_5_xl_sft_lm_4b", "minimax_music3"]
+    assert schema["music_model_types"] == ["ace_step_v1_5_xl_sft_lm_4b", "minimax_music3", "yue2"]
     assert "provenance" in schema["excluded"]
 
 

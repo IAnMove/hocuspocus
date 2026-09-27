@@ -70,8 +70,8 @@ export type AgentSceneControlRequest =
   | { type: 'export_3d_scene'; sceneName: string }
 
 export type AgentSceneWorkflowRequest =
-  | { type: 'create_3d_scene'; sceneName: string; durationSeconds: number; width: number; height: number; fps: 30 | 60; reset?: boolean }
-  | { type: 'set_3d_scene_properties'; sceneName: string; durationSeconds?: number; width?: number; height?: number; fps?: 30 | 60 }
+  | { type: 'create_3d_scene'; sceneName: string; durationSeconds: number; width: number; height: number; fps: 24 | 30 | 60; reset?: boolean }
+  | { type: 'set_3d_scene_properties'; sceneName: string; durationSeconds?: number; width?: number; height?: number; fps?: 24 | 30 | 60 }
   | { type: 'add_3d_scene_layer'; sceneName: string; layerName: string; layerType: 'model3d' | 'image' | 'video' | 'overlay' | 'camera'; outputName?: string }
   | { type: 'update_3d_scene_layer'; sceneName: string; layerName: string; visible?: boolean; locked?: boolean }
   | { type: 'remove_3d_scene_layer'; sceneName: string; layerName: string }
@@ -339,16 +339,31 @@ export function listenForAgentSeriesReviewView(listener: (view: AgentSeriesRevie
 }
 
 const ACTIVITY_DETAILS_EVENT = 'hocuspocus:activity-details'
-let requestedActivityDetails = false
 
-export function openAgentActivityDetails(): void {
-  requestedActivityDetails = true
-  window.dispatchEvent(new CustomEvent(ACTIVITY_DETAILS_EVENT))
+export interface ActivityDetailsRequest {
+  taskId?: string
+  intentId?: string
+  receiptId?: string
+  inspectPreviousAttempt?: boolean
 }
 
-export function listenForAgentActivityDetails(listener: () => void): () => void {
-  const handler = () => listener()
+let requestedActivityDetails: ActivityDetailsRequest | true | null = null
+
+export function openAgentActivityDetails(request?: ActivityDetailsRequest): void {
+  requestedActivityDetails = request || true
+  window.dispatchEvent(new window.CustomEvent(ACTIVITY_DETAILS_EVENT, { detail: request || {} }))
+}
+
+export function listenForAgentActivityDetails(listener: (request?: ActivityDetailsRequest) => void): () => void {
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<ActivityDetailsRequest>).detail
+    listener(detail && (detail.taskId || detail.intentId || detail.receiptId) ? detail : undefined)
+  }
   window.addEventListener(ACTIVITY_DETAILS_EVENT, handler)
-  if (requestedActivityDetails) listener()
+  if (requestedActivityDetails) {
+    const pending = requestedActivityDetails
+    requestedActivityDetails = null
+    listener(pending === true ? undefined : pending)
+  }
   return () => window.removeEventListener(ACTIVITY_DETAILS_EVENT, handler)
 }

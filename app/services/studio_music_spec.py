@@ -47,7 +47,7 @@ from pydantic import (
 )
 
 from services.image_generation_spec import ImageGenerationSpecError
-from services.music_model_contract import ACE_DEFAULT, GUIDE_REVISION, MUSIC3_LOCAL
+from services.music_model_contract import ACE_DEFAULT, GUIDE_REVISION, MUSIC3_LOCAL, YUE2_LOCAL
 from services.studio_image_spec import _validate_reference
 
 
@@ -66,7 +66,7 @@ _MAX_LORA_COUNT = 64
 # This is deliberately an exact registration.  ``music_model_contract`` also
 # knows remote/community IDs and ACE aliases for Story compatibility; this
 # local command must never route one of those IDs to the generic music worker.
-STUDIO_MUSIC_MODEL_TYPES = frozenset({ACE_DEFAULT, MUSIC3_LOCAL})
+STUDIO_MUSIC_MODEL_TYPES = frozenset({ACE_DEFAULT, MUSIC3_LOCAL, YUE2_LOCAL})
 MUSIC_MODEL_TYPES = STUDIO_MUSIC_MODEL_TYPES
 
 # These defaults are adapter-owned and contain no model-derived values.  The
@@ -345,7 +345,7 @@ class StudioMusicParams(_ClosedModel):
         _non_blank(self.prompt, "input.params.prompt")
         # ACE-Step accepts lyrics without a style caption. MiniMax requires
         # one; reject that request here, before resources or task admission.
-        if self.model_type == MUSIC3_LOCAL:
+        if self.model_type in (MUSIC3_LOCAL, YUE2_LOCAL):
             _non_blank(self.alt_prompt, "input.params.alt_prompt")
         _non_blank(self.model_type, "input.params.model_type")
         if self.model_type not in STUDIO_MUSIC_MODEL_TYPES:

@@ -1,4 +1,5 @@
 import type { CommandResult } from '../../lib/commandContract'
+import { canonicalSceneFps } from '../../lib/sceneFps.ts'
 import type {
   AgentAction,
   AgentApply3dRhythmAction,
@@ -699,10 +700,41 @@ defineCapability<AgentStageStoryComicAction>({
 
 defineCapability<AgentCreateSeriesEpisodeAction>({
   name: 'create_series_episode', title: 'Create a filled Series Lab episode',
-  description: 'Create or resolve a series, save its editable canon and create one exact episode with its canonical episode ID.',
-  useWhen: 'The user asks for a new, filled episode in Series Lab.',
-  parameters: ['series_title', 'episode_title', 'episode_premise', 'create_if_missing', 'characters', 'locations', 'outline_beats'],
-  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'create_series_episode' }, series_title: { type: 'string', maxLength: 300 }, episode_premise: { type: 'string', maxLength: 3_000 }, create_if_missing: { type: 'boolean' } }, required: ['type', 'series_title', 'episode_premise'] },
+  description: 'Create or resolve a series, save its premise, visual style and editable world, and create a first episode outline with its canonical episode ID.',
+  useWhen: 'The user wants to develop a series or episode, including creative direction supplied in reply to an earlier question. Invent missing draft titles and plot details from that direction.',
+  parameters: ['series_title', 'series_premise', 'series_logline', 'world_summary', 'visual_style', 'genre', 'tone', 'theme', 'language',
+    'episode_title', 'episode_premise', 'episode_logline', 'ending', 'target_duration_seconds', 'create_if_missing', 'known_universe',
+    'characters', 'locations', 'outline_beats'],
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      type: { const: 'create_series_episode' },
+      series_title: { type: 'string', maxLength: 300 },
+      series_premise: { type: 'string', maxLength: 3_000 }, series_logline: { type: 'string', maxLength: 2_000 },
+      world_summary: { type: 'string', maxLength: 3_000 }, visual_style: { type: 'string', maxLength: 2_000 },
+      genre: { type: 'string', maxLength: 300 }, tone: { type: 'string', maxLength: 500 },
+      theme: { type: 'string', maxLength: 1_000 }, language: { type: 'string', maxLength: 120 },
+      episode_title: { type: 'string', maxLength: 300 }, episode_premise: { type: 'string', maxLength: 3_000 },
+      episode_logline: { type: 'string', maxLength: 2_000 }, ending: { type: 'string', maxLength: 2_000 },
+      target_duration_seconds: { type: 'number', minimum: 0, maximum: 3_600 },
+      create_if_missing: { type: 'boolean' }, known_universe: { type: 'boolean' },
+      characters: { type: 'array', maxItems: 16, items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          name: { type: 'string', maxLength: 160 }, role: { type: 'string', maxLength: 300 },
+          personality: { type: 'string', maxLength: 1_000 }, desire: { type: 'string', maxLength: 1_000 },
+          flaw: { type: 'string', maxLength: 1_000 }, appearance: { type: 'string', maxLength: 1_000 },
+          voice: { type: 'string', maxLength: 1_000 },
+        }, required: ['name'],
+      } },
+      locations: { type: 'array', maxItems: 16, items: {
+        type: 'object', additionalProperties: false,
+        properties: { name: { type: 'string', maxLength: 160 }, purpose: { type: 'string', maxLength: 1_000 }, description: { type: 'string', maxLength: 1_500 } },
+        required: ['name'],
+      } },
+      outline_beats: { type: 'array', maxItems: 24, items: { type: 'string', maxLength: 1_500 } },
+    }, required: ['type', 'series_title', 'episode_premise'],
+  },
   risk: 'edit', confirmation: 'none', progress: 'Creando el episodio editable de Series Lab…',
   resolve(raw) {
     const fields = seriesEpisodeFields(raw)
@@ -1098,8 +1130,8 @@ function sceneWorkflowAction(type: AgentSceneWorkflowAction['type'], raw: Record
   if (raw.confirm !== true) return null
   const sceneName = text(raw.scene_name, 300)
   if (!sceneName) return null
-  if (type === 'create_3d_scene') return { type, sceneName, durationSeconds: boundedNumber(raw.duration_seconds, 1, 300, 5), width: boundedNumber(raw.width, 320, 7680, 1280), height: boundedNumber(raw.height, 240, 4320, 720), fps: raw.fps === 60 ? 60 : 30, confirm: true }
-  if (type === 'set_3d_scene_properties') return { type, sceneName, durationSeconds: raw.duration_seconds === undefined ? undefined : boundedNumber(raw.duration_seconds, 1, 300, 5), width: raw.width === undefined ? undefined : boundedNumber(raw.width, 320, 7680, 1280), height: raw.height === undefined ? undefined : boundedNumber(raw.height, 240, 4320, 720), fps: raw.fps === undefined ? undefined : raw.fps === 60 ? 60 : 30, confirm: true }
+  if (type === 'create_3d_scene') return { type, sceneName, durationSeconds: boundedNumber(raw.duration_seconds, 1, 300, 5), width: boundedNumber(raw.width, 320, 7680, 1280), height: boundedNumber(raw.height, 240, 4320, 720), fps: canonicalSceneFps(raw.fps), confirm: true }
+  if (type === 'set_3d_scene_properties') return { type, sceneName, durationSeconds: raw.duration_seconds === undefined ? undefined : boundedNumber(raw.duration_seconds, 1, 300, 5), width: raw.width === undefined ? undefined : boundedNumber(raw.width, 320, 7680, 1280), height: raw.height === undefined ? undefined : boundedNumber(raw.height, 240, 4320, 720), fps: raw.fps === undefined ? undefined : canonicalSceneFps(raw.fps), confirm: true }
   const layerName = text(raw.layer_name, 300)
   if (type === 'add_3d_scene_layer') {
     const layerType = text(raw.layer_type, 30) as Extract<AgentSceneWorkflowAction, { type: 'add_3d_scene_layer' }>['layerType']

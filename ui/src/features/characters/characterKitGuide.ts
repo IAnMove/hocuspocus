@@ -2,6 +2,8 @@ import type { CharacterKit, CharacterKitAsset, CharacterMouthState } from '../..
 import { isFacePatchCompatible } from '../../lib/characterFacePatch'
 import type { ParseKeys } from 'i18next'
 import i18n from '../../i18n'
+import { CHARACTER_MOUTH_STATES } from '../../lib/characterMouthStates'
+import { speechPreparationReadiness } from '../../lib/characterSpeechPreparation'
 
 export type CharacterKitEditorTab = 'kit' | 'face-rig'
 
@@ -21,7 +23,7 @@ export type CharacterKitNextStep = {
 
 const KNOWN_POSES = ['base', 'pointing', 'reaction'] as const
 
-const MOUTH_STATES: CharacterMouthState[] = ['closed', 'small', 'wide', 'round']
+const MOUTH_STATES = CHARACTER_MOUTH_STATES
 
 function tCharacters(key: ParseKeys<'characters'>, options?: Record<string, unknown>): string {
   return i18n.t(key, { ns: 'characters', ...options })
@@ -125,7 +127,7 @@ export function characterKitNextStep(kit: CharacterKit | null, poseId = 'base'):
       tab: 'face-rig',
     }
   }
-  if (characterKitApprovedMouths(kit).length < 2) {
+  if (!speechPreparationReadiness(kit, poseId).complete) {
     return {
       id: 'make-mouths',
       title: tCharacters('guide.makeMouths.title'),

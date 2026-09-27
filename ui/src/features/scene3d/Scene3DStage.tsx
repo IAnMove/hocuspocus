@@ -1,6 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { bindScreenMedia } from './screenMediaRuntime'
+import { prepareWorldSfxMedia, worldSfxMediaReady } from '../sceneFx/worldRuntime'
+import { worldSfxAtTime } from '../sceneFx/worldMotion'
 import { namedSceneMeshes, namedSceneNodes } from './screenPlane'
 import { slotMountKey } from './backdrop'
 import { createTransformGizmo, type TransformMode, type TransformPatch } from './transformGizmo.ts'
@@ -28,6 +30,8 @@ import {
   prepareBackdropTexture,
   pruneSlots,
   resizeWorld,
+  renderWorld,
+  setWorldExportQuality,
   setWorldSize,
   slotNeedsReload,
   syncSlotClip,
@@ -52,7 +56,9 @@ export type Scene3DStageHandle = {
   paint: (seconds: number, document?: Scene3DDocument) => HTMLCanvasElement | null
   ready: (slots: readonly Scene3DSlot[]) => boolean
   setExportSize: (width: number, height: number) => void
+  setExportQuality: (enabled: boolean) => void
   restoreSize: () => void
+  canvas: () => HTMLCanvasElement | null
   beginExport: (document: Scene3DDocument) => void
   endExport: () => void
   facePlacement?: (slotId: string, profile: PlacementMode) => FacePlacement | undefined
@@ -62,11 +68,11 @@ export type Scene3DStageHandle = {
 
 function loadScreen(world: GpuWorld, slot: Scene3DSlot, onError: (message: string) => void, onReady: () => void) {
   const gpu = world.slots.get(slot.id), screen = slot.screen
-  if (!gpu || !screen?.sourceUrl) return
+  if (!gpu || !screen?.sourceUrl || slot.speech?.facePack) return
   const abort = new AbortController(); gpu.screenAbort = abort
   void bindScreenMedia(gpu.root, screen, slot.media === 'screen', abort.signal, () => {
-    if (!abort.signal.aborted && world.slots.get(slot.id) === gpu) world.renderer.render(world.scene, world.camera)
-  }).then(media => {
+    if (!abort.signal.aborted && world.slots.get(slot.id) === gpu) renderWorld(world)
+  }, slot.media === 'image' ? { look: slot.imageLook } : undefined).then(media => {
     if (world.slots.get(slot.id) !== gpu || abort.signal.aborted) { media.dispose(); return }
     gpu.screen = media
     onReady()
@@ -115,9 +121,10 @@ function loadSlotImage(
   slot: Scene3DSlot,
   cancelled: () => boolean,
   liveSlot: () => Scene3DSlot | undefined,
+  repaint: () => void,
 ) {
   const url = slot.sourceUrl
-  if (!url) return
+  if (!url) { repaint(); return }
   new TextureLoader().load(
     url,
     (texture: import('three').Texture) => {
@@ -126,12 +133,13 @@ function loadSlotImage(
         return
       }
       const live = liveSlot()
-      if (!live || live.sourceUrl !== url || live.media !== 'image') {
+      if (!live || slotMountKey(live) !== slotMountKey(slot) || live.media !== 'image') {
         texture.dispose()
         return
       }
       prepareBackdropTexture(texture)
       placeSlot(world, live, imageBackdropMesh(live, texture), [], 1, true)
+      repaint()
     },
     undefined,
     () => undefined,
@@ -171,6 +179,10 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     async prepareFrame(seconds, frozen) {
       const world = worldRef.current
       if (!world) return
+      // Export dimensions may have changed the projected portal aspect. Mount
+      // its current surface before awaiting media, including the first frame.
+      paintWorld(world, frozen, seconds)
+      await prepareWorldSfxMedia(world.worldSfx, frozen.worldSfx, seconds)
       await Promise.all(frozen.slots.map(slot => slot.screen ? world.slots.get(slot.id)?.screen?.seek(seconds, slot.screen) : undefined))
     },
     paint(seconds, frozen) {
@@ -181,16 +193,23 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     },
     ready(slots) {
       const world = worldRef.current
-      return Boolean(world && worldAssetsReady(world, slots))
+      return Boolean(world && worldAssetsReady(world, slots) && worldSfxMediaReady(world.worldSfx, (exportLockRef.current ?? documentRef.current).worldSfx))
     },
     setExportSize(width, height) {
       const world = worldRef.current
       if (world) setWorldSize(world, width, height)
     },
+    setExportQuality(enabled) {
+      const world = worldRef.current
+      if (world) setWorldExportQuality(world, enabled)
+    },
     restoreSize() {
       const world = worldRef.current
       const host = hostRef.current
-      if (world && host) resizeWorld(world, host)
+      if (world && host) { resizeWorld(world, host); paintWorld(world, documentRef.current, secondsRef.current) }
+    },
+    canvas() {
+      return worldRef.current?.renderer.domElement ?? null
     },
     facePlacement(slotId, profile) {
       const placement = worldRef.current?.slots.get(slotId)?.root.userData.speechPlacements?.[profile] as FacePlacement | undefined
@@ -220,6 +239,7 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     const resize = () => {
       if (exportLockRef.current) return
       resizeWorld(world, host)
+      paintWorld(world, documentRef.current, secondsRef.current)
     }
     resize()
     const observer = new ResizeObserver(resize)
@@ -272,7 +292,9 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     const world = worldRef.current
     if (!world || exportLockRef.current) return
     const loader = new GLTFLoader()
-    const repaint = () => paintWorld(world, documentRef.current, secondsRef.current)
+    const repaint = () => {
+      if (!exportLockRef.current) paintWorld(world, documentRef.current, secondsRef.current)
+    }
     const bindScreen = (slot: Scene3DSlot) => loadScreen(world, slot,
       () => setScreenErrors(current => ({ ...current, [slot.id]: slotMountKey(slot) })),
       () => {
@@ -295,12 +317,12 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       const live = () => documentRef.current.slots.find(item => item.id === slot.id)
       const gone = () => worldRef.current !== world
       if (slot.media === 'image') {
-        loadSlotImage(world, slot, gone, live)
+        loadSlotImage(world, slot, gone, live, () => { bindScreen(live() ?? slot); repaint() })
         continue
       }
       loadSlotGltf(world, slot, loader, gone, live, (slotId, clips) => {
         onSlotClipsRef.current?.(slotId, clips)
-        paintWorld(world, documentRef.current, secondsRef.current)
+        repaint()
       }, (loaded, gltf) => {
         onSlotMeshesRef.current?.(loaded.id, namedSceneMeshes(gltf.scene), namedSceneNodes(gltf.scene))
         bindScreen(loaded)
@@ -312,13 +334,14 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
   useEffect(() => {
     const world = worldRef.current
     if (!world || exportLockRef.current) return
+    paintWorld(world, document, sceneSeconds)
+    const worldCue = document.worldSfx?.find(cue => cue.id === selectedWorldSfxId)
     gizmoRef.current?.sync(
       selectedWorldSfxId ? undefined : document.slots.find(slot => slot.id === selectedId),
       transformMode,
       editing,
-      document.worldSfx?.find(cue => cue.id === selectedWorldSfxId),
+      worldCue ? worldSfxAtTime(worldCue, sceneSeconds) : undefined,
     )
-    paintWorld(world, document, sceneSeconds)
   }, [document, sceneSeconds, selectedId, selectedWorldSfxId, transformMode, editing])
 
   return <><div ref={hostRef} className="absolute inset-0" data-testid="scene3d-stage" />

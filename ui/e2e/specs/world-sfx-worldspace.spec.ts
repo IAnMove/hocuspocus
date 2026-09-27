@@ -23,14 +23,16 @@ test('world SFX demos occupy the 3D stage and keep screen overlays', async ({ pa
   await workspace.getByLabel('Scene position', { exact: true }).fill('5')
   await page.screenshot({ path: info.outputPath('world-sfx-depth-oblique.png') })
   await workspace.getByTestId('world-sfx-demo-duel').click()
-  await expect(workspace.getByTestId('world-sfx-controls').locator('summary')).toContainText('(5)')
+  await expect(workspace.getByTestId('world-sfx-title')).toContainText('(5)')
   await workspace.getByTestId('world-sfx-demo-mixed').click()
   await expect(workspace.getByTestId('scene-fx-overlay')).toBeVisible()
   await closeApp(page, session)
 })
 
-test('portal depth demo exports a decodable MP4 when the encoder exists', async ({ page }, info) => {
+test.describe('native world-sfx export', () => {
+  test.skip(process.platform !== 'win32', 'Native MP4 is the Windows Edge job')
   test.setTimeout(120_000)
+  test('portal depth demo exports a decodable MP4 when the encoder exists', async ({ page }, info) => {
   const { session, workspace } = await openVideo3d(page)
   const available = await page.evaluate(async () => {
     if (typeof VideoEncoder === 'undefined') return false
@@ -60,4 +62,5 @@ test('portal depth demo exports a decodable MP4 when the encoder exists', async 
     await writeFile(path.join(dir, 'world-sfx-depth.mp4'), Buffer.from(bytes))
   }
   await closeApp(page, session)
+})
 })

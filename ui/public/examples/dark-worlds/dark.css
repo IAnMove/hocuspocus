@@ -1,0 +1,6 @@
+:root { background: #100f12; --muted: #b6adb8; --line: #39343c; --mint: #ebd3a2; }
+body { background: radial-gradient(ellipse at 75% 0%, #302333 0, transparent 35rem); }
+h1 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; letter-spacing: -.04em; }
+.card { background: #18161c; }
+.export { color: #302315 !important; }
+.picture { background: #050507; }

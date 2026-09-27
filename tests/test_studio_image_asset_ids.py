@@ -20,7 +20,10 @@ def test_asset_id_resolves_real_manifest_in_source_workspace(resources_fixture, 
     assert params["image_refs"] == [str(source)]
     assert resources[0]["workspace"] == "source"
     assert resources[0]["url"] == reference
-    assert fixture["service"].canonicalize_legacy(reference) == reference
+    canonical = fixture["service"].canonicalize_legacy(reference)
+    assert canonical == "/api/v1/file/same%20name.png?workspace=source"
+    restored, _ = fixture["service"].prepare_media({"workspace": "output", "image_refs": [canonical]})
+    assert restored["image_refs"] == [str(source)]
 
 
 def test_ambiguous_asset_id_requires_exact_url(resources_fixture):
@@ -29,6 +32,8 @@ def test_ambiguous_asset_id_requires_exact_url(resources_fixture):
     managed_image(fixture["other"] / "reference.png", "asset_shared")
     with pytest.raises(ValueError, match="multiple locations"):
         fixture["service"].prepare_media({"image_refs": ["asset_shared"]})
+    with pytest.raises(ValueError, match="multiple locations"):
+        fixture["service"].canonicalize_legacy("asset_shared")
     params, _ = fixture["service"].prepare_media({"image_refs": ["/api/v1/file/reference.png?workspace=source"]})
     assert params["image_refs"] == [str(fixture["source"] / "reference.png")]
 

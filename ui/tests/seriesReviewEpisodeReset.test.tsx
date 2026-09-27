@@ -66,6 +66,7 @@ test('Series Review pauses and clears episode-owned state when the episode chang
     ownerType: 'attempt', ownerId: `attempt-${number}`, isDerivedThumbnail: false, metadata: {},
   })
   const series = {
+    characters: [], locations: [],
     id: 'series-1', title: 'Series',
     assets: { 'asset-1': asset(1), 'asset-2': asset(2) },
     provider: { videoSettings: { resolution: '540p', orientation: 'landscape' } },
@@ -129,6 +130,7 @@ test('a late Review cancel does not attach episode 1 job onto episode 2', { conc
   const first = episode('episode-1', 1)
   const second = episode('episode-2', 2)
   const series = {
+    characters: [], locations: [],
     id: 'series-1', title: 'Series',
     assets: {
       'asset-1': { id: 'asset-1', workspaceId: 'default', kind: 'video', uri: 'outputs/clip-1.mp4', ownerType: 'attempt', ownerId: 'attempt-1', isDerivedThumbnail: false, metadata: {} },

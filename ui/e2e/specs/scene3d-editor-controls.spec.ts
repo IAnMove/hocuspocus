@@ -4,6 +4,27 @@ import { applyScene3DTemplate } from '../../src/features/scene3d/templates'
 import { gotoApp, closeApp } from '../helpers/gotoApp'
 
 // The real Three.js scene runs against a closed, simulated API. No model provider.
+test('selecting a seamless floor enables reflection after hiding or disabling the floor', async ({ page }) => {
+  const session = await gotoApp(page)
+  await page.getByRole('tab', { name: 'Video 3D', exact: true }).click()
+  await page.getByRole('button', { name: 'Close Ask to the Wizard' }).click()
+  const workspace = page.getByTestId('scene3d-workspace')
+  await workspace.getByRole('checkbox', { name: 'Cinematic environment', exact: true }).check()
+  const reflection = workspace.getByRole('checkbox', { name: 'Reflective metal floor', exact: true })
+  const finish = workspace.getByRole('combobox', { name: 'Floor finish', exact: true })
+  await reflection.uncheck()
+  await finish.selectOption('mirror')
+  await expect(reflection).toBeChecked()
+  await finish.selectOption('none')
+  await reflection.uncheck()
+  await finish.selectOption('mirror')
+  await expect(reflection).toBeChecked()
+  // The separate reflection control remains an explicit override.
+  await reflection.uncheck()
+  await expect(reflection).not.toBeChecked()
+  await closeApp(page, session)
+})
+
 test('3D templates, playback speed and object transforms work in the editor', async ({ page }, testInfo) => {
   const session = await gotoApp(page)
   await page.getByRole('tab', { name: 'Video 3D', exact: true }).click()
@@ -37,8 +58,8 @@ test('3D templates, playback speed and object transforms work in the editor', as
 
   // Drag the real X handle in the WebGL viewport, then verify the document field.
   const scene = applyScene3DTemplate('two-shot')
-  const canvas = workspace.locator('canvas').first()
   const viewport = workspace.getByRole('region', { name: '3D scene', exact: true })
+  const canvas = viewport.locator('canvas[data-engine]')
   await viewport.focus()
   await page.keyboard.press('r')
   await expect(workspace.getByRole('button', { name: 'Rotate Y', exact: true })).toHaveAttribute('aria-pressed', 'true')
@@ -101,10 +122,11 @@ test('3D templates, playback speed and object transforms work in the editor', as
   await page.keyboard.press('r')
   await expect(workspace.getByRole('button', { name: 'Scale', exact: true })).toHaveAttribute('aria-pressed', 'true')
 
-  await workspace.locator('summary').filter({ hasText: 'Shot library' }).click()
-  await workspace.getByRole('searchbox', { name: 'Search templates' }).fill('close')
-  await workspace.getByTestId('world3d-template-face-closeup').click()
-  await workspace.locator('summary').filter({ hasText: 'Shot library' }).click()
+  await workspace.getByTestId('world3d-open-library').click()
+  const library = page.getByTestId('world3d-shot-library')
+  await library.getByRole('searchbox', { name: 'Search templates' }).fill('close')
+  await library.getByTestId('world3d-template-face-closeup').click()
+  await library.getByTestId('world3d-use-shot').click()
   const framing = workspace.locator('details').filter({ has: page.locator('summary', { hasText: 'Subject framing' }) })
   await framing.locator('summary').click()
   await expect(framing.getByRole('checkbox', { name: 'Subject framing', exact: true })).toBeChecked()
@@ -138,7 +160,9 @@ test('3D templates, playback speed and object transforms work in the editor', as
   await closeApp(page, session)
 })
 
-test('speed is baked into a decodable MP4 and its scene metadata', async ({ page }) => {
+test.describe('native speed export', () => {
+  test.skip(process.platform !== 'win32', 'Native MP4 is the Windows Edge job')
+  test('speed is baked into a decodable MP4 and its scene metadata', async ({ page }) => {
   const session = await gotoApp(page)
   await page.getByRole('tab', { name: 'Video 3D', exact: true }).click()
   await page.getByRole('button', { name: 'Close Ask to the Wizard' }).click()
@@ -178,4 +202,5 @@ test('speed is baked into a decodable MP4 and its scene metadata', async ({ page
   expect(decoded.width).toBe(1280)
   expect(decoded.height).toBe(720)
   await closeApp(page, session)
+})
 })

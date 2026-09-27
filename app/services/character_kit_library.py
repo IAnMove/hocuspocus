@@ -26,6 +26,7 @@ _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 _STYLES = {"cutout", "children-illustration", "anime-2d"}
 _REVIEW_STATES = {"pending", "approved", "rejected"}
 _ALPHA_STATES = {"unknown", "transparent", "opaque"}
+_MOUTH_STATES = {"closed", "small", "wide", "round", "pressed", "medium", "pucker", "bite", "tongue"}
 
 
 class CharacterKitRevisionConflict(ValueError):
@@ -53,6 +54,17 @@ def _text(value: Any, label: str, maximum: int, *, required: bool = False) -> st
     if len(text) > maximum or any(ord(char) < 32 for char in text):
         raise ValueError(f"{label} is invalid")
     return text
+
+
+def _asset_dimensions(value: dict[str, Any], label: str) -> dict[str, int]:
+    result: dict[str, int] = {}
+    if "width" in value or "height" in value:
+        for dimension in ("width", "height"):
+            number = value.get(dimension)
+            if isinstance(number, bool) or not isinstance(number, int) or not 1 <= number <= 65536:
+                raise ValueError(f"{label} {dimension} must be a positive pixel dimension")
+            result[dimension] = number
+    return result
 
 
 def _asset(value: Any, label: str) -> dict[str, Any]:
@@ -85,6 +97,7 @@ def _asset(value: Any, label: str) -> dict[str, Any]:
     }
     if face_patch is not None:
         result["facePatch"] = face_patch
+    result.update(_asset_dimensions(value, label))
     for key, maximum in (("prompt", 4000), ("model", 240), ("workspace", 120)):
         text = _text(value.get(key), f"{label} {key}", maximum)
         if text:
@@ -122,7 +135,7 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
     poses = {_token(key, "Pose"): _asset(asset, f"Pose {key}") for key, asset in poses_raw.items()}
 
     mouth_raw = value.get("mouth") or {}
-    if not isinstance(mouth_raw, dict) or any(key not in {"closed", "small", "wide", "round"} for key in mouth_raw):
+    if not isinstance(mouth_raw, dict) or any(key not in _MOUTH_STATES for key in mouth_raw):
         raise ValueError("Character Kit mouth states are invalid")
     mouth = {key: _asset(asset, f"Mouth {key}") for key, asset in mouth_raw.items()}
 
@@ -142,7 +155,7 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
         group = {"mouth": _anchor(raw_group["mouth"], f"{pose_id} mouth anchor")}
         mouth_states_raw = raw_group.get("mouthStates")
         if mouth_states_raw is not None:
-            if not isinstance(mouth_states_raw, dict) or any(key not in {"closed", "small", "wide", "round"} for key in mouth_states_raw):
+            if not isinstance(mouth_states_raw, dict) or any(key not in _MOUTH_STATES for key in mouth_states_raw):
                 raise ValueError(f"Anchors for {pose_id} have invalid mouth states")
             group["mouthStates"] = {
                 key: _anchor(anchor, f"{pose_id} mouth {key} anchor")
@@ -171,6 +184,12 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
         result["voice"] = normalize_character_voice(value["voice"])
     if value.get("lookNotes"):
         result["lookNotes"] = _text(value["lookNotes"], "Character look notes", 4000)
+    if value.get("restPose") is not None:
+        rest = value["restPose"]
+        if not isinstance(rest, dict):
+            raise ValueError("Character rest pose must be an object")
+        result["restPose"] = {"asset": _asset(rest.get("asset"), "Character rest pose"),
+                              "fingerprint": _text(rest.get("fingerprint"), "Rest pose fingerprint", 8000, required=True)}
     for key in ("identityReference", "base"):
         if value.get(key) is not None:
             result[key] = _asset(value[key], f"Character Kit {key}")

@@ -1,6 +1,7 @@
 import type { AssetCatalogItem, AssetKind } from '../api/assets'
 import type { ApiOutput } from '../api/outputs'
 import { catalogItemToOutput } from '../features/asset-picker'
+import { rememberStoredImageFile } from './storedImageFiles'
 
 export function studioMediaPath(item: ApiOutput): string {
   const url = item.url || ''
@@ -33,5 +34,6 @@ export async function fileFromStudioOutput(item: ApiOutput): Promise<File> {
   const response = await fetch(item.url)
   if (!response.ok) throw new Error('Could not read the selected media')
   const blob = await response.blob()
-  return new File([blob], item.name, { type: blob.type || fallbackMime(item) })
+  const file = new File([blob], item.name, { type: blob.type || fallbackMime(item) })
+  return item.type === 'image' ? rememberStoredImageFile(file, item.url) : file
 }

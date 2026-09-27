@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Umbrales de gigantes · HocusPocus</title>
+  <link rel="stylesheet" href="../perspective-lab/review.css">
+  <link rel="stylesheet" href="dark.css">
+  <script type="module" src="../perspective-lab/review.js"></script>
+</head>
+<body data-review-key="hocuspocus:dark-worlds-review:v1" data-collection="hocuspocus-dark-worlds-20260915" data-report-filename="mis-valoraciones-dark-fantasy.json">
+  <header>
+    <nav><a class="brand" href="/">✦ HOCUSPOCUS</a><a href="../living-worlds/">Ver los 6 fondos vivos ↗</a></nav>
+    <div class="intro"><div><p class="eyebrow">20 MUNDOS DARK FANTASY · 6 SEGUNDOS · 9:16</p><h1>Umbrales<br>de gigantes.</h1></div>
+      <div class="lead"><p>Colosos de piedra. Bosques bajo la luna. Reyes sumergidos, dragones petrificados y fortalezas sobre el hielo.</p><p>Veinte composiciones con un paisaje animado propio detrás de arcos y portales. Arquitectura estática, figuras a distintas profundidades y cámaras suaves. Un viaje entre lo diminuto y lo monumental; cada capa sigue siendo editable.</p></div>
+    </div>
+    <div class="instructions"><span>01 <b>Reproduce</b> y mira el fondo.</span><span>02 <b>Valora</b> el movimiento y la composición.</span><span>03 <b>Descarga</b> tus notas o el plano editable.</span></div>
+  </header>
+  <main>
+    <div class="toolbar">
+      <label>Mostrar<select id="filter"><option value="all">Las 20 propuestas</option><option value="pending">Sin evaluar</option><option value="keep">Me encantan</option><option value="refine">Para retocar</option><option value="discard">Descartadas</option></select></label>
+      <label>PSX<select id="style"><option value="all">Cualquier pieza</option><option value="personaje">En el personaje</option><option value="atrezzo">En el atrezzo</option></select></label>
+      <span id="progress" role="status">Cargando colección…</span>
+      <button id="export" class="export">Descargar mis valoraciones ↓</button>
+    </div>
+    <p id="storage" class="storage">Las valoraciones se guardan en este navegador. Descárgalas para conservar una copia o compartirlas.</p>
+    <div id="grid" class="grid" aria-label="Plantillas con fondos animados para evaluar"></div>
+    <p id="empty" hidden>No hay propuestas con estos filtros.</p>
+    <section class="edit-help"><span class="eyebrow">TU SIGUIENTE PLANO</span><h2>Elige el mundo. Dirige la escena.</h2><p>En HocusPocus: <b>Estudios → Vídeo 3D → Biblioteca de planos → Dark Fantasy</b>. Cambia el personaje, selecciona cualquier pieza o ajusta la cámara.</p><p>Selecciona <b>exterior-video</b> en la lista de objetos para cambiar el paisaje o su velocidad. Selecciona <b>background → Ventanas transparentes</b> para ajustar los huecos. El marco y las paredes conservan la imagen original; personajes, objetos y PSX se editan por separado.</p><p>También puedes descargar el plano y usar <b>Abrir plano JSON</b>. La <b>Plantilla reutilizable</b> se importa desde Mis escenarios.</p></section>
+  </main>
+  <footer><a href="/">Volver a HocusPocus ↗</a><span>Vídeos de fondo generados en HocusPocus con MiniMax H3 Fused · composición con su editor 3D.</span></footer>
+  <dialog id="viewer" aria-label="Vista ampliada de la plantilla">
+    <div class="viewer-head"><h2 id="viewer-title"></h2><button id="close" aria-label="Cerrar vista ampliada">Cerrar ✕</button></div>
+    <video id="large-video" controls loop playsinline preload="none"></video>
+    <div class="viewer-foot"><button id="previous">← Anterior</button><span id="viewer-count"></span><button id="next">Siguiente →</button></div>
+  </dialog>
+</body>
+</html>

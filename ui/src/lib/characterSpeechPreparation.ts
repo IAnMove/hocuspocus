@@ -1,5 +1,6 @@
 import { isFacePatchCompatible } from './characterFacePatch'
 import type { CharacterKit, CharacterMouthState } from './characterKit'
+import { BASIC_MOUTH_STATES, CHARACTER_MOUTH_STATES } from './characterMouthStates'
 
 export type SpeechPreparationStatus = 'missing' | 'pending' | 'rejected' | 'incompatible' | 'approved'
 
@@ -10,7 +11,7 @@ export interface SpeechPreparationReadiness {
   complete: boolean
 }
 
-const MOUTH_STATES: readonly CharacterMouthState[] = ['closed', 'small', 'wide', 'round']
+const MOUTH_STATES = CHARACTER_MOUTH_STATES
 
 function poseFor(kit: CharacterKit, poseId: string) {
   return poseId === 'base' ? kit.base : kit.poses[poseId]
@@ -33,7 +34,7 @@ export function speechPreparationReadiness(kit: CharacterKit, poseId: string): S
     return { state, status: asset.reviewState }
   })
   const approved = new Set(rows.filter(row => row.status === 'approved').map(row => row.state))
-  const previewReady = poseApproved && approved.has('closed') && MOUTH_STATES.some(state => state !== 'closed' && approved.has(state))
+  const previewReady = poseApproved && approved.has('closed') && BASIC_MOUTH_STATES.some(state => state !== 'closed' && approved.has(state))
   const complete = poseApproved && MOUTH_STATES.every(state => approved.has(state))
   return { poseApproved, rows, previewReady, complete }
 }

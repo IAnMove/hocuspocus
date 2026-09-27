@@ -3,11 +3,15 @@ import { fetchOutputs, type ApiOutput } from '../../api/outputs'
 import { AssetExplorerDialog } from '../../components/common/AssetExplorerDialog'
 import { useUiTranslation } from '../../i18n'
 import { isWorld3DOutput, loadWorld3DOutput, saveWorld3DOutput } from './sceneLibrary'
+import type { Scene3DDocumentRef } from './documentHistory.ts'
 import type { Scene3DDocument } from './types'
 
-export function Scene3DLibraryControls({ document, workspace, disabled, preview, onLoad }: {
+export function Scene3DLibraryControls({ document, workspace, disabled, preview, identity, onLoad, onSaved }: {
   document: Scene3DDocument; workspace: string; disabled: boolean
-  preview: () => string | undefined; onLoad: (document: Scene3DDocument) => void
+  preview: () => string | undefined
+  identity?: Scene3DDocumentRef
+  onLoad: (document: Scene3DDocument, source?: Scene3DDocumentRef) => void
+  onSaved?: (output: ApiOutput, document: Scene3DDocument, identity: Scene3DDocumentRef) => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false)
@@ -15,8 +19,8 @@ export function Scene3DLibraryControls({ document, workspace, disabled, preview,
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [retry, setRetry] = useState(0), [name, setName] = useState('')
   const [note, setNote] = useState(''), [error, setError] = useState('')
-  const current = useRef({ document, workspace, disabled })
-  current.current = { document, workspace, disabled }
+  const current = useRef({ document, workspace, disabled, identity })
+  current.current = { document, workspace, disabled, identity }
   const loading = useRef<AbortController | null>(null)
   useEffect(() => () => { loading.current?.abort() }, [])
   useEffect(() => {
@@ -42,7 +46,8 @@ export function Scene3DLibraryControls({ document, workspace, disabled, preview,
       if (current.current.document !== captured.document || current.current.workspace !== captured.workspace || current.current.disabled) {
         setError(t('library.changed')); return
       }
-      onLoad(next); setOpen(false); setNote('')
+      onLoad(next, { workspace: captured.workspace, documentId: item.name, revision: Math.max(1, Math.trunc(item.created_at) || 1) })
+      setOpen(false); setNote('')
     } catch { if (!abort.signal.aborted) setError(t('invalidDocument')) }
     finally { if (loading.current === abort) { loading.current = null; setBusy(false) } }
   }
@@ -52,7 +57,8 @@ export function Scene3DLibraryControls({ document, workspace, disabled, preview,
     try {
       const png = preview()
       if (!png) throw new Error(t('library.previewUnavailable'))
-      await saveWorld3DOutput(captured.document, png, name.trim() || captured.document.templateId, captured.workspace)
+      const saved = await saveWorld3DOutput(captured.document, png, name.trim() || captured.document.templateId, captured.workspace)
+      if (captured.identity) onSaved?.(saved, captured.document, captured.identity)
       if (current.current.workspace === captured.workspace) setNote(t('library.saved'))
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('library.saveFailed')) }
     finally { setBusy(false) }

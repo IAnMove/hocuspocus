@@ -12,7 +12,8 @@
       "description": "Admit one local music generation with literal lyrics and caption through the canonical generation queue. The selected ACE-Step or MiniMax-Music3 model must already be installed; retries reuse the same intent receipt.",
       "musicModelTypes": [
         "ace_step_v1_5_xl_sft_lm_4b",
-        "minimax_music3"
+        "minimax_music3",
+        "yue2"
       ],
       "guideRevision": "music-model-contract-v1",
       "inputSchema": {
@@ -1333,11 +1334,13 @@
     ],
     "music_model_types": [
       "ace_step_v1_5_xl_sft_lm_4b",
-      "minimax_music3"
+      "minimax_music3",
+      "yue2"
     ],
     "local_models": [
       "ace_step_v1_5_xl_sft_lm_4b",
-      "minimax_music3"
+      "minimax_music3",
+      "yue2"
     ],
     "guide_revision": "music-model-contract-v1",
     "effects": {

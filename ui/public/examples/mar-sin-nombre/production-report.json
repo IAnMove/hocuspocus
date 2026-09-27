@@ -1,0 +1,963 @@
+{
+  "startedAt": "2026-09-16T12:50:08.894883+00:00",
+  "finishedAt": "2026-09-16T13:47:33.779777+00:00",
+  "elapsedSeconds": 3444.9,
+  "stages": [
+    {
+      "label": "Imágenes nuevas",
+      "work": "27 imágenes, incluidas pruebas y correcciones",
+      "processingSeconds": 501.8
+    },
+    {
+      "label": "Canción YuE2",
+      "work": "1 canción original en español · 2:35",
+      "processingSeconds": 105.8
+    },
+    {
+      "label": "Movimiento H3",
+      "work": "11 tomas: seis mares, dos acciones y tres objetos",
+      "processingSeconds": 761.2
+    },
+    {
+      "label": "Quitar fondos",
+      "work": "19 recortes de imagen y vídeo",
+      "processingSeconds": 916.6
+    },
+    {
+      "label": "Exportación por capas",
+      "work": "33 planos finales + 1 encuadre corregido",
+      "processingSeconds": 650.9
+    },
+    {
+      "label": "Montaje final",
+      "work": "1 vídeo con canción y 32 fundidos",
+      "processingSeconds": 34.7
+    }
+  ],
+  "notes": [
+    "Tiempos activos sumados por etapa; algunos procesos se solapan.",
+    "El tiempo total incluye preparación, revisión, análisis musical y pruebas descartadas.",
+    "La canción original dura 155 segundos; el vídeo recorta 15⅔ segundos de introducción instrumental.",
+    "Los mares y objetos animados se reutilizan entre encuadres; ninguna fuente se invierte ni se estira dentro de los planos."
+  ],
+  "validation": {
+    "exactNativePreviewDocuments": 33,
+    "finalFrames": 4180,
+    "movies": {
+      "/examples/mar-sin-nombre/assets/sea-moon-motion.mp4": 6.583333,
+      "/examples/mar-sin-nombre/assets/lantern-alpha.webm": 6.583,
+      "/examples/mar-sin-nombre/assets/sail-alpha.webm": 6.583,
+      "/examples/mar-sin-nombre/assets/sea-leviathan-motion.mp4": 6.583333,
+      "/examples/mar-sin-nombre/assets/sailor-lookout-alpha.webm": 6.583,
+      "/examples/mar-sin-nombre/assets/sea-blood-v2-motion.mp4": 6.583008,
+      "/examples/mar-sin-nombre/assets/sea-prism-v2-motion.mp4": 6.583333,
+      "/examples/mar-sin-nombre/assets/bucket-alpha.webm": 6.583,
+      "/examples/mar-sin-nombre/assets/sea-stars-motion.mp4": 6.583333,
+      "/examples/mar-sin-nombre/assets/sea-dawn-motion.mp4": 6.583333,
+      "/examples/mar-sin-nombre/assets/sailor-relief-alpha.webm": 6.583
+    },
+    "uses": {
+      "sea-moon-motion.mp4": 5,
+      "lantern-alpha.webm": 32,
+      "sail-alpha.webm": 13,
+      "sea-leviathan-motion.mp4": 8,
+      "sailor-lookout-alpha.webm": 1,
+      "sea-blood-v2-motion.mp4": 2,
+      "sea-prism-v2-motion.mp4": 4,
+      "bucket-alpha.webm": 1,
+      "sea-stars-motion.mp4": 7,
+      "sea-dawn-motion.mp4": 7,
+      "sailor-relief-alpha.webm": 1
+    },
+    "allVideoSlotsForwardNormalSpeed": true,
+    "allVideoSlotsFitSourceDuration": true,
+    "browserPlaybackAndSeeking": true,
+    "mobileOverflow": false,
+    "subtitleTracks": 1,
+    "allGalleryLinksOK": true,
+    "videoRangeStatus": 206,
+    "browserInfo": {
+      "width": 720,
+      "height": 1280,
+      "duration": 139.333008,
+      "tracks": 1
+    },
+    "fullDecode": true,
+    "nativeSceneFramesValidated": 33,
+    "exactAssemblyRequestMatch": true,
+    "nativeAssetsHashValidated": 52,
+    "nativePreviewDocumentsExact": 33,
+    "sceneArchiveExact": true,
+    "reviewedMovingLayersAndCrossfades": true,
+    "subtitleCuesLoaded": true,
+    "songPlayback": true,
+    "allSixSceneImagesLoaded": true
+  },
+  "images": [
+    {
+      "id": "minimax-image-29223683e454",
+      "asset": "2026-09-16-14h56m36s_minimax-comic_3349c24f.jpg",
+      "seconds": 20.037153244018555,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-92604c37f9ce",
+      "asset": "2026-09-16-14h53m50s_minimax-comic_66fb91e9.jpg",
+      "seconds": 18.434853315353394,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-e1bd8719bf22",
+      "asset": "2026-09-16-14h56m55s_minimax-comic_72dcdd9a.jpg",
+      "seconds": 19.320358514785767,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-07f6ceb3fbe7",
+      "asset": "2026-09-16-15h14m53s_minimax-comic_8524531a.jpg",
+      "seconds": 19.611026763916016,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-f162cb768b75",
+      "asset": "2026-09-16-14h51m20s_minimax-comic_d157863d.jpg",
+      "seconds": 19.980444192886353,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-d8d850ea9fbd",
+      "asset": "2026-09-16-14h52m18s_minimax-comic_5f3db263.jpg",
+      "seconds": 18.648924827575684,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-27b009309208",
+      "asset": "2026-09-16-14h51m00s_minimax-comic_76ddbffa.jpg",
+      "seconds": 18.176711797714233,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-96a97614d667",
+      "asset": "2026-09-16-14h55m55s_minimax-comic_ab87456b.jpg",
+      "seconds": 19.33542513847351,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-4cd7e39ae073",
+      "asset": "2026-09-16-14h55m18s_minimax-comic_ddf2fc57.jpg",
+      "seconds": 18.113455533981323,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-61ab739952c1",
+      "asset": "2026-09-16-14h53m32s_minimax-comic_caca74a2.jpg",
+      "seconds": 23.494558095932007,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-bfb9da2d1464",
+      "asset": "2026-09-16-14h56m16s_minimax-comic_66c872db.jpg",
+      "seconds": 21.246816158294678,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-0d6f52c0cb37",
+      "asset": "2026-09-16-14h57m12s_minimax-comic_fd354d81.jpg",
+      "seconds": 17.038874626159668,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-92e6c22ecc86",
+      "asset": "2026-09-16-14h53m09s_minimax-comic_30711df6.jpg",
+      "seconds": 15.28261923789978,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-21833d46c6cd",
+      "asset": "2026-09-16-14h54m59s_minimax-comic_171ba19a.jpg",
+      "seconds": 17.435689210891724,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-088cebb21db5",
+      "asset": "2026-09-16-14h54m23s_minimax-comic_bfff96f8.jpg",
+      "seconds": 15.899256229400635,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-c6ec2856fc77",
+      "asset": "2026-09-16-14h51m38s_minimax-comic_9775c19b.jpg",
+      "seconds": 18.911606550216675,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-4c170bcae6be",
+      "asset": "2026-09-16-14h52m36s_minimax-comic_a2d3bf30.jpg",
+      "seconds": 18.512943744659424,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-379d4b497a8a",
+      "asset": "2026-09-16-14h51m59s_minimax-comic_7aec56b0.jpg",
+      "seconds": 20.271713495254517,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-ffbb2750ad55",
+      "asset": "2026-09-16-14h52m54s_minimax-comic_7821d298.jpg",
+      "seconds": 17.382553100585938,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-c5cf1876a20f",
+      "asset": "2026-09-16-14h54m42s_minimax-comic_178041e8.jpg",
+      "seconds": 19.007022619247437,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-5c2530587bf3",
+      "asset": "2026-09-16-14h57m48s_minimax-comic_422e7b79.jpg",
+      "seconds": 18.96722912788391,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-d3d54cea2cce",
+      "asset": "2026-09-16-14h55m36s_minimax-comic_6a37d30e.jpg",
+      "seconds": 17.957860469818115,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-b2799cd3dcc6",
+      "asset": "2026-09-16-14h54m07s_minimax-comic_b41211dc.jpg",
+      "seconds": 16.373003721237183,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-a4bb4f9bd864",
+      "asset": "2026-09-16-14h50m42s_minimax-comic_574bec9f.jpg",
+      "seconds": 19.241272926330566,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-27f3ac7cad7c",
+      "asset": "2026-09-16-14h57m29s_minimax-comic_1c43b706.jpg",
+      "seconds": 16.55458116531372,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-0df04536392f",
+      "asset": "2026-09-16-14h59m53s_minimax-comic_5848f7e5.jpg",
+      "seconds": 16.068522214889526,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-681c6df44185",
+      "asset": "2026-09-16-15h15m47s_minimax-comic_1e27fc4f.jpg",
+      "seconds": 20.50014877319336,
+      "provider": "MiniMax Image-01"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "fda12e87",
+      "label": "sailor-rear-cutout",
+      "asset": "2026-09-16-14h59m53s_minimax-comic_5848f7e5.no-background-93c2f726.png",
+      "seconds": 0.91,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "2a854e32",
+      "label": "sail-alpha",
+      "asset": "2026-09-16-15h04m36s_seed916822_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-bc0c4f32.webm",
+      "seconds": 183.26,
+      "mode": "video",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "182bb95f",
+      "label": "lantern-alpha",
+      "asset": "2026-09-16-15h05m48s_seed916823_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-e7a87cc7.webm",
+      "seconds": 131.73,
+      "mode": "video",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "ec4244bc",
+      "label": "bucket-alpha",
+      "asset": "2026-09-16-15h06m44s_seed916824_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-9be7766b.webm",
+      "seconds": 314.35,
+      "mode": "video",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "f3a31d35",
+      "label": "sailor-lookout-alpha",
+      "asset": "2026-09-16-15h08m03s_seed916825_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-5246f116.webm",
+      "seconds": 123.21,
+      "mode": "video",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "7b63e1c8",
+      "label": "sailor-relief-alpha",
+      "asset": "2026-09-16-15h09m16s_seed916826_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.no-background-72e47eb7.webm",
+      "seconds": 131.4,
+      "mode": "video",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "6bd26a2f",
+      "label": "mar-sin-nombre-es",
+      "asset": "2026-09-16-14h52m03s_seed916771_[Verse]Zarpé de mi puertocon rumbo al confín.La brújula, ciega,giraba sobre mí.[Chorus]Ay.wav",
+      "seconds": 105.79,
+      "mode": "audio",
+      "model": "yue2"
+    },
+    {
+      "id": "95f311fe",
+      "label": "mast-cutout",
+      "asset": "2026-09-16-15h14m53s_minimax-comic_8524531a.no-background-b9832ca9.png",
+      "seconds": 9.44,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "333f0f4e",
+      "label": "sailor-master-cutout",
+      "asset": "2026-09-16-14h50m42s_minimax-comic_574bec9f.no-background-bc9d279a.png",
+      "seconds": 0.98,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "3d7cf579",
+      "label": "sailor-lookout-cutout",
+      "asset": "2026-09-16-14h56m16s_minimax-comic_66c872db.no-background-54e12f04.png",
+      "seconds": 0.98,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "72cf9b67",
+      "label": "sailor-lantern-cutout",
+      "asset": "2026-09-16-14h56m36s_minimax-comic_3349c24f.no-background-9ff1d86f.png",
+      "seconds": 0.95,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "be785b30",
+      "label": "sailor-relief-cutout",
+      "asset": "2026-09-16-14h56m55s_minimax-comic_72dcdd9a.no-background-7b14afff.png",
+      "seconds": 0.93,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "1c5ed2d2",
+      "label": "bucket-cutout",
+      "asset": "2026-09-16-14h53m50s_minimax-comic_66fb91e9.no-background-41209b2d.png",
+      "seconds": 1.22,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "97320a2f",
+      "label": "lantern-cutout",
+      "asset": "2026-09-16-14h54m07s_minimax-comic_b41211dc.no-background-22c5ae20.png",
+      "seconds": 2.32,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "546393e6",
+      "label": "rigging-cutout",
+      "asset": "2026-09-16-14h54m23s_minimax-comic_bfff96f8.no-background-57b938ec.png",
+      "seconds": 1.57,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "c3c6662b",
+      "label": "sail-cutout",
+      "asset": "2026-09-16-14h54m42s_minimax-comic_178041e8.no-background-2bca2e07.png",
+      "seconds": 5.15,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "523fef3f",
+      "label": "rail-cutout",
+      "asset": "2026-09-16-14h54m59s_minimax-comic_171ba19a.no-background-e9c0be2c.png",
+      "seconds": 2.98,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "a33b782a",
+      "label": "chart-table-cutout",
+      "asset": "2026-09-16-14h55m18s_minimax-comic_ddf2fc57.no-background-7c0c86dd.png",
+      "seconds": 2.53,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "8d355c65",
+      "label": "caravel-cutout",
+      "asset": "2026-09-16-14h55m36s_minimax-comic_6a37d30e.no-background-86cd83a3.png",
+      "seconds": 1.23,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "3b4ea135",
+      "label": "cofa-v2-cutout",
+      "asset": "2026-09-16-14h57m12s_minimax-comic_fd354d81.no-background-9efaccf1.png",
+      "seconds": 1.5,
+      "mode": "image",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "0bf34d69",
+      "label": "sea-blood-v2-motion",
+      "asset": "2026-09-16-15h01m08s_seed916820_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+      "seconds": 67.94,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "390c2611",
+      "label": "sea-prism-v2-motion",
+      "asset": "2026-09-16-15h03m24s_seed916821_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+      "seconds": 68.33,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "4fee264d",
+      "label": "sail-motion",
+      "asset": "2026-09-16-15h04m36s_seed916822_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+      "seconds": 68.56,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "484e4b6e",
+      "label": "lantern-motion",
+      "asset": "2026-09-16-15h05m48s_seed916823_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+      "seconds": 68.33,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "a183e6d5",
+      "label": "bucket-motion",
+      "asset": "2026-09-16-15h06m44s_seed916824_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+      "seconds": 53.64,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "32075b18",
+      "label": "sailor-lookout-motion",
+      "asset": "2026-09-16-15h08m03s_seed916825_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+      "seconds": 75.38,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "11b83f8e",
+      "label": "sailor-relief-motion",
+      "asset": "2026-09-16-15h09m16s_seed916826_STRICTLY LOCKED camera, no pan, tilt, camera zoom or reframing, no cuts. Preserve the painterly illu.mp4",
+      "seconds": 69.18,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "d335c726",
+      "label": "sea-moon-motion",
+      "asset": "2026-09-16-14h57m44s_seed916800_Strictly LOCKED stationary camera, no camera pan, no tilt, no zoom, no cuts. Preserve this artistic.mp4",
+      "seconds": 93.91,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "e3403776",
+      "label": "sea-leviathan-motion",
+      "asset": "2026-09-16-14h58m52s_seed916801_Strictly LOCKED stationary camera, no camera pan, no tilt, no zoom, no cuts. Preserve this artistic.mp4",
+      "seconds": 66.1,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "8c7d9ae1",
+      "label": "sea-stars-motion",
+      "asset": "2026-09-16-14h59m57s_seed916802_Strictly LOCKED stationary camera, no camera pan, no tilt, no zoom, no cuts. Preserve this artistic.mp4",
+      "seconds": 64.81,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "1d04a823",
+      "label": "sea-dawn-motion",
+      "asset": "2026-09-16-15h02m13s_seed916803_Strictly LOCKED stationary camera, no camera pan, no tilt, no zoom, no cuts. Preserve this artistic.mp4",
+      "seconds": 64.98,
+      "mode": null,
+      "model": "minimax_h3_fused_turbo"
+    }
+  ],
+  "audioAnalysis": {
+    "id": "audio-analysis-8a14e2a95e94",
+    "processingSeconds": 9.92
+  },
+  "nativeExports": [
+    {
+      "shot": 1,
+      "id": "world3d-export-f2305d17e47d4732",
+      "seconds": 33.701549768447876,
+      "queueSeconds": 0.24811434745788574,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-01-Departure-cabin-sea-moon-fa324e717155400ea084a38aef65a7cb.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-01-Departure-cabin-sea-moon-fa324e717155400ea084a38aef65a7cb.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-01-Departure-cabin-sea-moon-fa324e717155400ea084a38aef65a7cb.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 2,
+      "id": "world3d-export-d5a2c4d96ac34dba",
+      "seconds": 12.237751483917236,
+      "queueSeconds": 0.2444448471069336,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-02-Departure-ship-sea-moon-c733258e4a8548c3868b1492715ecd91.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-02-Departure-ship-sea-moon-c733258e4a8548c3868b1492715ecd91.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-02-Departure-ship-sea-moon-c733258e4a8548c3868b1492715ecd91.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 3,
+      "id": "world3d-export-af0f83ee46744ec2",
+      "seconds": 14.594363451004028,
+      "queueSeconds": 0.24947738647460938,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-03-Departure-chart-sea-moon-46d0ae5aaa624bf1bad5d2643fd96903.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-03-Departure-chart-sea-moon-46d0ae5aaa624bf1bad5d2643fd96903.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-03-Departure-chart-sea-moon-46d0ae5aaa624bf1bad5d2643fd96903.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 4,
+      "id": "world3d-export-762f9f58174a4aae",
+      "seconds": 38.246013879776,
+      "queueSeconds": 0.2515256404876709,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-04-Departure-deck-back-sea-moon-e2c6185631b14248a2828b44126d2b4f.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-04-Departure-deck-back-sea-moon-e2c6185631b14248a2828b44126d2b4f.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-04-Departure-deck-back-sea-moon-e2c6185631b14248a2828b44126d2b4f.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 5,
+      "id": "world3d-export-6f7a25b6b8ae4782",
+      "seconds": 18.104744911193848,
+      "queueSeconds": 0.24243998527526855,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-05-Unknown-cofa-sea-leviathan-5cff92e53ab64ac487edc72d125ffd77.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-05-Unknown-cofa-sea-leviathan-5cff92e53ab64ac487edc72d125ffd77.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-05-Unknown-cofa-sea-leviathan-5cff92e53ab64ac487edc72d125ffd77.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 6,
+      "id": "world3d-export-0b8bcda561e74bba",
+      "seconds": 12.74348521232605,
+      "queueSeconds": 0.28856849670410156,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-06-Unknown-cabin-wide-sea-leviathan-f31e360078b8477bbb446cf10516ae8a.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-06-Unknown-cabin-wide-sea-leviathan-f31e360078b8477bbb446cf10516ae8a.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-06-Unknown-cabin-wide-sea-leviathan-f31e360078b8477bbb446cf10516ae8a.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 7,
+      "id": "world3d-export-ad31970f35a848c4",
+      "seconds": 17.982974529266357,
+      "queueSeconds": 0.2560310363769531,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-07-Unknown-deck-back-sea-leviathan-c4415d93632941be9867b91f5c525577.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-07-Unknown-deck-back-sea-leviathan-c4415d93632941be9867b91f5c525577.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-07-Unknown-deck-back-sea-leviathan-c4415d93632941be9867b91f5c525577.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 8,
+      "id": "world3d-export-a981c75d5a8f428f",
+      "seconds": 17.146486043930054,
+      "queueSeconds": 0.25241684913635254,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-08-Unknown-cofa-sea-leviathan-230e74b35490488cbd943265670b90e1.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-08-Unknown-cofa-sea-leviathan-230e74b35490488cbd943265670b90e1.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-08-Unknown-cofa-sea-leviathan-230e74b35490488cbd943265670b90e1.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 9,
+      "id": "world3d-export-095ba1b857824bea",
+      "seconds": 12.852445363998413,
+      "queueSeconds": 0.25141406059265137,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-09-Unknown-cabin-wide-sea-leviathan-c8b8aeb58831460e86cdc0fa09516ede.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-09-Unknown-cabin-wide-sea-leviathan-c8b8aeb58831460e86cdc0fa09516ede.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-09-Unknown-cabin-wide-sea-leviathan-c8b8aeb58831460e86cdc0fa09516ede.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 10,
+      "id": "world3d-export-668397709f684a35",
+      "seconds": 41.52498197555542,
+      "queueSeconds": 0.26925230026245117,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-10-Whale-cofa-action-sea-leviathan-bb5fb17ed1e242138fd04783b79180ee.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-10-Whale-cofa-action-sea-leviathan-bb5fb17ed1e242138fd04783b79180ee.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-10-Whale-cofa-action-sea-leviathan-bb5fb17ed1e242138fd04783b79180ee.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 11,
+      "id": "world3d-export-e3a1354ff94644fa",
+      "seconds": 14.563323736190796,
+      "queueSeconds": 0.2781646251678467,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-11-Whale-deck-back-sea-leviathan-c12dc50b645544d8a3098dcb0d6b6c37.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-11-Whale-deck-back-sea-leviathan-c12dc50b645544d8a3098dcb0d6b6c37.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-11-Whale-deck-back-sea-leviathan-c12dc50b645544d8a3098dcb0d6b6c37.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 12,
+      "id": "world3d-export-574b03f5563a4c5f",
+      "seconds": 15.218625783920288,
+      "queueSeconds": 0.2504410743713379,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-12-Blood-cabin-wide-sea-blood-v2-b77349b950cb46dbb8c39786c0a52d2b.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-12-Blood-cabin-wide-sea-blood-v2-b77349b950cb46dbb8c39786c0a52d2b.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-12-Blood-cabin-wide-sea-blood-v2-b77349b950cb46dbb8c39786c0a52d2b.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 13,
+      "id": "world3d-export-9b0f89632fb24006",
+      "seconds": 15.552618980407715,
+      "queueSeconds": 0.26953959465026855,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-13-Prism-cabin-sea-prism-v2-65bd8eccb44844b69bb853351ccfc61f.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-13-Prism-cabin-sea-prism-v2-65bd8eccb44844b69bb853351ccfc61f.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-13-Prism-cabin-sea-prism-v2-65bd8eccb44844b69bb853351ccfc61f.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 14,
+      "id": "world3d-export-5ac7b70c2db54977",
+      "seconds": 24.365468740463257,
+      "queueSeconds": 7.202322483062744,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-14-Prism-bucket-close-sea-prism-v2-baad338be818439fa983f17ee1fbe57a.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-14-Prism-bucket-close-sea-prism-v2-baad338be818439fa983f17ee1fbe57a.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-14-Prism-bucket-close-sea-prism-v2-baad338be818439fa983f17ee1fbe57a.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 15,
+      "id": "world3d-export-90f4e89861774e31",
+      "seconds": 21.305934190750122,
+      "queueSeconds": 0.25173425674438477,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-15-Prism-cofa-sea-prism-v2-0d694ad427a1424db4ef8e4335f4d66e.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-15-Prism-cofa-sea-prism-v2-0d694ad427a1424db4ef8e4335f4d66e.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-15-Prism-cofa-sea-prism-v2-0d694ad427a1424db4ef8e4335f4d66e.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 16,
+      "id": "world3d-export-cf82629073bf461d",
+      "seconds": 13.54123830795288,
+      "queueSeconds": 0.25267934799194336,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-16-Lights-lantern-close-sea-stars-1cd81eae38814bdb938d37fc066e2a6d.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-16-Lights-lantern-close-sea-stars-1cd81eae38814bdb938d37fc066e2a6d.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-16-Lights-lantern-close-sea-stars-1cd81eae38814bdb938d37fc066e2a6d.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 17,
+      "id": "world3d-export-a539bc59ffa64459",
+      "seconds": 12.55377745628357,
+      "queueSeconds": 0.2590310573577881,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-17-Lights-cabin-wide-sea-stars-480f1440fcd74125b714009a32b162d5.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-17-Lights-cabin-wide-sea-stars-480f1440fcd74125b714009a32b162d5.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-17-Lights-cabin-wide-sea-stars-480f1440fcd74125b714009a32b162d5.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 18,
+      "id": "world3d-export-c2cb0945cd3a44e2",
+      "seconds": 17.477317810058594,
+      "queueSeconds": 0.24884605407714844,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-18-Lights-deck-back-sea-stars-f1f61f5cd6834e22864c6d1f1e119a1e.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-18-Lights-deck-back-sea-stars-f1f61f5cd6834e22864c6d1f1e119a1e.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-18-Lights-deck-back-sea-stars-f1f61f5cd6834e22864c6d1f1e119a1e.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 19,
+      "id": "world3d-export-84f4dcd8c4c140b2",
+      "seconds": 20.243175983428955,
+      "queueSeconds": 0.5160887241363525,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-19-Lights-lantern-close-sea-stars-df5419b205e84f2488f8bbbbfa94697b.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-19-Lights-lantern-close-sea-stars-df5419b205e84f2488f8bbbbfa94697b.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-19-Lights-lantern-close-sea-stars-df5419b205e84f2488f8bbbbfa94697b.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 20,
+      "id": "world3d-export-f3339a5697954add",
+      "seconds": 13.514057397842407,
+      "queueSeconds": 0.2528061866760254,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-20-Lights-cabin-wide-sea-stars-9f4064959b5e4da69c62458ecb422e3b.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-20-Lights-cabin-wide-sea-stars-9f4064959b5e4da69c62458ecb422e3b.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-20-Lights-cabin-wide-sea-stars-9f4064959b5e4da69c62458ecb422e3b.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 21,
+      "id": "world3d-export-403bafbb606b47f9",
+      "seconds": 15.961803674697876,
+      "queueSeconds": 0.2532379627227783,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-21-Lights-deck-back-sea-stars-27fd03e75fd943128839c83b16ba2a0c.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-21-Lights-deck-back-sea-stars-27fd03e75fd943128839c83b16ba2a0c.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-21-Lights-deck-back-sea-stars-27fd03e75fd943128839c83b16ba2a0c.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 22,
+      "id": "world3d-export-39e542558196486e",
+      "seconds": 19.367563486099243,
+      "queueSeconds": 0.25860095024108887,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-22-Home-cofa-sea-dawn-5947f6b87a2b410aa9c505b7619a2f9f.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-22-Home-cofa-sea-dawn-5947f6b87a2b410aa9c505b7619a2f9f.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-22-Home-cofa-sea-dawn-5947f6b87a2b410aa9c505b7619a2f9f.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 23,
+      "id": "world3d-export-c0537dfc30cb4387",
+      "seconds": 40.81570219993591,
+      "queueSeconds": 22.732126235961914,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-23-Home-relief-sea-dawn-fce5dd87db854eeaa5f2d9ae0a3f8342.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-23-Home-relief-sea-dawn-fce5dd87db854eeaa5f2d9ae0a3f8342.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-23-Home-relief-sea-dawn-fce5dd87db854eeaa5f2d9ae0a3f8342.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 24,
+      "id": "world3d-export-2deb028061b940d0",
+      "seconds": 18.15865397453308,
+      "queueSeconds": 0.2621746063232422,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-24-Home-deck-back-sea-dawn-4f78e1c59f564446bb6598370e618b92.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-24-Home-deck-back-sea-dawn-4f78e1c59f564446bb6598370e618b92.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-24-Home-deck-back-sea-dawn-4f78e1c59f564446bb6598370e618b92.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 25,
+      "id": "world3d-export-180e5cd348934ce2",
+      "seconds": 14.113988399505615,
+      "queueSeconds": 0.2477128505706787,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-25-Home-cabin-wide-sea-dawn-eafde7975dd3455ca01c598bab8fc85f.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-25-Home-cabin-wide-sea-dawn-eafde7975dd3455ca01c598bab8fc85f.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-25-Home-cabin-wide-sea-dawn-eafde7975dd3455ca01c598bab8fc85f.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 26,
+      "id": "world3d-export-d79da0cdfa19412e",
+      "seconds": 18.774481296539307,
+      "queueSeconds": 0.2605161666870117,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-26-Home-cofa-sea-dawn-6c2dba257e8542cd8ce061d2b701fc84.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-26-Home-cofa-sea-dawn-6c2dba257e8542cd8ce061d2b701fc84.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-26-Home-cofa-sea-dawn-6c2dba257e8542cd8ce061d2b701fc84.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 27,
+      "id": "world3d-export-e3479bea18f0410e",
+      "seconds": 13.03203296661377,
+      "queueSeconds": 0.24334287643432617,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-27-Memories-memory-sea-moon-1b5767be0e0e4d629d9330e28043fd99.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-27-Memories-memory-sea-moon-1b5767be0e0e4d629d9330e28043fd99.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-27-Memories-memory-sea-moon-1b5767be0e0e4d629d9330e28043fd99.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 28,
+      "id": "world3d-export-d3eee58b3a964f6b",
+      "seconds": 14.35672402381897,
+      "queueSeconds": 0.2449789047241211,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-28-Memories-memory-sea-leviathan-82475fba0bb34824a56b60c3ae3c6790.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-28-Memories-memory-sea-leviathan-82475fba0bb34824a56b60c3ae3c6790.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-28-Memories-memory-sea-leviathan-82475fba0bb34824a56b60c3ae3c6790.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 29,
+      "id": "world3d-export-8c5c984ad09f4731",
+      "seconds": 14.375692129135132,
+      "queueSeconds": 0.25986742973327637,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-29-Memories-memory-sea-blood-v2-5b6d240e5dc34afa96b90131256aa267.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-29-Memories-memory-sea-blood-v2-5b6d240e5dc34afa96b90131256aa267.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-29-Memories-memory-sea-blood-v2-5b6d240e5dc34afa96b90131256aa267.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 30,
+      "id": "world3d-export-a2e8846d4e1e4600",
+      "seconds": 13.350923776626587,
+      "queueSeconds": 0.24968886375427246,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-30-Memories-memory-sea-prism-v2-d21457a041ed4bbf8d14d06ca7b72a53.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-30-Memories-memory-sea-prism-v2-d21457a041ed4bbf8d14d06ca7b72a53.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-30-Memories-memory-sea-prism-v2-d21457a041ed4bbf8d14d06ca7b72a53.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 31,
+      "id": "world3d-export-e6cabc1bee1c4068",
+      "seconds": 13.659710884094238,
+      "queueSeconds": 0.24551987648010254,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-31-Memories-memory-sea-stars-af7b823e9ee241e99f068de90734c39d.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-31-Memories-memory-sea-stars-af7b823e9ee241e99f068de90734c39d.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-31-Memories-memory-sea-stars-af7b823e9ee241e99f068de90734c39d.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 32,
+      "id": "world3d-export-419eee39f070497d",
+      "seconds": 14.63923692703247,
+      "queueSeconds": 0.24834609031677246,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-32-Memories-memory-sea-dawn-43eb4291d24c4ea0affa1eeaa9ee9411.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-32-Memories-memory-sea-dawn-43eb4291d24c4ea0affa1eeaa9ee9411.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-32-Memories-memory-sea-dawn-43eb4291d24c4ea0affa1eeaa9ee9411.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "shot": 33,
+      "id": "world3d-export-43eaa874c5e04579",
+      "seconds": 12.674803972244263,
+      "queueSeconds": 0.25846362113952637,
+      "scene": {
+        "name": "Donde-el-mar-no-tiene-nombre-33-Memories-memory-sea-dawn-6231c46e705e4141a2693a00b940db8d.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-33-Memories-memory-sea-dawn-6231c46e705e4141a2693a00b940db8d.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Donde-el-mar-no-tiene-nombre-33-Memories-memory-sea-dawn-6231c46e705e4141a2693a00b940db8d.world3d.scene.preview.png?workspace=default"
+      }
+    }
+  ],
+  "supersededExports": [
+    {
+      "shot": 14,
+      "id": "world3d-export-9d78b6be63664fa0",
+      "seconds": 40.10201597213745,
+      "reason": "Lower floor plate to cover frame during the bucket close-up"
+    }
+  ],
+  "assembly": {
+    "language": "es",
+    "id": "video-edit-9a3c2c4acb20",
+    "filename": "2026-09-16-15h44m38s_Donde_el_mar_no_tiene_nombre.mp4",
+    "url": "/api/v1/file/2026-09-16-15h44m38s_Donde_el_mar_no_tiene_nombre.mp4",
+    "seconds": 34.67478656768799,
+    "frames": 4180,
+    "duration": 139.33333333333334,
+    "bytes": 47329327
+  }
+}

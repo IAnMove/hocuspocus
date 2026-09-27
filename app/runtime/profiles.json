@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "revision": "runtime-profiles-v1",
+  "revision": "runtime-profiles-v1-macos-core",
   "platforms": [
     "linux",
     "win32"
@@ -32,6 +32,28 @@
     }
   },
   "engines": {
+    "core": {
+      "label": "HocusPocus core",
+      "env": "app/env",
+      "environment": "venv",
+      "python": "3.10",
+      "required": true,
+      "platforms": [
+        "darwin"
+      ],
+      "requirements": "app/runtime/requirements-core.txt",
+      "constraints": {
+        "fastapi": "0.141.1",
+        "psutil": "7.2.2",
+        "pydantic": "2.10.6",
+        "pillow": "11.3.0",
+        "python-multipart": "0.0.32",
+        "requests": "2.34.2",
+        "starlette": "0.52.1",
+        "uvicorn": "0.52.4"
+      },
+      "defaultInstall": true
+    },
     "wangp": {
       "label": "HocusPocus / WanGP",
       "env": "app/env",

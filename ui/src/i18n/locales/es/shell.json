@@ -20,6 +20,11 @@
   "preflight": {
     "dismiss": "Descartar"
   },
+  "capabilities": {
+    "macosCoreRemote": "macOS · modo edición y proveedores remotos",
+    "macosIntel": "Intel Mac no entra en el primer lanzamiento macOS. Usa Apple Silicon o un host NVIDIA remoto.",
+    "coreRemote": "Edición y proveedores remotos · los motores NVIDIA locales no están disponibles"
+  },
   "oom": {
     "title": "Sin VRAM",
     "generationFailed": "La generación falló.",

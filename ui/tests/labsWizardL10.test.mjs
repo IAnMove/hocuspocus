@@ -22,15 +22,15 @@ test('Series Lab L10 keeps five destinations and groups canon without dropping d
   assert.match(canon, /tab === 'continuity'/)
   assert.match(canon, /tab === 'advanced' && <SectionCard title=\{t\('canon.propsTitle'\)/)
   assert.match(canon, /<SeriesVoiceFields/)
-  assert.match(en.canon.voicesDescription, /do not control MiniMax H3/)
-  assert.match(es.canon.voicesDescription, /No controlan MiniMax H3/)
+  assert.match(en.canon.voicesDescription, /do not control MiniMax H3/i)
+  assert.match(es.canon.voicesDescription, /no controlan MiniMax H3/i)
 })
 
 test('Series shots keep a compact face and hide IDs behind advanced details', () => {
   const shots = readFileSync(new URL('../src/features/series/SeriesShotsPanel.tsx', import.meta.url), 'utf8')
   assert.match(shots, /shot\.action \|\| shot\.framing/)
   assert.match(shots, /dialogueBeats\.map/)
-  assert.match(shots, /shots\.advancedDetails/)
+  assert.match(shots, /native\.editShot/)
   assert.match(shots, /<details/)
   const draft = readFileSync(new URL('../src/features/series/SeriesShotDraftFields.tsx', import.meta.url), 'utf8')
   const proposal = readFileSync(new URL('../src/features/series/SeriesEpisodeProposalReview.tsx', import.meta.url), 'utf8')

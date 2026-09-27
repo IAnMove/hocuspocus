@@ -15,6 +15,30 @@ export async function fetchPreflight(): Promise<{ ok: boolean; checks: Preflight
   return res.json()
 }
 
+export type CapabilityState = 'available' | 'disabled' | 'hidden'
+
+export interface SystemCapability {
+  state: CapabilityState
+  reason_code: string
+  provider?: string | null
+  alternative?: string | null
+}
+
+export interface SystemCapabilities {
+  platform: string
+  arch: string
+  profile: string
+  accelerators: { cuda: boolean; mps: boolean; metal: boolean }
+  ui: { mode: string; show_cuda_controls: boolean }
+  capabilities: Record<string, SystemCapability>
+}
+
+export async function fetchSystemCapabilities(): Promise<SystemCapabilities> {
+  const res = await fetch(`${BASE}/api/v1/system/capabilities`)
+  if (!res.ok) throw new Error('Failed to fetch system capabilities')
+  return res.json()
+}
+
 // --- System Config ---
 
 export async function fetchSystemConfig(): Promise<import('../types').SystemConfig> {

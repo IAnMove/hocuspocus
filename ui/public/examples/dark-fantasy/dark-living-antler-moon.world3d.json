@@ -1,0 +1,343 @@
+{
+  "version": 1,
+  "units": "meters",
+  "up": "y",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "duration": 6,
+  "templateId": "dark-living-antler-moon",
+  "light": {
+    "kind": "directional",
+    "direction": [
+      -0.5,
+      -0.6,
+      -0.8
+    ],
+    "intensity": 2,
+    "color": "#fff2e4"
+  },
+  "environment": {
+    "reflectiveFloor": false,
+    "platform": false,
+    "bloom": 0.07,
+    "floorStyle": "backdrop",
+    "floorColor": "#252e46",
+    "floorSourceHeight": 1
+  },
+  "slots": [
+    {
+      "id": "background",
+      "slot": "background",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/dark-living-antler-moon-frame.jpg",
+      "position": [
+        0,
+        -6.2621875000000005,
+        -11
+      ],
+      "scale": 12.3,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "windows": [
+          [
+            [
+              0.36527777777777776,
+              0.7421875
+            ],
+            [
+              0.6388888888888888,
+              0.7421875
+            ],
+            [
+              0.6638888888888889,
+              0.7109375
+            ],
+            [
+              0.6833333333333333,
+              0.67265625
+            ],
+            [
+              0.6958333333333333,
+              0.6359375
+            ],
+            [
+              0.7111111111111111,
+              0.60234375
+            ],
+            [
+              0.7194444444444444,
+              0.565625
+            ],
+            [
+              0.7166666666666667,
+              0.5265625
+            ],
+            [
+              0.7236111111111111,
+              0.50703125
+            ],
+            [
+              0.7138888888888889,
+              0.4875
+            ],
+            [
+              0.7208333333333333,
+              0.465625
+            ],
+            [
+              0.7125,
+              0.43046875
+            ],
+            [
+              0.7027777777777777,
+              0.4015625
+            ],
+            [
+              0.6805555555555556,
+              0.37265625
+            ],
+            [
+              0.6583333333333333,
+              0.34921875
+            ],
+            [
+              0.6388888888888888,
+              0.328125
+            ],
+            [
+              0.6069444444444444,
+              0.309375
+            ],
+            [
+              0.5722222222222222,
+              0.296875
+            ],
+            [
+              0.5319444444444444,
+              0.290625
+            ],
+            [
+              0.4861111111111111,
+              0.2890625
+            ],
+            [
+              0.44722222222222224,
+              0.2890625
+            ],
+            [
+              0.41388888888888886,
+              0.30078125
+            ],
+            [
+              0.37916666666666665,
+              0.31640625
+            ],
+            [
+              0.3472222222222222,
+              0.3375
+            ],
+            [
+              0.3236111111111111,
+              0.35546875
+            ],
+            [
+              0.30277777777777776,
+              0.38203125
+            ],
+            [
+              0.2875,
+              0.41328125
+            ],
+            [
+              0.2777777777777778,
+              0.4421875
+            ],
+            [
+              0.2791666666666667,
+              0.475
+            ],
+            [
+              0.26944444444444443,
+              0.50625
+            ],
+            [
+              0.2722222222222222,
+              0.53828125
+            ],
+            [
+              0.27361111111111114,
+              0.575
+            ],
+            [
+              0.2875,
+              0.61015625
+            ],
+            [
+              0.3,
+              0.640625
+            ],
+            [
+              0.31805555555555554,
+              0.67421875
+            ],
+            [
+              0.3388888888888889,
+              0.709375
+            ]
+          ]
+        ],
+        "unlit": true
+      }
+    },
+    {
+      "id": "hero",
+      "slot": "subject_1",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+      "position": [
+        0.55,
+        0,
+        -0.1
+      ],
+      "scale": 1.25,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.88,
+        "tint": "#c9cbd0"
+      }
+    },
+    {
+      "id": "near-prop",
+      "slot": "prop",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+      "position": [
+        -2.6,
+        0,
+        3
+      ],
+      "scale": 3.5,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.8,
+        "tint": "#68717e",
+        "psx": 0.22
+      }
+    },
+    {
+      "id": "exterior-video",
+      "slot": "prop",
+      "media": "screen",
+      "sourceUrl": "",
+      "clip": null,
+      "position": [
+        -0.04804687499999983,
+        -0.8117500000000009,
+        -12.5
+      ],
+      "rotationY": 0,
+      "scale": 1,
+      "screen": {
+        "sourceUrl": "/examples/dark-fantasy/dark-living-antler-moon-exterior.mp4",
+        "media": "video",
+        "mode": "mesh",
+        "targetMesh": "SCREEN_CONTENT",
+        "anchor": "",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "pitch": 0,
+        "yaw": 0,
+        "roll": 0,
+        "width": 7.290056249999999,
+        "height": 12.930375000000002,
+        "style": "frameless",
+        "fit": "cover",
+        "start": 0,
+        "speed": 1,
+        "loop": true,
+        "flipY": false
+      }
+    }
+  ],
+  "camera": {
+    "family": "establishment",
+    "frameFormat": "portrait",
+    "eye": [
+      -0.18,
+      3.75,
+      10.959999999999999
+    ],
+    "look": [
+      0,
+      3.75,
+      -0.5
+    ],
+    "fov": 49,
+    "framing": {
+      "targetSlot": "hero",
+      "anchor": "feet",
+      "from": [
+        -0.584,
+        3.0,
+        8.767999999999999
+      ],
+      "to": [
+        -0.40800000000000003,
+        3.0,
+        8.552
+      ],
+      "lookFrom": [
+        -0.44000000000000006,
+        3.0,
+        -0.4
+      ],
+      "lookTo": [
+        -0.44000000000000006,
+        3.0,
+        -0.4
+      ],
+      "rollFrom": 0,
+      "rollTo": 0,
+      "relativeToFacing": false,
+      "orbitTurns": 0
+    }
+  },
+  "worldSfx": [
+    {
+      "id": "atmosphere",
+      "kind": "dust",
+      "position": {
+        "x": 0,
+        "y": 1.5,
+        "z": -1.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#81d9e8",
+      "scale": 2,
+      "intensity": 0.1,
+      "seed": 918,
+      "start": 0,
+      "end": 6,
+      "sound": false,
+      "volume": 0
+    }
+  ]
+}

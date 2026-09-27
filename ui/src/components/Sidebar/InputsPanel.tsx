@@ -222,9 +222,10 @@ export function InputsPanel() {
   const refBgLabel = modelOptions?.background_removal_label
   // max_image_refs includes the Edit source image, when present.
   const configuredMaxRefs = modelOptions?.max_image_refs ?? null
+  const usesEditSource = Boolean(params.image_guide) || (params.image_mode as number) === 2
   const maxRefs = configuredMaxRefs == null
     ? null
-    : Math.max(0, configuredMaxRefs - ((params.image_mode as number) === 2 ? 1 : 0))
+    : Math.max(0, configuredMaxRefs - (usesEditSource ? 1 : 0))
   const canAddRef = maxRefs == null || imageRefs.length < maxRefs
   const defaultRefType = hasLandscapeMode ? 'KI' : hasPeopleMode ? 'I' : ''
 

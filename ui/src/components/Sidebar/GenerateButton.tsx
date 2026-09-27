@@ -6,13 +6,16 @@ import { splitPromptSchedule } from '../../lib/promptScheduler'
 import { newUserGenerationContext } from '../../features/studio/generationProvenance'
 import { useViggleGenerationGuard } from '../../lib/useViggleGenerationGuard'
 import { isGenerationJobActive } from '../../lib/generationJobState'
+import { usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
+import { generateBlockedCopy, hasOutpaintArea, isRemoteMiniMaxImage } from '../../lib/generateButtonGate'
+import { imageStudioInputRequirement, supportsImageIntent } from '../../features/studio/imageStudioIntent'
+import { imageBatchStatus, imageBatchHasSources } from '../../features/studio/imageBatch'
 
 export function GenerateButton() {
   const { t } = useUiTranslation('studio')
   const { t: tCommon } = useUiTranslation('common')
   const jobs = useStore(s => s.jobs)
   const startGeneration = useStore(s => s.startGeneration)
-  const setSidebarOpen = useStore(s => s.setSidebarOpen)
   const [submitting, setSubmitting] = useState(false)
   const [submissionError, setSubmissionError] = useState('')
   const submissionPending = useRef(false)
@@ -30,28 +33,39 @@ export function GenerateButton() {
     ) === true,
   )
   const hasStartImage = useStore(s => !!(s.startImage || s.params.image_start))
-  const needsImage = generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage
-  const needsReference = generationMode === 'video' && isOmniReference
-    && !hasOmniVisualReference
+  const imageRequirement = useStore(s => s.generationMode === 'image'
+    ? imageStudioInputRequirement(s.imageStudioIntent, imageBatchHasSources(s.imageStudioIntent, s.imageBatch) ? s.imageBatch?.sources[0]?.url : s.params.image_guide, s.imageRefs.length || s.params.image_refs?.length || 0)
+    : null)
+  const incompatibleImage = useStore(s => s.generationMode === 'image' && !supportsImageIntent(s.imageStudioIntent, s.modelOptions))
+  const needsImage = (generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage)
+    || imageRequirement === 'source'
+  const needsReference = (generationMode === 'video' && isOmniReference
+    && !hasOmniVisualReference) || imageRequirement === 'reference'
   const editSubMode = useStore(s => s.editSubMode)
   const editVideoPath = useStore(s => s.editVideoPath)
   const outpaintVideoBox = useStore(s => s.outpaintVideoBox)
   const isOutpaint = generationMode === 'avatar' && editSubMode === 'outpaint'
   const needsOutpaintSource = isOutpaint && !editVideoPath
-  const hasOutpaintArea = (
-    outpaintVideoBox.x > 0.0005
-    || outpaintVideoBox.y > 0.0005
-    || outpaintVideoBox.x + outpaintVideoBox.w < 0.9995
-    || outpaintVideoBox.y + outpaintVideoBox.h < 0.9995
-  )
-  const needsOutpaintArea = isOutpaint && !!editVideoPath && !hasOutpaintArea
+  const needsOutpaintArea = isOutpaint && !!editVideoPath && !hasOutpaintArea(outpaintVideoBox)
   const promptSchedulerEnabled = useStore(s => s.promptSchedulerEnabled)
   const imageMode = useStore(s => s.params.image_mode)
   const prompt = useStore(s => s.params.prompt)
+  const imageBatch = useStore(s => s.imageBatch)
+  const imageIntent = useStore(s => s.imageStudioIntent)
+  const imageMask = useStore(s => s.params.image_mask)
+  const { batching, count: batchCount, invalid: invalidBatch } = imageBatchStatus(
+    generationMode, imageIntent, String(prompt || ''), imageMask, imageBatch,
+  )
   const schedulerApplies = promptSchedulerEnabled && generationMode === 'video' && imageMode === 0
   const scheduledVideoCount = schedulerApplies ? splitPromptSchedule(prompt).length : 0
   const needsScheduledPrompts = schedulerApplies && scheduledVideoCount === 0
-  const blocked = needsImage || needsReference || needsOutpaintSource || needsOutpaintArea || needsScheduledPrompts
+  const needsPrompt = generationMode === 'image' && !String(prompt || '').trim()
+  const modelType = useStore(s => s.params.model_type)
+  const imageProvider = useStore(s => s.productionProfile?.image?.provider)
+  const localUnavailable = usePlatformCapabilities()?.capabilities.wangp_local?.state === 'hidden'
+    && !isRemoteMiniMaxImage(generationMode, modelType, imageProvider)
+  const blocked = incompatibleImage || localUnavailable || needsImage || needsReference || needsOutpaintSource
+    || needsOutpaintArea || needsScheduledPrompts || needsPrompt || invalidBatch
 
   const handleClick = async () => {
     if (blocked || submissionPending.current) return
@@ -63,7 +77,6 @@ export function GenerateButton() {
       // Keep the visible command panel mounted through preparation/admission.
       // A click or a resolved legacy return value is not a queue receipt.
       await startGeneration(undefined, newUserGenerationContext())
-      setSidebarOpen(false)
     } catch (error) {
       setSubmissionError(error instanceof Error ? error.message : tCommon('status.failed'))
     } finally {
@@ -75,20 +88,10 @@ export function GenerateButton() {
   const queueCount = jobs.filter(job => isGenerationJobActive(job.status)).length
 
   if (blocked) {
-    const label = needsImage
-      ? t('generate.needImage')
-      : needsReference
-        ? t('generate.needReference')
-      : needsOutpaintSource
-        ? t('generate.needSource')
-      : needsOutpaintArea
-        ? t('generate.chooseCanvas')
-        : t('generate.addPrompt')
-    const title = needsOutpaintArea
-      ? t('generate.outpaintAreaHint')
-      : needsReference
-        ? t('generate.referenceHint')
-        : undefined
+    const { label, title } = generateBlockedCopy({
+      incompatibleImage, localUnavailable, needsImage, needsReference, needsOutpaintSource, needsOutpaintArea,
+      needsPrompt, needsScheduledPrompts, t,
+    })
     return (
       <button
         disabled
@@ -121,9 +124,10 @@ export function GenerateButton() {
       <Play size={13} fill={submitting ? 'currentColor' : 'white'} />
       {checkingFrame ? t('wangp.checkingFrame') : submitting
           ? t('generate.submitting')
-          : scheduledVideoCount > 1
-            ? t('generate.queueCount', { count: scheduledVideoCount })
-            : queueCount > 0 ? t('generate.goCount', { count: queueCount }) : tCommon('actions.generate')}
+          : scheduledVideoCount > 1 || batching
+            ? t('generate.queueCount', { count: batching ? batchCount : scheduledVideoCount })
+            : tCommon('actions.generate')}
     </button>
+    {queueCount > 0 ? <p className="mt-1 text-right text-[10px] text-text-muted">{t('generate.activeCount', { count: queueCount })}</p> : null}
   </div>
 }

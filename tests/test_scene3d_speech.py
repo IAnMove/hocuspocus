@@ -9,6 +9,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from routers.character_kit_face import create_character_kit_face_router
 from services import scene3d_speech as speech
+from services.speech_analysis_cache import reset_runtime_state
+
+
+@pytest.fixture(autouse=True)
+def _speech_analysis_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("SPEECH_ANALYSIS_CACHE_DIR", str(tmp_path / "speech-cache"))
+    reset_runtime_state()
+    yield
+    reset_runtime_state()
 
 
 def wav(seconds=1, rate=16000):

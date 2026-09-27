@@ -340,13 +340,13 @@ def create_llm_router(
         return {"status": "ok"}
 
     @router.get("/api/v1/llm/models")
-    def list_llm_models(provider: str = ""):
-        """Return available LLM model options. Pass provider to include remote models."""
+    def list_llm_models(provider: str = "", url: str = ""):
+        """Return available LLM model options. Pass provider and optional url to query that server (Ollama / OpenAI-compatible) without waiting for a saved profile."""
         from services import llm_service
         services = get_services_config()
         profile_provider, _profile_model, profile_remote_url = effective_llm_routing(services)
         p = provider or profile_provider
-        api_key, remote_url = llm_provider_credentials(p, services, profile_remote_url)
+        api_key, remote_url = llm_provider_credentials(p, services, url.strip() or profile_remote_url)
         return {"models": llm_service.get_available_models(provider=p, remote_url=remote_url, api_key=api_key)}
 
     @router.get("/api/v1/llm/stream-status")
@@ -372,8 +372,9 @@ def create_llm_router(
             if len(json.dumps(json_schema, ensure_ascii=False)) > 100_000:
                 raise HTTPException(status_code=400, detail="json_schema is too large")
 
-        ensure_llm_loaded()
-
+        llm_override = comic_writing_llm(body) if body.get("writingProvider") else None
+        if not llm_override:
+            ensure_llm_loaded()
         try:
             from services.wangp_analysis import generate_with_media
             arguments = dict(
@@ -387,6 +388,13 @@ def create_llm_router(
                 seed=body.get("seed"),
                 json_schema=json_schema,
             )
+            if llm_override:
+                if body.get("media"):
+                    raise ValueError("Scoped writing requests support text only; use the configured vision model for media")
+                arguments.pop("seed", None)
+                text = await asyncio.to_thread(llm_service.generate_openai_compatible,
+                    **arguments, model_id=llm_override["model"], base_url=llm_override["base_url"], api_key=llm_override["api_key"])
+                return {"text": text}
             if body.get("media") and resolve_visual_media is None:
                 raise ValueError("Visual input resolver is unavailable")
             return await asyncio.to_thread(generate_with_media, llm_service, arguments, body.get("media"),

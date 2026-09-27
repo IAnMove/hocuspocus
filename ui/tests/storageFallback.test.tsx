@@ -39,16 +39,20 @@ test('WelcomeModal renders and dismisses when localStorage throws', { concurrenc
   const { WelcomeModal } = await import('../src/components/WelcomeModal.tsx')
   const original = window.localStorage
   Object.defineProperty(window, 'localStorage', { configurable: true, value: throwingStorage() })
+  const { latestWhatsNewPr, WELCOME_SEEN_KEY } = await import('../src/whatsNew.ts')
   safeStorageRemove('local', 'maestro_welcome_seen_v1')
+  safeStorageRemove('local', WELCOME_SEEN_KEY)
 
   try {
     render(<WelcomeModal />)
     assert.ok(screen.getByText('What’s new in HocusPocus'))
+    assert.ok(screen.getByText('#448'))
+    assert.ok(screen.getByLabelText('Latest changes'))
     assert.equal(screen.queryByText('Mature mode is off by default'), null)
     assert.equal(screen.queryByText(/PG-13/i), null)
     fireEvent.click(screen.getByRole('button', { name: 'Enter the studio' }))
     assert.equal(screen.queryByText('What’s new in HocusPocus'), null)
-    assert.equal(safeStorageGet('local', 'hocuspocus_welcome_seen_v1'), '1')
+    assert.equal(safeStorageGet('local', WELCOME_SEEN_KEY), String(latestWhatsNewPr()))
   } finally {
     cleanup()
     Object.defineProperty(window, 'localStorage', { configurable: true, value: original })

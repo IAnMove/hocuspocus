@@ -1,0 +1,328 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-living-last-aqueduct",
+  "title": "El último acueducto",
+  "description": "Ruinas blancas y agua azul suspendidas sobre un abismo.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T14:25:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-living-last-aqueduct",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#384555",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-last-aqueduct-frame.jpg",
+        "position": [
+          0,
+          -5.224374999999999,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.2791666666666667,
+                0.784375
+              ],
+              [
+                0.7319444444444444,
+                0.784375
+              ],
+              [
+                0.7347222222222223,
+                0.73828125
+              ],
+              [
+                0.7263888888888889,
+                0.72578125
+              ],
+              [
+                0.7388888888888889,
+                0.72265625
+              ],
+              [
+                0.7402777777777778,
+                0.40546875
+              ],
+              [
+                0.7236111111111111,
+                0.38828125
+              ],
+              [
+                0.7180555555555556,
+                0.378125
+              ],
+              [
+                0.7375,
+                0.34609375
+              ],
+              [
+                0.7277777777777777,
+                0.31953125
+              ],
+              [
+                0.7069444444444445,
+                0.2953125
+              ],
+              [
+                0.6791666666666667,
+                0.2734375
+              ],
+              [
+                0.6444444444444445,
+                0.25625
+              ],
+              [
+                0.6041666666666666,
+                0.2421875
+              ],
+              [
+                0.5638888888888889,
+                0.2328125
+              ],
+              [
+                0.5319444444444444,
+                0.23046875
+              ],
+              [
+                0.4736111111111111,
+                0.2296875
+              ],
+              [
+                0.4305555555555556,
+                0.234375
+              ],
+              [
+                0.3888888888888889,
+                0.24453125
+              ],
+              [
+                0.35138888888888886,
+                0.2578125
+              ],
+              [
+                0.3194444444444444,
+                0.275
+              ],
+              [
+                0.29305555555555557,
+                0.2953125
+              ],
+              [
+                0.27361111111111114,
+                0.315625
+              ],
+              [
+                0.2611111111111111,
+                0.3359375
+              ],
+              [
+                0.25555555555555554,
+                0.34609375
+              ],
+              [
+                0.2916666666666667,
+                0.38125
+              ],
+              [
+                0.2722222222222222,
+                0.4015625
+              ],
+              [
+                0.2638888888888889,
+                0.40390625
+              ],
+              [
+                0.26666666666666666,
+                0.721875
+              ],
+              [
+                0.2791666666666667,
+                0.73125
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          -0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.25,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.88,
+          "tint": "#c9cbd0",
+          "psx": 0.16
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          2.6,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.0288281249999999,
+          -1.0116249999999996,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-fantasy/dark-living-last-aqueduct-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 7.780518750000001,
+          "height": 15.8285625,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.18,
+        3.75,
+        10.84
+      ],
+      "look": [
+        0,
+        3.75,
+        -0.5
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "feet",
+        "from": [
+          0.584,
+          3.0,
+          8.672
+        ],
+        "to": [
+          0.40800000000000003,
+          3.0,
+          8.456
+        ],
+        "lookFrom": [
+          0.44000000000000006,
+          3.0,
+          -0.4
+        ],
+        "lookTo": [
+          0.44000000000000006,
+          3.0,
+          -0.4
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#7abfe9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 921,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

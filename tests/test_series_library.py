@@ -233,6 +233,23 @@ def test_duplicate_does_not_copy_episode_attempt_history():
     assert duplicate["seasons"][0]["episodeOrder"] == []
 
 
+@pytest.mark.parametrize("owner_type", ["episode", "shot", "attempt"])
+def test_duplicate_retains_rendered_media_without_dangling_owners(owner_type):
+    series = normalize_series_library(example_library(), "default")["seriesById"]["series_signal"]
+    asset = copy.deepcopy(next(iter(series["assets"].values())))
+    asset.update(id="rendered_asset", ownerType=owner_type, ownerId="old_production_owner")
+    series["assets"]["rendered_asset"] = asset
+    before = copy.deepcopy(series)
+    duplicate = duplicate_series_project(series)
+    library = {"version": 1, "workspaceId": "default", "seriesOrder": [duplicate["id"]],
+               "seriesById": {duplicate["id"]: duplicate}}
+    result = normalize_series_library(library, "default")["seriesById"][duplicate["id"]]
+    assert result["assets"]["rendered_asset"]["ownerType"] == "series"
+    assert result["assets"]["rendered_asset"]["ownerId"] == duplicate["id"]
+    assert result["assets"]["rendered_asset"]["uri"] == asset["uri"]
+    assert series == before
+
+
 def test_canon_delta_requires_explicit_accept_and_increments_once():
     series = normalize_series_library(example_library(), "default")["seriesById"]["series_signal"]
     untouched = commit_canon_delta(series, "episode_1", {}, 1)

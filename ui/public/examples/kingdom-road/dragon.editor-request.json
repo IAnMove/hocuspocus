@@ -1,0 +1,359 @@
+{
+  "name": "El jinete PSX - 35 reinos - 2m48",
+  "workspace": "default",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "clips": [
+    {
+      "name": "CLIP 01 — El jinete PSX · Coast",
+      "source": "/api/v1/file/2026-09-16-02h57m08s_world3d-scene_0e0e8a.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 02 — El jinete PSX · Clouds",
+      "source": "/api/v1/file/2026-09-16-03h01m04s_world3d-scene_16612c.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 03 — El jinete PSX · Neon",
+      "source": "/api/v1/file/2026-09-16-03h18m43s_world3d-scene_6b9577.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 04 — El jinete PSX · Cobalt Crater",
+      "source": "/api/v1/file/2026-09-16-03h19m22s_world3d-scene_7a10e6.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 05 — El jinete PSX · Coral Radio",
+      "source": "/api/v1/file/2026-09-16-03h19m56s_world3d-scene_66c04b.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 06 — El jinete PSX · Amber Ice",
+      "source": "/api/v1/file/2026-09-16-03h20m29s_world3d-scene_5c5fdb.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 07 — El jinete PSX · Rose Orbit",
+      "source": "/api/v1/file/2026-09-16-03h22m10s_world3d-scene_b2856a.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 08 — El jinete PSX · Ocean Window",
+      "source": "/api/v1/file/2026-09-16-03h23m51s_world3d-scene_f04170.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 09 — El jinete PSX · Scarlet Tide",
+      "source": "/api/v1/file/2026-09-16-03h24m25s_world3d-scene_3ed1e0.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 10 — El jinete PSX · Glass Orchard",
+      "source": "/api/v1/file/2026-09-16-03h24m59s_world3d-scene_5a0a33.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 11 — El jinete PSX · Furnace",
+      "source": "/api/v1/file/2026-09-16-03h25m33s_world3d-scene_4043c4.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 12 — El jinete PSX · Moon",
+      "source": "/api/v1/file/2026-09-16-03h26m07s_world3d-scene_73aac1.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 13 — El jinete PSX · Snow",
+      "source": "/api/v1/file/2026-09-16-03h26m43s_world3d-scene_3a7326.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 14 — El jinete PSX · Sea",
+      "source": "/api/v1/file/2026-09-16-03h27m16s_world3d-scene_987257.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 15 — El jinete PSX · Last Aqueduct",
+      "source": "/api/v1/file/2026-09-16-03h32m35s_world3d-scene_1df252.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 16 — El jinete PSX · Antler Moon",
+      "source": "/api/v1/file/2026-09-16-03h35m02s_world3d-scene_a11e53.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 17 — El jinete PSX · Winter Shoulder",
+      "source": "/api/v1/file/2026-09-16-03h35m35s_world3d-scene_87154d.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 18 — El jinete PSX · Thorn Crown",
+      "source": "/api/v1/file/2026-09-16-03h36m06s_world3d-scene_711aec.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 19 — El jinete PSX · Moon Grave",
+      "source": "/api/v1/file/2026-09-16-03h36m26s_world3d-scene_395375.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 20 — El jinete PSX · Black Tide",
+      "source": "/api/v1/file/2026-09-16-03h36m47s_world3d-scene_0fe436.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 21 — El jinete PSX · Violet Oracle",
+      "source": "/api/v1/file/2026-09-16-03h37m04s_world3d-scene_c86518.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 22 — El jinete PSX · Hollow Saint",
+      "source": "/api/v1/file/2026-09-16-03h37m22s_world3d-scene_058259.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 23 — El jinete PSX · Copper Trees",
+      "source": "/api/v1/file/2026-09-16-03h37m41s_world3d-scene_a774bb.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 24 — El jinete PSX · Ember Heart",
+      "source": "/api/v1/file/2026-09-16-03h37m58s_world3d-scene_9e12ea.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 25 — El jinete PSX · Final Gate",
+      "source": "/api/v1/file/2026-09-16-03h38m13s_world3d-scene_5254a4.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 26 — El jinete PSX · Sleeping Titan",
+      "source": "/api/v1/file/2026-09-16-03h38m28s_world3d-scene_3d8048.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 27 — El jinete PSX · Drowned King",
+      "source": "/api/v1/file/2026-09-16-03h38m44s_world3d-scene_b30dbb.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 28 — El jinete PSX · Red Pilgrim",
+      "source": "/api/v1/file/2026-09-16-03h38m59s_world3d-scene_16ca06.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 29 — El jinete PSX · Jade Dragon",
+      "source": "/api/v1/file/2026-09-16-03h39m16s_world3d-scene_aa39d7.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 30 — El jinete PSX · Bell Of Ash",
+      "source": "/api/v1/file/2026-09-16-03h39m33s_world3d-scene_3b7b9f.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 31 — El jinete PSX · Sand Library",
+      "source": "/api/v1/file/2026-09-16-03h39m48s_world3d-scene_409542.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 32 — El jinete PSX · Fungal Throne",
+      "source": "/api/v1/file/2026-09-16-03h40m03s_world3d-scene_262af5.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 33 — El jinete PSX · Golden Ruin",
+      "source": "/api/v1/file/2026-09-16-03h40m19s_world3d-scene_383d9d.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 34 — El jinete PSX · Storm Bridge",
+      "source": "/api/v1/file/2026-09-16-03h40m34s_world3d-scene_c75c64.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 35 — El jinete PSX · Knight Passage",
+      "source": "/api/v1/file/2026-09-16-03h40m48s_world3d-scene_08eff4.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 4.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    }
+  ]
+}

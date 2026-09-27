@@ -1,0 +1,30 @@
+{
+    "model": {
+        "name": "Qwen Image 2.1 GGUF Q8_0 7B",
+        "architecture": "qwen_image_21",
+        "description": "DiT GGUF Q8_0 (7.7 GB) from leejet. Near-INT8 quality, slower than ConvRot on NVIDIA because GGUF bypasses Comfy/mmgp weight streaming. Still needs the 2.1 VAE and Qwen3-VL-8B encoder. License follows Qwen Research License.",
+        "selector_help": "Use on a 4090 only if INT8 ConvRot misbehaves. Q8 is the highest GGUF. Default 1024; 2048 is heavier. Encoder is still the INT8/BF16 safetensors, not GGUF.",
+        "URLs": [
+            "https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/resolve/main/qwen_image_2.1-Q8_0.gguf"
+        ],
+        "preload_URLs": "qwen_image_21",
+        "license_name": "Qwen Research License",
+        "license_url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
+        "resource_requirements": {
+            "vram_gb": 14,
+            "ram_gb": 32,
+            "storage_gb": 18,
+            "platform": "NVIDIA / AMD",
+            "backend": "GGUF Q8_0",
+            "tier": "experimental",
+            "note": "INT8 ConvRot is faster on NVIDIA. GGUF helps older AMD."
+        },
+        "attention": {"<89": "sdpa"},
+        "image_outputs": true
+    },
+    "prompt": "A neon shop sign that reads QWEN IMAGE 2.1, rainy night, reflections on wet pavement",
+    "resolution": "1024x1024",
+    "num_inference_steps": 40,
+    "guidance_scale": 1,
+    "batch_size": 1
+}

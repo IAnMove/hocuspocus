@@ -71,6 +71,13 @@ Studio and advanced MCP clients use this version 2 envelope:
 }
 ```
 
+Qwen Image 2.1 (`qwen_image_21` and its BF16/GGUF variants) is a unified
+generator and editor. There is no separate Edit-2.1 checkpoint. Version 2
+local edits use `image_guide` as the source canvas, `image_mask` as the
+white=change mask, `video_prompt_type` containing `VAG` (and `I`/`KI` when
+identity refs are also attached), and optional `video_guide_outpainting`
+as `"top bottom left right"` percents. Native 2K is `2048x2048`.
+
 The selected model must support the supplied conditioning. Version 2 accepts
 only the typed image fields declared in `studio_image_spec.py`. Optional native
 sentinels and explicit null values remain in the snapshot. Active video/audio

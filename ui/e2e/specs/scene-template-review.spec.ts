@@ -281,6 +281,7 @@ test('Library template bindings survive the real editor save and reopen without 
     await route.fulfill({ json: id ? assets.find(item => item.id === id) : { assets, total: assets.length } })
   })
   await page.route('**/api/v1/file/*.svg*', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#5577aa"/></svg>' }))
+  await page.route('**/api/v1/outputs/thumbnail/*.svg*', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#5577aa"/></svg>' }))
   try {
     await page.goto('/scene-template-review?editor=1')
     await page.getByRole('button', { name: 'Templates · create with my Library assets' }).click()

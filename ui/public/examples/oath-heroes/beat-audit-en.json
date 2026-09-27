@@ -1,0 +1,10 @@
+{
+  "totalFrames": 3926,
+  "fps": 30,
+  "cuts": 28,
+  "transitionFrames": 15,
+  "timeline": "Crossfade overlap included in each scene musical clock",
+  "characterActions": 6,
+  "characterPlayback": "forward-only, speed=1, loop=false",
+  "validated": true
+}

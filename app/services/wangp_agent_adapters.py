@@ -12,9 +12,31 @@ def _mounted_routes(router):
             yield route
 
 
+def application_endpoint(api, path, method):
+    return next(route.endpoint for route in _mounted_routes(api)
+                if getattr(route, 'path', None) == path and method in getattr(route, 'methods', set()))
+
+
+def asset_catalog_handler(endpoint):
+    """Project MCP arguments onto the canonical HTTP catalog, retaining IDs."""
+    def list_assets(arguments):
+        limit, offset = arguments.get('limit', 100), arguments.get('offset', 0)
+        if (type(limit) is not int or type(offset) is not int
+                or not 1 <= limit <= 500 or offset < 0):
+            raise ValueError('Catalog pagination requires limit 1..500 and offset >= 0')
+        filters = {}
+        for key, maximum in (('search', 300), ('kind', 80), ('workspace', 160)):
+            value = arguments.get(key, '')
+            if not isinstance(value, str) or len(value) > maximum:
+                raise ValueError(f'Invalid catalog {key}')
+            filters[key] = value
+        return endpoint(**filters, collection='', sort='', limit=limit, offset=offset)
+    return list_assets
+
+
 def application_handlers(api):
     def endpoint(path, method):
-        return next(route.endpoint for route in _mounted_routes(api) if getattr(route, 'path', None) == path and method in getattr(route, 'methods', set()))
+        return application_endpoint(api, path, method)
 
     assets = endpoint('/api/v1/assets', 'GET')
     asset = endpoint('/api/v1/assets/{asset_id}', 'GET')
@@ -29,13 +51,6 @@ def application_handlers(api):
         request = JsonRequest(value, trusted_tool='external_agent')
         request.app = api  # The HTTP route can resolve canonical references in minimal embeddings too.
         return await command(request)
-
-    def list_assets(arguments):
-        limit, offset = int(arguments.get('limit', 100)), int(arguments.get('offset', 0))
-        if not 1 <= limit <= 500 or offset < 0:
-            raise ValueError('Catalog pagination requires limit 1..500 and offset >= 0')
-        return assets(search=arguments.get('search', ''), kind=arguments.get('kind', ''),
-                      workspace=arguments.get('workspace', ''), collection='', sort='', limit=limit, offset=offset)
 
     async def organize(request):
         params = await request.json()
@@ -67,7 +82,7 @@ def application_handlers(api):
             return await update(identity, JsonRequest(body))
         return await create(JsonRequest(body))
 
-    handlers = {'assets': list_assets, 'collections': endpoint('/api/v1/workspace-collections', 'GET'),
+    handlers = {'assets': asset_catalog_handler(assets), 'collections': endpoint('/api/v1/workspace-collections', 'GET'),
                 'organize': organize, 'analyze': endpoint('/api/v1/llm/generate', 'POST')}
     # New versioned operations bypass the legacy transport journal: effects and
     # receipts are committed together by the existing WorkspaceRegistry.

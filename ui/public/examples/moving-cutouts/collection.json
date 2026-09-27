@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "title": "Fuera del lienzo",
+  "items": [
+    {
+      "id": "dark-motion-knight-passage",
+      "number": 1,
+      "title": "El caminante de ceniza",
+      "titleEn": "The Ash Walker",
+      "description": "El caballero avanza con su capa y sus pasos; el pasillo y la niebla tienen otro movimiento.",
+      "colors": [
+        "#7396aa",
+        "#241f31"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "dark-motion-knight-passage.mp4",
+      "poster": "dark-motion-knight-passage.png",
+      "template": "dark-motion-knight-passage.world3d-template.json",
+      "scene": "dark-motion-knight-passage.world3d.json",
+      "backgroundVideo": "knight-passage.mp4",
+      "staticLayer": "/examples/moving-cutouts/knight-passage-0.png",
+      "actorVideo": "walking-knight-motion.webm",
+      "sourceVideo": "walking-knight-motion.mp4",
+      "tag": "Movimiento continuo · capas independientes"
+    },
+    {
+      "id": "dark-motion-knight-embers",
+      "number": 2,
+      "title": "Hacia las brasas",
+      "titleEn": "Toward the Embers",
+      "description": "La misma marcha frente a lava viva, detrás de arquitectura quieta.",
+      "colors": [
+        "#eea357",
+        "#261c25"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "dark-motion-knight-embers.mp4",
+      "poster": "dark-motion-knight-embers.png",
+      "template": "dark-motion-knight-embers.world3d-template.json",
+      "scene": "dark-motion-knight-embers.world3d.json",
+      "backgroundVideo": "/examples/dark-stillness/still-furnace.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-ember-heart-frame.jpg",
+      "actorVideo": "walking-knight-motion.webm",
+      "sourceVideo": "walking-knight-motion.mp4",
+      "tag": "Movimiento continuo · capas independientes"
+    },
+    {
+      "id": "creative-motion-skate-coast",
+      "number": 3,
+      "title": "Sal y velocidad",
+      "titleEn": "Salt and Speed",
+      "description": "Ilustración en movimiento sobre mar turquesa y costa coral; el horizonte se desliza.",
+      "colors": [
+        "#29aaa9",
+        "#faac7d"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "creative-motion-skate-coast.mp4",
+      "poster": "creative-motion-skate-coast.png",
+      "template": "creative-motion-skate-coast.world3d-template.json",
+      "scene": "creative-motion-skate-coast.world3d.json",
+      "backgroundVideo": "skate-coast.mp4",
+      "staticLayer": "/examples/moving-cutouts/skate-coast-0.png",
+      "actorVideo": "skate-illustration-motion.webm",
+      "sourceVideo": "skate-illustration-motion.mp4",
+      "tag": "Movimiento continuo · capas independientes"
+    },
+    {
+      "id": "creative-motion-skate-neon",
+      "number": 4,
+      "title": "La ciudad pasa",
+      "titleEn": "The City Passes",
+      "description": "La chaqueta respira mientras la ciudad violeta corre por detrás.",
+      "colors": [
+        "#ec648e",
+        "#323073"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "creative-motion-skate-neon.mp4",
+      "poster": "creative-motion-skate-neon.png",
+      "template": "creative-motion-skate-neon.world3d-template.json",
+      "scene": "creative-motion-skate-neon.world3d.json",
+      "backgroundVideo": "skate-neon.mp4",
+      "staticLayer": "/examples/moving-cutouts/skate-neon-0.png",
+      "actorVideo": "skate-illustration-motion.webm",
+      "sourceVideo": "skate-illustration-motion.mp4",
+      "tag": "Movimiento continuo · capas independientes"
+    },
+    {
+      "id": "creative-motion-skate-clouds",
+      "number": 5,
+      "title": "Carretera de nubes",
+      "titleEn": "Cloud Road",
+      "description": "Una tabla, un camino imposible y nubes enormes a otra velocidad.",
+      "colors": [
+        "#f5a968",
+        "#354d9b"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "creative-motion-skate-clouds.mp4",
+      "poster": "creative-motion-skate-clouds.png",
+      "template": "creative-motion-skate-clouds.world3d-template.json",
+      "scene": "creative-motion-skate-clouds.world3d.json",
+      "backgroundVideo": "skate-clouds.mp4",
+      "staticLayer": "/examples/moving-cutouts/skate-clouds-0.png",
+      "actorVideo": "skate-illustration-motion.webm",
+      "sourceVideo": "skate-illustration-motion.mp4",
+      "tag": "Movimiento continuo · capas independientes"
+    },
+    {
+      "id": "creative-motion-skate-portal",
+      "number": 6,
+      "title": "El mar al otro lado",
+      "titleEn": "The Sea Beyond",
+      "description": "Personaje con filtro PSX, piedra inmóvil y un horizonte que se mueve detrás del arco.",
+      "colors": [
+        "#b3d9c7",
+        "#326e80"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "creative-motion-skate-portal.mp4",
+      "poster": "creative-motion-skate-portal.png",
+      "template": "creative-motion-skate-portal.world3d-template.json",
+      "scene": "creative-motion-skate-portal.world3d.json",
+      "backgroundVideo": "skate-coast.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-black-tide-frame.jpg",
+      "actorVideo": "skate-illustration-motion.webm",
+      "sourceVideo": "skate-illustration-motion.mp4",
+      "tag": "Movimiento continuo · capas independientes"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Face pack maker</title>
+    <style>
+      body { margin: 0; background: #0b0d14; color: #f4efe6; font: 15px/1.45 system-ui, sans-serif; }
+      header, section { padding: 16px 20px; max-width: 1100px; }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      h2 { margin: 0 0 10px; font-size: 16px; }
+      p, li { color: #c5ccd6; }
+      code { color: #7ad7ff; }
+      label { display: block; margin: 8px 0 4px; font-size: 13px; }
+      input[type=text] { width: min(36rem, 100%); padding: 8px 10px; border-radius: 8px; border: 1px solid #2a3344; background: #151822; color: #f4efe6; }
+      textarea { width: min(52rem, 100%); min-height: 5.5rem; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a3344; background: #10141c; color: #f4efe6; font: 13px/1.4 ui-monospace, monospace; }
+      button { margin-top: 6px; padding: 6px 10px; border-radius: 8px; border: 1px solid #2a3344; background: #163044; color: #f4efe6; cursor: pointer; }
+      .row { display: grid; gap: 10px; margin: 10px 0 16px; }
+      .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+      .slot { border: 1px dashed #2a3344; border-radius: 10px; padding: 8px; background: #151822; min-height: 120px; }
+      .slot strong { display: block; font-size: 12px; margin-bottom: 4px; }
+      .slot img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #10141c; border-radius: 6px; }
+      #preview { max-width: 100%; background: #10141c; border-radius: 10px; }
+      #status { color: #7ad7ff; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Generar un face pack (plano de cubo)</h1>
+      <p>1) Copia el prompt de <strong>reposo</strong> al generador de imagen (1:1). 2) Edita esa still: solo boca (visemas) o solo ojos (expresiones). 3) Suelta los PNG aquí y descarga el 9×6. La herramienta ancla el color de piel al reposo.</p>
+    </header>
+    <section>
+      <label for="skin">Material de la piel <code>{skin}</code></label>
+      <input id="skin" type="text" value="cream felt fabric" />
+      <h2>Reposo (canónico)</h2>
+      <textarea id="rest-prompt" readonly></textarea>
+      <button type="button" data-copy="rest-prompt">Copiar</button>
+      <div class="row" id="prompt-list"></div>
+    </section>
+    <section>
+      <h2>Stills</h2>
+      <p>Nombres: <code>rest.png</code>, <code>A.png</code> … <code>happy.png</code>. Faltantes se alias (I=E, U=O, F=M, L=A). Neutral = rest.</p>
+      <input id="files" type="file" accept="image/*" multiple />
+      <div class="slots" id="slots"></div>
+      <p id="status"></p>
+      <button type="button" id="build">Montar 9×6</button>
+      <button type="button" id="download" disabled>Descargar pack.png</button>
+      <p><canvas id="preview" width="1152" height="768"></canvas></p>
+    </section>
+    <script type="module" src="/face-pack-maker.ts"></script>
+  </body>
+</html>

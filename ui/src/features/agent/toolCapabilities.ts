@@ -59,9 +59,9 @@ export function registerToolCapabilities(register: typeof defineCapability): voi
 
   const definition: CapabilityDefinition<AgentRemoveBackgroundAction> = {
     name: 'remove_background',
-    title: 'Remove image background',
-    description: 'Open Tools and create a transparent derived image from an exact existing image asset.',
-    useWhen: 'The user explicitly asks to remove, erase or make an image background transparent.',
+    title: 'Remove image or video background',
+    description: 'Open Tools and create a transparent PNG or WebM from an exact existing image or video asset.',
+    useWhen: 'The user explicitly asks to remove, erase or make an image or video background transparent.',
     parameters: ['asset_id', 'source', 'source_workspace', 'instruction', 'confirm'],
     inputSchema: {
       type: 'object',
@@ -79,7 +79,7 @@ export function registerToolCapabilities(register: typeof defineCapability): voi
     },
     risk: 'compute',
     confirmation: 'required',
-    progress: 'Removing the image background…',
+    progress: 'Removing the background…',
     resolve(raw) {
       if (raw.confirm !== true) return null
       const assetId = text(raw.asset_id, 180) || undefined
@@ -97,7 +97,7 @@ export function registerToolCapabilities(register: typeof defineCapability): voi
     validate(action) {
       return action.confirm === true && (Boolean(action.assetId) || Boolean(action.source))
         ? []
-        : ['an exact image asset_id or source plus confirmation is required']
+        : ['an exact image/video asset_id or source plus confirmation is required']
     },
     async prepare(action) { return action },
     async execute(action, context) {

@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { Upload, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
+import { LocalImagePreview } from '../common/ImagePreview'
 
 export function ImageUpload() {
   const { t } = useUiTranslation('studio')
@@ -99,11 +100,7 @@ function DropZone({ label, sublabel, file, onDrop, onSelect, onClear }: {
     >
       {file ? (
         <>
-          <img
-            src={URL.createObjectURL(file)}
-            alt={label}
-            className="w-full h-full object-cover rounded absolute inset-0"
-          />
+          <LocalImagePreview file={file} label={label} className="absolute inset-0 h-full w-full cursor-zoom-in rounded" />
           <button
             onClick={e => { e.stopPropagation(); onClear() }}
             className="absolute top-1 right-1 bg-bg-primary/80 rounded-full p-0.5 hover:bg-bg-hover z-10"

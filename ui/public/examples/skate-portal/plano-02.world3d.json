@@ -1,0 +1,170 @@
+{
+  "version": 1,
+  "units": "meters",
+  "up": "y",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "duration": 1.2,
+  "light": {
+    "kind": "directional",
+    "direction": [
+      -0.5,
+      -0.6,
+      -0.8
+    ],
+    "intensity": 2,
+    "color": "#fff2e4"
+  },
+  "environment": {
+    "reflectiveFloor": false,
+    "platform": false,
+    "bloom": 0.02,
+    "floorStyle": "none",
+    "floorColor": "#222233"
+  },
+  "slots": [
+    {
+      "id": "background",
+      "slot": "background",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/moving-cutouts/skate-coast-0.png",
+      "position": [
+        0,
+        -6,
+        -8
+      ],
+      "scale": 9,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true
+      },
+      "screen": {
+        "sourceUrl": "/examples/moving-cutouts/skate-coast.mp4",
+        "media": "video",
+        "mode": "mesh",
+        "targetMesh": "SCREEN_CONTENT",
+        "anchor": "",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "pitch": 0,
+        "yaw": 0,
+        "roll": 0,
+        "width": 32,
+        "height": 18,
+        "style": "frameless",
+        "fit": "cover",
+        "start": 2.4,
+        "speed": 0.6,
+        "loop": false,
+        "flipY": false
+      }
+    },
+    {
+      "id": "hero",
+      "slot": "subject_1",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+      "position": [
+        0.3,
+        0,
+        0
+      ],
+      "scale": 1.52,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0,
+        "tint": "#ffffff"
+      },
+      "screen": {
+        "sourceUrl": "/examples/skate-portal/skate-jump.webm",
+        "media": "video",
+        "mode": "mesh",
+        "targetMesh": "SCREEN_CONTENT",
+        "anchor": "",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "pitch": 0,
+        "yaw": 0,
+        "roll": 0,
+        "width": 2,
+        "height": 3,
+        "style": "frameless",
+        "fit": "contain",
+        "start": 2.4,
+        "speed": 0.5,
+        "loop": false,
+        "flipY": false,
+        "transparent": true
+      },
+      "motion": {
+        "to": [
+          -0.1,
+          1.05,
+          0
+        ],
+        "faceTravel": false,
+        "easing": "linear",
+        "via": [
+          0.1,
+          1.5,
+          0
+        ]
+      }
+    }
+  ],
+  "camera": {
+    "family": "fixed",
+    "frameFormat": "portrait",
+    "eye": [
+      0,
+      3,
+      10
+    ],
+    "look": [
+      0,
+      3,
+      0
+    ],
+    "fov": 49
+  },
+  "worldSfx": [
+    {
+      "id": "world-window",
+      "kind": "media_portal",
+      "label": "Ventana al otro mundo",
+      "position": {
+        "x": -0.45,
+        "y": 2.45,
+        "z": -1.2
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#ffe48c",
+      "scale": 2.8,
+      "intensity": 0.85,
+      "seed": 414,
+      "start": 0,
+      "end": 1.2,
+      "sound": false,
+      "volume": 0,
+      "sourceUrl": "/examples/moving-cutouts/skate-clouds.mp4"
+    }
+  ],
+  "effects": []
+}

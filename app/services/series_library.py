@@ -35,7 +35,7 @@ SHOT_EDITOR_FIELDS = frozenset({
     "dialogueBeats", "visibleCharacterIds", "speakingCharacterIds",
     "primarySpeakerId", "locationId", "locationVariantId",
     "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
-    "continuityFromShotId", "renderStrategy", "referencePolicy", "prompt",
+    "continuityFromShotId", "renderStrategy", "productionMethod", "referencePolicy", "prompt",
     "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
@@ -323,8 +323,12 @@ def _normalize_attempt(value: dict, shot_id: str, index: int) -> dict:
 
 def _normalize_shot(value: dict, index: int) -> dict:
     from .series_render import normalize_series_shot_duration
+    from .series_production import PRODUCTION_METHODS
 
     shot = copy.deepcopy(value)
+    method = shot.get("productionMethod") or "generated_video"
+    if method not in PRODUCTION_METHODS:
+        raise ValueError("Unsupported Series shot production method")
     shot_id = _id(shot.get("id"), f"shot_{index + 1}")
     dialogue = [
         _normalize_dialogue_beat(item, f"{shot_id}_dialogue_{dialogue_index + 1}")
@@ -338,7 +342,9 @@ def _normalize_shot(value: dict, index: int) -> dict:
         "id": shot_id,
         "sceneId": _id(shot.get("sceneId"), "scene_1"),
         "order": _integer(shot.get("order"), index + 1, 1),
-        "durationSeconds": float(normalize_series_shot_duration(shot.get("durationSeconds"))),
+        "productionMethod": method,
+        "durationSeconds": float(normalize_series_shot_duration(shot.get("durationSeconds"))) if method == "generated_video"
+        else min(600, _number(shot.get("durationSeconds"), 5, .1)),
         "framing": _text(shot.get("framing")),
         "camera": _text(shot.get("camera")),
         "action": _text(shot.get("action")),
@@ -727,6 +733,7 @@ def _validate_project_graph_ids(project: dict) -> None:
 
 
 def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
+    from services.series_production import normalize_production_methods
     if not isinstance(value, dict):
         raise ValueError("Every Series Lab project must be a JSON object")
     project = copy.deepcopy(value)
@@ -849,6 +856,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "version": 1,
         "id": series_id,
         "revision": _integer(project.get("revision"), 1, 1),
+        "allowedProductionMethods": normalize_production_methods(project.get("allowedProductionMethods")),
         "title": _text(project.get("title"), "Untitled series"),
         "logline": _text(project.get("logline")),
         "premise": _text(project.get("premise")),
@@ -1317,7 +1325,12 @@ def duplicate_series_project(series: dict) -> dict:
     for asset in duplicate_assets.values():
         if not isinstance(asset, dict):
             continue
-        if asset.get("ownerType") == "series" and asset.get("ownerId") == old_id:
+        # Episodes and their attempt graph are intentionally omitted. Keep the
+        # media reusable without leaving owners that no longer exist in the copy.
+        if asset.get("ownerType") in {"episode", "shot", "attempt"}:
+            asset["ownerType"] = "series"
+            asset["ownerId"] = new_id
+        elif asset.get("ownerType") == "series" and asset.get("ownerId") == old_id:
             asset["ownerId"] = new_id
     duplicate["assets"] = duplicate_assets
     duplicate["importSource"] = {

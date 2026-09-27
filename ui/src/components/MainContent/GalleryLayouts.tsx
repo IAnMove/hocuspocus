@@ -1,107 +1,64 @@
-import { useMemo, useState } from 'react'
-import type { CSSProperties, JSX } from 'react'
-import { useTranslation } from 'react-i18next'
+import type { JSX } from 'react'
 import { GalleryTile } from './GalleryTile'
+import type { BlockRange, GalleryLayout } from './mediaGalleryLayout'
 import type { OutputFile } from '../../types'
 
-const GAP = 12
-const MIN_TILE = 190
-const MASONRY_PAGE_SIZE = 120
-
-/** Grid and mosaic layouts for the gallery. Kept out of the entry chunk —
+/** Grid and mosaic cells for the visible rows. Kept out of the entry chunk —
  *  the one-up feed is what loads with the app, and these arrive when the
- *  reader actually asks for them. */
+ *  reader actually asks for them. The geometry comes from the shared gallery
+ *  layout, so every cell is placed before its image decodes. */
 export default function GalleryLayouts({
-  view, outputs, workspace, activeIndex, containerWidth, containerHeight, scrollTop, onOpen,
+  layout, range, outputs, workspace, activeIndex, selecting, picked, onOpen, onOpenDetails, onPick, onLongPress,
 }: {
-  view: 'grid' | 'masonry'
+  layout: GalleryLayout
+  range: BlockRange
   outputs: OutputFile[]
   workspace: string
   activeIndex: number
-  containerWidth: number
-  containerHeight: number
-  scrollTop: number
+  selecting: boolean
+  picked: ReadonlySet<string>
   onOpen: (index: number) => void
+  onOpenDetails: (index: number) => void
+  onPick: (index: number, range: boolean) => void
+  onLongPress: (index: number) => void
 }) {
-  const { t } = useTranslation('activity')
-  const [page, setPage] = useState(1)
-  const columns = Math.max(1, Math.floor((containerWidth + GAP) / (MIN_TILE + GAP)))
-  const tile = Math.floor((containerWidth - GAP * (columns - 1)) / columns)
-  const rowHeight = tile + GAP
-
-  // Every cell is square, so every row is the same height: the window is
-  // arithmetic instead of per-item measurement.
-  const grid = useMemo(() => {
-    if (view !== 'grid') return null
-    const totalRows = Math.ceil(outputs.length / columns)
-    const overscan = 2
-    const firstRow = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
-    const lastRow = Math.min(totalRows, Math.ceil((scrollTop + containerHeight) / rowHeight) + overscan)
-    const cells: JSX.Element[] = []
-    for (let row = firstRow; row < lastRow; row++) {
-      for (let column = 0; column < columns; column++) {
-        const index = row * columns + column
-        const file = outputs[index]
-        if (!file) break
-        cells.push(
-          <GalleryTile
-            key={file.name}
-            file={file}
-            workspace={workspace}
-            active={activeIndex === index}
-            fixedAspect
-            onOpen={() => onOpen(index)}
-            style={{
-              position: 'absolute',
-              top: row * rowHeight,
-              left: column * (tile + GAP),
-              width: tile,
-              height: tile,
-            }}
-          />
-        )
-      }
+  const cells: JSX.Element[] = []
+  for (let row = range.first; row <= range.last; row++) {
+    const block = layout.blocks[row]
+    if (!block) continue
+    if (block.header) {
+      cells.push(
+        <h3 key={`day:${block.top}`} className="absolute inset-x-0 flex items-end truncate px-1 pb-1.5 text-xs font-semibold text-text-secondary"
+          style={{ top: block.top, height: block.height }}>
+          {block.header}
+        </h3>
+      )
+      continue
     }
-    return { cells, height: totalRows * rowHeight }
-  }, [view, outputs, columns, rowHeight, tile, scrollTop, containerHeight, activeIndex, workspace, onOpen])
-
-  if (view === 'grid' && grid) {
-    return <div className="relative" style={{ height: grid.height }}>{grid.cells}</div>
+    for (const cell of block.cells) {
+      const file = outputs[cell.index]
+      if (!file) continue
+      cells.push(
+        <GalleryTile
+          key={file.name}
+          file={file}
+          workspace={workspace}
+          index={cell.index}
+          active={activeIndex === cell.index}
+          cover={layout.view === 'grid'}
+          top={block.top}
+          left={cell.left}
+          width={cell.width}
+          height={cell.height}
+          selecting={selecting}
+          picked={selecting && picked.has(file.name)}
+          onOpen={onOpen}
+          onOpenDetails={onOpenDetails}
+          onPick={onPick}
+          onLongPress={onLongPress}
+        />
+      )
+    }
   }
-
-  // Mosaic keeps every aspect ratio, so item heights are unknown until the
-  // images load and a column layout cannot be windowed by height. It grows a
-  // page at a time rather than asking the browser to lay out the workspace.
-  const shown = outputs.slice(0, page * MASONRY_PAGE_SIZE)
-  return (
-    <div>
-      <div
-        className="[column-gap:12px] [columns:var(--hp-masonry-cols)]"
-        style={{ '--hp-masonry-cols': String(columns) } as CSSProperties}
-      >
-        {shown.map((file, index) => (
-          <div key={file.name} className="mb-3 break-inside-avoid">
-            <GalleryTile
-              file={file}
-              workspace={workspace}
-              active={activeIndex === index}
-              fixedAspect={false}
-              onOpen={() => onOpen(index)}
-            />
-          </div>
-        ))}
-      </div>
-      {outputs.length > shown.length && (
-        <div className="flex justify-center py-4">
-          <button
-            type="button"
-            onClick={() => setPage(p => p + 1)}
-            className="rounded-lg border border-border px-4 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-border-light hover:text-text-primary"
-          >
-            {t('catalog.loadMore')}
-          </button>
-        </div>
-      )}
-    </div>
-  )
+  return <>{cells}</>
 }

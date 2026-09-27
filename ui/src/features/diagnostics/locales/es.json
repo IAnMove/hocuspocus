@@ -1,0 +1,17 @@
+{
+  "title": "Diagnóstico de instalación y generación",
+  "export": "Exportar informe",
+  "loading": "Recogiendo hechos…",
+  "failed": "El diagnóstico no está disponible.",
+  "available": "Disponible",
+  "unavailable": "No disponible",
+  "engines": "Motores",
+  "operations": "Operaciones",
+  "models": "Modelos",
+  "error": "Error correlacionado",
+  "noError": "No se adjuntó ninguna tarea ni recibo.",
+  "build": "Compilación",
+  "platform": "Plataforma",
+  "repair": "Reparación",
+  "tab": "Diagnóstico"
+}

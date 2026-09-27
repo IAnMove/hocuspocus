@@ -49,10 +49,10 @@ test('Face Rig validates a persistent approved base or pose', () => {
   assert.throws(() => validateFaceRigPose({ ...kit, base: { ...pose, source: 'blob:temporary' } }), /persistent pose source/)
 })
 
-test('Face Rig produces six identity-preserving generation requests including open eyes', () => {
+test('Face Rig produces nine mouth requests and two optional eye requests with the same identity', () => {
   const kit = { ...createCharacterKit('Luna'), base: pose }
   const requests = faceRigGenerationRequests(kit, 'base', 'a shy schoolgirl with red braids')
-  assert.deepEqual(requests.map(request => request.state), ['closed', 'small', 'wide', 'round', 'open-eyes', 'blink'])
+  assert.deepEqual(requests.map(request => request.state), ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue', 'open-eyes', 'blink'])
   assert.ok(requests.every(request => request.reference === 'base.png' && request.prompt.includes('a shy schoolgirl with red braids')))
   assert.ok(requests.every(request => request.prompt.includes('ONLY') && request.prompt.includes('transparent') && request.prompt.includes('no full character')))
   assert.match(faceRigPrompt(kit, 'blink'), /eyelids fully closed/)
@@ -138,7 +138,7 @@ test('dialogue preview marks missing mouths as fallbacks and stays off the kit',
   const preview = previewFaceRigDialogue(kit, 'The square is frozen and the bell is too loud.', 3)
   assert.equal(preview.end, 3)
   assert.deepEqual(preview.available, ['closed', 'wide'])
-  assert.deepEqual(preview.missing, ['small', 'round'])
+  assert.deepEqual(preview.missing, ['small', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'])
   assert.ok(preview.visemes.some(beat => beat.state === 'closed'))
   assert.ok(preview.visemes.filter(beat => beat.fallback).every(beat => beat.sourceState === 'wide' || beat.sourceState === 'closed'))
   assert.equal(kit.mouth.small, undefined)
@@ -221,6 +221,20 @@ test('wiping a mouth region fills the ellipse without touching distant pixels', 
   assert.equal(kit.base.reviewState, 'pending')
   assert.notEqual(kit.base.id, pose.id)
   assert.equal(kit.provenance.at(-1).method, 'character-kit-mouth-wipe')
+})
+
+test('mouth removal follows cheek shading and preserves transparency instead of painting a flat box', () => {
+  const width = 80, height = 60, rgba = new Uint8ClampedArray(width * height * 4)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = (y * width + x) * 4, mouth = x > 27 && x < 53 && y > 26 && y < 34
+    rgba.set([mouth ? 20 : 90 + x * 2, mouth ? 0 : 60 + x, mouth ? 0 : 50 + x, x === 40 ? 0 : 180], i)
+  }
+  const wiped = wipeMouthRegion(rgba, width, height, { cx: 40, cy: 30, rx: 20, ry: 10, shape: 'rectangle' })
+  const left = (30 * width + 27) * 4, right = (30 * width + 53) * 4
+  assert.ok(wiped[right] - wiped[left] > 20, 'the cheek illumination should vary across the repaired skin')
+  assert.ok(wiped[(30 * width + 35) * 4] > 120, 'remove the original dark mouth')
+  for (let i = 3; i < rgba.length; i += 4) assert.equal(wiped[i], rgba[i], 'alpha must be preserved')
+  assert.deepEqual(wiped.slice(0, width * 4), rgba.slice(0, width * 4), 'pixels outside the mask are untouched')
 })
 
 test('locking mouth placement copies one calibration onto every viseme', () => {

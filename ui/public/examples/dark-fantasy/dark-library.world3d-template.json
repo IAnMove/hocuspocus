@@ -1,0 +1,183 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-library",
+  "title": "Dark Fantasy · La biblioteca del vacío",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
+  "createdAt": "2026-09-14T17:00:00Z",
+  "includeAssets": true,
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-library",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "backdrop",
+      "floorColor": "#272536",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/07-library.jpg",
+        "clip": null,
+        "position": [
+          0,
+          1.7999999999999998,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 24
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          0.45,
+          0,
+          0
+        ],
+        "scale": 1.3,
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          -2,
+          0,
+          -4
+        ],
+        "scale": 0.95,
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "orb-near",
+        "kind": "energy_orb",
+        "position": {
+          "x": -1.3,
+          "y": 2.5999999999999996,
+          "z": 1
+        },
+        "color": "#e5b55e",
+        "scale": 0.36,
+        "intensity": 0.55,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "orb-far",
+        "kind": "energy_orb",
+        "position": {
+          "x": 1.6,
+          "y": 2.999999999999999,
+          "z": -3
+        },
+        "color": "#b681ed",
+        "scale": 0.32,
+        "intensity": 0.55,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "stardust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 0.7999999999999998,
+          "z": -1
+        },
+        "color": "#cab99d",
+        "scale": 2.8,
+        "intensity": 0.35,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        0.13000000000000012,
+        2.7,
+        9.99
+      ],
+      "look": [
+        0.0,
+        1.8,
+        0.0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.24615384615384608,
+          1.076923076923077,
+          7.684615384615385
+        ],
+        "to": [
+          0.015384615384615469,
+          1.076923076923077,
+          7.315384615384615
+        ],
+        "lookFrom": [
+          -0.34615384615384615,
+          0.3846153846153846,
+          0.0
+        ],
+        "lookTo": [
+          -0.34615384615384615,
+          0.3846153846153846,
+          0.0
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    }
+  }
+}

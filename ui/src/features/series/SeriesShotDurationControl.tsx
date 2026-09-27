@@ -3,6 +3,7 @@ import * as api from '../../api/client'
 import { useUiTranslation } from '../../i18n'
 import { inputClass } from './styles'
 import type { SeriesProject, SeriesShot } from './types'
+import { seriesShotMethod } from './productionMethods'
 
 const SILENT_DURATIONS = [5, 10, 15] as const
 
@@ -19,6 +20,7 @@ export function SeriesShotDurationControl({
   onChange: (shot: SeriesShot) => void
 }) {
   const { t } = useUiTranslation('seriesLab')
+  const generatedVideo = seriesShotMethod(series, shot) === 'generated_video'
   const [calculating, setCalculating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const onChangeRef = useRef(onChange)
@@ -37,6 +39,7 @@ export function SeriesShotDurationControl({
   }, [onChange, shot])
 
   useEffect(() => {
+    if (!generatedVideo) return
     if (!hasDialogue) {
       lastCalculatedSignature.current = ''
       const currentShot = shotRef.current
@@ -74,7 +77,12 @@ export function SeriesShotDurationControl({
       lastCalculatedSignature.current = previousSignature
       controller.abort()
     }
-  }, [hasDialogue, series.id, signature, workspace])
+  }, [generatedVideo, hasDialogue, series.id, signature, workspace])
+
+  if (!generatedVideo) return <label className="text-[10px] text-text-muted">{t('duration.requestedClip')}
+    <input aria-label={t('duration.shotAria', { order: shot.order })} className={`mt-1 ${inputClass}`} type="number" min={.1} max={600} step={.1} value={shot.durationSeconds}
+      onChange={event => onChange({ ...shot, durationSeconds: Math.max(.1, Math.min(600, Number(event.target.value) || .1)), dialogueDuration: undefined })} />
+  </label>
 
   if (!hasDialogue) {
     return <label className="text-[10px] text-text-muted">

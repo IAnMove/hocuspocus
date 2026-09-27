@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+import os
+from urllib.parse import unquote, urlsplit
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
@@ -13,6 +15,7 @@ from services.generation_provenance import normalize_submission_provenance
 from shared.tools.background_removal_job import build_background_removal_job
 from shared.tools.background_removal_request import (
     RemoveBackgroundRequest,
+    IMAGE_EXTENSIONS, UPSCALE_VIDEO_EXTENSIONS,
     destination_context,
     job_response,
     resolve_source,
@@ -64,12 +67,18 @@ def create_tools_router(
             list_workspaces=list_workspaces,
             workspace_dir=workspace_dir,
         )
+        asset = find_source_asset(payload.asset_id) if payload.asset_id else None
+        extension = os.path.splitext(unquote(urlsplit(payload.source or "").path))[1].lower()
+        kind = ("video" if asset and asset.get("kind") == "video" else "image") if payload.asset_id else ("video" if extension in UPSCALE_VIDEO_EXTENSIONS else "image")
         source_path, source_filename, source_workspace = resolve_source(
             payload,
             destination_workspace=destination_workspace,
             workspace_dir=workspace_dir,
             uploads_dir=uploads_dir,
-            asset_finder=find_source_asset,
+            asset_finder=lambda _id: asset,
+            expected_kind=kind,
+            allowed_extensions=UPSCALE_VIDEO_EXTENSIONS if kind == "video" else IMAGE_EXTENSIONS,
+            source_label=kind,
         )
         source_asset_id = payload.asset_id or (
             "asset_unmanaged_"
@@ -98,6 +107,8 @@ def create_tools_router(
             source_root=source_root,
             provenance=provenance,
             instruction=payload.instruction.strip(),
+            media_kind=kind,
+            temporal_smoothing=payload.temporal_smoothing,
         )
         accepted = register_job(job)
         start_remove_background(accepted)

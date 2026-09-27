@@ -16,6 +16,17 @@ import threading
 import numpy as np
 from typing import Optional, List, Tuple
 from dataclasses import dataclass, field, asdict
+from services.lyric_timeline import (
+    LyricSegment,
+    LyricWord,
+    align_authoritative_lyrics,
+    attach_timing_to_clips,
+    build_visual_events,
+    build_timing_bundle,
+    has_authoritative_lyrics,
+    lyrics_to_srt,
+    structure_from_aligned_lyrics,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,22 +103,6 @@ class Section:
     energy: float
 
 @dataclass
-class LyricWord:
-    """A word aligned to the source audio, independent of Whisper's API."""
-    start: float
-    end: float
-    text: str
-
-
-@dataclass
-class LyricSegment:
-    start: float
-    end: float
-    text: str
-    speaker: Optional[str] = None
-    words: Optional[List[LyricWord]] = None
-
-@dataclass
 class AudioAnalysis:
     duration: float
     sample_rate: int
@@ -119,6 +114,11 @@ class AudioAnalysis:
     lyrics: Optional[List[LyricSegment]] = None
     vocals_path: Optional[str] = None
     warnings: Optional[List[str]] = None
+    transcript: Optional[List[LyricSegment]] = None
+    lyric_timeline: Optional[List[LyricSegment]] = None
+    lyrics_srt: Optional[str] = None
+    lyric_timing: Optional[dict] = None
+    visual_events: Optional[List[dict]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -316,16 +316,24 @@ def _transcribe(audio_path: str, lyrics_hint: Optional[str] = None) -> List[Lyri
     initial_prompt = _clean_lyrics_hint(lyrics_hint)
     if initial_prompt:
         print(f"[AudioAnalysis] Seeding transcription with known lyrics ({len(initial_prompt)} chars)")
-    segments, info = model.transcribe(
-        audio_path,
+    options = dict(
         beam_size=5,
         # Segment timing can span a whole sentence.  The cutout animator uses
         # these word boundaries to make mouth beats at real speech points.
         word_timestamps=True,
         language=None,
-        vad_filter=True,
+        # VAD can discard a quiet spoken or sung intro. With known lyrics we
+        # inspect the complete waveform and use the text only as a prior.
+        vad_filter=not bool(initial_prompt),
         initial_prompt=initial_prompt,
     )
+    if initial_prompt:
+        options.update(
+            condition_on_previous_text=False,
+            no_speech_threshold=1.0,
+            max_initial_timestamp=30.0,
+        )
+    segments, info = model.transcribe(audio_path, **options)
 
     lyrics = []
     for seg in segments:
@@ -796,6 +804,16 @@ def analyze(
             _set_progress("transcribing", "Transcribing audio")
             result.lyrics = _transcribe(transcription_path, lyrics_hint=lyrics_hint)
 
+            result.transcript = result.lyrics or []
+            _set_progress("aligning_lyrics", "Aligning lyrics to the source audio")
+            timing_bundle = build_timing_bundle(lyrics_hint or "", result.transcript, duration)
+            result.lyric_timeline = timing_bundle["timeline"]
+            result.lyric_timing = timing_bundle["timing"]
+            result.lyrics_srt = timing_bundle["srt"]
+            result.visual_events = timing_bundle["visual_events"]
+            result.warnings.extend(timing_bundle["warnings"])
+            result.lyrics = result.lyric_timeline
+
             # Run speaker diarization on the original mix (needs both voices)
             if result.lyrics:
                 # _diarize loads pyannote on first call (~100MB cached).
@@ -833,6 +851,21 @@ def analyze(
                     cleanup_error,
                     exc_info=True,
                 )
+
+        # A missing model or empty ASR result must not make supplied lyrics
+        # disappear. Keep a clearly approximate timeline so the user can edit
+        # it and the planner never falls back to unrelated free text.
+        if lyrics_hint and not result.lyric_timeline and has_authoritative_lyrics(lyrics_hint):
+            timeline, timing = align_authoritative_lyrics(lyrics_hint, [], duration)
+            result.transcript = result.transcript or []
+            result.lyric_timeline = timeline
+            result.lyric_timing = timing
+            result.lyrics_srt = lyrics_to_srt(timeline)
+            result.visual_events = build_visual_events(timeline)
+            result.lyrics = timeline
+            result.warnings.append(
+                "Transcription timing was unavailable; written lyrics use an approximate editable timeline."
+            )
 
     _set_progress("finalizing", "Finalizing")
     print(f"[AudioAnalysis] Done: {bpm:.1f} BPM, {len(beats)} beats, {len(sections)} sections")
@@ -1182,6 +1215,8 @@ def plan_clip_structure(
             prev["beat_count"] = max(1, round(prev_dur / beat_duration))
             prev["duration_frames"] = _snap_to_valid_frames(prev_dur, fps, frames_steps, frames_minimum)
             clips.pop()
+
+    attach_timing_to_clips(clips, analysis)
 
     return clips
 

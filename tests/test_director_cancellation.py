@@ -1153,6 +1153,46 @@ class TestDirectorCancellation(unittest.TestCase):
 
         concatenate.assert_not_called()
 
+    def test_rejoin_rejects_stale_video_even_when_a_take_is_selected(self):
+        pid = "pipe-stale-selected-rejoin"
+        record = self._add_pipeline(pid, "completed")
+        record["clip_plans"] = [
+            {"image_prompt": "one", "video_prompt": "one"},
+            {"image_prompt": "two", "video_prompt": "two"},
+        ]
+        record["_clip_video_files"] = ["one.mp4", "two.mp4"]
+        for filename in record["_clip_video_files"]:
+            self._write_media(filename, b"video")
+        self.assertTrue(pipeline._save_pipeline_state(pid))
+
+        def mark_selected_stale(state):
+            clip = state["clips"][0]
+            clip["selected_video_filename"] = clip["video_filename"]
+            clip["video_stale"] = True
+
+        pipeline._update_saved_pipeline(self.temp_dir.name, pid, mark_selected_stale)
+        loaded = pipeline.load_pipeline_state(self.temp_dir.name, pid)
+        self.assertTrue(loaded["clips"][0]["video_stale"])
+        self.assertEqual(loaded["clips"][0]["selected_video_filename"], "one.mp4")
+
+        def keep_notes(state):
+            state["clips"][0]["review_notes"] = "keep stale"
+
+        pipeline._update_saved_pipeline(self.temp_dir.name, pid, keep_notes)
+        raw_path = pipeline._find_pipeline_file(self.temp_dir.name, pid)
+        with open(raw_path, encoding="utf-8") as handle:
+            saved = json.load(handle)
+        self.assertTrue(saved["clips"][0]["video_stale"])
+        self.assertEqual(saved["clips"][0]["review_notes"], "keep stale")
+
+        concatenate = Mock(return_value=True)
+        pipeline._wgp.concatenate_multi_clip_videos = concatenate
+        with self.assertRaisesRegex(
+            ValueError, "stale video clip.*1.*before rejoining",
+        ):
+            pipeline.rejoin_clips(self.temp_dir.name, pid)
+        concatenate.assert_not_called()
+
     def test_rejoin_rejects_clip_whose_start_image_is_missing(self):
         pid = "pipe-missing-rejoin-start"
         record = self._add_pipeline(pid, "completed")
@@ -2775,6 +2815,136 @@ class TestDirectorCancellation(unittest.TestCase):
             )
         finally:
             pipeline._release_pipeline_delete(pid)
+
+    def test_execute_and_delete_claims_cannot_both_succeed(self):
+        pid = "pipe-claim-race"
+        self._add_pipeline(pid, "completed")
+        for _ in range(24):
+            pipeline._release_pipeline_operation(pid)
+            pipeline._release_pipeline_delete(pid)
+            barrier = threading.Barrier(2)
+            results = {"execute": None, "delete": None}
+
+            def try_execute():
+                barrier.wait()
+                results["execute"] = pipeline._claim_pipeline_operation(pid)
+
+            def try_delete():
+                barrier.wait()
+                results["delete"] = pipeline._claim_pipeline_delete(pid)
+
+            threads = (
+                threading.Thread(target=try_execute),
+                threading.Thread(target=try_delete),
+            )
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=1)
+                self.assertFalse(thread.is_alive())
+            self.assertTrue(results["execute"] ^ results["delete"])
+            if results["execute"]:
+                self.assertFalse(pipeline._claim_pipeline_delete(pid))
+            else:
+                self.assertFalse(pipeline._claim_pipeline_operation(pid))
+        pipeline._release_pipeline_operation(pid)
+        pipeline._release_pipeline_delete(pid)
+
+    def test_exclusive_pipeline_operation_raises_busy(self):
+        pid = "pipe-busy-decorator"
+        self._add_pipeline(pid, "completed")
+
+        @pipeline._exclusive_pipeline_operation
+        def mutate(out_dir, actual_pid):
+            return "ran"
+
+        self.assertTrue(pipeline._claim_pipeline_operation(pid))
+        try:
+            with self.assertRaises(pipeline.PipelineBusyError) as raised:
+                mutate(self.temp_dir.name, pid)
+            self.assertIn("still active", str(raised.exception))
+            self.assertIsInstance(raised.exception, RuntimeError)
+        finally:
+            pipeline._release_pipeline_operation(pid)
+
+        self.assertTrue(pipeline._claim_pipeline_delete(pid))
+        try:
+            with self.assertRaises(pipeline.PipelineBusyError):
+                mutate(self.temp_dir.name, pid)
+        finally:
+            pipeline._release_pipeline_delete(pid)
+
+        self.assertEqual(mutate(self.temp_dir.name, pid), "ran")
+        self.assertNotIn(pid, pipeline._pipeline_operations)
+        self.assertNotIn(pid, pipeline._pipeline_deleting)
+
+    def test_exclusive_pipeline_operation_releases_lock_after_success_and_failure(self):
+        pid = "pipe-exclusive-release"
+        self._add_pipeline(pid, "completed")
+
+        @pipeline._exclusive_pipeline_operation
+        def succeed(out_dir, actual_pid):
+            self.assertIn(actual_pid, pipeline._pipeline_operations)
+            return "ok"
+
+        @pipeline._exclusive_pipeline_operation
+        def fail(out_dir, actual_pid):
+            self.assertIn(actual_pid, pipeline._pipeline_operations)
+            raise RuntimeError("mutation failed")
+
+        self.assertEqual(succeed(self.temp_dir.name, pid), "ok")
+        self.assertNotIn(pid, pipeline._pipeline_operations)
+        self.assertTrue(pipeline._claim_pipeline_operation(pid))
+        pipeline._release_pipeline_operation(pid)
+
+        with self.assertRaisesRegex(RuntimeError, "mutation failed"):
+            fail(self.temp_dir.name, pid)
+        self.assertNotIn(pid, pipeline._pipeline_operations)
+        self.assertTrue(pipeline._claim_pipeline_operation(pid))
+        pipeline._release_pipeline_operation(pid)
+        self.assertTrue(pipeline._claim_pipeline_delete(pid))
+        pipeline._release_pipeline_delete(pid)
+
+    def test_pipeline_claim_helpers_come_from_pipeline_locks(self):
+        from services.director import pipeline_locks
+
+        self.assertIs(
+            pipeline._claim_pipeline_operation_locked,
+            pipeline_locks._claim_pipeline_operation_locked,
+        )
+        self.assertIs(
+            pipeline._claim_pipeline_operation,
+            pipeline_locks._claim_pipeline_operation,
+        )
+        self.assertIs(
+            pipeline._claim_pipeline_delete,
+            pipeline_locks._claim_pipeline_delete,
+        )
+        self.assertIs(
+            pipeline._exclusive_pipeline_operation,
+            pipeline_locks._exclusive_pipeline_operation,
+        )
+        self.assertIs(pipeline.PipelineBusyError, pipeline_locks.PipelineBusyError)
+
+    def test_reconcile_and_observer_helpers_are_reexported(self):
+        from services.director import pipeline_observer, pipeline_reconcile
+
+        self.assertIs(
+            pipeline._reconcile_pipeline_state_file,
+            pipeline_reconcile._reconcile_pipeline_state_file,
+        )
+        self.assertIs(
+            pipeline._normalize_interrupted_repair,
+            pipeline_reconcile._normalize_interrupted_repair,
+        )
+        self.assertIs(
+            pipeline._notify_pipeline_snapshot,
+            pipeline_observer._notify_pipeline_snapshot,
+        )
+        self.assertIs(
+            pipeline._observer_task_ids,
+            pipeline_observer._observer_task_ids,
+        )
 
     def test_worker_start_failure_marks_pipeline_failed_and_untracks_it(self):
         pid = "pipe-start-failure"

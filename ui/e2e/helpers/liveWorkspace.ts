@@ -104,6 +104,7 @@ export async function isolateLiveWorkspace(page: Page, request: APIRequestContex
   })
   await page.addInitScript(() => {
     localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
+    localStorage.setItem('hocuspocus_welcome_seen_v2', '453')
     localStorage.setItem('hocuspocus-ui-language', 'en')
   })
   return {

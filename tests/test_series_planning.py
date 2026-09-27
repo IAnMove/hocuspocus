@@ -63,6 +63,40 @@ def shot_result(count=8):
     } for index in range(count)]}
 
 
+def test_shot_planning_respects_the_series_production_allowlist():
+    series, episode = prepared()
+    series['allowedProductionMethods'] = ['animation_2d', 'imported_video']
+    episode['script'] = normalize_planning_result('script', script_result(), series, episode)['script']
+    result = shot_result()
+    for index, shot in enumerate(result['shots']):
+        shot['productionMethod'] = 'animation_2d' if index % 2 else 'imported_video'
+    normalized = normalize_planning_result('shots', result, series, episode)
+    assert {shot['productionMethod'] for shot in normalized['shots']} == {'animation_2d', 'imported_video'}
+    prompt, system = planning_prompt('shots', series, episode)
+    assert 'allowedProductionMethods' in prompt
+    assert 'choose productionMethod only from ["animation_2d", "imported_video"]' in system
+    result['shots'][0]['productionMethod'] = 'generated_video'
+    with pytest.raises(ValueError, match='not permitted'):
+        normalize_planning_result('shots', result, series, episode)
+
+
+@pytest.mark.parametrize('method', ['animation_2d', 'animation_3d'])
+def test_animation_shot_requires_or_inherits_its_canonical_environment(method):
+    series, episode = prepared()
+    series['allowedProductionMethods'] = [method]
+    episode['script'] = normalize_planning_result('script', script_result(), series, episode)['script']
+    result = shot_result()
+    for shot in result['shots']:
+        shot.update(productionMethod=method, sceneId=episode['script'][0]['id'], locationId='',
+                    visibleCharacterIds=[], speakingCharacterIds=[], primarySpeakerId='')
+    normalized = normalize_planning_result('shots', result, series, episode)
+    assert all(shot['locationId'] == 'loc_a' for shot in normalized['shots'])
+    assert all(shot['visibleCharacterIds'] == [] for shot in normalized['shots'])
+    episode['script'][0]['locationId'] = ''
+    with pytest.raises(ValueError, match='needs a canonical location'):
+        normalize_planning_result('shots', result, series, episode)
+
+
 def test_scopes_and_schemas_are_bounded():
     assert planning_stages("outline") == ["outline"]
     assert planning_stages("complete")[-1] == "canon_delta"

@@ -4,6 +4,14 @@ Verificado el 7 de septiembre de 2026 contra `origin/development` **`ef5b0871`**
 Es una fotografía con evidencia, no un sustituto de Git. Antes de reservar trabajo:
 `git fetch origin development`, consultar PR abiertos y comprobar sus archivos.
 
+## Correcciones de integración — 12 septiembre 2026
+
+Rama `fix/integration-audit-20260912`, base `5f68eb12`, preparada para PR hacia
+development. Ocho correcciones en generación, borradores, ejecución Wizard,
+exportación World3D, inspector y revisión de producción. Evidencia y límites en
+[INTEGRATION_AUDIT_2026-09-12](INTEGRATION_AUDIT_2026-09-12.md). No implica merge
+ni publicación de la aplicación local.
+
 ## SFX, habla y MCP — 10 septiembre 2026
 
 PR **#299** (draft hacia development), base integrada `729f784c`. Contrato:
@@ -16,7 +24,19 @@ y ejemplo inglés. Corregida conversión de coordenadas de piel animada. Contrat
 [VIDEO3D_SPEECH](VIDEO3D_SPEECH.md).
 Consultar el HEAD y sus checks en el PR antes de integrar. No es una publicación.
 
+## Timeline de letra desde el audio — 11 septiembre 2026
+
+La rama de trabajo de fidelidad musical conserva la letra escrita, la alinea con
+palabras detectadas en el audio, genera SRT dentro de la aplicación y entrega al
+Director offsets exactos para apariciones y acciones. Contrato y límites:
+[SOURCE_AUDIO_LYRIC_TIMELINE](SOURCE_AUDIO_LYRIC_TIMELINE.md). Consultar PR y HEAD
+vigentes antes de integrar; la evidencia local no equivale a publicación.
+
 ## Lectura mínima
+
+YuE2 y AuK (WanGP 13.00): contrato de adopción y resultados de la investigación
+de Deepy móvil en [WANGP_1300_AUDIO](WANGP_1300_AUDIO.md). Consultar el PR y su
+HEAD antes de integrar; una rama de implementación no equivale a publicación.
 
 Lee este documento y el contrato del dominio que vas a modificar. Para contribuir,
 consulta [BRANCHING](BRANCHING.md) y [AGENT_QA_POLICY](AGENT_QA_POLICY.md).

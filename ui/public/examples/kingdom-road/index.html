@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+  <title>Que tú veas el alba · HocusPocus</title>
+  <link rel="stylesheet" href="kingdom.css"><script type="module" src="kingdom.js"></script>
+</head>
+<body>
+<header><nav><a href="/">✦ HOCUSPOCUS</a><a href="../portal-rides/">Los primeros viajes ↗</a></nav>
+  <p class="eyebrow">UNA CANCIÓN · CUARENTA ESCENARIOS · TREINTA Y CINCO MUNDOS</p>
+  <h1>Que tú veas<br><em>el alba.</em></h1>
+  <p class="intro">Un caballero cruza varios reinos para rescatar a su amor. La salva, entrega su vida y se marcha en paz.</p>
+</header>
+<main>
+  <section class="feature" aria-labelledby="song-title">
+    <div class="screen"><video id="song" controls playsinline preload="metadata" poster="the-last-dawn.jpg"><source src="alba.mp4" type="video/mp4"><track kind="subtitles" src="lyrics.vtt" srclang="es" label="Español" default></video></div>
+    <div class="detail"><p class="eyebrow">PELÍCULA MUSICAL · 2:10 · VERTICAL</p><h2 id="song-title">El precio de una promesa.</h2>
+      <p>Canción original en español creada con YuE2. Los cambios de plano siguen los golpes y compases detectados en el audio. El rescate y la despedida tienen su propio espacio.</p>
+      <p>Un recorrido por los cuarenta escenarios de las últimas colecciones: gigantes, ruinas, mares vivos, ventanas a otros mundos y personajes que se mueven en capas.</p>
+      <div class="actions"><button data-fullscreen="song">Ver a pantalla completa ↗</button><a href="alba.mp4" download>Descargar vídeo ↓</a><a href="song.wav" download>Descargar canción ↓</a></div>
+      <details><summary>Letra y montaje</summary><p><a href="lyrics.txt">Leer la letra</a> · <a href="lyrics.vtt" download>Subtítulos</a> · <a href="music-edit-plan.json" download>Mapa de cortes y compases</a> · <a href="alba.editor-request.json" download>Montaje del Editor de vídeo</a></p><p>Los subtítulos se pueden activar o desactivar en el reproductor. La canción conserva su introducción y su final instrumental.</p></details>
+      <fieldset data-rating="alba"><legend>¿Qué te parece?</legend><button data-value="keep">Me encanta</button><button data-value="refine">Lo retocaría</button><button data-value="discard">No me convence</button><label>Notas<textarea rows="2" maxlength="4000" placeholder="El ritmo, la historia, los planos…"></textarea></label></fieldset>
+    </div>
+  </section>
+  <section class="journeys" aria-label="Los dos viajes completos">
+    <article><div class="screen"><video id="skate" controls playsinline preload="metadata" poster="skate.jpg" src="skate.mp4"></video></div><div class="detail"><p class="eyebrow">CALZADA INFINITA · 3:44</p><h2>Una bajada. Treinta y cinco mundos.</h2><p>El skater recorre todos los fondos animados del archivo de estas colecciones. La carretera sigue avanzando mientras los portales cambian el horizonte.</p><p class="muted">Estudio visual sin sonido.</p><div class="actions"><button data-fullscreen="skate">Ampliar ↗</button><a href="skate.mp4" download>Vídeo ligero ↓</a><a href="/api/v1/file/2026-09-16-03h36m13s_Calzada_infinita_-_35_mundos_-_3m44.mp4?workspace=default" download>Original 720p ↓</a><a href="skate-scenes.zip" download>35 planos editables ↓</a></div><fieldset data-rating="skate"><legend>¿Qué conservarías?</legend><button data-value="keep">Me encanta</button><button data-value="refine">Lo retocaría</button><button data-value="discard">No me convence</button><label>Notas<textarea rows="2" maxlength="4000" placeholder="La bajada, los portales, el movimiento…"></textarea></label></fieldset></div></article>
+    <article><div class="screen"><video id="dragon" controls playsinline preload="metadata" poster="dragon.jpg" src="dragon.mp4"></video></div><div class="detail"><p class="eyebrow">EL JINETE PSX · 2:48</p><h2>Alas de otra época.</h2><p>Caballero y dragón reciben el tratamiento PSX. El fuego, el hielo, el mar y el cielo conservan su propio detalle y se mueven detrás de ellos.</p><p class="muted">Estudio visual sin sonido.</p><div class="actions"><button data-fullscreen="dragon">Ampliar ↗</button><a href="dragon.mp4" download>Vídeo ↓</a><a href="dragon-scenes.zip" download>35 planos editables ↓</a></div><fieldset data-rating="dragon"><legend>¿Qué conservarías?</legend><button data-value="keep">Me encanta</button><button data-value="refine">Lo retocaría</button><button data-value="discard">No me convence</button><label>Notas<textarea rows="2" maxlength="4000" placeholder="El estilo PSX, la profundidad, el vuelo…"></textarea></label></fieldset></div></article>
+  </section>
+  <section class="notes"><h2>Vuelve a entrar en los mundos.</h2><p>Los setenta planos están guardados en la biblioteca de esta instalación como <b>Calzada infinita · 35 mundos</b> y <b>El jinete PSX · 35 reinos</b>. También puedes descomprimir los planos y abrir uno en <b>Estudios → Vídeo 3D → Cargar plano</b>.</p><p>En la capa del personaje, <b>Vídeo → Continuidad entre planos</b> permite elegir un intervalo, alternar avance y retroceso y mantener el tiempo entre escenas. El filtro PSX se ajusta en cada capa.</p><p>En otras instalaciones, los planos necesitan los archivos de las colecciones enlazadas. Los vídeos finales se pueden descargar y compartir directamente.</p><div class="actions"><a href="../dark-worlds/">Umbrales de gigantes ↗</a><a href="../dark-stillness/">El tiempo pesa ↗</a><a href="../living-worlds/">Ventanas vivas ↗</a><a href="../moving-cutouts/">Fuera del lienzo ↗</a></div><button id="export-notes">Descargar mis valoraciones ↓</button><p id="status" role="status">Tus notas se guardan en este navegador.</p></section>
+</main>
+<footer><a href="/">Volver a HocusPocus ↗</a><span>Canción, imágenes, movimiento, recorte, composición y montaje en HocusPocus.</span></footer>
+</body>
+</html>

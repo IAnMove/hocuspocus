@@ -20,6 +20,11 @@
   "preflight": {
     "dismiss": "Dismiss"
   },
+  "capabilities": {
+    "macosCoreRemote": "macOS · editing and remote providers",
+    "macosIntel": "Intel Mac is not in the first macOS release. Use Apple Silicon or a remote NVIDIA host.",
+    "coreRemote": "Editing and remote providers · local NVIDIA engines are unavailable"
+  },
   "oom": {
     "title": "Out of VRAM",
     "generationFailed": "Generation failed.",

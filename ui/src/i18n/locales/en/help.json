@@ -1,0 +1,86 @@
+{
+  "button": "Help",
+  "title": "How to use HocusPocus",
+  "close": "Close help",
+  "openAria": "Open the HocusPocus tutorial",
+  "languageLabel": "Tutorial language",
+  "draft": "In-app guide. It follows the current layout: work happens in the large pane.",
+  "nav": {
+    "start": "Layout",
+    "wizard": "Wizard",
+    "direct": "Direct generation",
+    "queue": "Queue",
+    "studios": "Studios",
+    "faces": "Talking faces",
+    "tijeral": "Cut-paper",
+    "video3d": "Video 3D",
+    "production": "Production",
+    "media": "Library",
+    "settings": "Settings",
+    "examples": "Example outputs"
+  },
+  "start": {
+    "title": "Where things live",
+    "body": "The left rail is Ask to the Wizard. The top row is Direct generation, Studios, Production and Media. The large area is where you work: forms, studios and the gallery share that space.\n\nDirect generation no longer opens a second column. Click it and the form appears in the large pane, with results beside it when there is room.\n\nThe folder name at the top-right is the output folder (where files are written). Workspaces in the nav are collections of references, not that folder."
+  },
+  "wizard": {
+    "title": "Ask to the Wizard",
+    "body": "Open the rail on the left. Describe what you want in your language. The Wizard fills the visible form and can start generation when you say so.\n\nIt does not replace Studios: Story Lab, Series, Comics and Video 3D keep their own large controls. Use the Wizard for language-to-action; use the studio when you want every field in front of you."
+  },
+  "direct": {
+    "title": "Direct generation",
+    "body": "Image, Video, Audio, 3D, Edit and Tools. Submodes (Speech/Music/SFX, Frames/Multi-Shot, Upscale…) sit under those tabs.\n\nPick a model, write the prompt, press Go. The job appears in Activity. Do not start MiniMax H3 while another heavy model is loaded if RAM is already tight."
+  },
+  "queue": {
+    "title": "Activity and the queue",
+    "body": "Activity (bottom-left and the top tab) lists running, queued and finished jobs. You can cancel, retry or inspect a run without leaving the current screen.\n\nIf the machine was interrupted, a recovery dialog may offer to resume the queue. That is global: do not recover someone else’s jobs on a shared install."
+  },
+  "studios": {
+    "title": "Studios",
+    "body": "Story Lab, Series Lab, Comics, Character Creator, Video 2.5D, Video 3D, Replace character and Animate. Each studio is a full workspace in the large pane.\n\nIf you only need a single image or clip, go back to Direct generation instead of fighting the studio form."
+  },
+  "faces": {
+    "title": "Talking faces (9×6 pack)",
+    "body": "In Character Creator open Lipsync face (cube plane). Generate a square front-of-cube skin (eyes, nose, rest mouth only — no round head). Then stills for visemes and expressions.\n\nTalking must not change the expression: the pack is a matrix, rest/M/A/E/I/O/U/F/L × neutral/happy/angry/worried/surprised/sleepy. Skin colour is locked to rest so the face does not flash. Build 9×6 pack composites the sheet. Prepare 2D speech is a separate puppet path and does not need a 360 video."
+  },
+  "tijeral": {
+    "title": "Cut-paper example (Tijeral)",
+    "body": "Story Lab has Load Tijeral cut-paper example. That is original limited animation, not a clone of another show. It loads a story, puppets and shots you can edit. It is not a top-level tab."
+  },
+  "video3d": {
+    "title": "Video 3D, cinema and SFX",
+    "body": "Video 3D is the real-world editor (metres, cameras, objects). Video 2.5D is plates and layers.\n\nInside Video 3D: shot library, Voice and lip-sync, Cinematic environment (illustrated backdrop, not a full 3D city), Scene SFX and World SFX. Templates such as cinema shots live here, not as their own nav items."
+  },
+  "production": {
+    "title": "Director and the editor",
+    "body": "Director turns a song or story into a videoclip pipeline. Video Editor cuts, trims and exports. Productions stores saved video workflows — empty until you run Director once."
+  },
+  "media": {
+    "title": "Library",
+    "body": "Media is the gallery: Images, Videos, Audio, Scenes, Favorites, and the rest. Filters only change what the large pane lists. Opening Direct generation does not throw those files away; they stay in the folder."
+  },
+  "settings": {
+    "title": "Settings, language and models",
+    "body": "ES/EN in the top-right changes labels only. Prompts and filenames stay as you wrote them.\n\nSettings → Performance is VRAM and profiles. Integrations is LLM keys and providers. Enable the models you actually have installed. Developer mode shows internal tools; leave it off for normal use."
+  },
+  "examples": {
+    "title": "Example outputs from this machine",
+    "body": "A real Flux 2 Klein 9B still, Lanczos ×2 upscale, a 20 s ACE-Step instrumental, and a 5 s MiniMax H3 clip of the same toy wizard. They prove the path works; they are not a style bible."
+  },
+  "images": {
+    "directImage": "Direct generation · Image in the large pane",
+    "directVideo": "Direct generation · Video",
+    "directMusic": "Direct generation · Music",
+    "wizard": "Ask to the Wizard rail open",
+    "storyLab": "Story Lab, including the Tijeral example button",
+    "characterCreator": "Character Creator with the 9×6 face pack",
+    "video3d": "Video 3D studio",
+    "director": "Director",
+    "media": "Media · Images",
+    "activity": "Activity",
+    "settings": "Settings",
+    "mobile": "Narrow layout",
+    "exampleImage": "Flux 2 Klein 9B example still",
+    "exampleVideo": "Frame from MiniMax H3 example clip"
+  }
+}

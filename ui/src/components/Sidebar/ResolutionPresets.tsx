@@ -1,7 +1,10 @@
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import type { ResolutionPreset } from '../../types'
 
 export function ResolutionPresets() {
+  const { t } = useUiTranslation('studio')
+  const qwen21 = String(useStore(s => s.params.model_type)).startsWith('qwen_image_21')
   const resolutionPreset = useStore(s => s.resolutionPreset)
   const setResolutionPreset = useStore(s => s.setResolutionPreset)
   const generationMode = useStore(s => s.generationMode)
@@ -20,7 +23,7 @@ export function ResolutionPresets() {
 
   return (
     <div>
-      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Resolution</label>
+      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('imageResolution.label')}</label>
       <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
         {presets.map(p => (
           <button
@@ -38,7 +41,7 @@ export function ResolutionPresets() {
           </button>
         ))}
       </div>
-      {resolutionPreset === 'auto' && (
+      {resolutionPreset === 'auto' && !qwen21 && (
         <p className="text-[9px] text-text-muted mt-0.5">
           {isEdit ? 'Uses source clip resolution' : isImage ? 'Matches reference image aspect ratio' : 'Auto resolution'}
         </p>
@@ -47,7 +50,7 @@ export function ResolutionPresets() {
         <p className={`mt-1 text-[9px] leading-relaxed ${
           selectedModelPreset.experimental ? 'text-indicator-warning' : 'text-text-muted'
         }`}>
-          {selectedModelPreset.hint}
+          {qwen21 ? t(resolutionPreset === '1080p' ? 'imageResolution.quality' : resolutionPreset === 'auto' ? 'imageResolution.auto' : 'imageResolution.balanced') : selectedModelPreset.hint}
         </p>
       )}
     </div>

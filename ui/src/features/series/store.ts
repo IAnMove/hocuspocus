@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import * as api from '../../api/client'
 import { emptySeriesLibrary, normalizeSeriesLibrary, normalizeSeriesProject } from './model'
 import type { SeriesEpisode, SeriesJobStatus, SeriesLibrary, SeriesProject } from './types'
+import { mergeSeriesReferenceImport, type SeriesReferenceImport } from './referenceImages'
 
 const activeKey = (workspace: string): string => `maestro-series-lab-active:${workspace}`
 
@@ -26,6 +27,7 @@ interface SeriesState {
   updateSeries: (updater: (series: SeriesProject) => SeriesProject) => void
   updateEpisode: (episodeId: string, updater: (episode: SeriesEpisode) => SeriesEpisode) => void
   adoptRemoteSeries: (series: SeriesProject) => void
+  acceptAssetImport: (workspace: string, result: SeriesReferenceImport) => void
   saveNow: () => Promise<SeriesProject | null>
   newSeries: () => Promise<void>
   duplicateSeries: (seriesId?: string) => Promise<void>
@@ -207,6 +209,19 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
       dirty: false,
       error: null,
     })
+  },
+
+  acceptAssetImport: (workspace, result) => {
+    const state = get()
+    if (state.workspace !== workspace) return
+    const current = state.library.seriesById[result.series.id]
+    if (!current) return
+    const active = state.activeSeriesId === current.id
+    const project = (active && state.dirty) || current.revision > result.series.revision ? mergeSeriesReferenceImport(current, result) : result.series
+    set({ library: { ...state.library, seriesById: { ...state.library.seriesById, [current.id]: project } },
+      ...(active ? { serverRevision: project.revision } : {}),
+    })
+    if (active && state.dirty) void get().saveNow().catch(() => { /* Store exposes the save error. */ })
   },
 
   saveNow: async () => {

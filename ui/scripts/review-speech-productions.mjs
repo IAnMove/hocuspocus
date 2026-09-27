@@ -41,6 +41,7 @@ try {
   await page.addInitScript(() => {
     localStorage.setItem('hocuspocus-ui-language', 'es')
     localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
+    localStorage.setItem('hocuspocus_welcome_seen_v2', '453')
   })
   await page.goto(base)
   await page.getByRole('button', { name: 'Estudios', exact: true }).click({ timeout: 30000 })

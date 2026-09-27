@@ -1,6 +1,6 @@
 import type { CharacterKit, CharacterKitLibrary } from '../../../lib/characterKit'
 import type { Scene3DSlot } from '../types'
-import { parseCharacterVoice } from '../../../lib/characterVoice'
+import { parseCharacterVoice, type CharacterKitRef } from '../../../lib/characterVoice'
 import { parseScene3DSourceRef } from '../slotSource'
 import { defaultSpeech } from './types'
 import { faceSettings, modelDigest } from './profiles'
@@ -25,3 +25,18 @@ export async function characterFromSlot(kit: CharacterKit, slot: Scene3DSlot): P
     voice: parseCharacterVoice(slot.character?.voice), updatedAt: new Date().toISOString() }
 }
 export const speechCharacters = (library: CharacterKitLibrary) => Object.values(library.kits).filter(kit => kit.speech3d)
+
+/** A Story/Series 2D kit ref is not enough to open Video 3D speech. Need a GLB or a speech3d kit. */
+export function speechCastIsReady(
+  cast: Array<{ id: string; characterKitRef?: CharacterKitRef }>,
+  models: Record<string, unknown>,
+  links: Record<string, CharacterKitRef | undefined>,
+  speech3dKits: CharacterKit[],
+): boolean {
+  if (cast.length < 1 || cast.length > 2) return false
+  return cast.every(speaker => {
+    if (models[speaker.id]) return true
+    const ref = Object.hasOwn(links, speaker.id) ? links[speaker.id] : speaker.characterKitRef
+    return Boolean(ref && speech3dKits.some(kit => kit.id === ref.id && kit.speech3d))
+  })
+}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>El tiempo pesa · HocusPocus</title>
+  <link rel="stylesheet" href="../perspective-lab/review.css">
+  <link rel="stylesheet" href="dark.css">
+  <script type="module" src="../perspective-lab/review.js"></script>
+</head>
+<body data-review-key="hocuspocus:dark-stillness-review:v1" data-collection="hocuspocus-dark-stillness-20260915" data-report-filename="mis-valoraciones-tiempo-pesa.json">
+  <header>
+    <nav><a class="brand" href="/">✦ HOCUSPOCUS</a><a href="../dark-worlds/">Ver los 20 mundos anteriores ↗</a></nav>
+    <div class="intro"><div><p class="eyebrow">8 ESCENAS · CÁMARA FIJA · 6 PERSONAJES NUEVOS</p><h1>El tiempo<br>pesa.</h1></div>
+      <div class="lead"><p>La cámara descansa. El mundo sigue vivo.</p><p>Mar, humo, nieve y niebla detrás de arquitectura estática. Figuras nuevas a distintas profundidades y tres estudios de contraste. En el último plano, un caballero herido atraviesa el tiempo a saltos mientras el ambiente fluye.</p><p><a href="#dark-still-time-wounds">Ir al caballero y sus fragmentos de tiempo ↓</a> · <a href="#characters">Ver los seis personajes ↓</a></p></div>
+    </div>
+    <div class="instructions"><span>01 <b>Reproduce</b> y mira el fondo.</span><span>02 <b>Valora</b> el movimiento y la composición.</span><span>03 <b>Descarga</b> tus notas o el plano editable.</span></div>
+  </header>
+  <main>
+    <div class="toolbar">
+      <label>Mostrar<select id="filter"><option value="all">Las 8 propuestas</option><option value="pending">Sin evaluar</option><option value="keep">Me encantan</option><option value="refine">Para retocar</option><option value="discard">Descartadas</option></select></label>
+      <label>PSX<select id="style"><option value="all">Cualquier pieza</option><option value="personaje">En el personaje</option><option value="sin filtro">Sin filtro PSX</option></select></label>
+      <span id="progress" role="status">Cargando colección…</span>
+      <button id="export" class="export">Descargar mis valoraciones ↓</button>
+    </div>
+    <p id="storage" class="storage">Las valoraciones se guardan en este navegador. Descárgalas para conservar una copia o compartirlas.</p>
+    <div id="grid" class="grid" aria-label="Plantillas con fondos animados para evaluar"></div>
+    <p id="empty" hidden>No hay propuestas con estos filtros.</p>
+    <section class="edit-help"><span class="eyebrow">AJUSTA EL EXPERIMENTO</span><h2>Una cámara quieta. Dos ritmos.</h2><p>En <b>Estudios → Vídeo 3D → Biblioteca de planos → Dark Fantasy</b> están las ocho composiciones. En el inspector de escena puedes elegir <b>Cámara fija</b>.</p><p>En <b>El tiempo pesa</b>, selecciona <b>hero → Animar esta capa → Poses a saltos</b>. Cambia cada imagen, su duración, altura y desplazamiento. Las poses son una capa con transparencia; el fondo conserva su reloj continuo.</p><p>Para movimiento continuo puedes importar un <b>vídeo con canal alfa</b> y activar <b>Conservar transparencia</b>. Un vídeo opaco necesita recorte previo: esta opción no borra su fondo.</p><p>Descarga un <b>Plano</b> y usa <b>Abrir plano JSON</b>, o importa la <b>Plantilla reutilizable</b> desde Mis escenarios. Las poses son dibujos generados por separado y pueden variar en pequeños detalles de la armadura; puedes sustituirlos en el editor.</p></section><section id="characters" class="edit-help"><span class="eyebrow">REPARTO REUTILIZABLE</span><h2>Seis habitantes de la penumbra.</h2><p>PNG con transparencia, generados y recortados en HocusPocus. Descárgalos o selecciónalos en la biblioteca de imágenes.</p><div class="characters"><article><a href="wounded-knight.png" target="_blank" rel="noopener"><img loading="lazy" src="wounded-knight.png" alt="El caballero de la última brasa"></a><h3>El caballero de la última brasa</h3><a href="wounded-knight.png" download>Descargar PNG ↓</a></article><article><a href="bell-nun.png" target="_blank" rel="noopener"><img loading="lazy" src="bell-nun.png" alt="La monja de las campanas"></a><h3>La monja de las campanas</h3><a href="bell-nun.png" download>Descargar PNG ↓</a></article><article><a href="salt-widow.png" target="_blank" rel="noopener"><img loading="lazy" src="salt-widow.png" alt="La viuda de sal"></a><h3>La viuda de sal</h3><a href="salt-widow.png" download>Descargar PNG ↓</a></article><article><a href="basalt-monk.png" target="_blank" rel="noopener"><img loading="lazy" src="basalt-monk.png" alt="El monje de basalto"></a><h3>El monje de basalto</h3><a href="basalt-monk.png" download>Descargar PNG ↓</a></article><article><a href="moth-oracle.png" target="_blank" rel="noopener"><img loading="lazy" src="moth-oracle.png" alt="El oráculo polilla"></a><h3>El oráculo polilla</h3><a href="moth-oracle.png" download>Descargar PNG ↓</a></article><article><a href="copper-falconer.png" target="_blank" rel="noopener"><img loading="lazy" src="copper-falconer.png" alt="La cetrera de cobre"></a><h3>La cetrera de cobre</h3><a href="copper-falconer.png" download>Descargar PNG ↓</a></article></div></section>
+  </main>
+  <footer><a href="/">Volver a HocusPocus ↗</a><span>Vídeos de fondo generados en HocusPocus con MiniMax H3 Fused · composición con su editor 3D.</span></footer>
+  <dialog id="viewer" aria-label="Vista ampliada de la plantilla">
+    <div class="viewer-head"><h2 id="viewer-title"></h2><button id="close" aria-label="Cerrar vista ampliada">Cerrar ✕</button></div>
+    <video id="large-video" controls loop playsinline preload="none"></video>
+    <div class="viewer-foot"><button id="previous">← Anterior</button><span id="viewer-count"></span><button id="next">Siguiente →</button></div>
+  </dialog>
+</body>
+</html>

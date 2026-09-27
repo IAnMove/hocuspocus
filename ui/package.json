@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "scene:review": "tsx scripts/scene-template-review.mjs",
-    "test": "tsx --tsconfig tsconfig.app.json --import ./tests/setupI18n.ts --test tests/*.test.mjs tests/*.test.tsx tests/*.test.ts",
+    "test": "tsx --tsconfig tsconfig.app.json --import ./tests/setupI18n.ts --test --test-concurrency=2 tests/*.test.mjs tests/*.test.tsx tests/*.test.ts",
     "i18n:check": "node scripts/check-i18n-catalogs.mjs",
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "test:e2e:headed": "playwright test -c e2e/playwright.config.ts --headed",

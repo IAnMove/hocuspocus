@@ -1,6 +1,6 @@
 {
   "title": "Scene SFX",
-  "help": "Visual overlays for 2D and 3D with optional local sound. Demos replace SFX and extend duration: full collection 90 s; magic and anime 36 s. Actors, camera and audio are retained.",
+  "help": "Visual overlays for 2D and 3D with optional local sound. Demos replace SFX and extend duration: 3 s per effect; magic/anime 36 s; retro consoles 30 s. Actors, camera and audio are retained.",
   "effect": "Effect",
   "color": "Color",
   "sound": "Sound",
@@ -46,10 +46,35 @@
     "energy_orb": "Energy orb",
     "energy_beam": "Energy beam",
     "sword_slash": "Sword slash",
-    "manga_impact": "Manga impact"
+    "manga_impact": "Manga impact",
+    "fire": "Fire",
+    "shield": "Energy shield",
+    "tornado": "Tornado",
+    "splash": "Water splash",
+    "dust": "Dust burst",
+    "media_portal": "Media portal",
+    "psx": "PlayStation 1",
+    "n64": "Nintendo 64",
+    "nes": "NES",
+    "snes": "Super NES",
+    "gameboy": "Game Boy",
+    "gameboy_color": "Game Boy Color",
+    "genesis": "Mega Drive / Genesis",
+    "vhs": "VHS tape",
+    "crt": "Arcade CRT",
+    "c64": "Commodore 64"
   },
+  "collections": {
+    "classic": "Classic overlays",
+    "anime": "Magic and anime",
+    "retro": "Retro consoles and tape"
+  },
+  "worldMedia": "Other side (photo or video)",
+  "worldMediaHelp": "URL or file — seen through the portal",
+  "worldMediaFailed": "Could not upload the portal photo or video.",
   "rotation": "Rotation (°)",
   "animeShowcase": "Apply magic and anime demo",
+  "retroShowcase": "Apply retro consoles and VHS demo",
   "worldTitle": "World SFX (3D)",
   "worldHelp": "These effects sit in the scene in meters. The camera can orbit them and opaque objects can hide them. Screen overlays above stay 2D.",
   "worldScale": "Size (m)",
@@ -65,5 +90,25 @@
   "anchor": "Follow slot id",
   "anchorNone": "None — stays in the world",
   "worldTarget": "Aim at slot id",
-  "worldTargetPosition": "Aim (m)"
+  "worldTargetPosition": "Aim (m)",
+  "motion": {
+    "title": "Animated path",
+    "help": "Position, rotation and size at specific scene times. Points override the fixed pose. Use size 0 to appear from nothing and 360° for a complete rotation.",
+    "detach": "Remove the anchor to animate position in the scene.",
+    "time": "Scene time (s)",
+    "scale": "Size",
+    "easing": "Movement to the next point",
+    "smooth": "Smooth",
+    "linear": "Linear",
+    "add": "Add point",
+    "clear": "Remove path"
+  },
+  "portalPlayback": {
+    "title": "Landscape inside the portal",
+    "screen": "Window into the next world",
+    "help": "Keeps the landscape aligned with the frame as the portal grows. Continue with the same camera and video time in the next scene.",
+    "start": "Video start (s)",
+    "speed": "Speed",
+    "loop": "Loop video"
+  }
 }

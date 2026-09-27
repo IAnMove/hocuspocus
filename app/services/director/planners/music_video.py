@@ -983,6 +983,31 @@ class MusicVideoPlanner(BasePlanner):
             else:
                 vocal_info = "instrumental"
 
+            timed_cues = []
+            for cue in clip.get("lyric_cues") or []:
+                try:
+                    offset = float(cue.get("offset", 0.0))
+                except (TypeError, ValueError):
+                    offset = 0.0
+                timed_cues.append(
+                    f'+{offset:.3f}s "{str(cue.get("text") or "").strip()}"'
+                )
+            timed_events = []
+            for event in clip.get("visual_events") or []:
+                try:
+                    offset = float(event.get("offset", 0.0))
+                except (TypeError, ValueError):
+                    offset = 0.0
+                timed_events.append(
+                    f'+{offset:.3f}s {event.get("kind", "action")} on '
+                    f'"{event.get("trigger", "")}"; result must not be visible earlier'
+                )
+            timing_hint = ""
+            if timed_cues:
+                timing_hint += " Source-audio lyric clock: " + "; ".join(timed_cues) + "."
+            if timed_events:
+                timing_hint += " Mandatory visual action anchors: " + "; ".join(timed_events) + "."
+
             coverage = coverage_plan[i] if coverage_plan and i < len(coverage_plan) else {}
             coverage_hint = (
                 f" Planned role: {coverage.get('scene_type', 'narrative')}; "
@@ -1015,7 +1040,7 @@ class MusicVideoPlanner(BasePlanner):
                 )
             if coverage.get("reuse_chorus_signature"):
                 coverage_hint += " Return to the same chorus signature instead of inventing a new location."
-            ctx = f"Clip {i + 1}: {section}, {beat_count} beats, {vocal_info}.{performer_hint}{coverage_hint}"
+            ctx = f"Clip {i + 1}: {section}, {beat_count} beats, {vocal_info}.{performer_hint}{coverage_hint}{timing_hint}"
             contexts.append(ctx)
 
         return contexts
@@ -1196,6 +1221,9 @@ MUSIC VIDEO RULES:
 - Never repeat the same location-plus-action combination (for example, sitting at a computer in a cafe) across most clips. Keep visual style global, but vary situation, action, scale, time of day, and environment across verses and bridge.
 - Treat visual-style text as medium, palette, lighting and design language only. Do not turn an incidental action, prop or location embedded in style text into a repeated scene template.
 - Performer visibility and lip-sync follow the editable treatment and each clip's planned role.
+- The source-audio lyric clock is authoritative. Write action_beats in chronological order with
+  the supplied +seconds offsets. An entrance, reveal, transformation or impact must begin at its
+  mandatory action anchor; establish anticipation before it and never show the result early.
 
 EDITABLE MUSIC-VIDEO TREATMENT:
 {json.dumps(treatment, ensure_ascii=False, indent=2)}
@@ -1594,6 +1622,8 @@ Return exactly this one missing shot plan."""
                     "bpm": clip.get("bpm", 120),
                     "clip_start": clip.get("start", 0),
                     "clip_end": clip.get("end", 0),
+                    "lyric_cues": clip.get("lyric_cues", []),
+                    "visual_events": clip.get("visual_events", []),
                     "music_video_role": coverage.get("scene_type"),
                     "recurring_set": coverage.get("recurring_set"),
                     "coverage": coverage.get("coverage"),

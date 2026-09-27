@@ -7,7 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 EDITOR = ROOT / "ui" / "src" / "features" / "video-editor" / "VideoEditorPanel.tsx"
 HANDOFF = ROOT / "ui" / "src" / "features" / "video-editor" / "replacementHandoff.ts"
 MAIN = ROOT / "ui" / "src" / "components" / "MainContent" / "MainContent.tsx"
-FEED = ROOT / "ui" / "src" / "components" / "MainContent" / "MediaFeedItem.tsx"
+# Output actions live in the bar shared by the one-up card and the details dialog.
+FEED = ROOT / "ui" / "src" / "components" / "MainContent" / "OutputActionBar.tsx"
 
 
 def test_selected_montage_clip_can_be_opened_in_video_creation():

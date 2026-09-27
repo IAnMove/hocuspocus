@@ -1,4 +1,5 @@
-import type { Scene3DCameraFamily, Scene3DDocument, Scene3DSlotId } from './types.ts'
+import { defaultMediaScreen } from './mediaScreen.ts'
+import type { Scene3DCameraFamily, Scene3DDocument, Scene3DSlot, Scene3DSlotId } from './types.ts'
 import { applyScene3DTemplate, type Scene3DTemplateId } from './templates.ts'
 
 export type World3DWizardRequest = {
@@ -56,13 +57,29 @@ export function documentFromWorld3DRequest(request: World3DWizardRequest): Scene
   const bindings = request.bindings ?? {}
   document.slots = document.slots.map(slot => {
     const bound = bindings[slot.slot]
-    if (!bound) return slot
-    return {
-      ...slot,
-      sourceUrl: bound.url,
-      media: bound.media ?? slot.media,
-      clip: null,
-    }
+    return bound ? bindWorld3DSlot(slot, bound) : slot
   })
   return document
+}
+
+function bindWorld3DSlot(
+  slot: Scene3DSlot,
+  bound: { url: string; media?: 'model3d' | 'image' },
+): Scene3DSlot {
+  if (slot.media === 'screen') {
+    return {
+      ...slot,
+      screen: {
+        ...(slot.screen ?? defaultMediaScreen()),
+        sourceUrl: bound.url,
+        media: bound.media === 'image' ? 'image' : slot.screen?.media || 'image',
+      },
+    }
+  }
+  return {
+    ...slot,
+    sourceUrl: bound.url,
+    media: bound.media ?? slot.media,
+    clip: null,
+  }
 }

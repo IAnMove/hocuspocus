@@ -1,0 +1,346 @@
+{
+  "version": 1,
+  "title": "Perspectivas",
+  "items": [
+    {
+      "id": "creative-amber-ice",
+      "number": 1,
+      "title": "La estación del deshielo",
+      "titleEn": "Thaw Station",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "personaje",
+      "colors": [
+        "#073e61",
+        "#ffb444"
+      ],
+      "duration": 6,
+      "video": "creative-amber-ice.mp4",
+      "poster": "../creative/creative-amber-ice.png",
+      "template": "../creative/creative-amber-ice.world3d-template.json",
+      "scene": "../creative/creative-amber-ice.world3d.json"
+    },
+    {
+      "id": "creative-scarlet-tide",
+      "number": 2,
+      "title": "La marea roja",
+      "titleEn": "Scarlet Tide",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "atrezzo",
+      "colors": [
+        "#572d36",
+        "#3ce7d1"
+      ],
+      "duration": 6,
+      "video": "creative-scarlet-tide.mp4",
+      "poster": "../creative/creative-scarlet-tide.png",
+      "template": "../creative/creative-scarlet-tide.world3d-template.json",
+      "scene": "../creative/creative-scarlet-tide.world3d.json"
+    },
+    {
+      "id": "creative-pearl-spores",
+      "number": 3,
+      "title": "El vivero de perlas",
+      "titleEn": "Pearl Nursery",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "fondo",
+      "colors": [
+        "#424865",
+        "#dceab0"
+      ],
+      "duration": 6,
+      "video": "creative-pearl-spores.mp4",
+      "poster": "../creative/creative-pearl-spores.png",
+      "template": "../creative/creative-pearl-spores.world3d-template.json",
+      "scene": "../creative/creative-pearl-spores.world3d.json"
+    },
+    {
+      "id": "creative-ultramarine-forge",
+      "number": 4,
+      "title": "La fundición azul",
+      "titleEn": "Blue Foundry",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "personaje",
+      "colors": [
+        "#152f64",
+        "#ffd166"
+      ],
+      "duration": 6,
+      "video": "creative-ultramarine-forge.mp4",
+      "poster": "../creative/creative-ultramarine-forge.png",
+      "template": "../creative/creative-ultramarine-forge.world3d-template.json",
+      "scene": "../creative/creative-ultramarine-forge.world3d.json"
+    },
+    {
+      "id": "creative-rose-orbit",
+      "number": 5,
+      "title": "Capilla en órbita",
+      "titleEn": "Orbital Chapel",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "atrezzo",
+      "colors": [
+        "#9a5b70",
+        "#aaf2f1"
+      ],
+      "duration": 6,
+      "video": "creative-rose-orbit.mp4",
+      "poster": "../creative/creative-rose-orbit.png",
+      "template": "../creative/creative-rose-orbit.world3d-template.json",
+      "scene": "../creative/creative-rose-orbit.world3d.json"
+    },
+    {
+      "id": "creative-brass-mirage",
+      "number": 6,
+      "title": "El espejismo de latón",
+      "titleEn": "Brass Mirage",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "personaje",
+      "colors": [
+        "#171822",
+        "#eecb61"
+      ],
+      "duration": 6,
+      "video": "creative-brass-mirage.mp4",
+      "poster": "../creative/creative-brass-mirage.png",
+      "template": "../creative/creative-brass-mirage.world3d-template.json",
+      "scene": "../creative/creative-brass-mirage.world3d.json"
+    },
+    {
+      "id": "creative-jade-cinema",
+      "number": 7,
+      "title": "La última sesión verde",
+      "titleEn": "Last Green Screening",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "atrezzo",
+      "colors": [
+        "#123a34",
+        "#ff936b"
+      ],
+      "duration": 6,
+      "video": "creative-jade-cinema.mp4",
+      "poster": "../creative/creative-jade-cinema.png",
+      "template": "../creative/creative-jade-cinema.world3d-template.json",
+      "scene": "../creative/creative-jade-cinema.world3d.json"
+    },
+    {
+      "id": "creative-apricot-cable",
+      "number": 8,
+      "title": "Último funicular",
+      "titleEn": "Last Cable Car",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "fondo",
+      "colors": [
+        "#885335",
+        "#699bd5"
+      ],
+      "duration": 6,
+      "video": "creative-apricot-cable.mp4",
+      "poster": "../creative/creative-apricot-cable.png",
+      "template": "../creative/creative-apricot-cable.world3d-template.json",
+      "scene": "../creative/creative-apricot-cable.world3d.json"
+    },
+    {
+      "id": "creative-violet-baths",
+      "number": 9,
+      "title": "Baños ultravioleta",
+      "titleEn": "Ultraviolet Baths",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "personaje",
+      "colors": [
+        "#493458",
+        "#f8c760"
+      ],
+      "duration": 6,
+      "video": "creative-violet-baths.mp4",
+      "poster": "../creative/creative-violet-baths.png",
+      "template": "../creative/creative-violet-baths.world3d-template.json",
+      "scene": "../creative/creative-violet-baths.world3d.json"
+    },
+    {
+      "id": "creative-clockwork-glass",
+      "number": 10,
+      "title": "El jardín mecánico",
+      "titleEn": "Clockwork Garden",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "atrezzo",
+      "colors": [
+        "#4c6950",
+        "#eea898"
+      ],
+      "duration": 6,
+      "video": "creative-clockwork-glass.mp4",
+      "poster": "../creative/creative-clockwork-glass.png",
+      "template": "../creative/creative-clockwork-glass.world3d-template.json",
+      "scene": "../creative/creative-clockwork-glass.world3d.json"
+    },
+    {
+      "id": "creative-paper-monsoon",
+      "number": 11,
+      "title": "Monzón de papel",
+      "titleEn": "Paper Monsoon",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "personaje",
+      "colors": [
+        "#172d49",
+        "#ff956b"
+      ],
+      "duration": 6,
+      "video": "creative-paper-monsoon.mp4",
+      "poster": "../creative/creative-paper-monsoon.png",
+      "template": "../creative/creative-paper-monsoon.world3d-template.json",
+      "scene": "../creative/creative-paper-monsoon.world3d.json"
+    },
+    {
+      "id": "creative-cobalt-crater",
+      "number": 12,
+      "title": "El cráter de cobalto",
+      "titleEn": "Cobalt Crater",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "atrezzo",
+      "colors": [
+        "#16274b",
+        "#ff8142"
+      ],
+      "duration": 6,
+      "video": "creative-cobalt-crater.mp4",
+      "poster": "../creative/creative-cobalt-crater.png",
+      "template": "../creative/creative-cobalt-crater.world3d-template.json",
+      "scene": "../creative/creative-cobalt-crater.world3d.json"
+    },
+    {
+      "id": "creative-saffron-lens",
+      "number": 13,
+      "title": "El ojo del desierto",
+      "titleEn": "Desert Eye",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "fondo",
+      "colors": [
+        "#624831",
+        "#b6d7fa"
+      ],
+      "duration": 6,
+      "video": "creative-saffron-lens.mp4",
+      "poster": "../creative/creative-saffron-lens.png",
+      "template": "../creative/creative-saffron-lens.world3d-template.json",
+      "scene": "../creative/creative-saffron-lens.world3d.json"
+    },
+    {
+      "id": "creative-glass-orchard",
+      "number": 14,
+      "title": "La cosecha de cristal",
+      "titleEn": "Glass Harvest",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "personaje",
+      "colors": [
+        "#59656a",
+        "#ecaea4"
+      ],
+      "duration": 6,
+      "video": "creative-glass-orchard.mp4",
+      "poster": "../creative/creative-glass-orchard.png",
+      "template": "../creative/creative-glass-orchard.world3d-template.json",
+      "scene": "../creative/creative-glass-orchard.world3d.json"
+    },
+    {
+      "id": "creative-terracotta-radio",
+      "number": 15,
+      "title": "La habitación que escucha",
+      "titleEn": "The Listening Room",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "atrezzo",
+      "colors": [
+        "#69483e",
+        "#bb8bce"
+      ],
+      "duration": 6,
+      "video": "creative-terracotta-radio.mp4",
+      "poster": "../creative/creative-terracotta-radio.png",
+      "template": "../creative/creative-terracotta-radio.world3d-template.json",
+      "scene": "../creative/creative-terracotta-radio.world3d.json"
+    },
+    {
+      "id": "creative-chrome-bloom",
+      "number": 16,
+      "title": "Flores de cromo",
+      "titleEn": "Chrome Blossom",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "personaje",
+      "colors": [
+        "#34213e",
+        "#4fdfde"
+      ],
+      "duration": 6,
+      "video": "creative-chrome-bloom.mp4",
+      "poster": "../creative/creative-chrome-bloom.png",
+      "template": "../creative/creative-chrome-bloom.world3d-template.json",
+      "scene": "../creative/creative-chrome-bloom.world3d.json"
+    },
+    {
+      "id": "creative-arctic-spin",
+      "number": 17,
+      "title": "Centrifugado polar",
+      "titleEn": "Polar Spin",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "fondo",
+      "colors": [
+        "#26505a",
+        "#e5bc52"
+      ],
+      "duration": 6,
+      "video": "creative-arctic-spin.mp4",
+      "poster": "../creative/creative-arctic-spin.png",
+      "template": "../creative/creative-arctic-spin.world3d-template.json",
+      "scene": "../creative/creative-arctic-spin.world3d.json"
+    },
+    {
+      "id": "creative-domino-garden",
+      "number": 18,
+      "title": "El jardín dominó",
+      "titleEn": "Domino Garden",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "atrezzo",
+      "colors": [
+        "#b7b7a5",
+        "#dc4c50"
+      ],
+      "duration": 6,
+      "video": "creative-domino-garden.mp4",
+      "poster": "../creative/creative-domino-garden.png",
+      "template": "../creative/creative-domino-garden.world3d-template.json",
+      "scene": "../creative/creative-domino-garden.world3d.json"
+    },
+    {
+      "id": "creative-midnight-bakery",
+      "number": 19,
+      "title": "Pan de medianoche",
+      "titleEn": "Midnight Bread",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "personaje",
+      "colors": [
+        "#4b3344",
+        "#efb95e"
+      ],
+      "duration": 6,
+      "video": "creative-midnight-bakery.mp4",
+      "poster": "../creative/creative-midnight-bakery.png",
+      "template": "../creative/creative-midnight-bakery.world3d-template.json",
+      "scene": "../creative/creative-midnight-bakery.world3d.json"
+    },
+    {
+      "id": "creative-coral-radio",
+      "number": 20,
+      "title": "Radio arrecife",
+      "titleEn": "Reef Radio",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+      "psx": "atrezzo",
+      "colors": [
+        "#144852",
+        "#f99467"
+      ],
+      "duration": 6,
+      "video": "creative-coral-radio.mp4",
+      "poster": "../creative/creative-coral-radio.png",
+      "template": "../creative/creative-coral-radio.world3d-template.json",
+      "scene": "../creative/creative-coral-radio.world3d.json"
+    }
+  ]
+}

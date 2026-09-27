@@ -290,6 +290,8 @@ def submit_music_generation(
             raise MusicSubmissionConflict()
         existing = dict(existing)
         existing["replay"] = True
+        from .story_music_generation_record import ensure_story_music_generation_record
+        ensure_story_music_generation_record(workspace_dir, existing)
         return existing
     verify_story_destination(workspace_dir, spec)
     job_id = _token_id("minimax-music") if route == "remote_minimax" else _token_id("local-music")
@@ -339,6 +341,8 @@ def submit_music_generation(
             "idempotency_key": key,
         },
     )
+    from .story_music_generation_record import ensure_story_music_generation_record
+    ensure_story_music_generation_record(workspace_dir, stored)
     if after_persist is not None:
         try:
             after_persist(stored)

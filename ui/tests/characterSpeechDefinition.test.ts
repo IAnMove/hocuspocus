@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { createCharacterKit } from '../src/lib/characterKit'
 import { parseCharacterVoice } from '../src/lib/characterVoice'
 import { generateSceneSpeechClip } from '../src/lib/sceneSpeech'
-import { characterSlotPatch, characterFromSlot } from '../src/features/scene3d/speech/characterBinding'
+import { characterSlotPatch, characterFromSlot, speechCastIsReady } from '../src/features/scene3d/speech/characterBinding'
 import { defaultSpeech } from '../src/features/scene3d/speech/types'
 import { normalizeStoryCharacter } from '../src/features/stories/model'
 import { normalizeScene3DSlot } from '../src/features/scene3d/documentSlot'
@@ -14,6 +14,24 @@ const voice = { provider: 'local', model: 'qwen3_tts_customvoice', voiceId: 'ser
 const face = { meshIndex: 0, center: [0, 1, 0] as const, size: [.1, .1] as const, skin: [.5, .4, .3] as const,
   eyes: { left: [-.1, 1.2, 0] as const, right: [.1, 1.2, 0] as const, size: [.1, .1] as const, skinLeft: [.5, .4, .3] as const, skinRight: [.5, .4, .3] as const } }
 const model = { workspaceId: 'one', filename: 'alice.glb', url: '/unit-character.glb' }
+test('Video 3D speech submit ignores a 2D Story kit until a GLB or speech3d kit is present', () => {
+  const paper = { ...createCharacterKit('Nilo'), id: 'nilo' }
+  const talker = {
+    ...createCharacterKit('Alice'),
+    id: 'alice',
+    speech3d: { model, digest: 'a'.repeat(64) },
+  }
+  const cast = [{ id: 'nilo', name: 'Nilo', characterKitRef: { id: 'nilo', workspace: 'one' } }]
+  assert.equal(speechCastIsReady(cast, {}, {}, [paper, talker]), false)
+  assert.equal(speechCastIsReady(cast, {}, {}, [talker]), false)
+  assert.equal(speechCastIsReady(
+    [{ id: 'alice', name: 'Alice', characterKitRef: { id: 'alice', workspace: 'one' } }],
+    {}, {}, [talker],
+  ), true)
+  assert.equal(speechCastIsReady(cast, { nilo: { name: 'nilo.glb' } }, {}, [talker]), true)
+  assert.equal(speechCastIsReady(cast, {}, { nilo: { id: 'alice', workspace: 'one' } }, [talker]), true)
+})
+
 test('public voice whitelist rejects secrets and unsupported providers', () => {
   assert.deepEqual(parseCharacterVoice(voice), voice)
   for (const patch of [{ apiKey: 'fake' }, { provider: 'remote' }, { model: 'wrong' }, { voiceId: 'unknown' }]) assert.throws(() => parseCharacterVoice({ ...voice, ...patch }))

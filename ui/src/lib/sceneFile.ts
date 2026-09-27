@@ -1,5 +1,6 @@
 import { sceneFxFields } from '../features/sceneFx/types'
 import { kineticTextFields } from './kineticText'
+import { canonicalSceneFps } from './sceneFps.ts'
 import type { Scene, SceneLayer } from '../types'
 import { parseSceneGenerationPolicy, sceneGenerationPolicyFields } from './sceneGenerationPolicy'
 
@@ -62,7 +63,7 @@ export const parseSceneFile = (text: string): Scene => {
     ...(generationPolicy ? { generationPolicy } : {}),
     height,
     duration: duration > 0 ? duration : 1,
-    fps: candidate.fps === 60 ? 60 : 30,
+    fps: canonicalSceneFps(candidate.fps),
     layers: candidate.layers as Scene['layers'],
   }
 }

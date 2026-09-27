@@ -1,6 +1,6 @@
 import { DirectorModelPicker } from './DirectorModelPicker'
 import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } from 'react'
-import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen, Zap } from 'lucide-react'
+import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen, Zap, Download } from 'lucide-react'
 import { useStore, resolveResolution } from '../../stores/useStore'
 import { fetchModelOptions } from '../../api/client'
 import { MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
@@ -2134,6 +2134,15 @@ function AnalysisSummary({
   const speakerCount = new Set(
     (analysis.lyrics || []).map(l => l.speaker).filter(Boolean)
   ).size
+  const downloadSrt = () => {
+    if (!analysis.lyrics_srt) return
+    const url = URL.createObjectURL(new Blob([analysis.lyrics_srt], { type: 'application/x-subrip;charset=utf-8' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'lyrics-timeline.srt'
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="space-y-1">
@@ -2145,6 +2154,18 @@ function AnalysisSummary({
           {warning}
         </p>
       ))}
+      {analysis.lyric_timing && !isShortFilm && (
+        <div className="flex items-center justify-between gap-2 rounded border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[10px]">
+          <span className="text-cyan-100">
+            Source-audio lyric timeline · {Math.round(analysis.lyric_timing.coverage * 100)}% word coverage
+          </span>
+          {analysis.lyrics_srt && (
+            <button type="button" onClick={downloadSrt} className="flex shrink-0 items-center gap-1 text-cyan-300 hover:text-cyan-100">
+              <Download size={10} /> SRT
+            </button>
+          )}
+        </div>
+      )}
       <button
         onClick={() => setShowDetails(v => !v)}
         className="flex items-center gap-3 text-[11px] text-text-muted w-full hover:text-text-secondary transition-colors"
@@ -2179,7 +2200,9 @@ function AnalysisSummary({
           {analysis.lyrics && analysis.lyrics.length > 0 && (
             <div>
               <div className="text-text-muted uppercase tracking-wider mb-1 font-medium">
-                Lyrics {analysis.song_structure?.length ? '(LLM Structure)' : '(Whisper)'}
+                Lyrics {analysis.lyric_timing?.method === 'authoritative_lyrics_word_alignment'
+                  ? '(Source audio alignment)'
+                  : analysis.song_structure?.length ? '(Structured)' : '(Whisper)'}
               </div>
               <div className="space-y-0.5">
                 {analysis.song_structure && analysis.song_structure.length > 0 ? (

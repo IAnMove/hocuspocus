@@ -4,7 +4,12 @@
     "closed",
     "small",
     "wide",
-    "round"
+    "round",
+    "pressed",
+    "medium",
+    "pucker",
+    "bite",
+    "tongue"
   ],
   "packs": [
     {
@@ -172,6 +177,1166 @@
           "file": "watercolor/round.png",
           "width": 828,
           "height": 855
+        }
+      }
+    },
+    {
+      "id": "ruby-ink",
+      "label": "Ruby ink",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Clean bold ink cartoon with ruby-red sculpted lips, ivory teeth, coral tongue. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "ba3f5858fbbf56c00e513195663e4fe37e2d9530bc863b14abd0a7c3b48b4f4d"
+      },
+      "states": {
+        "closed": {
+          "file": "ruby-ink/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "ruby-ink/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "ruby-ink/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "ruby-ink/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "ruby-ink/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "ruby-ink/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "ruby-ink/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "ruby-ink/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "ruby-ink/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "minimal-line",
+      "label": "Minimal line",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Minimal flat cartoon: very thin black outline, NO outer fleshy lips, dark maroon interior, single ivory tooth band, coral tongue. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "4b9d2efa283721d871ae86a4e262563c924cc7d6c3a6d2766360cf5a075ff686"
+      },
+      "states": {
+        "closed": {
+          "file": "minimal-line/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "minimal-line/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "minimal-line/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "minimal-line/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "minimal-line/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "minimal-line/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "minimal-line/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "minimal-line/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "minimal-line/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "storybook-gouache",
+      "label": "Storybook gouache",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Children's picture book gouache, soft terracotta lip edge with subtle brush texture, aubergine interior, ivory teeth. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "bc47e82c820b0394db29d3503e959e259d633dab66a5d3f1e556b486b01f40ea"
+      },
+      "states": {
+        "closed": {
+          "file": "storybook-gouache/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "storybook-gouache/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "storybook-gouache/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "storybook-gouache/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "storybook-gouache/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "storybook-gouache/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "storybook-gouache/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "storybook-gouache/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "storybook-gouache/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "cardboard-cut",
+      "label": "Cardboard cut",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Layered colored cardstock, rough black cut-paper edges, flat wine interior, ivory paper teeth and pink paper tongue, NO skin. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "5db9cba8b6926435a2915cc1ed52790d72655f36c876b89178b403905e06b707"
+      },
+      "states": {
+        "closed": {
+          "file": "cardboard-cut/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "cardboard-cut/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "cardboard-cut/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "cardboard-cut/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "cardboard-cut/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "cardboard-cut/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "cardboard-cut/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "cardboard-cut/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "cardboard-cut/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "velvet-puppet",
+      "label": "Velvet puppet",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Handmade dark plum velvet felt puppet mouth, softly fuzzy fabric edges, pink felt tongue, cream felt teeth. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "01caba99f968551c1a53bc932258ecef64aa311867fd9e1ca0caecc2218f9973"
+      },
+      "states": {
+        "closed": {
+          "file": "velvet-puppet/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "velvet-puppet/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "velvet-puppet/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "velvet-puppet/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "velvet-puppet/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "velvet-puppet/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "velvet-puppet/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "velvet-puppet/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "velvet-puppet/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "cel-anime",
+      "label": "Cel anime",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Elegant restrained anime cel animation mouth, fine dark reddish outline, no external fleshy lips, burgundy cavity, subtle pink tongue, clean cream tooth band. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "004e03f92895ef6afdc3d0c840a75c1fa54e7296651466060049b95c71776922"
+      },
+      "states": {
+        "closed": {
+          "file": "cel-anime/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "cel-anime/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "cel-anime/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "cel-anime/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "cel-anime/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "cel-anime/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "cel-anime/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "cel-anime/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "cel-anime/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "rubber-hose",
+      "label": "Rubber hose",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "1930s rubber-hose cartoon mouth, bold pure black forms, warm ivory teeth, gray-pink tongue, pie-cut rubbery expressive shapes. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "de4a72802aae79dca7684e5ed7f54d23b430ef0c0909963149ece3d07190e611"
+      },
+      "states": {
+        "closed": {
+          "file": "rubber-hose/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "rubber-hose/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "rubber-hose/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "rubber-hose/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "rubber-hose/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "rubber-hose/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "rubber-hose/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "rubber-hose/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "rubber-hose/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "comic-halftone",
+      "label": "Comic halftone",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Pop comic mouth with bold navy ink outline, coral lip edge, magenta halftone dot shading, ivory teeth and salmon tongue. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "2f72a9d425c51dac4da51e21de8563abc48e2c07405261bf95645cff3ee437d9"
+      },
+      "states": {
+        "closed": {
+          "file": "comic-halftone/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "comic-halftone/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "comic-halftone/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "comic-halftone/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "comic-halftone/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "comic-halftone/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "comic-halftone/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "comic-halftone/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "comic-halftone/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "clay-puppet",
+      "label": "Clay puppet",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Hand sculpted clay animation mouth parts, matte plum outer edge, deep burgundy clay interior, softly rounded ivory clay teeth and pink clay tongue, front view no shadows. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "69bced323083d14f3d7142f3d700caeae84f4c0719afbba4737bb0fffc34b07c"
+      },
+      "states": {
+        "closed": {
+          "file": "clay-puppet/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "clay-puppet/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "clay-puppet/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "clay-puppet/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "clay-puppet/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "clay-puppet/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "clay-puppet/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "clay-puppet/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "clay-puppet/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "pixel-arcade",
+      "label": "Pixel arcade",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Crisp low-resolution 16-bit pixel art mouth with black stepped outline and angular shapes, purple-black cavity, square ivory teeth and vivid pink tongue, no antialiasing aesthetic. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "0fb47097f4442fca933472ed641aecc1849bbc07bb9db950f22008e7699e5089"
+      },
+      "states": {
+        "closed": {
+          "file": "pixel-arcade/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "pixel-arcade/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "pixel-arcade/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "pixel-arcade/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "pixel-arcade/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "pixel-arcade/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "pixel-arcade/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "pixel-arcade/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "pixel-arcade/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "chalk-doodle",
+      "label": "Chalk doodle",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Chalk pastel doodle mouth, dark charcoal uneven outline, muted berry opening, off-white chalk tooth strip, pink chalk tongue, no external skin. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "9f69b1242021ab7d8f10a39fe9d566f98a94e53cb9230a4b649e3a3effc3eaff"
+      },
+      "states": {
+        "closed": {
+          "file": "chalk-doodle/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "chalk-doodle/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "chalk-doodle/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "chalk-doodle/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "chalk-doodle/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "chalk-doodle/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "chalk-doodle/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "chalk-doodle/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "chalk-doodle/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "soft-manga",
+      "label": "Soft manga",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Charming manga chibi mouth, no thick lips, delicate ink contour, rich reddish brown opening, tiny ivory tooth band, simple salmon tongue. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "6e1cc52150455c748dd8c26c4d7ee3cf51bf6f8c8d0b0b27ef14afa04038d9c6"
+      },
+      "states": {
+        "closed": {
+          "file": "soft-manga/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "soft-manga/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "soft-manga/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "soft-manga/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "soft-manga/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "soft-manga/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "soft-manga/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "soft-manga/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "soft-manga/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "flat-geometric",
+      "label": "Flat geometric",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Modern flat graphic animation, smoothly geometric mouth shape with uniform charcoal stroke, brick red inner rim, creamy tooth band, geometric coral tongue. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "619d67618faeea51063c8a943a48832f8dddb8bad685c2a9ca4523434749ad42"
+      },
+      "states": {
+        "closed": {
+          "file": "flat-geometric/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "flat-geometric/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "flat-geometric/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "flat-geometric/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "flat-geometric/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "flat-geometric/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "flat-geometric/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "flat-geometric/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "flat-geometric/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "plush-stitch",
+      "label": "Plush stitch",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Soft sewn plush toy mouth applique, burgundy cloth with clear cream stitched edge, pink cloth tongue, simple ivory fabric teeth. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "1ba7ea4662c25ed9604861d3a6e48cbb5675ac3e002c9390ba1441ab80c672bb"
+      },
+      "states": {
+        "closed": {
+          "file": "plush-stitch/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "plush-stitch/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "plush-stitch/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "plush-stitch/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "plush-stitch/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "plush-stitch/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "plush-stitch/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "plush-stitch/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "plush-stitch/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "woodblock",
+      "label": "Woodblock",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Vintage woodblock printed mouth, irregular dark indigo carved outlines, muted vermilion inner edge, cream paper tooth band and ochre pink tongue. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "f10ef446de11880bf4e5fe9839e4a0775d209c35de78065246220b983ec573df"
+      },
+      "states": {
+        "closed": {
+          "file": "woodblock/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "woodblock/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "woodblock/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "woodblock/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "woodblock/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "woodblock/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "woodblock/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "woodblock/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "woodblock/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "neon-toon",
+      "label": "Neon toon",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Cyber cartoon mouth, crisp midnight-purple outline, vivid magenta lip rim with thin cyan graphic accents, lavender-white teeth and pink tongue, NO glow outside mouth. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "9086626caee3f349ed6f64f6c5af5cd5aa7bb12e396ce290242496bf3eb549a6"
+      },
+      "states": {
+        "closed": {
+          "file": "neon-toon/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "neon-toon/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "neon-toon/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "neon-toon/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "neon-toon/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "neon-toon/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "neon-toon/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "neon-toon/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "neon-toon/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "monochrome-ink",
+      "label": "Monochrome ink",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Classic monochrome black-and-white cartoon mouth, expressive solid black cavity, grayscale lip edging, white teeth and mid-gray tongue, NO skin. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "747540017cc1e373e9d26b1e28707004b08344c9ab773497ddec25a6faac95c7"
+      },
+      "states": {
+        "closed": {
+          "file": "monochrome-ink/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "monochrome-ink/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "monochrome-ink/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "monochrome-ink/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "monochrome-ink/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "monochrome-ink/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "monochrome-ink/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "monochrome-ink/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "monochrome-ink/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "warm-pastel",
+      "label": "Warm pastel",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Friendly preschool flat pastel cartoon mouth, warm cocoa outline, peach pink thin lip edge, deep raspberry cavity, creamy rounded teeth and apricot tongue. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "d715430ac1f7e246f22a104d90c49435faff2ad8fbe90b01ec7896c8cdd7850f"
+      },
+      "states": {
+        "closed": {
+          "file": "warm-pastel/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "warm-pastel/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "warm-pastel/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "warm-pastel/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "warm-pastel/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "warm-pastel/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "warm-pastel/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "warm-pastel/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "warm-pastel/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "sticker-bold",
+      "label": "Sticker bold",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Bold sticker cartoon mouth with thick charcoal perimeter and small white outer keyline restricted to mouth, burnt-orange thin lip rim, egg-white teeth and rose tongue. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "c741f1dd5863994483dbad70225fed54e91cd4b81b05da6910922a9a461898d6"
+      },
+      "states": {
+        "closed": {
+          "file": "sticker-bold/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "sticker-bold/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "sticker-bold/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "sticker-bold/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "sticker-bold/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "sticker-bold/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "sticker-bold/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "sticker-bold/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "sticker-bold/tongue.png",
+          "width": 512,
+          "height": 512
+        }
+      }
+    },
+    {
+      "id": "watercolor-rose",
+      "label": "Watercolor rose",
+      "style": "cutout",
+      "collection": "studio-20",
+      "notes": "Delicate rose watercolor mouth, wine outline with natural watercolor pigment variation INSIDE shapes only, pale ivory teeth and muted rose tongue, no surrounding skin wash. Nine phonetic positions, transparent PNG, shared 512px frame and pivot.",
+      "provenance": {
+        "tool": "OpenAI imagegen",
+        "atlasSha256": "0ac2bc3246eec54f2547239cad0136d3e90312684a20775edc639893a99418d4"
+      },
+      "states": {
+        "closed": {
+          "file": "watercolor-rose/closed.png",
+          "width": 512,
+          "height": 512
+        },
+        "small": {
+          "file": "watercolor-rose/small.png",
+          "width": 512,
+          "height": 512
+        },
+        "wide": {
+          "file": "watercolor-rose/wide.png",
+          "width": 512,
+          "height": 512
+        },
+        "round": {
+          "file": "watercolor-rose/round.png",
+          "width": 512,
+          "height": 512
+        },
+        "pressed": {
+          "file": "watercolor-rose/pressed.png",
+          "width": 512,
+          "height": 512
+        },
+        "medium": {
+          "file": "watercolor-rose/medium.png",
+          "width": 512,
+          "height": 512
+        },
+        "pucker": {
+          "file": "watercolor-rose/pucker.png",
+          "width": 512,
+          "height": 512
+        },
+        "bite": {
+          "file": "watercolor-rose/bite.png",
+          "width": 512,
+          "height": 512
+        },
+        "tongue": {
+          "file": "watercolor-rose/tongue.png",
+          "width": 512,
+          "height": 512
         }
       }
     }

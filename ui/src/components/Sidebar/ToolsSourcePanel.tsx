@@ -4,6 +4,7 @@ import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import type { AssetKind } from '../../api/assets'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
+import { ImagePreview } from '../common/ImagePreview'
 
 export type ToolsPanelTool = 'upscale' | 'revoice' | 'remove_background'
 export type ToolSource = {
@@ -34,13 +35,13 @@ type SourceProps = {
 }
 
 const SOURCE_KINDS: Record<ToolsPanelTool, readonly AssetKind[]> = {
-  remove_background: ['image'],
+  remove_background: ['image', 'video'],
   upscale: ['image', 'video'],
   revoice: ['video'],
 }
 
 const SOURCE_ACCEPT: Record<ToolsPanelTool, string> = {
-  remove_background: 'image/*',
+  remove_background: 'image/*,video/*',
   upscale: 'image/*,video/*',
   revoice: 'video/*',
 }
@@ -48,17 +49,16 @@ const SOURCE_ACCEPT: Record<ToolsPanelTool, string> = {
 export function ToolsSourcePanel(props: SourceProps) {
   const { t } = useUiTranslation('studio')
   const workspaceId = useStore(s => s.activeWorkspace)
-  const label = props.tool === 'remove_background'
-    ? t('tools.sourceImage')
-    : props.tool === 'upscale' ? t('tools.sourceMedia') : t('tools.sourceClip')
+  const label = props.tool === 'revoice' ? t('tools.sourceClip') : t('tools.sourceMedia')
   const value = sourceValue(props)
   return (
     <div className="space-y-2">
       <AssetInput
         label={label}
-        placeholder={t('tools.selectGalleryImage')}
+        placeholder={props.tool === 'revoice' ? t('tools.selectGallery') : t('tools.selectLibraryMedia')}
         items={props.items}
         value={value}
+        showPreview={false}
         accept={SOURCE_ACCEPT[props.tool]}
         workspaceId={workspaceId}
         optional
@@ -79,16 +79,14 @@ export function ToolsSourcePanel(props: SourceProps) {
           {props.currentIsImage ? t('tools.useGalleryImage') : t('tools.selectGalleryImage')}
         </button>
       )}
-      {props.tool !== 'remove_background' && (
-        <button
-          type="button"
-          onClick={props.useCurrentClip}
-          disabled={!props.currentIsVideo}
-          className="w-full text-[11px] py-1.5 rounded-md border border-border bg-bg-tertiary text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          {props.currentIsVideo ? t('tools.useGallery') : t('tools.selectGallery')}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={props.useCurrentClip}
+        disabled={!props.currentIsVideo}
+        className="w-full text-[11px] py-1.5 rounded-md border border-border bg-bg-tertiary text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        {props.currentIsVideo ? t('tools.useGallery') : t('tools.selectGallery')}
+      </button>
     </div>
   )
 }
@@ -113,7 +111,7 @@ function SelectedSource({
   const { t } = useUiTranslation('studio')
   return (
     <div className="bg-bg-tertiary border border-border rounded-lg p-2 space-y-2">
-      {sourceUrl && <SourcePreview url={sourceUrl} kind={sourceKind} name={sourceName || ''} />}
+      {sourceUrl && <SourcePreview url={sourceUrl} kind={sourceKind} name={sourceName || ''} workspace={sourceWorkspace} />}
       <div className="flex items-center gap-2">
         {sourceKind === 'image'
           ? <ImageIcon size={12} className="text-accent-blue shrink-0" />
@@ -128,10 +126,12 @@ function SelectedSource({
   )
 }
 
-function SourcePreview({ url, kind, name }: { url: string; kind: ToolSource['kind']; name: string }) {
+function SourcePreview({ url, kind, name, workspace }: { url: string; kind: ToolSource['kind']; name: string; workspace?: string | null }) {
   return kind === 'image'
     ? <div className="overflow-hidden rounded-md bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px]">
-      <img src={url} alt={name} className="w-full max-h-64 object-contain" />
+      <ImagePreview image={{ url, name, workspace_id: workspace || undefined }} className="block w-full">
+        <img src={url} alt={name} className="w-full max-h-64 object-contain" />
+      </ImagePreview>
     </div>
-    : <video src={url} className="w-full rounded-md max-h-64 bg-black" muted controls playsInline />
+    : <div className="rounded-md bg-[conic-gradient(#1c2330_25%,#343d4c_0_50%,#1c2330_0_75%,#343d4c_0)] bg-[length:16px_16px]"><video src={url} className="w-full rounded-md max-h-64" muted controls playsInline /></div>
 }
