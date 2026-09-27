@@ -36710,6 +36710,9 @@ _mimetypes.add_type("text/javascript", ".mjs")
 _mimetypes.add_type("text/css", ".css")
 _mimetypes.add_type("image/svg+xml", ".svg")
 
+from routers.example_assets import create_example_assets_router
+api.include_router(create_example_assets_router())
+
 _ui_dist = os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))
 from services.ui_distribution import build_status as _ui_build_status, recovery_html as _ui_recovery_html
 _ui_ready = _ui_build_status()["ready"]

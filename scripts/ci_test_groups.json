@@ -49,6 +49,7 @@
         "tests/test_generation_provenance_submission.py",
         "tests/test_generation_record.py",
         "tests/test_generation_runtime.py",
+        "tests/test_example_assets.py",
         "tests/test_inpaint_preparation.py",
         "tests/test_h3_benchmark_client.py",
         "tests/test_h3_director_dialogue.py",

@@ -75,6 +75,7 @@ function ShotLibraryBody(props: ShotLibraryProps) {
       <ExamplesMenu />
       <button type="button" onClick={props.onClose} aria-label={t('shotLibrary.close')} className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border hover:bg-bg-hover"><X size={18} /></button>
     </header>
+    <p className="border-b border-border px-4 py-2 text-xs text-text-muted">{t('shotLibrary.optionalExamples')}</p>
     <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-[12rem_minmax(0,1fr)] md:overflow-hidden lg:grid-cols-[12rem_minmax(0,1fr)_20rem]">
       <LibrarySidebar view={view} hasRecent={recent.length > 0} settings={settings} onView={setView} />
       <main className="min-h-0 overflow-y-auto p-3">

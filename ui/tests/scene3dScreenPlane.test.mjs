@@ -96,8 +96,8 @@ test('a stale cleanup cannot remove the replacement plane', () => {
   assert.equal(head.children.length, 0)
 })
 
-test('bundled TV-head example loads as a GLB with headfront and Walking', async () => {
-  const glb = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../public/examples/tv-head-humanoid.glb'))
+test('TV-head example fixture loads as a GLB with headfront and Walking', async () => {
+  const glb = readFileSync(join(dirname(fileURLToPath(import.meta.url)), './fixtures/tv-head-humanoid.glb'))
   assert.ok(glb.length > 1000)
   assert.ok(glb.length < 20000)
   const jsonLength = glb.readUInt32LE(12)

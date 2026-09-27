@@ -1880,6 +1880,7 @@
     }
   },
   "shotLibrary": {
+    "optionalExamples": "Los recursos de ejemplo se descargan al abrir una vista previa o usar una plantilla. Después quedan disponibles sin conexión.",
     "change": "Cambiar plano",
     "use": "Usar este plano",
     "cancel": "Cancelar",

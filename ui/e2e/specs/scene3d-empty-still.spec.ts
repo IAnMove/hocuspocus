@@ -23,7 +23,7 @@ for (const media of ['poses', 'video'] as const) {
     const url = `/api/v1/uploads/empty-still.${media === 'video' ? 'webm' : 'png'}`
     const body = await readFile(new URL(media === 'video'
       ? '../../public/rig-previews/animation-jump.webm'
-      : '../../public/examples/dark-stillness/wounded-knight.png', import.meta.url))
+      : '../../public/character-kit-presets/mouths/minimal-line/closed.png', import.meta.url))
     let requested = false
     await page.route(`**${url}*`, route => {
       requested = true

@@ -10,6 +10,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': apiTarget,
+      '/examples': apiTarget,
       '/classic': apiTarget,
     },
   },

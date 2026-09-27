@@ -1880,6 +1880,7 @@
     }
   },
   "shotLibrary": {
+    "optionalExamples": "Example media downloads when you open a preview or use a template. Downloaded resources remain available offline.",
     "change": "Change shot",
     "use": "Use this shot",
     "cancel": "Cancel",
