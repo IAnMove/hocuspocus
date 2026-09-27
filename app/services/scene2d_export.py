@@ -120,14 +120,13 @@ def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequen
 
 def _layer_media(refs: list, layer: dict, workspace: str) -> None:
     urls = _sequence_urls(layer)
-    for extra in urls:
-        _append_visual_ref(refs, layer, extra, workspace, True)
     source = str(layer.get("source") or "").strip()
     if source:
         _append_visual_ref(refs, layer, source, workspace, False)
-        return
-    if not urls:
+    elif not urls:
         raise http_error(422, "missing_ref", f"Layer {layer.get('id')} needs durable workspace or example media")
+    for extra in urls:
+        _append_visual_ref(refs, layer, extra, workspace, True)
 
 
 def media_refs(document: dict, workspace: str) -> list[dict]:
