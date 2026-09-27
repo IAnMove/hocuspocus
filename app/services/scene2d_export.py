@@ -83,6 +83,22 @@ def _durable(url: str) -> bool:
     return lowered.startswith(DURABLE_PREFIXES) or lowered.startswith("data:image/")
 
 
+def _sequence_urls(layer: dict) -> list[str]:
+    sequence = layer.get("sequence")
+    if not isinstance(sequence, dict):
+        return []
+    if sequence.get("kind") == "frames":
+        return [str(source).strip() for source in sequence.get("sources") or [] if str(source).strip()]
+    if sequence.get("kind") == "sheet":
+        source = str(sequence.get("source") or "").strip()
+        return [source] if source else []
+    urls = [str(source).strip() for source in sequence.get("sources") or [] if str(source).strip()]
+    source = str(sequence.get("source") or "").strip()
+    if source:
+        urls.append(source)
+    return urls
+
+
 def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequence: bool) -> None:
     label = "sequence" if sequence else "source"
     if not url or _blocked_url(url) or not _durable(url):
@@ -103,17 +119,19 @@ def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequen
 
 
 def _layer_media(refs: list, layer: dict, workspace: str) -> None:
-    sequence = layer.get("sequence") if isinstance(layer.get("sequence"), dict) else {}
-    urls = list(sequence.get("sources") or [])
-    if sequence.get("source"):
-        urls.append(sequence.get("source"))
+    urls = _sequence_urls(layer)
     for extra in urls:
-        _append_visual_ref(refs, layer, str(extra or "").strip(), workspace, True)
-    _append_visual_ref(refs, layer, str(layer.get("source") or "").strip(), workspace, False)
+        _append_visual_ref(refs, layer, extra, workspace, True)
+    source = str(layer.get("source") or "").strip()
+    if source:
+        _append_visual_ref(refs, layer, source, workspace, False)
+        return
+    if not urls:
+        raise http_error(422, "missing_ref", f"Layer {layer.get('id')} needs durable workspace or example media")
 
 
 def media_refs(document: dict, workspace: str) -> list[dict]:
-    """Durable media referenced by visual layers and audio tracks."""
+    """Durable media referenced by visual layers, frame sequences and audio tracks."""
     refs = []
     for layer in document["layers"]:
         if layer.get("type") in {"effect", "camera"} or layer.get("visible") is False:

@@ -84,7 +84,7 @@ window.__scene2dExport = {
     canvas.width = size.width
     canvas.height = size.height
     media.clear()
-    await Promise.all(next.layers.filter(layer => layer.visible && (layer.type === 'image' || layer.type === 'overlay' || layer.type === 'video')).map(async layer => {
+    await Promise.all(next.layers.filter(layer => layer.visible && (layer.type === 'image' || layer.type === 'overlay' || layer.type === 'video') && layer.source.trim()).map(async layer => {
       media.set(layer.id, layer.type === 'video' ? await loadVideo(layer.source) : await loadImage(layer.source))
     }))
     await ensureTextFonts(next.texts)
