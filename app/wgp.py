@@ -1237,15 +1237,17 @@ def validate_settings(state, model_type, single_prompt, inputs):
         elif multi_prompts_gen_type in [0, 2]:
             if len(image_start or []) > 0 and len(image_start or []) != len(image_end or []):
                 gr.Info("The number of Start and End Images should be the same if the option 'Each Line Will be used for a new Sliding Window of the same Video Generation' is not set")
-                return ret()    
+                return ret()
     else:        
         image_end = None
 
     if "V" in video_prompt_type and "O" in video_prompt_type:
         if image_start is None and video_source is None and "L" not in video_prompt_type and not all_letters(video_prompt_type, "IK"):
-            return err("Aligned Pose transfer requires a Start Image or Source Video to continue to be used")    
+            gr.Info("Aligned Pose transfer requires a Start Image or Source Video to continue to be used")
+            return ret()
         if "A" in video_prompt_type and any_letters(video_prompt_type, "YWZ"):
-            return err("Aligned Pose transfer supports only Inpainting process outside the masked area")    
+            gr.Info("Aligned Pose transfer supports only Inpainting process outside the masked area")
+            return ret()
 
     if test_any_sliding_window(model_type) and image_mode == 0:
         if video_length > sliding_window_size:
@@ -8102,6 +8104,9 @@ def generate_video(
     # the audio block doesn't fire.
     # (Upstream Wan2GP added this in MegaMix commit ecfe88b.)
     video_length_not_limited_by_audio = False
+    # The multitalk audio padding below needs the window overlap before the
+    # sliding-window decision further down; it does not depend on the length.
+    reuse_frames = min(sliding_window_size - latent_size, sliding_window_overlap) if test_any_sliding_window(model_type) else 0
     if audio_guide != None:
         from preprocessing.extract_vocals import get_vocals
         import librosa

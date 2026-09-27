@@ -215,6 +215,39 @@ def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Pa
     assert rejoin_sidecar["generation_timings"]["assembly_time_sec"] == saved["assembly_time_sec"]
 
 
+@pytest.mark.parametrize("direct_video", [False, True])
+def test_rerun_h3_segment_can_replace_the_whole_shot_prompt(tmp_path: Path, direct_video):
+    state = _saved_state(tmp_path)
+    state["video_model"] = "minimax_h3_legacy"
+    _write_pipeline(tmp_path, state)
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        filename = f"new_{len(submitted)}.mp4"
+        (tmp_path / filename).write_bytes(b"new video")
+        return [filename]
+
+    with patch.object(director_pipeline, "_direct_video_settings", return_value=(direct_video, "")), \
+            patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch("app.services.video_editor.probe_media", return_value={"duration": 5.16}), \
+            patch("app.services.video_editor.extract_frame",
+                  side_effect=lambda _s, destination, _t: Path(destination).write_bytes(b"frame")):
+        result = director_pipeline.rerun_h3_segment(
+            str(tmp_path),
+            "editable",
+            0,
+            2,
+            prompt_override="She stands and looks at the sky.",
+            cascade=False,
+            replace_shot_prompt=True,
+        )
+
+    assert result["filenames"] == ["new_1.mp4"]
+    saved = director_pipeline.load_pipeline_state(str(tmp_path), "editable")
+    assert saved["clips"][0]["video_prompt"] == "She stands and looks at the sky."
+
+
 def test_clip_history_is_recovered_selected_and_used_by_rejoin(tmp_path: Path):
     for filename in ("clip_0_original.mp4", "clip_0_rerun.mp4", "clip_1.mp4"):
         (tmp_path / filename).write_bytes(b"video")
