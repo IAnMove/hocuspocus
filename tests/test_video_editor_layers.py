@@ -105,3 +105,20 @@ def test_apply_layers_burns_overlay_and_mixes_cue(tmp_path):
     loud = subprocess.run(["ffmpeg", "-v", "info", "-ss", "0.6", "-t", "0.3", "-i", str(out), "-af", "volumedetect",
                            "-f", "null", "-"], capture_output=True, text=True).stderr
     assert "mean_volume" in loud and "-91" not in loud.split("mean_volume:")[1][:8]
+
+
+@pytest.mark.skipif(not FFMPEG, reason="ffmpeg is required")
+def test_short_base_audio_is_padded_to_the_video(tmp_path):
+    base = tmp_path / "base.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=black:s=160x90:r=24:d=3",
+                    "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=1.2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", str(base)], check=True)
+    voice = tmp_path / "vo.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.4", str(voice)], check=True)
+    out = tmp_path / "out.mp4"
+    apply_layers(str(base), str(out), width=160, height=90, fps=24, duration=3.0, duck=0.5, overlays=[],
+                 audio_cues=[{"id": "vo", "source": "vo.wav", "resolved_path": str(voice), "start": 1.5, "volume": 1,
+                              "trim_start": 0, "trim_end": 0}])
+    probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=duration",
+                                       "-of", "json", str(out)], capture_output=True, text=True, check=True).stdout)
+    assert abs(float(probe["streams"][0]["duration"]) - 3.0) < 0.1
