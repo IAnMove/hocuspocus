@@ -2,7 +2,7 @@
 // the headless scene2d renderer. Character-kit synchronization stays in the editor.
 import { canonicalSceneFps } from '../sceneFps'
 import { normalizeFaceBinding } from '../cutoutDialogue'
-import { parseKineticTexts } from '../kineticText'
+import { lyricFields, parseKineticTexts } from '../kineticText'
 import { getSceneLayerTiming, normalizeSceneEvents, normalizeSceneKeyframes, withNormalizedSceneTiming, withSceneKeyframes } from '../sceneTimeline'
 import type { SceneCurve } from '../../types'
 import { boundedNumber, finiteNumber, normalizedAtmosphere, normalizedEffects, normalizedStrip } from './layerStyle'
@@ -205,5 +205,5 @@ export function normalizeScene2D(raw: unknown): AnimatorScene {
   const { width, height, layers: normalized } = normalizeScene2DLayers(incoming)
   const layers = breakDependencyCycles(normalized)
   const duration = Math.min(3600, Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed })))
-  return { ...incoming, texts: parseKineticTexts(incoming.texts), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
+  return { ...incoming, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
 }

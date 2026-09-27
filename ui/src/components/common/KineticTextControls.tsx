@@ -1,12 +1,15 @@
 import { useUiTranslation } from '../../i18n'
-import { parseKineticTexts, type KineticText } from '../../lib/kineticText'
+import { parseKineticTexts, type KineticText, type SceneLyrics } from '../../lib/kineticText'
 import { randomUuid } from '../../lib/uuid'
 import { TextCueBox, TextCueContent, TextCueMotion, TextCuePreview, TextCueStyle } from './kineticText/TextCueSections'
+import { TextTemplateInsert } from './kineticText/TextTemplateInsert'
 
 const MAX_CUES = 48
 
-export function KineticTextControls({ cues = [], duration, disabled, onChange }: {
-  cues?: KineticText[]; duration: number; disabled?: boolean; onChange: (cues: KineticText[]) => void
+export function KineticTextControls({ cues = [], duration, width = 1280, height = 720, lyrics, disabled, onChange, onLyricsChange }: {
+  cues?: KineticText[]; duration: number; width?: number; height?: number; lyrics?: SceneLyrics; disabled?: boolean
+  onChange: (cues: KineticText[]) => void
+  onLyricsChange?: (lyrics: SceneLyrics | undefined) => void
 }) {
   const { t } = useUiTranslation('kineticText')
   const update = (id: string, patch: Partial<KineticText>) => onChange(parseKineticTexts(cues.map(cue => cue.id === id ? { ...cue, ...patch } : cue)))
@@ -14,6 +17,8 @@ export function KineticTextControls({ cues = [], duration, disabled, onChange }:
     <summary className="cursor-pointer text-sm font-semibold text-text-primary">{t('title')} ({cues.length})</summary>
     <p className="my-2 text-xs text-text-muted">{t('help')}</p>
     <fieldset disabled={disabled} className="space-y-3 disabled:opacity-50">
+      <TextTemplateInsert duration={duration} width={width} height={height} disabled={disabled} onInsert={next => onChange(parseKineticTexts([...cues, ...next]))} onLyrics={onLyricsChange} />
+      {lyrics ? <p className="text-xs text-text-muted">{lyrics.lines.length}</p> : null}
       {cues.map(cue => <div key={cue.id} className="space-y-2 rounded border border-border p-2">
         <TextCuePreview cue={cue} />
         <TextCueContent cue={cue} update={patch => update(cue.id, patch)} />

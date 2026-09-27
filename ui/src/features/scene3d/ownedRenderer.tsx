@@ -7,7 +7,7 @@ import { waitForWorld3DAssets } from './exportFlow'
 import { startWorld3DExport, finishWorld3DExport, paintWorld3DExportFrame } from './exportLock'
 import { scene3dPlaybackSpeed } from './clock'
 import { paintSceneFx } from '../sceneFx/paint'
-import { ensureTextFonts, paintKineticTexts } from '../../lib/kineticText'
+import { ensureTextFonts, paintKineticTexts, paintSceneLyrics } from '../../lib/kineticText'
 import { paintClipNumber } from './performance'
 import type { Scene3DDocument } from './types'
 
@@ -46,6 +46,7 @@ window.__world3dExport = {
     context.drawImage(source, 0, 0, canvas.width, canvas.height)
     paintSceneFx(context, canvas.width, canvas.height, time, snapshot.sfx)
     paintKineticTexts(context, canvas.width, canvas.height, time, snapshot.texts)
+    paintSceneLyrics(context, canvas.width, canvas.height, time, snapshot.lyrics)
     paintClipNumber(context, canvas.width, canvas.height, snapshot.clipNumber)
     return canvas.toDataURL('image/png')
   },

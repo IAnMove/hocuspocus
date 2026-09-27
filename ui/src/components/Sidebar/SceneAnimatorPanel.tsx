@@ -2609,7 +2609,7 @@ export function SceneAnimatorPanel() {
       </div>
       <p className="mt-2 text-[9px] text-text-muted">{t('animator.canvasHelp')}</p>
       <SceneFxControls cues={scene.sfx} duration={scene.duration} disabled={playing || recording || publishing} onChange={sfx => updateScene(current => ({ ...current, sfx }))} onShowcase={collection => updateScene(current => withFxShowcase(current, collection))} />
-      <KineticTextControls cues={scene.texts} duration={scene.duration} disabled={playing || recording || publishing} onChange={texts => updateScene(current => ({ ...current, texts }))} />
+      <KineticTextControls cues={scene.texts} lyrics={scene.lyrics} duration={scene.duration} width={scene.width} height={scene.height} disabled={playing || recording || publishing} onChange={texts => updateScene(current => ({ ...current, texts }))} onLyricsChange={lyrics => updateScene(current => ({ ...current, lyrics }))} />
       <SceneTimeline
         layers={scene.layers}
         duration={scene.duration}

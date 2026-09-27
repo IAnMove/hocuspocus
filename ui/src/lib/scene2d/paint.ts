@@ -2,7 +2,7 @@
 // headless scene2d renderer. Media lookup is injected so the same drawing code
 // works with live DOM elements (editor) or preloaded images/videos (headless).
 import { paintSceneFx } from '../../features/sceneFx/paint'
-import { paintKineticTexts } from '../kineticText'
+import { paintKineticTexts, paintSceneLyrics } from '../kineticText'
 import { paintSeamOccluder } from '../seamOccluder'
 import type { SceneEvaluator } from './evaluate'
 import { applyLayerMask, drawAtmosphere, effectFilter, isVisualLayer, normalizedAtmosphere, normalizedEffects, normalizedStrip } from './layerStyle'
@@ -79,5 +79,6 @@ export function paintScene2D(canvas: HTMLCanvasElement, current: AnimatorScene, 
     })
   paintSceneFx(context, canvas.width, canvas.height, sceneSeconds, current.sfx)
   paintKineticTexts(context, canvas.width, canvas.height, sceneSeconds, current.texts)
+  paintSceneLyrics(context, canvas.width, canvas.height, sceneSeconds, current.lyrics)
   return true
 }

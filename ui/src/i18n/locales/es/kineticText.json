@@ -44,5 +44,8 @@
   "exits": { "none": "Ninguna", "fade": "Fundido", "fall": "Caída", "blur": "Desenfoque", "wipe": "Barrido", "scale": "Escala", "slide-left": "Hacia la izquierda", "slide-right": "Hacia la derecha" },
   "loops": { "none": "Ninguno", "wave": "Ola", "pulse": "Pulso", "shake": "Temblor", "float": "Flotación", "flicker": "Parpadeo" },
   "eases": { "linear": "Lineal", "ease": "Suave" },
-  "boxKinds": { "none": "Ninguna", "solid": "Sólida", "paper": "Papel", "pill": "Píldora", "bar": "Barra", "underline": "Subrayado", "plate": "Placa" }
+  "boxKinds": { "none": "Ninguna", "solid": "Sólida", "paper": "Papel", "pill": "Píldora", "bar": "Barra", "underline": "Subrayado", "plate": "Placa" },
+  "insertTemplate": "Insertar plantilla",
+  "lyricsPaste": "Pega LRC, SRT o letra suelta",
+  "lyricsImport": "Importar letra"
 }
