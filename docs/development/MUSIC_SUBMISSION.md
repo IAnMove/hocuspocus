@@ -50,3 +50,8 @@ Publishing reserved IDs to disk and Story is
 backend compilation are [MUSIC_MODEL_CONTRACT.md](MUSIC_MODEL_CONTRACT.md).
 The frozen spec keeps the full caption; MiniMax's 300-character cap applies
 only when compiling the remote request.
+
+Each reservation also writes a GenerationRecord v1 projection
+(`ensure_story_music_generation_record` → `{workspace}/generation-records/`).
+See [GENERATION_RECORD.md](GENERATION_RECORD.md). That file is not a second
+task row and is not yet a universal Activity/Library reader.
