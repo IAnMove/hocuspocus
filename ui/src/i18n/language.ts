@@ -11,8 +11,7 @@ export function isUiLanguage(value: string | null | undefined): value is UiLangu
 export function detectUiLanguage(): UiLanguage {
   const stored = safeStorageGet('local', LANGUAGE_STORAGE_KEY)
   if (isUiLanguage(stored)) return stored
-  const browser = typeof navigator !== 'undefined' ? navigator.language : ''
-  if (browser.toLowerCase().startsWith('es')) return 'es'
+  // Fresh installs start in English; an explicit saved choice always wins.
   return DEFAULT_LANGUAGE
 }
 

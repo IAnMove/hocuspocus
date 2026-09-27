@@ -16,6 +16,20 @@ function installDom(language = 'en-US') {
   })
 }
 
+test('fresh installations start in English even with a Spanish browser', async () => {
+  installDom('es-ES')
+  const { detectUiLanguage, LANGUAGE_STORAGE_KEY, persistUiLanguage } = await import('../src/i18n/language.ts')
+  const { safeStorageRemove } = await import('../src/lib/safeStorage.ts')
+  safeStorageRemove('local', LANGUAGE_STORAGE_KEY)
+  assert.equal(detectUiLanguage(), 'en')
+  persistUiLanguage('es')
+  assert.equal(detectUiLanguage(), 'es')
+  assert.equal(document.documentElement.lang, 'es')
+  persistUiLanguage('en')
+  assert.equal(detectUiLanguage(), 'en')
+  safeStorageRemove('local', LANGUAGE_STORAGE_KEY)
+})
+
 test('the real UI language key wins over i18nextLng and the browser locale', async () => {
   installDom('en-US')
   const { detectUiLanguage, LANGUAGE_STORAGE_KEY } = await import('../src/i18n/language.ts')

@@ -4,7 +4,7 @@ A local studio for turning an idea into a production: story, pictures, clips, co
 
 HocusPocus is an experimental, **non-commercial** fork of [Blizaine/Maestro](https://github.com/Blizaine/Maestro) by [Blaine Brown](https://github.com/Blizaine) ([@blizaine](https://x.com/blizaine)). Maestro already did the hard part: a serious local generation stack on [Wan2GP](https://github.com/deepbeepmeep/Wan2GP). We keep that foundation and add the missing production layer — a world that can be planned, directed, recovered and revised without starting from zero.
 
-The **HocusPocus** mark is a quill shaping a cube: imagination becoming a buildable world. The UI is English and Spanish.
+The **HocusPocus** mark is a quill shaping a cube: imagination becoming a buildable world. New installations start in English. Switch to Spanish in Settings; an explicitly saved language choice is preserved.
 
 Open **Help / Ayuda** next to Settings for the in-app tutorial, with screenshots of the layout, generation, studios and queue. Its ES/EN selector changes the UI language. Use Tab and Shift+Tab to navigate the dialog; Escape closes it and returns focus to Help.
 
@@ -46,7 +46,7 @@ Selected images (single inputs, batch inputs and image references) show a small 
 
 ### Build a world once, reuse it everywhere
 
-**Story Lab** is the production bible: premise, world rules, locations, cast, relationships, beats. Approve fields, then hand the canon to Comics, Director, trailers or videoclips. Export a `.storypack` when you want to move the project.
+**Story Lab** is the production bible: premise, world rules, locations, cast, relationships, beats. Approve fields, then hand the canon to Comics, Director, trailers or videoclips. Export a `.storypack` when you want to move the project. **Add reference** opens a dialog with **From my computer** and **From HocusPocus** choices, so it stays accessible from long character and location cards. Closing the dialog cancels pending attachment; existing references remain.
 
 **Example.** Approve a desert city, three characters and a logline. Open **Productions → Comic** for a 4-page chapter that does not retell the whole plot. Open **Short Film → Story** with the same canon and the same identity images. The writing model stays the one you picked on the story, not a silent global default.
 
