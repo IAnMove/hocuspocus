@@ -203,6 +203,38 @@ def test_missing_upload_media_is_refused_before_admission(tmp_path):
     assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
 
 
+def test_freeze_marks_uploads_gallery_file_urls():
+    document = _document(layers=[_layer(source="/api/v1/file/gallery-hero.png?workspace=__uploads__")])
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["refs"] == [{"layerId": "bg", "url": "/api/v1/file/gallery-hero.png?workspace=__uploads__",
+                                 "kind": "image", "filename": "gallery-hero.png", "root": "uploads"}]
+
+
+def test_uploads_gallery_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.uploads_dir()) / "gallery-hero.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source="/api/v1/file/gallery-hero.png?workspace=__uploads__")])
+    receipt = service.submit(_command(intent="scene2d-uploads-gallery", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_scoped_workspace_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.workspace_dir("assets")) / "shared.png", 8, 8, (40, 50, 60))
+    document = _document(layers=[_layer(source="/api/v1/file/shared.png?workspace=assets")])
+    receipt = service.submit(_command(intent="scene2d-scoped", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_missing_scoped_workspace_file_is_refused(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.workspace_dir(WORKSPACE)) / "shared.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source="/api/v1/file/shared.png?workspace=assets")])
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent="scene2d-scoped-missing", document=document))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+
+
 @pytest.mark.skipif(not FFMPEG, reason="ffmpeg is required")
 def test_export_publishes_mp4_with_audio_tracks(tmp_path):
     service = _service(tmp_path)

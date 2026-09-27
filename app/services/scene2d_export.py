@@ -112,9 +112,12 @@ def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequen
             raise http_error(422, "missing_ref", "Use a valid bundled example URL")
         refs.append(record)
         return
-    path, scoped = parse_media_ref(url, workspace)
+    # Honor the URL's own workspace. Passing the export workspace into
+    # parse_media_ref would hide gallery Uploads (`?workspace=__uploads__`)
+    # and media picked from another workspace folder.
+    path, scoped = parse_media_ref(url)
     record["filename"] = os.path.basename((path or "").replace("\\", "/"))
-    if url.lower().startswith("/api/v1/uploads/"):
+    if url.lower().startswith("/api/v1/uploads/") or scoped == "__uploads__":
         record["root"] = "uploads"
     else:
         record["workspace"] = scoped or workspace
@@ -241,10 +244,13 @@ class Scene2DExportService(World3DExportService):
             name = ref.get("filename")
             if not name:
                 continue
-            if ref.get("root") == "uploads":
+            named = ref.get("workspace", workspace)
+            if ref.get("root") == "uploads" or named == "__uploads__":
                 root = uploads_root
-            elif ref.get("workspace", workspace) == workspace:
+            elif named == workspace:
                 root = workspace_root
+            elif isinstance(named, str) and WORKSPACE_RE.fullmatch(named):
+                root = Path(self.workspace_dir(named))
             else:
                 continue
             if not (root / str(name)).is_file():
