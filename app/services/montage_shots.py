@@ -47,6 +47,32 @@ def media_duration(path: Path) -> float:
         return 0.0
 
 
+def _has_audio(path: Path) -> bool:
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type",
+             "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=20, check=True,
+        ).stdout.strip()
+        return bool(out)
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _atempo(speed: float) -> str:
+    """Chain atempo filters; each hop must stay in FFmpeg's 0.5–2.0 range."""
+    parts: list[str] = []
+    remaining = max(0.01, min(100.0, float(speed)))
+    while remaining < 0.5:
+        parts.append("atempo=0.5")
+        remaining /= 0.5
+    while remaining > 2.0:
+        parts.append("atempo=2.0")
+        remaining /= 2.0
+    parts.append(f"atempo={remaining:.6f}")
+    return ",".join(parts)
+
+
 def _read_json(path: Path) -> dict[str, Any] | None:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -283,10 +309,25 @@ class ShotBoard:
     def _retimed(root: Path, source: str, slot: float, available: float) -> tuple[str, dict[str, Any]]:
         factor = slot / max(0.1, available - 0.1)
         target = f"{Path(source).stem[:60]}_retimed{factor:.2f}x.mp4"
-        if not (root / target).exists():
-            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(root / Path(source).name), "-an", "-vf",
-                            f"setpts={factor:.4f}*PTS", "-c:v", "libx264", "-crf", "14", "-preset", "medium",
-                            "-pix_fmt", "yuv420p", str(root / target)], check=True, timeout=600)
+        src, dest = root / Path(source).name, root / target
+        keep_audio = _has_audio(src)
+        # Re-encode when missing, or when a previous silent render discarded the take's audio.
+        if not dest.exists() or (keep_audio and not _has_audio(dest)):
+            temporary = dest.with_name(dest.name + ".tmp.mp4")
+            command = ["ffmpeg", "-v", "error", "-y", "-i", str(src)]
+            if keep_audio:
+                command += ["-filter_complex",
+                            f"[0:v]setpts={factor:.4f}*PTS[v];[0:a]{_atempo(1.0 / factor)}[a]",
+                            "-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
+            else:
+                command += ["-an", "-vf", f"setpts={factor:.4f}*PTS"]
+            command += ["-c:v", "libx264", "-crf", "14", "-preset", "medium", "-pix_fmt", "yuv420p", str(temporary)]
+            try:
+                subprocess.run(command, check=True, timeout=600)
+                temporary.replace(dest)
+            except (OSError, subprocess.SubprocessError) as exc:
+                temporary.unlink(missing_ok=True)
+                raise MontageError("Could not slow this take to cover the shot", status=409, code="retime_failed") from exc
         return target, {"kind": "render", "derivedFrom": source, "note": f"{source} slowed {factor:.2f}x to cover its slot"}
 
 
