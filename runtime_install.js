@@ -107,8 +107,9 @@ function engineSteps(engine, platform) {
   }
   const torch = ['torch', 'torchvision', 'torchaudio'].filter(k => spec[k])
     .map(k => `${k}==${spec[k]}+cu${spec.cuda.replace('.', '')}`).join(' ')
-  const removals = engine === 'wangp' && platform === 'win32'
-    ? [pip(engine, platform, 'uninstall torchcodec')] : []
+  const removals = spec.excludedPackages?.length
+    ? [pip(engine, platform, `uninstall ${spec.excludedPackages.join(' ')}`)]
+    : engine === 'wangp' && platform === 'win32' ? [pip(engine, platform, 'uninstall torchcodec')] : []
   run.push({method: 'shell.run', params: {...shell(engine, platform), message: [
     ...removals,
     pip(engine, platform, `install ${torch}`),

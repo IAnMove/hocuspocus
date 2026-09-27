@@ -62,17 +62,16 @@
         "torchaudio": "2.7.1",
         "constraints": {
           "torchcodec": null,
-          "flash-attn": "2.7.4.post1",
           "triton-windows": "3.3.1.post19",
-          "xformers": "0.0.31"
+          "xformers": "0.0.31.post1"
         },
         "acceleratorPackages": [
-          "xformers==0.0.31",
+          "xformers==0.0.31.post1",
           "triton-windows==3.3.1.post19",
-          "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows/sageattention-2.2.0+cu128torch2.7.1-cp310-cp310-win_amd64.whl",
-          "https://huggingface.co/cocktailpeanut/wheels/resolve/main/flash_attn-2.7.4.post1%2Bcu128torch2.7.0-cp310-cp310-win_amd64.whl"
+          "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows/sageattention-2.2.0+cu128torch2.7.1-cp310-cp310-win_amd64.whl"
         ],
-        "verificationImports": ["xformers.ops", "flash_attn", "diffusers.models.transformers.pixart_transformer_2d"]
+        "excludedPackages": ["torchcodec", "flash-attn"],
+        "verificationImports": ["xformers.ops", "diffusers.models.transformers.pixart_transformer_2d"]
       },
       "defaultInstall": true,
       "acceleratorPackages": [

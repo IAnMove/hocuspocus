@@ -143,10 +143,13 @@ References: [Python venv](https://docs.python.org/3/library/venv.html),
 [NVIDIA CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html),
 [TorchCodec compatibility](https://github.com/meta-pytorch/torchcodec),
 [pinned SAM requirements](https://github.com/facebookresearch/sam3/blob/8f0b7f4d4e7eda2ed606ebde6702c93359ad01da/pyproject.toml).
-# Windows startup verification
+## Windows startup verification
 
-The Windows WanGP recipe pins Flash Attention to 2.7.4.post1, within the
-supported range of xFormers 0.0.31. Installation verifies `xformers.ops`,
-`flash_attn` and the Diffusers transformer import used by Quanto before writing
-a success receipt. Package metadata checks alone do not catch these import-time
-ABI/version failures. Linux attention pins are unchanged.
+The Windows WanGP recipe uses xFormers 0.0.31.post1, which fixes the native
+extension packaging in 0.0.31. It removes the external Flash Attention package:
+2.8.2 conflicts with xFormers and the evaluated 2.7.4 Windows wheels lack RTX
+3070 kernels. xFormers, PyTorch SDPA and SageAttention remain available.
+Installation checks the Diffusers transformer import used by Quanto and runs
+a small xFormers CUDA attention calculation before writing a success receipt.
+Package metadata alone does not catch import or GPU-kernel failures. Linux
+attention pins are unchanged.

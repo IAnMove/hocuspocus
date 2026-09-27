@@ -22,11 +22,11 @@ def test_windows_and_linux_choose_distinct_main_abis():
     assert win["supported"] and linux["supported"]
     assert win["engines"]["wangp"]["torch"] == "2.7.1"
     assert linux["engines"]["wangp"]["torch"] == "2.7.0"
-    assert win["engines"]["wangp"]["constraints"]["xformers"] == "0.0.31"
+    assert win["engines"]["wangp"]["constraints"]["xformers"] == "0.0.31.post1"
     assert "torchcodec" not in win["engines"]["wangp"]["constraints"]
     assert linux["engines"]["wangp"]["constraints"]["torchcodec"] == "0.5"
     assert not win["engines"]["rigging"]["supported"]
-    assert win["engines"]["wangp"]["constraints"]["flash-attn"] == "2.7.4.post1"
+    assert "flash-attn" in win["engines"]["wangp"]["excludedPackages"]
     assert "xformers.ops" in win["engines"]["wangp"]["verificationImports"]
     assert "verificationImports" not in linux["engines"]["wangp"]
 
@@ -54,6 +54,23 @@ def test_verification_rejects_accelerator_import_failure(monkeypatch):
     with pytest.raises(ImportError, match="incompatible Flash-Attention"):
         helper.verify("wangp", cuda=False)
     assert imported == ["torch", "xformers.ops"]
+
+
+def test_metadata_inspection_rejects_leftover_incompatible_accelerator(monkeypatch):
+    from types import SimpleNamespace
+
+    module_spec = importlib.util.spec_from_file_location("runtime_verify_test", ROOT / "scripts/runtime_verify.py")
+    helper = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(helper)
+    monkeypatch.setattr(helper, "recipe", lambda *a: {
+        "env": sys.prefix, "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+        "constraints": {}, "excludedPackages": ["flash-attn"],
+    })
+    monkeypatch.setattr(helper.importlib.metadata, "distributions", lambda: [
+        SimpleNamespace(metadata={"Name": "flash_attn"}, version="2.8.2"),
+    ])
+    with pytest.raises(RuntimeError, match="incompatible package flash-attn"):
+        helper.inspect_environment("wangp")
 
 
 def test_older_driver_keeps_core_available_without_claiming_h3_support():
