@@ -1,6 +1,6 @@
 # Plan: «plano a plano» — ver de qué planos sale un clip, rehacer planos y volver a montarlo
 
-Fecha: 27 de septiembre de 2026. Estado: **diseño; no implementado**.
+Fecha: 27 de septiembre de 2026. Estado: **S1–S3 implementados** (contrato, `shots.get`/`shot.regenerate`/`shot.select`, panel en el Editor de vídeo); pendientes S4 (Story Lab y Director), la marca de export desactualizado y `shot.rerender` para escenas.
 Depende de: PR #494 (montajes editables, documentos de escena y export Video 2D en servidor).
 
 ## 1. Qué se busca

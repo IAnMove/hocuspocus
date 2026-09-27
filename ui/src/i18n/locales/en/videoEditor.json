@@ -200,5 +200,39 @@
     "end": "End (s)",
     "volume": "Volume",
     "remove": "Remove"
+  },
+  "shots": {
+    "toggle": "Shot board",
+    "toggleTitle": "See which shots the montage is made of, redo shots and pick takes",
+    "title": "Shot board",
+    "loading": "Loading shots…",
+    "summary": "{{count}} shots · rev. {{revision}}",
+    "hint": "Regenerate queues a new take; using a take saves a revision and reloads the editor (save your edits first).",
+    "prompt": "Prompt",
+    "seed": "seed",
+    "seedAuto": "new",
+    "queue": "Queue take",
+    "cancel": "Cancel",
+    "queueHint": "Uses the same parameters and start image as the original shot, on the normal GPU queue.",
+    "regenerate": "Regenerate shot",
+    "use": "Use",
+    "startImage": "Start image",
+    "sceneHint": "This shot comes from a scene: open it in its editor, export it and replace the clip.",
+    "notRegenerable": "No saved generation parameters for this shot.",
+    "status": {
+      "queued": "queued",
+      "running": "generating",
+      "completed": "ready",
+      "failed": "failed",
+      "pending": "queued"
+    },
+    "origin": {
+      "generation": "Generated",
+      "scene2d": "Video 2D scene",
+      "scene3d": "Video 3D scene",
+      "render": "Derived copy",
+      "upload": "Uploaded",
+      "production": "Director production"
+    }
   }
 }

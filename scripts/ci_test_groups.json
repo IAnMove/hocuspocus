@@ -319,7 +319,8 @@
         "tests/test_world3d_media_cache.py",
         "tests/test_montage_documents.py",
         "tests/test_scene2d_export.py",
-        "tests/test_video_editor_layers.py"
+        "tests/test_video_editor_layers.py",
+        "tests/test_montage_shots.py"
       ]
     }
   ],
@@ -428,6 +429,13 @@
       "prefix": "app/routers/scene2d_export.py",
       "paths": [
         "tests/test_scene2d_export.py"
+      ]
+    },
+    {
+      "prefix": "app/services/montage_shots.py",
+      "paths": [
+        "tests/test_montage_shots.py",
+        "tests/test_montage_documents.py"
       ]
     }
   ]

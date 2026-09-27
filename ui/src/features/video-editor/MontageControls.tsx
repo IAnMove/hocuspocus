@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Layers, Loader2, Save, Trash2 } from 'lucide-react'
-import * as api from '../../api/client'
-import { getMontage, listMontages, saveMontage, type MontageSummary } from '../../api/montages'
+import { listMontages, saveMontage, type MontageSummary } from '../../api/montages'
+import { loadMontageIntoEditor } from './montageLoader'
 import { useUiTranslation } from '../../i18n'
 import type { EditorSoundtrack, ResolutionOption } from './editorDraft'
 import type { EditorClip } from './editorClipNormalization'
-import { editorFromMontage, montageFromEditor, resolutionFor, type MontageLayers, type MontageRef } from './montage'
+import { montageFromEditor, type MontageLayers, type MontageRef } from './montage'
 
 export interface MontageEditorState {
   projectName: string
@@ -45,11 +45,8 @@ export function MontageToolbar({ workspace, disabled, current, layers, montageRe
     setBusy(true)
     onError(null)
     try {
-      const { montage } = await getMontage(workspace, file)
-      const opened = await editorFromMontage(montage, source => api.probeVideoEditorClip(source, workspace),
-        source => api.probeVideoEditorAudio(source, workspace), api.getVideoEditorThumbnailUrl)
-      onOpen({ projectName: montage.name, resolution: resolutionFor(montage.width, montage.height), fps: montage.fps, clips: opened.clips, soundtrack: opened.soundtrack },
-        opened.layers, { file, revision: montage.revision ?? 1, origins: opened.origins })
+      const loaded = await loadMontageIntoEditor(workspace, file)
+      onOpen(loaded.state, loaded.layers, loaded.ref)
       setOpen(false)
     } catch (error) { onError((error as Error).message) } finally { setBusy(false) }
   }
@@ -59,9 +56,9 @@ export function MontageToolbar({ workspace, disabled, current, layers, montageRe
     setBusy(true)
     onError(null)
     try {
-      const montage = montageFromEditor({ ...state, layers, origins: montageRef?.origins })
+      const montage = montageFromEditor({ ...state, layers, origins: montageRef?.origins, extras: montageRef?.extras, notes: montageRef?.notes })
       const saved = await saveMontage({ workspace, montage, ...(montageRef ? { file: montageRef.file, expected_revision: montageRef.revision } : {}) })
-      onSaved({ file: saved.file, revision: saved.revision, origins: montageRef?.origins ?? {} })
+      onSaved({ ...montageRef, file: saved.file, revision: saved.revision, origins: montageRef?.origins ?? {} })
     } catch (error) { onError((error as Error).message) } finally { setBusy(false) }
   }
 
