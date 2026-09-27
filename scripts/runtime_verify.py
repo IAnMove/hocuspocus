@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app"))
-from services.runtime_profiles import dependency_fingerprint, recipe  # noqa: E402
+from services.runtime_profiles import FINGERPRINT_SCHEME, dependency_fingerprint, recipe  # noqa: E402
 from services.runtime_sources import sources_current  # noqa: E402
 
 
@@ -44,7 +44,8 @@ def verify(engine: str, *, cuda: bool = True) -> dict:
         return {"engine": engine, "profile": spec["id"], "python": spec["python"],
                 "prefix": str((ROOT / spec["env"]).resolve()), "packages": installed, "cuda": None,
                 "cudaCalculation": False, "modelsExecuted": False,
-                "fingerprint": dependency_fingerprint(engine, sys.platform)}
+                "fingerprint": dependency_fingerprint(engine, sys.platform),
+                "fingerprintScheme": FINGERPRINT_SCHEME}
     torch = importlib.import_module("torch")
     if torch.version.cuda != spec["cuda"]:
         raise RuntimeError(f"{engine}: expected CUDA {spec['cuda']} wheel; got {torch.version.cuda}")
@@ -67,7 +68,8 @@ def verify(engine: str, *, cuda: bool = True) -> dict:
     return {"engine": engine, "profile": spec["id"], "python": spec["python"],
             "prefix": str((ROOT / spec["env"]).resolve()), "packages": installed, "cuda": torch.version.cuda,
             "cudaCalculation": cuda, "modelsExecuted": False,
-            "fingerprint": dependency_fingerprint(engine, sys.platform)}
+            "fingerprint": dependency_fingerprint(engine, sys.platform),
+            "fingerprintScheme": FINGERPRINT_SCHEME}
 
 
 def main() -> None:
