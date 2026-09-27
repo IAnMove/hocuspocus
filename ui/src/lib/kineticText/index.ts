@@ -1,0 +1,8 @@
+export { ensureTextFonts, TEXT_FONT_STACK } from './fonts'
+export { displayedKineticText, wrapKineticLines } from './layout'
+export { derivedTextMotion, isLegacyKineticText, kineticTextFields, parseKineticTexts } from './parse'
+export { paintKineticTexts } from './paint'
+export { KINETIC_TEXT_SCHEMA } from './schema'
+export { kineticTextState } from './state'
+export { KINETIC_PRESETS, TEXT_ALIGNS, TEXT_BOX_KINDS, TEXT_ENTERS, TEXT_EXITS, TEXT_FONTS, TEXT_LOOPS, TEXT_WEIGHTS } from './types'
+export type { KineticText, TextAlign, TextBox, TextBoxKind, TextCounter, TextEnter, TextExit, TextFill, TextFont, TextLoop, TextMotion, TextShadow, TextStroke, TextWeight } from './types'

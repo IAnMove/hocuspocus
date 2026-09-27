@@ -24,7 +24,7 @@ test('untrusted text imports are bounded and literal text is preserved', () => {
   assert.equal(texts[0].text, cue.text)
   assert.equal(texts[0].x, 50)
   assert.equal(texts[0].size, 25)
-  assert.equal(parseKineticTexts(Array.from({length:20}, (_,i)=>({...cue,id:String(i)}))).length,12)
+  assert.equal(parseKineticTexts(Array.from({length:60}, (_,i)=>({...cue,id:String(i)}))).length,48)
   assert.equal(parseKineticTexts([{...cue,font:'untrusted-font'}])[0].font,undefined)
 })
 

@@ -5,6 +5,7 @@ import '../../i18n'
 import { createSceneEvaluator } from '../../lib/scene2d/evaluate'
 import { isVisualLayer } from '../../lib/scene2d/layerStyle'
 import { normalizeScene2D } from '../../lib/scene2d/normalize'
+import { ensureTextFonts } from '../../lib/kineticText'
 import { paintScene2D, type SceneMedia } from '../../lib/scene2d/paint'
 import type { AnimatorLayer, AnimatorScene } from '../../lib/scene2d/types'
 import { sceneProgressFromSeconds, sceneTimeToLayerTime } from '../../lib/sceneTimeline'
@@ -77,6 +78,7 @@ window.__scene2dExport = {
     await Promise.all(next.layers.filter(layer => layer.visible && (layer.type === 'image' || layer.type === 'overlay' || layer.type === 'video')).map(async layer => {
       media.set(layer.id, layer.type === 'video' ? await loadVideo(layer.source) : await loadImage(layer.source))
     }))
+    await ensureTextFonts(next.texts)
     scene = { ...next, width: size.width, height: size.height }
   },
   async frame(seconds) {
