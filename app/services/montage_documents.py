@@ -280,7 +280,8 @@ class MontageStore:
             if expected_revision is not None and expected_revision != revision:
                 raise MontageError(f"Montage changed (revision {revision}); reload before saving",
                                    status=409, code="revision_conflict")
-            if current is not None and expected_revision is None and not file:
+            # Existing files require compare-and-swap; `file` alone must not overwrite.
+            if current is not None and expected_revision is None:
                 raise MontageError("A montage with this name exists; pass file and expected_revision to update it",
                                    status=409, code="exists")
             document.update({"revision": revision + 1, "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%S")})
