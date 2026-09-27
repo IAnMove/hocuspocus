@@ -17,6 +17,9 @@ from functools import lru_cache
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parents[1]
+# Receipts written before this scheme hashed whole shared files, so a Windows-only
+# recipe edit looked like a Linux reinstall. Scheme 2 hashes the resolved recipe.
+FINGERPRINT_SCHEME = 2
 
 
 @lru_cache(maxsize=1)
@@ -52,9 +55,15 @@ def recipe(engine: str, platform: str, arch: str | None = None) -> dict:
 
 
 def dependency_fingerprint(engine: str, platform: str) -> str:
+    """Hash the resolved recipe plus the files that install that engine.
+
+    ``profiles.json`` and ``runtime_install.js`` are not hashed whole.
+    Platform edits stay inside ``recipe()``, and install-step edits bump
+    ``installStepsVersion`` on that engine (or its ``windows`` override).
+    """
     spec = recipe(engine, platform)
     root = APP_DIR.parent
-    paths = ["app/runtime/profiles.json", spec["constraintFile"], "runtime_install.js",
+    paths = [spec["constraintFile"],
              "vendor_revisions.js", "hunyuan_native.js", "torch.js", "scripts/runtime_verify.py",
              "scripts/runtime_pip.py", "scripts/runtime_failed.py", "scripts/runtime_vendor.py",
              "app/runtime/vendors.json", "app/services/runtime_sources.py",
@@ -68,35 +77,62 @@ def dependency_fingerprint(engine: str, platform: str) -> str:
             paths.append("scripts/windows_toolchain.py")
     if "/vendor/" not in spec["requirements"]:
         paths.append(spec["requirements"])
-    digest = hashlib.sha256(f"{engine}:{platform}".encode())
+    digest = hashlib.sha256(f"{engine}:{platform}:{FINGERPRINT_SCHEME}".encode())
+    digest.update(json.dumps(spec, sort_keys=True, separators=(",", ":")).encode())
     for name in paths:
         digest.update((root / name).read_bytes())
     return digest.hexdigest()
 
 
+def _receipt_path(spec: dict) -> Path:
+    return APP_DIR.parent / spec["env"] / ".hocus-runtime-profile.json"
+
+
+def _matching_identity(receipt: dict, spec: dict) -> bool:
+    return (receipt.get("profile") == spec["id"]
+            and receipt.get("cudaCalculation") is bool(spec.get("cuda")))
+
+
+def _rewrite_fingerprint(path: Path, receipt: dict, fingerprint: str) -> None:
+    updated = {**receipt, "fingerprint": fingerprint, "fingerprintScheme": FINGERPRINT_SCHEME}
+    temporary = path.with_suffix(f".{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(updated, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _inspect_passes(engine: str, platform: str, spec: dict) -> bool:
+    from services.runtime_sources import sources_current
+    if not sources_current(spec.get("vendors", []), APP_DIR.parent):
+        return False
+    from services.runtime_environment import isolated_environment, python_path
+    executable = python_path(APP_DIR.parent / spec["env"], kind=spec["environment"], platform=platform)
+    result = subprocess.run(
+        [str(executable), "-I", str(APP_DIR.parent / "scripts" / "runtime_verify.py"),
+         "--engine", engine, "--inspect"],
+        env=isolated_environment(executable), capture_output=True, timeout=15,
+    )
+    return result.returncode == 0
+
+
 def installation_current(engine: str, platform: str) -> bool:
     spec = recipe(engine, platform)
     try:
-        receipt = json.loads((APP_DIR.parent / spec["env"] / ".hocus-runtime-profile.json").read_text())
-        if not isinstance(receipt, dict):
+        path = _receipt_path(spec)
+        receipt = json.loads(path.read_text())
+        if not isinstance(receipt, dict) or not _matching_identity(receipt, spec):
             return False
-        matches = (receipt.get("fingerprint") == dependency_fingerprint(engine, platform)
-                   and receipt.get("profile") == spec["id"]
-                   and receipt.get("cudaCalculation") is bool(spec.get("cuda")))
-        if not matches:
+        fingerprint = dependency_fingerprint(engine, platform)
+        current = (receipt.get("fingerprintScheme") == FINGERPRINT_SCHEME
+                   and receipt.get("fingerprint") == fingerprint)
+        legacy = receipt.get("fingerprintScheme") != FINGERPRINT_SCHEME
+        if not current and not legacy:
             return False
-        from services.runtime_sources import sources_current
-        if not sources_current(spec.get("vendors", []), APP_DIR.parent):
+        if not _inspect_passes(engine, platform, spec):
             return False
-        from services.runtime_environment import isolated_environment, python_path
-        executable = python_path(APP_DIR.parent / spec["env"], kind=spec["environment"], platform=platform)
-        result = subprocess.run(
-            [str(executable), "-I", str(APP_DIR.parent / "scripts" / "runtime_verify.py"),
-             "--engine", engine, "--inspect"],
-            env=isolated_environment(executable), capture_output=True, timeout=15,
-        )
-        return result.returncode == 0
-    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        if legacy:
+            _rewrite_fingerprint(path, receipt, fingerprint)
+        return True
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError, TypeError):
         return False
 
 

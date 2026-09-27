@@ -1,6 +1,7 @@
 // Pure Video 2D layer styling: effects, strips, masks and procedural atmosphere.
 // Shared by the Scene Animator preview/export and the headless scene2d renderer.
 import { withAlpha } from '../../features/sceneFx/color'
+import { emitterSample, parseEmitter } from './motion'
 import type { SceneAtmosphereKind, SceneBlendMode, SceneLayer, SceneMask } from '../../types'
 import { normalizeSeamOccluder } from '../seamOccluder'
 import type { AnimatorLayer, Atmosphere, LayerEffects, LayerStrip, VisualAnimatorLayer } from './types'
@@ -53,6 +54,7 @@ export const normalizedStrip = (value: SceneLayer['strip'] | undefined): LayerSt
 export const normalizedAtmosphere = (value: SceneLayer['atmosphere'] | undefined): Atmosphere => {
   const kind = ATMOSPHERE_KINDS.includes(value?.kind as SceneAtmosphereKind) ? value!.kind : 'rain'
   const preset = ATMOSPHERE_PRESETS[kind]
+  const emitter = parseEmitter(value?.emitter)
   return {
     kind,
     density: Math.round(boundedNumber(value?.density, preset.density, 5, 240)),
@@ -60,7 +62,17 @@ export const normalizedAtmosphere = (value: SceneLayer['atmosphere'] | undefined
     size: boundedNumber(value?.size, preset.size, .2, 8),
     wind: boundedNumber(value?.wind, preset.wind, -100, 100),
     color: typeof value?.color === 'string' && /^#[0-9a-f]{6}$/i.test(value.color) ? value.color : preset.color,
+    ...(emitter ? { emitter } : {}),
   }
+}
+export function placedParticles(atmosphere: Atmosphere, seconds: number, anchor?: { x: number; y: number }) {
+  const particles = atmosphereParticles(atmosphere, seconds)
+  const emitter = atmosphere.emitter
+  if (!anchor || !emitter || emitter.mode === 'frame') return particles
+  return particles.flatMap((particle, index) => {
+    const sample = emitterSample(emitter, index, seconds, anchor)
+    return sample ? [{ ...particle, x: sample.x, y: sample.y, alpha: particle.alpha * sample.alpha }] : []
+  })
 }
 export const particleNoise = (index: number, salt: number) => {
   const value = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453
@@ -84,11 +96,11 @@ export const atmosphereParticles = (atmosphere: Atmosphere, seconds: number) => 
   if (atmosphere.kind === 'speedlines') return { ...shared, x: -10 + travel * 120, y: baseY, alpha: .18 + depth * .58 }
   return { ...shared, x: baseX + wind + (atmosphere.kind === 'snow' || atmosphere.kind === 'ash' || atmosphere.kind === 'leaves' ? Math.sin(seconds * 1.2 + index) * 2.8 : 0), y: -10 + travel * 120, alpha: atmosphere.kind === 'rain' ? .28 + depth * .55 : atmosphere.kind === 'ash' ? .18 + depth * .45 : .35 + depth * .65 }
 })
-export const drawAtmosphere = (context: CanvasRenderingContext2D, atmosphere: Atmosphere, seconds: number, width: number, height: number) => {
+export const drawAtmosphere = (context: CanvasRenderingContext2D, atmosphere: Atmosphere, seconds: number, width: number, height: number, anchor?: { x: number; y: number }) => {
   const shortSide = Math.min(width, height)
   const confettiPalette = ['#f472b6', '#60a5fa', '#facc15', '#34d399', '#c084fc', '#fb7185']
   const leafPalette = ['#f59e0b', '#dc2626', '#84cc16', '#d97706', '#a16207', '#fbbf24']
-  for (const particle of atmosphereParticles(atmosphere, seconds)) {
+  for (const particle of placedParticles(atmosphere, seconds, anchor)) {
     const x = -width / 2 + width * particle.x / 100
     const y = -height / 2 + height * particle.y / 100
     const color = atmosphere.kind === 'confetti' ? confettiPalette[particle.variant] : atmosphere.kind === 'leaves' ? leafPalette[particle.variant] : atmosphere.color

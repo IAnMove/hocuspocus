@@ -1,5 +1,10 @@
 // One recipe builder for Install, Update and optional engines.
 // Pattern: Pinokio system/examples/comfy/install.js shell.run + script.start.
+//
+// This file is not hashed into the install fingerprint. When the steps for an
+// engine change, bump installStepsVersion on that engine in
+// app/runtime/profiles.json. Windows-only steps bump windows.installStepsVersion
+// so Linux receipts stay valid. See docs/development/RUNTIME_PROFILES.md.
 const path = require('node:path')
 const catalog = require('./app/runtime/profiles.json')
 const vendors = require('./vendor_revisions')

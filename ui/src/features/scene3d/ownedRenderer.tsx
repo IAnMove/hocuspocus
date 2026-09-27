@@ -7,7 +7,7 @@ import { waitForWorld3DAssets } from './exportFlow'
 import { startWorld3DExport, finishWorld3DExport, paintWorld3DExportFrame } from './exportLock'
 import { scene3dPlaybackSpeed } from './clock'
 import { paintSceneFx } from '../sceneFx/paint'
-import { paintKineticTexts } from '../../lib/kineticText'
+import { ensureTextFonts, paintKineticTexts, paintSceneLyrics } from '../../lib/kineticText'
 import { paintClipNumber } from './performance'
 import type { Scene3DDocument } from './types'
 
@@ -32,6 +32,7 @@ window.__world3dExport = {
     }
     // Load props and resources before locking the stage for deterministic export.
     await waitForWorld3DAssets(stage, scene, 90000)
+    await ensureTextFonts(scene.texts)
     snapshot = startWorld3DExport(stage, scene, size)
     canvas.width = size.width
     canvas.height = size.height
@@ -45,6 +46,7 @@ window.__world3dExport = {
     context.drawImage(source, 0, 0, canvas.width, canvas.height)
     paintSceneFx(context, canvas.width, canvas.height, time, snapshot.sfx)
     paintKineticTexts(context, canvas.width, canvas.height, time, snapshot.texts)
+    paintSceneLyrics(context, canvas.width, canvas.height, time, snapshot.lyrics)
     paintClipNumber(context, canvas.width, canvas.height, snapshot.clipNumber)
     return canvas.toDataURL('image/png')
   },

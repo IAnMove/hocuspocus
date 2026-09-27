@@ -4,7 +4,7 @@
 const HEX_BYTE = /^[0-9a-f]{2}$/i
 
 function hexWithAlpha(color: string, alpha: string): string | null {
-  const match = /^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(color)
+  const match = color.match(/^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i)
   if (!match || !HEX_BYTE.test(alpha)) return null
   const digits = match[1]
   const body = digits.length <= 4 ? digits.slice(0, 3).split('').map(channel => channel + channel).join('') : digits.slice(0, 6)
@@ -30,7 +30,7 @@ export function withAlpha(color: string, alpha: string): string {
   const trimmed = color.trim()
   const hex = hexWithAlpha(trimmed, alpha)
   if (hex) return hex
-  const functional = /^(rgba?|hsla?)\((.*)\)$/i.exec(trimmed)
+  const functional = trimmed.match(/^(rgba?|hsla?)\((.*)\)$/i)
   const channels = functional ? functionalChannels(functional[2]) : null
   if (!functional || !channels) return trimmed
   const space = functional[1].toLowerCase().startsWith('rgb') ? 'rgba' : 'hsla'

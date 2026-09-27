@@ -198,6 +198,69 @@ def test_constraint_files_match_the_selected_recipe():
             assert actual == expected
 
 
+def test_windows_recipe_edits_do_not_change_the_linux_fingerprint():
+    import copy
+    data = copy.deepcopy(profiles.catalog())
+    with patch.object(profiles, "catalog", lambda: data):
+        linux_before = profiles.dependency_fingerprint("wangp", "linux")
+        windows_before = profiles.dependency_fingerprint("wangp", "win32")
+        data["engines"]["wangp"]["windows"]["torch"] = "9.9.9"
+        assert profiles.dependency_fingerprint("wangp", "linux") == linux_before
+        assert profiles.dependency_fingerprint("wangp", "win32") != windows_before
+        linux_before = profiles.dependency_fingerprint("wangp", "linux")
+        windows_now = profiles.dependency_fingerprint("wangp", "win32")
+        data["engines"]["wangp"]["torch"] = "9.8.0"
+        assert profiles.dependency_fingerprint("wangp", "linux") != linux_before
+        assert profiles.dependency_fingerprint("wangp", "win32") == windows_now
+        linux_now = profiles.dependency_fingerprint("wangp", "linux")
+        data["engines"]["wangp"]["windows"]["installStepsVersion"] = 2
+        assert profiles.dependency_fingerprint("wangp", "linux") == linux_now
+        assert profiles.dependency_fingerprint("wangp", "win32") != windows_now
+
+
+def test_legacy_receipt_is_rewritten_once_when_inspect_passes(tmp_path):
+    profiles.catalog()
+    app = tmp_path / "app"
+    env = app / "env"
+    env.mkdir(parents=True)
+    path = env / ".hocus-runtime-profile.json"
+    path.write_text(json.dumps({
+        "fingerprint": "old-whole-file-hash",
+        "profile": "linux-x64-nvidia-wangp",
+        "cudaCalculation": True,
+        "packages": {},
+    }))
+    passed = subprocess.CompletedProcess([], 0)
+    with patch.object(profiles, "APP_DIR", app), \
+            patch.object(profiles, "dependency_fingerprint", return_value="new-fingerprint"), \
+            patch("services.runtime_sources.sources_current", return_value=True), \
+            patch.object(profiles.subprocess, "run", return_value=passed):
+        assert profiles.installation_current("wangp", "linux")
+        updated = json.loads(path.read_text())
+        assert updated["fingerprintScheme"] == profiles.FINGERPRINT_SCHEME
+        assert updated["fingerprint"] == "new-fingerprint"
+        assert updated["packages"] == {}
+        path.write_text(json.dumps({**updated, "fingerprint": "changed-after-migration"}))
+        assert not profiles.installation_current("wangp", "linux")
+        assert json.loads(path.read_text())["fingerprint"] == "changed-after-migration"
+
+
+def test_legacy_receipt_is_kept_when_inspect_fails(tmp_path):
+    profiles.catalog()
+    app = tmp_path / "app"
+    env = app / "env"
+    env.mkdir(parents=True)
+    path = env / ".hocus-runtime-profile.json"
+    original = {"fingerprint": "old-whole-file-hash", "profile": "linux-x64-nvidia-wangp", "cudaCalculation": True}
+    path.write_text(json.dumps(original))
+    failed = subprocess.CompletedProcess([], 1)
+    with patch.object(profiles, "APP_DIR", app), \
+            patch("services.runtime_sources.sources_current", return_value=True), \
+            patch.object(profiles.subprocess, "run", return_value=failed):
+        assert not profiles.installation_current("wangp", "linux")
+    assert json.loads(path.read_text()) == original
+
+
 def test_native_helpers_affect_installation_fingerprint(tmp_path):
     # Exercise the hashing contract using an isolated source copy, no working tree mutation.
     import shutil

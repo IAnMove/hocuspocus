@@ -100,8 +100,17 @@ MCP input envelopes follow the other versioned commands:
   inline `data:image/...`; remote URLs are never fetched.
 * `fps` ∈ {24, 30, 60}; duration ≤ 600 s; output ≤ 1920×1080 (or 1080×1920).
 * `audioTracks` (real workspace audio files with `startTime`/`volume`) are mixed
-  into the MP4. Screen-FX `sound: true` cues are rejected because their audio is
-  synthesized in the browser.
+  into the MP4. Screen-FX `sound: true` cues are synthesized in the headless
+  page with `OfflineAudioContext` (`mixFxAudio` + `sceneAudioWav`) and mixed
+  from `staging/fx.wav` before the audio tracks. `sound: true` with `volume: 0`
+  stays silent and does not write a WAV.
+* Image layers may also reference `sequence.sources` or `sequence.source`.
+  Those URLs follow the same durable-media rules. `blob:` and remote URLs are
+  refused when the scene is saved or exported.
+* `scene.rhythm` is the live beat grid stored on the document. Baking keyframes
+  with `applySceneRhythmToLayer` is the older path: it rewrites the layer and
+  does not keep a beat envelope. Live `beatPulse` reads the stored grid at
+  paint time, so a headless export does not need a new server-side analysis.
 * Requires the built UI (`ui/dist/scene2d-render.html`) and Playwright
   Chromium; `capabilities.realRender` reports `pending` otherwise.
 * Rendering takes the `local_cpu:scene2d-render` lane, never the GPU lane.
