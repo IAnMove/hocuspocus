@@ -323,6 +323,7 @@
         "tests/test_montage_documents.py",
         "tests/test_scene2d_export.py",
         "tests/test_song_shorten.py",
+        "tests/test_publish_presets.py",
         "tests/test_video_editor_layers.py",
         "tests/test_montage_shots.py"
       ]
