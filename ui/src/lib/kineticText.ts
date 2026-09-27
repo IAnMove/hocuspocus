@@ -4,6 +4,6 @@ export {
   TEXT_FONT_STACK, KINETIC_TEXT_SCHEMA, parseKineticTexts, kineticTextFields, isLegacyKineticText,
   derivedTextMotion, kineticTextState, paintKineticTexts, ensureTextFonts, displayedKineticText, wrapKineticLines,
   parseSceneLyrics, lyricFields, importLrc, importSrt, importPlainLyrics, importTimingBundle, paintSceneLyrics,
-  TEXT_TEMPLATES, buildTextTemplate,
+  TEXT_TEMPLATES, buildTextTemplate, textTemplatesFromRecipe,
 } from './kineticText/index'
 export type { KineticText, TextFont, TextEnter, TextExit, TextLoop, TextAlign, TextBox, TextBoxKind, TextCounter, TextFill, TextMotion, TextStroke, TextShadow, TextWeight, SceneLyrics, LyricLine, LyricMode, LyricStyle, LyricWord } from './kineticText/index'

@@ -38,5 +38,19 @@ export const TEXT_TEMPLATES: TextTemplate[] = [
 ]
 
 export function buildTextTemplate(id: string, values: Record<string, string>, frame: { start: number; duration: number; width: number; height: number }) {
-  return TEXT_TEMPLATES.find(template => template.id === id)?.build(values, frame) ?? []
+  const built = TEXT_TEMPLATES.find(template => template.id === id)?.build(values, frame) ?? []
+  return built.map(item => ({ ...item, template: id }))
+}
+
+export function textTemplatesFromRecipe(raw: unknown, frame: { start: number; duration: number; width: number; height: number }) {
+  if (!Array.isArray(raw)) return []
+  return raw.slice(0, 9).flatMap(item => {
+    if (!item || typeof item !== 'object') return []
+    const row = item as { id?: unknown; values?: unknown }
+    if (typeof row.id !== 'string' || !TEXT_TEMPLATES.some(template => template.id === row.id)) return []
+    const values = row.values && typeof row.values === 'object'
+      ? Object.fromEntries(Object.entries(row.values as Record<string, unknown>).map(([key, value]) => [key, String(value ?? '')]))
+      : {}
+    return buildTextTemplate(row.id, values, frame)
+  })
 }
