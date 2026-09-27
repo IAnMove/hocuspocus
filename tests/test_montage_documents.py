@@ -71,8 +71,16 @@ def test_save_is_revisioned_and_compare_and_swap(tmp_path):
     with pytest.raises(MontageError) as stale:
         store.save("x-song", _montage(), file=first["file"], expected_revision=1)
     assert stale.value.code == "revision_conflict"
-    listed = store.list("x-song")
-    assert listed[0]["revision"] == 2 and listed[0]["overlays"] == 1 and listed[0]["audioCues"] == 1
+    with pytest.raises(MontageError) as blind:
+        store.save("x-song", _montage(duck=0.9), file=first["file"])
+    assert blind.value.status == 409 and blind.value.code == "exists"
+    assert store.get("x-song", first["file"])["montage"]["duck"] == 0.2
+    created = store.save("x-song", _montage(name="Other cut"), file="Other-cut.montage.json")
+    assert created["revision"] == 1 and created["file"] == "Other-cut.montage.json"
+    listed = {item["file"]: item for item in store.list("x-song")}
+    assert listed[first["file"]]["revision"] == 2 and listed[first["file"]]["overlays"] == 1
+    assert listed[first["file"]]["audioCues"] == 1
+    assert listed[created["file"]]["revision"] == 1
     assert store.get("x-song", first["file"])["montage"]["duck"] == 0.2
     with pytest.raises(MontageError):
         store.get("x-song", "../escape.montage.json")
@@ -107,6 +115,9 @@ def test_commands_and_http_share_one_service(tmp_path):
     assert started[0]["audio_cues"][0]["source"] == "vo01.wav"
     conflict = client.post("/api/v1/montages", json={"workspace": "x-song", "montage": _montage()})
     assert conflict.status_code == 409 and conflict.json()["detail"]["code"] == "exists"
+    overwrite = client.post("/api/v1/montages", json={"workspace": "x-song", "montage": _montage(duck=0.9), "file": file})
+    assert overwrite.status_code == 409 and overwrite.json()["detail"]["code"] == "exists"
+    assert json.loads(Path(tmp_path, "x-song", file).read_text())["duck"] == 0.5
     invalid = asyncio.run(_raises(commands.handlers()["montages.get"], {"version": 2, "input": {}}))
     assert invalid.status_code == 422
     assert json.loads(Path(tmp_path, "x-song", file).read_text())["revision"] == 1
