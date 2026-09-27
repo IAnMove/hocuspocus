@@ -19,11 +19,23 @@ def test_windows_and_linux_choose_distinct_main_abis():
     assert win["supported"] and linux["supported"]
     assert win["engines"]["wangp"]["torch"] == "2.7.1"
     assert linux["engines"]["wangp"]["torch"] == "2.7.0"
-    assert win["engines"]["wangp"]["constraints"]["xformers"] == "0.0.31"
+    assert win["engines"]["wangp"]["constraints"]["xformers"] == "0.0.31.post1"
     assert "torchcodec" not in win["engines"]["wangp"]["constraints"]
     assert linux["engines"]["wangp"]["constraints"]["torchcodec"] == "0.5"
     assert not win["engines"]["rigging"]["supported"]
 
+
+def test_windows_flash_attention_matches_lock_and_supported_xformers_range():
+    from urllib.parse import urlparse, parse_qs
+    spec = profiles.recipe("wangp", "win32")
+    wheel = next(p for p in spec["acceleratorPackages"] if "/flash_attn-" in p)
+    version = wheel.split("/flash_attn-")[1].split("+")[0]
+    assert (2, 7, 1) <= profiles._version(version) <= (2, 8, 0)
+    digest = parse_qs(urlparse(wheel).fragment)["sha256"][0]
+    assert len(digest) == 64 and all(c in "0123456789abcdef" for c in digest)
+    lock = (ROOT / "app/runtime/locks/win32-wangp.txt").read_text()
+    assert f"flash-attn @ {wheel}" in lock
+    assert f"xformers=={spec['constraints']['xformers']}" in lock
 
 def test_older_driver_keeps_core_available_without_claiming_h3_support():
     result = profiles.select_profiles("linux", "x64", "nvidia", "570.124.06")
