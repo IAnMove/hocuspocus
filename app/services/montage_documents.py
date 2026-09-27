@@ -211,6 +211,19 @@ def _snake_cues(raw: Any) -> Any:
     return [{**item, "trim_start": item.get("trimStart"), "trim_end": item.get("trimEnd")} if isinstance(item, dict) else item for item in raw]
 
 
+def _derived_from(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict) or raw.get("derivedFrom") is None:
+        return None
+    value = raw.get("derivedFrom")
+    if not isinstance(value, dict):
+        raise MontageError("derivedFrom must be an object")
+    file = str(value.get("file") or "")
+    if not FILE_RE.fullmatch(file):
+        raise MontageError("derivedFrom file must be a montage filename")
+    revision = int(_number(value.get("revision"), "derivedFrom revision", 1, 1_000_000))
+    return {"file": file, "revision": revision}
+
+
 def normalize_montage(raw: Any) -> dict[str, Any]:
     """Validate a montage document and return its canonical form (no revision)."""
     if not isinstance(raw, dict) or raw.get("version") != 1:
@@ -244,6 +257,9 @@ def normalize_montage(raw: Any) -> dict[str, Any]:
         "audioCues": camel_cues, "overlays": camel_overlays, "duck": duck,
         "notes": str(raw.get("notes") or "")[:4000],
     }
+    derived = _derived_from(raw)
+    if derived:
+        document["derivedFrom"] = derived
     if len(json.dumps(document, ensure_ascii=False)) > MAX_BYTES:
         raise MontageError("Montage exceeds 2 MB")
     return document
