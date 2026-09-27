@@ -32,6 +32,31 @@ needs Visual Studio Build Tools. The installer actually imports Torch and runs
 a small CUDA calculation before accepting each environment. It does not execute
 models as part of this check.
 
+### Windows native toolchain
+
+The Hunyuan recipe uses CUDA Toolkit 12.8 and x64 MSVC 14.2x/14.3x/14.4x.
+`scripts/windows_toolchain.py` discovers side-by-side Visual Studio installations
+with Microsoft's `vswhere`, selects a compatible toolset instead of VS 18's
+MSVC 14.50+, and activates its Windows SDK environment. Missing toolsets or a
+different CUDA toolkit stop Windows preflight with recovery instructions.
+Install VS 2022 Build Tools with v143 or VS 2019 with v142 and a Windows SDK
+if no compatible toolset exists. Existing VS installations are not removed.
+
+Windows native package builds and the 2.1 mesh painter use that same environment.
+CUDA libraries are found in either the NVIDIA `lib/x64` layout or Pinokio/conda's
+`lib` layout. No machine-specific paths are committed, and Linux build commands
+are unchanged. Retry Install after correcting prerequisites; Reset is unnecessary.
+The pinned 2.1 rasterizer also needs explicit `int64_t` tensor dimensions on
+MSVC (C2398), and `int64_t` pointers instead of Linux's 64-bit `long` (LNK2001
+on Windows, where `long` is 32-bit). Its Windows wheel is built from a temporary
+source copy containing those fixes. The vendor checkout remains untouched; an unexpected upstream
+source layout fails instead of silently applying a partial patch.
+
+The launcher hides optional SAM/UniRig install entries on known incompatible
+OS/architecture/GPU combinations using the existing recipe catalog. Unknown
+hardware inventory keeps the options visible. This menu filtering does not
+change the studio's internal feature navigation or add macOS/MPS support.
+
 ## Preventing dependency contamination
 
 - Each engine uses its own Python executable; Windows conda uses `env/python.exe`,
@@ -118,3 +143,13 @@ References: [Python venv](https://docs.python.org/3/library/venv.html),
 [NVIDIA CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html),
 [TorchCodec compatibility](https://github.com/meta-pytorch/torchcodec),
 [pinned SAM requirements](https://github.com/facebookresearch/sam3/blob/8f0b7f4d4e7eda2ed606ebde6702c93359ad01da/pyproject.toml).
+## Windows startup verification
+
+The Windows WanGP recipe uses xFormers 0.0.31.post1, which fixes the native
+extension packaging in 0.0.31. It removes the external Flash Attention package:
+2.8.2 conflicts with xFormers and the evaluated 2.7.4 Windows wheels lack RTX
+3070 kernels. xFormers, PyTorch SDPA and SageAttention remain available.
+Installation checks the Diffusers transformer import used by Quanto and runs
+a small xFormers CUDA attention calculation before writing a success receipt.
+Package metadata alone does not catch import or GPU-kernel failures. Linux
+attention pins are unchanged.

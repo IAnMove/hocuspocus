@@ -27,8 +27,12 @@ def inspect_environment(engine: str) -> dict:
         actual = importlib.metadata.version(name)
         if actual.split("+", 1)[0] != wanted:
             raise RuntimeError(f"{engine}: {name} is {actual}; recipe requires {wanted}")
-    return {d.metadata["Name"].lower().replace("_", "-"): d.version
-            for d in importlib.metadata.distributions() if d.metadata.get("Name")}
+    packages = {d.metadata["Name"].lower().replace("_", "-"): d.version
+                for d in importlib.metadata.distributions() if d.metadata.get("Name")}
+    for name in spec.get("excludedPackages", []):
+        if name in packages:
+            raise RuntimeError(f"{engine}: incompatible package {name} remains installed; run Install to repair")
+    return packages
 
 
 def verify(engine: str, *, cuda: bool = True) -> dict:
@@ -47,12 +51,19 @@ def verify(engine: str, *, cuda: bool = True) -> dict:
     for name in ("torchvision", "torchaudio"):
         if name in spec:
             importlib.import_module(name)
+    for name in spec.get("verificationImports", []):
+        importlib.import_module(name)
     if cuda:
         if not torch.cuda.is_available():
             raise RuntimeError(f"{engine}: CUDA is unavailable; check the NVIDIA driver")
         result = (torch.ones(1, device="cuda") + 1).item()
         if result != 2:
             raise RuntimeError(f"{engine}: CUDA calculation failed")
+        if "xformers.ops" in spec.get("verificationImports", []):
+            query = torch.ones((1, 16, 2, 64), device="cuda", dtype=torch.float16)
+            attention = importlib.import_module("xformers.ops").memory_efficient_attention(query, query, query)
+            if not torch.isfinite(attention).all().item():
+                raise RuntimeError(f"{engine}: xFormers CUDA calculation failed")
     return {"engine": engine, "profile": spec["id"], "python": spec["python"],
             "prefix": str((ROOT / spec["env"]).resolve()), "packages": installed, "cuda": torch.version.cuda,
             "cudaCalculation": cuda, "modelsExecuted": False,

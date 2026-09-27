@@ -13,7 +13,8 @@ const cudaEnvLinux = {
 
 const cudaEnvWindows = {
   CUDA_HOME: cudaHome,
-  CUDA_PATH: cudaHome
+  CUDA_PATH: cudaHome,
+  DISTUTILS_USE_SDK: 1
 }
 
 function rasterizerSteps(condaPath, rasterizerPath) {
@@ -61,7 +62,7 @@ function meshPainterSteps() {
       params: {
         conda,
         path: painterPath,
-        message: "python ../../../../build_mesh_painter.py"
+        message: "python \"{{path.resolve(cwd, 'scripts/windows_toolchain.py')}}\" --script ../../../../build_mesh_painter.py"
       }
     }
   ]
