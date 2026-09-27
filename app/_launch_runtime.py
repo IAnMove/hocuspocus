@@ -511,6 +511,9 @@ def _prepare_local_gpu_owner(
                 and str(llm_status.get("device") or "").startswith("cuda")
             ):
                 llm_service.unload_model()
+            # Ollama is a separate process on the same GPU; release any model
+            # Maestro used so it does not hold memory the next job needs.
+            llm_service.release_ollama_models()
         except Exception as exc:
             print(f"[Resources] Local CUDA LLM cleanup skipped: {exc}")
     # release_model() already flushes Torch caches and performs collection.

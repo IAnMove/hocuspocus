@@ -850,6 +850,43 @@ def _ollama_native_payload(payload: dict) -> dict:
     return native
 
 
+# Ollama keeps a model in GPU memory for five minutes after its last request,
+# which starves a video render that starts right after story writing. Every
+# model Maestro sends to Ollama is remembered and released at GPU handoff.
+_ollama_models_in_use: set[tuple[str, str]] = set()
+_ollama_models_lock = threading.Lock()
+
+
+def _remember_ollama_model(base_url: str, model: str) -> None:
+    from .provider_profile import canonicalize_remote_url
+    origin = canonicalize_remote_url(base_url)
+    if origin and model:
+        with _ollama_models_lock:
+            _ollama_models_in_use.add((origin, str(model)))
+
+
+def release_ollama_models() -> list[str]:
+    """Ask Ollama to unload every model Maestro used; returns released names."""
+    with _ollama_models_lock:
+        models = sorted(_ollama_models_in_use)
+        _ollama_models_in_use.clear()
+    released: list[str] = []
+    for origin, model in models:
+        try:
+            # Documented unload: an empty generate request with keep_alive 0.
+            requests.post(
+                f"{origin}/api/generate",
+                json={"model": model, "keep_alive": 0},
+                timeout=(3, 30),
+            ).raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            print(f"[LLM] Could not release Ollama model {model}: {exc}")
+            continue
+        released.append(model)
+        print(f"[LLM] Released Ollama model {model} from GPU memory")
+    return released
+
+
 def _ollama_native_to_openai(data: dict, *, stream: bool = False) -> dict:
     """Reshape an Ollama /api/chat response (or stream line) like OpenAI's."""
     message = data.get("message") or {}
@@ -2382,6 +2419,7 @@ def generate(
         if native_ollama:
             from .provider_profile import ollama_chat_url
             endpoint, request_payload = ollama_chat_url(_server_url()), _ollama_native_payload(payload)
+            _remember_ollama_model(_server_url(), request_payload.get("model"))
         else:
             endpoint, request_payload = f"{_server_url()}/v1/chat/completions", payload
         resp = requests.post(
@@ -2671,6 +2709,7 @@ def generate_openai_compatible(
             )
         if is_ollama:
             request_payload = _ollama_native_payload(request_payload)
+            _remember_ollama_model(base_url, model_id)
         try:
             task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
 
@@ -3074,6 +3113,7 @@ def generate_streaming(
         if native_ollama:
             from .provider_profile import ollama_chat_url
             endpoint, request_payload = ollama_chat_url(_server_url()), _ollama_native_payload(payload)
+            _remember_ollama_model(_server_url(), request_payload.get("model"))
         else:
             endpoint, request_payload = f"{_server_url()}/v1/chat/completions", payload
         resp = requests.post(
