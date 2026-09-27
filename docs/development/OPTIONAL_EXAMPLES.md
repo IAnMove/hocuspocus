@@ -29,6 +29,8 @@ After this change reaches the branch being installed, a lightweight fresh checko
 git clone --depth 1 --single-branch --branch main https://github.com/IAnMove/hocuspocus.git
 ```
 
+The current upstream Pinokio Download flow already runs `git clone --depth 1 --single-branch` in `prepareLauncherDownload` and `cloneLauncherRemoteRepo` ([source](https://github.com/pinokiocomputer/pinokiod/blob/add4a674ad1ba95bb62ec427fce519fe5bf0e9bf/server/index.js#L9374)). Other paths, including `script.download` and checkpoint installation, still use a full clone. This was verified in upstream source, not on the user's installed macOS version. Check a specific installation from its repository directory with `git rev-parse --is-shallow-repository`; `true` confirms it has a shallow history. A fresh clone through that shallow Download flow benefits once the example-removal change reaches the default branch. Existing full clones are not automatically shrunk by updating.
+
 A source ZIP of that new revision also excludes historical files. The Pinokio repository clone happens before this application's `install.js`, so changing `install.js` cannot shrink that initial transfer. Distribution must use a shallow clone or a source archive, or the repository history must be migrated separately.
 
 A future history cleanup must preserve the archived examples at an independent asset release/store **first**, update and verify the manifest's source, then coordinate rewritten branches, open PRs and existing clones. Do not delete the current pinned revision before migrating its media. Simply deleting old merged branches does not remove blobs reachable from `main`.
