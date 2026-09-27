@@ -86,26 +86,45 @@ def _durable(url: str) -> bool:
     return lowered.startswith(DURABLE_PREFIXES) or lowered.startswith("data:image/")
 
 
+def _sequence_urls(layer: dict) -> list[str]:
+    sequence = layer.get("sequence")
+    if not isinstance(sequence, dict):
+        return []
+    if sequence.get("kind") == "frames":
+        return [str(source).strip() for source in sequence.get("sources") or [] if str(source).strip()]
+    if sequence.get("kind") == "sheet":
+        source = str(sequence.get("source") or "").strip()
+        return [source] if source else []
+    return []
+
+
+def _append_media_ref(refs: list[dict], url: str, layer: dict, workspace: str) -> None:
+    if _blocked_url(url) or not _durable(url):
+        raise http_error(422, "missing_ref", f"Layer {layer.get('id')} needs durable workspace or example media")
+    if url.lower().startswith("/examples/"):
+        path = unquote(urlsplit(url).path)
+        if ".." in path.split("/") or "\\" in path:
+            raise http_error(422, "missing_ref", "Use a valid bundled example URL")
+        refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"]})
+        return
+    if url.lower().startswith("data:"):
+        return
+    path, scoped = parse_media_ref(url, workspace)
+    refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"],
+                 "filename": os.path.basename((path or "").replace("\\", "/")), "workspace": scoped or workspace})
+
+
 def media_refs(document: dict, workspace: str) -> list[dict]:
-    """Durable media referenced by visual layers and audio tracks."""
+    """Durable media referenced by visual layers, frame sequences and audio tracks."""
     refs = []
     for layer in document["layers"]:
         if layer.get("type") in {"effect", "camera"} or layer.get("visible") is False:
             continue
-        url = str(layer.get("source") or "").strip()
-        if not url or _blocked_url(url) or not _durable(url):
+        urls = [url for url in [str(layer.get("source") or "").strip(), *_sequence_urls(layer)] if url]
+        if not urls:
             raise http_error(422, "missing_ref", f"Layer {layer.get('id')} needs durable workspace or example media")
-        if url.lower().startswith("/examples/"):
-            path = unquote(urlsplit(url).path)
-            if ".." in path.split("/") or "\\" in path:
-                raise http_error(422, "missing_ref", "Use a valid bundled example URL")
-            refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"]})
-            continue
-        if url.lower().startswith("data:"):
-            continue
-        path, scoped = parse_media_ref(url, workspace)
-        refs.append({"layerId": layer["id"], "url": url, "kind": layer["type"],
-                     "filename": os.path.basename((path or "").replace("\\", "/")), "workspace": scoped or workspace})
+        for url in urls:
+            _append_media_ref(refs, url, layer, workspace)
     for track in document.get("audioTracks") or []:
         name = os.path.basename(str((track or {}).get("filename") or ""))
         if not name or os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
