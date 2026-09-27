@@ -108,3 +108,10 @@ MCP input envelopes follow the other versioned commands:
 The Scene Animator, its browser export and the headless renderer share
 `ui/src/lib/scene2d/{normalize,evaluate,layerStyle,paint}.ts`, so a scene looks
 the same in the editor and in the server export.
+
+## 5. Planned next steps
+
+* Shot board (see which shots a clip is made of, regenerate or re-render a
+  shot, pick a take and re-export): [MONTAGE_SHOT_BOARD_PLAN](../development/MONTAGE_SHOT_BOARD_PLAN.md).
+* Video 2D text, lyrics, finishing and templates:
+  [GROK_VIDEO2D_BOOST_PLAN_2026-09-27](../development/GROK_VIDEO2D_BOOST_PLAN_2026-09-27.md).
