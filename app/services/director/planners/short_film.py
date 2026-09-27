@@ -466,7 +466,9 @@ def _h3_screenplay_speaker_heading(value: Any) -> tuple[str, bool] | None:
         # speaker; treating it as one voices the cast list as dialogue.
         if re.search(
             r"\b(?:characters?|cast|logline|theme|title|synopsis|premise|setting|"
-            r"genre|tone|notes?|summary|style|audience|locations?|scene|world)\b",
+            r"genre|tone|notes?|summary|style|audience|locations?|scene|world|"
+            r"structure|arc|setup|incident|conflict|climax|resolution|act|beats?|"
+            r"outline|treatment)\b",
             text,
             flags=re.IGNORECASE,
         ):
@@ -474,7 +476,14 @@ def _h3_screenplay_speaker_heading(value: Any) -> tuple[str, bool] | None:
 
     # Standard screenplay headings are short uppercase names. Exclude scene
     # headings and structural labels so they cannot become phantom speakers.
-    if not colon_heading and not re.fullmatch(r"[A-Z][A-Z0-9 .'\-()]{0,60}", text):
+    if not colon_heading and not re.fullmatch(r"[A-Z][A-Z0-9 .'\-()!?]{0,60}", text):
+        return None
+    # All-caps sound effects in action lines ("BOOM.", "CRASH!") are not
+    # speakers; a speaker heading never ends a single word with punctuation.
+    if not colon_heading and (
+        text.endswith(("!", "?"))
+        or (text.endswith(".") and " " not in text.strip())
+    ):
         return None
     upper = text.upper()
     if upper.startswith(("INT.", "EXT.", "INT/EXT.", "I/E.")):
@@ -511,6 +520,19 @@ def _extract_h3_screenplay_dialogue(screenplay: Any) -> list[dict[str, str]]:
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     manifest: list[dict[str, str]] = []
     index = 0
+    # Writing models sometimes prepend a story treatment (Title:, Logline:,
+    # Story Structure:, Emotional Arc: ...). When such front matter precedes
+    # the first scene heading, begin at that heading so no treatment label or
+    # paragraph can become a phantom speaker.
+    scene_start = next((
+        position for position, line in enumerate(lines)
+        if re.match(r"^\s*(?:INT\.|EXT\.|INT/EXT\.|I/E\.)\s+", line, flags=re.IGNORECASE)
+    ), None)
+    if scene_start is not None and any(
+        re.match(r"^\s*[*_#]*\s*(?:title|logline)\s*[*_]*\s*:", line, flags=re.IGNORECASE)
+        for line in lines[:scene_start]
+    ):
+        index = scene_start
     while index < len(lines):
         heading = _h3_screenplay_speaker_heading(lines[index])
         if not heading:
