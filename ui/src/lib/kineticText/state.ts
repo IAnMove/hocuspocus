@@ -46,31 +46,54 @@ function loopShift(cue: KineticText, elapsed: number) {
   return {}
 }
 
+type Shift = { opacity?: number; scale?: number; dy?: number; dx?: number; blur?: number; clip?: number }
+const pick = (value: number | undefined, fallback: number) => value == null ? fallback : value
+
+function typedEntrance(preset: TextEnter) {
+  return preset === 'typewriter' || preset === 'letters' || preset === 'words'
+}
+
+function enterSeconds(cue: KineticText, span: number, preset: TextEnter) {
+  if (cue.enter) return cue.enter.duration
+  return typedEntrance(preset) ? Math.min(1.7, span * .65) : Math.min(.65, span / 3)
+}
+
+function letterCount(text: string, elapsed: number, duration: number, preset: TextEnter) {
+  if (preset === 'words') return revealCount(text, elapsed, duration, true)
+  if (preset === 'typewriter' || preset === 'letters') return revealCount(text, elapsed, duration, false)
+  return Array.from(text).length
+}
+
+function combine(elapsed: number, enter: Shift, exit: Shift, loop: Shift, letters: number, wave: boolean): TextMotion {
+  return {
+    elapsed,
+    opacity: pick(enter.opacity, 1) * pick(exit.opacity, 1) * pick(loop.opacity, 1),
+    scale: pick(enter.scale, 1) * pick(exit.scale, 1) * pick(loop.scale, 1),
+    dy: pick(enter.dy, 0) + pick(exit.dy, 0) + pick(loop.dy, 0),
+    dx: pick(enter.dx, 0) + pick(exit.dx, 0) + pick(loop.dx, 0),
+    letters,
+    blur: pick(enter.blur, 0) + pick(exit.blur, 0),
+    clip: pick(enter.clip, 1) * pick(exit.clip, 1),
+    wave,
+  }
+}
+
 function v2State(cue: KineticText, seconds: number, text: string): TextMotion {
   const elapsed = seconds - cue.start
   const span = cue.end - cue.start
   const derived = derivedTextMotion(cue.preset)
-  const enterPreset: TextEnter = cue.enter?.preset ?? derived.enter
-  const exitPreset: TextExit = cue.exit?.preset ?? derived.exit
-  const enterDuration = cue.enter?.duration ?? (enterPreset === 'typewriter' || enterPreset === 'letters' || enterPreset === 'words' ? Math.min(1.7, span * .65) : Math.min(.65, span / 3))
+  const enterPreset = cue.enter?.preset ?? derived.enter
+  const exitPreset = cue.exit?.preset ?? derived.exit
+  const enterDuration = enterSeconds(cue, span, enterPreset)
   const exitDuration = cue.exit?.duration ?? Math.min(.3, span / 3)
-  const enterT = clamp(elapsed / Math.max(.05, enterDuration), 0, 1)
-  const exitT = clamp((cue.end - seconds) / Math.max(.05, exitDuration), 0, 1)
-  const enter = enterShift(enterPreset, enterT)
-  const exit = exitShift(exitPreset, exitT)
-  const loop = loopShift(cue, elapsed)
-  const reveal = enterPreset === 'typewriter' || enterPreset === 'letters' || enterPreset === 'words'
-  const letters = reveal ? revealCount(text, elapsed, enterDuration, enterPreset === 'words') : Array.from(text).length
-  return {
+  return combine(
     elapsed,
-    opacity: (enter.opacity ?? 1) * (exit.opacity ?? 1) * (loop.opacity ?? 1),
-    scale: (enter.scale ?? 1) * (exit.scale ?? 1) * (loop.scale ?? 1),
-    dy: (enter.dy ?? 0) + (exit.dy ?? 0) + (loop.dy ?? 0),
-    dx: (enter.dx ?? 0) + (exit.dx ?? 0) + (loop.dx ?? 0),
-    letters, blur: (enter.blur ?? 0) + (exit.blur ?? 0),
-    clip: (enter.clip ?? 1) * (exit.clip ?? 1),
-    wave: (cue.loop ?? derived.loop) === 'wave',
-  }
+    enterShift(enterPreset, clamp(elapsed / Math.max(.05, enterDuration), 0, 1)),
+    exitShift(exitPreset, clamp((cue.end - seconds) / Math.max(.05, exitDuration), 0, 1)),
+    loopShift(cue, elapsed),
+    letterCount(text, elapsed, enterDuration, enterPreset),
+    (cue.loop ?? derived.loop) === 'wave',
+  )
 }
 
 /** Pure time sampling. Seeking backwards never depends on the last painted frame. */

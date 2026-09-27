@@ -1,4 +1,4 @@
-import { KINETIC_PRESETS, TEXT_ALIGNS, TEXT_BOX_KINDS, TEXT_ENTERS, TEXT_EXITS, TEXT_FONTS, TEXT_LOOPS, TEXT_WEIGHTS, type KineticText, type TextAlign, type TextBox, type TextCounter, type TextEnter, type TextExit, type TextFill, type TextLoop, type TextShadow, type TextStroke, type TextWeight } from './types'
+import { KINETIC_PRESETS, TEXT_ALIGNS, TEXT_BOX_KINDS, TEXT_ENTERS, TEXT_EXITS, TEXT_FONTS, TEXT_LOOPS, TEXT_WEIGHTS, type KineticText, type TextBox, type TextCounter, type TextEnter, type TextExit, type TextFill, type TextLoop, type TextShadow, type TextStroke } from './types'
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const numeric = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback
@@ -63,6 +63,33 @@ function parseCounter(value: unknown): TextCounter | undefined {
   return decimals != null && ease ? { from: raw.from, to: raw.to, decimals: Math.round(decimals), ease } : undefined
 }
 
+function defined(fields: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value != null))
+}
+
+function cueLook(value: Partial<KineticText>) {
+  const template = typeof value.template === 'string' ? value.template.trim().slice(0, 80) : ''
+  return defined({
+    font: oneOf(value.font, TEXT_FONTS),
+    weight: TEXT_WEIGHTS.find(item => item === value.weight),
+    enter: parseSpan(value.enter, TEXT_ENTERS),
+    exit: parseSpan(value.exit, TEXT_EXITS),
+    loop: oneOf(value.loop, TEXT_LOOPS),
+    align: oneOf(value.align, TEXT_ALIGNS),
+    maxWidth: bounded(value.maxWidth, 10, 100),
+    lineHeight: bounded(value.lineHeight, 0.8, 2),
+    letterSpacing: bounded(value.letterSpacing, -0.1, 0.5),
+    uppercase: value.uppercase === true ? true : undefined,
+    italic: value.italic === true ? true : undefined,
+    stroke: parseStroke(value.stroke),
+    shadow: parseShadow(value.shadow),
+    fill: parseFill(value.fill),
+    box: parseBox(value.box),
+    counter: parseCounter(value.counter),
+    template: template || undefined,
+  })
+}
+
 function parseCue(value: Partial<KineticText> | null, ids: Set<string>): KineticText | undefined {
   if (!value || typeof value.id !== 'string' || !value.id || ids.has(value.id)) return undefined
   if (typeof value.text !== 'string' || value.text.length > 240) return undefined
@@ -70,18 +97,6 @@ function parseCue(value: Partial<KineticText> | null, ids: Set<string>): Kinetic
   const end = numeric(value.end, start + 3)
   if (end <= start) return undefined
   ids.add(value.id)
-  const font = oneOf(value.font, TEXT_FONTS)
-  const weight = TEXT_WEIGHTS.find(item => item === value.weight)
-  const enter = parseSpan(value.enter, TEXT_ENTERS)
-  const exit = parseSpan(value.exit, TEXT_EXITS)
-  const loop = oneOf(value.loop, TEXT_LOOPS)
-  const align = oneOf(value.align, TEXT_ALIGNS)
-  const stroke = parseStroke(value.stroke)
-  const shadow = parseShadow(value.shadow)
-  const fill = parseFill(value.fill)
-  const box = parseBox(value.box)
-  const counter = parseCounter(value.counter)
-  const template = typeof value.template === 'string' && value.template.trim() ? value.template.trim().slice(0, 80) : undefined
   return {
     id: value.id, text: value.text, start, end,
     preset: KINETIC_PRESETS.includes(value.preset!) ? value.preset! : 'impact',
@@ -89,23 +104,7 @@ function parseCue(value: Partial<KineticText> | null, ids: Set<string>): Kinetic
     size: clamp(numeric(value.size, 9), 2, 25),
     color: hex(value.color) ?? '#ffe3a0',
     rotation: clamp(numeric(value.rotation, 0), -45, 45),
-    ...(font ? { font } : {}),
-    ...(enter ? { enter: enter as { preset: TextEnter; duration: number } } : {}),
-    ...(exit ? { exit: exit as { preset: TextExit; duration: number } } : {}),
-    ...(loop ? { loop: loop as TextLoop } : {}),
-    ...(weight ? { weight: weight as TextWeight } : {}),
-    ...(align ? { align: align as TextAlign } : {}),
-    ...(bounded(value.maxWidth, 10, 100) != null ? { maxWidth: bounded(value.maxWidth, 10, 100) } : {}),
-    ...(bounded(value.lineHeight, 0.8, 2) != null ? { lineHeight: bounded(value.lineHeight, 0.8, 2) } : {}),
-    ...(bounded(value.letterSpacing, -0.1, 0.5) != null ? { letterSpacing: bounded(value.letterSpacing, -0.1, 0.5) } : {}),
-    ...(value.uppercase === true ? { uppercase: true } : {}),
-    ...(value.italic === true ? { italic: true } : {}),
-    ...(stroke ? { stroke } : {}),
-    ...(shadow ? { shadow } : {}),
-    ...(fill ? { fill } : {}),
-    ...(box ? { box } : {}),
-    ...(counter ? { counter } : {}),
-    ...(template ? { template } : {}),
+    ...cueLook(value),
   }
 }
 
@@ -124,12 +123,11 @@ export function kineticTextFields(raw: unknown): { texts?: KineticText[] } {
   return texts.length ? { texts } : {}
 }
 
+const MODERN_FIELDS = ['enter', 'exit', 'loop', 'weight', 'align', 'maxWidth', 'lineHeight', 'letterSpacing', 'uppercase', 'italic', 'stroke', 'shadow', 'fill', 'box', 'counter'] as const
+
 export function isLegacyKineticText(cue: KineticText) {
-  const modernFont = cue.font != null && cue.font !== 'sans' && cue.font !== 'mono'
-  return !modernFont && cue.enter == null && cue.exit == null && cue.loop == null && cue.weight == null
-    && cue.align == null && cue.maxWidth == null && cue.lineHeight == null && cue.letterSpacing == null
-    && cue.uppercase == null && cue.italic == null && cue.stroke == null && cue.shadow == null
-    && cue.fill == null && cue.box == null && cue.counter == null
+  if (cue.font != null && cue.font !== 'sans' && cue.font !== 'mono') return false
+  return MODERN_FIELDS.every(key => cue[key] == null)
 }
 
 /** What a v1 preset means once enter, exit and loop are written down. Short cues still cap the fade the way they always have. */
