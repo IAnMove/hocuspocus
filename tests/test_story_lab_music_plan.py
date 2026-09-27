@@ -128,6 +128,15 @@ class TestStoryLabMusicPlan(unittest.TestCase):
         self.assertTrue(normalized["music"]["cues"][4]["lyrics"].startswith("[Verse]\n\nTiny feet"))
         self.assertIsNone(_story_stage_problem(normalized, "music", self.project))
 
+    def test_character_cue_marked_vocal_without_lyrics_becomes_instrumental(self):
+        result = copy.deepcopy(self.result)
+        result["music"]["cues"][1]["instrumental"] = False
+        result["music"]["cues"][1]["lyrics"] = ""
+        normalized = _normalize_story_stage_ids(result, "music", self.project)
+
+        self.assertIs(normalized["music"]["cues"][1]["instrumental"], True)
+        self.assertIsNone(_story_stage_problem(normalized, "music", self.project))
+
     def test_placeholder_lyrics_are_not_accepted_as_a_song(self):
         for placeholder in (
             "[Verse]\n\nNone (Instrumental)",

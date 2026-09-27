@@ -27948,6 +27948,16 @@ def _normalize_story_stage_ids(
             cue["targetId"] = target
             if (
                 project_type != "music_video"
+                and kind in {"character", "world"}
+                and cue.get("instrumental") is False
+                and len(str(cue.get("lyrics") or "").strip()) < 10
+            ):
+                # A presentation or ambience cue marked vocal but given no
+                # lyrics is an instrumental theme; nothing is lost.
+                cue["instrumental"] = True
+                cue["lyrics"] = ""
+            if (
+                project_type != "music_video"
                 and cue.get("instrumental") is False
                 and isinstance(cue.get("lyrics"), str)
                 and cue["lyrics"].strip()
