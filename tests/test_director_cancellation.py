@@ -623,8 +623,11 @@ class TestDirectorCancellation(unittest.TestCase):
             )
 
         anchor_path = os.path.join(self.temp_dir.name, "anchor.jpg")
-        self.assertEqual(submitted[0]["image_refs"], [character_ref])
-        self.assertNotIn(location_ref, submitted[0]["image_refs"])
+        self.assertEqual(
+            [os.path.realpath(path) for path in submitted[0]["image_refs"]],
+            [os.path.realpath(character_ref)],
+        )
+        self.assertNotIn(os.path.realpath(location_ref), [os.path.realpath(path) for path in submitted[0]["image_refs"]])
         self.assertIn(
             "Mara: a tall woman with silver braids", submitted[0]["prompt"],
         )
@@ -632,8 +635,8 @@ class TestDirectorCancellation(unittest.TestCase):
             "definitive identity and appearance source", submitted[0]["prompt"],
         )
         self.assertEqual(
-            submitted[1]["image_refs"],
-            [anchor_path, character_ref, location_ref],
+            [os.path.realpath(path) for path in submitted[1]["image_refs"]],
+            [os.path.realpath(path) for path in (anchor_path, character_ref, location_ref)],
         )
 
     def test_user_reference_skips_generated_anchor(self):
@@ -2725,7 +2728,7 @@ class TestDirectorCancellation(unittest.TestCase):
         from services.win_safe_files import safe_delete as real_safe_delete
 
         def lock_media_only(path, **kwargs):
-            if os.path.normcase(path) == os.path.normcase(media_path):
+            if os.path.normcase(os.path.realpath(path)) == os.path.normcase(os.path.realpath(media_path)):
                 return {"deleted": False, "reason": "locked"}
             return real_safe_delete(path, **kwargs)
 
