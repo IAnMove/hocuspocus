@@ -16,6 +16,7 @@ from services.scene2d_export import command_catalog as export_catalog
 from services.scene_commands import command_catalog as effects_catalog
 from services.scene_documents import OPERATIONS as SAVE_OPERATIONS
 from services.scene_documents import command_catalog as save_catalog
+from services.video2d_catalogs import command_catalog as video2d_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED = ROOT / "app" / "shared"
@@ -59,7 +60,7 @@ def _catalog_files() -> list[Path]:
 
 
 def _catalog_operations() -> list[dict]:
-    operations = [*effects_catalog(), *save_catalog(), *export_catalog()]
+    operations = [*effects_catalog(), *save_catalog(), *export_catalog(), *video2d_catalog()]
     return [item for item in operations if str(item.get("name", "")).endswith(".catalog")]
 
 
@@ -108,7 +109,15 @@ def _named(text: str, key: str) -> bool:
 
 def test_shared_json_catalogs_are_exposed_by_a_catalog_operation():
     operations = _catalog_operations()
-    assert [item["name"] for item in operations] == ["scenes.effects.catalog"]
+    assert [item["name"] for item in operations] == [
+        "scenes.effects.catalog",
+        "scenes.templates.catalog",
+        "scenes.text.catalog",
+        "scenes.finish.catalog",
+        "scenes.fonts.catalog",
+        "scenes.atmospheres.catalog",
+        "scenes.motion.catalog",
+    ]
     for path in _catalog_files():
         readers = [item for item in (ROOT / "app").rglob("*.py") if path.name in item.read_text(encoding="utf-8")]
         assert readers, path.name

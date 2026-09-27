@@ -1,4 +1,6 @@
 // Optional full-frame finish. Missing `finish` leaves the frame untouched.
+import finishCatalog from '../../../../app/shared/finish_presets.json' with { type: 'json' }
+
 export type SceneFinish = {
   grade?: { exposure: number; contrast: number; saturation: number; temperature: number; tint: number; fade: number; beatFlash?: number }
   bloom?: { amount: number; threshold: number; radius: number; beat?: number }
@@ -62,12 +64,12 @@ export function parseFinish(raw: unknown): SceneFinish | undefined {
   return Object.keys(finish).length ? finish : undefined
 }
 
-export const FINISH_PRESETS: Record<string, SceneFinish> = {
-  warmCinema: { grade: { exposure: 0.05, contrast: 0.12, saturation: 0.08, temperature: 0.25, tint: 0.04, fade: 0.08 }, vignette: { amount: 0.35, softness: 0.6 }, letterbox: { ratio: 2.39, color: '#000000' } },
-  oldDoc: { grade: { exposure: -0.04, contrast: 0.18, saturation: -0.35, temperature: 0.2, tint: 0.08, fade: 0.16 }, grain: { amount: 0.28, size: 1.4 }, texture: { kind: 'scratches', amount: 0.2 } },
-  nightNeon: { grade: { exposure: 0.02, contrast: 0.2, saturation: 0.25, temperature: -0.15, tint: 0.2, fade: 0 }, bloom: { amount: 0.45, threshold: 0.55, radius: 0.5 } },
-  paperComic: { grade: { exposure: 0.04, contrast: 0.08, saturation: -0.1, temperature: 0.12, tint: 0, fade: 0.05 }, texture: { kind: 'paper', amount: 0.45 } },
-}
+export const FINISH_PRESETS: Record<string, SceneFinish> = Object.fromEntries(
+  finishCatalog.entries.map(entry => {
+    const { id, ...preset } = entry
+    return [id, preset]
+  }),
+) as Record<string, SceneFinish>
 
 const scratch = new Map<string, HTMLCanvasElement>()
 function canvas(key: string, width: number, height: number) {

@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "ranges": {
+    "density": { "min": 5, "max": 240, "integer": true },
+    "speed": { "min": 0.05, "max": 4 },
+    "size": { "min": 0.2, "max": 8 },
+    "wind": { "min": -100, "max": 100 },
+    "color": { "pattern": "^#[0-9a-fA-F]{6}$" }
+  },
+  "emitter": {
+    "modes": ["frame", "point", "layer"],
+    "defaults": {
+      "direction": 0,
+      "spread": 30,
+      "rate": 12,
+      "lifetime": 1.2,
+      "speed": 20,
+      "gravity": 0,
+      "x": 50,
+      "y": 50,
+      "offsetX": 0,
+      "offsetY": 0
+    },
+    "ranges": {
+      "direction": [-180, 180],
+      "spread": [0, 180],
+      "rate": [0.1, 80],
+      "lifetime": [0.05, 12],
+      "speed": [0, 200],
+      "gravity": [-80, 80],
+      "x": [0, 100],
+      "y": [0, 100],
+      "offsetX": [-100, 100],
+      "offsetY": [-100, 100],
+      "targetLayerId": { "maxLength": 120 }
+    }
+  },
+  "entries": [
+    { "id": "rain", "density": 145, "speed": 1.3, "size": 1.65, "wind": -10, "color": "#dbeafe", "opacity": 0.92 },
+    { "id": "snow", "density": 90, "speed": 0.42, "size": 2.15, "wind": 8, "color": "#ffffff", "opacity": 0.95 },
+    { "id": "dust", "density": 58, "speed": 0.25, "size": 2.5, "wind": 18, "color": "#fde68a", "opacity": 0.78 },
+    { "id": "embers", "density": 68, "speed": 0.62, "size": 1.55, "wind": 10, "color": "#fb923c", "opacity": 0.92 },
+    { "id": "fog", "density": 16, "speed": 0.18, "size": 1.15, "wind": 28, "color": "#dbeafe", "opacity": 0.58 },
+    { "id": "smoke", "density": 22, "speed": 0.3, "size": 0.85, "wind": 12, "color": "#cbd5e1", "opacity": 0.62 },
+    { "id": "ash", "density": 95, "speed": 0.34, "size": 1.35, "wind": 14, "color": "#d1d5db", "opacity": 0.72 },
+    { "id": "fireflies", "density": 38, "speed": 0.22, "size": 1.4, "wind": 4, "color": "#fde047", "opacity": 0.95 },
+    { "id": "confetti", "density": 86, "speed": 0.72, "size": 1.65, "wind": 12, "color": "#f472b6", "opacity": 1 },
+    { "id": "bokeh", "density": 24, "speed": 0.12, "size": 2.8, "wind": 6, "color": "#f0abfc", "opacity": 0.58 },
+    { "id": "sparkles", "density": 42, "speed": 0.18, "size": 1.8, "wind": 4, "color": "#ffffff", "opacity": 0.9 },
+    { "id": "bubbles", "density": 46, "speed": 0.45, "size": 1.6, "wind": 5, "color": "#bae6fd", "opacity": 0.85 },
+    { "id": "speedlines", "density": 72, "speed": 1.65, "size": 1.15, "wind": 45, "color": "#e0f2fe", "opacity": 0.7 },
+    { "id": "leaves", "density": 54, "speed": 0.48, "size": 1.8, "wind": 20, "color": "#f59e0b", "opacity": 0.95 }
+  ]
+}
