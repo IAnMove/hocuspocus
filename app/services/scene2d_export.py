@@ -114,7 +114,10 @@ def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequen
         return
     path, scoped = parse_media_ref(url, workspace)
     record["filename"] = os.path.basename((path or "").replace("\\", "/"))
-    record["workspace"] = scoped or workspace
+    if url.lower().startswith("/api/v1/uploads/"):
+        record["root"] = "uploads"
+    else:
+        record["workspace"] = scoped or workspace
     refs.append(record)
 
 
@@ -214,6 +217,10 @@ class Scene2DExportService(World3DExportService):
     render_page = "/scene2d-render.html"
     render_bridge = "__scene2dExport"
 
+    def __init__(self, *, workspace_dir, registry_for, renderer=None, app_url=None, uploads_dir=None):
+        super().__init__(workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer, app_url=app_url)
+        self.uploads_dir = uploads_dir or (lambda: os.path.join(os.getcwd(), "uploads"))
+
     def capabilities(self) -> dict:
         module = playwright_module()
         ready = bool(shutil.which("ffmpeg")) and module is not None and renderer_available(self.app_url, module)
@@ -228,10 +235,19 @@ class Scene2DExportService(World3DExportService):
         return resource_scheduler.cpu_lane("scene2d-render")
 
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
-        root = Path(self.workspace_dir(workspace))
+        workspace_root = Path(self.workspace_dir(workspace))
+        uploads_root = Path(self.uploads_dir())
         for ref in refs:
             name = ref.get("filename")
-            if name and ref.get("workspace", workspace) == workspace and not (root / str(name)).is_file():
+            if not name:
+                continue
+            if ref.get("root") == "uploads":
+                root = uploads_root
+            elif ref.get("workspace", workspace) == workspace:
+                root = workspace_root
+            else:
+                continue
+            if not (root / str(name)).is_file():
                 raise http_error(409, "missing_ref", f"Missing workspace media: {name}")
 
     def prepare_snapshot(self, snapshot: dict, cancelled) -> dict:

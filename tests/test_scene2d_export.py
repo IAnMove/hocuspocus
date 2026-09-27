@@ -76,8 +76,10 @@ def _paint(snapshot, staging, progress, cancelled):
 
 def _service(tmp_path, renderer=_paint):
     workspace_dir = _workspace_dir(tmp_path)
+    uploads = tmp_path / "uploads"
+    uploads.mkdir(exist_ok=True)
     return Scene2DExportService(workspace_dir=workspace_dir, registry_for=lambda name: TaskRegistry(workspace_dir(name), interrupt_stale=False),
-                                renderer=renderer)
+                                renderer=renderer, uploads_dir=lambda: str(uploads))
 
 
 def _tone(path, frequency, duration=0.25):
@@ -174,6 +176,30 @@ def test_catalog_and_lane_do_not_use_the_gpu():
 def test_missing_workspace_media_is_refused_before_admission(tmp_path):
     with pytest.raises(Exception) as error:
         _service(tmp_path).submit(_command())
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+
+
+def test_freeze_marks_upload_urls_as_uploads_root():
+    document = _document(layers=[_layer(source="/api/v1/uploads/local-hero.png")])
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["refs"] == [{"layerId": "bg", "url": "/api/v1/uploads/local-hero.png", "kind": "image",
+                                 "filename": "local-hero.png", "root": "uploads"}]
+
+
+def test_upload_media_is_admitted_from_uploads_dir(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.uploads_dir()) / "local-hero.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source="/api/v1/uploads/local-hero.png")])
+    receipt = service.submit(_command(intent="scene2d-upload", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_missing_upload_media_is_refused_before_admission(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.workspace_dir(WORKSPACE)) / "local-hero.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source="/api/v1/uploads/local-hero.png")])
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent="scene2d-upload-missing", document=document))
     assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
 
 
