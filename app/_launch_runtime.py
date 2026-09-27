@@ -33,9 +33,10 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 _app_dir_for_identity = os.path.dirname(os.path.abspath(__file__))
 if _app_dir_for_identity not in sys.path:
     sys.path.insert(0, _app_dir_for_identity)
-from app_identity import read_app_version
+from app_identity import read_app_version, startup_identity
 
 APP_VERSION = read_app_version()
+startup_identity()  # pin the deployed commit before anything can change the checkout
 
 import torch
 import glob
@@ -36730,6 +36731,8 @@ api.include_router(create_wangp_mcp_router(
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
+from routers.about import create_about_router
+api.include_router(create_about_router(os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))))
 
 # Optional production renderer: pass a callable that drives the existing
 # Video 3D exportFlow through a process-owned headless browser. Closing a

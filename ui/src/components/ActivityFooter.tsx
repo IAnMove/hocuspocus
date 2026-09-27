@@ -8,6 +8,7 @@ import { useActivityPanel } from '../features/activity/useActivityPanel'
 import { readHiddenHistory, writeHiddenHistory } from '../features/activity/activityHistory'
 import { ActivityDetailsPanel } from '../features/activity/ActivityDetailsPanel'
 import { ActivityCompactBar } from '../features/activity/ActivityCompactBar'
+import { BuildBadge } from './BuildBadge'
 
 export function ActivityFooter() {
   const activeWorkspace = useStore(state => state.activeWorkspace)
@@ -91,6 +92,7 @@ export function ActivityFooter() {
         onCopyPrompt={copyPrompt}
         onControl={(task, action) => runControl(task, action, panel.openPanel)}
       />
+      <BuildBadge />
     </footer>
   )
 }

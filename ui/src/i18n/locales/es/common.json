@@ -3,9 +3,13 @@
     "title": "Recortar imagen",
     "editName": "Editar {{name}}",
     "hint": "Arrastra para seleccionar un área o indica las coordenadas en píxeles originales. Al guardar se crea una copia PNG y se usa como entrada; el original no cambia.",
-    "x": "Izquierda (px)", "y": "Arriba (px)", "width": "Ancho (px)", "height": "Alto (px)",
+    "x": "Izquierda (px)",
+    "y": "Arriba (px)",
+    "width": "Ancho (px)",
+    "height": "Alto (px)",
     "reset": "Seleccionar imagen completa",
-    "save": "Guardar recorte", "saving": "Guardando copia…",
+    "save": "Guardar recorte",
+    "saving": "Guardando copia…",
     "loadFailed": "No se pudo cargar la imagen. Cierra y vuelve a intentarlo.",
     "saveFailed": "No se pudo guardar el recorte. La entrada original no ha cambiado. Vuelve a intentarlo."
   },
@@ -176,5 +180,38 @@
     "message": "Se ha detectado una actualización o un reinicio del servidor. Conservamos tu formulario. Recarga cuando termines; se borrarán los cambios sin enviar.",
     "reload": "Recargar ahora",
     "later": "Más tarde"
+  },
+  "about": {
+    "title": "Acerca de HocusPocus",
+    "subtitle": "Creation Lab local para dirigir mundos persistentes",
+    "description": "HocusPocus es un estudio de creación local (fork de Maestro) para dirigir vídeo, imagen, música, voz, cómic y 3D con pipelines recuperables y un agente vía MCP. Código abierto en GitHub.",
+    "repository": "Repositorio en GitHub",
+    "close": "Cerrar",
+    "open": "Acerca de HocusPocus y versión desplegada",
+    "deployment": "Versión desplegada",
+    "backend": "Servidor en marcha",
+    "backendDetail": "rama {{branch}} · arrancado {{when}}",
+    "uiBuild": "Interfaz compilada",
+    "uiBuildDetail": "compilada {{when}}",
+    "thisTab": "Esta pestaña",
+    "dirty": "con cambios locales sin commit",
+    "copy": "Copiar commit completo",
+    "copied": "Copiado",
+    "unavailable": "No se pudo consultar el servidor.",
+    "reload": "Recargar",
+    "credits": "Créditos",
+    "state": {
+      "reload": "Esta pestaña usa una interfaz anterior a la que sirve el servidor. Recarga para ver la versión desplegada.",
+      "rebuild": "La interfaz servida se compiló desde otro commit que el servidor en marcha. Usa Repair Web UI o reinicia.",
+      "unknown": "No hay datos de compilación (compilación manual con npm)."
+    },
+    "roles": {
+      "fork origin": "proyecto original del que parte",
+      "local generation engine": "motor local de generación",
+      "music": "música",
+      "images, voice and language": "imagen, voz y lenguaje",
+      "video": "vídeo",
+      "installer and launcher": "instalación y arranque"
+    }
   }
 }
