@@ -27,6 +27,11 @@ export async function restoreImageFile(path: string, workspace: string, signal?:
   throw new Error(`${name}: image unavailable`)
 }
 
-export function outputImageUrl(name: string, workspace: string): string {
+/** Bytes for a gallery row: the listed workspace, or the uploads folder. */
+export function outputMediaUrl(name: string, workspace: string): string {
   return workspace === '__uploads__' ? getUploadUrl(name) : getFileUrl(name, workspace)
+}
+
+export function outputImageUrl(name: string, workspace: string): string {
+  return outputMediaUrl(name, workspace)
 }
