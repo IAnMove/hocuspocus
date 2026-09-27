@@ -568,6 +568,8 @@ class TestDirectorCancellation(unittest.TestCase):
         for request in submitted[1:]:
             self.assertEqual(request["image_refs"], [anchor_path])
             self.assertEqual(request["video_prompt_type"], "KI")
+        # References are cropped to the shot's aspect, never letterboxed.
+        self.assertTrue(all(request["image_fit_mode"] == "crop" for request in submitted))
         self.assertEqual(
             params["generated_reference_image_filename"], "anchor.jpg",
         )

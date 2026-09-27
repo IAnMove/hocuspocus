@@ -10806,6 +10806,11 @@ def _run_image_generation(
             # 'I' carries an image reference; a ref-less anchor is plain T2I.
             "video_prompt_type": "KI" if all_refs else "",
             "resolution": resolution,
+            # Crop references to the shot's aspect ratio. The fixed-aspect
+            # default letterboxes them, so a landscape character or location
+            # sheet in a 9:16 run became a white-padded strip that the image
+            # model reproduced in every start frame.
+            "image_fit_mode": "crop",
             "seed": -1,
             "settings_version": 2.52,
             "generation_mode": "image",
