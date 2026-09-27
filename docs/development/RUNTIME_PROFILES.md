@@ -143,3 +143,10 @@ References: [Python venv](https://docs.python.org/3/library/venv.html),
 [NVIDIA CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html),
 [TorchCodec compatibility](https://github.com/meta-pytorch/torchcodec),
 [pinned SAM requirements](https://github.com/facebookresearch/sam3/blob/8f0b7f4d4e7eda2ed606ebde6702c93359ad01da/pyproject.toml).
+# Windows startup verification
+
+The Windows WanGP recipe pins Flash Attention to 2.7.4.post1, within the
+supported range of xFormers 0.0.31. Installation verifies `xformers.ops`,
+`flash_attn` and the Diffusers transformer import used by Quanto before writing
+a success receipt. Package metadata checks alone do not catch these import-time
+ABI/version failures. Linux attention pins are unchanged.

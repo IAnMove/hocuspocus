@@ -1,5 +1,6 @@
 # Runtime ABI constraints; generated from app/runtime/profiles.json.
 diffusers==0.36.0
+flash-attn==2.7.4.post1
 mmgp==3.7.6
 numpy==2.1.2
 tokenizers==0.22.1

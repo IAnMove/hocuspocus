@@ -16,6 +16,10 @@ module.exports = {
         (!arch || runtimeCatalog.architectures.includes(arch)) &&
         (!gpu || gpu === 'unknown' || runtimeCatalog.accelerators.includes(gpu))
     }
+    const filterOptional = items => items.filter(item =>
+      item.href === 'sam_install.js' ? optionalAvailable('sam')
+        : item.href === 'rigging_install.js' ? optionalAvailable('rigging') : true
+    ).map(item => item.menu ? {...item, menu: filterOptional(item.menu)} : item)
     // Do not gate this menu on kernel.gpu. Pinokio can render an app menu
     // before its hardware inventory has populated that property, which would
     // hide Start from supported systems. install.js retains the documented
@@ -175,8 +179,7 @@ module.exports = {
           text: "<div><strong>Reset</strong><div>Revert to pre-install state</div></div>",
           href: "reset.js",
           confirm: "Are you sure you wish to reset the app?"
-        }].filter(item => item.href === 'sam_install.js' ? optionalAvailable('sam')
-          : item.href === 'rigging_install.js' ? optionalAvailable('rigging') : true)
+        }].flatMap(item => filterOptional([item]))
       }
     } else {
       return [{

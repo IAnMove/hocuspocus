@@ -42,6 +42,8 @@ def verify(engine: str, *, cuda: bool = True) -> dict:
     for name in ("torchvision", "torchaudio"):
         if name in spec:
             importlib.import_module(name)
+    for name in spec.get("verificationImports", []):
+        importlib.import_module(name)
     if cuda:
         if not torch.cuda.is_available():
             raise RuntimeError(f"{engine}: CUDA is unavailable; check the NVIDIA driver")

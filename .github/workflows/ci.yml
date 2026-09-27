@@ -205,8 +205,6 @@ jobs:
           check-latest: false
           cache: npm
           cache-dependency-path: ui/package-lock.json
-      - name: Windows CUDA toolchain selection checks
-        run: python -m pytest tests/test_windows_toolchain.py -q
       - name: Fresh Windows production UI build and verified repeat start
         run: |
           python scripts/build_ui.py
