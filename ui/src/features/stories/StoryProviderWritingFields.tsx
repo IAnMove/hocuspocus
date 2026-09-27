@@ -21,6 +21,8 @@ export function StoryProviderWritingFields({
           <option value="minimax">MiniMax</option>
           <option value="openai">OpenAI</option>
           <option value="openai-compatible">Custom OpenAI-compatible</option>
+          <option value="ollama">Ollama (local)</option>
+          <option value="grok">Grok</option>
         </select>
       </label>
       <p className={`text-[10px] ${writingReady ? 'text-emerald-400' : 'text-amber-300'}`}>

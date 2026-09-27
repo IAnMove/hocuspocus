@@ -60,6 +60,24 @@ test('the Director follows the global aspect ratio even with its own video model
   }
 })
 
+test('a Story Lab resolution and aspect change updates the profile and the Director', async () => {
+  const { puts, close } = fixture('16:9')
+  try {
+    await useStore.getState().setSharedVideoFormat('540p', '9:16')
+    const state = useStore.getState()
+    assert.equal(state.directorResolution, '540p')
+    assert.equal(state.directorAspectRatio, '9:16')
+    const saved = puts[0].profile as { video: { settings: { resolution: string; aspectRatio: string } } }
+    assert.deepEqual(
+      [saved.video.settings.resolution, saved.video.settings.aspectRatio],
+      ['540p', '9:16'],
+    )
+    assert.equal(state.selectedModelPerMode.video, 'director_override')
+  } finally {
+    close()
+  }
+})
+
 test('choosing a ratio in the Director saves it to the global profile only', async () => {
   const { puts, close } = fixture('16:9')
   try {

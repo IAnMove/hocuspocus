@@ -3,6 +3,7 @@ import JSZip from 'jszip'
 import { Check, Loader2 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
+import { StoryVideoFormatControls } from './StoryVideoFormatControls'
 import { useUiTranslation } from '../../i18n'
 import { AssetInput } from '../asset-picker/AssetInput.tsx'
 import { useWorkspaceImageOutputs } from '../../lib/labsImagePick'
@@ -592,16 +593,20 @@ export function StoryLabPanel() {
     const outputSize = resolveResolution(storyVideoOptions, format.resolution, format.aspectRatio)
     const aspectLabel = STORY_VIDEO_ASPECTS.find(option => option.value === format.aspectRatio)?.label
       || format.aspectRatio
-    patch({
-      ...(project.provider.useGlobalProfile ? {
-        provider: { ...project.provider, useGlobalProfile: false },
-      } : {}),
-      videoOverride: {
-        model: filmVideoModel,
-        resolution: format.resolution,
-        aspectRatio: format.aspectRatio,
-      },
-    })
+    // One shared format: update the global profile (and with it the Director)
+    // instead of silently detaching this project from the global profile.
+    // A project that already overrides its video model keeps its own copy in
+    // step so its runs use the same format.
+    void useStore.getState().setSharedVideoFormat(format.resolution, format.aspectRatio)
+    if (!project.provider.useGlobalProfile) {
+      patch({
+        videoOverride: {
+          model: filmVideoModel,
+          resolution: format.resolution,
+          aspectRatio: format.aspectRatio,
+        },
+      })
+    }
     setNotice({
       kind: 'ok',
       text: t('notice.videoFormatUpdated', {
@@ -4028,6 +4033,18 @@ export function StoryLabPanel() {
                   referenceBatchBusy={referenceBatchBusy}
                   styledReferenceTargetCount={styledReferenceTargetCount}
                   onProfileModeChange={setStoryProfileMode}
+                  videoFormatControls={(
+                    <StoryVideoFormatControls
+                      videoModel={filmVideoModel}
+                      resolution={storyVideoResolution}
+                      aspectRatio={storyVideoAspectRatio}
+                      options={storyVideoOptions}
+                      disabled={!storyVideoOptionsReady}
+                      inherited={project.provider.useGlobalProfile}
+                      adjusted={storyVideoFormat.adjusted}
+                      onChange={setStoryVideoFormat}
+                    />
+                  )}
                 />
                 {project.projectType !== 'full_story' && (
                   <CompactVideoWorkspace

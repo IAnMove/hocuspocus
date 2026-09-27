@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { getModelMode, useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import { button, panel } from './storyLabChrome'
@@ -7,11 +8,13 @@ import { StoryProviderWritingFields } from './StoryProviderWritingFields'
 import type { StoryProject, StoryWritingProvider } from './types'
 
 export function StoryProviderPanel({
-  project, patch, onProfileModeChange,
+  project, patch, onProfileModeChange, videoFormatControls,
 }: {
   project: StoryProject
   patch: (patch: Partial<StoryProject>) => void
   onProfileModeChange: (useGlobalProfile: boolean) => void
+  /** Shared resolution/aspect controls; editable in both profile modes. */
+  videoFormatControls?: ReactNode
 }) {
   const { t } = useUiTranslation('storyLab')
   const services = useStore(state => state.servicesConfig)
@@ -32,6 +35,9 @@ export function StoryProviderPanel({
     || (provider === 'openai' && Boolean(services?.openai_api_key_set))
     || (provider === 'openai-compatible'
       && Boolean(services?.compatible_api_key_set && services?.compatible_base_url))
+    // Ollama runs locally and needs no API key.
+    || provider === 'ollama'
+    || (provider === 'grok' && Boolean(services?.grok_api_key_set))
   const imageReady = effectiveImageProvider === 'maestro'
     ? installedImageModels.some(model => model.model_type === effectiveImageModel)
     : Boolean(services?.minimax_api_key_set)
@@ -44,7 +50,15 @@ export function StoryProviderPanel({
           ? { writingModel: 'gpt-4.1', writingBaseUrl: 'https://api.openai.com' }
           : next === 'openai-compatible'
             ? { writingModel: '', writingBaseUrl: services?.compatible_base_url || '' }
-            : { writingModel: project.provider.writingModel, writingBaseUrl: project.provider.writingBaseUrl }
+            : next === 'ollama'
+              ? {
+                writingModel: profile.text.provider === 'ollama' ? profile.text.model : project.provider.writingModel,
+                writingBaseUrl: profile.text.provider === 'ollama' && profile.text.base_url
+                  ? profile.text.base_url : 'http://127.0.0.1:11434',
+              }
+              : next === 'grok'
+                ? { writingModel: 'grok-4', writingBaseUrl: 'https://api.x.ai/v1' }
+                : { writingModel: project.provider.writingModel, writingBaseUrl: project.provider.writingBaseUrl }
     patch({ provider: { ...project.provider, writingProvider: next, ...defaults } })
   }
   const patchProvider = (value: Partial<StoryProject['provider']>) =>
@@ -87,6 +101,7 @@ export function StoryProviderPanel({
           onPatchProvider={patchProvider}
         />
       </fieldset>
+      {videoFormatControls}
     </div>
   )
 }

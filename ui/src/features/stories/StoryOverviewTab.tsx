@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Palette, RefreshCcw, Sparkles } from 'lucide-react'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
 import { useUiTranslation } from '../../i18n'
@@ -66,6 +67,7 @@ export function StoryOverviewTab({
   project, patch, busy, instruction, setInstruction, generate, approve, isApproved,
   setTrailerDuration, protagonistReferenceReady, promptHealthWarnings, writeStyleIntoPrompts,
   regenerateStyledReferences, imageBusy, referenceBatchBusy, styledReferenceTargetCount, onProfileModeChange,
+  videoFormatControls,
 }: StoryLabSectionTabProps & {
   patch: (value: Partial<StoryProject>) => void
   setTrailerDuration: (value: number) => void
@@ -77,6 +79,7 @@ export function StoryOverviewTab({
   referenceBatchBusy: boolean
   styledReferenceTargetCount: number
   onProfileModeChange: (useGlobalProfile: boolean) => void
+  videoFormatControls?: ReactNode
 }) {
   const { t } = useUiTranslation('storyLab')
   const title = project.projectType === 'music_video' ? t('overview.titleMusic')
@@ -286,7 +289,7 @@ export function StoryOverviewTab({
             </div>
           </div>
         </div>
-        <StoryProviderPanel project={project} patch={patch} onProfileModeChange={onProfileModeChange} />
+        <StoryProviderPanel project={project} patch={patch} onProfileModeChange={onProfileModeChange} videoFormatControls={videoFormatControls} />
       </div>
     </>
   )

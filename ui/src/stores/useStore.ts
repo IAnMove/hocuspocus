@@ -1675,6 +1675,8 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice {
   updateProductionProfile: (profile: ProductionProfile) => Promise<void>
   /** Director aspect ratio and the global profile share one value. */
   setSharedVideoAspectRatio: (ratio: AspectRatio) => Promise<void>
+  /** Resolution and aspect ratio shared by Settings, the Director and Story Lab. */
+  setSharedVideoFormat: (resolution: ResolutionPreset | null, aspectRatio: AspectRatio) => Promise<void>
 
   // Director (Music Video Director)
   sidebarMode: 'director' | 'studio'
@@ -6496,22 +6498,28 @@ export const useStore = create<AppState>((set, get) => {
       set({ productionProfileLoading: false })
     }
   },
-  setSharedVideoAspectRatio: async (ratio) => {
-    set({ directorAspectRatio: ratio })
+  setSharedVideoAspectRatio: ratio => get().setSharedVideoFormat(null, ratio),
+  setSharedVideoFormat: async (resolution, aspectRatio) => {
+    set({ directorAspectRatio: aspectRatio, ...(resolution ? { directorResolution: resolution } : {}) })
     const previous = get().productionProfile
-    if (previous.video.settings.aspectRatio === ratio) return
-    // Save only the aspect ratio: unlike updateProductionProfile this must not
+    const settings = previous.video.settings
+    const nextResolution = resolution ?? settings.resolution
+    if (settings.aspectRatio === aspectRatio && settings.resolution === nextResolution) return
+    // Save only the format: unlike updateProductionProfile this must not
     // reset the Director's own model selection to the global one.
     const next: ProductionProfile = {
       ...previous,
-      video: { ...previous.video, settings: { ...previous.video.settings, aspectRatio: ratio } },
+      video: {
+        ...previous.video,
+        settings: { ...settings, resolution: nextResolution, aspectRatio },
+      },
     }
     set({ productionProfile: next })
     try {
       const result = await api.updateProductionProfile(next)
       set({ productionProfile: result.profile, productionProfileConfigured: result.configured })
     } catch (e) {
-      console.error('Failed to save the shared aspect ratio:', e)
+      console.error('Failed to save the shared video format:', e)
       if (get().productionProfile === next) set({ productionProfile: previous })
     }
   },
