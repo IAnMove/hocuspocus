@@ -11,16 +11,19 @@ import pytest
 
 from services.montage_commands import MontageCommands, command_catalog
 from services.montage_documents import MontageError, MontageStore, normalize_montage
-from services.montage_shots import ShotBoard, timeline_slots
+from services.montage_shots import ShotBoard, _atempo, timeline_slots
 
 WS = "x-song"
 FFMPEG = shutil.which("ffmpeg") and shutil.which("ffprobe")
 pytestmark = pytest.mark.skipif(not FFMPEG, reason="ffmpeg is required")
 
 
-def _video(path: Path, seconds: float) -> None:
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=blue:s=64x36:r=24:d={seconds}",
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)], check=True)
+def _video(path: Path, seconds: float, *, audio: bool = False) -> None:
+    command = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=blue:s=64x36:r=24:d={seconds}"]
+    if audio:
+        command += ["-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}", "-c:a", "aac"]
+    command += ["-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)]
+    subprocess.run(command, check=True)
 
 
 def _sidecar(root: Path, video: str, *, job: str, prompt: str = "Rockets ignite", seed: int = 8906) -> None:
@@ -136,6 +139,34 @@ def test_select_swaps_media_keeps_history_and_retimes_short_takes(board):
     assert clip["origin"] == {"kind": "render", "derivedFrom": "shot1b.mp4", "note": clip["origin"]["note"]}
     assert clip["takes"][0]["source"] == "shot1.mp4" and clip["takes"][0]["note"] == "previous selection"
     assert (root / clip["source"]).is_file()
+
+
+def test_select_keeps_audio_when_a_short_take_is_slowed(board):
+    shots, store, root, _ = board
+    asyncio.run(shots.regenerate(WS, "Bird.montage.json", "s1", intent_id="regen-1", expected_revision=1))
+    _video(root / "shot1b.mp4", 1, audio=True)
+    _sidecar(root, "shot1b.mp4", job="job-new")
+    shots.select(WS, "Bird.montage.json", "s1", "take-job-new", expected_revision=2)
+    clip = store.get(WS, "Bird.montage.json")["montage"]["clips"][0]
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type",
+         "-of", "csv=p=0", str(root / clip["source"])],
+        capture_output=True, text=True, check=True,
+    )
+    assert probe.stdout.strip()
+    loud = subprocess.run(
+        ["ffmpeg", "-v", "info", "-i", str(root / clip["source"]), "-af", "volumedetect", "-f", "null", "-"],
+        capture_output=True, text=True,
+    ).stderr
+    mean = loud.split("mean_volume:")[1][:12]
+    assert "mean_volume" in loud and "-inf" not in mean and "-91" not in mean
+
+
+def test_atempo_stays_inside_ffmpeg_limits():
+    assert _atempo(1.0) == "atempo=1.000000"
+    assert _atempo(0.45) == "atempo=0.5,atempo=0.900000"
+    assert _atempo(0.02).startswith("atempo=0.5")
+    assert all(0.5 <= float(part.split("=")[1]) <= 2.0 for part in _atempo(0.02).split(","))
 
 
 def test_commands_expose_the_board():

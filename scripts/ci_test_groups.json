@@ -15,6 +15,7 @@
         "tests/test_activity_generation_details.py",
         "tests/test_analyze_pr.py",
         "tests/test_app_identity.py",
+        "tests/test_about.py",
         "tests/test_architecture_contracts.py",
         "tests/test_architecture_factory.py",
         "tests/test_asset_catalog.py",
@@ -436,6 +437,19 @@
       "paths": [
         "tests/test_montage_shots.py",
         "tests/test_montage_documents.py"
+      ]
+    },
+    {
+      "prefix": "app/app_identity.py",
+      "paths": [
+        "tests/test_about.py",
+        "tests/test_app_identity.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/about.py",
+      "paths": [
+        "tests/test_about.py"
       ]
     }
   ]

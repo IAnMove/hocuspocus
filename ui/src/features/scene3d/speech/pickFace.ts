@@ -2,6 +2,7 @@ import { Mesh, MeshStandardMaterial, Raycaster, Vector2, Vector3, type Camera, t
 import { faceMeshes, manualFace } from './calibration'
 import type { FacePlacement } from './types'
 import { restFaceHit } from './faceCoordinates'
+import { isGeneratedScreenPlane } from '../screenPlane'
 
 /** Interpolate ORIGINAL vertices using barycentrics on the currently posed triangle. */
 export function placementAtHit(root: Object3D, hit: Intersection, previous?: FacePlacement): FacePlacement | undefined {
@@ -27,6 +28,6 @@ export function pickFace(root: Object3D, camera: Camera, canvas: HTMLCanvasEleme
   root.updateMatrixWorld(true); camera.updateMatrixWorld(true)
   ray.setFromCamera(new Vector2((x - rect.left) / rect.width * 2 - 1, 1 - (y - rect.top) / rect.height * 2), camera)
   // Only this subject participates; clicking another actor cannot edit it.
-  const hit = ray.intersectObject(root, true)[0]
+  const hit = ray.intersectObject(root, true).find(item => !isGeneratedScreenPlane(item.object))
   return hit ? placementAtHit(root, hit, previous) : undefined
 }

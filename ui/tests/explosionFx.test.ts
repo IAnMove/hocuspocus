@@ -4,6 +4,7 @@ import { Scene } from 'three'
 import { effectsTemplateDocument } from '../src/features/scene3d/effectsTemplates'
 import { parseScene3DDocument } from '../src/features/scene3d/document'
 import { parseWorldSfx, WORLD_SFX_KINDS, createWorldSfx, worldMediaUrl } from '../src/features/sceneFx/world'
+import { PACKED_FX } from '../src/features/sceneFx/packedRecipes'
 import { syncWorldSfx } from '../src/features/sceneFx/worldRuntime'
 import { parseSceneFx } from '../src/features/sceneFx/types'
 import { paintSceneFx } from '../src/features/sceneFx/paint'
@@ -43,6 +44,15 @@ test('3D explosion nodes seek and release like other cinematic kinds', () => {
   assert.equal(nodes.get('blast')?.root.visible, false)
   syncWorldSfx(scene, nodes, [], 0, [])
   assert.equal(nodes.size, 0)
+})
+
+test('ninety packed cinematic recipes parse and a sample mounts', () => {
+  assert.equal(PACKED_FX.length, 90)
+  const cues = parseWorldSfx(PACKED_FX.map((item, i) => ({ id: item.id, kind: item.id, start: 0, end: 2, seed: i + 1 })))
+  assert.equal(cues.length, 90)
+  const scene = new Scene(), nodes = new Map()
+  syncWorldSfx(scene, nodes, cues.slice(0, 12), 1, [])
+  assert.equal(nodes.size, 12)
 })
 
 test('new cinematic world kinds parse and mount', () => {

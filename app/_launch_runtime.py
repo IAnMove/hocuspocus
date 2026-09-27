@@ -33,9 +33,10 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 _app_dir_for_identity = os.path.dirname(os.path.abspath(__file__))
 if _app_dir_for_identity not in sys.path:
     sys.path.insert(0, _app_dir_for_identity)
-from app_identity import read_app_version
+from app_identity import read_app_version, startup_identity
 
 APP_VERSION = read_app_version()
+startup_identity()  # pin the deployed commit before anything can change the checkout
 
 import torch
 import glob
@@ -26646,6 +26647,7 @@ async def save_scene_recording(
     """
     from services.scene_recording import (
         SceneRecordingTranscodeError,
+        canonical_scene_fps,
         transcode_scene_recording,
     )
 
@@ -26716,7 +26718,7 @@ async def save_scene_recording(
     output_path = os.path.join(out_dir, output_name)
     upload_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-recording.webm")
     upload_audio_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-audio.wav")
-    fps = 60 if scene.get("fps") == 60 else 30
+    fps = canonical_scene_fps(scene.get("fps"))
     started_at = time.time()
 
     try:
@@ -30069,7 +30071,7 @@ def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
 
 @api.post("/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
 def start_series_episode_render(series_id: str, episode_id: str, body: dict):
-    from services.series_production import series_shot_method
+    from services.series_production import is_series_generated_shot
     from services.series_library import append_shot_render_attempt, series_for_episode_snapshot
     from services.series_reference_router import route_shot_references
     from services.series_render import (
@@ -30097,7 +30099,7 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         routing_series = series_for_episode_snapshot(series, episode)
         try:
             candidates = _series_render_candidates(episode, body)
-            candidates = [shot for shot in candidates if series_shot_method(series, shot) == "generated_video"]
+            candidates = [shot for shot in candidates if is_series_generated_shot(series, shot)]
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not candidates:
@@ -35946,6 +35948,22 @@ def _upsert_canonical_task(
         # cancellation/completion won. Canonical resume explicitly transitions
         # the registry before the next active adapter snapshot arrives.
         return existing
+    existing_metadata = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
+    incoming_metadata = fields.get("metadata") if isinstance(fields.get("metadata"), dict) else None
+    if incoming_metadata is not None:
+        merged_metadata = dict(existing_metadata)
+        for key, value in incoming_metadata.items():
+            if value is not None:
+                merged_metadata[key] = value
+        fields["metadata"] = merged_metadata
+        # Reservation owns attempt identity. Adapter snapshots must not
+        # replace workflow/title after submit_music_generation wrote them.
+        if any(
+            existing_metadata.get(key)
+            for key in ("generation_id", "candidate_id", "command_id", "idempotency_key")
+        ):
+            fields.pop("workflow", None)
+            fields.pop("title", None)
     mutable = {
         key: value for key, value in fields.items()
         if key not in {"id", "created_at"}
@@ -36292,9 +36310,16 @@ def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
             "actor": provenance.get("actor") or "unknown",
             "tool": provenance.get("tool") or adapter,
             "capability": provenance.get("capability"),
-            "command_id": command.get("command_id"),
+            "command_id": (
+                command.get("command_id")
+                or record.get("commandId")
+                or record.get("command_id")
+            ),
             "workflow_id": command.get("workflow_id"),
             "run_id": command.get("run_id"),
+            "generation_id": record.get("generationId") or record.get("generation_id"),
+            "candidate_id": record.get("candidateId") or record.get("candidate_id"),
+            "idempotency_key": record.get("idempotencyKey") or record.get("idempotency_key"),
         },
     )
 
@@ -36730,6 +36755,8 @@ api.include_router(create_wangp_mcp_router(
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
+from routers.about import create_about_router
+api.include_router(create_about_router(os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))))
 
 # Optional production renderer: pass a callable that drives the existing
 # Video 3D exportFlow through a process-owned headless browser. Closing a

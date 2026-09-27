@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from app_identity import manifest_app_ref
+
 from .generation_provenance import resolve_generation_location
 
 
@@ -244,6 +246,7 @@ def build_asset_manifest(
         "output_folder": location.get("output_folder"),
         "project": _entity_ref(project),
         "production": _entity_ref(production),
+        "app": manifest_app_ref(),
     }
     if origin["workspace_id"] is None:
         origin.pop("workspace_id", None)

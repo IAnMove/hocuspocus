@@ -13,6 +13,15 @@ class SceneRecordingTranscodeError(RuntimeError):
     """Raised when FFmpeg cannot finalize a browser recording."""
 
 
+def canonical_scene_fps(value: object) -> int:
+    """Match the UI 24 / 30 / 60 contract. Unknown rates stay 30."""
+    try:
+        fps = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 30
+    return fps if fps in (24, 60) else 30
+
+
 def probe_scene_recording_output(path: str | os.PathLike[str]) -> dict[str, object]:
     """Return machine-readable stream/container metadata for a finalized MP4."""
 
@@ -89,7 +98,7 @@ def build_scene_recording_command(
 ) -> list[str]:
     """Build a broadly playable H.264/yuv420p MP4 transcode command."""
 
-    normalized_fps = 60 if int(fps) == 60 else 30
+    normalized_fps = canonical_scene_fps(fps)
     tracks = list(audio_tracks)
     command = [
         "ffmpeg",

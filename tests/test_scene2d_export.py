@@ -105,6 +105,44 @@ def test_freeze_validates_2d_documents_and_collects_refs():
                                  "filename": "bg.png", "workspace": WORKSPACE}]
 
 
+def test_freeze_accepts_sequence_only_layers_and_collects_frame_refs():
+    document = _document(layers=[_layer(
+        id="walk", source="",
+        sequence={"kind": "frames", "sources": [
+            f"/api/v1/file/walk-1.png?workspace={WORKSPACE}",
+            f"/api/v1/file/walk-2.png?workspace={WORKSPACE}",
+        ], "fps": 12, "loop": "loop"},
+    )])
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert [ref["filename"] for ref in snapshot["refs"]] == ["walk-1.png", "walk-2.png"]
+
+
+def test_freeze_collects_sheet_sequence_ref_when_source_is_empty():
+    document = _document(layers=[_layer(
+        id="sheet", source="",
+        sequence={"kind": "sheet", "source": f"/api/v1/file/atlas.png?workspace={WORKSPACE}",
+                  "columns": 4, "rows": 2, "count": 8, "fps": 12, "loop": "loop"},
+    )])
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["refs"] == [{"layerId": "sheet", "url": f"/api/v1/file/atlas.png?workspace={WORKSPACE}",
+                                 "kind": "image", "sequence": True, "filename": "atlas.png", "workspace": WORKSPACE}]
+
+
+def test_freeze_rejects_sequence_only_layer_without_durable_frames():
+    document = _document(layers=[_layer(id="walk", source="", sequence={"kind": "frames", "sources": ["blob:http://x/1"], "fps": 12, "loop": "loop"})])
+    with pytest.raises(Exception) as error:
+        freeze_export_command(_command(document=document))
+    assert error.value.detail["code"] == "missing_ref"
+
+
+def test_freeze_keeps_still_and_collects_sequence_frames():
+    document = _document(layers=[_layer(sequence={"kind": "frames", "sources": [
+        f"/api/v1/file/walk-1.png?workspace={WORKSPACE}",
+    ], "fps": 12, "loop": "loop"})])
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert [ref["filename"] for ref in snapshot["refs"]] == ["bg.png", "walk-1.png"]
+
+
 @pytest.mark.parametrize("document,code", [
     (_document(layers=[_layer(type="model3d")]), "unsupported_capability"),
     (_document(layers=[_layer(source="blob:http://x/1")]), "missing_ref"),

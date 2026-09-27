@@ -1,6 +1,7 @@
 import { Bone, Box3, Color, Mesh, MeshStandardMaterial, Raycaster, Vector3, type Object3D } from 'three'
 import type { FacePlacement } from './types'
 import { restFaceHit } from './faceCoordinates'
+import { isGeneratedScreenPlane } from '../screenPlane'
 
 export const FACE_PROFILES = ['generic', 'human_mira', 'elf_seren', 'orc_grog', 'goblin_zik'] as const
 export type FaceProfile = typeof FACE_PROFILES[number]
@@ -14,7 +15,7 @@ const PROFILES = {
 } satisfies Record<FaceProfile, number[]>
 export function faceMeshes(root: Object3D): Mesh[] {
   const meshes: Mesh[] = []
-  root.traverse(node => { if (node instanceof Mesh) meshes.push(node) })
+  root.traverse(node => { if (node instanceof Mesh && !isGeneratedScreenPlane(node)) meshes.push(node) })
   return meshes
 }
 /** Editable starting point in ORIGINAL vertex coordinates, also for GLBs without a rig. */

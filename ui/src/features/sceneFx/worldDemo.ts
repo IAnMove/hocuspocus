@@ -1,5 +1,7 @@
 import { createDefaultScene3DDocument } from '../scene3d/document'
 import type { Scene3DDocument, Scene3DSlot } from '../scene3d/types'
+import { parseSceneFx } from './types'
+import { sceneHasAuthoredContent } from './showcase'
 import { parseWorldSfx } from './world'
 
 function box(id: string, slot: Scene3DSlot['slot'], position: Scene3DSlot['position'], rotationY = 0, scale = 1): Scene3DSlot {
@@ -96,4 +98,21 @@ export function worldSfxDemoDocument(id: WorldSfxDemoId): Scene3DDocument {
   if (id === 'duel') return worldSfxDuelDocument()
   if (id === 'mixed') return worldSfxMixedDocument()
   return worldSfxDepthDocument()
+}
+
+/** Stock demos may replace an empty stage. Authored actors, voices and cues stay. */
+export function applyWorldSfxDemo(current: Scene3DDocument, id: WorldSfxDemoId): { mode: 'retain' | 'replace'; document: Scene3DDocument } {
+  const demo = worldSfxDemoDocument(id)
+  if (!sceneHasAuthoredContent(current)) {
+    return { mode: 'replace', document: { ...demo, width: current.width, height: current.height, fps: current.fps } }
+  }
+  return {
+    mode: 'retain',
+    document: {
+      ...current,
+      duration: Math.max(current.duration, demo.duration),
+      worldSfx: parseWorldSfx([...(current.worldSfx ?? []), ...(demo.worldSfx ?? [])]),
+      sfx: parseSceneFx([...(current.sfx ?? []), ...(demo.sfx ?? [])]),
+    },
+  }
 }
