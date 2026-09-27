@@ -394,6 +394,10 @@ export function MainContent() {
     return estimatedItemHeight
   }, [estimatedItemHeight, outputs])
 
+  // Bumped whenever an item reports a new height; it must be a dependency of
+  // the offset calculation below, or a card that grows after its image loads
+  // keeps its old slot and the next card is drawn on top of it.
+  const [measureEpoch, setMeasureEpoch] = useState(0)
   const { startIndex, endIndex, totalHeight, itemOffsets } = useMemo(() => {
     const count = outputs.length
     const offsets: number[] = new Array(count)
@@ -424,9 +428,8 @@ export function MainContent() {
       totalHeight: Math.max(total, placeholderTotalHeight),
       itemOffsets: offsets,
     }
-  }, [outputs.length, scrollTop, containerHeight, getItemHeight, placeholderTotalHeight, estimatedItemHeight])
+  }, [outputs.length, scrollTop, containerHeight, getItemHeight, placeholderTotalHeight, estimatedItemHeight, measureEpoch])
 
-  const [, setMeasureEpoch] = useState(0)
   const handleItemMeasured = useCallback((index: number, height: number) => {
     const name = outputs[index]?.name
     if (!name) return

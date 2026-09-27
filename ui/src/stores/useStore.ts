@@ -1673,6 +1673,8 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice {
   productionProfileLoading: boolean
   loadProductionProfile: () => Promise<void>
   updateProductionProfile: (profile: ProductionProfile) => Promise<void>
+  /** Director aspect ratio and the global profile share one value. */
+  setSharedVideoAspectRatio: (ratio: AspectRatio) => Promise<void>
 
   // Director (Music Video Director)
   sidebarMode: 'director' | 'studio'
@@ -2148,11 +2150,15 @@ function findResolutionSelection(
 
 let _productionProfileVideoFormatSeq = 0
 
-/** Keep Director/Story Lab's canvas aligned with a globally inherited model.
+/** Keep Director/Story Lab's canvas aligned with the global production profile.
+ *
+ * The aspect ratio is one shared setting: it always follows the profile, even
+ * when the Director uses its own video model. Resolution follows the profile
+ * only while the video model is globally inherited.
  *
  * Model selections and the production profile are hydrated by independent
  * requests at boot.  Resolve the format after either one settles, and reject
- * a late response if the user selected a project/model override meanwhile.
+ * a late response if the user changed the model or profile meanwhile.
  */
 async function _syncGlobalProductionVideoFormat(
   profile: ProductionProfile,
@@ -2160,15 +2166,15 @@ async function _syncGlobalProductionVideoFormat(
   set: (partial: Partial<AppState>) => void,
 ): Promise<void> {
   const requestSeq = ++_productionProfileVideoFormatSeq
-  const modelType = profile.video.model.trim()
   const requestedResolution = profile.video.settings.resolution
   const requestedAspect = profile.video.settings.aspectRatio
   const before = get()
-  if (
-    !modelType
-    || !_globalModelSelectionModes.has('video')
-    || before.selectedModelPerMode.video !== modelType
-  ) return
+  const inheritsModel = _globalModelSelectionModes.has('video')
+    && before.selectedModelPerMode.video === profile.video.model.trim()
+  const modelType = (
+    inheritsModel ? profile.video.model : before.selectedModelPerMode.video || profile.video.model
+  ).trim()
+  if (!modelType) return
 
   let options: ModelOptions
   try {
@@ -2183,22 +2189,23 @@ async function _syncGlobalProductionVideoFormat(
   const latest = get()
   if (
     requestSeq !== _productionProfileVideoFormatSeq
-    || !_globalModelSelectionModes.has('video')
-    || latest.selectedModelPerMode.video !== modelType
-    || latest.productionProfile.video.model !== modelType
-    || latest.productionProfile.video.settings.resolution !== requestedResolution
     || latest.productionProfile.video.settings.aspectRatio !== requestedAspect
+    || latest.selectedModelPerMode.video !== before.selectedModelPerMode.video
+    || (inheritsModel && (
+      !_globalModelSelectionModes.has('video')
+      || latest.productionProfile.video.model !== modelType
+      || latest.productionProfile.video.settings.resolution !== requestedResolution
+    ))
   ) return
 
   const format = resolveSupportedVideoFormat(
     options,
-    requestedResolution,
+    inheritsModel ? requestedResolution : latest.directorResolution,
     requestedAspect,
   )
-  set({
-    directorResolution: format.resolution,
-    directorAspectRatio: format.aspectRatio,
-  })
+  set(inheritsModel
+    ? { directorResolution: format.resolution, directorAspectRatio: format.aspectRatio }
+    : { directorAspectRatio: format.aspectRatio })
 }
 
 export const useStore = create<AppState>((set, get) => {
@@ -6487,6 +6494,25 @@ export const useStore = create<AppState>((set, get) => {
     } catch (e) {
       console.error('Failed to load production profile:', e)
       set({ productionProfileLoading: false })
+    }
+  },
+  setSharedVideoAspectRatio: async (ratio) => {
+    set({ directorAspectRatio: ratio })
+    const previous = get().productionProfile
+    if (previous.video.settings.aspectRatio === ratio) return
+    // Save only the aspect ratio: unlike updateProductionProfile this must not
+    // reset the Director's own model selection to the global one.
+    const next: ProductionProfile = {
+      ...previous,
+      video: { ...previous.video, settings: { ...previous.video.settings, aspectRatio: ratio } },
+    }
+    set({ productionProfile: next })
+    try {
+      const result = await api.updateProductionProfile(next)
+      set({ productionProfile: result.profile, productionProfileConfigured: result.configured })
+    } catch (e) {
+      console.error('Failed to save the shared aspect ratio:', e)
+      if (get().productionProfile === next) set({ productionProfile: previous })
     }
   },
   updateProductionProfile: async (profile) => {

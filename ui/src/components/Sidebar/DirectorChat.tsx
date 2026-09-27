@@ -1462,7 +1462,8 @@ function CharacterNaming({
 
 function DirectorAspectRatioSelector() {
   const ratio = useStore(s => s.directorAspectRatio)
-  const setRatio = useStore(s => s.setDirectorAspectRatio)
+  // Shared with Settings → Global production profile, in both directions.
+  const setRatio = useStore(s => s.setSharedVideoAspectRatio)
   const presets = [
     { value: '16:9' as const, label: '16:9', desc: 'Wide' },
     { value: '9:16' as const, label: '9:16', desc: 'Portrait' },
