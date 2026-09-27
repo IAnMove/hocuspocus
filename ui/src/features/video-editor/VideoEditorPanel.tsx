@@ -27,6 +27,7 @@ import type { ParseKeys } from 'i18next'
 import { useUiTranslation } from '../../i18n'
 import { MontageLayersPanel, MontageToolbar, type MontageEditorState } from './MontageControls'
 import { loadMontageIntoEditor } from './montageLoader'
+import { DeriveVerticalButton } from './DeriveVerticalButton'
 import { ShotBoard } from './ShotBoard'
 import { exportLayerFields, loadMontageState, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
@@ -1985,6 +1986,13 @@ export function VideoEditorPanel() {
           montageRef={montage.ref}
           onOpen={applyMontage}
           onSaved={ref => { setMontage(current => ({ ...current, ref })); persistMontageState(activeWorkspace, montage.layers, ref) }}
+          onError={setError}
+        />
+        <DeriveVerticalButton
+          workspace={activeWorkspace}
+          file={montage.ref?.file ?? null}
+          disabled={isVideoEditorJobActive(exportJob)}
+          onOpened={loaded => applyMontage(loaded.state, loaded.layers, loaded.ref)}
           onError={setError}
         />
         {montage.ref && (

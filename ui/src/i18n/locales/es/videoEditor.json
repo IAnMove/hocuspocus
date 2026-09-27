@@ -5,6 +5,9 @@
     "import": "Importar",
     "fromHocusPocus": "Desde HocusPocus",
     "exportMp4": "Exportar MP4",
+    "vertical": "Crear versión vertical",
+    "verticalTitle": "Guarda una copia 9:16 con desenfoque. El montaje original no cambia.",
+    "verticalWorking": "Creando la versión vertical…",
     "cancelling": "Cancelando…"
   },
   "empty": {

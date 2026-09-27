@@ -77,6 +77,12 @@ def create_montages_router(commands: MontageCommands) -> APIRouter:
     async def export_montage(file: str, workspace: str):
         return await run("montages.export", {"workspace": workspace, "file": file})
 
+    @router.post("/api/v1/montages/{file}/derive")
+    async def derive_montage(file: str, request: Request):
+        payload = await body(request)
+        allowed = {"workspace", "format", "fit", "output_file", "expected_revision"}
+        return await run("montages.derive", {"file": file, **{key: value for key, value in payload.items() if key in allowed}})
+
     return router
 
 

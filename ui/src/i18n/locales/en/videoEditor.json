@@ -5,6 +5,9 @@
     "import": "Import",
     "fromHocusPocus": "From HocusPocus",
     "exportMp4": "Export MP4",
+    "vertical": "Create vertical version",
+    "verticalTitle": "Save a 9:16 copy with blur fill. The original montage stays as it is.",
+    "verticalWorking": "Creating vertical version…",
     "cancelling": "Cancelling…"
   },
   "empty": {
