@@ -27792,6 +27792,47 @@ def _normalize_story_stage_ids(
                 return "\n\n".join(sections)
             return str(value or "").strip()
 
+        section_names = {
+            "intro": "Intro", "verse": "Verse", "prechorus": "Pre Chorus",
+            "chorus": "Chorus", "postchorus": "Post Chorus",
+            "interlude": "Interlude", "bridge": "Bridge",
+            "transition": "Transition", "buildup": "Build Up", "break": "Break",
+            "hook": "Hook", "inst": "Inst", "instrumental": "Inst",
+            "solo": "Solo", "outro": "Outro",
+        }
+        section_pattern = (
+            r"(intro|verse|pre[\s-]?chorus|post[\s-]?chorus|chorus|interlude|"
+            r"bridge|transition|build[\s-]?up|break|hook|instrumental|inst|solo|outro)"
+        )
+        # A heading line such as "[Verse 1]", "Verse 1:", "(Chorus)" or
+        # "**Chorus**"; a lyric may follow a bracketed or colon heading.
+        heading_re = re.compile(
+            r"^\s*[*_#]*\s*(?:[\[(]\s*" + section_pattern + r"(?:\s*\d+)?\s*[\])]\s*:?"
+            r"|" + section_pattern + r"(?:\s*\d+)?\s*:"
+            r"|" + section_pattern + r"(?:\s*\d+)?(?=\s*[*_]*\s*$))\s*[*_]*\s*(.*)$",
+            re.IGNORECASE,
+        )
+
+        def canonical_lyrics(lyrics: str) -> str:
+            """Rewrite section-heading variants to MiniMax's exact tags."""
+            lines: list[str] = []
+            for line in str(lyrics or "").splitlines():
+                match = heading_re.match(line)
+                if not match:
+                    lines.append(line)
+                    continue
+                name = match.group(1) or match.group(2) or match.group(3)
+                token = re.sub(r"[^a-z]+", "", name.casefold())
+                lines.append(f"[{section_names.get(token, 'Verse')}]")
+                if match.group(4).strip():
+                    lines.append(match.group(4).strip())
+            text = "\n".join(lines).strip()
+            if text and not re.search(r"^\[(Verse|Chorus|Hook)\]\s*$", text, re.MULTILINE):
+                if "\n" not in text and "/" in text:
+                    text = re.sub(r"\s*/\s*", "\n", text)
+                text = f"[Verse]\n\n{text}"
+            return text[:3500].rstrip()
+
         characters = [
             character for character in project.get("characters", [])
             if isinstance(character, dict) and str(character.get("id") or "").strip()
@@ -27843,14 +27884,7 @@ def _normalize_story_stage_ids(
                     or "cinematic story song, expressive lead vocal, dynamic original production"
                 ).strip()
                 cue["style"] = style[:300]
-                lyrics = cue_lyrics(cue)[:3500].strip()
-                if lyrics and not re.search(
-                    r"^\[(Verse|Chorus|Hook)\]\s*$", lyrics, re.MULTILINE
-                ):
-                    if "\n" not in lyrics and "/" in lyrics:
-                        lyrics = re.sub(r"\s*/\s*", "\n", lyrics)
-                    lyrics = f"[Verse]\n\n{lyrics}"[:3500].rstrip()
-                cue["lyrics"] = lyrics
+                cue["lyrics"] = canonical_lyrics(cue_lyrics(cue)[:3500].strip())
                 cue["instrumental"] = False
                 requested_duration = creative_brief.get(
                     "durationSeconds", project_music.get("targetDurationSeconds")
@@ -27878,6 +27912,13 @@ def _normalize_story_stage_ids(
             elif kind == "world":
                 target = "world"
             cue["targetId"] = target
+            if (
+                project_type != "music_video"
+                and cue.get("instrumental") is False
+                and isinstance(cue.get("lyrics"), str)
+                and cue["lyrics"].strip()
+            ):
+                cue["lyrics"] = canonical_lyrics(cue["lyrics"])
             candidate = _story_id_token(cue.get("id")) or f"music-{kind or 'cue'}-{index + 1}"
             base = candidate
             suffix = 2

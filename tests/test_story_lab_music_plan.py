@@ -103,6 +103,31 @@ class TestStoryLabMusicPlan(unittest.TestCase):
         invalid["music"]["cues"][3]["lyrics"] = ""
         self.assertIn("must include vocals", _story_stage_problem(invalid, "music", self.project))
 
+    def test_heading_variants_become_exact_structural_tags(self):
+        result = copy.deepcopy(self.result)
+        result["music"]["cues"][3]["lyrics"] = (
+            "**Verse 1:**\nPaws on the carpet\n\n"
+            "[Pre-Chorus]\nHold the line\n\n"
+            "(Chorus) I am the storm\n\n"
+            "Bridge\nConfetti falls"
+        )
+        normalized = _normalize_story_stage_ids(result, "music", self.project)
+
+        self.assertEqual(
+            normalized["music"]["cues"][3]["lyrics"],
+            "[Verse]\nPaws on the carpet\n\n[Pre Chorus]\nHold the line\n\n"
+            "[Chorus]\nI am the storm\n\n[Bridge]\nConfetti falls",
+        )
+        self.assertIsNone(_story_stage_problem(normalized, "music", self.project))
+
+    def test_untagged_lyrics_gain_a_verse_tag(self):
+        result = copy.deepcopy(self.result)
+        result["music"]["cues"][4]["lyrics"] = "Tiny feet in the glitter\nWalking into light"
+        normalized = _normalize_story_stage_ids(result, "music", self.project)
+
+        self.assertTrue(normalized["music"]["cues"][4]["lyrics"].startswith("[Verse]\n\nTiny feet"))
+        self.assertIsNone(_story_stage_problem(normalized, "music", self.project))
+
     def test_full_story_schema_pins_the_exact_cue_count(self):
         project = {"projectType": "full_story", "characters": [{"id": "buster"}]}
         count = _story_music_cue_count(project, "full_story")
