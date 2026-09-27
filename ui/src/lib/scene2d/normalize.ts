@@ -162,6 +162,20 @@ function normalizeVisuals(raw: RawLayer, isCamera: boolean, isEffect: boolean) {
   }
 }
 
+function layerPath(rawLayer: RawLayer) {
+  const path = parsePath(rawLayer.animation?.path)
+  return path ? { path } : {}
+}
+
+function layerExtras(rawLayer: RawLayer) {
+  const sequence = parseSequence(rawLayer.sequence)
+  const pulse = rawLayer.beatPulse
+  const beatPulse = pulse && Number.isFinite(pulse.amount)
+    ? { amount: Math.max(0, Math.min(1, pulse.amount)), on: pulse.on === 'downbeats' ? 'downbeats' as const : 'beats' as const }
+    : undefined
+  return { ...(sequence ? { sequence } : {}), ...(beatPulse ? { beatPulse } : {}) }
+}
+
 function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLayer {
   if (!isAnimatorLayerType((rawLayer as { type?: unknown }).type)) throw new Error(`Unsupported scene layer type: ${String((rawLayer as { type?: unknown }).type ?? 'missing')}`)
   const isCamera = rawLayer.type === 'camera'
@@ -187,11 +201,10 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
       ...normalizeModelClip(rawLayer.animation, rawLayer.type === 'model3d'),
       shake: normalizeShake(rawLayer.animation?.shake, isCamera),
       orbit: normalizeOrbit(rawLayer, isCamera, context.visualIds),
-      ...(parsePath(rawLayer.animation?.path) ? { path: parsePath(rawLayer.animation?.path)! } : {}),
+      ...layerPath(rawLayer),
     },
     missingAsset: isCamera || isEffect ? false : Boolean(rawLayer.missingAsset || !source.trim() || context.isMissing(source)),
-    ...(parseSequence(rawLayer.sequence) ? { sequence: parseSequence(rawLayer.sequence) } : {}),
-    ...(rawLayer.beatPulse && Number.isFinite(rawLayer.beatPulse.amount) ? { beatPulse: { amount: Math.max(0, Math.min(1, rawLayer.beatPulse.amount)), on: rawLayer.beatPulse.on === 'downbeats' ? 'downbeats' as const : 'beats' as const } } : {}),
+    ...layerExtras(rawLayer),
   } as AnimatorLayer
   const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
   const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
