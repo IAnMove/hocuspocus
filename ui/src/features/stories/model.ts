@@ -33,17 +33,59 @@ const STYLE_FAMILIES = [
   ['stop motion', 'stop-motion', 'claymation'],
 ] as const
 
+// Title-like words that do not identify a character on their own.
+const CHARACTER_NAME_FILLER = new Set([
+  'the', 'great', 'little', 'old', 'young', 'wise', 'big', 'small', 'mr', 'mrs', 'ms',
+  'miss', 'dr', 'sir', 'lady', 'lord', 'king', 'queen', 'captain',
+])
+
+/**
+ * Drop clauses of the shared character style that describe one named cast
+ * member ("Owl is fluffy"). The style is applied to every visible character in
+ * every clip, so such a clause adds that character's traits to shots where it
+ * is absent and blends it into whoever is on screen.
+ */
+export function stripCharacterSpecificStyle(style: string, characterNames: string[]): string {
+  const names = new Set<string>()
+  for (const raw of characterNames) {
+    const name = raw.trim().toLocaleLowerCase()
+    if (!name) continue
+    names.add(name)
+    for (const word of name.split(/\s+/)) {
+      if (word.length >= 3 && !CHARACTER_NAME_FILLER.has(word)) names.add(word)
+    }
+  }
+  const trimmed = style.trim()
+  if (!names.size) return trimmed
+  const mentions = (clause: string) => [...names].some(name => new RegExp(
+    `(^|[^\\p{L}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}]|$)`, 'iu',
+  ).test(clause))
+  return trimmed
+    .split(/(?<=[;.])\s+/)
+    .filter(clause => !mentions(clause))
+    .join(' ')
+    .replace(/[\s;,]+$/, '')
+    .trim()
+}
+
 export function directVideoMasterPromptFromVisualStyles(
   visualStyle: string,
   characterVisualStyle: string,
+  characterNames: string[] = [],
 ): string {
   const globalStyle = visualStyle.trim()
-  const characterStyle = characterVisualStyle.trim()
+  const characterStyle = stripCharacterSpecificStyle(characterVisualStyle, characterNames)
   if (!globalStyle && !characterStyle) return ''
+  const hasCast = characterNames.some(name => name.trim())
   return [
     globalStyle ? `GLOBAL VISUAL STYLE (mandatory in every clip): ${globalStyle}` : '',
     characterStyle
       ? `CHARACTER VISUAL STYLE (mandatory for every visible character): ${characterStyle}`
+      : '',
+    // Video models merge adjacent animals (a rabbit with an owl's head)
+    // unless each character's single species is stated as binding.
+    hasCast
+      ? 'CHARACTER INTEGRITY: every character is exactly one species with one body, as described in its own shot description. Keep each animal anatomically distinct.'
       : '',
     DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
   ].filter(Boolean).join('\n\n')
@@ -608,7 +650,11 @@ export function normalizeStoryProject(value: unknown): StoryProject {
         : 'image_guided',
     directVideoMasterPromptMode,
     directVideoMasterPrompt: directVideoMasterPromptMode === 'inherit'
-      ? directVideoMasterPromptFromVisualStyles(visualStyle, characterVisualStyle)
+      ? directVideoMasterPromptFromVisualStyles(
+        visualStyle,
+        characterVisualStyle,
+        characters.map(character => character.name),
+      )
       : rawDirectVideoMasterPrompt,
     premise: text(project.premise),
     logline: text(project.logline),

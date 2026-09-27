@@ -78,3 +78,16 @@ test('Story Lab format uses the Studio selectors with only 16:9 and 9:16', async
     cleanup()
   }
 })
+
+test('the shared character style drops clauses about individual characters', async () => {
+  const { directVideoMasterPromptFromVisualStyles, stripCharacterSpecificStyle } = await import('../src/features/stories/model')
+  const style = 'Stylized 3D characters with expressive features; Pip has large glossy eyes; Owl is fluffy with scholarly features.'
+  const cast = ['Pip', 'Barnaby', 'Sasha', 'Great Wise Owl']
+  assert.equal(stripCharacterSpecificStyle(style, cast), 'Stylized 3D characters with expressive features')
+  // Words that merely contain a name, or title words, are not treated as names.
+  assert.equal(stripCharacterSpecificStyle('Great detail; pipeline-ready fur shading.', cast), 'Great detail; pipeline-ready fur shading.')
+  const prompt = directVideoMasterPromptFromVisualStyles('Pixar-like forest', style, cast)
+  assert.match(prompt, /CHARACTER VISUAL STYLE \(mandatory for every visible character\): Stylized 3D characters with expressive features\n/)
+  assert.doesNotMatch(prompt, /Owl is fluffy|Pip has/)
+  assert.match(prompt, /CHARACTER INTEGRITY: every character is exactly one species/)
+})

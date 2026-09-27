@@ -116,10 +116,14 @@ def test_trailer_orientation_can_override_the_global_landscape_default_inline():
 
     assert "Portrait / Shorts" in source
     assert "disabled={!storyVideoOptionsReady}" in trailer
-    assert "provider: { ...project.provider, useGlobalProfile: false }" in handler
+    # The format is one shared setting: it updates the global profile and the
+    # Director instead of detaching the project from the global profile.
+    assert "setSharedVideoFormat(format.resolution, format.aspectRatio)" in handler
+    assert "useGlobalProfile: false" not in handler
     assert "if (project.provider.useGlobalProfile) return" not in handler
     assert "Formato seleccionado" in source
-    assert "aria-pressed={aspectRatio === option.value}" in source
+    assert "<AspectRatioGrid" in source
+    assert "ratios={STORY_VIDEO_ASPECTS.map(option => option.value)}" in source
     assert "t('notice.videoFormatUpdated'" in handler
 
 

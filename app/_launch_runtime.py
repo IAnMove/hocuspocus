@@ -31295,6 +31295,13 @@ Current manually edited project (preserve useful established facts and stable ID
 Return only the JSON required by the schema. This is a reusable story bible, not a comic
 page plan and not a screenplay. Characters need
 distinct desire, need, flaw, voice, visual silhouette and a change caused by their choices.
+Every character's appearance and visualPrompt must begin with one explicit species or
+body type (for example "a young red fox", "an elderly human woman", "a small copper
+robot"). Never describe a character only as a "creature", "being" or "figure", and never
+give one character traits of another species.
+characterVisualStyle is art direction shared by the whole cast (medium, rendering,
+proportions, materials, texture). It must never name or describe an individual character;
+put each character's features in that character's own appearance instead.
 Visual prompts describe one neutral concept-art subject or environment only: no contact
 sheets, no grids, no comic panels, no lettering, no captions, no UI and no multiple views.
 Keep visualPrompt fields semantic and reusable: describe identity, environment, composition,
