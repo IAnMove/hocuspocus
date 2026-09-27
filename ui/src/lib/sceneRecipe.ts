@@ -1,5 +1,5 @@
 import { sceneFxFields, SCENE_FX_SCHEMA } from '../features/sceneFx/types'
-import { kineticTextFields, KINETIC_TEXT_SCHEMA, type KineticText } from './kineticText'
+import { kineticTextFields, KINETIC_TEXT_SCHEMA, lyricFields, TEXT_TEMPLATES, textTemplatesFromRecipe, type KineticText, type SceneLyrics } from './kineticText'
 import type { Scene, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../types'
 import { applyCutoutDialogue, findCutoutMouthLayers, normalizeFaceBinding, planCutoutDialogue } from './cutoutDialogue'
 import { resolveSceneGrade } from './sceneGrade'
@@ -213,9 +213,11 @@ export interface SceneRecipe {
   audio?: SceneRecipeAudio[]
   dialogueBeats?: SceneRecipeDialogueBeat[]
   shots?: SceneRecipeShot[]
+  textTemplates?: Array<{ id: string; values?: Record<string, string> }>
   scene: {
     sfx?: import('../features/sceneFx/types').SceneFx[]
     texts?: KineticText[]
+    lyrics?: SceneLyrics
     width?: number
     height?: number
     fps?: 24 | 30 | 60
@@ -623,11 +625,13 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         additionalProperties: false,
       },
     },
+    textTemplates: { type: 'array', maxItems: 9, items: { type: 'object', additionalProperties: false, properties: { id: { enum: TEXT_TEMPLATES.map(template => template.id) }, values: { type: 'object', additionalProperties: { type: 'string' } } }, required: ['id'] } },
     scene: {
       type: 'object',
       properties: {
         sfx: SCENE_FX_SCHEMA,
         texts: KINETIC_TEXT_SCHEMA,
+        lyrics: { type: 'object', additionalProperties: true },
         width: { type: 'integer', minimum: 256, maximum: 3840 },
         height: { type: 'integer', minimum: 256, maximum: 3840 },
         fps: { enum: [24, 30, 60] },
@@ -1280,9 +1284,11 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
     audio,
     dialogueBeats,
     shots,
+    ...(parseRecipeTextTemplates(raw.textTemplates) ?? {}),
     scene: {
       ...sceneFxFields(sceneRaw.sfx),
       ...kineticTextFields(sceneRaw.texts),
+      ...lyricFields(sceneRaw.lyrics),
       width: Math.round(boundedNumber(sceneRaw.width, 1280, 256, 3840)),
       height: Math.round(boundedNumber(sceneRaw.height, 720, 256, 3840)),
       fps: canonicalSceneFps(sceneRaw.fps),
@@ -1294,6 +1300,28 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
       intensity: ([1, 2, 3] as const).includes(sceneRaw.intensity as SceneGradeIntensity) ? sceneRaw.intensity as SceneGradeIntensity : undefined,
       layers,
     },
+  }
+}
+
+function parseRecipeTextTemplates(raw: unknown): { textTemplates: NonNullable<SceneRecipe['textTemplates']> } | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const items = raw.slice(0, 9).flatMap(item => {
+    if (!item || typeof item !== 'object') return []
+    const row = item as { id?: unknown; values?: unknown }
+    if (typeof row.id !== 'string' || !TEXT_TEMPLATES.some(template => template.id === row.id)) return []
+    const values = row.values && typeof row.values === 'object'
+      ? Object.fromEntries(Object.entries(row.values as Record<string, unknown>).slice(0, 12).map(([key, value]) => [key.slice(0, 40), String(value ?? '').slice(0, 240)]))
+      : undefined
+    return [{ id: row.id, ...(values ? { values } : {}) }]
+  })
+  return items.length ? { textTemplates: items } : undefined
+}
+
+function recipeLettering(recipe: SceneRecipe, duration: number) {
+  const frame = { start: 0, duration, width: recipe.scene.width || 1280, height: recipe.scene.height || 720 }
+  return {
+    ...kineticTextFields([...(recipe.scene.texts ?? []), ...textTemplatesFromRecipe(recipe.textTemplates, frame)]),
+    ...lyricFields(recipe.scene.lyrics),
   }
 }
 
@@ -1382,7 +1410,7 @@ export function compileRecipeShot(
     return {
       ...scene,
       ...sceneFxFields(recipe.scene.sfx),
-      ...kineticTextFields(recipe.scene.texts),
+      ...recipeLettering(recipe, scene.duration),
       ...sceneGenerationPolicyFields(recipe.generationPolicy),
       layers: dialogue.layers,
       ...(audioTracks.length ? { audioTracks } : {}),
@@ -1631,7 +1659,7 @@ export function compileSceneRecipe(
     version: 1,
     name: recipe.name,
     ...sceneFxFields(recipe.scene.sfx),
-    ...kineticTextFields(recipe.scene.texts),
+    ...recipeLettering(recipe, duration),
     ...sceneGenerationPolicyFields(recipe.generationPolicy),
     width: recipe.scene.width || 1280,
     height: recipe.scene.height || 720,
