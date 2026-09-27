@@ -28,6 +28,7 @@ import { useUiTranslation } from '../../i18n'
 import { MontageLayersPanel, MontageToolbar, type MontageEditorState } from './MontageControls'
 import { loadMontageIntoEditor } from './montageLoader'
 import { DeriveVerticalButton } from './DeriveVerticalButton'
+import { ShortenSongPanel } from './ShortenSongPanel'
 import { ShotBoard } from './ShotBoard'
 import { exportLayerFields, loadMontageState, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
@@ -2661,6 +2662,22 @@ export function VideoEditorPanel() {
               <Volume2 size={10} /> {soundtrack.name}{soundtrack.loop ? ` · ${t('timeline.loop')}` : ''}
             </span>
           )}
+          <ShortenSongPanel
+            workspace={activeWorkspace}
+            soundtrack={soundtrack}
+            clips={clips}
+            layers={montage.layers}
+            projectName={projectName}
+            resolution={resolution}
+            fps={fps}
+            onApply={next => {
+              setSoundtrack(next.soundtrack)
+              setClips(next.clips)
+              setMontage(current => ({ ...current, layers: next.layers }))
+              if (next.report) setError(next.report)
+            }}
+            onError={setError}
+          />
           <label className="ml-auto flex items-center gap-1.5">
             <span>{t('timeline.allGaps')}</span>
             <select

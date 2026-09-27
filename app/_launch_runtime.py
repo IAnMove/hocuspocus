@@ -36751,14 +36751,28 @@ _wizard_workflow_executor = WizardWorkflowExecutor(
     get_task=lambda workspace, task_id: _task_registry(workspace).get(task_id),
 )
 api.include_router(create_wizard_workflow_executor_router(_wizard_workflow_executor, list_workspaces=_list_workspaces))
+from routers.audio_shorten import (
+    command_catalog as audio_shorten_catalog,
+    command_handlers as audio_shorten_handlers,
+    create_audio_shorten_router,
+)
+
+def _resolve_shorten_source(source: str, workspace: str) -> str:
+    return _resolve_request_media_path(source, workspace=workspace, kinds=("audio",))
+
+_audio_shorten_handlers = audio_shorten_handlers(_resolve_shorten_source, _workspace_dir)
+api.include_router(create_audio_shorten_router(
+    resolve_source=_resolve_shorten_source,
+    workspace_dir=_workspace_dir,
+))
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
     handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export)},
+              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **_audio_shorten_handlers},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *scene_document_catalog(), *scene2d_export_catalog()],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *scene_document_catalog(), *scene2d_export_catalog(), *audio_shorten_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
