@@ -30,7 +30,9 @@ MAX_BYTES = 2 * 1024 * 1024
 WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 FILE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,150}\.montage\.json")
 BLOCKED = ("blob:", "file:", "javascript:", "filesystem:", "data:")
-ORIGIN_KINDS = frozenset({"scene2d", "scene3d", "generation", "upload", "render"})
+ORIGIN_KINDS = frozenset({"scene2d", "scene3d", "generation", "upload", "render", "production"})
+ORIGIN_TEXT = ("scene", "note", "meta", "derivedFrom", "productionId", "shotId", "takeId")
+MAX_TAKES = 20
 FPS = (24, 25, 30, 50, 60)
 
 
@@ -72,10 +74,44 @@ def _origin(raw: Any, label: str) -> dict[str, str] | None:
     if not isinstance(raw, dict) or raw.get("kind") not in ORIGIN_KINDS:
         raise MontageError(f"{label} origin needs a kind: {', '.join(sorted(ORIGIN_KINDS))}")
     origin = {"kind": str(raw["kind"])}
-    for key in ("scene", "note"):
+    for key in ORIGIN_TEXT:
         if raw.get(key) is not None:
             origin[key] = str(raw[key]).strip()[:500]
     return origin
+
+
+def _take(raw: Any, label: str) -> dict[str, Any]:
+    """An alternative for a clip: finished media, or a queued generation still pending."""
+    if not isinstance(raw, dict):
+        raise MontageError(f"{label} is invalid")
+    take: dict[str, Any] = {"id": str(raw.get("id") or "").strip()[:160]}
+    if not take["id"]:
+        raise MontageError(f"{label} needs an id")
+    pending = raw.get("pending")
+    if isinstance(pending, dict):
+        take["pending"] = {key: str(pending[key])[:160] for key in ("jobId", "intentId") if pending.get(key)}
+        if "jobId" not in take["pending"]:
+            raise MontageError(f"{label} pending take needs a jobId")
+    else:
+        take["source"] = _source(raw.get("source"), label)
+    origin = _origin(raw.get("origin"), label)
+    if origin:
+        take["origin"] = origin
+    for key in ("createdAt", "note"):
+        if raw.get(key):
+            take[key] = str(raw[key])[:300]
+    return take
+
+
+def _takes(raw: Any, label: str) -> list[dict[str, Any]]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or len(raw) > MAX_TAKES:
+        raise MontageError(f"{label} takes must be a list of at most {MAX_TAKES}")
+    takes = [_take(item, f"{label} take {index + 1}") for index, item in enumerate(raw)]
+    if len({take["id"] for take in takes}) != len(takes):
+        raise MontageError(f"{label} take ids must be unique")
+    return takes
 
 
 def _clip(raw: Any, index: int) -> dict[str, Any]:
@@ -106,6 +142,11 @@ def _clip(raw: Any, index: int) -> dict[str, Any]:
     origin = _origin(raw.get("origin"), label)
     if origin:
         clip["origin"] = origin
+    takes = _takes(raw.get("takes"), label)
+    if takes:
+        clip["takes"] = takes
+    if raw.get("lyric"):
+        clip["lyric"] = str(raw["lyric"]).strip()[:500]
     return clip
 
 
@@ -293,4 +334,4 @@ class MontageStore:
                 "url": self._url(path.name, workspace)}
 
 
-__all__ = ["MontageError", "MontageStore", "SUFFIX", "export_body", "normalize_montage", "slug_file"]
+__all__ = ["MAX_TAKES", "MontageError", "MontageStore", "SUFFIX", "export_body", "normalize_montage", "slug_file"]

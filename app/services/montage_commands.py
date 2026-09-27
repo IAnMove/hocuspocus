@@ -8,9 +8,12 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from services.montage_documents import MontageError, MontageStore, export_body
+from services.montage_shots import ShotBoard
 
 WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 FILE = {"type": "string", "pattern": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,150}\.montage\.json$"}
+CLIP_ID = {"type": "string", "minLength": 1, "maxLength": 160}
+INTENT = {"type": "string", "minLength": 1, "maxLength": 160}
 
 MONTAGE_SCHEMA = {
     "type": "object",
@@ -35,6 +38,23 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "montages.export": ({"workspace": WORKSPACE, "file": FILE}, ["workspace", "file"], True,
                         "Queue the ordinary Video Editor FFmpeg export of a saved montage (overlays and audio cues "
                         "included). Returns job_id; poll montages.export.status."),
+    "montages.shots.get": ({"workspace": WORKSPACE, "file": FILE}, ["workspace", "file"], False,
+                           "Shot board of a montage: each clip's slot on the timeline, its provenance (prompt, seed, start "
+                           "image and model read from the generation sidecar, or the scene it was rendered from) and its takes. "
+                           "Pending takes resolve from the workspace once their generation finishes."),
+    "montages.shot.regenerate": ({"workspace": WORKSPACE, "file": FILE, "clip_id": CLIP_ID, "intent_id": INTENT,
+                                  "expected_revision": {"type": "integer", "minimum": 1},
+                                  "prompt": {"type": "string", "minLength": 1, "maxLength": 4000},
+                                  "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647}},
+                                 ["workspace", "file", "clip_id", "intent_id", "expected_revision"], True,
+                                 "Queue a new take of one generated shot with its original parameters (optionally a new "
+                                 "prompt or seed) on the normal generation queue. Adds a pending take; the clip keeps its "
+                                 "current media until montages.shot.select."),
+    "montages.shot.select": ({"workspace": WORKSPACE, "file": FILE, "clip_id": CLIP_ID, "take_id": CLIP_ID,
+                              "expected_revision": {"type": "integer", "minimum": 1}, "retime": {"type": "boolean"}},
+                             ["workspace", "file", "clip_id", "take_id", "expected_revision"], True,
+                             "Use a finished take for a clip. The previous media stays as a take. A take shorter than "
+                             "the clip's slot is slowed to cover it unless retime is false. Export again afterwards."),
     "montages.export.status": ({"job_id": {"type": "string", "minLength": 1, "maxLength": 80}}, ["job_id"], False,
                                "Read a montage export job: status, progress, filename and url when completed."),
 }
@@ -67,10 +87,27 @@ def _payload(arguments: Any, name: str) -> dict[str, Any]:
 
 class MontageCommands:
     def __init__(self, store: MontageStore, *, start_export: Callable[[dict], dict],
-                 get_export: Callable[[str], dict]) -> None:
+                 get_export: Callable[[str], dict], shots: ShotBoard | None = None) -> None:
         self.store = store
         self.start_export = start_export
         self.get_export = get_export
+        self.shots = shots
+
+    def _board(self) -> ShotBoard:
+        if self.shots is None:
+            raise MontageError("The shot board is not available on this server", status=503, code="unavailable")
+        return self.shots
+
+    async def execute_async(self, name: str, arguments: Any) -> dict[str, Any]:
+        """Like execute, but runs the generation submission of montages.shot.regenerate on the event loop."""
+        from starlette.concurrency import run_in_threadpool
+        if name != "montages.shot.regenerate":
+            return await run_in_threadpool(self.execute, name, arguments)
+        payload = _payload(arguments, name)
+        result = await self._board().regenerate(
+            payload["workspace"], payload["file"], payload["clip_id"], intent_id=payload["intent_id"],
+            expected_revision=payload["expected_revision"], prompt=payload.get("prompt"), seed=payload.get("seed"))
+        return {"version": 1, "status": "completed", "operation": name, "result": result}
 
     def execute(self, name: str, arguments: Any) -> dict[str, Any]:
         if name not in OPERATIONS:
@@ -83,6 +120,13 @@ class MontageCommands:
         elif name == "montages.save":
             result = self.store.save(payload["workspace"], payload["montage"], file=payload.get("file"),
                                      expected_revision=payload.get("expected_revision"))
+        elif name == "montages.shots.get":
+            result = self._board().shots(payload["workspace"], payload["file"])
+        elif name == "montages.shot.select":
+            result = self._board().select(payload["workspace"], payload["file"], payload["clip_id"], payload["take_id"],
+                                          expected_revision=payload["expected_revision"], retime=payload.get("retime", True))
+        elif name == "montages.shot.regenerate":
+            raise MontageError("montages.shot.regenerate is asynchronous; use execute_async", code="invalid_command")
         elif name == "montages.export":
             saved = self.store.get(payload["workspace"], payload["file"])
             result = {"file": saved["file"], "job": self.start_export(export_body(saved["montage"], payload["workspace"]))}
@@ -96,9 +140,8 @@ class MontageCommands:
     def _handler(self, name: str) -> Callable[[Any], Any]:
         async def handle(arguments: Any) -> dict[str, Any]:
             from fastapi import HTTPException
-            from starlette.concurrency import run_in_threadpool
             try:
-                return await run_in_threadpool(self.execute, name, arguments)
+                return await self.execute_async(name, arguments)
             except MontageError as error:
                 raise HTTPException(error.status, {"code": error.code, "message": str(error)}) from error
         return handle

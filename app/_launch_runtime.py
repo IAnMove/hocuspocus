@@ -36683,8 +36683,23 @@ api.include_router(create_scene2d_export_router(_scene2d_export))
 from services.montage_documents import MontageStore
 from services.montage_commands import MontageCommands, command_catalog as montage_command_catalog
 from routers.montages import create_montages_router
-_montage_commands = MontageCommands(MontageStore(_workspace_dir), start_export=start_video_editor_export,
-                                    get_export=get_video_editor_export)
+from services.montage_shots import ShotBoard
+from services.wangp_submission import JsonRequest as _ShotRequest
+_montage_store = MontageStore(_workspace_dir)
+
+
+async def _submit_shot_generation(params: dict) -> dict:
+    return await generate(_ShotRequest(params))
+
+
+def _shot_job_status(job_id: str) -> dict | None:
+    return snapshot_job(_jobs[job_id]) if job_id in _jobs else None
+
+
+_montage_commands = MontageCommands(_montage_store, start_export=start_video_editor_export,
+                                    get_export=get_video_editor_export,
+                                    shots=ShotBoard(_montage_store, workspace_dir=_workspace_dir,
+                                                    submit=_submit_shot_generation, job_status=_shot_job_status))
 api.include_router(create_montages_router(_montage_commands))
 from services.scene_documents import command_catalog as scene_document_catalog, command_handlers as scene_document_handlers
 

@@ -103,7 +103,8 @@ def test_commands_and_http_share_one_service(tmp_path):
 
     commands = MontageCommands(_store(tmp_path), start_export=start_export, get_export=lambda job: {"job_id": job, "status": "completed"})
     names = [item["name"] for item in command_catalog()]
-    assert names == ["montages.list", "montages.get", "montages.save", "montages.export", "montages.export.status"]
+    assert names == ["montages.list", "montages.get", "montages.save", "montages.export", "montages.shots.get",
+                     "montages.shot.regenerate", "montages.shot.select", "montages.export.status"]
     saved = asyncio.run(commands.handlers()["montages.save"]({"version": 1, "input": {"workspace": "x-song", "montage": _montage()}}))
     file = saved["result"]["file"]
     app = FastAPI()

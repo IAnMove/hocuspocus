@@ -17,6 +17,9 @@ export interface MontageRef {
   file: string
   revision: number
   origins: Record<string, MontageClip['origin']>
+  /** Takes and lyric per clip id, kept untouched by editor saves. */
+  extras?: Record<string, Pick<MontageClip, 'takes' | 'lyric'>>
+  notes?: string
 }
 
 export const EMPTY_LAYERS: MontageLayers = { overlays: [], audioCues: [], duck: 0 }
@@ -31,6 +34,8 @@ export function montageFromEditor(input: {
   soundtrack: EditorSoundtrack | null
   layers: MontageLayers
   origins?: MontageRef['origins']
+  extras?: MontageRef['extras']
+  notes?: string
 }): MontageDocument {
   return {
     version: 1,
@@ -53,6 +58,7 @@ export function montageFromEditor(input: {
       transitionText: clip.transitionText,
       transitionTextSize: clip.transitionTextSize,
       ...(input.origins?.[clip.id] ? { origin: input.origins[clip.id] } : {}),
+      ...(input.extras?.[clip.id] ?? {}),
     })),
     soundtrack: input.soundtrack ? {
       name: input.soundtrack.name,
@@ -65,6 +71,7 @@ export function montageFromEditor(input: {
     overlays: input.layers.overlays,
     audioCues: input.layers.audioCues,
     duck: input.layers.duck,
+    ...(input.notes ? { notes: input.notes } : {}),
   }
 }
 
@@ -79,9 +86,10 @@ export async function editorFromMontage(
   probe: (source: string) => Promise<VideoEditorProbe>,
   probeAudio: (source: string) => Promise<{ duration: number }>,
   thumbnail: (source: string) => string,
-): Promise<{ clips: EditorClip[]; soundtrack: EditorSoundtrack | null; layers: MontageLayers; origins: MontageRef['origins'] }> {
+): Promise<{ clips: EditorClip[]; soundtrack: EditorSoundtrack | null; layers: MontageLayers; origins: MontageRef['origins']; extras: NonNullable<MontageRef['extras']> }> {
   const clips: EditorClip[] = []
   const origins: MontageRef['origins'] = {}
+  const extras: NonNullable<MontageRef['extras']> = {}
   for (const clip of montage.clips) {
     const facts = await probe(clip.source)
     const trimEnd = clip.trimEnd > clip.trimStart ? Math.min(clip.trimEnd, facts.duration || clip.trimEnd) : facts.duration
@@ -103,6 +111,7 @@ export async function editorFromMontage(
       transitionTextSize: clip.transitionTextSize,
     })
     if (clip.origin) origins[clip.id] = clip.origin
+    if (clip.takes?.length || clip.lyric) extras[clip.id] = { ...(clip.takes?.length ? { takes: clip.takes } : {}), ...(clip.lyric ? { lyric: clip.lyric } : {}) }
   }
   let soundtrack: EditorSoundtrack | null = null
   if (montage.soundtrack) {
@@ -117,7 +126,7 @@ export async function editorFromMontage(
       loop: montage.soundtrack.loop,
     }
   }
-  return { clips, soundtrack, layers: { overlays: montage.overlays ?? [], audioCues: montage.audioCues ?? [], duck: montage.duck ?? 0 }, origins }
+  return { clips, soundtrack, layers: { overlays: montage.overlays ?? [], audioCues: montage.audioCues ?? [], duck: montage.duck ?? 0 }, origins, extras }
 }
 
 /** Snake-case layer fields for POST /api/v1/video-editor/export. */

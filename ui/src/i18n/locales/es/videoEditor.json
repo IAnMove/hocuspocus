@@ -200,5 +200,39 @@
     "end": "Fin (s)",
     "volume": "Volumen",
     "remove": "Quitar"
+  },
+  "shots": {
+    "toggle": "Plano a plano",
+    "toggleTitle": "Ver de qué planos sale el montaje, rehacer planos y elegir tomas",
+    "title": "Plano a plano",
+    "loading": "Cargando planos…",
+    "summary": "{{count}} planos · rev. {{revision}}",
+    "hint": "Regenerar crea una toma nueva en la cola; al usar una toma se guarda una revisión y se recarga el editor (guarda antes tus cambios).",
+    "prompt": "Prompt",
+    "seed": "semilla",
+    "seedAuto": "nueva",
+    "queue": "Encolar toma",
+    "cancel": "Cancelar",
+    "queueHint": "Usa los mismos parámetros e imagen inicial que el plano original, en la cola normal de GPU.",
+    "regenerate": "Regenerar plano",
+    "use": "Usar",
+    "startImage": "Imagen inicial",
+    "sceneHint": "Este plano sale de una escena: ábrela en su editor, expórtala y reemplaza el clip.",
+    "notRegenerable": "Sin parámetros de generación guardados para este plano.",
+    "status": {
+      "queued": "en cola",
+      "running": "generando",
+      "completed": "lista",
+      "failed": "falló",
+      "pending": "en cola"
+    },
+    "origin": {
+      "generation": "Generado",
+      "scene2d": "Escena Video 2D",
+      "scene3d": "Escena Video 3D",
+      "render": "Copia derivada",
+      "upload": "Subido",
+      "production": "Producción del Director"
+    }
   }
 }
