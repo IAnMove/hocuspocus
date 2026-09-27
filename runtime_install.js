@@ -62,6 +62,13 @@ function preflight(engine = null) {
     {when: '{{!' + test + '}}', method: 'notify', params: {
       html: '{{Object.values(local.runtime.engines).filter(e => !e.supported).map(e => e.reason).join("<br>")}}',
     }, next: null},
+    // Fail before lengthy downloads if Windows cannot compile the requested 3D engine.
+    ...(engine && engine !== 'hunyuan3d' ? [] : [{
+      when: "{{platform === 'win32' && local.runtime.engines.hunyuan3d.supported && !local.runtime.engines.hunyuan3d.installed}}",
+      method: 'shell.run', params: {
+        message: guarded('python scripts/windows_toolchain.py --cuda 12.8'),
+      },
+    }]),
   ]
 }
 

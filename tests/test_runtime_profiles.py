@@ -133,7 +133,7 @@ def test_native_helpers_affect_installation_fingerprint(tmp_path):
     source = tmp_path / "source"
     for name in ["app/runtime", "app/services/hunyuan3d/requirements.txt", "app/services/hunyuan3d/build_mesh_painter.py",
                  "runtime_install.js", "vendor_revisions.js", "hunyuan_native.js", "torch.js", "scripts/runtime_verify.py",
-                 "scripts/runtime_pip.py", "scripts/runtime_failed.py", "scripts/runtime_vendor.py",
+                 "scripts/runtime_pip.py", "scripts/runtime_failed.py", "scripts/runtime_vendor.py", "scripts/windows_toolchain.py",
                  "app/services/runtime_sources.py"]:
         src, dest = ROOT / name, source / name
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -143,6 +143,12 @@ def test_native_helpers_affect_installation_fingerprint(tmp_path):
         helper = source / "app/services/hunyuan3d/build_mesh_painter.py"
         helper.write_text(helper.read_text() + "\n# native build fix\n")
         assert profiles.dependency_fingerprint("hunyuan3d", "linux") != before
+        windows_before = profiles.dependency_fingerprint("hunyuan3d", "win32")
+        linux_before = profiles.dependency_fingerprint("hunyuan3d", "linux")
+        windows_helper = source / "scripts/windows_toolchain.py"
+        windows_helper.write_text(windows_helper.read_text() + "\n# Windows-only fix\n")
+        assert profiles.dependency_fingerprint("hunyuan3d", "win32") != windows_before
+        assert profiles.dependency_fingerprint("hunyuan3d", "linux") == linux_before
 
 
 def _engine_lib_dirs(executable):

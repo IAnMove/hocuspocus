@@ -58,6 +58,8 @@ def dependency_fingerprint(engine: str, platform: str) -> str:
         paths.append("app/scripts/install_gguf_kernels.py")
     if engine == "hunyuan3d":
         paths.append("app/services/hunyuan3d/build_mesh_painter.py")
+        if platform == "win32":
+            paths.append("scripts/windows_toolchain.py")
     if "/vendor/" not in spec["requirements"]:
         paths.append(spec["requirements"])
     digest = hashlib.sha256(f"{engine}:{platform}".encode())

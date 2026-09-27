@@ -34,6 +34,9 @@ for (const platform of ['linux', 'win32']) {
     }
   }
   const all = JSON.stringify(steps)
+  const preflight = runtime.preflight().filter(step => step.method === 'shell.run' &&
+    (!step.when || render(step.when, ctx) === 'true'))
+  assert.equal(JSON.stringify(preflight).includes('windows_toolchain.py'), platform === 'win32')
   if (platform === 'win32') {
     assert(!all.includes('targets/x86_64-linux'))
     assert(!all.includes('bash compile_mesh_painter'))
@@ -86,6 +89,18 @@ async function checkUiLaunchers() {
   const busy = await menu({}, {...info, running: name => name === 'ui_build.js'})
   assert.equal(busy[0].href, 'ui_build.js')
   assert.equal(busy[0].default, true)
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    const entries = await menu({platform, arch: 'x64', gpu: 'nvidia'}, info)
+    assert.equal(entries.some(item => item.href === 'sam_install.js'), platform !== 'darwin')
+    assert.equal(entries.some(item => item.href === 'rigging_install.js'), platform === 'linux')
+    assert(entries.some(item => item.href === 'start.js'), 'Existing Start must remain accessible')
+  }
+  const unknown = await menu({}, info)
+  assert(unknown.some(item => item.href === 'sam_install.js'), 'Unknown hardware must not hide features')
+  const pending = await menu({platform: 'win32', arch: 'unknown', gpu: 'unknown'}, info)
+  assert(pending.some(item => item.href === 'sam_install.js'))
+  const amd = await menu({platform: 'linux', gpu: 'amd'}, info)
+  assert(!amd.some(item => item.href === 'rigging_install.js'))
   console.log('React repair/start/menu contract: PASS')
 }
 checkUiLaunchers().catch(error => { console.error(error); process.exitCode = 1 })

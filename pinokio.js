@@ -1,10 +1,21 @@
 const path = require('path')
+const runtimeCatalog = require('./app/runtime/profiles.json')
 module.exports = {
   version: "8.0",
   title: "HocusPocus · Creation Lab",
   description: "A local creation studio, forked from Maestro, for directing persistent worlds across video, images, sound, comics and 3D. Includes recoverable Director pipelines and optimized MiniMax H3 generation. Requires an NVIDIA GPU (6GB+ VRAM).",
   icon: "hocuspocus-icon.png",
   menu: async (kernel, info) => {
+    const optionalAvailable = engine => {
+      // Unknown inventory is not proof of incompatibility; never hide Start.
+      const rawArch = typeof kernel.arch === 'string' ? kernel.arch.toLowerCase() : ''
+      const arch = rawArch === 'unknown' ? ''
+        : {amd64: 'x64', x86_64: 'x64', aarch64: 'arm64'}[rawArch] || rawArch
+      const gpu = typeof kernel.gpu === 'string' ? kernel.gpu.toLowerCase() : ''
+      return (!kernel.platform || runtimeCatalog.engines[engine].platforms.includes(kernel.platform)) &&
+        (!arch || runtimeCatalog.architectures.includes(arch)) &&
+        (!gpu || gpu === 'unknown' || runtimeCatalog.accelerators.includes(gpu))
+    }
     // Do not gate this menu on kernel.gpu. Pinokio can render an app menu
     // before its hardware inventory has populated that property, which would
     // hide Start from supported systems. install.js retains the documented
@@ -164,7 +175,8 @@ module.exports = {
           text: "<div><strong>Reset</strong><div>Revert to pre-install state</div></div>",
           href: "reset.js",
           confirm: "Are you sure you wish to reset the app?"
-        }]
+        }].filter(item => item.href === 'sam_install.js' ? optionalAvailable('sam')
+          : item.href === 'rigging_install.js' ? optionalAvailable('rigging') : true)
       }
     } else {
       return [{
