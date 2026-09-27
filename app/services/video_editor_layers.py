@@ -241,8 +241,10 @@ def build_layer_filter(
         labels.append(f"[cue{offset}]")
     maps_audio = bool(labels)
     if labels:
-        parts.append(f"{''.join(labels)}amix=inputs={len(labels)}:normalize=0:dropout_transition=0[cues]")
-        parts.append("[0:a]aresample=48000,aformat=channel_layouts=stereo[base]")
+        parts.append(f"{''.join(labels)}amix=inputs={len(labels)}:normalize=0:dropout_transition=0,"
+                     f"apad=whole_dur={duration:.4f}[cues]")
+        # Pad the assembled audio: a soundtrack shorter than the video must not shorten the export.
+        parts.append(f"[0:a]aresample=48000,aformat=channel_layouts=stereo,apad=whole_dur={duration:.4f}[base]")
         if duck > 0:
             ratio = 1 + 9 * duck
             parts.append("[cues]asplit=2[cuemix][sidechain]")
