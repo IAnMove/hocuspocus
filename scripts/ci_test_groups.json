@@ -169,7 +169,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 1573,
+      "weight": 1591,
       "paths": [
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
@@ -260,6 +260,7 @@
         "tests/test_provenance_3d_director.py",
         "tests/test_recipes_router.py",
         "tests/test_remove_background_tool.py",
+        "tests/test_video2d_edit.py",
         "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",
         "tests/test_safety_scan.py",
