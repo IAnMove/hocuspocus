@@ -6,7 +6,6 @@ use the same service through the MCP ``montages.*`` operations.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
-from starlette.concurrency import run_in_threadpool
 
 from services.montage_commands import MontageCommands, command_catalog
 from services.montage_documents import MontageError
@@ -21,7 +20,7 @@ def create_montages_router(commands: MontageCommands) -> APIRouter:
 
     async def run(name: str, payload: dict) -> dict:
         try:
-            return (await run_in_threadpool(commands.execute, name, {"version": 1, "input": payload}))["result"]
+            return (await commands.execute_async(name, {"version": 1, "input": payload}))["result"]
         except MontageError as error:
             _raise(error)
             raise  # pragma: no cover - _raise always raises
@@ -55,6 +54,24 @@ def create_montages_router(commands: MontageCommands) -> APIRouter:
         payload = await body(request)
         allowed = {"workspace", "montage", "file", "expected_revision"}
         return await run("montages.save", {key: value for key, value in payload.items() if key in allowed})
+
+    @router.get("/api/v1/montages/{file}/shots")
+    async def montage_shots(file: str, workspace: str):
+        return await run("montages.shots.get", {"workspace": workspace, "file": file})
+
+    @router.post("/api/v1/montages/{file}/shots/{clip_id}/regenerate", status_code=202)
+    async def regenerate_shot(file: str, clip_id: str, request: Request):
+        payload = await body(request)
+        allowed = {"workspace", "intent_id", "expected_revision", "prompt", "seed"}
+        return await run("montages.shot.regenerate",
+                         {"file": file, "clip_id": clip_id, **{key: value for key, value in payload.items() if key in allowed}})
+
+    @router.post("/api/v1/montages/{file}/shots/{clip_id}/select")
+    async def select_take(file: str, clip_id: str, request: Request):
+        payload = await body(request)
+        allowed = {"workspace", "take_id", "expected_revision", "retime"}
+        return await run("montages.shot.select",
+                         {"file": file, "clip_id": clip_id, **{key: value for key, value in payload.items() if key in allowed}})
 
     @router.post("/api/v1/montages/{file}/export", status_code=202)
     async def export_montage(file: str, workspace: str):

@@ -41,3 +41,15 @@ test('export fields are snake_case and omitted without layers', () => {
   assert.equal(fields.duck, 0.5)
   assert.equal(resolutionFor(1080, 1920).label, 'Portrait 1080p · 9:16')
 })
+
+test('editor saves keep takes, lyric and notes of each clip', () => {
+  const withTakes: MontageDocument = { ...montage, notes: 'rebuilt', clips: [{ ...montage.clips[0], lyric: 'fly', takes: [{ id: 't1', source: 'alt.mp4' }, { id: 't2', pending: { jobId: 'j' } }] }] }
+  const saved = montageFromEditor({ projectName: 'Bird', resolution: resolutionFor(1920, 1080), fps: 24,
+    clips: [{ id: 'c1', name: 'shot', source: 'shot.mp4', trimStart: 1, trimEnd: 5, volume: 1, muted: false, fit: 'fill', transition: 'crossfade',
+      transitionDuration: 0.4, transitionText: '', transitionTextSize: 100 } as never],
+    soundtrack: null, layers: { overlays: [], audioCues: [], duck: 0 }, origins: {},
+    extras: { c1: { takes: withTakes.clips[0].takes, lyric: 'fly' } }, notes: withTakes.notes })
+  assert.equal(saved.clips[0].takes?.length, 2)
+  assert.equal(saved.clips[0].lyric, 'fly')
+  assert.equal(saved.notes, 'rebuilt')
+})

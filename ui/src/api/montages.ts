@@ -14,7 +14,29 @@ export interface MontageClip {
   transitionDuration: number
   transitionText: string
   transitionTextSize: number
-  origin?: { kind: 'scene2d' | 'scene3d' | 'generation' | 'upload' | 'render'; scene?: string; note?: string }
+  origin?: MontageOrigin
+  takes?: MontageTake[]
+  lyric?: string
+}
+
+export interface MontageOrigin {
+  kind: 'scene2d' | 'scene3d' | 'generation' | 'upload' | 'render' | 'production'
+  scene?: string
+  note?: string
+  meta?: string
+  derivedFrom?: string
+  productionId?: string
+  shotId?: string
+  takeId?: string
+}
+
+export interface MontageTake {
+  id: string
+  source?: string
+  pending?: { jobId: string; intentId?: string }
+  origin?: MontageOrigin
+  createdAt?: string
+  note?: string
 }
 
 export interface MontageOverlay {
@@ -105,4 +127,73 @@ export async function saveMontage(payload: {
 export async function exportMontage(workspace: string, file: string): Promise<{ file: string; job: VideoEditorExportJob }> {
   const res = await fetch(`${BASE}/api/v1/montages/${encodeURIComponent(file)}/export?workspace=${encodeURIComponent(workspace)}`, { method: 'POST' })
   return readJson(res, 'Could not export montage')
+}
+
+export interface ShotProvenance {
+  kind: string
+  scene?: string
+  note?: string
+  sidecar?: string
+  generatedFrom?: string
+  model?: string
+  prompt?: string
+  seed?: number
+  resolution?: string
+  frames?: number
+  startImage?: { name: string; url: string }
+  canRegenerate: boolean
+}
+
+export interface ShotTake extends MontageTake {
+  status: string
+  url?: string
+  duration?: number
+  error?: string
+  provenance?: ShotProvenance
+}
+
+export interface MontageShot {
+  index: number
+  id: string
+  name: string
+  start: number
+  end: number
+  source: string
+  url: string
+  lyric: string
+  provenance: ShotProvenance
+  takes: ShotTake[]
+}
+
+export interface MontageShotBoard {
+  file: string
+  name: string
+  revision: number
+  duration: number
+  shots: MontageShot[]
+}
+
+export async function getMontageShots(workspace: string, file: string): Promise<MontageShotBoard> {
+  const res = await fetch(`${BASE}/api/v1/montages/${encodeURIComponent(file)}/shots?workspace=${encodeURIComponent(workspace)}`)
+  return readJson(res, 'Could not read the shots')
+}
+
+async function postShot<T>(file: string, clipId: string, action: 'regenerate' | 'select', payload: object, fallback: string): Promise<T> {
+  const res = await fetch(`${BASE}/api/v1/montages/${encodeURIComponent(file)}/shots/${encodeURIComponent(clipId)}/${action}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+  return readJson(res, fallback)
+}
+
+export function regenerateShot(workspace: string, file: string, clipId: string, input: {
+  intentId: string; expectedRevision: number; prompt?: string; seed?: number
+}): Promise<{ jobId: string; revision: number }> {
+  return postShot(file, clipId, 'regenerate', {
+    workspace, intent_id: input.intentId, expected_revision: input.expectedRevision,
+    ...(input.prompt ? { prompt: input.prompt } : {}), ...(input.seed !== undefined ? { seed: input.seed } : {}),
+  }, 'Could not regenerate the shot')
+}
+
+export function selectShotTake(workspace: string, file: string, clipId: string, takeId: string, expectedRevision: number): Promise<{ revision: number }> {
+  return postShot(file, clipId, 'select', { workspace, take_id: takeId, expected_revision: expectedRevision }, 'Could not use this take')
 }

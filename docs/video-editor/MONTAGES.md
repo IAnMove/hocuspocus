@@ -84,6 +84,7 @@ and `duck`.
 | `montages.save` | `POST /api/v1/montages` `{workspace, montage, file?, expected_revision?}` |
 | `montages.export` | `POST /api/v1/montages/{file}/export?workspace=` → Video Editor job |
 | `montages.export.status` | `GET /api/v1/video-editor/export/{job_id}` |
+| `montages.shots.get`, `montages.shot.regenerate`, `montages.shot.select` | see §5 |
 | `scenes.document.save` / `.get` | — (MCP; the UI keeps its existing save routes) |
 | `scenes.video2d.export` (+ `.receipt`, `.cancel`) | `POST /api/v1/scenes/video2d/export`, `GET .../receipt`, `POST .../cancel`, `GET .../capabilities` |
 
@@ -109,9 +110,35 @@ The Scene Animator, its browser export and the headless renderer share
 `ui/src/lib/scene2d/{normalize,evaluate,layerStyle,paint}.ts`, so a scene looks
 the same in the editor and in the server export.
 
-## 5. Planned next steps
+## 5. Shot board (plano a plano)
 
-* Shot board (see which shots a clip is made of, regenerate or re-render a
-  shot, pick a take and re-export): [MONTAGE_SHOT_BOARD_PLAN](../development/MONTAGE_SHOT_BOARD_PLAN.md).
+With a montage open, **Video Editor → Shot board** lists every clip with its
+slot on the timeline and where it came from. For generated clips the board
+reads the generation sidecar (`<clip>.meta.json`, or the file a slowed copy was
+derived from): model, prompt, seed and start image. Nothing needs migrating.
+
+* **Regenerate shot** queues a new take with the same parameters (optionally a
+  new prompt or seed) on the normal generation queue and stores it as a
+  `pending` take. The clip keeps its media meanwhile.
+* When the generation finishes the take resolves from the workspace (by job id
+  in the sidecar, so it survives a server restart). **Use** swaps the clip media,
+  keeps the previous media as a take and slows a shorter take to cover the slot.
+  Export again to get the new video.
+* Clips from Video 2D/3D scenes show their scene; re-render them from their editor.
+
+| Operation (MCP) | HTTP |
+|---|---|
+| `montages.shots.get` | `GET /api/v1/montages/{file}/shots?workspace=` |
+| `montages.shot.regenerate` `{clip_id, intent_id, expected_revision, prompt?, seed?}` | `POST /api/v1/montages/{file}/shots/{clip_id}/regenerate` |
+| `montages.shot.select` `{clip_id, take_id, expected_revision, retime?}` | `POST /api/v1/montages/{file}/shots/{clip_id}/select` |
+
+Clips may also carry `takes[]` (≤20: `{id, source, origin?}` or `{id, pending:{jobId}}`)
+and a `lyric`; `origin` accepts `meta`, `derivedFrom` and `production`
+(`productionId`, `shotId`, `takeId`). Editor saves keep them.
+
+## 6. Planned next steps
+
+* Rest of the shot board (Story Lab and Director links, out-of-date export
+  warning): [MONTAGE_SHOT_BOARD_PLAN](../development/MONTAGE_SHOT_BOARD_PLAN.md).
 * Video 2D text, lyrics, finishing and templates:
   [GROK_VIDEO2D_BOOST_PLAN_2026-09-27](../development/GROK_VIDEO2D_BOOST_PLAN_2026-09-27.md).
