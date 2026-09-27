@@ -182,5 +182,23 @@
     "outPoint": "Punto de salida",
     "inTime": "Entrada {{time}}",
     "outTime": "Salida {{time}}"
+  },
+  "montage": {
+    "open": "Montajes",
+    "openTitle": "Abrir un montaje editable guardado en este workspace",
+    "save": "Guardar montaje",
+    "saveTitle": "Guardar la línea de tiempo, los rótulos y las voces como montaje editable en el workspace",
+    "saveAs": "Guardar nueva revisión de {{file}}",
+    "loading": "Cargando montajes…",
+    "none": "No hay montajes en este workspace",
+    "summary": "{{clips}} clips · {{overlays}} rótulos · {{cues}} audios · rev. {{revision}}",
+    "layers": "Capas temporizadas: {{overlays}} rótulos · {{cues}} audios",
+    "overlays": "Rótulos e imágenes",
+    "audioCues": "Voces y audios",
+    "duck": "Atenuar música",
+    "start": "Inicio (s)",
+    "end": "Fin (s)",
+    "volume": "Volumen",
+    "remove": "Quitar"
   }
 }
