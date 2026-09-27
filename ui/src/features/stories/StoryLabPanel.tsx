@@ -10,7 +10,11 @@ import type { ApiOutput } from '../../api/outputs'
 
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
-import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
+import {
+  resolveSupportedVideoFormat,
+  writingBaseUrlFromProfile,
+  writingProviderFromText,
+} from '../../lib/productionProfile'
 import { StoryLabNavigation } from './StoryLabNavigation'
 import { StoryRelationshipsTab } from './StoryRelationshipsTab'
 import { StoryWorldTab } from './StoryWorldTab'
@@ -625,22 +629,10 @@ export function StoryLabPanel() {
 
   useEffect(() => {
     if (!project.provider.useGlobalProfile) return
-    const writingProvider: StoryWritingProvider = productionProfile.text.provider === 'minimax'
-      ? 'minimax'
-      : productionProfile.text.provider === 'openai'
-        ? 'openai'
-        : productionProfile.text.provider === 'deepseek'
-          ? 'deepseek'
-          : productionProfile.text.provider === 'openai-compatible'
-            ? 'openai-compatible'
-            : 'maestro'
-    const writingBaseUrl = writingProvider === 'minimax'
-      ? 'https://api.minimax.io/v1'
-      : writingProvider === 'openai'
-        ? 'https://api.openai.com'
-        : writingProvider === 'deepseek'
-          ? 'https://api.deepseek.com'
-          : project.provider.writingBaseUrl
+    // Shared with the other labs so every profile provider (including
+    // Ollama and Grok) reaches Story Lab instead of falling back to Maestro.
+    const writingProvider: StoryWritingProvider = writingProviderFromText(productionProfile.text.provider)
+    const writingBaseUrl = writingBaseUrlFromProfile(productionProfile) || project.provider.writingBaseUrl
     const imageProvider: StoryImageProvider = productionProfile.image.provider === 'minimax'
       ? 'minimax' : 'maestro'
     if (

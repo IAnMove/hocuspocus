@@ -7,6 +7,8 @@ import {
   resolveSupportedVideoFormat,
   seriesProviderFieldsFromProfile,
   seriesProviderMatchesGlobal,
+  writingBaseUrlFromProfile,
+  writingProviderFromText,
 } from '../src/lib/productionProfile.ts'
 
 const options = {
@@ -71,4 +73,13 @@ test('chooses the nearest advertised tier without flipping orientation', () => {
     aspectRatio: '9:16',
     adjusted: true,
   })
+})
+
+test('Ollama and Grok text profiles keep their own writing provider', () => {
+  for (const [provider, url] of [['ollama', 'http://127.0.0.1:11434'], ['grok', 'https://api.x.ai/v1']]) {
+    const profile = { ...DEFAULT_PRODUCTION_PROFILE, text: { ...DEFAULT_PRODUCTION_PROFILE.text, provider, base_url: '' } }
+    assert.equal(writingProviderFromText(provider), provider)
+    assert.equal(writingBaseUrlFromProfile(profile), url)
+  }
+  assert.equal(writingProviderFromText('local'), 'maestro')
 })
