@@ -1,6 +1,6 @@
 # Plan de mejora del creador Video 2D para Grok
 
-Fecha: 27 de septiembre de 2026. Estado: **B0+B1 en draft ([#497](https://github.com/IAnMove/hocuspocus/pull/497)); B2–B8 sin empezar**.
+Fecha: 27 de septiembre de 2026. Estado: **B0+B1 fusionado ([#497](https://github.com/IAnMove/hocuspocus/pull/497)) y revisado; B2–B8 sin empezar**.
 Autor del plan: Claude (revisará cada PR de Grok). Ejecutor: Grok.
 
 ## 1. Por qué
@@ -395,11 +395,24 @@ rama antes de pasar al siguiente bloque.
 
 | Bloque | Rama / PR | Estado | Notas |
 |---|---|---|---|
-| B0+B1 | [#497](https://github.com/IAnMove/hocuspocus/pull/497) `fix/scene-fx-alpha-20260927` | draft | Hashes de paridad iguales en los fotogramas que ya pintaban. Fireworks deja de lanzar `hsl(...)00`. Demo: `/mnt/extras/hocuspocus-worktrees/video2d-demo/fireworks-demo.mp4`. |
-| B2 | | pendiente | |
+| B0+B1 | [#497](https://github.com/IAnMove/hocuspocus/pull/497) `fix/scene-fx-alpha-20260927` | fusionado · revisado por Claude | Hashes de paridad iguales en los fotogramas que ya pintaban. Fireworks deja de lanzar `hsl(...)00`. Demo: `/mnt/extras/hocuspocus-worktrees/video2d-demo/fireworks-demo.mp4`. |
+| B2 | | pendiente | Hacer primero los pendientes de la revisión de B0+B1 (abajo). |
 | B3 | | pendiente | |
 | B4 | | pendiente | |
 | B5 | | pendiente | |
 | B6 | | pendiente | |
 | B7 | | pendiente | |
 | B8 | | pendiente | |
+
+### Revisión de B0+B1 (Claude, 27/9)
+
+Correcto: `withAlpha` conserva los stops hex (mismos píxeles) y convierte
+`rgb()/hsl()` a `rgba()/hsla()`; auditoría completa de concatenaciones;
+`scene2d-frame-hash.mjs --check` pasa en `development` (camera-strips,
+fx-atmosphere, texts-v1: todos los hashes coinciden). Pendiente, dentro del PR de B2:
+
+- [ ] `ui/tests/fixtures/scene2d/fireworks-demo/` no tiene `manifest.json`, así que
+  el arnés no lo comprueba: añadirlo con sus hashes ahora que pinta.
+- [ ] Exponer el arnés como `npm run scene2d:parity` y documentarlo en
+  `docs/development/LOCAL_VALIDATION.md` (no en CI por ahora: necesita Chromium).
+- [ ] Mantener la plantilla del PR al día: #497 se fusionó con «En desarrollo» marcado.

@@ -115,3 +115,5 @@ the same in the editor and in the server export.
   shot, pick a take and re-export): [MONTAGE_SHOT_BOARD_PLAN](../development/MONTAGE_SHOT_BOARD_PLAN.md).
 * Video 2D text, lyrics, finishing and templates:
   [GROK_VIDEO2D_BOOST_PLAN_2026-09-27](../development/GROK_VIDEO2D_BOOST_PLAN_2026-09-27.md).
+* Vertical framing, derived 9:16 montages, beat-aligned song shortening and
+  publish presets: [GROK_TASKS_2026-09-27](../development/GROK_TASKS_2026-09-27.md).
