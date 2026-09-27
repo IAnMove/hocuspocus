@@ -159,3 +159,18 @@ test('browsing examples and selecting a variant only requests catalog metadata',
     assert.equal(document.querySelector('img[src^="/examples/"]'), null)
   } finally { cleanup(); globalThis.fetch = original }
 })
+
+
+test('schematic previews strip every portal, speech and appearance media loader', async () => {
+  const { previewTemplateDocument } = await import('../src/features/scene3d/templateCatalog')
+  const { SCENE3D_TEMPLATES } = await import('../src/features/scene3d/templates')
+  for (const { id } of SCENE3D_TEMPLATES) {
+    const doc = previewTemplateDocument(id)
+    for (const slot of doc.slots) {
+      assert.equal(slot.speech, undefined, id)
+      assert.equal(slot.appearance, undefined, id)
+      assert.equal(slot.screen, undefined, id)
+    }
+    for (const effect of doc.worldSfx ?? []) assert.equal(effect.sourceUrl, undefined, id)
+  }
+})

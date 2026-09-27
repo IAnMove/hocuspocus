@@ -31,3 +31,12 @@ export function templateCollections(id: Scene3DTemplateId): string[] {
   if (!requirements.has(id)) requirements.set(id, exampleCollections(applyScene3DTemplate(id)))
   return requirements.get(id)!
 }
+
+/** Preview the composition without loading portal media, face packs or decals. */
+export function previewTemplateDocument(id: Scene3DTemplateId) {
+  const doc = applyScene3DTemplate(id)
+  return { ...doc,
+    slots: doc.slots.map(slot => ({ ...slot, speech: undefined, appearance: undefined, screen: undefined })),
+    worldSfx: doc.worldSfx?.map(effect => ({ ...effect, sourceUrl: undefined })),
+  }
+}
