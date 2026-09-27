@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useUiTranslation } from '../../../i18n'
-import { buildTextTemplate, importLrc, importPlainLyrics, importSrt, parseSceneLyrics, TEXT_TEMPLATES, type KineticText, type SceneLyrics } from '../../../lib/kineticText'
+import { buildTextTemplate, importLyricsText, parseSceneLyrics, TEXT_TEMPLATES, type KineticText, type SceneLyrics } from '../../../lib/kineticText'
 import { randomUuid } from '../../../lib/uuid'
 import { fieldClass } from './textFields'
 
@@ -31,8 +31,7 @@ export function TextTemplateInsert({ duration, width, height, disabled, onInsert
     }}>{t('insertTemplate')}</button>
     {onLyrics ? <label className="block text-xs">{t('lyricsPaste')}<textarea value={lyricsText} onChange={event => setLyricsText(event.target.value)} className={fieldClass} rows={4} disabled={disabled} /><input type="number" step={0.1} value={offset} onChange={event => setOffset(event.target.valueAsNumber || 0)} className={fieldClass} disabled={disabled} />
       <button type="button" disabled={disabled} className="mt-2 min-h-9 rounded border border-border px-3 text-xs" onClick={() => {
-        const trimmed = lyricsText.trim()
-        const lines = trimmed.includes('-->') ? importSrt(trimmed, offset) : trimmed.includes('[') ? importLrc(trimmed, offset) : importPlainLyrics(trimmed, duration, offset)
+        const lines = importLyricsText(lyricsText, duration, offset)
         onLyrics(parseSceneLyrics({ mode: 'karaoke', lines, style: { font: 'sans', size: 7, color: '#f4efe6', activeColor: '#ffe08a', x: 50, y: 78, maxWidth: 80, align: 'center', visibleLines: 2 } }))
       }}>{t('lyricsImport')}</button></label> : null}
   </div>
