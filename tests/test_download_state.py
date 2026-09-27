@@ -405,7 +405,8 @@ class TestDownloadState(unittest.TestCase):
                     partial_paths,
                 )
                 self.assertEqual(
-                    extracted, [os.path.join(target_dir, "model.safetensors")],
+                    [os.path.realpath(path) for path in extracted],
+                    [os.path.realpath(os.path.join(target_dir, "model.safetensors"))],
                 )
                 self.assertTrue(os.path.isfile(extracted[0]))
                 self.assertEqual(os.path.getsize(extracted[0]), len(valid_payload))
