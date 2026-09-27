@@ -280,3 +280,16 @@ def test_missing_vendor_files_and_changed_revisions_trigger_repair(tmp_path, mon
     git("add", "custom.py")
     git("commit", "-m", "different upstream revision")
     assert not sources.sources_current(["fixture"], tmp_path)
+
+
+def test_windows_flash_attention_matches_lock_and_supported_xformers_range():
+    from urllib.parse import urlparse, parse_qs
+    spec = profiles.recipe("wangp", "win32")
+    wheel = next(p for p in spec["acceleratorPackages"] if "/flash_attn-" in p)
+    version = wheel.split("/flash_attn-")[1].split("+")[0]
+    assert (2, 7, 1) <= profiles._version(version) <= (2, 8, 0)
+    digest = parse_qs(urlparse(wheel).fragment)["sha256"][0]
+    assert len(digest) == 64 and all(c in "0123456789abcdef" for c in digest)
+    lock = (ROOT / "app/runtime/locks/win32-wangp.txt").read_text()
+    assert f"flash-attn @ {wheel}" in lock
+    assert f"xformers=={spec['constraints']['xformers']}" in lock

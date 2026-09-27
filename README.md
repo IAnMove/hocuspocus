@@ -199,7 +199,7 @@ AMD GPUs and macOS are **not** supported (CUDA kernels). First launch downloads 
 2. Discover → paste `https://github.com/IAnMove/hocuspocus`, or download from this repo.
 3. **Install**, then **Start**. The first job on each model fetches its weights.
 
-Pinokio **Install** and **Update** share Windows/Linux recipes with separate Python environments and pinned dependencies per engine. Update also rebuilds the UI. SAM (Inpaint) and UniRig are optional menu installs; UniRig currently has a Linux recipe. See [runtime profiles and recovery](docs/development/RUNTIME_PROFILES.md).
+Pinokio **Install** and **Update** share Windows/Linux recipes with separate Python environments and pinned dependencies per engine. Update also rebuilds the UI. SAM (Inpaint) and UniRig are optional menu installs; UniRig currently has a Linux recipe. See [runtime profiles and recovery](docs/development/RUNTIME_PROFILES.md). Windows WanGP pins xformers 0.0.31.post1 and Flash Attention 2.7.4.post1 (with a SHA-256 pinned wheel) for the Torch 2.7.1 / CUDA 12.8 environment.
 
 **Start** verifies and repairs the React build before loading the backend. For a missing or incomplete interface, stop Start, use **Repair Web UI**, then Start again; models are preserved. Startup logs show the app version, commit, OS and React build ID for bug reports. See [React recovery and manual commands](docs/development/REACT_INSTALLATION.md).
 
