@@ -221,6 +221,7 @@
         "tests/test_llm_router.py",
         "tests/test_lyrics_language.py",
         "tests/test_mcp_access.py",
+        "tests/test_mcp_coverage.py",
         "tests/test_media_refs.py",
         "tests/test_merge_eligibility.py",
         "tests/test_minimax_h3.py",
