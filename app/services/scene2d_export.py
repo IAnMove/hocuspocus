@@ -116,11 +116,11 @@ def _sequence_urls(layer: dict) -> list[str]:
 
 def _layer_media(refs: list, layer: dict, workspace: str) -> None:
     urls = _sequence_urls(layer)
-    for url in urls:
-        _append_visual_ref(refs, layer, url, workspace, True)
     source = str(layer.get("source") or "").strip()
     if source or not urls:
         _append_visual_ref(refs, layer, source, workspace, False)
+    for url in urls:
+        _append_visual_ref(refs, layer, url, workspace, True)
 
 
 def media_refs(document: dict, workspace: str) -> list[dict]:
