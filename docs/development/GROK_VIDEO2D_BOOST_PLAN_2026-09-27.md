@@ -1,6 +1,6 @@
 # Plan de mejora del creador Video 2D para Grok
 
-Fecha: 27 de septiembre de 2026. Estado: **plan preparado; ejecución no iniciada**.
+Fecha: 27 de septiembre de 2026. Estado: **B0+B1 en draft ([#497](https://github.com/IAnMove/hocuspocus/pull/497)); B2–B8 sin empezar**.
 Autor del plan: Claude (revisará cada PR de Grok). Ejecutor: Grok.
 
 ## 1. Por qué
@@ -395,7 +395,7 @@ rama antes de pasar al siguiente bloque.
 
 | Bloque | Rama / PR | Estado | Notas |
 |---|---|---|---|
-| B0+B1 | | pendiente | |
+| B0+B1 | [#497](https://github.com/IAnMove/hocuspocus/pull/497) `fix/scene-fx-alpha-20260927` | draft | Hashes de paridad iguales en los fotogramas que ya pintaban. Fireworks deja de lanzar `hsl(...)00`. Demo: `/mnt/extras/hocuspocus-worktrees/video2d-demo/fireworks-demo.mp4`. |
 | B2 | | pendiente | |
 | B3 | | pendiente | |
 | B4 | | pendiente | |
