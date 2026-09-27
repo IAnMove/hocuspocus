@@ -5,7 +5,7 @@ Example media is absent from the current Git tree and UI build. This saves about
 ## User behavior
 
 - Installation, build, startup, library browsing and schematic previews never download example media.
-- **Video 3D → Shot library → Templates** contains 32 reusable shot compositions that work with the user's own media. **Examples and variants** holds the remaining 256 authored looks. All 288 existing template IDs remain supported, including saved projects and recent shots.
+- **Video 3D → Shot library → Templates** contains 243 templates, including all advanced shot types, all 57 Pixel worlds, every perspective and the ten Dark Fantasy PSX editions. **Examples and variants** holds 45 additional looks from eight explicitly reviewed composition families. Advanced templates remain in the main catalog even when their example media is optional. All 288 existing template IDs remain supported, including saved projects and recent shots.
 - Select an example or collection, check the download size, then press **Download**. The size includes missing shared dependencies, counted once. Progress and cancellation are available. Completed collections remain installed when another download is cancelled or fails.
 - Saved scenes referencing missing `/examples/...` resources offer the same download controls in the editor. After completion, the current scene reloads its media. Users can also replace these resources with their own files.
 - Only an explicit install POST starts network transfers. GET and HEAD never fetch external content. Missing media returns 409 with installation instructions; unknown paths return 404.
@@ -60,6 +60,6 @@ python scripts/package_example_assets.py \
 
 The builder validates input checksums and records cross-collection file references. Publish all resulting ZIPs plus a copy of the manifest, verify the release sizes/checksums and test an actual download before shipping the updated manifest. Never overwrite assets belonging to an existing version.
 
-`templateCatalog.ts` selects core templates by distinct shot purpose, camera movement or layout; illustrated variants stay in the examples view. Adding a core template requires keeping it free of optional-media references. Do not remove legacy IDs merely to simplify the visible catalog.
+`templateCatalog.ts` retains every template by default. Only the additional members of `TEMPLATE_VARIANT_GROUPS` go into the examples view; the first member stays in the main catalog. Groups document repeated layer arrangements and motion with different media, palettes or small framing adjustments. Distinct camera techniques, effects, portals, screen layouts, speech setups, perspectives and Pixel worlds must remain available. Optional media references do not disqualify an advanced template. Do not remove legacy IDs merely to simplify the visible catalog.
 
 The tiny TV-head GLB in `ui/tests/fixtures` is an offline renderer test fixture, not shipped UI content. Export E2E tests supply their own media and never depend on optional examples.

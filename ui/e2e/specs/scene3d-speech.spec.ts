@@ -31,7 +31,6 @@ test('new talking shots are reachable in the existing 3D video editor', async ({
   for (const id of ['speech-portrait', 'speech-dialogue', 'speech-presenter']) {
     await workspace.getByTestId('world3d-open-library').click()
     const library = page.getByTestId('world3d-shot-library')
-    if (id !== 'speech-dialogue') await library.getByRole('button', { name: 'Examples and variants', exact: true }).click()
     await library.getByRole('searchbox', { name: 'Search templates' }).fill(id)
     await library.getByTestId('world3d-template-' + id).dblclick()
     await expect(toggle).toHaveAttribute('aria-expanded', 'true')

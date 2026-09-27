@@ -1897,7 +1897,7 @@
     "examples": "Examples and variants"
 },
   "shotLibrary": {
-    "optionalExamples": "Reusable shots use your own media. Authored looks are under Examples and variants; older projects remain compatible.",
+    "optionalExamples": "Advanced shot types and all Pixel worlds stay here. Additional looks for repeated compositions are under Examples and variants. Example media is optional.",
     "change": "Change shot",
     "use": "Use this shot",
     "cancel": "Cancel",
