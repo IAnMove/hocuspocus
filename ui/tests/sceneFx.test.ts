@@ -67,6 +67,10 @@ test('world SFX demos keep authored speakers and append cues instead of replacin
   const empty = applyWorldSfxDemo(createDefaultScene3DDocument(), 'depth')
   assert.equal(empty.mode, 'replace')
   assert.equal(empty.document.worldSfx?.[0].id, 'demo-portal')
+  const switched = applyWorldSfxDemo(empty.document, 'duel')
+  assert.equal(switched.mode, 'replace')
+  assert.equal(switched.document.worldSfx?.length, 5)
+  assert.equal(switched.document.worldSfx?.some(cue => cue.id === 'demo-portal'), false)
 })
 
 test('world SFX stay in meters and do not rewrite screen overlays', () => {
