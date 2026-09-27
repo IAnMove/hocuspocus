@@ -11,6 +11,8 @@ import { isRetroLook } from '../../features/sceneFx/retroPaint'
 import { adoptPreparedSceneDocument, withFxShowcase } from '../../features/sceneFx/showcase'
 import { KineticTextControls } from '../common/KineticTextControls'
 import { KineticTextOverlay } from '../common/KineticTextOverlay'
+import { LiveRhythmStore, SceneFinalPreview, SceneFinishControls, SceneMotionControls } from '../../features/scene2d/boostControls'
+import { beatEnvelope } from '../../lib/scene2d/motion'
 import { parseKineticTexts } from '../../lib/kineticText'
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ParseKeys } from 'i18next'
@@ -2600,7 +2602,7 @@ export function SceneAnimatorPanel() {
         {(composition.safeArea === 'vertical' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-y-0 left-1/2 z-[993] -translate-x-1/2 border-x border-dashed border-fuchsia-300/90 bg-fuchsia-400/[.03]" style={{ width: `${verticalSafeWidth}%` }}><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-fuchsia-200">{t('animator.verticalBadge')}</span></div>}
         {retroLive && <canvas ref={retroCanvasRef} data-testid="scene-retro-look" className="pointer-events-none absolute inset-0 z-[896] h-full w-full" aria-hidden="true" />}
         {!retroLive && <SceneFxOverlay cues={scene.sfx} seconds={progress * scene.duration} width={scene.width} height={scene.height} duration={scene.duration} playing={playing} />}
-        {!retroLive && <KineticTextOverlay cues={scene.texts} seconds={progress * scene.duration} width={scene.width} height={scene.height} />}
+        {!retroLive && <KineticTextOverlay cues={scene.texts} lyrics={scene.lyrics} seconds={progress * scene.duration} width={scene.width} height={scene.height} envelope={beatEnvelope(scene.rhythm, progress * scene.duration)} />}
         {activeCamera && <div className="pointer-events-none absolute left-2 top-2 z-[997] flex items-center gap-1 rounded bg-black/55 px-1.5 py-1 text-[8px] text-cyan-200"><Camera size={10} /> {activeCamera.name}</div>}
         {orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}
         {flash && <div className="pointer-events-none absolute z-[999]" style={{ left: `${flash.x}%`, top: `${flash.y}%` }}><span className="absolute -left-6 -top-6 h-12 w-12 rounded-full border-2 border-white/90 animate-ping" /><span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-white shadow-[0_0_20px_8px_rgba(96,165,250,.9)]" /></div>}
@@ -2610,6 +2612,9 @@ export function SceneAnimatorPanel() {
       <p className="mt-2 text-[9px] text-text-muted">{t('animator.canvasHelp')}</p>
       <SceneFxControls cues={scene.sfx} duration={scene.duration} disabled={playing || recording || publishing} onChange={sfx => updateScene(current => ({ ...current, sfx }))} onShowcase={collection => updateScene(current => withFxShowcase(current, collection))} />
       <KineticTextControls cues={scene.texts} lyrics={scene.lyrics} duration={scene.duration} width={scene.width} height={scene.height} disabled={playing || recording || publishing} onChange={texts => updateScene(current => ({ ...current, texts }))} onLyricsChange={lyrics => updateScene(current => ({ ...current, lyrics }))} />
+      <SceneFinishControls finish={scene.finish} playing={playing} recording={recording} publishing={publishing} onChange={finish => updateScene(current => ({ ...current, finish }))} />
+      <SceneFinalPreview scene={scene} seconds={progress * scene.duration} />
+      <SceneMotionControls layer={selected} playing={playing} recording={recording} publishing={publishing} onPath={path => { if (selected) updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, path } })) }} onSequence={sequence => { if (selected) updateLayer(selected.id, layer => ({ ...layer, sequence })) }} />
       <SceneTimeline
         layers={scene.layers}
         duration={scene.duration}
@@ -2694,6 +2699,7 @@ export function SceneAnimatorPanel() {
           </div>
           <label className="block text-[8px] text-text-muted">{t('animator.intensityPercent', { percent: Math.round(rhythmIntensity * 100) })}<input type="range" min="0" max="1" step="0.05" value={rhythmIntensity} onChange={event => setRhythmIntensity(Number(event.target.value))} className="mt-0.5 w-full accent-violet-400" /></label>
           <button type="button" disabled={!activeRhythmAnalysis || !selected || selected.locked || rhythmBusy || playing || recording || publishing} onClick={applySceneRhythm} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{selected?.name ? t('animator.applyToLayer', { name: selected.name }) : t('animator.applyToSelected')}</button>
+          <LiveRhythmStore analysis={activeRhythmAnalysis} track={selectedRhythmTrack} duration={scene.duration} playing={playing} recording={recording} publishing={publishing} rhythmBusy={rhythmBusy} onChange={rhythm => updateScene(current => ({ ...current, rhythm }))} />
           <p className="text-[7px] leading-relaxed text-text-muted">{t('animator.rhythmHelp')}</p>
         </div>}
         {rhythmError && <p className="text-[8px] text-red-300">{rhythmError}</p>}

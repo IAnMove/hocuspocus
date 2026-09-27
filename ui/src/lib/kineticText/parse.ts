@@ -87,6 +87,7 @@ function cueLook(value: Partial<KineticText>) {
     box: parseBox(value.box),
     counter: parseCounter(value.counter),
     template: template || undefined,
+    beatPulse: bounded(value.beatPulse, 0, 1),
   })
 }
 

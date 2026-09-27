@@ -32,7 +32,7 @@ function paintTextLine(ctx: CanvasRenderingContext2D, text: string, y: number, c
   ctx.textAlign = 'center'
 }
 
-export function paintLegacyCue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText) {
+export function paintLegacyCue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText, pulse = 1) {
   const state = legacyTextState(cue, seconds)
   ctx.save()
   let size = height * cue.size / 100
@@ -44,7 +44,7 @@ export function paintLegacyCue(ctx: CanvasRenderingContext2D, width: number, hei
   ctx.font = font(size)
   ctx.translate(width * cue.x / 100, height * (cue.y / 100 + state.dy))
   ctx.rotate(cue.rotation * Math.PI / 180)
-  ctx.scale(state.scale, state.scale)
+  ctx.scale(state.scale * pulse, state.scale * pulse)
   ctx.globalAlpha = state.opacity
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
   ctx.strokeStyle = '#07101e'; ctx.lineWidth = Math.max(3, size * .085)

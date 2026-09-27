@@ -47,5 +47,17 @@
   "boxKinds": { "none": "Ninguna", "solid": "Sólida", "paper": "Papel", "pill": "Píldora", "bar": "Barra", "underline": "Subrayado", "plate": "Placa" },
   "insertTemplate": "Insertar plantilla",
   "lyricsPaste": "Pega LRC, SRT o letra suelta",
-  "lyricsImport": "Importar letra"
+  "lyricsImport": "Importar letra",
+  "finishTitle": "Acabado",
+  "finishWarm": "Cine cálido",
+  "finishDoc": "Documental antiguo",
+  "finishNeon": "Neón nocturno",
+  "finishPaper": "Papel / cómic",
+  "finishClear": "Quitar acabado",
+  "finalPreview": "Vista final",
+  "pathTitle": "Trayectoria",
+  "pathAdd": "Añadir una curva",
+  "pathOrient": "Orientar con la tangente",
+  "sequenceSources": "Fotogramas, una URL por línea",
+  "rhythmLive": "Guardar el ritmo en la escena"
 }

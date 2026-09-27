@@ -141,7 +141,7 @@ function applyInk(ctx: CanvasRenderingContext2D, cue: KineticText, size: number,
   } else ctx.fillStyle = cue.color
 }
 
-function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText) {
+function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText, pulse = 1) {
   const motion = kineticTextState(cue, seconds) as TextMotion | null
   if (!motion || !('clip' in motion)) return
   const text = displayedKineticText(cue, seconds)
@@ -161,7 +161,7 @@ function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number
   paintPlate(ctx, cue, width, height, motion.opacity)
   ctx.translate(width * (cue.x / 100 + motion.dx), height * (cue.y / 100 + motion.dy))
   ctx.rotate(cue.rotation * Math.PI / 180)
-  ctx.scale(motion.scale, motion.scale)
+  ctx.scale(motion.scale * pulse, motion.scale * pulse)
   ctx.globalAlpha = motion.opacity
   if (motion.blur > .2 && 'filter' in ctx) ctx.filter = `blur(${motion.blur}px)`
   if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${cue.letterSpacing ?? 0}em`
@@ -182,10 +182,11 @@ function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number
   ctx.restore()
 }
 
-export function paintKineticTexts(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cues: readonly KineticText[] = []) {
+export function paintKineticTexts(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cues: readonly KineticText[] = [], envelope = 0) {
   for (const cue of cues) {
     if (seconds < cue.start || seconds >= cue.end) continue
-    if (isLegacyKineticText(cue)) paintLegacyCue(ctx, width, height, seconds, cue)
-    else paintV2Cue(ctx, width, height, seconds, cue)
+    const pulse = 1 + (cue.beatPulse ?? 0) * envelope
+    if (isLegacyKineticText(cue)) paintLegacyCue(ctx, width, height, seconds, cue, pulse)
+    else paintV2Cue(ctx, width, height, seconds, cue, pulse)
   }
 }

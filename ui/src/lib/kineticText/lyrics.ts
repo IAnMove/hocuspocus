@@ -146,6 +146,7 @@ function defaultStyle(raw: Partial<LyricStyle> | undefined): LyricStyle {
     visibleLines: raw?.visibleLines === 2 ? 2 : 1,
     ...(raw?.uppercase === true ? { uppercase: true } : {}),
     ...(typeof raw?.weight === 'number' ? { weight: num(raw.weight, 700, 400, 900) } : {}),
+    ...(typeof raw?.beatPulse === 'number' ? { beatPulse: num(raw.beatPulse, 0, 0, 1) } : {}),
   }
 }
 
