@@ -5,18 +5,23 @@ import '../../i18n'
 import { createSceneEvaluator } from '../../lib/scene2d/evaluate'
 import { isVisualLayer } from '../../lib/scene2d/layerStyle'
 import { normalizeScene2D } from '../../lib/scene2d/normalize'
+import { ensureTextFonts } from '../../lib/kineticText'
+import { sequenceFrame } from '../../lib/scene2d/motion'
+import { mixFxAudio } from '../sceneFx/mix'
+import { sceneAudioWav } from '../sceneFx/audioExport'
 import { paintScene2D, type SceneMedia } from '../../lib/scene2d/paint'
 import type { AnimatorLayer, AnimatorScene } from '../../lib/scene2d/types'
 import { sceneProgressFromSeconds, sceneTimeToLayerTime } from '../../lib/sceneTimeline'
 
 type Size = { width: number; height: number; fps?: number }
-type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; dispose: () => void }
+type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; audio: () => Promise<string>; dispose: () => void }
 declare global { interface Window { __scene2dExport: Renderer } }
 
 const canvas = document.createElement('canvas')
 let scene: AnimatorScene | null = null
 let fps = 30
 const media = new Map<string, HTMLImageElement | HTMLVideoElement>()
+const sequenceImages = new Map<string, HTMLImageElement>()
 
 function loadImage(source: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -61,9 +66,14 @@ async function syncVideos(current: AnimatorScene, seconds: number) {
   }
 }
 
+function hasSequence(layer: AnimatorLayer) {
+  if (layer.sequence?.kind === 'frames') return layer.sequence.sources.length > 0
+  return layer.sequence?.kind === 'sheet'
+}
+
 function assertRenderable(layer: AnimatorLayer) {
   if (layer.type === 'model3d') throw new Error('Headless Video 2D export does not support 3D model layers yet; render them in Video 3D.')
-  if (layer.visible && isVisualLayer(layer) && layer.type !== 'effect' && !layer.source.trim()) throw new Error(`Layer ${layer.name} has no media source.`)
+  if (layer.visible && isVisualLayer(layer) && layer.type !== 'effect' && !layer.source.trim() && !hasSequence(layer)) throw new Error(`Layer ${layer.name} has no media source.`)
 }
 
 window.__scene2dExport = {
@@ -77,16 +87,41 @@ window.__scene2dExport = {
     await Promise.all(next.layers.filter(layer => layer.visible && (layer.type === 'image' || layer.type === 'overlay' || layer.type === 'video')).map(async layer => {
       media.set(layer.id, layer.type === 'video' ? await loadVideo(layer.source) : await loadImage(layer.source))
     }))
+    await ensureTextFonts(next.texts)
+    sequenceImages.clear()
+    await Promise.all(next.layers.flatMap(layer => {
+      if (layer.sequence?.kind === 'frames') return layer.sequence.sources.map(async (source, index) => { sequenceImages.set(`${layer.id}:${index}`, await loadImage(source)) })
+      if (layer.sequence?.kind === 'sheet') return [loadImage(layer.sequence.source).then(image => { sequenceImages.set(`${layer.id}:sheet`, image) })]
+      return []
+    }))
     scene = { ...next, width: size.width, height: size.height }
   },
   async frame(seconds) {
     if (!scene) throw new Error('Load a Video 2D snapshot first')
     const time = Math.min(scene.duration, Math.max(0, seconds))
+    for (const layer of scene.layers) {
+      if (layer.sequence?.kind === 'frames') {
+        const image = sequenceImages.get(`${layer.id}:${sequenceFrame(layer.sequence, time)}`)
+        if (image) media.set(layer.id, image)
+      } else if (layer.sequence?.kind === 'sheet') {
+        const image = sequenceImages.get(`${layer.id}:sheet`)
+        if (image) media.set(layer.id, image)
+      }
+    }
     await syncVideos(scene, time)
     const progress = sceneProgressFromSeconds(time, scene.duration)
     const painted = paintScene2D(canvas, scene, progress, createSceneEvaluator(scene), layer => (media.get(layer.id) as SceneMedia | undefined) ?? null)
     if (!painted) throw new Error('Could not paint the Video 2D frame')
     return canvas.toDataURL('image/png')
+  },
+  async audio() {
+    if (!scene?.sfx?.some(cue => cue.sound && cue.volume > 0)) return ''
+    const buffer = await mixFxAudio(scene.sfx, scene.duration)
+    if (!buffer) return ''
+    const bytes = new Uint8Array(await sceneAudioWav(buffer).arrayBuffer())
+    let binary = ''
+    for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
+    return `data:audio/wav;base64,${btoa(binary)}`
   },
   dispose() {
     media.forEach(element => { if (element instanceof HTMLVideoElement) element.removeAttribute('src') })

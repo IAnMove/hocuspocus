@@ -64,6 +64,21 @@ def _url(name: str, workspace: str) -> str:
     return "/api/v1/file/" + quote(name) + "?workspace=" + quote(workspace, safe="")
 
 
+def _remote_sequence(document: dict) -> bool:
+    for layer in document.get("layers") or []:
+        sequence = layer.get("sequence") if isinstance(layer, dict) else None
+        if not isinstance(sequence, dict):
+            continue
+        urls = list(sequence.get("sources") or [])
+        if sequence.get("source"):
+            urls.append(sequence.get("source"))
+        for url in urls:
+            text = str(url or "").strip().lower()
+            if text.startswith(("http://", "https://", "blob:", "file:", "//")):
+                return True
+    return False
+
+
 def save_document(workspace: str, document: Any, *, name: str | None, preview: str | None,
                   workspace_dir: Callable[[str], str]) -> dict[str, Any]:
     if not isinstance(workspace, str) or not WORKSPACE_RE.fullmatch(workspace):
@@ -81,6 +96,8 @@ def save_document(workspace: str, document: Any, *, name: str | None, preview: s
     encoded = json.dumps(valid, ensure_ascii=False, allow_nan=False, indent=2)
     if re.search(r'"(?:blob:|file:)', encoded):
         raise SceneDocumentError("Upload local scene resources before saving")
+    if _remote_sequence(valid):
+        raise SceneDocumentError("Sequence frames must be durable workspace or example media")
     if preview:
         preview_png(preview)  # Validate even though Video 2D scenes do not store it.
     label = str(name or valid.get("name") or "scene")[:120]

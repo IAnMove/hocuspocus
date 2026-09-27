@@ -239,6 +239,7 @@ export type Scene3DDocument = {
   /** Spatial effects in world meters. Screen overlays stay on `sfx`. */
   worldSfx?: import('../sceneFx/world').WorldSfx[]
   texts?: import('../../lib/kineticText').KineticText[]
+  lyrics?: import('../../lib/kineticText').SceneLyrics
   /** Timeline rate; exported duration is duration / playbackSpeed. */
   playbackSpeed?: number
   templateId: Scene3DTemplateId
