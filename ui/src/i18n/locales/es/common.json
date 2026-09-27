@@ -1,4 +1,14 @@
 {
+  "crop": {
+    "title": "Recortar imagen",
+    "editName": "Editar {{name}}",
+    "hint": "Arrastra para seleccionar un área o indica las coordenadas en píxeles originales. Al guardar se crea una copia PNG y se usa como entrada; el original no cambia.",
+    "x": "Izquierda (px)", "y": "Arriba (px)", "width": "Ancho (px)", "height": "Alto (px)",
+    "reset": "Seleccionar imagen completa",
+    "save": "Guardar recorte", "saving": "Guardando copia…",
+    "loadFailed": "No se pudo cargar la imagen. Cierra y vuelve a intentarlo.",
+    "saveFailed": "No se pudo guardar el recorte. La entrada original no ha cambiado. Vuelve a intentarlo."
+  },
   "language": {
     "name": "Spanish",
     "nativeName": "Español"

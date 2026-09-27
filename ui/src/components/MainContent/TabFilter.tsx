@@ -300,6 +300,10 @@ export function TabFilter() {
   }
 
   const selectCategory = (category: NavigationCategory) => {
+    if (category === 'direct-generation') {
+      openDirectGeneration(generationMode)
+      return
+    }
     setActiveCategory(category)
     setExpandedCategory(category)
   }

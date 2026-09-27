@@ -29,6 +29,7 @@ for (const media of ['poses', 'video'] as const) {
       requested = true
       return fulfillSeekable(body, media === 'video' ? 'video/webm' : 'image/png')(route)
     })
+    if (media === 'poses') await page.route('**/api/v1/outputs/thumbnail/empty-still.png*', route => route.fulfill({ contentType: 'image/png', body }))
     slot.screen = parseMediaScreen({
       ...defaultMediaScreen(), sourceUrl: url, media: media === 'video' ? 'video' : 'image',
       ...(media === 'poses' ? { poseSequence: parseImagePoses([{ sourceUrl: url, duration: 1 }]) } : {}),

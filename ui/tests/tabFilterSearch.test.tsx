@@ -44,7 +44,7 @@ test('primary navigation exposes four stable categories and highlights the selec
   const { useStore } = await import('../src/stores/useStore.ts')
   ensureUiI18n()
   await setUiLanguage('en')
-  useStore.setState({ developerMode: false, mediaFilter: 'all', outputSearchQuery: '', activeWorkspace: 'default', browsingUploads: false, sidebarOpen: false, sidebarMode: 'studio', settingsOpen: true, dashboardOpen: true, loadOutputs: async () => undefined })
+  useStore.setState({ generationMode: 'image', developerMode: false, mediaFilter: 'all', outputSearchQuery: '', activeWorkspace: 'default', browsingUploads: false, sidebarOpen: false, sidebarMode: 'studio', settingsOpen: true, dashboardOpen: true, loadOutputs: async () => undefined })
   try {
     render(<TabFilter />)
     const direct = screen.getByRole('button', { name: 'Direct generation' })
@@ -73,6 +73,9 @@ test('primary navigation exposes four stable categories and highlights the selec
     assert.equal(media.hasAttribute('data-navigation-active'), false)
 
     fireEvent.click(direct)
+    assert.equal(useStore.getState().mediaFilter, 'images')
+    assert.equal(useStore.getState().sidebarOpen, true)
+    assert.equal(useStore.getState().sidebarMode, 'studio')
     const directDestinations = [
       ['Image', 'image', 'images'],
       ['Video', 'video', 'videos'],

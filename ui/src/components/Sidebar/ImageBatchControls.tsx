@@ -5,6 +5,8 @@ import { useUiTranslation } from '../../i18n'
 import { imageBatchPairs, MAX_IMAGE_BATCH_JOBS } from '../../features/studio/imageBatch'
 import { forgetLocalImage, rememberLocalImage } from '../../lib/localEditImages'
 import { setStudioImageMask } from '../../features/studio/imageInputActions'
+import { ImageCropButton } from '../common/ImageCropButton'
+import { InputImageThumbnail } from '../common/InputImageThumbnail'
 
 const AssetExplorerDialog = lazy(() => import('../common/AssetExplorerDialog').then(module => ({ default: module.AssetExplorerDialog })))
 
@@ -49,7 +51,14 @@ export function ImageBatchControls() {
         event.target.value = ''
       }} />
       <ul className="max-h-40 space-y-1 overflow-auto text-xs">
-        {sources.map(item => <li key={item.url} className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate">{item.name}</span><button type="button" aria-label={common('picker.remove') + ' ' + item.name} onClick={() => {
+        {sources.map(item => <li key={`${workspace}:${item.url}`} className="flex items-center gap-2">
+          <span className="h-12 w-12 shrink-0"><InputImageThumbnail item={item} /></span>
+          <span className="min-w-0 flex-1 truncate">{item.name}</span>
+          <ImageCropButton item={item} onReplace={saved => {
+            useStore.setState(state => ({ imageBatch: { ...state.imageBatch!, sources: (state.imageBatch?.sources || []).map(source => source.url === item.url ? saved : source) } }))
+            forgetLocalImage(item.url)
+          }} />
+          <button type="button" aria-label={common('picker.remove') + ' ' + item.name} onClick={() => {
           forgetLocalImage(item.url)
           patch({ sources: sources.filter(other => other.url !== item.url) })
         }}>×</button></li>)}

@@ -13,6 +13,7 @@ test('a screen upload, dimensions and fit survive saving and reopening the shot'
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
   await page.route('**/api/v1/upload', route => route.fulfill({ json: { filename: 'media-screen-test.png', path: url, url, kind: 'image' } }))
   await page.route(`**${url}`, route => route.fulfill({ contentType: 'image/png', body: png }))
+  await page.route('**/api/v1/outputs/thumbnail/media-screen-test.png*', route => route.fulfill({ contentType: 'image/png', body: png }))
   await page.getByRole('tab', { name: 'Video 3D', exact: true }).click()
   await page.getByRole('button', { name: 'Close Ask to the Wizard' }).click()
   await page.getByRole('button', { name: 'Expand editor', exact: true }).click()
