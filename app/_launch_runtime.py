@@ -36727,6 +36727,14 @@ _montage_commands = MontageCommands(_montage_store, start_export=start_video_edi
                                     shots=ShotBoard(_montage_store, workspace_dir=_workspace_dir,
                                                     submit=_submit_shot_generation, job_status=_shot_job_status))
 api.include_router(create_montages_router(_montage_commands))
+from services.scene_packages import make_workspace_reader as _template_reader
+from services.template_library import TemplateLibrary, resolve_template_library_root
+from services.template_commands import TemplateCommands, command_catalog as template_command_catalog
+from routers.templates import create_templates_router
+_template_commands = TemplateCommands(TemplateLibrary(
+    resolve_template_library_root(_app_dir), workspace_dir=_workspace_dir,
+    reader=_template_reader(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))))
+api.include_router(create_templates_router(_template_commands))
 from services.scene_documents import command_catalog as scene_document_catalog, command_handlers as scene_document_handlers
 
 from services.mcp_access import McpAccess
@@ -36749,10 +36757,10 @@ api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
     handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export)},
+              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export)},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *scene_document_catalog(), *scene2d_export_catalog()],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *template_command_catalog(), *scene_document_catalog(), *scene2d_export_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
