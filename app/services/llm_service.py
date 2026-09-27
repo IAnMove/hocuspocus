@@ -887,6 +887,41 @@ def release_ollama_models() -> list[str]:
     return released
 
 
+def _read_ollama_native_stream(response) -> dict:
+    """Assemble a streamed /api/chat reply into the OpenAI response shape.
+
+    Ollama requests stream so the HTTP read timeout measures silence between
+    tokens rather than the whole answer: a long Series or Story plan from a
+    local model can legitimately take longer than the read timeout while
+    still producing tokens steadily.
+    """
+    response.encoding = "utf-8"
+    content: list[str] = []
+    thinking: list[str] = []
+    final: dict = {}
+    for line in response.iter_lines(decode_unicode=True):
+        if not line:
+            continue
+        chunk = json.loads(line)
+        if chunk.get("error"):
+            raise RuntimeError(f"Ollama error: {chunk['error']}")
+        message = chunk.get("message") or {}
+        content.append(str(message.get("content") or ""))
+        thinking.append(str(message.get("thinking") or ""))
+        if chunk.get("done"):
+            final = chunk
+            break
+    if not final:
+        raise RuntimeError("Ollama closed the stream before the answer finished")
+    final = dict(final)
+    final["message"] = {
+        "role": "assistant",
+        "content": "".join(content),
+        "thinking": "".join(thinking),
+    }
+    return _ollama_native_to_openai(final)
+
+
 def _ollama_native_to_openai(data: dict, *, stream: bool = False) -> dict:
     """Reshape an Ollama /api/chat response (or stream line) like OpenAI's."""
     message = data.get("message") or {}
@@ -2419,6 +2454,8 @@ def generate(
         if native_ollama:
             from .provider_profile import ollama_chat_url
             endpoint, request_payload = ollama_chat_url(_server_url()), _ollama_native_payload(payload)
+            # Stream so the read timeout measures silence, not the whole answer.
+            request_payload["stream"] = True
             _remember_ollama_model(_server_url(), request_payload.get("model"))
         else:
             endpoint, request_payload = f"{_server_url()}/v1/chat/completions", payload
@@ -2429,7 +2466,7 @@ def generate(
             # (connect, read): fail fast if the server socket is gone;
             # allow a long read for actual generation.
             timeout=(10, 600),
-            stream=bool(cancellation_token),
+            stream=bool(cancellation_token) or native_ollama,
         )
         resp.raise_for_status()
         response_watcher = _watch_response_for_cancellation(
@@ -2439,9 +2476,7 @@ def generate(
             cancellation_token, _provider,
             abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
         )
-        data = resp.json()
-        if native_ollama:
-            data = _ollama_native_to_openai(data)
+        data = _read_ollama_native_stream(resp) if native_ollama else resp.json()
         _raise_if_token_cancelled(
             cancellation_token, _provider,
             abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
@@ -2709,6 +2744,7 @@ def generate_openai_compatible(
             )
         if is_ollama:
             request_payload = _ollama_native_payload(request_payload)
+            request_payload["stream"] = True
             _remember_ollama_model(base_url, model_id)
         try:
             task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
@@ -2743,7 +2779,7 @@ def generate_openai_compatible(
                     json=request_payload,
                     headers=headers,
                     timeout=(10, 600),
-                    stream=bool(cancellation_token),
+                    stream=bool(cancellation_token) or is_ollama,
                 )
                 response_watcher = _watch_response_for_cancellation(
                     response, cancellation_token, provider_name,
@@ -2773,7 +2809,7 @@ def generate_openai_compatible(
                         json=fallback_payload,
                         headers=headers,
                         timeout=(10, 600),
-                        stream=bool(cancellation_token),
+                        stream=bool(cancellation_token) or is_ollama,
                     )
                     response_watcher = _watch_response_for_cancellation(
                         response, cancellation_token, provider_name,
@@ -2819,9 +2855,25 @@ def generate_openai_compatible(
                 provider_name,
                 abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
             )
-            response_data = response.json()
             if is_ollama:
-                response_data = _ollama_native_to_openai(response_data)
+                try:
+                    response_data = _read_ollama_native_stream(response)
+                except (requests.exceptions.RequestException, RuntimeError) as exc:
+                    abort_supported = bool(
+                        response_watcher and response_watcher[2].get("abort_supported")
+                    )
+                    _stop_response_cancellation_watcher(response_watcher)
+                    response_watcher = None
+                    if _token_cancelled(cancellation_token):
+                        raise LLMRequestCancelled(
+                            provider_name,
+                            abort_supported=abort_supported,
+                        ) from exc
+                    detail = f"Ollama stopped mid-answer: {exc}"
+                    finish_operation("failed", "Provider stream stopped", error=detail)
+                    raise RuntimeError(detail) from exc
+            else:
+                response_data = response.json()
             base_response = response_data.get("base_resp") or {}
             if base_response.get("status_code") not in (None, 0):
                 detail = str(base_response.get("status_msg") or "MiniMax returned an error")
