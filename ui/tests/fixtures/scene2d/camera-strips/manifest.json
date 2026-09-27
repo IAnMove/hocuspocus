@@ -1,0 +1,20 @@
+{
+  "width": 640,
+  "height": 360,
+  "fps": 30,
+  "seconds": [
+    "0.4",
+    "1.6",
+    "3.2"
+  ],
+  "hashes": {
+    "0.4": "32d17a73b5de8f4e7ec977986a2296a673addcf12a6be138433c00e9b0400de0",
+    "1.6": "53215d4657e71c09809ee9c74c3d0b9f4c66c3d43c3ef8dc716819e84d1730c3",
+    "3.2": "f0edb56dfb9c4a07cbb55585f9c9db8301aee9a45d7944cccefc38fad9ab8be8"
+  },
+  "tolerance": {
+    "maxChangedRatio": 0,
+    "channelEpsilon": 2,
+    "note": "Camera, follow relationship, strip copies and a seam pole. Exact SHA-256; see texts-v1 for the pixel-tolerance rule."
+  }
+}

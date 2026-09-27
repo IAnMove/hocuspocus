@@ -1,5 +1,6 @@
 // Pure Video 2D layer styling: effects, strips, masks and procedural atmosphere.
 // Shared by the Scene Animator preview/export and the headless scene2d renderer.
+import { withAlpha } from '../../features/sceneFx/color'
 import type { SceneAtmosphereKind, SceneBlendMode, SceneLayer, SceneMask } from '../../types'
 import { normalizeSeamOccluder } from '../seamOccluder'
 import type { AnimatorLayer, Atmosphere, LayerEffects, LayerStrip, VisualAnimatorLayer } from './types'
@@ -103,8 +104,8 @@ export const drawAtmosphere = (context: CanvasRenderingContext2D, atmosphere: At
       const radius = shortSide * particle.size / (atmosphere.kind === 'fog' ? 8 : 11)
       const gradient = context.createRadialGradient(x, y, 0, x, y, radius)
       gradient.addColorStop(0, color)
-      gradient.addColorStop(.45, `${color}88`)
-      gradient.addColorStop(1, `${color}00`)
+      gradient.addColorStop(.45, withAlpha(color, '88'))
+      gradient.addColorStop(1, withAlpha(color, '00'))
       context.fillStyle = gradient
       context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
     } else if (atmosphere.kind === 'fireflies' || atmosphere.kind === 'embers') {

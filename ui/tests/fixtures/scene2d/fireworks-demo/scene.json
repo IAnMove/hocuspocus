@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "name": "fireworks-demo",
+  "width": 1280,
+  "height": 720,
+  "fps": 24,
+  "duration": 2,
+  "sfx": [
+    { "id": "show", "kind": "fireworks", "start": 0, "end": 2, "x": 50, "y": 46, "size": 90, "intensity": 1.2, "color": "#ff88dd", "seed": 4, "sound": false, "volume": 0 }
+  ],
+  "layers": [
+    {
+      "id": "night",
+      "name": "Night",
+      "type": "effect",
+      "visible": true,
+      "z": 0,
+      "transform": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+      "animation": {
+        "start": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+        "end": { "x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0 },
+        "duration": 2,
+        "curve": "linear"
+      },
+      "atmosphere": { "kind": "sparkles", "density": 24, "speed": 0.2, "size": 1.2, "wind": 0, "color": "#fff7d6" }
+    }
+  ]
+}

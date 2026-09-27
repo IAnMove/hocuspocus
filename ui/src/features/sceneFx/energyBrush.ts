@@ -1,3 +1,4 @@
+import { withAlpha } from './color'
 import type { SceneFx } from './types'
 
 export type FxPainter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, progress: number) => void
@@ -7,7 +8,7 @@ export function ring(ctx: CanvasRenderingContext2D, radius: number, width = .004
 }
 export function glow(ctx: CanvasRenderingContext2D, color: string, radius: number, opacity = 1) {
   const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius)
-  gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(.12, color); gradient.addColorStop(1, color + '00')
+  gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(.12, color); gradient.addColorStop(1, withAlpha(color, '00'))
   ctx.save(); ctx.globalAlpha *= opacity; ctx.fillStyle = gradient
   ctx.fillRect(-radius, -radius, radius * 2, radius * 2); ctx.restore()
 }
