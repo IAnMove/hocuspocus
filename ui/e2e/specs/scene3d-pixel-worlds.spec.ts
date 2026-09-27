@@ -15,7 +15,10 @@ test('pixel worlds: a TV wall template relights, adds TVs and shares one recordi
   await workspace.getByTestId('world3d-open-library').click()
   const library = page.getByTestId('world3d-shot-library')
   await library.getByRole('button', { name: 'Pixel worlds', exact: true }).click()
-  for (const id of ['pixel-tv-wall', 'pixel-moon-lake', 'pixel-tv-lake', 'pixel-aurora-peaks']) {
+  await expect(library.getByTestId('world3d-template-pixel-moon-lake')).toBeVisible()
+  await library.getByRole('button', { name: 'Examples and variants', exact: true }).click()
+  await library.getByRole('button', { name: 'Pixel worlds', exact: true }).click()
+  for (const id of ['pixel-tv-wall', 'pixel-tv-lake', 'pixel-aurora-peaks']) {
     await expect(library.getByTestId(`world3d-template-${id}`)).toBeVisible()
   }
   // A click only picks and previews; the scene changes on "Use this shot".
@@ -53,6 +56,8 @@ test('pixel worlds: a landscape can be relit, reimagined and recoloured', async 
   const workspace = page.getByTestId('scene3d-workspace')
   await workspace.getByTestId('world3d-open-library').click()
   const library = page.getByTestId('world3d-shot-library')
+  await library.getByRole('button', { name: 'Pixel worlds', exact: true }).click()
+  await library.getByRole('button', { name: 'Examples and variants', exact: true }).click()
   await library.getByRole('button', { name: 'Pixel worlds', exact: true }).click()
   await library.getByTestId('world3d-template-pixel-neon-city').dblclick()
   const scene = workspace.getByTestId('pixel-scene-controls')

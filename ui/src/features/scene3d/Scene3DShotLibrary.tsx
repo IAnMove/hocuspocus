@@ -40,6 +40,12 @@ export function Scene3DShotLibraryDialog(props: ShotLibraryProps) {
   </ModalShell>
 }
 
+function libraryDownloads(mode: 'templates' | 'examples', picked: Pick | undefined) {
+  const required = picked?.kind === 'template' ? templateCollections(picked.id) : []
+  if (required.length) return { required }
+  return mode === 'examples' ? {} : null
+}
+
 function ShotLibraryBody(props: ShotLibraryProps) {
   const { t, i18n } = useUiTranslation('scene3dEditor')
   const locale = i18n.language.startsWith('es') ? 'es' : 'en'
@@ -62,6 +68,7 @@ function ShotLibraryBody(props: ShotLibraryProps) {
     ? recentTemplates(recent, filterScene3DTemplates({ ...filter, category: 'all', setting: 'all' }))
     : view.category === 'mine' ? [] : inCatalog(filterScene3DTemplates({ ...filter, category: view.category, setting: view.setting }))
   const settings = view.category === 'recent' || view.category === 'mine' ? [] : settingsIn(inCatalog(filterScene3DTemplates({ ...filter, category: view.category, setting: 'all' })))
+  const downloads = libraryDownloads(mode, picked)
   const use = (choice = picked) => {
     if (!choice || props.applyDisabled) return
     if (choice.kind === 'template') { setRecent(rememberRecentShot(choice.id)); props.onTemplate(choice.id) } else props.onUserTemplate(choice.pack)
@@ -83,8 +90,7 @@ function ShotLibraryBody(props: ShotLibraryProps) {
       <button type="button" onClick={props.onClose} aria-label={t('shotLibrary.close')} className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border hover:bg-bg-hover"><X size={18} /></button>
     </header>
     <p className="border-b border-border px-4 py-2 text-xs text-text-muted">{t('shotLibrary.optionalExamples')}</p>
-    {(mode === 'examples' || (picked?.kind === 'template' && templateCollections(picked.id).length > 0)) && <ExampleDownloads disabled={props.editingLocked}
-      required={picked?.kind === 'template' && templateCollections(picked.id).length ? templateCollections(picked.id) : undefined} />}
+    {downloads && <ExampleDownloads disabled={props.editingLocked} {...downloads} />}
     <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-[12rem_minmax(0,1fr)] md:overflow-hidden lg:grid-cols-[12rem_minmax(0,1fr)_20rem]">
       <LibrarySidebar available={LIBRARY_CATEGORIES.filter(category => filterScene3DTemplates({ category, setting: 'all', query: '', locale, titleOf }).some(item => allowed.has(item.id)))} view={view} hasRecent={recent.length > 0} settings={settings} onView={setView} />
       <main className="min-h-0 overflow-y-auto p-3">

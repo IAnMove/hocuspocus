@@ -12,6 +12,27 @@ async function request(path: string, options?: RequestInit) {
   return response.json()
 }
 
+function selection(catalog: Catalog | undefined, required: string[] | undefined, selected: string) {
+  const chosen = required ?? (selected ? [selected] : [])
+  const packs = catalog?.collections.filter(p => chosen.includes(p.id)) ?? []
+  const ready = chosen.length > 0 && packs.length === chosen.length && packs.every(p => p.installed)
+  const needed = new Set(packs.flatMap(p => p.dependencies))
+  // Each dependency is counted once across the selection.
+  const size = catalog?.collections.filter(p => needed.has(p.id) && !p.cached)
+    .reduce((sum, p) => sum + p.archive_size, 0) ?? 0
+  return { chosen, packs, ready, size }
+}
+
+function DownloadStatus({ job, onError }: { job: Job | null | undefined; onError: () => void }) {
+  const { t } = useUiTranslation('scene3dEditor')
+  if (job?.status === 'cancelled') return <p role="status">{t('examples.cancelled')}</p>
+  if (job?.status !== 'running') return null
+  return <div role="status">
+    {t('examples.progress', { size: bytes(job.received), total: bytes(job.total) })}
+    <button type="button" className="ml-3 underline" onClick={() => void request(`/install/${job.id}`, { method: 'DELETE', headers: { 'X-Hocus-Action': 'install-examples' } }).catch(onError)}>{t('examples.cancel')}</button>
+  </div>
+}
+
 /** Metadata-only until the user explicitly presses Download. */
 export function ExampleDownloads({ required, disabled = false, onInstalled }: {
   required?: string[]; disabled?: boolean; onInstalled?: () => void
@@ -47,13 +68,7 @@ export function ExampleDownloads({ required, disabled = false, onInstalled }: {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [active, retry])
   if (!active) return null
-  const chosen = required ?? (selected ? [selected] : [])
-  const packs = catalog?.collections.filter(p => chosen.includes(p.id)) ?? []
-  const ready = chosen.length > 0 && packs.length === chosen.length && packs.every(p => p.installed)
-  const needed = new Set(packs.flatMap(p => p.dependencies))
-  // Each dependency is counted once across the selection.
-  const size = catalog?.collections.filter(p => needed.has(p.id) && !p.cached)
-    .reduce((sum, p) => sum + p.archive_size, 0) ?? 0
+  const { chosen, packs, ready, size } = selection(catalog, required, selected)
   const busy = starting || catalog?.job?.status === 'running'
   const install = async () => {
     setStarting(true); setError(false)
@@ -74,11 +89,7 @@ export function ExampleDownloads({ required, disabled = false, onInstalled }: {
     </select> : <p>{required.join(', ')}</p>}
     {ready ? <p role="status">{t('examples.installed')}</p> : <button type="button" disabled={disabled || busy || !catalog || !chosen.length || packs.length !== chosen.length}
       onClick={() => void install()} className="rounded border border-cyan-400/50 px-3 py-2 disabled:opacity-40">{t('examples.download', { size: bytes(size) })}</button>}
-    {catalog?.job?.status === 'running' && <div role="status">
-      {t('examples.progress', { size: bytes(catalog.job.received), total: bytes(catalog.job.total) })}
-      <button type="button" className="ml-3 underline" onClick={() => void request(`/install/${catalog.job!.id}`, { method: 'DELETE', headers: { 'X-Hocus-Action': 'install-examples' } }).catch(() => setError(true))}>{t('examples.cancel')}</button>
-    </div>}
-    {catalog?.job?.status === 'cancelled' && <p role="status">{t('examples.cancelled')}</p>}
+    <DownloadStatus job={catalog?.job} onError={() => setError(true)} />
     {(error || catalog?.job?.status === 'failed') && <p role="alert">{t('examples.error')} <button type="button" className="underline" onClick={() => setRetry(n => n + 1)}>{t('examples.retry')}</button></p>}
     {ready && packs.filter(p => p.gallery).map(p => <a key={p.id} className="mr-3 inline-block underline" href={`/examples/${encodeURIComponent(p.id)}/`} target="_blank" rel="noopener noreferrer">{t('examples.open', { name: p.id })}</a>)}
   </section>
