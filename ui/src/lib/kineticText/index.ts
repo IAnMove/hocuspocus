@@ -1,5 +1,5 @@
 export { ensureTextFonts, TEXT_FONT_STACK } from './fonts'
-export { importLrc, importPlainLyrics, importSrt, importTimingBundle, lyricFields, parseSceneLyrics } from './lyrics'
+export { importLrc, importLyricsText, importPlainLyrics, importSrt, importTimingBundle, lyricFields, parseSceneLyrics } from './lyrics'
 export { TEXT_TEMPLATES, buildTextTemplate, textTemplatesFromRecipe } from './templates'
 export { paintSceneLyrics } from './lyricsPaint'
 export { displayedKineticText, wrapKineticLines } from './layout'

@@ -53,8 +53,12 @@ function lineFrom(id: string, text: string, start: number, end: number, words?: 
   return { id, start, end, words: timed?.length ? timed : wordsOf(text, start, end) }
 }
 
+const SECTION_TAG = /^\[[^\]]+\]$/
+const LRC_STAMP = /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/
+const SRT_ARROW = /\d{2}:\d{2}:\d{2}[,.]\d{1,3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{1,3}/
+
 export function importPlainLyrics(text: string, duration: number, offset = 0): LyricLine[] {
-  const rows = text.split(/\r?\n/).map(row => row.trim()).filter(Boolean).slice(0, 400)
+  const rows = text.split(/\r?\n/).map(row => row.trim()).filter(row => row && !SECTION_TAG.test(row)).slice(0, 400)
   const span = Math.max(0.2, duration)
   return rows.flatMap((row, index) => {
     const start = offset + span * index / rows.length
@@ -62,6 +66,20 @@ export function importPlainLyrics(text: string, duration: number, offset = 0): L
     const line = lineFrom(`line-${index + 1}`, row, Math.max(0, start), Math.max(start + 0.05, end))
     return line ? [line] : []
   }).slice(0, 400)
+}
+
+/** Paste entry used by the editor. MiniMax/Story lyrics use [Verse]/[Chorus] tags, which are not LRC stamps. */
+export function importLyricsText(text: string, duration: number, offset = 0): LyricLine[] {
+  const trimmed = text.trim()
+  if (SRT_ARROW.test(trimmed)) {
+    const lines = importSrt(trimmed, offset)
+    if (lines.length) return lines
+  }
+  if (LRC_STAMP.test(trimmed)) {
+    const lines = importLrc(trimmed, offset)
+    if (lines.length) return lines
+  }
+  return importPlainLyrics(trimmed, duration, offset)
 }
 
 export function importLrc(text: string, offset = 0): LyricLine[] {
