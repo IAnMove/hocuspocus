@@ -159,9 +159,10 @@ def _mix_wav(video: Path, wav: Path, duration: float) -> Path:
     return mixed
 
 
-def mix_audio_tracks(video: Path, tracks: list[dict], workspace_root: Path, duration: float) -> Path:
-    """Mix scene audio tracks (startTime, volume) under the silent render."""
-    usable = []
+def mix_audio_tracks(video: Path, tracks: list[dict], workspace_root: Path, duration: float,
+                     extras: list[Path] | None = None) -> Path:
+    """Mix scene audio tracks (startTime, volume) and optional extra WAVs under the silent render."""
+    usable = [(extra, 0.0, 1.0) for extra in extras or [] if extra.is_file()]
     for track in tracks:
         source = workspace_root / os.path.basename(str(track.get("filename") or ""))
         start = float(track.get("startTime") or 0)
@@ -223,14 +224,15 @@ class Scene2DExportService(World3DExportService):
         return None
 
     def finish_media(self, snapshot: dict, staging: Path, encoded: Path) -> Path:
-        video = encoded
-        fx = staging / "fx.wav"
-        if fx.is_file():
-            video = _mix_wav(video, fx, snapshot["plan"]["duration"])
+        duration = snapshot["plan"]["duration"]
         tracks = snapshot["document"].get("audioTracks") or []
+        fx = staging / "fx.wav"
+        extras = [fx] if fx.is_file() else []
+        if extras and not tracks:
+            return _mix_wav(encoded, fx, duration)
         if not tracks:
-            return video
-        return mix_audio_tracks(video, tracks, Path(self.workspace_dir(snapshot["workspace"])), snapshot["plan"]["duration"])
+            return encoded
+        return mix_audio_tracks(encoded, tracks, Path(self.workspace_dir(snapshot["workspace"])), duration, extras=extras)
 
     def output_name(self, snapshot: dict) -> str:
         label = re.sub(r"[^A-Za-z0-9._-]+", "-", str(snapshot["document"].get("name") or "scene")).strip("-._")[:40] or "scene"

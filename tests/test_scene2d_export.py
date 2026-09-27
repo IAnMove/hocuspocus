@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import shutil
+import struct
 import subprocess
 import time
 from pathlib import Path
@@ -76,6 +78,23 @@ def _service(tmp_path, renderer=_paint):
     workspace_dir = _workspace_dir(tmp_path)
     return Scene2DExportService(workspace_dir=workspace_dir, registry_for=lambda name: TaskRegistry(workspace_dir(name), interrupt_stale=False),
                                 renderer=renderer)
+
+
+def _tone(path, frequency, duration=0.25):
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"sine=frequency={frequency}:duration={duration}",
+                    str(path)], check=True)
+
+
+def _tone_energy(media, frequency, sample_rate=48000):
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(media), "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "-"],
+                         capture_output=True, check=True).stdout
+    samples = struct.unpack(f"<{len(raw) // 4}f", raw)
+    real = imag = 0.0
+    for index, sample in enumerate(samples):
+        angle = 2 * math.pi * frequency * index / sample_rate
+        real += sample * math.cos(angle)
+        imag += sample * math.sin(angle)
+    return (real * real + imag * imag) / max(1, len(samples))
 
 
 def test_freeze_validates_2d_documents_and_collects_refs():
@@ -169,6 +188,27 @@ def test_export_mixes_synthesized_screen_fx_wav(tmp_path):
     probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(output)],
                                       capture_output=True, text=True, check=True).stdout)
     assert {stream["codec_type"] for stream in probe["streams"]} == {"video", "audio"}
+
+
+@pytest.mark.skipif(not FFMPEG, reason="ffmpeg is required")
+def test_finish_media_keeps_screen_fx_when_mixing_audio_tracks(tmp_path):
+    service = _service(tmp_path)
+    root = Path(service.workspace_dir(WORKSPACE))
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    encoded = staging / "silent.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=64x36:d=0.25:r=24",
+                    "-pix_fmt", "yuv420p", str(encoded)], check=True)
+    _tone(staging / "fx.wav", 440)
+    _tone(root / "vo.wav", 330)
+    snapshot = {"workspace": WORKSPACE, "document": _document(
+        sfx=[{"id": "boom", "kind": "explosion", "start": 0, "end": 0.2, "sound": True, "volume": 0.4}],
+        audioTracks=[{"id": "vo", "filename": "vo.wav", "name": "vo", "kind": "speech", "startTime": 0, "volume": 1}]),
+                "plan": {"width": 64, "height": 36, "fps": 24, "duration": 0.25, "count": 6}, "refs": []}
+    mixed = service.finish_media(snapshot, staging, encoded)
+    noise = _tone_energy(mixed, 800)
+    assert _tone_energy(mixed, 440) > 10 * noise
+    assert _tone_energy(mixed, 330) > 10 * noise
 
 
 def test_scene_documents_save_2d_and_3d_revisions(tmp_path):
