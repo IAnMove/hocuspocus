@@ -21,8 +21,8 @@ import {
   isWizardConversationWriteCurrent,
   normalizeRemoteWizardMessages,
   shouldFollowWizardWorkspace,
-  WIZARD_WELCOME_TEXT,
 } from './wizardConversationSync'
+import { localizeWizardWelcome, wizardWelcomeText } from './wizardWelcome'
 import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
@@ -105,7 +105,7 @@ export function resolveWizardPendingAnswer(pending: WizardWorkflowPendingInput, 
 const welcomeMessage = (): AgentMessage => ({
   id: newId(),
   role: 'assistant',
-  text: WIZARD_WELCOME_TEXT,
+  text: wizardWelcomeText(),
   createdAt: Date.now(),
 })
 
@@ -496,7 +496,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         media: turnMedia,
         workspace,
         system_prompt: HOCUSPOCUS_AGENT_SYSTEM_PROMPT,
-        prompt: buildAgentTurnPrompt(workspace, nextMessages, tasks, buildAgentAppSnapshot({
+        prompt: buildAgentTurnPrompt(workspace, nextMessages.map(localizeWizardWelcome), tasks, buildAgentAppSnapshot({
           workflow: activeWorkflow,
           pending_question: pendingInput,
         })),
@@ -639,7 +639,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           const node = event.currentTarget
           followMessagesRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40
         }}>
-        {messages.map(message => (
+        {messages.map(localizeWizardWelcome).map(message => (
           <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div lang={message.language || undefined} className={message.role === 'user'
               ? `${expanded ? 'max-w-[min(42rem,70%)]' : 'max-w-[88%]'} whitespace-pre-wrap rounded-2xl rounded-br-sm bg-blue-500/20 px-3 py-2 leading-relaxed text-blue-50`
