@@ -73,6 +73,19 @@ def load_catalog(name: str) -> Any:
 CATALOGS = {operation: load_catalog(filename) for operation, filename in CATALOG_FILES.items()}
 EFFECTS_CATALOG = load_catalog("scene_effects.json")
 
+OPERATION = "scenes.catalog"
+KINDS = ("templates", "text", "finish", "fonts", "atmospheres", "motion", "effects")
+PAGE_LIMIT = 200
+QUERY_LIMIT = 80
+_KIND_SOURCE = {
+    "templates": "scenes.templates.catalog",
+    "text": "scenes.text.catalog",
+    "finish": "scenes.finish.catalog",
+    "fonts": "scenes.fonts.catalog",
+    "atmospheres": "scenes.atmospheres.catalog",
+    "motion": "scenes.motion.catalog",
+}
+
 
 def command_catalog() -> list[dict[str, Any]]:
     operations = []
@@ -125,12 +138,149 @@ def command_handlers() -> dict[str, Callable[[Any], Any]]:
     return {name: _handler(name) for name in CATALOGS}
 
 
+def _kind_data(kind: str) -> Any:
+    if kind == "effects":
+        return EFFECTS_CATALOG
+    return CATALOGS[_KIND_SOURCE[kind]]
+
+
+def _field(entry: dict, key: str) -> str:
+    value = entry.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def _haystack(entry: dict) -> str:
+    return f"{_field(entry, 'id')}\n{_field(entry, 'name')}".casefold()
+
+
+def _selected(kind: str, family: str, needle: str) -> list[dict]:
+    entries = _entries(_kind_data(kind), kind)
+    if family:
+        entries = [item for item in entries if item.get("family") == family]
+    if needle:
+        entries = [item for item in entries if needle in _haystack(item)]
+    return entries
+
+
+def _visible(kind: str, family: str, needle: str) -> list[dict]:
+    return _selected(kind, family if kind == "templates" else "", needle)
+
+
+def _require_text(value: Any, field: str, limit: int) -> str:
+    if value is None:
+        return ""
+    if type(value) is not str:
+        raise CatalogError("catalog_bad_envelope", field)
+    if len(value) > limit:
+        raise CatalogError("catalog_bad_envelope", field)
+    return value
+
+
+def _query_fields(data: Any) -> tuple[str, str, str]:
+    if not isinstance(data, dict):
+        raise CatalogError("catalog_bad_envelope", "Expected an object")
+    if set(data) - {"kind", "family", "q"}:
+        raise CatalogError("catalog_bad_envelope", "Unexpected catalog field")
+    kind = _require_text(data.get("kind"), "kind", QUERY_LIMIT)
+    family = _require_text(data.get("family"), "family", QUERY_LIMIT)
+    query = _require_text(data.get("q"), "q", QUERY_LIMIT)
+    if kind and kind not in KINDS:
+        raise CatalogError("catalog_unknown_kind", kind)
+    if family and kind not in ("", "templates"):
+        raise CatalogError("catalog_bad_envelope", "family filters templates")
+    return kind, family, query.casefold()
+
+
+def _summary(family: str, needle: str) -> dict[str, Any]:
+    rows = [{"kind": kind, "count": len(_visible(kind, family, needle))} for kind in KINDS]
+    return {"kinds": rows}
+
+
+def _page(kind: str, family: str, needle: str) -> dict[str, Any]:
+    entries = _visible(kind, family, needle)
+    total = len(entries)
+    return {
+        "kind": kind,
+        "entries": deepcopy(entries[:PAGE_LIMIT]),
+        "total": total,
+        "truncated": total > PAGE_LIMIT,
+    }
+
+
+def query_catalog(data: Any) -> dict[str, Any]:
+    kind, family, needle = _query_fields(data)
+    result = _summary(family, needle) if not kind else _page(kind, family, needle)
+    return {"version": 1, "status": "completed", "operation": OPERATION, "result": result}
+
+
+def execute_query(command: Any) -> dict[str, Any]:
+    if not isinstance(command, dict) or set(command) != {"version", "operation", "input"}:
+        raise CatalogError("catalog_bad_envelope", "Expected version, operation and input only")
+    if type(command["version"]) is not int or command["version"] != 1:
+        raise CatalogError("catalog_bad_envelope", "Expected version 1")
+    if command["operation"] != OPERATION:
+        raise CatalogError("catalog_unknown_operation", "Unknown catalog operation")
+    return query_catalog(command["input"])
+
+
+def query_operation() -> dict[str, Any]:
+    kinds = ", ".join(KINDS)
+    return {
+        "name": OPERATION,
+        "description": (
+            f"Query Video 2D catalogs ({kinds}). Omit kind for counts only "
+            "({kinds:[{kind, count}]}, no entry dump). family filters templates. "
+            "q matches id and name, case-insensitive, at most 80 characters. "
+            f"At most {PAGE_LIMIT} entries; truncated and total when over the cap. "
+            "Effects entries are scene_effects.json; world kinds stay on scenes.effects.catalog. "
+            "Read-only; no GPU, save or export."
+        ),
+        "mutation": False,
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "version": {"type": "integer", "const": 1},
+                "input": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "kind": {"type": "string", "enum": list(KINDS)},
+                        "family": {"type": "string", "maxLength": QUERY_LIMIT},
+                        "q": {"type": "string", "maxLength": QUERY_LIMIT},
+                    },
+                },
+            },
+            "required": ["version", "input"],
+        },
+    }
+
+
+def query_handlers() -> dict[str, Callable[[Any], Any]]:
+    async def handle(arguments: Any) -> dict[str, Any]:
+        from fastapi import HTTPException
+        from starlette.concurrency import run_in_threadpool
+
+        payload = arguments if isinstance(arguments, dict) else {}
+        try:
+            return await run_in_threadpool(execute_query, {**payload, "operation": OPERATION})
+        except CatalogError as error:
+            raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
+
+    return {OPERATION: handle}
+
+
 __all__ = [
     "CATALOG_FILES",
     "CatalogError",
     "EFFECTS_CATALOG",
+    "KINDS",
     "command_catalog",
     "command_handlers",
     "execute",
+    "execute_query",
     "load_catalog",
+    "query_catalog",
+    "query_handlers",
+    "query_operation",
 ]
