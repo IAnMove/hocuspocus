@@ -11,6 +11,7 @@
   "clearHistoryAria": "Clear activity history",
   "clearHistoryTitle": "Hide completed task history from this UI. Videos and task data are kept.",
   "ready": "Ready — no active jobs",
+  "memoryDegraded": "Slower than this model's usual step time",
   "eta": "ETA {{value}}",
   "etaTitle": "Estimate based on completed steps. Decoding and saving may add time.",
   "subtask": "Subtask {{phase}}",

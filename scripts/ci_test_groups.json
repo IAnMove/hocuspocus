@@ -48,6 +48,7 @@
         "tests/test_director_stop_endpoint.py",
         "tests/test_director_v2_story_refs.py",
         "tests/test_execution_mode.py",
+        "tests/test_generation_memory.py",
         "tests/test_generation_output_name.py",
         "tests/test_generation_provenance_submission.py",
         "tests/test_generation_queue_priority.py",
@@ -167,6 +168,7 @@
         "tests/test_video_generation_commands.py",
         "tests/test_video_generation_spec.py",
         "tests/test_video_generation_v3.py",
+        "tests/test_video_production_runbook.py",
         "tests/test_voice_reference_settings.py",
         "tests/test_wangp1272_runtime.py",
         "tests/test_wangp1300_audio.py",
@@ -176,7 +178,8 @@
         "tests/test_workspace_collections_router.py",
         "tests/test_workspace_commands.py",
         "tests/test_workspace_registry.py",
-        "tests/test_world3d_owned_render_smoke.py"
+        "tests/test_world3d_owned_render_smoke.py",
+        "tests/test_production_review.py"
       ]
     },
     {

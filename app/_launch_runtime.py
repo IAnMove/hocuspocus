@@ -24617,6 +24617,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                             # their byte-progress loop to this exact job's
                             # durable abort state so Cancel works before the
                             # model has finished downloading or loading.
+                            from services.generation_memory import prepare_queued_params
+                            prepare_queued_params(params)
                             with safe_download.cancellable_downloads(
                                 lambda: is_cancel_requested(job)
                                 or bool(gen.get("abort")),
@@ -24715,7 +24717,11 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                                 total = 0
                                 progress_updates.update(step=0, total_steps=0)
                             from shared.utils.generation_timing import inference_progress_clock
+                            from services.generation_memory import note_inference_step
                             progress_updates.update(inference_progress_clock(job, msg, step, time.time()))
+                            progress_updates.update(note_inference_step(
+                                job, step=step, now=time.time(), message=msg,
+                            ))
                             progress_updates.update(message=msg, phase=msg, last_progress_at=time.time())
                             if not update_job(job, **progress_updates):
                                 continue
@@ -26347,12 +26353,13 @@ def get_status(job_id: str):
         "oom_info": j.get("oom_info"),
     }
     from services.generation_output_name import status_output_fields
+    from services.generation_memory import include_performance
     payload.update(status_output_fields(
         payload.get("output_files"),
         workspace=str(j.get("workspace") or ""),
         workspace_dir=str(j.get("out_dir") or ""),
     ))
-    return payload
+    return include_performance(payload, j)
 
 
 @api.post("/api/v1/cancel/{job_id}")
@@ -36073,6 +36080,7 @@ def _generation_task_fields(job: dict) -> dict:
     provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
     command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
     from services.generation_provenance import task_fields_from_provenance
+    from services.generation_memory import performance_fields
 
     task_identity = task_fields_from_provenance(
         provenance,
@@ -36094,6 +36102,7 @@ def _generation_task_fields(job: dict) -> dict:
         "run_id": command.get("run_id"),
     }
     task_metadata.update(task_identity.pop("metadata", {}))
+    task_metadata.update(performance_fields(job.get("performance")))
     if owner_id.startswith("series:"):
         series_job_id = owner_id.split(":", 1)[1]
         parent_task_id = f"task-series-render-{series_job_id}"
@@ -36879,6 +36888,7 @@ from services.jobs_wait import command_catalog as jobs_wait_catalog, command_han
 from services.song_analysis import command_catalog as audio_analysis_catalog, command_handlers as audio_analysis_handlers
 from services.lipsync_qa import command_catalog as lipsync_qa_catalog, command_handlers as lipsync_qa_handlers
 from services.music_production import command_catalog as music_production_catalog, command_handlers as music_production_handlers
+from services.production_review import command_catalog as production_review_catalog, command_handlers as production_review_handlers
 _jobs_wait_handlers = jobs_wait_handlers(get_status, lambda job_id: _jobs.get(job_id))
 from services.studio_key import command_catalog as studio_key_catalog, command_handlers as studio_key_handlers
 _studio_key_handlers = studio_key_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
@@ -36927,10 +36937,10 @@ api.include_router(create_wangp_mcp_router(
     handlers={"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
               **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers, **_qa_people_handlers, **_studio_key_handlers, **_clip_align_handlers, **_montage_preview_handlers, **audio_analysis_handlers(_workspace_dir), **lipsync_qa_handlers(_workspace_dir),
-              **music_production_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or "", _mcp_access.token)},
+              **music_production_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or "", _mcp_access.token), **production_review_handlers(_workspace_dir)},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *template_command_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog(), *qa_people_catalog(), *studio_key_catalog(), *clip_align_catalog(), *montage_preview_catalog(), *audio_analysis_catalog(), *lipsync_qa_catalog(), *music_production_catalog()],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *template_command_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog(), *qa_people_catalog(), *studio_key_catalog(), *clip_align_catalog(), *montage_preview_catalog(), *audio_analysis_catalog(), *lipsync_qa_catalog(), *music_production_catalog(), *production_review_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
