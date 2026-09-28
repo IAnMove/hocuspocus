@@ -19,6 +19,7 @@
         "tests/test_architecture_contracts.py",
         "tests/test_architecture_factory.py",
         "tests/test_asset_catalog.py",
+        "tests/test_assets_upload.py",
         "tests/test_audio_analysis_cleanup.py",
         "tests/test_audio_analysis_jobs.py",
         "tests/test_audio_word_timestamps.py",
