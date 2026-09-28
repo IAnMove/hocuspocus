@@ -259,11 +259,15 @@ class Production:
                 frames[key] = name
         self.log(f"frames: {len(frames)}")
 
-    def clip_job(self, spec: dict, w: dict, seed: int) -> str | None:
+    def clip_job(self, spec: dict, w: dict, seed: int, take: int = 0) -> str | None:
+        """Retakes change strategy, not only the seed: even takes are driven by the full mix (best on the
+        pilot, r 0.41 vs 0.16), odd takes by the isolated vocals for songs whose mix drowns the voice."""
         frames = h3_frames_for(w["t1"] - w["t0"])
-        slice_name = f"{self.id}-slice-{w['key']}.wav"
+        vocals = self.score().get("vocals_file")
+        source = vocals if take % 2 == 1 and vocals and w.get("sing") else self.state["song"]["file"]
+        slice_name = f"{self.id}-slice-{w['key']}-{take}.wav"
         import subprocess
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(w["t0"]), "-t", str(frames / 24), "-i", str(self.root / self.state["song"]["file"]),
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(w["t0"]), "-t", str(frames / 24), "-i", str(self.root / source),
                         "-ar", "48000", "-ac", "2", str(self.root / slice_name)], check=True)
         sing = " (S1) sings the lead vocal of the mapped driving audio, lips, jaw and breath in precise sync with every syllable." if w.get("sing") else ""
         prompt = (f"integrated_multimodal_description: [Shot 1] {(spec.get('style') or {}).get('video', '')} {w['action']}{sing}\n"
@@ -272,8 +276,12 @@ class Production:
                   "workspace": self.ws, "image_prompt_type": "S", "image_start": self.upload(self.state["frames"][w["key"]])[0],
                   "video_length": frames, "sliding_window_size": frames, "num_inference_steps": 4, "guidance_scale": 1, "image_mode": 0,
                   "input_video_strength": 1.0, "audio_prompt_type": "A", "audio_guide": self.upload(slice_name)[0]}
-        r = self.mcp("generate", {"request_id": f"{self.id}-{w['key']}-{seed}", "params": params})
-        return r.get("job_id") or (r.get("result") or {}).get("job_id")
+        # a resumed run must not collide with the journal entry of an earlier take
+        r = self.mcp("generate", {"request_id": f"{self.id}-{w['key']}-{seed}-{uuid.uuid4().hex[:8]}", "params": params})
+        job = r.get("job_id") or (r.get("result") or {}).get("job_id")
+        if not job:
+            self.log(f"clip {w['key']} not admitted: {json.dumps(r)[:140]}")
+        return job
 
     def clips(self, spec: dict, windows: list[dict]) -> None:
         clips = self.state.setdefault("clips", {})
@@ -282,15 +290,19 @@ class Production:
         pending = [w for w in windows if w["kind"] == "h3" and w["key"] not in clips and w["key"] in self.state.get("frames", {})]
         takes = {w["key"]: 0 for w in pending}
         while pending:
-            names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + takes[w["key"]]) for w in pending})
+            names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + takes[w["key"]], takes[w["key"]]) for w in pending})
             retry = []
             for w in pending:
                 takes[w["key"]] += 1
                 name = names.get(w["key"])
                 if not name:
+                    self.log(f"clip {w['key']} take {takes[w['key']]}: no output")
+                    if takes[w["key"]] < max_takes:
+                        retry.append(w)
                     continue
                 qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"]) if w.get("sing") and vocals else {"verdict": "ok"}
-                self.log(f"clip {w['key']} take {takes[w['key']]}: {qa.get('verdict')} r={qa.get('best_r')}")
+                drive = "vocals" if (takes[w["key"]] - 1) % 2 == 1 and w.get("sing") else "mix"
+                self.log(f"clip {w['key']} take {takes[w['key']]} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
                 best = clips.get(w["key"])
                 if not best or (qa.get("best_r") or 0) >= ((best.get("qa") or {}).get("best_r") or 0):
                     clips[w["key"]] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
@@ -341,18 +353,26 @@ class Production:
         if clip:
             ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-push-in")})
             skip = round(max(0.0, a - shot.get("t0", a)) + ((clip.get("qa") or {}).get("suggested_sync_s") or 0), 3) if shot["kind"] == "h3" else 0
-            anim: dict[str, Any] = {"end": {"x": 50, "y": 50, "scale": 1.08 if shot["kind"] == "h3" else 1.15, "rotation": 0}}
+            # the animation duration is also the video span (sceneTimeline.getSceneLayerTiming): a camera preset's
+            # shorter duration would freeze the clip mid-scene, so it always covers the scene (+ the skipped head)
+            anim: dict[str, Any] = {"end": {"x": 50, "y": 50, "scale": 1.08 if shot["kind"] == "h3" else 1.15, "rotation": 0},
+                                    "duration": round(dur + skip, 3)}
             if skip > 0:
-                anim.update(trimStart=skip, duration=round(dur + skip, 3))
+                anim["trimStart"] = skip
             ops.append({"op": "update_layer", "id": "bg", "patch": {"fill": True, "animation": anim}})
         else:
             zoom = shot.get("zoom") or [1.0, 1.1]
-            ops += [{"op": "add_layer", "id": "bg", "source": stills.get(shot.get("still"), shot.get("still")), "type": "image", "preset": shot.get("camera", "camera-push-in")},
+            source = stills.get(shot.get("still"), shot.get("still"))
+            if not source and shot["kind"] == "h3" and shot["key"] in self.state.get("frames", {}):
+                source = self.upload(self.state["frames"][shot["key"]])[1]      # clip failed: hold its start frame
+            ops += [{"op": "add_layer", "id": "bg", "source": source, "type": "image", "preset": shot.get("camera", "camera-push-in")},
                     {"op": "update_layer", "id": "bg", "patch": {"fill": True, "focus": shot.get("focus", {"x": 50, "y": 50}), "animation": {
                         "start": {"x": 50, "y": 50, "scale": zoom[0], "rotation": 0}, "end": {"x": 50, "y": 50, "scale": zoom[1], "rotation": 0}}}}]
         if shot.get("title"):
             ops.append({"op": "add_title", "id": "tt", "template": shot["title"].get("template", "lower-third-date"), "fields": shot["title"]["fields"],
                         "start": 0.1, "duration": round(dur - 0.2, 3)})
+            if shot["title"].get("template", "lower-third-date") == "lower-third-date":   # section label on top; lyrics own the bottom
+                ops += [{"op": "update_text", "id": "tt-date", "patch": {"y": 12}}, {"op": "update_text", "id": "tt-caption", "patch": {"y": 20}}]
         for index, line in enumerate(score.get("lines") or []):
             if line["t1"] <= a or line["t0"] >= b:
                 continue
