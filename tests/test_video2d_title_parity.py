@@ -54,10 +54,10 @@ def test_add_title_matches_the_typescript_template(width, height):
         fields = {field["key"]: field["default"] for field in entry["fields"]}
         python = edit({"version": 1, "input": {"document": _document(width, height), "operations": [
             {"op": "add_title", "template": template_id, "fields": fields, "start": 0.4, "duration": 3.2},
-        ]}})["result"]["document"]["texts"]
+        ], "full": True}})["result"]["document"]["texts"]
         bridged = execute({
             "version": 1,
             "operation": "scenes.text.template",
-            "input": {"templateId": template_id, "fields": fields, "start": 0.4, "duration": 3.2, "width": width, "height": height},
+            "input": {"templateId": template_id, "fields": fields, "start": 0.4, "duration": 3.2, "width": width, "height": height, "full": True},
         })["result"]["texts"]
         _same(python, bridged, template_id)

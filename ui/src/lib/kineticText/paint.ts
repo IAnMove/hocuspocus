@@ -75,6 +75,58 @@ function paintPaper(ctx: CanvasRenderingContext2D, width: number, height: number
   ctx.restore()
 }
 
+function paintTapeFace(ctx: CanvasRenderingContext2D, width: number, height: number, radius?: number) {
+  const curve = Math.min(height / 2, (radius ?? 0.2) * height)
+  roundRect(ctx, -width / 2, -height / 2, width, height, curve)
+  ctx.fill()
+}
+
+function paintHalftone(ctx: CanvasRenderingContext2D, width: number, height: number, seed: number) {
+  const step = Math.max(3.5, Math.min(width, height) * 0.09)
+  const left = -width / 2
+  const top = -height / 2
+  ctx.save()
+  ctx.translate(Math.max(4, width * 0.06), Math.max(5, height * 0.14))
+  ctx.fillStyle = '#16130f'
+  const ink = ctx.globalAlpha * 0.9
+  for (let row = 0, y = top; y < top + height; row += 1, y += step) {
+    for (let column = 0, x = left; x < left + width; column += 1, x += step) {
+      if ((column + row + (seed % 2)) % 2 === 0) continue
+      ctx.globalAlpha = ink
+      ctx.beginPath()
+      ctx.arc(x + step * 0.35, y + step * 0.35, Math.max(0.8, step * 0.18), 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+}
+
+function paintCardFace(ctx: CanvasRenderingContext2D, width: number, height: number, color: string, radius: number | undefined, seed: number) {
+  paintHalftone(ctx, width, height, seed)
+  ctx.fillStyle = color
+  roundRect(ctx, -width / 2, -height / 2, width, height, Math.min(height / 2, (radius ?? 0.08) * height))
+  ctx.fill()
+  ctx.strokeStyle = '#1c140f'
+  ctx.lineWidth = Math.max(2, height * 0.035)
+  ctx.stroke()
+}
+
+function tapeCutsLetters(color: string) {
+  const red = Number.parseInt(color.slice(1, 3), 16)
+  const green = Number.parseInt(color.slice(3, 5), 16)
+  const blue = Number.parseInt(color.slice(5, 7), 16)
+  if (!Number.isFinite(red) || !Number.isFinite(green) || !Number.isFinite(blue)) return false
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722 >= 160
+}
+
+function prepareTapeCut(ctx: CanvasRenderingContext2D, cue: KineticText) {
+  if (cue.box?.kind !== 'tape' || !tapeCutsLetters(cue.color)) return
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.shadowColor = 'transparent'
+  ctx.shadowBlur = 0
+  ctx.lineWidth = 0
+}
+
 function paintBox(ctx: CanvasRenderingContext2D, cue: KineticText, blockWidth: number, blockHeight: number) {
   const box = cue.box
   if (!box || box.kind === 'none') return
@@ -88,6 +140,8 @@ function paintBox(ctx: CanvasRenderingContext2D, cue: KineticText, blockWidth: n
   else if (box.kind === 'pill') { roundRect(ctx, -width / 2, -height / 2, width, height, (box.radius ?? .6) * height); ctx.fill() }
   else if (box.kind === 'underline') ctx.fillRect(-blockWidth / 2, blockHeight * .35, blockWidth, Math.max(2, blockHeight * .06))
   else if (box.kind === 'bar') ctx.fillRect(-width / 2, -height / 2, width, height)
+  else if (box.kind === 'tape') paintTapeFace(ctx, width, height, box.radius)
+  else if (box.kind === 'card') paintCardFace(ctx, width, height, box.color, box.radius, hashId(cue.id))
   else ctx.fillRect(-width / 2, -height / 2, width, height)
   ctx.restore()
 }
@@ -189,6 +243,7 @@ function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number
     ctx.clip()
   }
   applyInk(ctx, cue, size, blockWidth, blockHeight)
+  prepareTapeCut(ctx, cue)
   ctx.textBaseline = 'middle'
   const origin = lineOrigin(cue.align ?? 'center', blockWidth)
   ctx.textAlign = origin.align

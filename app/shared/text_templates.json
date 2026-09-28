@@ -170,6 +170,56 @@
           "labelKey": "fields.caption"
         }
       ]
+    },
+    {
+      "id": "ransom",
+      "labelKey": "templates.ransom",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "line",
+          "default": "THE BIRD IS FREED",
+          "labelKey": "fields.line"
+        }
+      ]
+    },
+    {
+      "id": "dymo",
+      "labelKey": "templates.dymo",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "line",
+          "default": "KEEP THE LINE",
+          "labelKey": "fields.line"
+        },
+        {
+          "key": "background",
+          "default": "paper",
+          "labelKey": "fields.background"
+        }
+      ]
+    },
+    {
+      "id": "card",
+      "labelKey": "templates.card",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "title",
+          "default": "Musktopia",
+          "labelKey": "fields.title"
+        }
+      ]
     }
   ]
 }
