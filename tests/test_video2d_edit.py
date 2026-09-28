@@ -27,7 +27,7 @@ def _document():
 
 
 def _edit(operations, document=None):
-    return edit({"version": 1, "input": {"document": _document() if document is None else document, "operations": operations}})
+    return edit({"version": 1, "input": {"document": _document() if document is None else document, "operations": operations, "full": True}})
 
 
 def _result(operations, document=None):

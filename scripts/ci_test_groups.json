@@ -84,6 +84,7 @@
         "tests/test_media_gallery_listing.py",
         "tests/test_media_path_security.py",
         "tests/test_media_thumbnails.py",
+        "tests/test_mcp_compact_responses.py",
         "tests/test_minimax_h3_duration.py",
         "tests/test_minimax_h3_fused_turbo.py",
         "tests/test_minimax_h3_pdd.py",

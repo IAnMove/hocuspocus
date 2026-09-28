@@ -7,6 +7,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
+from services.mcp_compact import summarize_entry
+
 ROOT = Path(__file__).resolve().parents[1] / "shared"
 
 CATALOG_FILES = {
@@ -92,14 +94,26 @@ def command_catalog() -> list[dict[str, Any]]:
     for name, data in CATALOGS.items():
         operations.append({
             "name": name,
-            "description": f"{BLURBS[name]} {len(_entries(data, name))} entries. Read-only; no GPU, save or export.",
+            "description": (
+                f"{BLURBS[name]} {len(_entries(data, name))} entries. "
+                "Default result is id, name, one-line description, and counts. "
+                "Pass detail true for the full JSON, or id for one full entry. "
+                "Read-only; no GPU, save or export."
+            ),
             "mutation": False,
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
                     "version": {"type": "integer", "const": 1},
-                    "input": {"type": "object", "additionalProperties": False, "properties": {}},
+                    "input": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "detail": {"type": "boolean"},
+                            "id": {"type": "string", "minLength": 1, "maxLength": QUERY_LIMIT},
+                        },
+                    },
                 },
                 "required": ["version", "input"],
             },
@@ -115,9 +129,13 @@ def execute(command: Any) -> dict[str, Any]:
     name = command["operation"]
     if type(name) is not str or name not in CATALOGS:
         raise CatalogError("catalog_unknown_operation", "Unknown catalog operation")
-    if command["input"] != {}:
-        raise CatalogError("catalog_bad_envelope", "Catalog input must be empty")
-    return {"version": 1, "status": "completed", "operation": name, "result": deepcopy(CATALOGS[name])}
+    detail, identity = _catalog_options(command["input"])
+    return {
+        "version": 1,
+        "status": "completed",
+        "operation": name,
+        "result": _project_catalog(CATALOGS[name], detail=detail, identity=identity),
+    }
 
 
 def _handler(name: str) -> Callable[[Any], Any]:
@@ -176,19 +194,23 @@ def _require_text(value: Any, field: str, limit: int) -> str:
     return value
 
 
-def _query_fields(data: Any) -> tuple[str, str, str]:
+def _query_fields(data: Any) -> tuple[str, str, str, bool, str]:
     if not isinstance(data, dict):
         raise CatalogError("catalog_bad_envelope", "Expected an object")
-    if set(data) - {"kind", "family", "q"}:
+    if set(data) - {"kind", "family", "q", "detail", "id"}:
         raise CatalogError("catalog_bad_envelope", "Unexpected catalog field")
     kind = _require_text(data.get("kind"), "kind", QUERY_LIMIT)
     family = _require_text(data.get("family"), "family", QUERY_LIMIT)
     query = _require_text(data.get("q"), "q", QUERY_LIMIT)
+    identity = _require_text(data.get("id"), "id", QUERY_LIMIT)
+    detail = data.get("detail", False)
+    if type(detail) is not bool:
+        raise CatalogError("catalog_bad_envelope", "detail")
     if kind and kind not in KINDS:
         raise CatalogError("catalog_unknown_kind", kind)
     if family and kind not in ("", "templates"):
         raise CatalogError("catalog_bad_envelope", "family filters templates")
-    return kind, family, query.casefold()
+    return kind, family, query.casefold(), detail, identity
 
 
 def _summary(family: str, needle: str) -> dict[str, Any]:
@@ -196,20 +218,68 @@ def _summary(family: str, needle: str) -> dict[str, Any]:
     return {"kinds": rows}
 
 
-def _page(kind: str, family: str, needle: str) -> dict[str, Any]:
+def _page(kind: str, family: str, needle: str, detail: bool) -> dict[str, Any]:
     entries = _visible(kind, family, needle)
     total = len(entries)
-    return {
-        "kind": kind,
-        "entries": deepcopy(entries[:PAGE_LIMIT]),
-        "total": total,
-        "truncated": total > PAGE_LIMIT,
-    }
+    page = entries[:PAGE_LIMIT]
+    shown = deepcopy(page) if detail else [summarize_entry(item) for item in page]
+    return {"kind": kind, "entries": shown, "total": total, "truncated": total > PAGE_LIMIT}
+
+
+def _catalog_options(data: Any) -> tuple[bool, str]:
+    if data == {}:
+        return False, ""
+    if not isinstance(data, dict) or set(data) - {"detail", "id"}:
+        raise CatalogError("catalog_bad_envelope", "Catalog input accepts detail and id")
+    detail = data.get("detail", False)
+    if type(detail) is not bool:
+        raise CatalogError("catalog_bad_envelope", "detail")
+    identity = data.get("id", "")
+    if identity is None:
+        identity = ""
+    if type(identity) is not str or len(identity) > QUERY_LIMIT:
+        raise CatalogError("catalog_bad_envelope", "id")
+    return detail, identity
+
+
+def _project_catalog(data: Any, *, detail: bool, identity: str) -> Any:
+    entries = _entries(data, "catalog")
+    if identity:
+        match = next((item for item in entries if item.get("id") == identity), None)
+        if match is None:
+            raise CatalogError("catalog_unknown_id", identity)
+        return {"entry": deepcopy(match)}
+    if detail:
+        return deepcopy(data)
+    return {"entries": [summarize_entry(item) for item in entries], "counts": {"entries": len(entries)}}
+
+
+def _find_entry(identity: str, kind: str, family: str, needle: str) -> tuple[str, dict]:
+    kinds = (kind,) if kind else KINDS
+    found: dict | None = None
+    found_kind = ""
+    for item_kind in kinds:
+        for entry in _visible(item_kind, family, needle):
+            if entry.get("id") != identity:
+                continue
+            if found is not None:
+                raise CatalogError("catalog_ambiguous_id", identity)
+            found = entry
+            found_kind = item_kind
+    if found is None:
+        raise CatalogError("catalog_unknown_id", identity)
+    return found_kind, found
 
 
 def query_catalog(data: Any) -> dict[str, Any]:
-    kind, family, needle = _query_fields(data)
-    result = _summary(family, needle) if not kind else _page(kind, family, needle)
+    kind, family, needle, detail, identity = _query_fields(data)
+    if identity:
+        found_kind, entry = _find_entry(identity, kind, family, needle)
+        result: dict[str, Any] = {"kind": found_kind, "entry": deepcopy(entry)}
+    elif kind:
+        result = _page(kind, family, needle, detail)
+    else:
+        result = _summary(family, needle)
     return {"version": 1, "status": "completed", "operation": OPERATION, "result": result}
 
 
@@ -229,7 +299,9 @@ def query_operation() -> dict[str, Any]:
         "name": OPERATION,
         "description": (
             f"Query Video 2D catalogs ({kinds}). Omit kind for counts only "
-            "({kinds:[{kind, count}]}, no entry dump). family filters templates. "
+            "({kinds:[{kind, count}]}, no entry dump). With kind, entries are summaries "
+            "(id, name, one-line description, counts) unless detail is true. "
+            "id returns that one full entry. family filters templates. "
             "q matches id and name, case-insensitive, at most 80 characters. "
             f"At most {PAGE_LIMIT} entries; truncated and total when over the cap. "
             "Effects entries are scene_effects.json; world kinds stay on scenes.effects.catalog. "
@@ -248,6 +320,8 @@ def query_operation() -> dict[str, Any]:
                         "kind": {"type": "string", "enum": list(KINDS)},
                         "family": {"type": "string", "maxLength": QUERY_LIMIT},
                         "q": {"type": "string", "maxLength": QUERY_LIMIT},
+                        "detail": {"type": "boolean"},
+                        "id": {"type": "string", "maxLength": QUERY_LIMIT},
                     },
                 },
             },

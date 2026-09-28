@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
 import http.server
 import inspect
 import json
@@ -248,7 +247,7 @@ def build_handlers(root: Path) -> dict[str, Handler]:
     handlers.update(query_handlers())
     handlers.update(compile_handlers())
     handlers.update(edit_handlers())
-    handlers.update(preview_handlers())
+    handlers.update(preview_handlers(workspace_dir=resolve))
     handlers.update(validate_handlers(resolve, lambda: str(uploads)))
     handlers.update(document_handlers(resolve))
     handlers.update(SceneCommands(resolve).handlers())
@@ -269,7 +268,7 @@ def choose_template(entries: list[Any]) -> dict[str, Any]:
 
 
 def load_template(handlers: dict[str, Handler], report: dict[str, Any]) -> dict[str, Any]:
-    result = invoke(handlers["scenes.catalog"], {"version": 1, "input": {"kind": "templates"}})
+    result = invoke(handlers["scenes.catalog"], {"version": 1, "input": {"kind": "templates", "detail": True}})
     _record(report, "scenes.catalog")
     entries = result.get("result", {}).get("entries") or []
     if not entries:
@@ -298,7 +297,7 @@ def _compile_input(template_id: str, assets: dict[str, str], duration: float) ->
     width, height = FRAME
     return {"version": 1, "input": {
         "templateId": template_id, "assets": assets, "duration": duration,
-        "width": width, "height": height, "fps": COMPILE_FPS,
+        "width": width, "height": height, "fps": COMPILE_FPS, "full": True,
     }}
 
 
@@ -337,6 +336,7 @@ def add_lyrics(handlers: dict[str, Handler], document: dict[str, Any], report: d
         "format": "plain",
         "text": "The harbour keeps the light\nA quiet bell\nThen morning",
         "duration": 8,
+        "full": True,
     }})
     _record(report, "scenes.lyrics.import")
     lyrics = result.get("result", {}).get("lyrics")
@@ -404,7 +404,7 @@ def apply_effect(handlers: dict[str, Handler], document: dict[str, Any], report:
 
 def validate_scene(handlers: dict[str, Handler], document: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
     result = invoke(handlers["scenes.video2d.validate"], {"version": 1, "input": {
-        "workspace": WORKSPACE, "document": document,
+        "workspace": WORKSPACE, "document": document, "full": True,
     }})
     _record(report, "scenes.video2d.validate")
     body = result.get("result") if isinstance(result.get("result"), dict) else {}
@@ -432,11 +432,20 @@ def preview_times(duration: float) -> list[float]:
     return times[:8]
 
 
-def write_sheet(result: dict[str, Any], path: Path) -> str:
-    encoded = result.get("result", {}).get("png_base64")
-    if not isinstance(encoded, str):
-        raise SmokeError("preview_paint_failed", "preview did not return a PNG")
-    raw = base64.b64decode(encoded)
+def write_sheet(result: dict[str, Any], path: Path, root: Path) -> str:
+    from urllib.parse import unquote, urlsplit
+
+    url = result.get("result", {}).get("url")
+    if not isinstance(url, str) or "base64" in json.dumps(result.get("result")):
+        raise SmokeError("preview_paint_failed", "preview did not return a workspace URL")
+    parts = urlsplit(url)
+    relative = unquote(parts.path).removeprefix("/api/v1/file/")
+    workspace = WORKSPACE
+    for item in parts.query.split("&"):
+        if item.startswith("workspace="):
+            workspace = unquote(item.split("=", 1)[1])
+    source = root / workspace / relative
+    raw = source.read_bytes()
     if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
         raise SmokeError("preview_paint_failed", "contact sheet is not a PNG")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -444,12 +453,14 @@ def write_sheet(result: dict[str, Any], path: Path) -> str:
     return str(path.resolve())
 
 
-def preview_scene(handlers: dict[str, Handler], document: dict[str, Any], path: Path, report: dict[str, Any]) -> str:
+def preview_scene(handlers: dict[str, Handler], document: dict[str, Any], path: Path, report: dict[str, Any], root: Path) -> str:
     result = invoke(handlers["scenes.video2d.preview"], {"version": 1, "input": {
-        "document": document, "times": preview_times(float(document.get("duration") or SCENE_SECONDS)),
+        "workspace": WORKSPACE,
+        "document": document,
+        "times": preview_times(float(document.get("duration") or SCENE_SECONDS)),
     }})
     _record(report, "scenes.video2d.preview")
-    return write_sheet(result, path)
+    return write_sheet(result, path, root)
 
 
 def save_scene(handlers: dict[str, Handler], document: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
@@ -624,7 +635,7 @@ def run_smoke(root: Path, contact_sheet: Path | None = None) -> dict[str, Any]:
     document = validate_scene(handlers, document, report)
     report["template_id"] = str(entry.get("id") or "")
     report["duration"] = document.get("duration")
-    report["contact_sheet"] = preview_scene(handlers, document, sheet, report)
+    report["contact_sheet"] = preview_scene(handlers, document, sheet, report, root)
     saved = save_scene(handlers, document, report)
     report["scene_file"] = str((root / WORKSPACE / str(saved["name"])).resolve())
     mp4, reason = export_scene(root, document, report)

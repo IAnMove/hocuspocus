@@ -16,6 +16,7 @@ from urllib.parse import unquote, urlsplit
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
+from services.mcp_compact import compact_scene
 from services.media_refs import parse_media_ref
 from services.scene2d_schema import FONTS, LAYER_TYPES, document_schema
 from services.scene2d_text_boxes import layout_warnings, lyric_placements, painted_contrast_warnings, text_placements
@@ -588,8 +589,9 @@ def normalize_document(raw: Any, *, workspace: str, workspace_dir: Callable[[str
 def command_catalog() -> list[dict[str, Any]]:
     workspace = {"type": "string", "minLength": 1, "maxLength": 120}
     description = (
-        "Normalize a version 1 Video 2D document and return result.document, result.errors and result.warnings "
-        "without saving or exporting. Errors use a stable code. Warnings use text_outside_safe_area "
+        "Normalize a version 1 Video 2D document. The default result is layer ids, text ids, warning codes, "
+        "error codes, duration and size. Pass input.full true for result.document, result.errors and result.warnings. "
+        "Does not save or export. Errors use a stable code. Warnings use text_outside_safe_area "
         "(overlay or text y < 12 or y > 80, or width > 90 on a portrait frame), missing_media, unknown_font, "
         "layer_outside_frame, and duration_over_publish_limit (X 140s / premium 180s, shorts 60s / premium 90s). "
         "Text and lyric boxes use font, size, maxWidth, align and box padding. text_overlap, lyrics_overlap, "
@@ -603,7 +605,7 @@ def command_catalog() -> list[dict[str, Any]]:
         "inputSchema": {"type": "object", "additionalProperties": False,
                         "properties": {"version": {"type": "integer", "const": 1},
                                        "input": {"type": "object", "additionalProperties": False,
-                                                 "properties": {"workspace": workspace, "document": document_schema()},
+                                                 "properties": {"workspace": workspace, "document": document_schema(), "full": {"type": "boolean"}},
                                                  "required": ["document", "workspace"]}},
                         "required": ["version", "input"]},
     }]
@@ -614,8 +616,10 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
 
     def payload(arguments: Any) -> dict[str, Any]:
         data = arguments.get("input") if isinstance(arguments, dict) and arguments.get("version") == 1 else None
-        if not isinstance(data, dict) or set(data) - {"document", "workspace"} or "document" not in data or "workspace" not in data:
+        if not isinstance(data, dict) or set(data) - {"document", "workspace", "full"} or "document" not in data or "workspace" not in data:
             raise Scene2DValidateError("invalid_command", "Use version 1 with input.document and input.workspace")
+        if "full" in data and type(data["full"]) is not bool:
+            raise Scene2DValidateError("invalid_command", "full must be boolean")
         if not isinstance(data.get("workspace"), str) or not WORKSPACE_RE.fullmatch(data["workspace"]):
             raise Scene2DValidateError("invalid_workspace", "Use an explicit valid workspace")
         return data
@@ -623,6 +627,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
     def run(arguments: Any) -> dict[str, Any]:
         data = payload(arguments)
         result = normalize_document(data["document"], workspace=data["workspace"], workspace_dir=workspace_dir, uploads_dir=uploads)
+        if data.get("full") is not True:
+            result = compact_scene(result.get("document"), result.get("warnings"), errors=result.get("errors"))
         return {"version": 1, "status": "completed", "operation": OPERATION, "result": result}
 
     async def handle(arguments: Any) -> dict[str, Any]:

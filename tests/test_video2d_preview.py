@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
+import json
 import struct
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import pytest
 
@@ -16,6 +17,7 @@ from services.video2d_preview import (
     OPERATION,
     PreviewError,
     bind_preview_origin,
+    bind_preview_workspace,
     command_catalog,
     execute,
     painter_block_reason,
@@ -65,8 +67,26 @@ def _block_paint(monkeypatch):
     monkeypatch.setattr("services.video2d_preview.paint_contact_sheet", lambda *args: pytest.fail(str(args)))
 
 
-def _png(result) -> bytes:
-    raw = base64.b64decode(result["result"]["png_base64"])
+def _bind_workspace(tmp_path: Path) -> Path:
+    root = tmp_path / "workspaces"
+
+    def workspace_dir(name: str) -> str:
+        path = root / name
+        path.mkdir(parents=True, exist_ok=True)
+        return str(path)
+
+    bind_preview_workspace(workspace_dir)
+    return root
+
+
+def _png(result, root: Path) -> bytes:
+    body = json.dumps(result)
+    assert "base64" not in body
+    assert "png_base64" not in result["result"]
+    url = result["result"]["url"]
+    relative = unquote(urlsplit(url).path).removeprefix("/api/v1/file/")
+    workspace = unquote(urlsplit(url).query.split("=", 1)[1])
+    raw = (root / workspace / relative).read_bytes()
     assert hashlib.sha256(raw).hexdigest() == result["result"]["sha256"]
     return raw
 
@@ -136,7 +156,8 @@ def test_remote_layer_source_is_rejected_before_paint():
     assert caught.value.code == "preview_missing_ref"
 
 
-def test_workspace_media_uses_the_live_app_origin(monkeypatch):
+def test_workspace_media_uses_the_live_app_origin(monkeypatch, tmp_path):
+    _bind_workspace(tmp_path)
     seen = {}
 
     def fake_run(payload, timeout):
@@ -192,16 +213,17 @@ def test_workspace_media_without_app_origin_fails_before_paint():
     assert caught.value.code == "preview_painter_unavailable"
 
 
-def test_contact_sheet_bytes_are_stable_for_a_portrait_document():
+def test_contact_sheet_bytes_are_stable_for_a_portrait_document(tmp_path):
     reason = painter_block_reason()
     if reason:
         pytest.skip(reason)
+    root = _bind_workspace(tmp_path)
     document = _document(name="portrait", width=90, height=160)
     command = _command(document=document, times=[0, 1])
     first = execute(command)
     second = execute(command)
-    left = _png(first)
-    right = _png(second)
+    left = _png(first, root)
+    right = _png(second, root)
     assert left == right
     assert hashlib.sha256(left).hexdigest() == first["result"]["sha256"]
     assert first["result"]["frameCount"] == 2
@@ -210,6 +232,7 @@ def test_contact_sheet_bytes_are_stable_for_a_portrait_document():
     assert first["result"]["columns"] == 2
     assert _png_size(left) == (180, 160)
     assert set(first["result"]) == {
-        "mime", "sha256", "png_base64", "times", "width", "height", "columns", "frameCount",
+        "mime", "sha256", "url", "file", "bytes", "times", "width", "height", "columns", "frameCount",
     }
+    assert first["result"]["url"].startswith("/api/v1/file/video2d-contact-")
     SHEET.write_bytes(left)

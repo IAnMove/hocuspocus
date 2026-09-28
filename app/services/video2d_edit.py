@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
+from services.mcp_compact import compact_scene
 from services.scene_commands import DocumentInput, command_error
 from services.video2d_preset_catalog import camera_presets, finish_presets
 
@@ -163,8 +164,10 @@ def _payload(command) -> dict:
     if type(command.get("version")) is not int or command.get("version") != 1:
         _fail("invalid_command", "Use version 1")
     data = command.get("input")
-    if not isinstance(data, dict) or set(data) != {"document", "operations"}:
+    if not isinstance(data, dict) or set(data) - {"document", "operations", "full"} or {"document", "operations"} - set(data):
         _fail("invalid_command", "input must include document and operations only")
+    if "full" in data and type(data["full"]) is not bool:
+        _fail("invalid_command", "full must be boolean")
     return data
 
 
@@ -1060,7 +1063,11 @@ def edit(command) -> dict:
     for operation in _operation_list(payload["operations"]):
         _apply(document, operation, warnings)
     _ensure_document(document)
-    return {"version": 1, "status": "completed", "operation": OPERATION, "result": {"document": document, "warnings": warnings, "saved": False}}
+    if payload.get("full") is True:
+        body = {"document": document, "warnings": warnings, "saved": False}
+    else:
+        body = compact_scene(document, warnings, saved=False)
+    return {"version": 1, "status": "completed", "operation": OPERATION, "result": body}
 
 
 def _schema_string(max_length: int) -> dict:
@@ -1075,7 +1082,7 @@ def command_catalog() -> list[dict]:
     preset = {"type": "string", "enum": list(camera_presets())}
     identity = _schema_string(160)
     description = (
-        "Return an edited version 1 Video 2D document and warnings. Does not save, export, render or fetch. "
+        "Return layer ids, text ids, warning codes, duration and size. Pass input.full true for the document and warnings. Does not save, export, render or fetch. "
         "At most 32 operations. Ids are 1..160 characters. add_layer, add_title and add_audio_track replace an object with the same id. "
         "add_layer source must be a durable /api/v1/file, /api/v1/uploads or /examples URL. Optional preset ids are the "
         "kind=camera entries of app/shared/motion_presets.json. Other motion ids are not camera presets. "
@@ -1103,7 +1110,7 @@ def command_catalog() -> list[dict]:
         _op_schema("set_duration", ["duration"], {"duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 600}}),
         _op_schema("set_format", ["width", "height"], {"width": {"type": "integer", "minimum": 240, "maximum": 3840}, "height": {"type": "integer", "minimum": 240, "maximum": 3840}}),
     ]}}
-    envelope = {"type": "object", "additionalProperties": False, "properties": {"version": {"type": "integer", "const": 1}, "input": {"type": "object", "additionalProperties": False, "properties": {"document": {"type": "object"}, "operations": operations}, "required": ["document", "operations"]}}, "required": ["version", "input"]}
+    envelope = {"type": "object", "additionalProperties": False, "properties": {"version": {"type": "integer", "const": 1}, "input": {"type": "object", "additionalProperties": False, "properties": {"document": {"type": "object"}, "operations": operations, "full": {"type": "boolean"}}, "required": ["document", "operations"]}}, "required": ["version", "input"]}
     return [{"name": OPERATION, "version": 1, "domain": "scenes", "mutation": False, "description": description, "inputSchema": envelope}]
 
 

@@ -1324,8 +1324,12 @@ def _check_model_downloaded(model_type: str) -> bool:
 
 
 @api.get("/api/v1/models")
-def list_models():
-    """List available model families and model types."""
+def list_models(detail: bool = True):
+    """List available model families and model types.
+
+    HTTP defaults to the full catalog so the Studio UI keeps working.
+    Pass detail=false for the short MCP summary.
+    """
     from services.director_model_compat import assess_director_model
 
     # Families
@@ -1425,7 +1429,21 @@ def list_models():
         "tool_only": True,
     })
 
-    return {"families": families, "models": models}
+    payload = {"families": families, "models": models}
+    if detail:
+        return payload
+    from services.mcp_compact import summarize_model_catalog
+    return summarize_model_catalog(payload)
+
+
+def mcp_model_list(args):
+    """models and models.list: summaries unless detail is true or one id is named."""
+    if not isinstance(args, dict):
+        args = {}
+    model_type = args.get("model_type")
+    if isinstance(model_type, str) and model_type.strip():
+        return get_model_options(model_type)
+    return list_models(detail=args.get("detail") is True)
 
 
 _MODEL_VISIBILITY_CONFIG_KEY = "maestro_model_visibility"
@@ -36886,9 +36904,9 @@ _image_generation_commands.leftover_receipt_lookup = _job_leftovers.receipt_for
 _job_leftover_handlers = job_leftover_handlers(_job_leftovers)
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
-    handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
+    handlers={"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers},
+              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
         adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *template_command_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog()],

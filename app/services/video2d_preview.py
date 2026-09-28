@@ -8,12 +8,12 @@ and the paint holds the ``scene2d-render`` CPU lane.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import http.server
 import json
 import mimetypes
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -22,6 +22,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import quote
 
 from fastapi import HTTPException
 
@@ -35,6 +36,8 @@ MAX_TIMES = 8
 MAX_EDGE = 960
 PAINT_TIMEOUT = 120.0
 FIELDS = frozenset({"document", "times", "workspace"})
+WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
+_WORKSPACE_DIR: Callable[[str], str] | None = None
 ROOT = Path(__file__).resolve().parents[2]
 UI_ROOT = ROOT / "ui"
 DIST = UI_ROOT / "dist"
@@ -76,16 +79,11 @@ def _detail(detail: Any, key: str, fallback: str) -> str:
     return fallback
 
 
-def _workspace_name(value: Any) -> None:
-    if not isinstance(value, str) or value != value.strip() or not 1 <= len(value) <= 120:
-        raise PreviewError("preview_bad_envelope", "workspace")
-
-
 def _preview_input(data: Any) -> dict:
     if not isinstance(data, dict) or not {"document", "times"} <= set(data) <= FIELDS:
         raise PreviewError("preview_bad_envelope", "input must be document and times")
-    if "workspace" in data:
-        _workspace_name(data["workspace"])
+    if "workspace" in data and not (isinstance(data["workspace"], str) and WORKSPACE_RE.fullmatch(data["workspace"])):
+        raise PreviewError("preview_bad_workspace", "workspace")
     return data
 
 
@@ -153,6 +151,39 @@ def prepare(command: Any) -> tuple[dict, list[float], tuple[int, int, int]]:
     document = _document(data["document"])
     times = _times(data["times"], float(document["duration"]))
     return document, times, preview_frame_size(document)
+
+
+def bind_preview_workspace(workspace_dir: Callable[[str], str] | None) -> None:
+    """Workspace root used when the contact sheet is stored as a file."""
+    global _WORKSPACE_DIR
+    _WORKSPACE_DIR = workspace_dir
+
+
+def _workspace_name(data: dict) -> str:
+    value = data.get("workspace", "default")
+    if value is None or value == "":
+        return "default"
+    if type(value) is not str or not WORKSPACE_RE.fullmatch(value):
+        raise PreviewError("preview_bad_workspace", "workspace")
+    return value
+
+
+def store_contact_sheet(png: bytes, *, workspace: str, workspace_dir: Callable[[str], str]) -> dict[str, Any]:
+    digest = hashlib.sha256(png).hexdigest()
+    name = f"video2d-contact-{digest[:20]}.png"
+    root = Path(workspace_dir(workspace))
+    root.mkdir(parents=True, exist_ok=True)
+    target = root / name
+    if not target.is_file():
+        temporary = root / f".{name}.tmp"
+        temporary.write_bytes(png)
+        temporary.replace(target)
+    return {
+        "url": "/api/v1/file/" + quote(name) + "?workspace=" + quote(workspace, safe=""),
+        "file": name,
+        "sha256": digest,
+        "bytes": len(png),
+    }
 
 
 def bind_preview_origin(url: str | None) -> None:
@@ -304,15 +335,17 @@ def paint_contact_sheet(document: dict, times: list[float], size: tuple[int, int
     return _paint_on_lane(document, times, size)
 
 
-def _result(png: bytes, times: list[float], size: tuple[int, int, int]) -> dict[str, Any]:
+def _result(png: bytes, times: list[float], size: tuple[int, int, int], workspace: str) -> dict[str, Any]:
+    if _WORKSPACE_DIR is None:
+        raise PreviewError("preview_bad_workspace", "workspace directory is not configured")
+    stored = store_contact_sheet(png, workspace=workspace, workspace_dir=_WORKSPACE_DIR)
     return {
         "version": 1,
         "status": "completed",
         "operation": OPERATION,
         "result": {
             "mime": "image/png",
-            "sha256": hashlib.sha256(png).hexdigest(),
-            "png_base64": base64.b64encode(png).decode("ascii"),
+            **stored,
             "times": times,
             "width": size[0],
             "height": size[1],
@@ -324,7 +357,8 @@ def _result(png: bytes, times: list[float], size: tuple[int, int, int]) -> dict[
 
 def execute(command: Any) -> dict[str, Any]:
     document, times, size = prepare(command)
-    return _result(paint_contact_sheet(document, times, size), times, size)
+    workspace = _workspace_name(_input(command))
+    return _result(paint_contact_sheet(document, times, size), times, size, workspace)
 
 
 def command_catalog() -> list[dict[str, Any]]:
@@ -332,7 +366,9 @@ def command_catalog() -> list[dict[str, Any]]:
         "name": OPERATION,
         "description": (
             "Paint up to 8 times from a version 1 Video 2D document with the Scene Animator export "
-            "painter (window.__scene2dExport on /scene2d-render.html) and return one contact-sheet PNG. "
+            "painter (window.__scene2dExport on /scene2d-render.html). The contact sheet is a workspace "
+            "PNG; the reply is its URL, sha256 and byte size, never the PNG bytes. "
+            "Optional workspace selects the folder (default when omitted). "
             "Each time must be from 0 through the document duration. The long edge is capped at 960. "
             "Does not save the scene or write an MP4. CPU lane scene2d-render, no GPU. "
             "input.workspace is optional and does not change the sheet; callers that omit it keep working. "
@@ -365,12 +401,17 @@ def command_catalog() -> list[dict[str, Any]]:
     }]
 
 
-def command_handlers(app_url: Callable[[], str] | None = None) -> dict[str, Callable[[Any], Any]]:
+def command_handlers(
+    app_url: Callable[[], str] | None = None,
+    workspace_dir: Callable[[str], str] | None = None,
+) -> dict[str, Callable[[Any], Any]]:
     async def handle(arguments: Any) -> dict[str, Any]:
         from starlette.concurrency import run_in_threadpool
 
         if app_url:
             bind_preview_origin(app_url())
+        if workspace_dir:
+            bind_preview_workspace(workspace_dir)
         payload = arguments if isinstance(arguments, dict) else {}
         try:
             return await run_in_threadpool(execute, {**payload, "operation": OPERATION})
@@ -385,6 +426,7 @@ __all__ = [
     "OPERATION",
     "PreviewError",
     "bind_preview_origin",
+    "bind_preview_workspace",
     "command_catalog",
     "command_handlers",
     "execute",

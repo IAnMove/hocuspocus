@@ -48,7 +48,7 @@ def test_omitted_kind_is_counts_only_and_kind_returns_that_catalog():
 
 
 def test_family_filters_templates():
-    narrowed = query_catalog({"kind": "templates", "family": "space"})["result"]
+    narrowed = query_catalog({"kind": "templates", "family": "space", "detail": True})["result"]
     assert narrowed["entries"]
     assert {item["family"] for item in narrowed["entries"]} == {"space"}
     assert narrowed["total"] == len(narrowed["entries"])
