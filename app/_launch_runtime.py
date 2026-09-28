@@ -10886,6 +10886,14 @@ async def generate(request: Request):
 
     body = await request.json()
     provenance = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
+    try:
+        from services.generation_output_name import OutputNameError, apply_output_name
+        apply_output_name(body)
+    except OutputNameError as error:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": error.code, "message": str(error), "retryable": False},
+        ) from error
     collection_id = provenance.get("workspace_id")
     if collection_id and not _workspace_collection_registry.get(collection_id):
         raise HTTPException(status_code=400, detail="Unknown Workspace collection")
@@ -26274,7 +26282,7 @@ def get_status(job_id: str):
         max(0.0, float(finished_at or time.time()) - float(started_at))
         if started_at else None
     )
-    return {
+    payload = {
         "job_id": j["id"],
         "task_id": j.get("task_id"),
         "root_task_id": j.get("root_task_id") or j.get("task_id"),
@@ -26307,6 +26315,13 @@ def get_status(job_id: str):
         # renders the OOM recovery banner when this is non-null.
         "oom_info": j.get("oom_info"),
     }
+    from services.generation_output_name import status_output_fields
+    payload.update(status_output_fields(
+        payload.get("output_files"),
+        workspace=str(j.get("workspace") or ""),
+        workspace_dir=str(j.get("out_dir") or ""),
+    ))
+    return payload
 
 
 @api.post("/api/v1/cancel/{job_id}")
