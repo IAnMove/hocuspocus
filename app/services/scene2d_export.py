@@ -23,6 +23,7 @@ from pydantic import ValidationError
 
 from services import resource_scheduler
 from services.media_refs import parse_media_ref
+from services.scene2d_schema import document_schema
 from services.scene_commands import DocumentInput, command_error as scene_error
 from services.world3d_export import (
     World3DExportPending,
@@ -300,7 +301,7 @@ def command_catalog() -> list[dict]:
     ids = {"type": "object", "additionalProperties": False, "properties": {"workspace": workspace, "intent_id": intent},
            "required": ["workspace", "intent_id"]}
     export_input = {"type": "object", "additionalProperties": False,
-                    "properties": {"workspace": workspace, "document": {"type": "object"}}, "required": ["workspace", "document"]}
+                    "properties": {"workspace": workspace, "document": document_schema()}, "required": ["workspace", "document"]}
 
     def entry(name, mutation, description, properties, required):
         return {"name": name, "version": 1, "domain": "scenes", "mutation": mutation, "description": description,

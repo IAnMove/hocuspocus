@@ -24,9 +24,8 @@ SHARED = ROOT / "app" / "shared"
 SCENE_TS = ROOT / "ui" / "src" / "types" / "index.ts"
 
 # Whole words already present in the save/export description or document schema.
-PUBLISHED_KEYS = frozenset({"audioTracks", "layers", "texts", "version"})
-# Scene keys save/export still do not name. M3 deletes a key here once the schema names it.
-KNOWN_SCHEMA_GAPS = frozenset({
+PUBLISHED_KEYS = frozenset({
+    "audioTracks",
     "composition",
     "copilotAudit",
     "dialogueBeats",
@@ -35,13 +34,18 @@ KNOWN_SCHEMA_GAPS = frozenset({
     "fps",
     "generationPolicy",
     "height",
+    "layers",
     "lyrics",
     "name",
     "narrative",
     "rhythm",
     "sfx",
+    "texts",
+    "version",
     "width",
 })
+# Scene keys save/export still do not name. Empty once the document schema names every key.
+KNOWN_SCHEMA_GAPS = frozenset()
 
 
 def _catalog_files() -> list[Path]:

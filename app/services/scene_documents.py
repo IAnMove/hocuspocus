@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
+from services.scene2d_schema import document_schema
 from services.scene_commands import DocumentInput, command_error
 from services.scene_library import preview_png, save_world3d
 
@@ -25,7 +26,7 @@ _PLACEHOLDER_SIZE = (320, 180)
 
 OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "scenes.document.save": (
-        {"workspace": WORKSPACE, "document": {"type": "object"}, "name": {"type": "string", "maxLength": 120},
+        {"workspace": WORKSPACE, "document": document_schema(), "name": {"type": "string", "maxLength": 120},
          "preview": {"type": "string", "description": "Optional data:image/png;base64 preview (Video 3D library)."}},
         ["workspace", "document"], True,
         "Save a version 1 Video 2D (layers) or Video 3D (slots) scene as a new immutable revision in the workspace so "
