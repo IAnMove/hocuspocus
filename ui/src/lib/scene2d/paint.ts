@@ -4,11 +4,12 @@
 import { paintSceneFx } from '../../features/sceneFx/paint'
 import { paintKineticTexts, paintSceneLyrics, type TextInkTrap } from '../kineticText'
 import { paintSceneFinish } from './finish'
+import { coverDrawState } from './cover'
 import { beatEnvelope, sheetCrop } from './motion'
 import { paintSeamOccluder } from '../seamOccluder'
 import type { SceneEvaluator } from './evaluate'
 import { applyLayerMask, drawAtmosphere, effectFilter, isVisualLayer, normalizedAtmosphere, normalizedEffects, normalizedStrip } from './layerStyle'
-import type { AnimatorScene, VisualAnimatorLayer } from './types'
+import type { AnimatorScene, LayerState, VisualAnimatorLayer } from './types'
 
 export type SceneMedia = HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | ImageBitmap
 /** Return the drawable for a visual layer instance, or null when it is not ready. */
@@ -53,6 +54,22 @@ function drawLayerImage(context: CanvasRenderingContext2D, layer: VisualAnimator
   else context.drawImage(media, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
 }
 
+function sourceFrame(layer: VisualAnimatorLayer, media: SceneMedia, seconds: number): [number, number] {
+  const [sourceWidth, sourceHeight] = mediaSize(media)
+  const crop = layer.sequence?.kind === 'sheet' ? sheetCrop(layer.sequence, seconds, sourceWidth, sourceHeight) : undefined
+  return [crop?.width ?? sourceWidth, crop?.height ?? sourceHeight]
+}
+
+function layerMedia(layer: VisualAnimatorLayer, instanceIndex: number, lookup: SceneMediaLookup): SceneMedia | null {
+  return layer.type === 'effect' ? null : lookup(layer, instanceIndex)
+}
+
+function drawState(canvas: HTMLCanvasElement, layer: VisualAnimatorLayer, state: LayerState, media: SceneMedia | null, seconds: number): LayerState {
+  if (layer.cover !== true || !media || !mediaReady(media) || layer.type === 'model3d') return state
+  const [sourceWidth, sourceHeight] = sourceFrame(layer, media, seconds)
+  return coverDrawState(canvas.width, canvas.height, sourceWidth, sourceHeight, layer.fill, layer.focus, state)
+}
+
 function textInk(finish: AnimatorScene['finish']): TextInkTrap | undefined {
   if (!finish?.riso) return undefined
   return { riso: true, paper: finish.riso.paper }
@@ -72,22 +89,20 @@ export function paintScene2D(canvas: HTMLCanvasElement, current: AnimatorScene, 
     .sort((a, b) => a.state.z - b.state.z)
     .forEach(({ layer, state, instanceIndex }) => {
     const effects = normalizedEffects(layer.effects)
-    context.save(); context.globalAlpha = state.opacity
+    const media = layerMedia(layer, instanceIndex, lookup)
+    const draw = drawState(canvas, layer, state, media, sceneSeconds)
+    context.save(); context.globalAlpha = draw.opacity
     context.globalCompositeOperation = effects.blendMode === 'normal' ? 'source-over' : effects.blendMode
     if ('filter' in context) context.filter = effectFilter(effects, Math.min(canvas.width, canvas.height) / 100)
-    const width = canvas.width * (layer.type === 'model3d' ? .52 : 1) * state.scale
-    const height = canvas.height * (layer.type === 'model3d' ? .75 : 1) * state.scale
-    context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100); context.rotate(state.rotation * Math.PI / 180)
+    const width = canvas.width * (layer.type === 'model3d' ? .52 : 1) * draw.scale
+    const height = canvas.height * (layer.type === 'model3d' ? .75 : 1) * draw.scale
+    context.translate(canvas.width * draw.x / 100, canvas.height * draw.y / 100); context.rotate(draw.rotation * Math.PI / 180)
     applyLayerMask(context, effects, width, height)
     if (layer.type === 'effect') {
       drawAtmosphere(context, normalizedAtmosphere(layer.atmosphere), sceneSeconds, width, height, effectAnchor(current, layer, evaluator, sceneProgress))
     } else if (layer.type === 'model3d') {
-      const viewer = lookup(layer, instanceIndex)
-      if (viewer) context.drawImage(viewer, -width / 2, -height / 2, width, height)
-    } else {
-      const media = lookup(layer, instanceIndex)
-      if (media && mediaReady(media)) drawLayerImage(context, layer, media, width, height, sceneSeconds)
-    }
+      if (media) context.drawImage(media, -width / 2, -height / 2, width, height)
+    } else if (media && mediaReady(media)) drawLayerImage(context, layer, media, width, height, sceneSeconds)
     context.restore()
   })
   current.layers
