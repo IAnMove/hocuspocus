@@ -141,8 +141,12 @@ def is_workspace_media(value: str) -> bool:
     return classify_url(value) in {"gallery", "uploads"}
 
 
+# Same-origin stills/models the app ships (drive plates, cafe textures, /examples/…).
+BUNDLED_PREFIXES = ("/examples/", "/scene3d/")
+
+
 def is_bundled_example(value: str) -> bool:
-    return value.startswith("/examples/") and ".." not in value
+    return any(value.startswith(prefix) for prefix in BUNDLED_PREFIXES) and ".." not in value
 
 
 # ---- manifest --------------------------------------------------------------
@@ -391,11 +395,15 @@ def clear_slot(editor: str, document: dict, slot: dict[str, Any]) -> None:
     if editor == "video3d":
         for item in document.get("slots") or []:
             if isinstance(item, dict) and item.get("slot") == slot["target"]:
+                if is_bundled_example(str(item.get("sourceUrl") or "")):
+                    continue
                 item.update({"sourceUrl": "", "clip": None})
                 item.pop("sourceRef", None)
         return
     for layer in document.get("layers") or []:
         if isinstance(layer, dict) and layer.get("id") == slot["target"]:
+            if is_bundled_example(str(layer.get("source") or "")):
+                continue
             layer.update({"source": "", "missingAsset": True})
 
 
