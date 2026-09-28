@@ -61,16 +61,31 @@ def media_kind(name: str) -> str | None:
 MediaRef = tuple[dict, str]  # (container, key) whose string value is a media locator
 
 
+def _speech_refs(speech: dict) -> Iterator[MediaRef]:
+    for key in ("audio", "atlas", "facePack"):
+        asset = speech.get(key)
+        if isinstance(asset, dict):
+            yield asset, "url"
+    for clip in speech.get("clips") or []:
+        if isinstance(clip, dict) and isinstance(clip.get("audio"), dict):
+            yield clip["audio"], "url"
+
+
+def _screen_refs(screen: dict) -> Iterator[MediaRef]:
+    yield screen, "sourceUrl"
+    for pose in screen.get("poseSequence") or []:
+        if isinstance(pose, dict):
+            yield pose, "sourceUrl"
+
+
 def _slot_refs(slot: dict) -> Iterator[MediaRef]:
     yield slot, "sourceUrl"
     screen = slot.get("screen")
     if isinstance(screen, dict):
-        yield screen, "sourceUrl"
+        yield from _screen_refs(screen)
     speech = slot.get("speech")
     if isinstance(speech, dict):
-        for key in ("audio", "atlas"):
-            if isinstance(speech.get(key), dict):
-                yield speech[key], "url"
+        yield from _speech_refs(speech)
 
 
 def _world3d_refs(document: dict) -> Iterator[MediaRef]:
@@ -387,16 +402,50 @@ def fill_slot(editor: str, document: dict, slot: dict[str, Any], url: str) -> No
     (_fill_3d if editor == "video3d" else _fill_2d)(document, slot["target"], url, kind)
 
 
+def _clear_speech(speech: dict) -> None:
+    for key in ("audio", "atlas", "facePack"):
+        speech.pop(key, None)
+    for clip in speech.get("clips") or []:
+        if isinstance(clip, dict):
+            clip.pop("audio", None)
+
+
+def _clear_screen(screen: dict) -> None:
+    screen["sourceUrl"] = ""
+    screen.pop("sourceRef", None)
+    screen.pop("poseSequence", None)
+
+
+def _clear_2d_sequence(layer: dict) -> None:
+    sequence = layer.get("sequence")
+    if not isinstance(sequence, dict):
+        return
+    if "source" in sequence:
+        sequence["source"] = ""
+    sources = sequence.get("sources")
+    if isinstance(sources, list):
+        for index, item in enumerate(sources):
+            if isinstance(item, str):
+                sources[index] = ""
+
+
 def clear_slot(editor: str, document: dict, slot: dict[str, Any]) -> None:
     if editor == "video3d":
         for item in document.get("slots") or []:
             if isinstance(item, dict) and item.get("slot") == slot["target"]:
                 item.update({"sourceUrl": "", "clip": None})
                 item.pop("sourceRef", None)
+                screen = item.get("screen")
+                if isinstance(screen, dict):
+                    _clear_screen(screen)
+                speech = item.get("speech")
+                if isinstance(speech, dict):
+                    _clear_speech(speech)
         return
     for layer in document.get("layers") or []:
         if isinstance(layer, dict) and layer.get("id") == slot["target"]:
             layer.update({"source": "", "missingAsset": True})
+            _clear_2d_sequence(layer)
 
 
 __all__ = [

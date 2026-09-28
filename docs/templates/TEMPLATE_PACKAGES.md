@@ -45,9 +45,11 @@ Only data: no scripts, no absolute paths, no `..`, no symlinks, no external URLs
 Media whose bytes do not match their SHA-256 name are dropped, and a document that
 references missing media is refused.
 
-By default a template is saved **without media**: slot media are emptied, a Video 3D
-soundtrack is removed and any other workspace media must be declared as a slot
-(`unbound_media`). `include_media: true` packs every workspace file the scene uses.
+By default a template is saved **without media**: slot media (the model/image,
+speech, screen and 2D frame sequence) are emptied; Video 3D soundtrack and world
+SFX files and Video 2D audio tracks are removed (they cannot be slots); any other
+workspace media must be declared as a slot (`unbound_media`). `include_media: true`
+packs every workspace file the scene uses.
 Files under `/examples/` are always kept as references.
 
 Importing an old Video 3D `*.world3d.template.json` converts it (media removed).
