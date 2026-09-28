@@ -1,3 +1,4 @@
+import { paintSceneGraphic } from '../scene2d/graphics'
 import { TEXT_FONT_STACK } from './fonts'
 import { displayedKineticText, wrapKineticLines } from './layout'
 import { paintLegacyCue } from './legacy'
@@ -196,5 +197,6 @@ export function paintKineticTexts(ctx: CanvasRenderingContext2D, width: number, 
     const pulse = 1 + (cue.beatPulse ?? 0) * envelope
     if (isLegacyKineticText(cue)) paintLegacyCue(ctx, width, height, seconds, cue, pulse)
     else paintV2Cue(ctx, width, height, seconds, cue, pulse)
+    if (cue.graphic) paintSceneGraphic(ctx, width, height, seconds, cue, pulse)
   }
 }

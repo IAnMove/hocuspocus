@@ -12,7 +12,7 @@ medios en GPU. Los assets tienen que ser ya URLs durables del workspace
 ## 1. Catálogo — `scenes.catalog`
 
 Descubre ids. No guarda. `kind` es uno de: `templates`, `text`, `finish`,
-`fonts`, `atmospheres`, `motion`, `effects`.
+`fonts`, `atmospheres`, `motion`, `effects`, `graphics`.
 
 - `templates` → `app/shared/scene_templates.json`
 - `text` → `app/shared/text_templates.json`
@@ -21,6 +21,7 @@ Descubre ids. No guarda. `kind` es uno de: `templates`, `text`, `finish`,
 - `atmospheres` → `app/shared/atmospheres.json`
 - `motion` → `app/shared/motion_presets.json` (movimientos y cámaras)
 - `effects` → `app/shared/scene_effects.json` (efectos de pantalla)
+- `graphics` → `app/shared/scene_graphics.json` (gráficos con id y parámetros, sin código)
 
 ```json
 {
