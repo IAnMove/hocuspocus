@@ -70,6 +70,7 @@
         "tests/test_integration_audit_regressions.py",
         "tests/test_job_lifecycle.py",
         "tests/test_job_lifecycle_wiring.py",
+        "tests/test_job_leftovers.py",
         "tests/test_labs_wizard_action_matrix.py",
         "tests/test_lan_auth.py",
         "tests/test_language_intent.py",

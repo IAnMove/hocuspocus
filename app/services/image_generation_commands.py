@@ -197,10 +197,19 @@ class ImageGenerationCommands:
             registry = self._registry(workspace)
             entry = registry.command_admission(intent_id)
             if entry is None:
+                recovered = self._leftover_receipt(workspace, intent_id)
+                if recovered is not None:
+                    return recovered
                 raise command_error(404, "receipt_not_found", "No admission exists for this intention in this workspace")
             return {"receipt": entry["receipt"], "task": registry.get(entry["task_id"])}
         except (OSError, sqlite3.Error) as error:
             raise command_error(503, "storage_unavailable", "Command storage is unavailable") from error
+
+    def _leftover_receipt(self, workspace, intent_id):
+        callback = getattr(self, "leftover_receipt_lookup", None)
+        if not callable(callback):
+            return None
+        return callback(workspace, intent_id)
 
     def native_worker(self, job):
         """Select a tool worker only for its real durable admission.
