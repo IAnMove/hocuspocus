@@ -27,8 +27,8 @@ from fastapi import HTTPException
 
 from services import resource_scheduler
 from services.resource_scheduler import ResourceAcquireCancelled
-from services.scene2d_export import validated_document
-from services.world3d_export import even_dim, playwright_module
+from services.scene2d_export import _durable, _sequence_urls, validated_document
+from services.world3d_export import _blocked_url, even_dim, playwright_module
 
 OPERATION = "scenes.video2d.preview"
 MAX_TIMES = 8
@@ -41,6 +41,7 @@ DIST = UI_ROOT / "dist"
 RENDER_HTML = DIST / "scene2d-render.html"
 SCRIPT = UI_ROOT / "scripts" / "scene2d-contact-sheet.mjs"
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+_APP_URL = os.environ.get("HOCUS_APP_URL", "").strip().rstrip("/")
 
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("text/javascript", ".mjs")
@@ -144,6 +145,45 @@ def prepare(command: Any) -> tuple[dict, list[float], tuple[int, int, int]]:
     return document, times, preview_frame_size(document)
 
 
+def bind_preview_origin(url: str | None) -> None:
+    """Use the live app origin so `/api/v1/file` and `/examples/` resolve."""
+    global _APP_URL
+    _APP_URL = (url or "").strip().rstrip("/")
+
+
+def preview_origin() -> str:
+    return _APP_URL or os.environ.get("HOCUS_APP_URL", "").strip().rstrip("/")
+
+
+def _layer_urls(layer: dict) -> list[str]:
+    urls = [str(item).strip() for item in _sequence_urls(layer) if str(item).strip()]
+    source = str(layer.get("source") or "").strip()
+    if source:
+        urls.append(source)
+    return urls
+
+
+def _needs_app_origin(document: dict) -> bool:
+    for layer in document.get("layers") or []:
+        for url in _layer_urls(layer):
+            lowered = url.lower()
+            if lowered.startswith("/api/v1/") or lowered.startswith("/examples/"):
+                return True
+    return False
+
+
+def _assert_preview_media(document: dict) -> None:
+    for layer in document.get("layers") or []:
+        if layer.get("type") in {"effect", "camera"} or layer.get("visible") is False:
+            continue
+        urls = _layer_urls(layer)
+        if not urls:
+            raise PreviewError("preview_missing_ref", f"Layer {layer.get('id')} needs durable workspace or example media")
+        for url in urls:
+            if _blocked_url(url) or not _durable(url):
+                raise PreviewError("preview_missing_ref", f"Layer {layer.get('id')} needs durable workspace or example media")
+
+
 def painter_block_reason() -> str | None:
     if not RENDER_HTML.is_file():
         return "ui/dist/scene2d-render.html is not built"
@@ -203,9 +243,8 @@ def _run_node(payload: dict, timeout: float) -> bytes:
     return stdout
 
 
-def _serve_and_paint(document: dict, times: list[float], size: tuple[int, int, int], deadline: float) -> bytes:
-    server, base = _serve_dist()
-    payload = {
+def _paint_payload(document: dict, times: list[float], size: tuple[int, int, int], base: str) -> dict:
+    return {
         "base": base,
         "document": document,
         "times": times,
@@ -214,8 +253,15 @@ def _serve_and_paint(document: dict, times: list[float], size: tuple[int, int, i
         "fps": size[2],
         "columns": sheet_columns(len(times)),
     }
+
+
+def _serve_and_paint(document: dict, times: list[float], size: tuple[int, int, int], deadline: float) -> bytes:
+    origin = preview_origin()
+    if origin:
+        return _run_node(_paint_payload(document, times, size, origin), deadline - time.monotonic())
+    server, base = _serve_dist()
     try:
-        return _run_node(payload, deadline - time.monotonic())
+        return _run_node(_paint_payload(document, times, size, base), deadline - time.monotonic())
     finally:
         _stop_server(server)
 
@@ -239,6 +285,9 @@ def _paint_on_lane(document: dict, times: list[float], size: tuple[int, int, int
 
 
 def paint_contact_sheet(document: dict, times: list[float], size: tuple[int, int, int]) -> bytes:
+    _assert_preview_media(document)
+    if _needs_app_origin(document) and not preview_origin():
+        raise PreviewError("preview_painter_unavailable", "Workspace media preview needs the running app origin")
     reason = painter_block_reason()
     if reason:
         raise PreviewError("preview_painter_unavailable", reason)
@@ -304,10 +353,12 @@ def command_catalog() -> list[dict[str, Any]]:
     }]
 
 
-def command_handlers() -> dict[str, Callable[[Any], Any]]:
+def command_handlers(app_url: Callable[[], str] | None = None) -> dict[str, Callable[[Any], Any]]:
     async def handle(arguments: Any) -> dict[str, Any]:
         from starlette.concurrency import run_in_threadpool
 
+        if app_url:
+            bind_preview_origin(app_url())
         payload = arguments if isinstance(arguments, dict) else {}
         try:
             return await run_in_threadpool(execute, {**payload, "operation": OPERATION})
@@ -321,6 +372,7 @@ def command_handlers() -> dict[str, Callable[[Any], Any]]:
 __all__ = [
     "OPERATION",
     "PreviewError",
+    "bind_preview_origin",
     "command_catalog",
     "command_handlers",
     "execute",
@@ -328,5 +380,6 @@ __all__ = [
     "painter_block_reason",
     "prepare",
     "preview_frame_size",
+    "preview_origin",
     "sheet_columns",
 ]

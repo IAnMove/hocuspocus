@@ -9,7 +9,17 @@ from pathlib import Path
 
 import pytest
 
-from services.video2d_preview import OPERATION, PreviewError, command_catalog, execute, painter_block_reason
+import time
+
+from services import video2d_preview
+from services.video2d_preview import (
+    OPERATION,
+    PreviewError,
+    bind_preview_origin,
+    command_catalog,
+    execute,
+    painter_block_reason,
+)
 
 SHEET = Path("/tmp/m5-video2d-contact-sheet.png")
 
@@ -86,6 +96,84 @@ def test_time_past_duration_uses_a_stable_code(monkeypatch):
     with pytest.raises(PreviewError) as caught:
         execute(_command(times=[2.01]))
     assert caught.value.code == "preview_time_out_of_range"
+
+
+def test_remote_layer_source_is_rejected_before_paint():
+    bind_preview_origin("")
+    document = _document(layers=[{
+        "id": "hero",
+        "name": "Hero",
+        "type": "image",
+        "source": "https://example.invalid/hero.png",
+        "visible": True,
+        "z": 0,
+        "transform": {"x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0},
+        "animation": {
+            "start": {"x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0},
+            "end": {"x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0},
+            "duration": 2,
+            "curve": "linear",
+        },
+    }])
+    with pytest.raises(PreviewError) as caught:
+        execute(_command(document=document, times=[0]))
+    assert caught.value.code == "preview_missing_ref"
+
+
+def test_workspace_media_uses_the_live_app_origin(monkeypatch):
+    seen = {}
+
+    def fake_run(payload, timeout):
+        seen["payload"] = payload
+        seen["timeout"] = timeout
+        return b"\x89PNG\r\n\x1a\n" + b"not-a-real-png"
+
+    monkeypatch.setattr("services.video2d_preview.painter_block_reason", lambda: None)
+    monkeypatch.setattr("services.video2d_preview._run_node", fake_run)
+    monkeypatch.setattr("services.video2d_preview._paint_on_lane", lambda document, times, size: video2d_preview._serve_and_paint(document, times, size, time.monotonic() + 5))
+    bind_preview_origin("http://127.0.0.1:7860")
+    document = _document(layers=[{
+        "id": "hero",
+        "name": "Hero",
+        "type": "image",
+        "source": "/api/v1/file/hero.png?workspace=default",
+        "visible": True,
+        "z": 0,
+        "transform": {"x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0},
+        "animation": {
+            "start": {"x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0},
+            "end": {"x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0},
+            "duration": 2,
+            "curve": "linear",
+        },
+    }])
+    result = execute(_command(document=document, times=[0]))
+    assert seen["payload"]["base"] == "http://127.0.0.1:7860"
+    assert seen["payload"]["document"]["layers"][0]["source"] == "/api/v1/file/hero.png?workspace=default"
+    assert result["status"] == "completed"
+    bind_preview_origin("")
+
+
+def test_workspace_media_without_app_origin_fails_before_paint():
+    bind_preview_origin("")
+    document = _document(layers=[{
+        "id": "hero",
+        "name": "Hero",
+        "type": "image",
+        "source": "/api/v1/file/hero.png?workspace=default",
+        "visible": True,
+        "z": 0,
+        "transform": {"x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0},
+        "animation": {
+            "start": {"x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0},
+            "end": {"x": 50, "y": 50, "scale": 1, "opacity": 1, "rotation": 0},
+            "duration": 2,
+            "curve": "linear",
+        },
+    }])
+    with pytest.raises(PreviewError) as caught:
+        execute(_command(document=document, times=[0]))
+    assert caught.value.code == "preview_painter_unavailable"
 
 
 def test_contact_sheet_bytes_are_stable_for_a_portrait_document():

@@ -82,10 +82,16 @@ function sceneControls(value: unknown): Partial<TemplateControls> {
 }
 
 function numericSize(input: Record<string, unknown>): Video2dCandidateSize {
+  const controls = input.controls && typeof input.controls === 'object' && !Array.isArray(input.controls)
+    ? input.controls as Record<string, unknown>
+    : {}
+  const duration = typeof input.duration === 'number' ? input.duration
+    : typeof controls.duration === 'number' ? controls.duration
+    : undefined
   const size: Video2dCandidateSize = {}
   if (typeof input.width === 'number') size.width = input.width
   if (typeof input.height === 'number') size.height = input.height
-  if (typeof input.duration === 'number') size.duration = input.duration
+  if (typeof duration === 'number') size.duration = duration
   if (typeof input.fps === 'number') size.fps = input.fps
   return size
 }
@@ -133,7 +139,7 @@ function compileScene(input: Record<string, unknown>): Scene {
   const id = input.templateId
   if (typeof id !== 'string' || !id) throw new CodedError('template_unknown', 'templateId')
   if ((VIDEO2D_CANDIDATE_IDS as readonly string[]).includes(id)) {
-    const scene = compileVideo2dCandidate(id, numericSize(input))
+    const scene = compileVideo2dCandidate(id, numericSize(input), stringMap(input.assets, 'template_bad_asset'))
     if (!scene) throw new CodedError('template_unknown', id)
     return scene
   }

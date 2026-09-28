@@ -18,6 +18,21 @@ test('a known scene template compiles to the builder layer ids', () => {
   assert.deepEqual(result.result.warnings, [])
 })
 
+test('a video2d candidate keeps slot images and the catalog duration', () => {
+  const result = compilePayload({
+    operation: 'scenes.template.compile',
+    input: { templateId: 'documentary-history', assets: ASSETS, controls: { duration: 4 } },
+  })
+  assert.equal(result.ok, true)
+  if (!result.ok || !('document' in result.result)) return
+  const layers = Object.fromEntries(result.result.document.layers.map(layer => [layer.id, layer]))
+  assert.equal(result.result.document.duration, 4)
+  assert.equal(layers.hero?.source, ASSETS.hero)
+  assert.equal(layers.plate?.source, ASSETS.plate)
+  assert.equal(layers.plate?.type, 'image')
+  assert.equal(layers['atmosphere-plate']?.type, 'effect')
+})
+
 test('a 9:16 compile keeps title y inside the vertical safe area', () => {
   const result = compilePayload({
     operation: 'scenes.template.compile',
