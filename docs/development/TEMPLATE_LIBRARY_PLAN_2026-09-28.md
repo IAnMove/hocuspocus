@@ -1,6 +1,6 @@
 # Plan: plantillas de usuario y de la comunidad (crear, compartir, importar)
 
-Fecha: 28 de septiembre de 2026. Responsable: Claude. Estado: **T1–T4 en revisión (#532); T5 preparado, pendiente de crear el repo público**.
+Fecha: 28 de septiembre de 2026. Responsable: Claude. Estado: **T1–T4 en `development` vía #548**; T5 es el repo público de comunidad (índice en `HOCUS_TEMPLATE_COMMUNITY_INDEX`). Contrato: [TEMPLATE_PACKAGES](../templates/TEMPLATE_PACKAGES.md).
 Sin migraciones: empezamos de cero. Las plantillas antiguas guardadas en el
 navegador (`localStorage`, `hocuspocus-world3d-user-templates`) no se leen ni se
 borran; la biblioteca nueva vive en el servidor.

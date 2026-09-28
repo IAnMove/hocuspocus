@@ -74,15 +74,20 @@ M2 y M3 pueden ir en paralelo después de fusionar M1. M5 espera a M4.
 
 ## Avance
 
+M0–M9 están en `development` vía #545 (`integrate/mcp-video2d-development`,
+2026-09-28). La guía operativa es [VIDEO2D_MCP_GUIDE](../agents/VIDEO2D_MCP_GUIDE.md).
+Las filas «Hueco» de la matriz de arriba describen el estado **antes** de esos
+PRs; no las uses como checklist de trabajo pendiente.
+
 | Bloque | Estado | PR |
 |---|---|---|
-| M0 | En borrador | https://github.com/IAnMove/hocuspocus/pull/530 |
-| M1 | En borrador | https://github.com/IAnMove/hocuspocus/pull/535 |
-| M2 | En borrador | https://github.com/IAnMove/hocuspocus/pull/537 |
-| M3 | En borrador | https://github.com/IAnMove/hocuspocus/pull/534 |
-| M4 | En borrador | https://github.com/IAnMove/hocuspocus/pull/539 |
-| M5 | En borrador | https://github.com/IAnMove/hocuspocus/pull/541 |
-| M6 | En borrador | https://github.com/IAnMove/hocuspocus/pull/533 |
-| M7 | En borrador | https://github.com/IAnMove/hocuspocus/pull/531 |
-| M8 | En borrador | https://github.com/IAnMove/hocuspocus/pull/538 |
-| M9 | En borrador | https://github.com/IAnMove/hocuspocus/pull/544 |
+| M0 | mezclado | #530 / #545 |
+| M1 | mezclado | #535 / #545 |
+| M2 | mezclado | #537 / #545 |
+| M3 | mezclado | #534 / #545 |
+| M4 | mezclado | #539 / #545 |
+| M5 | mezclado | #541 / #545 |
+| M6 | mezclado | #533 / #545 |
+| M7 | mezclado | #531 / #545 |
+| M8 | mezclado | #538 / #545 |
+| M9 | mezclado | #544 / #545 |

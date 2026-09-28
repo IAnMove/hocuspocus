@@ -1,12 +1,29 @@
 # Estado de desarrollo y punto de entrada
 
-## Plan de producción — 28 septiembre 2026
-
-La cola acepta `priority` opcional. `generation.video` versión 3 tipa MiniMax H3 (FL2VA y Ref2VA) y LTX-2.3 con fotogramas y audio conductor. `validate: true` no encola.
-
-Verificado el 7 de septiembre de 2026 contra `origin/development` **`ef5b0871`**.
+Verificado el 28 de septiembre de 2026 contra `origin/development` **`326f0f41`**.
 Es una fotografía con evidencia, no un sustituto de Git. Antes de reservar trabajo:
 `git fetch origin development`, consultar PR abiertos y comprobar sus archivos.
+
+## Integrado hoy — 28 septiembre 2026
+
+| Trabajo | Evidencia | Límite de la afirmación |
+|---|---|---|
+| Video 2D por MCP (M0–M9) | #545 | Catálogos, compile, edit, validate, preview, humo. No genera medios en GPU. |
+| Plantillas `.hptemplate` + comunidad | #548, docs en `TEMPLATE_PACKAGES` | El índice comunitario es un repo aparte. |
+| `assets.upload` | #552 | ≤8 MiB; no es `POST /api/v1/upload`. |
+| Leftovers, `jobs.wait`, `output_name`, `priority`, `invalid_selector`, `risoPress`, catálogos cortos | #561 | `validate: true` en vídeo v3 no encola. Sin informe GPU de 719 fotogramas. |
+| Recibos World3D = Video 2D | #563 | La admisión guardada sigue en `queued`. |
+
+Contratos: [VIDEO_COMMANDS](VIDEO_COMMANDS.md), [JOBS_AND_ASSETS](JOBS_AND_ASSETS.md),
+[VIDEO2D_MCP_GUIDE](../agents/VIDEO2D_MCP_GUIDE.md),
+[PRODUCTION_PLAN_2026-09-28](PRODUCTION_PLAN_2026-09-28.md).
+
+La tabla larga de abajo es historial hasta #223. No la uses como cola.
+
+## Lectura mínima (histórico 7 septiembre)
+
+La fotografía siguiente se tomó el 7 de septiembre de 2026 contra
+`origin/development` **`ef5b0871`**. Conserva contexto; no es el HEAD.
 
 ## Correcciones de integración — 12 septiembre 2026
 
@@ -146,7 +163,10 @@ priorización en [SLICE_QUEUE](SLICE_QUEUE.md).
 | Planos Video 3D, animaciones y revisión | [VIDEO3D_SHOT_REVIEW](VIDEO3D_SHOT_REVIEW.md) |
 | Identidad y procedencia | [DOMAIN_MODEL_AND_ASSET_PROVENANCE](DOMAIN_MODEL_AND_ASSET_PROVENANCE.md), [GENERATION_RECORD](GENERATION_RECORD.md) |
 | Música | [MUSIC_SUBMISSION](MUSIC_SUBMISSION.md), [MUSIC_FINALIZATION](MUSIC_FINALIZATION.md), [MUSIC_MODEL_CONTRACT](MUSIC_MODEL_CONTRACT.md) |
-| Wizard | [WIZARD_ACTION_RUNNER](WIZARD_ACTION_RUNNER.md), [WIZARD_WORKFLOW_RUNTIME](WIZARD_WORKFLOW_RUNTIME.md) |
+| Wizard | [WIZARD_ACTION_RUNNER](WIZARD_ACTION_RUNNER.md), [WIZARD_WORKFLOW_RUNTIME](WIZARD_WORKFLOW_RUNTIME.md), [WIZARD_MCP_USAGE](WIZARD_MCP_USAGE.md) |
+| Vídeo nativo | [VIDEO_COMMANDS](VIDEO_COMMANDS.md), [H3_EXTENDED_DURATION](H3_EXTENDED_DURATION.md) |
+| Cola, leftovers, uploads | [JOBS_AND_ASSETS](JOBS_AND_ASSETS.md) |
+| Video 2D / plantillas | [VIDEO2D_MCP_GUIDE](../agents/VIDEO2D_MCP_GUIDE.md), [TEMPLATE_PACKAGES](../templates/TEMPLATE_PACKAGES.md) |
 | Labs | [LABS_WIZARD_ACTION_MATRIX](LABS_WIZARD_ACTION_MATRIX.md): referencia detallada/fixture, no checklist de inicio |
 | Calidad y textos | [CODE_HEALTH](CODE_HEALTH.md), [INTERNATIONALIZATION](INTERNATIONALIZATION.md), [LOCAL_VALIDATION](LOCAL_VALIDATION.md) |
 
