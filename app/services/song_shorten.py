@@ -228,9 +228,13 @@ def _remap_interval(start: float, end: float, time_map: list[list[float]]) -> li
     return pieces
 
 
-def remap_montage(document: dict[str, Any], time_map: list[list[float]]) -> tuple[dict[str, Any], dict[str, list]]:
-    """Move clips, overlays and cues onto the shortened timeline. Drop what falls in a gap."""
-    report: dict[str, list] = {"dropped": [], "trimmed": []}
+def _piece_changed(pieces: list, start: float, end: float) -> bool:
+    if len(pieces) != 1:
+        return True
+    return abs(pieces[0][2] - start) > 0.001 or abs(pieces[0][3] - end) > 0.001
+
+
+def _remap_clips(document: dict[str, Any], time_map: list[list[float]], report: dict[str, list]) -> list:
     cursor = 0.0
     clips = []
     for clip in document.get("clips") or []:
@@ -241,7 +245,7 @@ def remap_montage(document: dict[str, Any], time_map: list[list[float]]) -> tupl
         if not pieces:
             report["dropped"].append({"kind": "clip", "id": clip.get("id"), "start": round(start, 3), "end": round(end, 3)})
             continue
-        if len(pieces) != 1 or abs(pieces[0][2] - start) > 0.001 or abs(pieces[0][3] - end) > 0.001:
+        if _piece_changed(pieces, start, end):
             report["trimmed"].append({"kind": "clip", "id": clip.get("id")})
         for index, (new_start, new_end, old_start, _old_end) in enumerate(pieces):
             copied = dict(clip)
@@ -251,6 +255,13 @@ def remap_montage(document: dict[str, Any], time_map: list[list[float]]) -> tupl
             if index:
                 copied["id"] = f"{clip.get('id')}-keep-{index + 1}"
             clips.append(copied)
+    return clips
+
+
+def remap_montage(document: dict[str, Any], time_map: list[list[float]]) -> tuple[dict[str, Any], dict[str, list]]:
+    """Move clips, overlays and cues onto the shortened timeline. Drop what falls in a gap."""
+    report: dict[str, list] = {"dropped": [], "trimmed": []}
+    clips = _remap_clips(document, time_map, report)
     if not clips:
         raise SongShortenError("shortening removed every clip")
 
@@ -263,7 +274,7 @@ def remap_montage(document: dict[str, Any], time_map: list[list[float]]) -> tupl
             if not pieces:
                 report["dropped"].append({"kind": kind, "id": item.get("id"), "start": round(start, 3), "end": round(end, 3)})
                 continue
-            if len(pieces) != 1 or abs(pieces[0][2] - start) > 0.001 or abs(pieces[0][3] - end) > 0.001:
+            if _piece_changed(pieces, start, end):
                 report["trimmed"].append({"kind": kind, "id": item.get("id")})
             for index, (new_start, new_end, _old_start, _old_end) in enumerate(pieces):
                 copied = dict(item)

@@ -34,8 +34,8 @@ def test_monitor_and_export_share_the_selected_resolution_and_fit_mode():
     source = _panel_source()
 
     assert source.count("<ExportPreviewCanvas") == 3
-    assert source.count("width={resolution.width}") == 3
-    assert source.count("height={resolution.height}") == 3
+    assert source.count("width={resolution.width}") == 4
+    assert source.count("height={resolution.height}") == 4
     assert "width: resolution.width" in source
     assert "height: resolution.height" in source
     assert "clipPreviewClass(clip.fit)" in source
