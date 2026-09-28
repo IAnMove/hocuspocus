@@ -4,11 +4,13 @@ Un agente puede montar una escena Video 2D sin leer el código de la UI. Los ids
 salen de los catálogos compartidos en `app/shared/`. Cada llamada va versionada:
 `{version: 1, input: {...}}`.
 
-Sin vista previa, el camino mínimo son cinco llamadas: catálogo, compilar,
-validar, guardar y exportar. El rótulo, la letra y el montaje se añaden en el
-mismo recorrido cuando la escena los necesita. `scenes.video2d.preview` no está
-disponible. La llamada que sigue a compilar (y a pegar rótulo o letra) es
-`scenes.video2d.validate`. No guarda.
+El camino mínimo son cinco llamadas: catálogo, compilar, validar, guardar y
+exportar. El rótulo, la letra y el montaje se añaden en el mismo recorrido
+cuando la escena los necesita. `scenes.video2d.preview` guarda la hoja de
+contactos como PNG del workspace y devuelve su URL; no metas los bytes en el
+JSON. La llamada que sigue a compilar (y a pegar rótulo o letra) es
+`scenes.video2d.validate`. No guarda. Las respuestas largas llegan en resumen;
+pide `detail: true` o `full: true` solo cuando necesites el documento.
 
 Nada de esto genera medios en GPU. Los assets tienen que ser ya URLs durables
 del workspace (`/api/v1/file/...`, `/api/v1/uploads/...`) o de ejemplos
@@ -36,12 +38,15 @@ Descubre ids. No guarda. `kind` es uno de: `templates`, `text`, `finish`,
 }
 ```
 
-Repite la llamada con `"kind": "text"` antes de elegir un rótulo. La respuesta
-es el JSON del catálogo: objetos con `id`. Copia esos ids; no los inventes.
+Repite la llamada con `"kind": "text"` antes de elegir un rótulo. Sin `detail`,
+cada fila es `id`, `name`, una descripción de una línea y `counts` (no el
+esquema de `controls`). Pide `"id": "cinema-establishing"` o `"detail": true`
+para slots y controles. Copia esos ids; no los inventes.
 
 ## 2. Compilar la plantilla — `scenes.template.compile`
 
-No guarda. Devuelve `{document, warnings}`. `templateId` es un id real de
+No guarda. Sin `full` devuelve ids de capas, códigos de aviso, duración y tamaño.
+Con `"full": true` devuelve `{document, warnings}`. `templateId` es un id real de
 `scene_templates.json`. `assets` asigna cada slot de esa plantilla a un medio
 durable. `controls` usa solo controles que el catálogo declara para ese id.
 
@@ -61,17 +66,19 @@ durable. `controls` usa solo controles que el catálogo declara para ese id.
     "width": 1280,
     "height": 720,
     "duration": 4,
-    "fps": 30
+    "fps": 30,
+    "full": true
   }
 }
 ```
 
-El `document` devuelto es la escena editable. Los avisos no impiden seguir, pero
-hay que leerlos. No llames a `scenes.video2d.preview`.
+El `document` (solo con `full: true`) es la escena editable. Los avisos no
+impiden seguir, pero hay que leer sus códigos. La vista previa es opcional y
+devuelve una URL, no el PNG.
 
 ## 3. Rótulo — `scenes.text.template`
 
-No guarda. Devuelve `{texts}`. `templateId` es un id real de
+No guarda. Sin `full` devuelve los ids de los rótulos. Con `"full": true` devuelve `{texts}`. `templateId` es un id real de
 `text_templates.json`. `fields` usa las claves de ese id (`title-card` tiene
 `title` y `subtitle`). Pega el array `texts` en `document.texts` antes de
 validar.
@@ -88,7 +95,8 @@ validar.
     "start": 0.4,
     "duration": 3.2,
     "width": 1280,
-    "height": 720
+    "height": 720,
+    "full": true
   }
 }
 ```
@@ -97,7 +105,7 @@ Si la escena no lleva rótulo, omite esta llamada.
 
 ## 4. Letra — `scenes.lyrics.import`
 
-No guarda. Devuelve `{lyrics}`. `format` es `srt`, `lrc`, `plain` o
+No guarda. Sin `full` devuelve ids de líneas y duración. Con `"full": true` devuelve `{lyrics}`. `format` es `srt`, `lrc`, `plain` o
 `timing-bundle`. `text` es el contenido (en `timing-bundle`, el JSON del bundle
 serializado como texto). Pega el objeto `lyrics` en `document.lyrics`.
 
@@ -106,7 +114,8 @@ serializado como texto). Pega el objeto `lyrics` en `document.lyrics`.
   "version": 1,
   "input": {
     "format": "plain",
-    "text": "The bird is freed\nKeep the line"
+    "text": "The bird is freed\nKeep the line",
+    "full": true
   }
 }
 ```
@@ -115,7 +124,8 @@ Si no hay letra que mostrar, omite esta llamada.
 
 ## 5. Validar — `scenes.video2d.validate`
 
-Esta es la llamada que sigue a compilar. No guarda. Devuelve
+Esta es la llamada que sigue a compilar. No guarda. Sin `full` devuelve ids,
+códigos de error y de aviso, duración y tamaño. Con `"full": true` devuelve
 `{document, errors, warnings}`. `document` es el de compile, más `texts` y
 `lyrics` si los hubo. Si `errors` no está vacío, corrige y vuelve a validar.
 No exportes ni guardes una escena con errores.
@@ -125,6 +135,7 @@ No exportes ni guardes una escena con errores.
   "version": 1,
   "input": {
     "workspace": "demo-video2d",
+    "full": true,
     "document": {
       "version": 1,
       "name": "teaser",
@@ -153,7 +164,9 @@ Usa el `document` devuelto por validate en las dos llamadas siguientes.
 ## 6. Guardar — `scenes.document.save`
 
 Crea una revisión inmutable (`*.scene.json`) en el workspace. No exporta. El
-resultado trae `name`: ese nombre es el que cita el montaje.
+resultado trae `name`: ese nombre es el que cita el montaje. Un `intent_id`
+opcional en el sobre, si se repite con el mismo documento, devuelve esa
+revisión y no escribe otro archivo. No hace falta en el catálogo.
 
 ```json
 {

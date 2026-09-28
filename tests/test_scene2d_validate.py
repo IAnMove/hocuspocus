@@ -185,7 +185,7 @@ def test_errors_use_stable_codes_and_do_not_save(tmp_path):
 def test_handler_returns_the_normalized_result_without_gpu(tmp_path):
     workspace_dir, uploads_dir = _dirs(tmp_path)
     handler = command_handlers(workspace_dir, uploads_dir)[OPERATION]
-    result = asyncio.run(handler({"version": 1, "input": {"workspace": WORKSPACE, "document": _document(layers=[_layer(type="effect", source="")])}}))
+    result = asyncio.run(handler({"version": 1, "input": {"workspace": WORKSPACE, "document": _document(layers=[_layer(type="effect", source="")]), "full": True}}))
     assert result["operation"] == OPERATION
     assert result["result"]["document"]["fps"] == 30
     assert result["result"]["errors"] == []
