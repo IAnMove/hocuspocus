@@ -16,7 +16,12 @@ Plan and roadmap: [TEMPLATE_LIBRARY_PLAN](../development/TEMPLATE_LIBRARY_PLAN_2
 duration; the current frame becomes its preview), click a template to apply it
 (sample media are copied into the workspace; *Keep assets* keeps your current
 characters), download it as `.hptemplate` or import one after reviewing what it
-contains. Video 2D follows (plan T3).
+contains.
+
+**Video 2D → My templates** (Scene Animator side panel) does the same for 2D scenes:
+slots are image/video layers with workspace media, the preview is the current frame
+and using a template opens it in the animator. Save the scene first if it still has
+local (unsaved) files: templates only reference workspace or example media.
 
 ## What a template is
 

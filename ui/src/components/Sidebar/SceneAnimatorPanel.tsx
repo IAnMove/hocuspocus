@@ -10,6 +10,7 @@ import { SceneFxOverlay } from '../../features/sceneFx/SceneFxOverlay'
 import { isRetroLook } from '../../features/sceneFx/retroPaint'
 import { adoptPreparedSceneDocument, withFxShowcase } from '../../features/sceneFx/showcase'
 import { KineticTextControls } from '../common/KineticTextControls'
+import { Scene2DTemplateDialog } from '../../features/scene2d/Scene2DTemplateDialog'
 import { KineticTextOverlay } from '../common/KineticTextOverlay'
 import { LiveRhythmStore, SceneFinalPreview, SceneFinishControls, SceneMotionControls } from '../../features/scene2d/boostControls'
 import { beatEnvelope } from '../../lib/scene2d/motion'
@@ -297,6 +298,7 @@ export function SceneAnimatorPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [templateComposerOpen, setTemplateComposerOpen] = useState(false)
+  const [userTemplatesOpen, setUserTemplatesOpen] = useState(false)
   const [assetExplorer, setAssetExplorer] = useState<AssetExplorerPurpose | null>(null)
   const [playing, setPlaying] = useState(false)
   const [recording, setRecording] = useState(false)
@@ -1798,6 +1800,12 @@ export function SceneAnimatorPanel() {
       await persistScene()
     }
   }
+  const templatePreview = () => {
+    const current = sceneRef.current, canvas = document.createElement('canvas'), scale = Math.min(1, 960 / Math.max(current.width, current.height))
+    canvas.width = Math.max(1, Math.round(current.width * scale)); canvas.height = Math.max(1, Math.round(current.height * scale))
+    paintScene(canvas, progress)
+    return canvas.toDataURL('image/jpeg', 0.85)
+  }
   const persistScene = async (): Promise<string | null> => {
     const current = sceneRef.current
     if (!current.layers.length && !current.sfx?.length) { setMessage(t('animator.addLayerBeforeSave')); return null }
@@ -2753,6 +2761,7 @@ export function SceneAnimatorPanel() {
       {selected && <div className="space-y-1 rounded border border-fuchsia-400/20 bg-fuchsia-400/[.025] p-2"><div className="text-[9px] text-fuchsia-100">{t('animator.suggestions', { name: selected.name })}</div><div className="flex flex-wrap gap-1">{copilotSuggestions.map(suggestion => <button key={suggestion} type="button" disabled={copilotBusy || selected.locked} onClick={() => { setCopilotIntent(suggestion); setCopilotError(null) }} className="rounded border border-fuchsia-300/25 px-1.5 py-0.5 text-left text-[8px] text-fuchsia-100 hover:bg-fuchsia-400/10 disabled:opacity-40">{suggestion}</button>)}</div></div>}
       <SceneRecipePanel disabled={playing || recording || publishing || saving} outputs={outputs} characterKits={characterKitLibrary} onApply={applyRecipeScene} />
       <button type="button" disabled={playing || recording || publishing || saving} onClick={() => setTemplateComposerOpen(true)} className="w-full rounded border border-cyan-400/40 p-2 text-xs text-cyan-100 disabled:opacity-40">{t('animator.createFromLibrary')}</button>
+      <button type="button" disabled={playing || recording || publishing || saving} onClick={() => setUserTemplatesOpen(true)} className="w-full rounded border border-border p-2 text-xs disabled:opacity-40">{t('animator.myTemplates')}</button>
       <a href="/scene-template-review" target="_blank" rel="noopener noreferrer" className="block rounded border border-cyan-500/30 p-2 text-center text-xs text-cyan-200">{t('animator.labCatalog')}</a>
       <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> {t('animator.addLayer')}</button>{addOpen && <div className="absolute z-[1100] mt-1 max-h-[75vh] w-full space-y-1 overflow-y-auto rounded border border-border bg-bg-primary p-1 shadow-xl"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">{t('animator.addCamera')}</button><div className="px-2 pt-1 text-[8px] font-medium uppercase tracking-wider text-text-muted">{t('animator.atmospherePresets')}</div><div className="grid grid-cols-2 gap-1">{ATMOSPHERE_KINDS.map(kind => <button key={kind} onClick={() => addAtmosphere(kind)} title={`${t(`atmosphere.labels.${kind}`)} — ${t(`atmosphere.descriptions.${kind}`, { defaultValue: ATMOSPHERE_DESCRIPTIONS[kind] })}`} className="truncate rounded border border-border px-2 py-1.5 text-left text-[9px] text-purple-200 hover:border-purple-400/60 hover:bg-bg-hover">{t(`atmosphere.labels.${kind}`)}</button>)}</div><button onClick={() => openLayerPicker('model3d', null)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.selectGenerated3d')}</button><button onClick={() => startLocalLayerPick('model3d', null, modelInputRef)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importGlb')}</button><button onClick={() => openLayerPicker('media', null)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.selectGeneratedMedia')}</button><button onClick={() => startLocalLayerPick('media', null, mediaInputRef)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importMedia')}</button><button onClick={() => openLayerPicker('overlay', null)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.chooseAsset')}</button><button onClick={() => startLocalLayerPick('overlay', null, overlayInputRef)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importOverlay')}</button></div>}</div>
       <input ref={modelInputRef} type="file" accept=".glb,model/gltf-binary" className="hidden" data-testid="scene-layer-model-file" onChange={event => { const files = [...(event.target.files ?? [])]; event.currentTarget.value = ''; if (files.length) void pickLocalLayerFiles('model3d', files) }} /><input ref={mediaInputRef} type="file" accept="image/*,video/*" className="hidden" data-testid="scene-layer-media-file" onChange={event => { const files = [...(event.target.files ?? [])]; event.currentTarget.value = ''; if (files.length) void pickLocalLayerFiles('media', files) }} /><input ref={overlayInputRef} type="file" accept="image/png,image/webp" multiple className="hidden" data-testid="scene-layer-overlay-file" onChange={event => { const files = [...(event.target.files ?? [])]; event.currentTarget.value = ''; if (files.length) void pickLocalLayerFiles('overlay', files) }} />
@@ -2864,6 +2873,8 @@ export function SceneAnimatorPanel() {
       </div>
       {message && <p className="text-[10px] text-text-secondary">{message}</p>}
     </aside>
+    {userTemplatesOpen && <Scene2DTemplateDialog scene={scene} workspace={workspace} disabled={saving} preview={templatePreview} onClose={() => setUserTemplatesOpen(false)}
+      onApply={(summary, next) => importScene(JSON.stringify(next), t('animator.templateApplied', { name: summary.title }))} />}
     {templateComposerOpen && <TemplateComposerDialog key={workspace} workspace={workspace} onClose={() => setTemplateComposerOpen(false)} onApply={next => importScene(JSON.stringify(next), t('animator.templateFromLibrary'))} />}
     <SceneAnimatorExplorer
       purpose={assetExplorer}
