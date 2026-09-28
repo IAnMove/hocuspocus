@@ -204,10 +204,11 @@ def test_note_inference_step_measures_only_after_the_denoising_anchor():
 
 def test_default_unloader_releases_only_a_loaded_inactive_family(monkeypatch):
     released = []
-    fake = types.ModuleType("wgp")
-    fake.transformer_type = "flux"
-    fake.release_model = lambda: released.append("released")
-    monkeypatch.setitem(sys.modules, "wgp", fake)
+    fake = types.SimpleNamespace(
+        transformer_type="flux",
+        release_model=lambda: released.append("released"),
+    )
+    monkeypatch.setattr("services.generation.runtime.get_wgp", lambda: fake)
     result = prepare_queued_model(
         "minimax_h3", available_bytes=1, release_cache=lambda: released.append("cache"),
     )

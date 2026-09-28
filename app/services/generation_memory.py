@@ -609,26 +609,34 @@ def _proc_memavailable() -> int | None:
     return None
 
 
+def _bound_wgp():
+    try:
+        from services.generation.runtime import get_wgp
+    except ImportError:
+        return None
+    try:
+        return get_wgp()
+    except RuntimeError:
+        return None
+
+
 def _unload_family(family: str) -> None:
     loaded = _loaded_transformer()
     if inactive_family(loaded) != family:
         return
-    try:
-        import wgp
-    except ImportError:
+    runtime = _bound_wgp()
+    if runtime is None:
         return
-    release = getattr(wgp, "release_model", None)
+    release = getattr(runtime, "release_model", None)
     if callable(release):
         release()
 
 
 def _loaded_transformer() -> str:
-    try:
-        import wgp
-    except ImportError:
+    runtime = _bound_wgp()
+    if runtime is None:
         return ""
-    loaded = getattr(wgp, "transformer_type", None)
-    return _text(loaded)
+    return _text(getattr(runtime, "transformer_type", None))
 
 
 def _release_torch_cache() -> None:
