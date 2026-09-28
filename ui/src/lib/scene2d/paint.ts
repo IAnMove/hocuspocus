@@ -2,7 +2,7 @@
 // headless scene2d renderer. Media lookup is injected so the same drawing code
 // works with live DOM elements (editor) or preloaded images/videos (headless).
 import { paintSceneFx } from '../../features/sceneFx/paint'
-import { paintKineticTexts, paintSceneLyrics } from '../kineticText'
+import { paintKineticTexts, paintSceneLyrics, type TextInkTrap } from '../kineticText'
 import { paintSceneFinish } from './finish'
 import { beatEnvelope, sheetCrop } from './motion'
 import { paintSeamOccluder } from '../seamOccluder'
@@ -53,6 +53,11 @@ function drawLayerImage(context: CanvasRenderingContext2D, layer: VisualAnimator
   else context.drawImage(media, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
 }
 
+function textInk(finish: AnimatorScene['finish']): TextInkTrap | undefined {
+  if (!finish?.riso) return undefined
+  return { riso: true, paper: finish.riso.paper }
+}
+
 /** Paint one frame at scene progress [0, 1]. Returns false without a 2D context. */
 export function paintScene2D(canvas: HTMLCanvasElement, current: AnimatorScene, progress: number, evaluator: SceneEvaluator, lookup: SceneMediaLookup): boolean {
   const { renderedLayerStates, seamCoverStates } = evaluator
@@ -101,7 +106,7 @@ export function paintScene2D(canvas: HTMLCanvasElement, current: AnimatorScene, 
   paintSceneFx(context, canvas.width, canvas.height, sceneSeconds, current.sfx)
   const envelope = beatEnvelope(current.rhythm, sceneSeconds)
   if (!current.finish?.applyToTexts) paintSceneFinish(context, canvas.width, canvas.height, sceneSeconds, current.finish, envelope, current.layers, current.duration)
-  paintKineticTexts(context, canvas.width, canvas.height, sceneSeconds, current.texts, envelope)
+  paintKineticTexts(context, canvas.width, canvas.height, sceneSeconds, current.texts, envelope, textInk(current.finish))
   paintSceneLyrics(context, canvas.width, canvas.height, sceneSeconds, current.lyrics, envelope)
   if (current.finish?.applyToTexts) paintSceneFinish(context, canvas.width, canvas.height, sceneSeconds, current.finish, envelope, current.layers, current.duration)
   return true

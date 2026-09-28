@@ -1,9 +1,12 @@
+import { INK_TRAP_PAPER, reserveBlackPlate, type InkTrapPaint } from '../scene2d/inkTrap'
 import { TEXT_FONT_STACK } from './fonts'
 import { displayedKineticText, wrapKineticLines } from './layout'
 import { paintLegacyCue } from './legacy'
 import { isLegacyKineticText } from './parse'
 import { kineticTextState } from './state'
 import type { KineticText, TextAlign, TextMotion } from './types'
+
+export type TextInkTrap = { riso?: boolean; paper?: string }
 
 const hashId = (id: string) => {
   let hash = 2166136261
@@ -112,8 +115,13 @@ function anchorOffset(align: TextAlign, blockWidth: number) {
   return 0
 }
 
-function paintGlyphs(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, elapsed: number, wave: boolean) {
-  if (!wave) { ctx.strokeText(text, x, y); ctx.fillText(text, x, y); return }
+function paintGlyphs(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, elapsed: number, wave: boolean, ink: InkTrapPaint) {
+  if (!wave) {
+    ctx.strokeText(text, x, y)
+    reserveBlackPlate(ctx, text, x, y, size, ink)
+    ctx.fillText(text, x, y)
+    return
+  }
   const width = ctx.measureText(text).width
   let cursor = ctx.textAlign === 'center' ? x - width / 2 : ctx.textAlign === 'right' ? x - width : x
   const previous = ctx.textAlign
@@ -121,6 +129,7 @@ function paintGlyphs(ctx: CanvasRenderingContext2D, text: string, x: number, y: 
   Array.from(text).forEach((letter, index) => {
     const dy = Math.sin(elapsed * 5.6 - index * .42) * size * .14
     ctx.strokeText(letter, cursor, y + dy)
+    reserveBlackPlate(ctx, letter, cursor, y + dy, size, ink)
     ctx.fillText(letter, cursor, y + dy)
     cursor += ctx.measureText(letter).width
   })
@@ -148,7 +157,7 @@ function applyInk(ctx: CanvasRenderingContext2D, cue: KineticText, size: number,
   } else ctx.fillStyle = cue.color
 }
 
-function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText, pulse = 1) {
+function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText, pulse = 1, ink: InkTrapPaint = { trap: false, color: cue.color }) {
   const motion = kineticTextState(cue, seconds) as TextMotion | null
   if (!motion || !('clip' in motion)) return
   const text = displayedKineticText(cue, seconds)
@@ -185,16 +194,19 @@ function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number
   ctx.textAlign = origin.align
   lines.forEach((line, index) => {
     const y = (index - (lines.length - 1) / 2) * lineHeight
-    paintGlyphs(ctx, line, origin.x, y, size, motion.elapsed, motion.wave)
+    paintGlyphs(ctx, line, origin.x, y, size, motion.elapsed, motion.wave, { ...ink, color: cue.color, fill: cue.fill?.kind })
   })
   ctx.restore()
 }
 
-export function paintKineticTexts(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cues: readonly KineticText[] = [], envelope = 0) {
+export function paintKineticTexts(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cues: readonly KineticText[] = [], envelope = 0, ink?: TextInkTrap) {
+  const paper = ink?.paper || INK_TRAP_PAPER
+  const riso = ink?.riso === true
   for (const cue of cues) {
     if (seconds < cue.start || seconds >= cue.end) continue
     const pulse = 1 + (cue.beatPulse ?? 0) * envelope
-    if (isLegacyKineticText(cue)) paintLegacyCue(ctx, width, height, seconds, cue, pulse)
-    else paintV2Cue(ctx, width, height, seconds, cue, pulse)
+    const trap = riso || cue.trap === true
+    if (isLegacyKineticText(cue)) paintLegacyCue(ctx, width, height, seconds, cue, pulse, { trap, color: cue.color, paper })
+    else paintV2Cue(ctx, width, height, seconds, cue, pulse, { trap, color: cue.color, paper, fill: cue.fill?.kind })
   }
 }

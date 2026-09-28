@@ -39,6 +39,7 @@ export const KINETIC_TEXT_SCHEMA = {
       }, required: ['from', 'to', 'decimals', 'ease'] },
       template: { type: 'string', maxLength: 80 },
       beatPulse: { type: 'number', minimum: 0, maximum: 1 },
+      trap: { type: 'boolean' },
     },
   },
 } as const

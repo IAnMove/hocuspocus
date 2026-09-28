@@ -1,5 +1,6 @@
 // The Video 2D text painter as it shipped before optional v2 fields.
 // Cues that do not set those fields must keep calling this path.
+import { reserveBlackPlate, type InkTrapPaint } from '../scene2d/inkTrap'
 import type { KineticText } from './types'
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -17,22 +18,26 @@ export function legacyTextState(cue: KineticText, seconds: number) {
   }
 }
 
-function paintTextLine(ctx: CanvasRenderingContext2D, text: string, y: number, cue: KineticText, time: number, size: number) {
+function paintTextLine(ctx: CanvasRenderingContext2D, text: string, y: number, cue: KineticText, time: number, size: number, ink: InkTrapPaint) {
   if (cue.preset !== 'wave') {
-    ctx.strokeText(text, 0, y); ctx.fillText(text, 0, y)
+    ctx.strokeText(text, 0, y)
+    reserveBlackPlate(ctx, text, 0, y, size, ink)
+    ctx.fillText(text, 0, y)
     return
   }
   let x = -ctx.measureText(text).width / 2
   ctx.textAlign = 'left'
   Array.from(text).forEach((letter, index) => {
     const dy = Math.sin(time * 5.6 - index * .42) * size * .14
-    ctx.strokeText(letter, x, y + dy); ctx.fillText(letter, x, y + dy)
+    ctx.strokeText(letter, x, y + dy)
+    reserveBlackPlate(ctx, letter, x, y + dy, size, ink)
+    ctx.fillText(letter, x, y + dy)
     x += ctx.measureText(letter).width
   })
   ctx.textAlign = 'center'
 }
 
-export function paintLegacyCue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText, pulse = 1) {
+export function paintLegacyCue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText, pulse = 1, ink: InkTrapPaint = { trap: false, color: cue.color }) {
   const state = legacyTextState(cue, seconds)
   ctx.save()
   let size = height * cue.size / 100
@@ -53,7 +58,7 @@ export function paintLegacyCue(ctx: CanvasRenderingContext2D, width: number, hei
   let remaining = state.letters
   lines.forEach((line, index) => {
     const letters = Array.from(line)
-    paintTextLine(ctx, letters.slice(0, Math.max(0, remaining)).join(''), (index - (lines.length - 1) / 2) * size * 1.12, cue, state.elapsed, size)
+    paintTextLine(ctx, letters.slice(0, Math.max(0, remaining)).join(''), (index - (lines.length - 1) / 2) * size * 1.12, cue, state.elapsed, size, { ...ink, color: cue.color })
     remaining -= letters.length + 1
   })
   ctx.restore()

@@ -53,6 +53,8 @@ export type KineticText = {
   template?: string
   /** Live scale added on stored beats. Absent means the cue does not pulse. */
   beatPulse?: number
+  /** Reserve the black plate under this cue even when the riso press is off. */
+  trap?: boolean
 }
 
 export type TextMotion = {
