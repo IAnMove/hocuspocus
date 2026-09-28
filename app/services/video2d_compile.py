@@ -195,13 +195,6 @@ def _frame(data: dict) -> None:
         raise CompileError("template_bad_frame", "fps")
 
 
-def _explicit_duration(data: dict) -> bool:
-    if "duration" in data:
-        return True
-    raw = data.get("controls")
-    return isinstance(raw, dict) and "duration" in raw
-
-
 def _prepare_template(data: dict) -> dict:
     template_id = data.get("templateId")
     if type(template_id) is not str or not template_id.strip():
@@ -216,7 +209,7 @@ def _prepare_template(data: dict) -> dict:
         raise CompileError("template_missing_slot", missing)
     controls = _controls(template, data)
     request: dict[str, Any] = {"templateId": template_id, "assets": assets, "controls": controls}
-    if _explicit_duration(data) and "duration" in controls:
+    if "duration" in controls:
         request["duration"] = controls["duration"]
     for key in ("width", "height", "fps"):
         if key in data:

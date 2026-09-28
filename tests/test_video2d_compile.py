@@ -94,3 +94,28 @@ def test_compile_calls_the_typescript_builders():
     result = execute(_compile())
     assert result["result"]["document"]["name"] == "Plano de establecimiento · candidata"
     assert [layer["id"] for layer in result["result"]["document"]["layers"]] == ["plate", "hero", "camera", "atmosphere-dust"]
+
+
+def test_video2d_candidate_forwards_catalog_duration_and_keeps_assets(monkeypatch):
+    seen = {}
+
+    def fake_bridge(payload):
+        seen["payload"] = payload
+        return {"ok": True, "result": {"document": {"version": 1, "layers": []}, "warnings": []}}
+
+    monkeypatch.setattr("services.video2d_compile.spawn_bridge", fake_bridge)
+    execute(_compile("documentary-history"))
+    assert seen["payload"]["input"]["duration"] == 4
+    assert seen["payload"]["input"]["controls"]["duration"] == 4
+    assert seen["payload"]["input"]["assets"] == ASSETS
+
+
+@pytest.mark.skipif(not TSX.is_file(), reason="ui node_modules is not installed")
+def test_video2d_candidate_compile_keeps_slot_images():
+    result = execute(_compile("documentary-history"))
+    layers = {layer["id"]: layer for layer in result["result"]["document"]["layers"]}
+    assert result["result"]["document"]["duration"] == 4
+    assert layers["hero"]["source"] == ASSETS["hero"]
+    assert layers["plate"]["source"] == ASSETS["plate"]
+    assert layers["plate"]["type"] == "image"
+    assert layers["atmosphere-plate"]["type"] == "effect"
