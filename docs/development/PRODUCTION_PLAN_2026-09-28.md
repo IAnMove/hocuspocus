@@ -14,3 +14,4 @@ Registro corto. El encargo privado no está en git. B2 ya está en `development`
 | B4 | en este PR | Un selector inválido responde `invalid_selector` y los valores permitidos. |
 | B5 | en este PR | `jobs.wait` espera el fin del trabajo o `timeout`. |
 | B6 | en este PR | Catálogos y ediciones resumidos. La hoja de contactos es una URL. |
+| C4 | en este PR | `studio.key` quita el fondo verde en CPU. El mate temporal queda fijo en 0.15/0.7/0.15. `isnet-anime` solo si el modelo ya está instalado. |

@@ -302,6 +302,7 @@
         "tests/test_story_montage_clip_history_ui.py",
         "tests/test_storyboard_camera_name_strip.py",
         "tests/test_studio_image_preparation.py",
+        "tests/test_studio_key.py",
         "tests/test_studio_music_commands.py",
         "tests/test_studio_music_spec.py",
         "tests/test_studio_sfx_commands.py",
