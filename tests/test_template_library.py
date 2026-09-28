@@ -56,6 +56,24 @@ def env(tmp_path):
     return make("library"), make, root / WS
 
 
+def test_save_keeps_bundled_scene3d_plates(env):
+    """Drive shots put /scene3d/*.jpg on the background; that is app media, not an external URL."""
+    library, _, _ = env
+    document = _world()
+    document["slots"][1]["sourceUrl"] = "/scene3d/drive-coast.jpg"
+    saved = library.save(workspace=WS, editor="video3d", document=document, metadata={"title": "Coast road"})
+    stored = library.get(saved["id"])["document"]
+    assert stored["slots"][1]["sourceUrl"] == "/scene3d/drive-coast.jpg"
+    assert stored["slots"][0]["sourceUrl"] == ""
+    applied = library.apply(saved["id"], workspace=WS)
+    assert applied["document"]["slots"][1]["sourceUrl"] == "/scene3d/drive-coast.jpg"
+    with pytest.raises(TemplateError) as traversal:
+        library.save(workspace=WS, editor="video3d",
+                     document=_world(slots=[{**_world()["slots"][0], "sourceUrl": "/scene3d/../secret.glb"}]),
+                     metadata={"title": "Nope"})
+    assert traversal.value.code == "external_media"
+
+
 def test_save_without_media_empties_slots_and_keeps_metadata(env):
     library, _, _ = env
     saved = library.save(workspace=WS, editor="video3d", document=_world(), preview="shot.png",
