@@ -1,5 +1,7 @@
 # Estado de desarrollo y punto de entrada
 
+Production plan B1 (2026-09-28): `generation.video` version 3 types MiniMax H3 FL2VA/Ref2VA and wired LTX-2.3 frames plus driving audio; `validate: true` stops before the GPU queue.
+
 Verificado el 7 de septiembre de 2026 contra `origin/development` **`ef5b0871`**.
 Es una fotografía con evidencia, no un sustituto de Git. Antes de reservar trabajo:
 `git fetch origin development`, consultar PR abiertos y comprobar sus archivos.

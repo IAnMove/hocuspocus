@@ -4,8 +4,13 @@ Studio's image Generate button, Wizard `start_generation` in image mode, and
 MCP `generation.image` share native preparation and durable command admission.
 The browser builds version 2 from its complete assembled image parameters,
 including references, LoRAs and advanced options. Version 1 remains available
-for small text-to-image clients. Video, audio, Tools, editorial domains and
+for small text-to-image clients. Audio, Tools, editorial domains and
 workflow execution are not covered by this slice.
+
+`generation.video` version 2 remains the closed Wan 2.1 Text2Video command.
+Version 3 types MiniMax H3 FL2VA, Ref2VA, and wired LTX-2.3 frames plus
+driving audio. `validate: true` on version 3 builds the generate payload and
+does not enqueue. H3 Advanced is a separate family and is not part of version 3.
 
 ## Contract and discovery
 

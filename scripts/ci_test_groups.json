@@ -158,6 +158,7 @@
         "tests/test_video_editor_time_cards.py",
         "tests/test_video_generation_commands.py",
         "tests/test_video_generation_spec.py",
+        "tests/test_video_generation_v3.py",
         "tests/test_voice_reference_settings.py",
         "tests/test_wangp1272_runtime.py",
         "tests/test_wangp1300_audio.py",

@@ -17,6 +17,16 @@ from services.task_command_admission import TaskCommandConflict
 from services.wangp_submission import JsonRequest
 
 
+def _validate_only_result(command, frozen, params):
+    """Version 3 may build a generate payload and stop before admission."""
+    if not isinstance(command, dict) or command.get("validate") is not True:
+        return None
+    if frozen.get("effective", {}).get("version") != 3:
+        raise command_error(422, "invalid_command", "validate is only supported for generation.video version 3")
+    payload = {key: value for key, value in params.items() if not str(key).startswith("_")}
+    return {"validated": True, "enqueued": False, "payload": payload}
+
+
 def command_error(status: int, code: str, message: str):
     return HTTPException(status, {"code": code, "message": message, "retryable": status >= 500})
 
@@ -139,6 +149,9 @@ class ImageGenerationCommands:
     async def submit(self, command, *, trusted_tool=None, submission_context=None):
         try:
             frozen, params = self._freeze(command)
+            validate_only = _validate_only_result(command, frozen, params)
+            if validate_only is not None:
+                return validate_only
             registry = self._registry(params["workspace"])
             previous = registry.command_admission(command["intent_id"])
             if previous is not None:
@@ -169,7 +182,7 @@ class ImageGenerationCommands:
             prepare_request = adapter.prepare_request if adapter and adapter.prepare_request else self.prepare
             return await prepare_request(request)
         except ImageGenerationSpecError as error:
-            raise command_error(422, "invalid_command", str(error)) from error
+            raise command_error(422, getattr(error, "code", None) or "invalid_command", str(error)) from error
         except TaskCommandConflict as error:
             raise command_error(409, "intent_conflict", str(error)) from error
         except (OSError, sqlite3.Error) as error:
