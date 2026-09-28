@@ -56,6 +56,15 @@ def set_job_state_observer(
         _job_state_observer = observer
 
 
+def _wake_job_waiters(snapshot: Mapping[str, Any]) -> None:
+    """Wake jobs.wait. A missing helper must not fail the generation."""
+    try:
+        from services.jobs_wait import note_job_state
+        note_job_state(snapshot)
+    except Exception:
+        return
+
+
 def _notify_job_state(job: MutableMapping[str, Any]) -> None:
     with _lifecycle_lock:
         observer = _job_state_observer
@@ -64,6 +73,7 @@ def _notify_job_state(job: MutableMapping[str, Any]) -> None:
             snapshot["output_files"] = list(snapshot["output_files"])
         if isinstance(snapshot.get("clip_output_files"), dict):
             snapshot["clip_output_files"] = dict(snapshot["clip_output_files"])
+    _wake_job_waiters(snapshot)
     if observer is None:
         return
     try:
