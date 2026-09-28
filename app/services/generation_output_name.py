@@ -243,10 +243,16 @@ def generation_receipt_view(
     workspace: str,
     workspace_dir: str,
 ) -> dict[str, Any]:
-    """Read-model for ``generation.receipt``. The stored admission is unchanged."""
+    """Read-model for ``generation.receipt``. The stored admission is unchanged.
+
+    A measured step pace on the task is copied onto the returned receipt.
+    The admission object stored at submit time is not rewritten.
+    """
+    from services.generation_memory import include_performance
+
     refs: object = []
     if isinstance(task, dict):
         refs = task.get("result_refs") or []
-    view = {"receipt": receipt, "task": task}
+    view = {"receipt": include_performance(receipt, task), "task": task}
     view.update(status_output_fields(refs, workspace=workspace, workspace_dir=workspace_dir))
     return view

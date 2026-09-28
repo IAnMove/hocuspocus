@@ -48,6 +48,7 @@
         "tests/test_director_stop_endpoint.py",
         "tests/test_director_v2_story_refs.py",
         "tests/test_execution_mode.py",
+        "tests/test_generation_memory.py",
         "tests/test_generation_output_name.py",
         "tests/test_generation_provenance_submission.py",
         "tests/test_generation_queue_priority.py",
