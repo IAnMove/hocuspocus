@@ -51,7 +51,7 @@ def test_section_at_12_5_keeps_a_4s_clip_inside(tmp_path):
     assert body["sourceStart"] == 12.5
     assert body["sync"] == 0
     assert body["verdict"] == "unreliable"
-    assert body["reason"] == "lipsync_unavailable"
+    assert body["reason"] == "lipsync_audio_missing"   # qa.lipsync is installed; this score names no audio
     assert body["trimStart"] == 0.0
     assert body["trimEnd"] == 2.5
     played_start = body["sourceStart"] + body["trimStart"]
