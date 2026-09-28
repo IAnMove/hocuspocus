@@ -29,6 +29,7 @@ import { MontageLayersPanel, MontageToolbar, type MontageEditorState } from './M
 import { loadMontageIntoEditor } from './montageLoader'
 import { DeriveVerticalButton } from './DeriveVerticalButton'
 import { ShortenSongPanel } from './ShortenSongPanel'
+import { PublishPresetBar } from './PublishPresetBar'
 import { ShotBoard } from './ShotBoard'
 import { exportLayerFields, loadMontageState, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
@@ -2003,6 +2004,15 @@ export function VideoEditorPanel() {
             <Film size={13} /> {t('shots.toggle')}
           </button>
         )}
+        <PublishPresetBar
+          width={resolution.width}
+          height={resolution.height}
+          duration={totalDuration}
+          overlays={montage.layers.overlays.map(item => ({ id: item.id, y: item.y, width: item.width }))}
+          source={exportJob?.url || exportJob?.filename || ''}
+          workspace={activeWorkspace}
+          onError={setError}
+        />
         <button
           onClick={startExport}
           disabled={!clips.length || isVideoEditorJobActive(exportJob)}

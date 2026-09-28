@@ -36776,6 +36776,11 @@ api.include_router(create_audio_shorten_router(
     resolve_source=_resolve_shorten_source,
     workspace_dir=_workspace_dir,
 ))
+from routers.publish_presets import create_publish_router
+api.include_router(create_publish_router(
+    resolve_source=lambda source, workspace: _resolve_request_media_path(source, workspace=workspace, kinds=("video", "audio")),
+    workspace_dir=_workspace_dir,
+))
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
     handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
