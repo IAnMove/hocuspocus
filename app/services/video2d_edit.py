@@ -48,7 +48,10 @@ _TEXT_RANGES = {"x": (0, 100), "y": (0, 100), "size": (2, 25), "rotation": (-45,
 _TEXT_ENUMS = {"font": _TEXT_FONTS, "align": _TEXT_ALIGNS, "preset": _TEXT_PRESETS, "loop": _TEXT_LOOPS}
 _TEXT_FIELDS = set(_TEXT_RANGES) | set(_TEXT_ENUMS) | {"text", "start", "end", "weight", "uppercase", "italic", "enter", "exit", "box", "counter", "color"}
 _POINT_RANGES = {"x": (-50, 150), "y": (-50, 150), "scale": (0.01, 20), "opacity": (0, 1), "rotation": (-180, 180)}
-_LAYER_PATCH = frozenset({"name", "source", "visible", "locked", "z", "fill", "type", "transform", "animation"})
+# Corner zooms use layer focus {x, y}: that frame point stays on the anchor while
+# scale changes (x = anchor - (focus - 50) * scale). Positions stay in _POINT_RANGES
+# so saved scenes keep the same limits. focus is omitted unless update_layer sets it.
+_LAYER_PATCH = frozenset({"name", "source", "visible", "locked", "z", "fill", "type", "transform", "animation", "focus"})
 _TRANSFORM_KEYS = frozenset({"x", "y", "scale", "opacity", "rotation"})
 
 
@@ -343,6 +346,15 @@ def _patch_layer_flags(layer: dict, patch: dict) -> None:
         layer[key] = patch[key]
 
 
+def _focus(value) -> dict:
+    if not isinstance(value, dict) or set(value) != {"x", "y"}:
+        _fail("invalid_input", "focus needs x and y")
+    return {
+        "x": _number(value["x"], 0, 100, "invalid_input", "focus is out of range"),
+        "y": _number(value["y"], 0, 100, "invalid_input", "focus is out of range"),
+    }
+
+
 def _apply_layer_patch(layer: dict, patch: dict, scene_duration: float) -> None:
     if not patch or any(key not in _LAYER_PATCH for key in patch):
         _fail("invalid_input", "update_layer patch has unsupported fields")
@@ -358,6 +370,8 @@ def _apply_layer_patch(layer: dict, patch: dict, scene_duration: float) -> None:
         _merge_transform(layer, patch["transform"])
     if "animation" in patch:
         _merge_animation(layer, patch["animation"], scene_duration)
+    if "focus" in patch:
+        layer["focus"] = _focus(patch["focus"])
 
 
 def _update_layer(document: dict, operation: dict, warnings: list) -> None:
@@ -1021,6 +1035,8 @@ def command_catalog() -> list[dict]:
         "set_lyrics stores lines with start/end/text and does not fetch. set_rhythm stores bpm and beats and does not analyze audio. "
         "set_duration is greater than 0 and at most 600 seconds. set_format width and height are even integers from 240 to 3840. "
         "reorder assigns z as 0, 10, 20… in the new order, matching editor assignZ. "
+        "update_layer focus {x, y} is the layer-frame point (0-100) that stays on the anchor while scale changes. "
+        "Omit it, or use 50,50, and scenes keep scaling around the center. "
         "An unknown op fails with invalid_operation."
     )
     operations = {"type": "array", "maxItems": MAX_OPERATIONS, "items": {"oneOf": [

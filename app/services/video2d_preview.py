@@ -34,7 +34,7 @@ OPERATION = "scenes.video2d.preview"
 MAX_TIMES = 8
 MAX_EDGE = 960
 PAINT_TIMEOUT = 120.0
-FIELDS = frozenset({"document", "times"})
+FIELDS = frozenset({"document", "times", "workspace"})
 ROOT = Path(__file__).resolve().parents[2]
 UI_ROOT = ROOT / "ui"
 DIST = UI_ROOT / "dist"
@@ -76,16 +76,26 @@ def _detail(detail: Any, key: str, fallback: str) -> str:
     return fallback
 
 
+def _workspace_name(value: Any) -> None:
+    if not isinstance(value, str) or value != value.strip() or not 1 <= len(value) <= 120:
+        raise PreviewError("preview_bad_envelope", "workspace")
+
+
+def _preview_input(data: Any) -> dict:
+    if not isinstance(data, dict) or not {"document", "times"} <= set(data) <= FIELDS:
+        raise PreviewError("preview_bad_envelope", "input must be document and times")
+    if "workspace" in data:
+        _workspace_name(data["workspace"])
+    return data
+
+
 def _input(command: Any) -> dict:
     if not isinstance(command, dict) or set(command) != {"version", "operation", "input"}:
         raise PreviewError("preview_bad_envelope", "Expected version, operation and input only")
     version = command.get("version")
     if type(version) is not int or version != 1 or command.get("operation") != OPERATION:
         raise PreviewError("preview_bad_envelope", f"Expected version 1 {OPERATION}")
-    data = command.get("input")
-    if not isinstance(data, dict) or set(data) != FIELDS:
-        raise PreviewError("preview_bad_envelope", "input must be document and times")
-    return data
+    return _preview_input(command.get("input"))
 
 
 def _document(raw: Any) -> dict:
@@ -325,6 +335,7 @@ def command_catalog() -> list[dict[str, Any]]:
             "painter (window.__scene2dExport on /scene2d-render.html) and return one contact-sheet PNG. "
             "Each time must be from 0 through the document duration. The long edge is capped at 960. "
             "Does not save the scene or write an MP4. CPU lane scene2d-render, no GPU. "
+            "input.workspace is optional and does not change the sheet; callers that omit it keep working. "
             "preview_too_many_times, preview_time_out_of_range and preview_timeout are stable errors."
         ),
         "mutation": False,
@@ -338,6 +349,7 @@ def command_catalog() -> list[dict[str, Any]]:
                     "additionalProperties": False,
                     "properties": {
                         "document": {"type": "object"},
+                        "workspace": {"type": "string", "minLength": 1, "maxLength": 120},
                         "times": {
                             "type": "array",
                             "minItems": 1,

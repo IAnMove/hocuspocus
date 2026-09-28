@@ -588,7 +588,8 @@ def command_catalog() -> list[dict[str, Any]]:
         "(overlay or text y < 12 or y > 80, or width > 90 on a portrait frame), missing_media, unknown_font, "
         "layer_outside_frame, and duration_over_publish_limit (X 140s / premium 180s, shorts 60s / premium 90s). "
         "Text and lyric boxes use font, size, maxWidth, align and box padding. text_overlap, lyrics_overlap, "
-        "text_outside_frame (the box, not the anchor), empty_timespan (a span over 2s with no visible layer or text), "
+        "text_outside_frame (the real box: left and right x are those edges; center or omitted align stays centered), "
+        "empty_timespan (a span over 2s with no visible layer or text), "
         "reserved_zone (document.reservedZones) and text_low_contrast (sampled luminance under 3:1 when the painter "
         "can start; otherwise the sample is skipped and no ratio is invented). No GPU and no scene-file write."
     )

@@ -250,6 +250,39 @@ def test_text_boxes_warn_on_overlap_outside_frame_and_lyrics(tmp_path):
     assert "text_overlap" not in _codes(separated["warnings"])
 
 
+def test_left_align_uses_the_text_edge_and_outside_frame_uses_that_box(tmp_path):
+    from services.scene2d_text_boxes import text_placements
+
+    wide = {
+        "id": "date", "text": "STORY LAB", "start": 0, "end": 4, "preset": "impact",
+        "x": 12, "y": 70, "size": 14, "font": "display", "align": "left",
+    }
+    document = _document(duration=8, layers=[_covered()], texts=[wide])
+    left = text_placements(document)[0]
+    assert left["left"] == pytest.approx(12)
+    assert left["right"] < 100
+    centered = json.loads(json.dumps(document))
+    centered["texts"][0]["align"] = "center"
+    center = text_placements(centered)[0]
+    assert center["left"] < 0
+    assert "text_outside_frame" in _codes(_validate(centered, tmp_path)["warnings"])
+    omitted = json.loads(json.dumps(document))
+    del omitted["texts"][0]["align"]
+    assert text_placements(omitted)[0]["left"] == pytest.approx(center["left"])
+    overflow = json.loads(json.dumps(document))
+    overflow["texts"][0]["x"] = 80
+    assert any(item["code"] == "text_outside_frame" and item["path"] == "texts[0]" for item in _validate(overflow, tmp_path)["warnings"])
+    kept = _validate(document, tmp_path)
+    assert "text_outside_frame" not in _codes(kept["warnings"])
+    right = json.loads(json.dumps(document))
+    right["texts"][0]["align"] = "right"
+    right["texts"][0]["x"] = 12
+    assert text_placements(right)[0]["right"] == pytest.approx(12)
+    assert "text_outside_frame" in _codes(_validate(right, tmp_path)["warnings"])
+    bad_focus = _document(layers=[_layer(focus={"x": -1, "y": 50})])
+    assert list(Draft202012Validator(document_schema()).iter_errors(bad_focus))
+
+
 def test_empty_timespan_warns_only_for_gaps_over_two_seconds(tmp_path):
     short = _layer()
     short["animation"]["duration"] = 2

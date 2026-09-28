@@ -55,8 +55,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
                              ["workspace", "file", "clip_id", "take_id", "expected_revision"], True,
                              "Use a finished take for a clip. The previous media stays as a take. A take shorter than "
                              "the clip's slot is slowed to cover it unless retime is false. Export again afterwards."),
-    "montages.export.status": ({"job_id": {"type": "string", "minLength": 1, "maxLength": 80}}, ["job_id"], False,
-                               "Read a montage export job: status, progress, filename and url when completed."),
+    "montages.export.status": ({"job_id": {"type": "string", "minLength": 1, "maxLength": 80}, "workspace": WORKSPACE},
+                               ["job_id"], False,
+                               "Read a montage export job: status, progress, filename and url when completed. "
+                               "workspace is optional, same string as the other montage commands; job_id still selects the job."),
 }
 
 

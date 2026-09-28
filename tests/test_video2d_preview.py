@@ -84,6 +84,22 @@ def test_catalog_is_a_read_only_preview():
     assert published[0]["inputSchema"]["properties"]["input"]["properties"]["times"]["maxItems"] == 8
 
 
+def test_optional_workspace_does_not_change_the_sheet(monkeypatch):
+    monkeypatch.setattr("services.video2d_preview.paint_contact_sheet", lambda *_args: b"png-bytes")
+    omitted = execute(_command())
+    included = execute({"version": 1, "operation": OPERATION, "input": {**_command()["input"], "workspace": "demo-video2d"}})
+    assert omitted["result"]["sha256"] == included["result"]["sha256"]
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]
+    assert "workspace" in schema["properties"]
+    assert "workspace" not in schema["required"]
+    with pytest.raises(PreviewError) as missing:
+        execute({"version": 1, "operation": OPERATION, "input": {"workspace": "demo-video2d", "times": [0]}})
+    assert missing.value.code == "preview_bad_envelope"
+    with pytest.raises(PreviewError) as blank:
+        execute({"version": 1, "operation": OPERATION, "input": {**_command()["input"], "workspace": " "}})
+    assert blank.value.code == "preview_bad_envelope"
+
+
 def test_too_many_times_uses_a_stable_code(monkeypatch):
     _block_paint(monkeypatch)
     with pytest.raises(PreviewError) as caught:

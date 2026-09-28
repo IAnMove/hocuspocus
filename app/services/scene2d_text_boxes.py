@@ -1,9 +1,10 @@
 """Approximate Video 2D text and lyric boxes for validate.
 
-Boxes are percentages of the frame. The block is centered on the anchor, matching
-``paintV2Cue``: align only shifts shorter lines inside that block, so the union
-still follows font, size, maxWidth and box padding. Plate boxes cover the frame.
-Rotation is ignored. Contrast ratios come from sampled pixels, never from a guess.
+Boxes are percentages of the frame. ``align: left`` puts the left edge on x and
+``align: right`` puts the right edge on x, matching ``paintV2Cue`` and the lyric
+painter. Center and omitted align keep the block centered on the anchor. Padding
+grows that union. Plate boxes cover the frame. Rotation is ignored. Contrast
+ratios come from sampled pixels, never from a guess.
 """
 from __future__ import annotations
 
@@ -69,6 +70,14 @@ def _padding(box: Any, line_px: float, frame_w: float, frame_h: float) -> tuple[
     return pad_px / frame_w * 100.0, pad_px / frame_h * 100.0
 
 
+def _block_center(anchor_x: float, align: Any, block_w: float) -> float:
+    if align == "left":
+        return anchor_x + block_w / 2.0
+    if align == "right":
+        return anchor_x - block_w / 2.0
+    return anchor_x
+
+
 def _ink_box(anchor_x: float, anchor_y: float, block_w: float, block_h: float, pad_x: float, pad_y: float) -> dict[str, float]:
     return {
         "left": anchor_x - block_w / 2.0 - pad_x,
@@ -109,7 +118,8 @@ def _measure(text: str, spec: dict[str, Any], frame_w: float, frame_h: float) ->
     if _number(spec.get("visibleLines")) == 2:
         block_h += leading
     pad_x, pad_y = _padding(box, size_px * scale * line_factor, frame_w, frame_h)
-    return _ink_box(anchor_x, anchor_y, widest / frame_w * 100.0, block_h, pad_x, pad_y)
+    block_w = widest / frame_w * 100.0
+    return _ink_box(_block_center(anchor_x, spec.get("align"), block_w), anchor_y, block_w, block_h, pad_x, pad_y)
 
 
 def _timing(node: dict, fallback_end: float | None) -> tuple[float, float] | None:

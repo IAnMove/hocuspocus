@@ -8,6 +8,24 @@ import type { AnimatorLayer, AnimatorScene, LayerState } from './types'
 
 export type SceneEvaluator = ReturnType<typeof createSceneEvaluator>
 
+/** Shift the drawn box so `focus` stays on the anchor. 50,50 and a missing focus are no-ops. */
+function pinFocus(scene: AnimatorScene, layer: AnimatorLayer, state: LayerState): LayerState {
+  const focus = layer.focus
+  if (!focus || layer.type === 'camera' || layer.type === 'effect') return state
+  const boxX = layer.type === 'model3d' ? .52 : 1
+  const boxY = layer.type === 'model3d' ? .75 : 1
+  const ox = (focus.x - 50) / 100 * scene.width * boxX * state.scale
+  const oy = (focus.y - 50) / 100 * scene.height * boxY * state.scale
+  const theta = state.rotation * Math.PI / 180
+  const cos = Math.cos(theta)
+  const sin = Math.sin(theta)
+  return {
+    ...state,
+    x: state.x - (cos * ox - sin * oy) / scene.width * 100,
+    y: state.y - (sin * ox + cos * oy) / scene.height * 100,
+  }
+}
+
 /** `time` is scene progress in [0, 1], as used by the animator timeline. */
 export function createSceneEvaluator(scene: AnimatorScene) {
   const baseLayerState = (layer: AnimatorLayer, time: number): LayerState => {
@@ -149,7 +167,7 @@ export function createSceneEvaluator(scene: AnimatorScene) {
               : { ...state, rotation: facingAngle }
           }
         }
-        instances.push(applyCameraTransform(state, layer, time))
+        instances.push(pinFocus(scene, layer, applyCameraTransform(state, layer, time)))
       }
     }
     // Each 3D copy is a live WebGL context. orbit(12) × strip(12) = 144

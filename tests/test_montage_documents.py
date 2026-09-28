@@ -86,6 +86,20 @@ def test_save_is_revisioned_and_compare_and_swap(tmp_path):
         store.get("x-song", "../escape.montage.json")
 
 
+def test_export_status_accepts_optional_workspace_and_keeps_job_id(tmp_path):
+    commands = MontageCommands(_store(tmp_path), start_export=lambda _body: {}, get_export=lambda job: {"job_id": job, "status": "completed"})
+    job_only = commands.execute("montages.export.status", {"version": 1, "input": {"job_id": "video-edit-9"}})
+    assert job_only["result"]["job"] == {"job_id": "video-edit-9", "status": "completed"}
+    with_workspace = commands.execute("montages.export.status", {"version": 1, "input": {"job_id": "video-edit-9", "workspace": "x-song"}})
+    assert with_workspace["result"]["job"]["job_id"] == "video-edit-9"
+    with pytest.raises(MontageError) as missing:
+        commands.execute("montages.export.status", {"version": 1, "input": {"workspace": "x-song"}})
+    assert missing.value.code == "invalid_command"
+    with pytest.raises(MontageError) as extra:
+        commands.execute("montages.export.status", {"version": 1, "input": {"job_id": "video-edit-9", "note": "nope"}})
+    assert extra.value.code == "invalid_command"
+
+
 def test_export_body_matches_video_editor_contract():
     body = export_body(normalize_montage(_montage()), "x-song")
     assert body["clips"][0]["trim_end"] == 4.2 and body["clips"][0]["transition"] == "crossfade"

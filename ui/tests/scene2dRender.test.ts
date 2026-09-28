@@ -46,6 +46,26 @@ test('dependency cycles are broken before evaluation', () => {
   assert.equal(second.relationship?.targetLayerId, 'a')
 })
 
+test('focus keeps an image point on the anchor while scale changes', () => {
+  const zoomed = layer('hero', {
+    transform: { x: 50, y: 50, scale: 3, opacity: 1 },
+    animation: { start: { x: 50, y: 50, scale: 3 }, end: { x: 50, y: 50, scale: 3 }, duration: 4, curve: 'linear' },
+    focus: { x: 0, y: 50 },
+  })
+  const [state] = createSceneEvaluator(scene([zoomed], 4)).renderedLayerStates(zoomed, 0)
+  assert.equal(state.x, 200)
+  assert.equal(state.y, 50)
+  const centered = layer('still', {
+    transform: { x: 50, y: 50, scale: 3, opacity: 1 },
+    animation: { start: { x: 50, y: 50, scale: 3 }, end: { x: 50, y: 50, scale: 3 }, duration: 4, curve: 'linear' },
+  })
+  const [plain] = createSceneEvaluator(scene([centered], 4)).renderedLayerStates(centered, 0)
+  assert.equal(plain.x, 50)
+  const normalized = normalizeScene2D(scene([zoomed]))
+  assert.deepEqual(normalized.layers[0].focus, { x: 0, y: 50 })
+  assert.equal(normalizeScene2D(scene([layer('plain')])).layers[0].focus, undefined)
+})
+
 test('strip offsets wrap copies around the frame', () => {
   const offsets = stripOffsets(layer('strip', { strip: { enabled: true, count: 3, spacing: 30, direction: 'left', speed: 10 } }), 0)
   assert.deepEqual(offsets.map(item => item.x), [-30, 0, 30])

@@ -141,6 +141,12 @@ de `text_templates.json`. `reorder` asigna z 0, 10, 20… en el orden nuevo y
 debe ser una permutación de los ids de capa. Las cámaras de `add_layer` salen
 de los ids `kind: camera` de `motion_presets.json`.
 
+`update_layer` puede llevar `patch.focus` con `{x, y}` de 0 a 100: es el punto
+del marco de la capa que permanece en el ancla mientras cambia `scale`. Sin
+`focus`, o con `{50, 50}`, la escala sigue alrededor del centro y las escenas
+ya guardadas no se mueven. Un zoom a una esquina no necesita una posición fuera
+del rango de `animation` (`x = 50 - (fx - 50) * scale` lo resuelve el pintor).
+
 ```json
 {
   "version": 1,
@@ -193,7 +199,10 @@ No guarda. Devuelve `{document, errors, warnings}`. Si `errors` no está vacío,
 corrige y vuelve a validar. No exportes ni guardes una escena con errores.
 
 Las cajas de texto y de letra usan fuente, tamaño, `maxWidth`, alineación y el
-padding de `box`. El ancla puede estar dentro y la caja no. Avisos estables:
+padding de `box`. `align: left` apoya el borde izquierdo en `x` y `align: right`
+el derecho. `center`, o la ausencia de `align`, siguen centrados en el ancla.
+El ancla puede estar dentro y la caja no: `text_outside_frame` usa esa caja.
+Avisos estables:
 
 ```json
 {
@@ -342,7 +351,9 @@ Usa el `document` devuelto por validate en las llamadas siguientes.
 
 Pinta hasta 8 instantes y devuelve una hoja de contactos PNG. No guarda la
 escena ni escribe un MP4. No usa la GPU: el pintor va por el carril CPU
-`scene2d-render`. Cada tiempo está entre 0 y `duration`.
+`scene2d-render`. Cada tiempo está entre 0 y `duration`. `input.workspace` es
+opcional y usa la misma cadena que validate y export. Quien no lo envía sigue
+igual: la hoja sale de `document` y `times`.
 
 ```json
 {
@@ -407,8 +418,11 @@ resultado trae `name`: ese nombre es el que cita el montaje.
 Renderiza el MP4 en la CPU. No es la vista previa. El sobre lleva `intent_id`
 además de `version` e `input`. Reutiliza el mismo `intent_id` solo para leer el
 recibo con `scenes.video2d.export.receipt` (`input.workspace` e
-`input.intent_id`). El MP4 publicado es el `source` del clip; no inventes el
-nombre del archivo.
+`input.intent_id`). Ese recibo copia el `status` de la tarea: no se queda en
+`queued` cuando el MP4 ya existe. `receipt.artifacts` es entonces
+`[{name, url, workspace}]` del archivo publicado. La admisión guardada no
+cambia. El MP4 publicado es el `source` del clip; no inventes el nombre del
+archivo.
 
 ```json
 {
@@ -448,7 +462,9 @@ Coloca el MP4 en una línea de tiempo editable. No renderiza. `clips[].source`
 es el archivo que devolvió el recibo de exportación. `origin.scene` es el
 `name` que devolvió `scenes.document.save`. Crear el mismo nombre otra vez
 responde `409 exists`; para actualizar hay que pasar `file` y
-`expected_revision`.
+`expected_revision`. `montages.export.status` acepta `input.workspace`
+opcional, igual que el resto de comandos de montaje, y sigue funcionando solo
+con `job_id`.
 
 ```json
 {

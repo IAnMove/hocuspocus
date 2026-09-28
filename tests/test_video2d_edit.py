@@ -52,6 +52,26 @@ def test_add_layer_replaces_existing_id_and_keeps_order():
     assert original == snapshot
 
 
+def test_update_layer_focus_pins_a_frame_point_without_moving_the_anchor():
+    result = _result([{
+        "op": "update_layer",
+        "id": "a",
+        "patch": {
+            "focus": {"x": 0, "y": 100},
+            "animation": {"end": {"x": 50, "y": 50, "scale": 4}},
+        },
+    }])
+    layer = result["document"]["layers"][0]
+    assert layer["focus"] == {"x": 0, "y": 100}
+    assert layer["animation"]["end"]["x"] == 50
+    assert layer["animation"]["end"]["scale"] == 4
+    untouched = _result([{"op": "update_layer", "id": "b", "patch": {"name": "plate"}}])["document"]["layers"][1]
+    assert "focus" not in untouched
+    with pytest.raises(Video2dEditError) as error:
+        _edit([{"op": "update_layer", "id": "a", "patch": {"focus": {"x": 140, "y": 50}}}])
+    assert error.value.code == "invalid_input"
+
+
 def test_remove_layer():
     document = _result([{"op": "remove_layer", "id": "b"}])["document"]
     assert [layer["id"] for layer in document["layers"]] == ["a", "c"]

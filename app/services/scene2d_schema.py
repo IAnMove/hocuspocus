@@ -183,6 +183,7 @@ def _layer() -> dict:
             "offsetX": _number(), "offsetY": _number(), "strength": _number(), "rotationOffset": _number(),
         }, ["type", "targetLayerId"]),
         "effects": _effects(), "strip": _strip(),
+        "focus": _object({"x": _number(0, 100), "y": _number(0, 100)}, ["x", "y"]),
         "transform": _object({
             "x": _number(), "y": _number(), "scale": _number(), "opacity": _number(),
             "rotation": _number(), "rotationX": _number(), "rotationY": _number(),
