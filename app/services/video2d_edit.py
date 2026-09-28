@@ -295,8 +295,9 @@ def _patch_anim_duration(current: dict, patch: dict, scene_duration: float) -> N
     if "duration" not in patch:
         return
     duration = _number(patch["duration"], 0.001, 600, "invalid_input", "Animation duration is out of range")
-    if duration - scene_duration > 1e-6:
-        _fail("timing_exceeds_duration", "Animation duration exceeds the scene duration")
+    # A trimmed video layer may run trimStart past the scene end so its span still covers the scene.
+    if duration - scene_duration - float(current.get("trimStart") or 0) > 1e-6:
+        _fail("timing_exceeds_duration", "Animation duration exceeds the scene duration plus trimStart")
     current["duration"] = duration
 
 
@@ -316,11 +317,28 @@ def _patch_spin(current: dict, patch: dict) -> None:
     current["spin"] = patch["spin"]
 
 
+# Video layer timing (ui/src/lib/sceneTimeline.ts getSceneLayerTiming): layer time =
+# trimStart + (scene time - offset) * speed, frozen at trimEnd unless loop. trimStart and
+# trimEnd are clamped to animation.duration, so to skip t seconds of a clip for the whole
+# scene set duration = scene duration + t. A clip generated against a song slice stays in
+# lip-sync by skipping the part of the slice that falls before the scene cut.
+_MEDIA_TIMING = {"trimStart": (0, 3600), "trimEnd": (0, 3600), "offset": (0, 3600), "speed": (0.1, 8)}
+
+
+def _patch_media_timing(current: dict, patch: dict) -> None:
+    for key, (low, high) in _MEDIA_TIMING.items():
+        if key in patch:
+            current[key] = _number(patch[key], low, high, "invalid_input", f"{key} is out of range")
+    if "loop" in patch:
+        current["loop"] = patch["loop"] is True
+
+
 def _merge_animation(layer: dict, patch, scene_duration: float) -> None:
     current = layer.get("animation")
-    allowed = {"start", "end", "duration", "curve", "spin", "shake"}
+    allowed = {"start", "end", "duration", "curve", "spin", "shake", "loop", *_MEDIA_TIMING}
     if not isinstance(current, dict) or not isinstance(patch, dict) or not patch or any(key not in allowed for key in patch):
         _fail("invalid_input", "Layer animation patch is invalid")
+    _patch_media_timing(current, patch)
     if "start" in patch:
         current["start"] = _animation_point(patch["start"])
     if "end" in patch:
