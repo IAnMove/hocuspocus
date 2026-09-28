@@ -83,6 +83,6 @@ M2 y M3 pueden ir en paralelo después de fusionar M1. M5 espera a M4.
 | M4 | En borrador | https://github.com/IAnMove/hocuspocus/pull/539 |
 | M5 | En borrador | https://github.com/IAnMove/hocuspocus/pull/541 |
 | M6 | En borrador | https://github.com/IAnMove/hocuspocus/pull/533 |
-| M7 | Pendiente | |
+| M7 | En borrador | https://github.com/IAnMove/hocuspocus/pull/531 |
 | M8 | Pendiente | |
 | M9 | En borrador | https://github.com/IAnMove/hocuspocus/pull/544 |
