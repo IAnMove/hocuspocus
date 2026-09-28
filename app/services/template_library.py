@@ -231,10 +231,14 @@ class TemplateLibrary:
 
     @staticmethod
     def _drop_unbound(editor: str, document: dict) -> dict:
-        """Without media, a Video 3D soundtrack is removed (it is not a slot)."""
-        if editor == "video3d" and document.get("soundtrack"):
+        """Without media, sidecar audio that is not a slot is removed."""
+        if editor == "video3d" and (document.get("soundtrack") or document.get("worldSfx")):
             document = {**document}
             document.pop("soundtrack", None)
+            document.pop("worldSfx", None)
+        if editor == "video2d" and document.get("audioTracks"):
+            document = {**document}
+            document.pop("audioTracks", None)
         return document
 
     def _preview(self, workspace: str, preview: str | None) -> dict[str, bytes]:

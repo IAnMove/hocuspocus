@@ -68,7 +68,7 @@ def _slot_refs(slot: dict) -> Iterator[MediaRef]:
         yield screen, "sourceUrl"
     speech = slot.get("speech")
     if isinstance(speech, dict):
-        for key in ("audio", "atlas"):
+        for key in ("audio", "atlas", "facePack"):
             if isinstance(speech.get(key), dict):
                 yield speech[key], "url"
 
@@ -119,6 +119,13 @@ def media_refs(editor: str, document: dict) -> Iterator[MediaRef]:
     return _world3d_refs(document) if editor == "video3d" else _scene2d_refs(document)
 
 
+def _stored_media_value(key: str, value: str) -> str:
+    """Audio tracks store a workspace basename, not a /api/v1/file URL."""
+    if key != "filename" or MEDIA_REF_RE.fullmatch(value):
+        return value
+    return parse_media_locator(value)[1] or value
+
+
 def rewrite_media(editor: str, document: dict, rewrite: Callable[[str], str | None]) -> dict:
     """Return a copy where every media locator is passed through ``rewrite`` (None keeps it)."""
     copy = deepcopy(document)
@@ -127,7 +134,7 @@ def rewrite_media(editor: str, document: dict, rewrite: Callable[[str], str | No
         if isinstance(value, str) and value:
             updated = rewrite(value)
             if updated is not None:
-                container[key] = updated
+                container[key] = _stored_media_value(key, updated)
     if editor == "video3d":
         for slot in copy.get("slots") or []:
             if isinstance(slot, dict) and isinstance(slot.get("sourceRef"), dict):
@@ -387,16 +394,39 @@ def fill_slot(editor: str, document: dict, slot: dict[str, Any], url: str) -> No
     (_fill_3d if editor == "video3d" else _fill_2d)(document, slot["target"], url, kind)
 
 
+def _clear_3d_sidecars(item: dict) -> None:
+    screen = item.get("screen")
+    if isinstance(screen, dict):
+        screen["sourceUrl"] = ""
+        screen.pop("sourceRef", None)
+    speech = item.get("speech")
+    if isinstance(speech, dict):
+        for key in ("audio", "atlas", "facePack"):
+            speech.pop(key, None)
+
+
+def _clear_2d_sequence(layer: dict) -> None:
+    sequence = layer.get("sequence")
+    if not isinstance(sequence, dict):
+        return
+    if "source" in sequence:
+        sequence["source"] = ""
+    if isinstance(sequence.get("sources"), list):
+        sequence["sources"] = []
+
+
 def clear_slot(editor: str, document: dict, slot: dict[str, Any]) -> None:
     if editor == "video3d":
         for item in document.get("slots") or []:
             if isinstance(item, dict) and item.get("slot") == slot["target"]:
                 item.update({"sourceUrl": "", "clip": None})
                 item.pop("sourceRef", None)
+                _clear_3d_sidecars(item)
         return
     for layer in document.get("layers") or []:
         if isinstance(layer, dict) and layer.get("id") == slot["target"]:
             layer.update({"source": "", "missingAsset": True})
+            _clear_2d_sequence(layer)
 
 
 __all__ = [

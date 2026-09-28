@@ -113,6 +113,42 @@ def test_contract_errors_are_explicit(env):
     assert exists.value.code == "exists"
 
 
+def test_save_without_media_drops_sidecar_audio(env):
+    library, _, _ = env
+    spoken = _world()
+    spoken["slots"][0]["speech"] = {"audio": {"url": f"/api/v1/file/song.wav?workspace={WS}", "filename": "song.wav"}}
+    spoken["slots"][1]["screen"] = {"sourceUrl": f"/api/v1/file/sky.png?workspace={WS}"}
+    spoken["worldSfx"] = [{"id": "boom", "sourceUrl": f"/api/v1/file/song.wav?workspace={WS}"}]
+    saved = library.save(workspace=WS, editor="video3d", document=spoken, metadata={"title": "Spoken"})
+    stored = library.get(saved["id"])["document"]
+    assert "soundtrack" not in stored and "worldSfx" not in stored
+    assert stored["slots"][0].get("speech", {}).get("audio") is None
+    assert (stored["slots"][1].get("screen") or {}).get("sourceUrl") in ("", None)
+
+    card = _scene2d()
+    card["audioTracks"] = [{"id": "m", "filename": "song.wav", "kind": "music"}]
+    card["layers"][0]["sequence"] = {"kind": "frames", "sources": [f"/api/v1/file/sky.png?workspace={WS}"], "fps": 12}
+    saved_2d = library.save(workspace=WS, editor="video2d", document=card, metadata={"title": "Card with music"})
+    stored_2d = library.get(saved_2d["id"])["document"]
+    assert "audioTracks" not in stored_2d
+    assert stored_2d["layers"][0]["source"] == ""
+    assert not (stored_2d["layers"][0].get("sequence") or {}).get("sources")
+
+
+def test_apply_keeps_audio_track_filename_as_basename(env):
+    library, _, workspace = env
+    scene = _scene2d()
+    scene["audioTracks"] = [{"id": "m", "filename": "song.wav", "kind": "music"}]
+    saved = library.save(workspace=WS, editor="video2d", document=scene, include_media=True,
+                         metadata={"title": "Scored card"})
+    applied = library.apply(saved["id"], workspace=WS)
+    tracks = applied["document"]["audioTracks"]
+    assert tracks and "/" not in tracks[0]["filename"] and "?" not in tracks[0]["filename"]
+    assert tracks[0]["filename"].startswith("tpl-") and tracks[0]["filename"].endswith(".wav")
+    assert (workspace / tracks[0]["filename"]).is_file()
+    assert any(name.endswith(".wav") for name in applied["copiedMedia"])
+
+
 def test_video2d_slots_unbound_media_and_examples(env):
     library, _, workspace = env
     with pytest.raises(TemplateError) as unbound:
