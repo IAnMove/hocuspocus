@@ -183,7 +183,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 1580,
+      "weight": 1586,
       "paths": [
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
@@ -346,7 +346,8 @@
         "tests/test_publish_presets.py",
         "tests/test_video_editor_layers.py",
         "tests/test_montage_shots.py",
-        "tests/test_template_library.py"
+        "tests/test_template_library.py",
+        "tests/test_clip_align.py"
       ]
     }
   ],
@@ -511,6 +512,12 @@
       "prefix": "scripts/community_index.py",
       "paths": [
         "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/clip_align.py",
+      "paths": [
+        "tests/test_clip_align.py"
       ]
     }
   ]
