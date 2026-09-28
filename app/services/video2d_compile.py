@@ -97,7 +97,7 @@ def _durable(source: str) -> bool:
         return False
     if lowered.startswith("data:image/") or lowered.startswith("data:model/gltf-binary;"):
         return True
-    if text.startswith("/api/v1/"):
+    if text.startswith("/api/v1/") or lowered.startswith("/examples/"):
         return True
     return lowered.startswith("https://") or lowered.startswith("http://")
 
