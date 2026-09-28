@@ -177,7 +177,8 @@
         "tests/test_workspace_collections_router.py",
         "tests/test_workspace_commands.py",
         "tests/test_workspace_registry.py",
-        "tests/test_world3d_owned_render_smoke.py"
+        "tests/test_world3d_owned_render_smoke.py",
+        "tests/test_production_review.py"
       ]
     },
     {
