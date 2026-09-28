@@ -496,3 +496,12 @@ con `job_id`.
 
 `source` y `scene` del ejemplo son marcadores: sustitúyelos por el MP4 del
 recibo y por el `name` real del guardado.
+
+`montages.preview` pinta una sola hoja de contactos de todo el montaje, no de
+una escena suelta. `times` elige los segundos; si no viene, `count` (1–8, por
+defecto 4) los reparte a lo largo de la duración. Un clip con `origin.scene`
+de Video 2D usa el pintor de `scenes.video2d.preview`. Un clip de vídeo usa
+un fotograma de ffmpeg. El PNG se guarda en el workspace. La respuesta es
+`{file, url, sha256, times}` y no incluye los bytes. Si un instante no se
+puede pintar, se omite y aparece en `warnings` con el código
+`montage_preview_unpaintable`. No usa GPU ni escribe un MP4.

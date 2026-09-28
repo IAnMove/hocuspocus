@@ -14,3 +14,4 @@ Registro corto. El encargo privado no está en git. B2 ya está en `development`
 | B4 | en este PR | Un selector inválido responde `invalid_selector` y los valores permitidos. |
 | B5 | en este PR | `jobs.wait` espera el fin del trabajo o `timeout`. |
 | B6 | en este PR | Catálogos y ediciones resumidos. La hoja de contactos es una URL. |
+| D5 | en este PR | `montages.preview` pinta hasta 8 instantes del montaje completo, guarda el PNG y devuelve URL y sha256. |

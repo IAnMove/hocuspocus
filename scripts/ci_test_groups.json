@@ -341,6 +341,7 @@
         "tests/test_world3d_media_cache.py",
         "tests/test_montage_derive.py",
         "tests/test_montage_documents.py",
+        "tests/test_montage_preview.py",
         "tests/test_scene2d_export.py",
         "tests/test_scene2d_validate.py",
         "tests/test_publish_presets.py",
@@ -428,9 +429,16 @@
       ]
     },
     {
+      "prefix": "app/services/montage_preview.py",
+      "paths": [
+        "tests/test_montage_preview.py"
+      ]
+    },
+    {
       "prefix": "app/services/montage_",
       "paths": [
-        "tests/test_montage_documents.py"
+        "tests/test_montage_documents.py",
+        "tests/test_montage_preview.py"
       ]
     },
     {
