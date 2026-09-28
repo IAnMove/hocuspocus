@@ -5,9 +5,9 @@ import numpy as np
 import pytest
 
 from services import lipsync_qa, song_analysis as audio_analysis
-from services.music_production import (Production, ProductionError, failure_reason, h3_frames_for, pick_song, segments,
-                                       shot_windows, status_summary, validate_spec)
-from services.video2d_edit import edit
+from services.music_production import (Production, ProductionError, failure_reason, h3_frames_for, lyric_span, pick_song,
+                                       segments, shot_windows, status_summary, title_span, validate_spec)
+from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS, Video2dEditError, edit
 
 
 def test_tempo_grid_finds_132_bpm_not_a_half_or_double():
@@ -129,6 +129,59 @@ def test_failed_takes_keep_their_reason_and_get_new_seeds(tmp_path, monkeypatch)
     assert "clip a take 2: failed (out of GPU memory)" in production.state["log"][-2]
     summary = status_summary(production.state | {"clip_failures": {"b": "out of GPU memory"}}, "ws")
     assert summary["clips"] == {"b": "failed", "a": "ok"} and summary["failures"] == {"b": "out of GPU memory"}
+
+
+def test_title_and_lyric_spans_fit_the_scene():
+    assert title_span(0.15) == (0.0, 0.15)
+    assert title_span(4.0) == (0.1, 3.8)
+    assert title_span(0.0) is None
+    assert lyric_span({"t0": 1.0, "t1": 2.0, "text": "x"}, 1.0, 1.2, 0.2) == (0.0, 0.2)
+    assert lyric_span({"t0": 5.0, "t1": 6.0, "text": "x"}, 0.0, 1.0, 1.0) is None
+
+
+def test_a_long_lyric_scene_is_edited_in_batches(tmp_path):
+    """One still that covers a whole verse used to send 40+ add_title ops and fail too_many_operations
+    after song/clips had already burned the GPU. Edit now applies 32-op chunks."""
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: edit(arguments))
+    lines = [{"t0": float(i), "t1": i + 0.8, "text": f"line {i}"} for i in range(40)]
+    shot = {"key": "verse", "kind": "still", "still": "/examples/hero.png",
+            "title": {"template": "lower-third-date", "fields": {"date": "VERSE", "caption": "one"}}}
+    ops = production.scene_ops(shot, 0.0, 45.0, 45.0, {"lines": lines}, {}, {}, {})
+    assert sum(1 for op in ops if op["op"] == "add_title") == 41
+    assert len(ops) > MAX_OPERATIONS
+    doc = {"version": 1, "name": "verse", "width": 1920, "height": 1080, "fps": 24, "duration": 45, "layers": [], "texts": []}
+    with pytest.raises(Video2dEditError) as error:
+        edit({"version": 1, "input": {"document": doc, "operations": ops, "full": True}})
+    assert error.value.code == "too_many_operations"
+    built = production.edit(doc, ops)
+    texts = built.get("texts") or []
+    assert built["layers"][0]["source"] == "/examples/hero.png"
+    assert any(item["id"] == "tt-date" for item in texts)
+    assert sum(1 for item in texts if str(item["id"]).startswith("ly")) == 40
+
+
+def test_short_titled_scene_does_not_send_a_negative_title(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: edit(arguments))
+    shot = {"key": "intro", "kind": "still", "still": "/examples/hero.png",
+            "title": {"template": "end-card", "fields": {"title": "Go", "cta": "now"}}}
+    ops = production.scene_ops(shot, 0.0, 0.15, 0.15, {"lines": []}, {}, {}, {})
+    title = next(op for op in ops if op["op"] == "add_title")
+    assert title["start"] == 0.0 and title["duration"] == 0.15
+    doc = {"version": 1, "name": "intro", "width": 1920, "height": 1080, "fps": 24, "duration": 0.15, "layers": [], "texts": []}
+    built = production.edit(doc, ops)
+    assert [item["id"] for item in built["texts"]] == ["tt-end", "tt-cta"]
+
+
+def test_lyric_cues_stop_at_the_text_cap(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    lines = [{"t0": float(i), "t1": i + 0.5, "text": f"line {i}"} for i in range(MAX_TEXTS + 10)]
+    ops = production.scene_ops({"key": "long", "kind": "still", "still": "/examples/hero.png"}, 0.0, 80.0, 80.0,
+                               {"lines": lines}, {}, {}, {})
+    titles = [op for op in ops if op["op"] == "add_title"]
+    assert len(titles) == MAX_TEXTS
+    assert any("dropped lyrics" in line for line in production.state.get("log") or [])
 
 
 def test_a_new_clip_reexports_only_its_scene(tmp_path):
