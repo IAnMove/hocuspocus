@@ -85,6 +85,7 @@ and `duck`.
 | `montages.export` | `POST /api/v1/montages/{file}/export?workspace=` → Video Editor job |
 | `montages.derive` | `POST /api/v1/montages/{file}/derive` `{workspace, format: 9:16\|1:1\|4:5, fit: blur\|fill, output_file?, expected_revision?}` saves a new montage. The source file stays as it is. |
 | `montages.export.status` | `GET /api/v1/video-editor/export/{job_id}` |
+| `montages.preview` | MCP only. One contact sheet of up to 8 instants across the whole montage. `{workspace, file, times?, count?}`. The PNG is saved in the workspace; the reply is `{file, url, sha256, times}` and never the PNG bytes. |
 | `montages.shots.get`, `montages.shot.regenerate`, `montages.shot.select` | see §5 |
 | `scenes.document.save` / `.get` | — (MCP; the UI keeps its existing save routes) |
 | `scenes.video2d.export` (+ `.receipt`, `.cancel`) | `POST /api/v1/scenes/video2d/export`, `GET .../receipt`, `POST .../cancel`, `GET .../capabilities` |

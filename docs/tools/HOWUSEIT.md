@@ -215,6 +215,22 @@ Face Rig overlay cleanup is a **different** endpoint
 (`POST /api/v1/character-kits/face-rig/cleanup`) that also uses rembg U2Net
 plus crop-to-alpha. Do not substitute one for the other.
 
+### Green screen (`studio.key`)
+
+MCP tool `studio.key` is not the rembg job above and does not take the GPU
+lock. Call it with version 1 and `input.workspace`, `input.source`, and an
+optional `input.mode` of `green` (the default) or `isnet-anime`.
+
+`green` despills the foreground and builds a matte per frame. Interior frames
+are mixed with weights **0.15 / 0.7 / 0.15**. Those weights are fixed: a
+heavier neighbor term leaves a halo on motion. `isnet-anime` runs only when
+`isnet-anime.onnx` is already installed (CPU only, no download). If it is
+missing, the call fails with `model_not_installed` and `green` still works.
+
+A still is written as one RGBA PNG. A video is a VP9 WebM with alpha. The
+result is `file`, `url`, `sha256`, and `frames`. The pixels are not returned.
+The source file is left in place.
+
 ---
 
 ## 7. Pitfalls

@@ -115,6 +115,91 @@ def _social(fields: dict, frame: dict) -> list:
     return [_cue("social", _field(fields, "caption") or "", frame, {"y": 72 if tall else 84, "size": 4.5, "maxWidth": 76 if tall else 70, "font": "sans", "box": {"kind": "pill", "color": "#11131a", "opacity": 0.82, "padding": 0.45, "radius": 0.8}})]
 
 
+_RANSOM_FONTS = ("display", "marker", "serif", "condensed")
+_RANSOM_PAPER = ("#f4e7cf", "#f6f1e4", "#f3d2b5", "#e7eef8")
+_RANSOM_TILT = (-3, 2, -1, 4, -2, 3, 1, -4)
+_INK = {"color": "#1c140f", "width": 0}
+_NO_SHADOW = {"color": "#1c140f", "blur": 0, "x": 0, "y": 0}
+_DYMO_TILT = (-1.5, -1, -0.5, 0, 0.5, 1, 1.5)
+
+
+def _ransom_words(line: str) -> list[str]:
+    return [word for word in line.upper().split() if word][:8]
+
+
+def _ransom_place(index: int, count: int, tall: bool) -> tuple[float, float]:
+    cols = 3 if tall else 4
+    row, col = divmod(index, cols)
+    row_count = min(cols, count - row * cols)
+    rows = (count + cols - 1) // cols
+    x = 50 + (col - (row_count - 1) / 2) * (22 if tall else 18)
+    y = (46 if tall else 48) + (row - (rows - 1) / 2) * 12
+    return x, y
+
+
+def _ransom_cue(word: str, index: int, count: int, frame: dict, tall: bool) -> dict:
+    x, y = _ransom_place(index, count, tall)
+    return _cue(f"word-{index + 1}", word, frame, {
+        "x": x, "y": y, "size": 7 if tall else 8, "font": _RANSOM_FONTS[index % 4], "weight": 700,
+        "align": "center", "uppercase": True, "rotation": _RANSOM_TILT[index % 8], "color": "#1c140f",
+        "start": frame["start"] + min(index * 0.12, frame["duration"] * 0.5), "end": frame["start"] + frame["duration"],
+        "enter": {"preset": "impact", "duration": 0.2},
+        "box": {"kind": "paper", "color": _RANSOM_PAPER[index % 4], "opacity": 1, "padding": 0.28},
+        "stroke": dict(_INK), "shadow": dict(_NO_SHADOW),
+    })
+
+
+def _ransom(fields: dict, frame: dict) -> list:
+    words = _ransom_words(_field(fields, "line") or "THE BIRD IS FREED")
+    tall = _vertical(frame)
+    return [_ransom_cue(word, index, len(words), frame, tall) for index, word in enumerate(words)]
+
+
+def _utf16_unit(char: str) -> int:
+    code = ord(char)
+    if code <= 0xFFFF:
+        return code
+    return 0xD800 + ((code - 0x10000) >> 10)
+
+
+def _dymo_tilt(text: str) -> float:
+    total = 0
+    for char in text:
+        total = (total + _utf16_unit(char)) % 7
+    return _DYMO_TILT[total]
+
+
+def _dymo_dark(background: str) -> bool:
+    return background.strip().lower() == "dark"
+
+
+def _dymo_look(text: str, dark: bool, tall: bool) -> dict:
+    return {
+        "x": 50, "y": 72 if tall else 78, "size": 4.5 if tall else 5, "font": "mono", "weight": 700,
+        "align": "center", "uppercase": True, "letterSpacing": 0.06, "maxWidth": 84 if tall else 78,
+        "rotation": _dymo_tilt(text), "color": "#141210" if dark else "#f4efe6",
+        "enter": {"preset": "words", "duration": 0.8},
+        "box": {"kind": "tape", "color": "#f2b705" if dark else "#141210", "opacity": 1, "padding": 0.55, "radius": 0.18},
+        "stroke": {"color": "#141210", "width": 0}, "shadow": {"color": "#141210", "blur": 0, "x": 0, "y": 0},
+    }
+
+
+def _dymo(fields: dict, frame: dict) -> list:
+    text = (_field(fields, "line") or "KEEP THE LINE").upper()
+    dark = _dymo_dark(_field(fields, "background") or "paper")
+    return [_cue("tape", text, frame, _dymo_look(text, dark, _vertical(frame)))]
+
+
+def _card(fields: dict, frame: dict) -> list:
+    tall = _vertical(frame)
+    return [_cue("card", _field(fields, "title") or "Musktopia", frame, {
+        "x": 50, "y": 44 if tall else 46, "size": 10 if tall else 12, "font": "display", "weight": 400,
+        "align": "center", "rotation": -1, "color": "#1a140f", "enter": {"preset": "rise", "duration": 0.45},
+        "box": {"kind": "card", "color": "#f7f1e4", "opacity": 1, "padding": 0.62, "radius": 0.08},
+        "stroke": dict(_INK), "shadow": dict(_NO_SHADOW),
+    })]
+
+
 TITLE_BUILDERS = {
     "lower-third-date": _lower_third,
     "chorus-banner": _chorus,
@@ -125,4 +210,23 @@ TITLE_BUILDERS = {
     "trailer-slam": _trailer,
     "chapter": _chapter,
     "social-caption": _social,
+    "ransom": _ransom,
+    "dymo": _dymo,
+    "card": _card,
 }
+
+TITLE_DEFAULTS = {
+    "ransom": {"line": "THE BIRD IS FREED"},
+    "dymo": {"line": "KEEP THE LINE", "background": "paper"},
+    "card": {"title": "Musktopia"},
+}
+
+
+def install_title_defaults() -> None:
+    """Register styles on the edit module without editing that file."""
+    from services import video2d_edit as edit
+    edit._TITLE_DEFAULTS.update(TITLE_DEFAULTS)
+    edit._TEXT_BOXES = frozenset([*edit._TEXT_BOXES, "tape", "card"])
+
+
+install_title_defaults()

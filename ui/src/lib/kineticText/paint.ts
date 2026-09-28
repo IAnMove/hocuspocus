@@ -1,9 +1,13 @@
+import { paintSceneGraphic } from '../scene2d/graphics'
+import { INK_TRAP_PAPER, reserveBlackPlate, type InkTrapPaint } from '../scene2d/inkTrap'
 import { TEXT_FONT_STACK } from './fonts'
 import { displayedKineticText, wrapKineticLines } from './layout'
 import { paintLegacyCue } from './legacy'
 import { isLegacyKineticText } from './parse'
 import { kineticTextState } from './state'
 import type { KineticText, TextAlign, TextMotion } from './types'
+
+export type TextInkTrap = { riso?: boolean; paper?: string }
 
 const hashId = (id: string) => {
   let hash = 2166136261
@@ -72,6 +76,58 @@ function paintPaper(ctx: CanvasRenderingContext2D, width: number, height: number
   ctx.restore()
 }
 
+function paintTapeFace(ctx: CanvasRenderingContext2D, width: number, height: number, radius?: number) {
+  const curve = Math.min(height / 2, (radius ?? 0.2) * height)
+  roundRect(ctx, -width / 2, -height / 2, width, height, curve)
+  ctx.fill()
+}
+
+function paintHalftone(ctx: CanvasRenderingContext2D, width: number, height: number, seed: number) {
+  const step = Math.max(3.5, Math.min(width, height) * 0.09)
+  const left = -width / 2
+  const top = -height / 2
+  ctx.save()
+  ctx.translate(Math.max(4, width * 0.06), Math.max(5, height * 0.14))
+  ctx.fillStyle = '#16130f'
+  const ink = ctx.globalAlpha * 0.9
+  for (let row = 0, y = top; y < top + height; row += 1, y += step) {
+    for (let column = 0, x = left; x < left + width; column += 1, x += step) {
+      if ((column + row + (seed % 2)) % 2 === 0) continue
+      ctx.globalAlpha = ink
+      ctx.beginPath()
+      ctx.arc(x + step * 0.35, y + step * 0.35, Math.max(0.8, step * 0.18), 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+}
+
+function paintCardFace(ctx: CanvasRenderingContext2D, width: number, height: number, color: string, radius: number | undefined, seed: number) {
+  paintHalftone(ctx, width, height, seed)
+  ctx.fillStyle = color
+  roundRect(ctx, -width / 2, -height / 2, width, height, Math.min(height / 2, (radius ?? 0.08) * height))
+  ctx.fill()
+  ctx.strokeStyle = '#1c140f'
+  ctx.lineWidth = Math.max(2, height * 0.035)
+  ctx.stroke()
+}
+
+function tapeCutsLetters(color: string) {
+  const red = Number.parseInt(color.slice(1, 3), 16)
+  const green = Number.parseInt(color.slice(3, 5), 16)
+  const blue = Number.parseInt(color.slice(5, 7), 16)
+  if (!Number.isFinite(red) || !Number.isFinite(green) || !Number.isFinite(blue)) return false
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722 >= 160
+}
+
+function prepareTapeCut(ctx: CanvasRenderingContext2D, cue: KineticText) {
+  if (cue.box?.kind !== 'tape' || !tapeCutsLetters(cue.color)) return
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.shadowColor = 'transparent'
+  ctx.shadowBlur = 0
+  ctx.lineWidth = 0
+}
+
 function paintBox(ctx: CanvasRenderingContext2D, cue: KineticText, blockWidth: number, blockHeight: number) {
   const box = cue.box
   if (!box || box.kind === 'none') return
@@ -85,6 +141,8 @@ function paintBox(ctx: CanvasRenderingContext2D, cue: KineticText, blockWidth: n
   else if (box.kind === 'pill') { roundRect(ctx, -width / 2, -height / 2, width, height, (box.radius ?? .6) * height); ctx.fill() }
   else if (box.kind === 'underline') ctx.fillRect(-blockWidth / 2, blockHeight * .35, blockWidth, Math.max(2, blockHeight * .06))
   else if (box.kind === 'bar') ctx.fillRect(-width / 2, -height / 2, width, height)
+  else if (box.kind === 'tape') paintTapeFace(ctx, width, height, box.radius)
+  else if (box.kind === 'card') paintCardFace(ctx, width, height, box.color, box.radius, hashId(cue.id))
   else ctx.fillRect(-width / 2, -height / 2, width, height)
   ctx.restore()
 }
@@ -112,8 +170,13 @@ function anchorOffset(align: TextAlign, blockWidth: number) {
   return 0
 }
 
-function paintGlyphs(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, elapsed: number, wave: boolean) {
-  if (!wave) { ctx.strokeText(text, x, y); ctx.fillText(text, x, y); return }
+function paintGlyphs(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, elapsed: number, wave: boolean, ink: InkTrapPaint) {
+  if (!wave) {
+    ctx.strokeText(text, x, y)
+    reserveBlackPlate(ctx, text, x, y, size, ink)
+    ctx.fillText(text, x, y)
+    return
+  }
   const width = ctx.measureText(text).width
   let cursor = ctx.textAlign === 'center' ? x - width / 2 : ctx.textAlign === 'right' ? x - width : x
   const previous = ctx.textAlign
@@ -121,6 +184,7 @@ function paintGlyphs(ctx: CanvasRenderingContext2D, text: string, x: number, y: 
   Array.from(text).forEach((letter, index) => {
     const dy = Math.sin(elapsed * 5.6 - index * .42) * size * .14
     ctx.strokeText(letter, cursor, y + dy)
+    reserveBlackPlate(ctx, letter, cursor, y + dy, size, ink)
     ctx.fillText(letter, cursor, y + dy)
     cursor += ctx.measureText(letter).width
   })
@@ -148,7 +212,7 @@ function applyInk(ctx: CanvasRenderingContext2D, cue: KineticText, size: number,
   } else ctx.fillStyle = cue.color
 }
 
-function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText, pulse = 1) {
+function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText, pulse = 1, ink: InkTrapPaint = { trap: false, color: cue.color }) {
   const motion = kineticTextState(cue, seconds) as TextMotion | null
   if (!motion || !('clip' in motion)) return
   const text = displayedKineticText(cue, seconds)
@@ -180,21 +244,26 @@ function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number
     ctx.clip()
   }
   applyInk(ctx, cue, size, blockWidth, blockHeight)
+  prepareTapeCut(ctx, cue)
   ctx.textBaseline = 'middle'
   const origin = lineOrigin(cue.align ?? 'center', blockWidth)
   ctx.textAlign = origin.align
   lines.forEach((line, index) => {
     const y = (index - (lines.length - 1) / 2) * lineHeight
-    paintGlyphs(ctx, line, origin.x, y, size, motion.elapsed, motion.wave)
+    paintGlyphs(ctx, line, origin.x, y, size, motion.elapsed, motion.wave, { ...ink, color: cue.color, fill: cue.fill?.kind })
   })
   ctx.restore()
 }
 
-export function paintKineticTexts(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cues: readonly KineticText[] = [], envelope = 0) {
+export function paintKineticTexts(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cues: readonly KineticText[] = [], envelope = 0, ink?: TextInkTrap) {
+  const paper = ink?.paper || INK_TRAP_PAPER
+  const riso = ink?.riso === true
   for (const cue of cues) {
     if (seconds < cue.start || seconds >= cue.end) continue
     const pulse = 1 + (cue.beatPulse ?? 0) * envelope
-    if (isLegacyKineticText(cue)) paintLegacyCue(ctx, width, height, seconds, cue, pulse)
-    else paintV2Cue(ctx, width, height, seconds, cue, pulse)
+    const trap = riso || cue.trap === true
+    if (isLegacyKineticText(cue)) paintLegacyCue(ctx, width, height, seconds, cue, pulse, { trap, color: cue.color, paper })
+    else paintV2Cue(ctx, width, height, seconds, cue, pulse, { trap, color: cue.color, paper, fill: cue.fill?.kind })
+    if (cue.graphic) paintSceneGraphic(ctx, width, height, seconds, cue, pulse)
   }
 }

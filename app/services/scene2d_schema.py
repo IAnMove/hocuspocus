@@ -11,7 +11,9 @@ from copy import deepcopy
 from pathlib import Path
 
 _EFFECTS = json.loads((Path(__file__).resolve().parents[1] / "shared" / "scene_effects.json").read_text(encoding="utf-8"))
+_GRAPHICS = json.loads((Path(__file__).resolve().parents[1] / "shared" / "scene_graphics.json").read_text(encoding="utf-8"))
 EFFECT_IDS = tuple(item["id"] for item in _EFFECTS)
+GRAPHIC_IDS = tuple(item["id"] for item in _GRAPHICS["entries"])
 FONTS = ("sans", "mono", "display", "condensed", "serif", "hand", "marker")
 HEX = {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"}
 CURVE = {"enum": ["linear", "ease", "dramatic", "bounce", "hold"]}
@@ -69,7 +71,7 @@ def _text_paint() -> dict:
             "kind": _enum(["solid", "gradient"]), "from": HEX, "to": HEX, "angle": _number(-180, 180),
         }, ["kind"]),
         "box": _object({
-            "kind": _enum(["none", "solid", "paper", "pill", "bar", "underline", "plate"]),
+            "kind": _enum(["none", "solid", "paper", "pill", "bar", "underline", "plate", "tape", "card"]),
             "color": HEX, "opacity": _number(0, 1), "padding": _number(0, 4), "radius": _number(0, 2),
         }, ["kind", "color", "opacity", "padding"]),
     }
@@ -210,7 +212,15 @@ def _texts() -> dict:
             "from": _number(), "to": _number(), "decimals": {"type": "integer", "minimum": 0, "maximum": 4},
             "ease": _enum(["linear", "ease"]),
         }, ["from", "to", "decimals", "ease"]),
-        "template": _string(80), "beatPulse": _number(0, 1),
+        "template": _string(80), "beatPulse": _number(0, 1), "trap": {"type": "boolean"},
+        "graphic": _object({
+            "id": _enum(GRAPHIC_IDS),
+            "params": {
+                "type": "object",
+                "maxProperties": 6,
+                "additionalProperties": {"anyOf": [{"type": "number"}, {"type": "string", "maxLength": 32}]},
+            },
+        }, ["id"]),
     }, ["id", "text", "start", "end", "preset"]), max_items=48)
 
 

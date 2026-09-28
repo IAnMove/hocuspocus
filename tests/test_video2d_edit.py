@@ -164,6 +164,39 @@ def test_add_title_uses_template_defaults_and_replaces_by_id():
     assert second[0]["text"] == "Dos"
 
 
+def test_ransom_dymo_and_card_titles():
+    ransom = _result([{"op": "add_title", "template": "ransom", "start": 0.4, "duration": 3.2}])["document"]["texts"]
+    assert [cue["text"] for cue in ransom] == ["THE", "BIRD", "IS", "FREED"]
+    assert [cue["box"]["kind"] for cue in ransom] == ["paper", "paper", "paper", "paper"]
+    assert [cue["rotation"] for cue in ransom] == [-3, 2, -1, 4]
+    assert [cue["x"] for cue in ransom] == [23, 41, 59, 77]
+    assert {cue["y"] for cue in ransom} == {48}
+    tape = _result([{"op": "add_title", "template": "dymo", "start": 0, "duration": 3}])["document"]["texts"][0]
+    assert tape["text"] == "KEEP THE LINE"
+    assert tape["box"]["color"] == "#141210"
+    assert tape["color"] == "#f4efe6"
+    assert tape["y"] == 78
+    dark = _result([{
+        "op": "add_title", "template": "dymo",
+        "fields": {"line": "KEEP THE LINE", "background": "dark"}, "start": 0, "duration": 3,
+    }])["document"]["texts"][0]
+    assert dark["color"] == "#141210"
+    assert dark["box"]["color"] == "#f2b705"
+    assert dark["rotation"] == tape["rotation"]
+    card = _result([{"op": "add_title", "template": "card", "start": 0, "duration": 3}])["document"]["texts"][0]
+    assert card["text"] == "Musktopia"
+    assert card["box"]["kind"] == "card"
+    assert card["rotation"] == -1
+    assert card["y"] == 46
+    kept = _result([
+        {"op": "add_title", "template": "dymo", "start": 0, "duration": 3},
+        {"op": "update_text", "id": "tape", "patch": {"box": tape["box"]}},
+        {"op": "add_title", "template": "card", "start": 0, "duration": 3},
+        {"op": "update_text", "id": "card", "patch": {"box": card["box"]}},
+    ])["document"]["texts"]
+    assert [cue["box"]["kind"] for cue in kept] == ["tape", "card"]
+
+
 def test_set_lyrics_stores_lines_without_fetching():
     lyrics = _result([{"op": "set_lyrics", "lyrics": {"lines": [{"start": 0, "end": 2, "text": "Hola mundo"}]}}])["document"]["lyrics"]
     assert lyrics["mode"] == "karaoke"
