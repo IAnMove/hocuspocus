@@ -24,6 +24,8 @@ from typing import Any, Callable
 import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
+from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
+from services.video2d_edit_titles import TITLE_BUILDERS
 
 RUN, STATUS = "production.run", "production.status"
 H3_FRAMES = [124 + 17 * k for k in range(14)]            # H3 window lengths (124 … 345 frames at 24 fps)
@@ -138,6 +140,40 @@ def segments(windows: list[dict], score: dict, clip_ok: Callable[[str], bool], f
 def pick_song(candidates: dict[str, dict]) -> str:
     good = {k: v for k, v in candidates.items() if v.get("tail_rms", 1) <= audio_analysis.TAIL_CUT_RMS} or candidates
     return max(good, key=lambda k: good[k].get("recall") or 0)
+
+
+def title_span(dur: float) -> tuple[float, float] | None:
+    """Inset 0.1 s when the scene is long enough; otherwise fill the scene. None if nothing fits."""
+    if dur <= 0:
+        return None
+    if dur > 0.3:
+        start, length = 0.1, round(dur - 0.2, 3)
+    else:
+        start, length = 0.0, round(dur, 3)
+    if length <= 0:
+        return None
+    return start, length
+
+
+def lyric_span(line: dict, a: float, b: float, dur: float) -> tuple[float, float] | None:
+    """Scene-relative start/duration for a score line, or None if it would be rejected by edit."""
+    if line["t1"] <= a or line["t0"] >= b:
+        return None
+    start = round(max(0.0, line["t0"] - a), 3)
+    length = round(min(b, line["t1"] + 0.15) - max(a, line["t0"]), 3)
+    if length <= 0 or start + length - dur > 1e-6:
+        return None
+    return start, length
+
+
+def title_cue_count(template: str, fields: dict, start: float, length: float) -> int:
+    builder = TITLE_BUILDERS.get(template)
+    if builder is None:
+        return 1
+    try:
+        return max(1, len(builder(fields, {"start": start, "duration": length, "width": 1920, "height": 1080})))
+    except Exception:
+        return 1
 
 
 # ---------------------------------------------------------------- run
@@ -377,10 +413,14 @@ class Production:
         self.log(f"scenes: {sum(1 for s in done.values() if s.get('file'))}/{len(segs)}")
 
     def edit(self, doc: dict, ops: list[dict]) -> dict:
-        r = self.mcp("scenes.video2d.edit", {"version": 1, "input": {"document": doc, "operations": ops, "full": True}})
-        if "result" not in r:
-            raise ProductionError("scene_edit_failed", json.dumps(r)[:300])
-        return r["result"]["document"]
+        # scenes.video2d.edit admits 32 ops; a long still with timed lyrics exceeds that in one shot.
+        for index in range(0, len(ops), MAX_OPERATIONS):
+            chunk = ops[index:index + MAX_OPERATIONS]
+            r = self.mcp("scenes.video2d.edit", {"version": 1, "input": {"document": doc, "operations": chunk, "full": True}})
+            if "result" not in r:
+                raise ProductionError("scene_edit_failed", json.dumps(r)[:300])
+            doc = r["result"]["document"]
+        return doc
 
     def scene_ops(self, shot: dict, a: float, b: float, dur: float, score: dict, clips: dict, style: dict, stills: dict) -> list[dict]:
         ops: list[dict] = []
@@ -403,16 +443,28 @@ class Production:
             ops += [{"op": "add_layer", "id": "bg", "source": source, "type": "image", "preset": shot.get("camera", "camera-push-in")},
                     {"op": "update_layer", "id": "bg", "patch": {"fill": True, "focus": shot.get("focus", {"x": 50, "y": 50}), "animation": {
                         "start": {"x": 50, "y": 50, "scale": zoom[0], "rotation": 0}, "end": {"x": 50, "y": 50, "scale": zoom[1], "rotation": 0}}}}]
-        if shot.get("title"):
-            ops.append({"op": "add_title", "id": "tt", "template": shot["title"].get("template", "lower-third-date"), "fields": shot["title"]["fields"],
-                        "start": 0.1, "duration": round(dur - 0.2, 3)})
-            if shot["title"].get("template", "lower-third-date") == "lower-third-date":   # section label on top; lyrics own the bottom
+        used = 0
+        if shot.get("title") and (span := title_span(dur)):
+            template = shot["title"].get("template", "lower-third-date")
+            fields = shot["title"]["fields"]
+            used += title_cue_count(template, fields, *span)
+            ops.append({"op": "add_title", "id": "tt", "template": template, "fields": fields,
+                        "start": span[0], "duration": span[1]})
+            if template == "lower-third-date":   # section label on top; lyrics own the bottom
                 ops += [{"op": "update_text", "id": "tt-date", "patch": {"y": 12}}, {"op": "update_text", "id": "tt-caption", "patch": {"y": 20}}]
+        lyric_template = style.get("lyric_template", "social-caption")
         for index, line in enumerate(score.get("lines") or []):
-            if line["t1"] <= a or line["t0"] >= b:
+            span = lyric_span(line, a, b, dur)
+            if span is None:
                 continue
-            ops.append({"op": "add_title", "id": f"ly{index}", "template": style.get("lyric_template", "social-caption"), "fields": {"caption": line["text"]},
-                        "start": round(max(0.0, line["t0"] - a), 3), "duration": round(min(b, line["t1"] + 0.15) - max(a, line["t0"]), 3)})
+            fields = {"caption": line["text"]}
+            cues = title_cue_count(lyric_template, fields, *span)
+            if used + cues > MAX_TEXTS:
+                self.log(f"scene {shot.get('key')}: dropped lyrics after {used} text cues")
+                break
+            used += cues
+            ops.append({"op": "add_title", "id": f"ly{index}", "template": lyric_template, "fields": fields,
+                        "start": span[0], "duration": span[1]})
         if style.get("finish"):
             ops.append({"op": "set_finish", **style["finish"]})
         return ops
