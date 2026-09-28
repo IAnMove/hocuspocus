@@ -176,6 +176,19 @@ function layerExtras(rawLayer: RawLayer) {
   return { ...(sequence ? { sequence } : {}), ...(beatPulse ? { beatPulse } : {}) }
 }
 
+function layerWithoutFocus(raw: RawLayer): Omit<RawLayer, 'focus'> {
+  const rest = { ...raw }
+  delete rest.focus
+  return rest
+}
+
+function focusFields(raw: RawLayer): { focus?: { x: number; y: number } } {
+  const focus = raw.focus
+  if (!focus || typeof focus.x !== 'number' || typeof focus.y !== 'number') return {}
+  if (!Number.isFinite(focus.x) || !Number.isFinite(focus.y)) return {}
+  return { focus: { x: Math.max(0, Math.min(100, focus.x)), y: Math.max(0, Math.min(100, focus.y)) } }
+}
+
 function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLayer {
   if (!isAnimatorLayerType((rawLayer as { type?: unknown }).type)) throw new Error(`Unsupported scene layer type: ${String((rawLayer as { type?: unknown }).type ?? 'missing')}`)
   const isCamera = rawLayer.type === 'camera'
@@ -183,7 +196,7 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
   const transform = normalizeTransform(rawLayer.transform)
   const source = String(rawLayer.source ?? '')
   const layer = {
-    ...rawLayer,
+    ...layerWithoutFocus(rawLayer),
     name: typeof rawLayer.name === 'string' && rawLayer.name.trim() ? rawLayer.name : `Layer ${rawLayer.id}`,
     source: isCamera ? '' : source,
     visible: isCamera ? rawLayer.id === context.activeCameraId : rawLayer.visible !== false,
@@ -205,6 +218,7 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
     },
     missingAsset: isCamera || isEffect ? false : Boolean(rawLayer.missingAsset || !source.trim() || context.isMissing(source)),
     ...layerExtras(rawLayer),
+    ...focusFields(rawLayer),
   } as AnimatorLayer
   const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
   const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)

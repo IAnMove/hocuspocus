@@ -161,7 +161,7 @@ def test_warnings_cover_safe_area_font_frame_duration_and_media(tmp_path):
     premium = _validate(_document(duration=200, layers=[_layer(type="effect", source="")]), tmp_path)
     assert "premium" in next(item["message"] for item in premium["warnings"] if item["code"] == "duration_over_publish_limit")
     quiet = _validate(_document(duration=100, layers=[_layer(type="camera", source="")]), tmp_path)
-    assert quiet["warnings"] == []
+    assert _codes(quiet["warnings"]) == ["empty_timespan"]
 
 
 def test_errors_use_stable_codes_and_do_not_save(tmp_path):
@@ -192,8 +192,135 @@ def test_handler_returns_the_normalized_result_without_gpu(tmp_path):
     catalog = command_catalog()
     assert catalog[0]["name"] == OPERATION and catalog[0]["mutation"] is False
     assert "duration_over_publish_limit" in catalog[0]["description"]
+    for code in ("text_overlap", "text_outside_frame", "lyrics_overlap", "empty_timespan", "reserved_zone", "text_low_contrast"):
+        assert code in catalog[0]["description"]
     with pytest.raises(Exception) as error:
         asyncio.run(handler({"version": 1, "input": {"document": {}}}))
     assert error.value.detail["code"] == "invalid_command"
     source = Path(__file__).resolve().parents[1].joinpath("app/services/scene2d_validate.py").read_text(encoding="utf-8")
     assert "torch" not in source and "cuda" not in source
+
+
+def _covered(duration=8):
+    layer = _layer(type="effect", source="")
+    layer["animation"]["duration"] = duration
+    return layer
+
+
+def test_text_boxes_warn_on_overlap_outside_frame_and_lyrics(tmp_path):
+    from services.video2d_edit_titles import TITLE_BUILDERS
+
+    frame = {"start": 0, "duration": 8, "width": 1280, "height": 720}
+    cues = TITLE_BUILDERS["lower-third-date"]({"date": "1968", "caption": "The harbour keeps the light"}, frame)
+    lyrics = {
+        "mode": "karaoke",
+        "lines": [{"id": "line-1", "start": 0, "end": 8, "words": [
+            {"text": "The", "start": 0, "end": 1}, {"text": "harbour", "start": 1, "end": 3},
+            {"text": "keeps", "start": 3, "end": 5}, {"text": "the", "start": 5, "end": 6},
+            {"text": "light", "start": 6, "end": 8},
+        ]}],
+        "style": {"font": "sans", "size": 7, "color": "#f4efe6", "activeColor": "#ffe08a", "x": 50, "y": 78,
+                  "maxWidth": 80, "align": "center", "visibleLines": 1},
+    }
+    stacked = _validate(_document(duration=8, layers=[_covered()], texts=cues, lyrics=lyrics), tmp_path)
+    assert "lyrics_overlap" in _codes(stacked["warnings"])
+    assert "text_overlap" in _codes(stacked["warnings"])
+    moved = json.loads(json.dumps(lyrics))
+    moved["style"]["y"] = 16
+    moved["style"]["size"] = 5
+    clear = _validate(_document(
+        duration=8, layers=[_covered()],
+        texts=[{**cues[1], "x": 28, "y": 78}],
+        lyrics=moved,
+    ), tmp_path)
+    assert "lyrics_overlap" not in _codes(clear["warnings"])
+    assert "text_overlap" not in _codes(clear["warnings"])
+    outside = _validate(_document(
+        duration=8, layers=[_covered()],
+        texts=[{"id": "low", "text": "Low", "start": 0, "end": 2, "preset": "impact", "x": 50, "y": 4, "size": 20}],
+    ), tmp_path)
+    assert any(item["code"] == "text_outside_frame" and item["path"] == "texts[0]" for item in outside["warnings"])
+    separated = _validate(_document(
+        duration=8, layers=[_covered()],
+        texts=[
+            {"id": "a", "text": "One", "start": 0, "end": 2, "preset": "impact", "x": 50, "y": 40, "size": 6},
+            {"id": "b", "text": "Two", "start": 3, "end": 5, "preset": "impact", "x": 50, "y": 40, "size": 6},
+        ],
+    ), tmp_path)
+    assert "text_overlap" not in _codes(separated["warnings"])
+
+
+def test_left_align_uses_the_text_edge_and_outside_frame_uses_that_box(tmp_path):
+    from services.scene2d_text_boxes import text_placements
+
+    wide = {
+        "id": "date", "text": "STORY LAB", "start": 0, "end": 4, "preset": "impact",
+        "x": 12, "y": 70, "size": 14, "font": "display", "align": "left",
+    }
+    document = _document(duration=8, layers=[_covered()], texts=[wide])
+    left = text_placements(document)[0]
+    assert left["left"] == pytest.approx(12)
+    assert left["right"] < 100
+    centered = json.loads(json.dumps(document))
+    centered["texts"][0]["align"] = "center"
+    center = text_placements(centered)[0]
+    assert center["left"] < 0
+    assert "text_outside_frame" in _codes(_validate(centered, tmp_path)["warnings"])
+    omitted = json.loads(json.dumps(document))
+    del omitted["texts"][0]["align"]
+    assert text_placements(omitted)[0]["left"] == pytest.approx(center["left"])
+    overflow = json.loads(json.dumps(document))
+    overflow["texts"][0]["x"] = 80
+    assert any(item["code"] == "text_outside_frame" and item["path"] == "texts[0]" for item in _validate(overflow, tmp_path)["warnings"])
+    kept = _validate(document, tmp_path)
+    assert "text_outside_frame" not in _codes(kept["warnings"])
+    right = json.loads(json.dumps(document))
+    right["texts"][0]["align"] = "right"
+    right["texts"][0]["x"] = 12
+    assert text_placements(right)[0]["right"] == pytest.approx(12)
+    assert "text_outside_frame" in _codes(_validate(right, tmp_path)["warnings"])
+    bad_focus = _document(layers=[_layer(focus={"x": -1, "y": 50})])
+    assert list(Draft202012Validator(document_schema()).iter_errors(bad_focus))
+
+
+def test_empty_timespan_warns_only_for_gaps_over_two_seconds(tmp_path):
+    short = _layer()
+    short["animation"]["duration"] = 2
+    gap = _validate(_document(duration=4, layers=[short]), tmp_path)
+    assert "empty_timespan" not in _codes(gap["warnings"])
+    long = _layer()
+    long["animation"]["duration"] = 3
+    warned = _validate(_document(duration=10, layers=[long]), tmp_path)
+    empty = next(item for item in warned["warnings"] if item["code"] == "empty_timespan")
+    assert empty["start"] == 3 and empty["end"] == 10
+    filled = _validate(_document(
+        duration=10, layers=[long],
+        texts=[{"id": "tail", "text": "Still here", "start": 3, "end": 10, "preset": "impact", "x": 50, "y": 40, "size": 6}],
+    ), tmp_path)
+    assert "empty_timespan" not in _codes(filled["warnings"])
+
+
+def test_reserved_zone_and_sampled_contrast(tmp_path):
+    from services.scene2d_text_boxes import contrast_ratio, contrast_warnings
+
+    invaded = _validate(_document(
+        duration=4, layers=[_covered(4)],
+        reservedZones=[{"id": "counter", "x": 78, "y": 0, "width": 22, "height": 14}],
+        texts=[{"id": "clock", "text": "12", "start": 0, "end": 4, "preset": "impact", "x": 88, "y": 6, "size": 6, "align": "center"}],
+    ), tmp_path)
+    zone = next(item for item in invaded["warnings"] if item["code"] == "reserved_zone")
+    assert zone["zone"] == "reservedZones[0]"
+    clear = _validate(_document(
+        duration=4, layers=[_covered(4)],
+        reservedZones=[{"id": "counter", "x": 78, "y": 0, "width": 22, "height": 14}],
+        texts=[{"id": "title", "text": "Harbour", "start": 0, "end": 4, "preset": "impact", "x": 50, "y": 40, "size": 8}],
+    ), tmp_path)
+    assert "reserved_zone" not in _codes(clear["warnings"])
+    white = bytes([255, 255, 255]) * 16
+    black = bytes([0, 0, 0]) * 16
+    box = {"path": "texts[0]", "color": "#ffffff", "left": 0, "top": 0, "right": 100, "bottom": 100}
+    assert contrast_warnings([box], white, 4, 4)[0]["code"] == "text_low_contrast"
+    assert contrast_warnings([box], black, 4, 4) == []
+    assert contrast_ratio((255, 255, 255), (255, 255, 255)) < 3
+    assert contrast_ratio((255, 255, 255), (0, 0, 0)) > 3
+    assert "text_low_contrast" not in _codes(clear["warnings"])

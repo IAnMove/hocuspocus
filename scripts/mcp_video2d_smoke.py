@@ -3,8 +3,7 @@
 
 The envelopes are the arguments the MCP handlers accept (version 1 and input,
 plus intent_id when that handler requires it). Handlers add the operation name.
-scenes.video2d.edit is not on this branch, so finish is copied from the finish
-catalog onto the document after compile.
+Finish, the extra title and layer order go through scenes.video2d.edit.
 """
 from __future__ import annotations
 
@@ -35,7 +34,6 @@ WORKSPACE = "video2d-smoke"
 INTENT = "video2d-smoke-export"
 EXPORT_DEADLINE = 15 * 60
 PREFERRED = ("documentary-history", "cinema-establishing")
-TEXT_TEMPLATE = "chapter"
 FINISH_ID = "oldDoc"
 EFFECT_ID = "rain"
 PIXEL = (
@@ -46,9 +44,8 @@ DEFAULT_SHEET = Path("/tmp/hocus-mcp-video2d-m9-contact.png")
 PLANNED = (
     "scenes.catalog",
     "scenes.template.compile",
-    "scenes.text.template",
     "scenes.lyrics.import",
-    "scenes.finish.catalog",
+    "scenes.video2d.edit",
     "scenes.effects.apply",
     "scenes.video2d.validate",
     "scenes.video2d.preview",
@@ -79,10 +76,11 @@ def _published() -> list[dict[str, Any]]:
     from services.video2d_catalogs import command_catalog as catalogs
     from services.video2d_catalogs import query_operation
     from services.video2d_compile import command_catalog as compile_catalog
+    from services.video2d_edit import command_catalog as edit_catalog
     from services.video2d_preview import command_catalog as preview_catalog
 
     return [
-        *effects(), *catalogs(), query_operation(), *compile_catalog(), *preview_catalog(),
+        *effects(), *catalogs(), query_operation(), *compile_catalog(), *edit_catalog(), *preview_catalog(),
         *validate_catalog(), *documents(), *export_catalog(), *montages(),
     ]
 
@@ -123,9 +121,15 @@ def sample_envelopes() -> dict[str, dict[str, Any]]:
         "scenes.template.compile": {"version": 1, "input": {
             "templateId": PREFERRED[0], "duration": SCENE_SECONDS, "width": width, "height": height, "fps": COMPILE_FPS,
         }},
-        "scenes.text.template": {"version": 1, "input": {"templateId": TEXT_TEMPLATE}},
         "scenes.lyrics.import": {"version": 1, "input": {"format": "plain", "text": "Harbour light"}},
-        "scenes.finish.catalog": {"version": 1, "input": {}},
+        "scenes.video2d.edit": {"version": 1, "input": {
+            "document": document,
+            "operations": [
+                {"op": "set_finish", "preset": FINISH_ID},
+                {"op": "add_title", "template": "chapter", "fields": {"kicker": "PART", "title": "Harbour"}, "start": 0.4, "duration": 3.5},
+                {"op": "reorder", "ids": ["plate"]},
+            ],
+        }},
         "scenes.effects.apply": {"version": 1, "input": {"document": document, "cues": [{
             "id": "smoke-rain", "kind": EFFECT_ID, "start": 2, "end": 6,
         }]}},
@@ -231,6 +235,7 @@ def build_handlers(root: Path) -> dict[str, Handler]:
     from services.video2d_catalogs import command_handlers as catalog_handlers
     from services.video2d_catalogs import query_handlers
     from services.video2d_compile import command_handlers as compile_handlers
+    from services.video2d_edit import command_handlers as edit_handlers
     from services.video2d_preview import command_handlers as preview_handlers
 
     resolve = workspace_resolver(root)
@@ -242,6 +247,7 @@ def build_handlers(root: Path) -> dict[str, Handler]:
     handlers.update(catalog_handlers())
     handlers.update(query_handlers())
     handlers.update(compile_handlers())
+    handlers.update(edit_handlers())
     handlers.update(preview_handlers())
     handlers.update(validate_handlers(resolve, lambda: str(uploads)))
     handlers.update(document_handlers(resolve))
@@ -318,32 +324,12 @@ def compile_document(handlers: dict[str, Handler], entry: dict[str, Any], report
         note = (
             f"{template_id} controls.duration.max is {limit:g}, so scenes.template.compile "
             f"rejected {SCENE_SECONDS}. Compiled at {limit:g} and set document duration to "
-            f"{SCENE_SECONDS}. scenes.video2d.edit is not on this branch."
+            f"{SCENE_SECONDS}. Layer timing stays at {limit:g}s, so validate should report empty_timespan."
         )
     else:
         note = ""
     _record(report, "scenes.template.compile")
     return document, note
-
-
-def add_texts(handlers: dict[str, Handler], document: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
-    width, height = FRAME
-    result = invoke(handlers["scenes.text.template"], {"version": 1, "input": {
-        "templateId": TEXT_TEMPLATE,
-        "fields": {"kicker": "CHAPTER", "title": "Harbour"},
-        "start": 14, "duration": 4, "width": width, "height": height,
-    }})
-    _record(report, "scenes.text.template")
-    incoming = result.get("result", {}).get("texts")
-    if not isinstance(incoming, list):
-        raise SmokeError("compile_bridge_failed", "text template did not return texts")
-    texts = [item for item in document.get("texts") or [] if isinstance(item, dict)]
-    known = {item.get("id") for item in texts}
-    for cue in incoming:
-        if isinstance(cue, dict) and cue.get("id") in known:
-            raise SmokeError("duplicate_text", str(cue.get("id")))
-    document["texts"] = [*texts, *incoming]
-    return document
 
 
 def add_lyrics(handlers: dict[str, Handler], document: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
@@ -360,25 +346,50 @@ def add_lyrics(handlers: dict[str, Handler], document: dict[str, Any], report: d
     return document
 
 
-def finish_preset(handlers: dict[str, Handler], report: dict[str, Any]) -> dict[str, Any]:
-    result = invoke(handlers["scenes.finish.catalog"], {"version": 1, "input": {}})
-    _record(report, "scenes.finish.catalog")
-    entries = result.get("result", {}).get("entries") or []
-    chosen = next((item for item in entries if isinstance(item, dict) and item.get("id") == FINISH_ID), None)
-    if chosen is None:
-        chosen = next((item for item in entries if isinstance(item, dict)), None)
-    if not isinstance(chosen, dict):
-        raise SmokeError("finish_missing", FINISH_ID)
-    return {key: value for key, value in chosen.items() if key != "id"}
+def _lyric_style(lyrics: dict[str, Any]) -> dict[str, Any]:
+    style = lyrics.get("style") if isinstance(lyrics.get("style"), dict) else {}
+    allowed = ("font", "size", "color", "activeColor", "weight", "x", "y", "maxWidth", "align", "uppercase", "visibleLines", "beatPulse")
+    cleaned = {key: style[key] for key in allowed if key in style}
+    cleaned["y"] = 16
+    cleaned["size"] = 5
+    cleaned["maxWidth"] = 70
+    return cleaned
 
 
-def assign_finish(handlers: dict[str, Handler], document: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
-    document["finish"] = finish_preset(handlers, report)
+def edit_scene(handlers: dict[str, Handler], document: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
+    """set_finish, add_title and reorder. Move the lower third off the lyric line."""
+    operations: list[dict[str, Any]] = [{"op": "set_finish", "preset": FINISH_ID}]
+    ids = {cue.get("id") for cue in document.get("texts") or [] if isinstance(cue, dict)}
+    if "date" in ids:
+        operations.append({"op": "update_text", "id": "date", "patch": {"size": 8, "x": 18, "y": 70}})
+    if "caption" in ids:
+        operations.append({"op": "update_text", "id": "caption", "patch": {"x": 22, "y": 78}})
+    operations.append({
+        "op": "add_title", "template": "chapter",
+        "fields": {"kicker": "PART", "title": "Harbour"}, "start": 0.4, "duration": 3.5,
+    })
+    operations.extend([
+        {"op": "update_text", "id": "kicker", "patch": {"y": 24, "size": 3, "x": 50}},
+        {"op": "update_text", "id": "chapter", "patch": {"y": 30, "size": 5, "x": 50}},
+    ])
+    lyrics = document.get("lyrics")
+    if isinstance(lyrics, dict):
+        payload = {key: lyrics[key] for key in ("mode", "lines", "source") if key in lyrics}
+        payload["style"] = _lyric_style(lyrics)
+        operations.append({"op": "set_lyrics", "lyrics": payload})
+    layer_ids = [layer.get("id") for layer in document.get("layers") or [] if isinstance(layer, dict) and isinstance(layer.get("id"), str)]
+    if layer_ids:
+        operations.append({"op": "reorder", "ids": list(reversed(layer_ids))})
+    result = invoke(handlers["scenes.video2d.edit"], {"version": 1, "input": {"document": document, "operations": operations}})
+    _record(report, "scenes.video2d.edit")
+    updated = result.get("result", {}).get("document")
+    if not isinstance(updated, dict):
+        raise SmokeError("invalid_result", "edit did not return a document")
     report["notes"].append(
-        "scenes.video2d.edit is not on this branch, so document finish was copied from "
-        f"finish_presets.json ({FINISH_ID}) after compile."
+        "scenes.video2d.edit applied set_finish, add_title and reorder. "
+        "The lower-third caption and the lyrics were moved so their boxes do not overlap."
     )
-    return document
+    return updated
 
 
 def apply_effect(handlers: dict[str, Handler], document: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
@@ -403,6 +414,9 @@ def validate_scene(handlers: dict[str, Handler], document: dict[str, Any], repor
     report["validate_warnings"] = warnings
     if errors:
         raise SmokeError("validate", json.dumps(errors, ensure_ascii=False)[:2000])
+    overlap = [item for item in warnings if isinstance(item, dict) and item.get("code") in {"text_overlap", "lyrics_overlap", "text_outside_frame"}]
+    if overlap:
+        raise SmokeError("overlap", json.dumps(overlap, ensure_ascii=False)[:2000])
     normalized = body.get("document")
     if not isinstance(normalized, dict):
         raise SmokeError("validate", "validate did not return a document")
@@ -604,9 +618,8 @@ def run_smoke(root: Path, contact_sheet: Path | None = None) -> dict[str, Any]:
     document, note = compile_document(handlers, entry, report)
     if note:
         report["notes"].append(note)
-    document = add_texts(handlers, document, report)
     document = add_lyrics(handlers, document, report)
-    document = assign_finish(handlers, document, report)
+    document = edit_scene(handlers, document, report)
     document = apply_effect(handlers, document, report)
     document = validate_scene(handlers, document, report)
     report["template_id"] = str(entry.get("id") or "")

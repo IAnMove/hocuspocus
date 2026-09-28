@@ -18,6 +18,7 @@ from jsonschema.exceptions import SchemaError
 
 from services.media_refs import parse_media_ref
 from services.scene2d_schema import FONTS, LAYER_TYPES, document_schema
+from services.scene2d_text_boxes import layout_warnings, lyric_placements, painted_contrast_warnings, text_placements
 
 OPERATION = "scenes.video2d.validate"
 WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
@@ -512,6 +513,14 @@ def _warn_audio(document: dict, workspace: str, workspace_dir: Callable[[str], s
         _add(warnings, _issue("missing_media", f"audioTracks[{index}].filename", "Audio track file is missing."))
 
 
+def _warn_layout(document: dict, warnings: list[dict[str, Any]]) -> None:
+    for item in layout_warnings(document):
+        _add(warnings, item)
+    placed = [*text_placements(document), *lyric_placements(document)]
+    for item in painted_contrast_warnings(document, placed):
+        _add(warnings, item)
+
+
 def _warn_media(document: dict, workspace: str, workspace_dir: Callable[[str], str],
                 uploads_dir: Callable[[], str], warnings: list[dict[str, Any]]) -> None:
     layers = document.get("layers")
@@ -566,6 +575,7 @@ def normalize_document(raw: Any, *, workspace: str, workspace_dir: Callable[[str
     _warn_fonts(document, warnings)
     _warn_layers(document, warnings)
     _warn_duration(document, warnings)
+    _warn_layout(document, warnings)
     _warn_media(document, workspace, workspace_dir, uploads_dir, warnings)
     return {"document": document, "errors": errors, "warnings": warnings}
 
@@ -577,7 +587,11 @@ def command_catalog() -> list[dict[str, Any]]:
         "without saving or exporting. Errors use a stable code. Warnings use text_outside_safe_area "
         "(overlay or text y < 12 or y > 80, or width > 90 on a portrait frame), missing_media, unknown_font, "
         "layer_outside_frame, and duration_over_publish_limit (X 140s / premium 180s, shorts 60s / premium 90s). "
-        "No GPU and no scene-file write."
+        "Text and lyric boxes use font, size, maxWidth, align and box padding. text_overlap, lyrics_overlap, "
+        "text_outside_frame (the real box: left and right x are those edges; center or omitted align stays centered), "
+        "empty_timespan (a span over 2s with no visible layer or text), "
+        "reserved_zone (document.reservedZones) and text_low_contrast (sampled luminance under 3:1 when the painter "
+        "can start; otherwise the sample is skipped and no ratio is invented). No GPU and no scene-file write."
     )
     return [{
         "name": OPERATION, "version": 1, "domain": "scenes", "mutation": False, "description": description,

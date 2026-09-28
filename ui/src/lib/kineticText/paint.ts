@@ -105,6 +105,13 @@ function lineOrigin(align: TextAlign, blockWidth: number) {
   return { x: 0, align: 'center' as const }
 }
 
+// x is the left or right edge. Center and omitted align stay on the block center.
+function anchorOffset(align: TextAlign, blockWidth: number) {
+  if (align === 'left') return blockWidth / 2
+  if (align === 'right') return -blockWidth / 2
+  return 0
+}
+
 function paintGlyphs(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, elapsed: number, wave: boolean) {
   if (!wave) { ctx.strokeText(text, x, y); ctx.fillText(text, x, y); return }
   const width = ctx.measureText(text).width
@@ -162,6 +169,7 @@ function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number
   ctx.translate(width * (cue.x / 100 + motion.dx), height * (cue.y / 100 + motion.dy))
   ctx.rotate(cue.rotation * Math.PI / 180)
   ctx.scale(motion.scale * pulse, motion.scale * pulse)
+  ctx.translate(anchorOffset(cue.align ?? 'center', blockWidth), 0)
   ctx.globalAlpha = motion.opacity
   if (motion.blur > .2 && 'filter' in ctx) ctx.filter = `blur(${motion.blur}px)`
   if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${cue.letterSpacing ?? 0}em`

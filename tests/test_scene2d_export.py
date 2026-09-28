@@ -23,6 +23,7 @@ from services.scene2d_export import (
     command_catalog,
     command_handlers,
     freeze_export_command,
+    project_export_receipt,
 )
 from services.scene_documents import SceneDocumentError, command_catalog as document_catalog, get_document, save_document
 from services.task_manager import TaskRegistry
@@ -166,6 +167,44 @@ def test_freeze_accepts_screen_fx_sound_and_sequence_refs():
     with pytest.raises(Exception) as error:
         freeze_export_command(_command(document=_document(layers=[_layer(sequence={"kind": "frames", "sources": ["https://example.com/a.png"], "fps": 8, "loop": "loop"})])))
     assert error.value.detail["code"] == "missing_ref"
+
+
+def _queued_receipt():
+    return {
+        "version": 1, "commandId": "scene2d-1", "operation": OPERATION, "status": "queued",
+        "entities": [], "artifacts": [], "taskIds": ["task-1"], "pipelineIds": [],
+        "result": {"job_id": "job-1", "task_id": "task-1", "workspace": WORKSPACE, "status": "queued"},
+    }
+
+
+def test_receipt_follows_the_completed_task_and_lists_the_mp4(tmp_path, monkeypatch):
+    stored = _queued_receipt()
+    published = {"name": "clip.mp4", "url": "/api/v1/file/clip.mp4", "workspace": WORKSPACE}
+    task = {"id": "task-1", "status": "completed", "workspace": WORKSPACE, "metadata": {"output": published}, "result_refs": ["clip.mp4"]}
+
+    class Registry:
+        def command_admission(self, intent_id):
+            assert intent_id == "scene2d-1"
+            return {"receipt": stored, "task_id": "task-1"}
+
+        def get(self, task_id):
+            assert task_id == "task-1"
+            return task
+
+    service = _service(tmp_path)
+    monkeypatch.setattr(service, "_registry", lambda _workspace: Registry())
+    viewed = service.receipt(WORKSPACE, "scene2d-1")
+    assert viewed["receipt"]["status"] == "completed"
+    assert viewed["receipt"]["result"]["status"] == "completed"
+    assert viewed["receipt"]["artifacts"] == [published]
+    assert stored["status"] == "queued"
+    assert stored["artifacts"] == []
+    refs_only = {**task, "metadata": {}, "result_refs": ["only.mp4"]}
+    fallback = project_export_receipt(stored, refs_only)
+    assert fallback["artifacts"] == [{"name": "only.mp4", "url": "/api/v1/file/only.mp4", "workspace": WORKSPACE}]
+    running = project_export_receipt(stored, {"status": "running", "workspace": WORKSPACE, "metadata": {}, "result_refs": []})
+    assert running["status"] == "running"
+    assert running["artifacts"] == []
 
 
 def test_catalog_and_lane_do_not_use_the_gpu():
