@@ -1,4 +1,8 @@
-import { sceneFxFields, SCENE_FX_SCHEMA } from '../features/sceneFx/types'
+import atmospheres from '../../../app/shared/atmospheres.json' with { type: 'json' }
+import fontCatalog from '../../../app/shared/fonts.json' with { type: 'json' }
+import motionPresets from '../../../app/shared/motion_presets.json' with { type: 'json' }
+import { FX_CATALOG, sceneFxFields, SCENE_FX_SCHEMA } from '../features/sceneFx/types'
+import { FINISH_PRESETS } from './scene2d/finish'
 import { kineticTextFields, KINETIC_TEXT_SCHEMA, lyricFields, TEXT_TEMPLATES, textTemplatesFromRecipe, type KineticText, type SceneLyrics } from './kineticText'
 import type { Scene, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../types'
 import { applyCutoutDialogue, findCutoutMouthLayers, normalizeFaceBinding, planCutoutDialogue } from './cutoutDialogue'
@@ -232,6 +236,8 @@ export interface SceneRecipe {
     mood?: SceneGradeMood
     palette?: SceneGradePalette
     intensity?: SceneGradeIntensity
+    /** Preset id from finish_presets.json. Expanded when the shot is compiled. */
+    finish?: string
     layers: SceneRecipeLayer[]
   }
 }
@@ -254,73 +260,44 @@ type MotionPreset = {
   curve: SceneCurve
 }
 
-const point = (x: number, y: number, scale: number, extra: { opacity?: number; rotation?: number } = {}): MotionPreset['start'] => ({
-  x, y, scale, ...extra,
-})
+const MOTION_CURVES = ['linear', 'ease', 'dramatic', 'bounce', 'hold'] as const
+type RawMotion = {
+  id: string
+  kind: string
+  start: MotionPreset['start']
+  end: MotionPreset['end']
+  duration: number
+  spin: boolean
+  curve: string
+  shake?: { amount: number; frequency: number; seed?: number }
+}
+type RawAtmosphere = { id: string; density: number; speed: number; size: number; wind: number; color: string }
 
-export const RECIPE_MOTION_PRESETS: Record<string, MotionPreset> = {
-  turntable: { start: point(50, 50, .8), end: point(50, 50, .8), duration: 5, spin: true, curve: 'linear' },
-  meteor: { start: point(-10, 82, .22), end: point(112, 18, .65), duration: 2, spin: true, curve: 'dramatic' },
-  'space-cruise': { start: point(8, 54, .48), end: point(92, 43, .68), duration: 5, spin: true, curve: 'ease' },
-  hover: { start: point(50, 54, .7), end: point(50, 46, .76), duration: 4, spin: true, curve: 'ease' },
-  landing: { start: point(50, -12, .2), end: point(50, 60, .82), duration: 4, spin: false, curve: 'bounce' },
-  liftoff: { start: point(50, 68, .82), end: point(54, -15, .28), duration: 3, spin: false, curve: 'dramatic' },
-  'zoom-in': { start: point(50, 50, .18), end: point(50, 50, 1.35), duration: 3, spin: true, curve: 'dramatic' },
-  'zoom-out': { start: point(50, 50, 1.25), end: point(50, 50, .18), duration: 3, spin: true, curve: 'ease' },
-  'pass-camera': { start: point(16, 50, .18), end: point(90, 50, 1.5), duration: 3, spin: true, curve: 'dramatic' },
-  'hero-flyover': { start: point(-18, 22, .22), end: point(118, 72, 1.15), duration: 4.2, spin: true, curve: 'ease' },
-  'fade-reveal': { start: point(50, 50, .78, { opacity: 0 }), end: point(50, 50, .92, { opacity: 1 }), duration: 2.5, spin: false, curve: 'ease' },
-  'portal-arrival': { start: point(50, 50, .02, { opacity: 0 }), end: point(50, 50, 1, { opacity: 1 }), duration: 1.6, spin: true, curve: 'dramatic' },
-  'exit-frame': { start: point(50, 50, .8), end: point(120, -10, .25), duration: 2, spin: true, curve: 'dramatic' },
-  'drift-right': { start: point(25, 50, .68), end: point(75, 50, .68), duration: 6, spin: false, curve: 'linear' },
-  'drift-left': { start: point(75, 50, .68), end: point(25, 50, .68), duration: 6, spin: false, curve: 'linear' },
-  'diagonal-rise': { start: point(20, 82, .38), end: point(78, 22, .82), duration: 4, spin: true, curve: 'ease' },
-  'diagonal-drop': { start: point(78, 16, .82), end: point(24, 84, .35), duration: 3, spin: true, curve: 'dramatic' },
-  pop: { start: point(50, 50, .05), end: point(50, 50, .85), duration: 1, spin: true, curve: 'bounce' },
-  glide: { start: point(-8, 72, .4), end: point(108, 70, .52), duration: 4, spin: false, curve: 'ease' },
-  vibrate: { start: point(49, 51, .72), end: point(51, 49, .75), duration: 2, spin: false, curve: 'bounce' },
-  'orbit-sweep': { start: point(18, 70, .32), end: point(86, 30, .9), duration: 5, spin: true, curve: 'ease' },
-  'center-reveal': { start: point(50, 105, .35), end: point(50, 52, .9), duration: 3, spin: true, curve: 'ease' },
-  'floating-logo': { start: point(50, 45, .72), end: point(50, 55, .72), duration: 4, spin: true, curve: 'ease' },
-  'cinematic-push': { start: point(38, 55, .28), end: point(54, 48, 1.18), duration: 5.5, spin: false, curve: 'ease' },
-  'crane-reveal': { start: point(50, 112, 1.3, { opacity: .2 }), end: point(50, 45, .72, { opacity: 1 }), duration: 4.5, spin: false, curve: 'ease' },
-  'foreground-parallax': { start: point(-28, 50, 1.55), end: point(128, 50, 1.55), duration: 7, spin: false, curve: 'linear' },
+const motionPreset = (entry: RawMotion): MotionPreset => {
+  if (!(MOTION_CURVES as readonly string[]).includes(entry.curve)) throw new Error(`Unknown motion curve: ${entry.id}`)
+  return { start: entry.start, end: entry.end, duration: entry.duration, spin: entry.spin, curve: entry.curve as SceneCurve }
 }
 
-export const RECIPE_CAMERA_PRESETS: Record<string, MotionPreset & { shake?: { amount: number; frequency: number; seed?: number } }> = {
-  'camera-locked': { start: point(50, 50, 1, { rotation: 0 }), end: point(50, 50, 1, { rotation: 0 }), duration: 5, spin: false, curve: 'linear' },
-  'camera-pan-right': { start: point(35, 50, 1, { rotation: 0 }), end: point(65, 50, 1, { rotation: 0 }), duration: 5, spin: false, curve: 'ease' },
-  'camera-pan-left': { start: point(65, 50, 1, { rotation: 0 }), end: point(35, 50, 1, { rotation: 0 }), duration: 5, spin: false, curve: 'ease' },
-  'camera-push-in': { start: point(50, 50, 1, { rotation: 0 }), end: point(50, 50, 1.55, { rotation: 0 }), duration: 6, spin: false, curve: 'ease' },
-  'camera-pull-out': { start: point(50, 50, 1.6, { rotation: 0 }), end: point(50, 50, 1, { rotation: 0 }), duration: 5, spin: false, curve: 'ease' },
-  'camera-crane-up': { start: point(50, 68, 1.15, { rotation: 0 }), end: point(50, 34, 1, { rotation: 0 }), duration: 5, spin: false, curve: 'ease' },
-  'camera-dutch-drift': { start: point(44, 54, 1.05, { rotation: -6 }), end: point(57, 46, 1.28, { rotation: 7 }), duration: 6, spin: false, curve: 'ease' },
-  'camera-handheld': { start: point(50, 50, 1.08, { rotation: 0 }), end: point(51, 49, 1.12, { rotation: .6 }), duration: 6, spin: false, curve: 'ease', shake: { amount: .75, frequency: 3.2, seed: 1.7 } },
-  'camera-whip-pan': { start: point(28, 50, 1.18, { rotation: -2 }), end: point(72, 50, 1.05, { rotation: 2 }), duration: 1.1, spin: false, curve: 'dramatic', shake: { amount: .35, frequency: 7, seed: 3.1 } },
-  'camera-dolly': { start: point(36, 57, 1.5, { rotation: -2 }), end: point(58, 46, .92, { rotation: 0 }), duration: 5.5, spin: false, curve: 'ease' },
-}
+const motionOf = (kind: string) => (motionPresets.entries as RawMotion[]).filter(entry => entry.kind === kind)
 
-const ATMOSPHERE: SceneAtmosphereKind[] = [
-  'rain', 'snow', 'dust', 'embers', 'fog', 'smoke', 'ash', 'fireflies',
-  'confetti', 'bokeh', 'sparkles', 'bubbles', 'speedlines', 'leaves',
-]
+export const RECIPE_MOTION_PRESETS: Record<string, MotionPreset> = Object.fromEntries(
+  motionOf('motion').map(entry => [entry.id, motionPreset(entry)]),
+)
 
-const ATMOSPHERE_DEFAULTS: Record<SceneAtmosphereKind, NonNullable<SceneLayer['atmosphere']>> = {
-  rain: { kind: 'rain', density: 145, speed: 1.3, size: 1.65, wind: -10, color: '#dbeafe' },
-  snow: { kind: 'snow', density: 90, speed: .42, size: 2.15, wind: 8, color: '#ffffff' },
-  dust: { kind: 'dust', density: 58, speed: .25, size: 2.5, wind: 18, color: '#fde68a' },
-  embers: { kind: 'embers', density: 68, speed: .62, size: 1.55, wind: 10, color: '#fb923c' },
-  fog: { kind: 'fog', density: 16, speed: .18, size: 1.15, wind: 28, color: '#dbeafe' },
-  smoke: { kind: 'smoke', density: 22, speed: .3, size: .85, wind: 12, color: '#cbd5e1' },
-  ash: { kind: 'ash', density: 95, speed: .34, size: 1.35, wind: 14, color: '#d1d5db' },
-  fireflies: { kind: 'fireflies', density: 38, speed: .22, size: 1.4, wind: 4, color: '#fde047' },
-  confetti: { kind: 'confetti', density: 86, speed: .72, size: 1.65, wind: 12, color: '#f472b6' },
-  bokeh: { kind: 'bokeh', density: 24, speed: .12, size: 2.8, wind: 6, color: '#f0abfc' },
-  sparkles: { kind: 'sparkles', density: 42, speed: .18, size: 1.8, wind: 4, color: '#ffffff' },
-  bubbles: { kind: 'bubbles', density: 46, speed: .45, size: 1.6, wind: 5, color: '#bae6fd' },
-  speedlines: { kind: 'speedlines', density: 72, speed: 1.65, size: 1.15, wind: 45, color: '#e0f2fe' },
-  leaves: { kind: 'leaves', density: 54, speed: .48, size: 1.8, wind: 20, color: '#f59e0b' },
-}
+export const RECIPE_CAMERA_PRESETS: Record<string, MotionPreset & { shake?: { amount: number; frequency: number; seed?: number } }> = Object.fromEntries(
+  motionOf('camera').map(entry => [entry.id, { ...motionPreset(entry), ...(entry.shake ? { shake: entry.shake } : {}) }]),
+)
+
+const atmosphereEntries = atmospheres.entries as RawAtmosphere[]
+const ATMOSPHERE = atmosphereEntries.map(entry => entry.id) as SceneAtmosphereKind[]
+const ATMOSPHERE_DEFAULTS = Object.fromEntries(atmosphereEntries.map(entry => [entry.id, {
+  kind: entry.id as SceneAtmosphereKind,
+  density: entry.density,
+  speed: entry.speed,
+  size: entry.size,
+  wind: entry.wind,
+  color: entry.color,
+}])) as Record<SceneAtmosphereKind, NonNullable<SceneLayer['atmosphere']>>
 
 const saucerLayers = (motion: string): SceneRecipeLayer[] => [
   { id: 'cam', type: 'camera', cameraPreset: 'camera-locked' },
@@ -639,6 +616,7 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] },
         palette: { enum: ['natural', 'cool', 'warm', 'neon'] },
         intensity: { enum: [1, 2, 3] },
+        finish: { enum: Object.keys(FINISH_PRESETS) },
         layers: { type: 'array', minItems: 1, maxItems: 24, items: recipeLayerSchema },
       },
       required: ['width', 'height', 'fps', 'duration', 'layers'],
@@ -661,13 +639,40 @@ function boundedInventory(inventory: SceneRecipeInventoryItem[] = []): SceneReci
   }))
 }
 
+const catalogLine = (label: string, ids: readonly string[]) => `${label}: ${ids.join(', ')}`
+
+function recipeFinishId(raw: unknown): { finish?: string } {
+  if (typeof raw !== 'string' || !Object.hasOwn(FINISH_PRESETS, raw)) return {}
+  return { finish: raw }
+}
+
+function recipeFinishPatch(id: string | undefined): { finish?: (typeof FINISH_PRESETS)[string] } {
+  if (!id || !Object.hasOwn(FINISH_PRESETS, id)) return {}
+  return { finish: FINISH_PRESETS[id] }
+}
+
+/** Planner ids from the shared JSON catalogs. Do not hand-maintain a second list. */
+function recipeCatalogLines(): string {
+  const fonts = fontCatalog.entries as Array<{ id: string; kineticRole?: string }>
+  const kineticFonts = fonts.filter(entry => entry.kineticRole).map(entry => entry.id)
+  const otherFonts = fonts.filter(entry => !entry.kineticRole).map(entry => entry.id)
+  return [
+    catalogLine('Motion', Object.keys(RECIPE_MOTION_PRESETS)),
+    catalogLine('Camera', Object.keys(RECIPE_CAMERA_PRESETS)),
+    catalogLine('Atmosphere', ATMOSPHERE),
+    catalogLine('Text templates', TEXT_TEMPLATES.map(template => template.id)),
+    catalogLine('Fonts', fonts.map(entry => entry.id)),
+    catalogLine('Kinetic fonts', kineticFonts),
+    catalogLine('Non-kinetic fonts', otherFonts),
+    catalogLine('Finish', Object.keys(FINISH_PRESETS)),
+    catalogLine('Screen effects', FX_CATALOG.map(item => item.id)),
+  ].join('\n')
+}
+
 export function buildRecipeSystemPrompt(options: {
   mode: 'auto' | 'manual'
   inventory?: SceneRecipeInventoryItem[]
 }): string {
-  const motion = Object.keys(RECIPE_MOTION_PRESETS).join(', ')
-  const cameras = Object.keys(RECIPE_CAMERA_PRESETS).join(', ')
-  const fx = ATMOSPHERE.join(', ')
   const templates = JSON.stringify(NARRATIVE_SCENE_TEMPLATES.map(template => ({
     id: template.id, category: template.category, visualIntent: template.visualIntent,
     slots: template.assetSlots.map(slot => ({ id: slot.id, types: slot.types, required: slot.required })), controls: template.controls,
@@ -722,10 +727,8 @@ VIRTUAL-PRODUCTION RULES:
 - One action beat normally lasts 3-7 seconds. Use multiple shots instead of compressing unrelated actions into one move.
 - Effects are free and require no generated asset.
 
-SUPPORTED IDS:
-Motion: ${motion}
-Camera: ${cameras}
-Atmosphere: ${fx}
+SUPPORTED IDS (copy exactly; never invent an id):
+${recipeCatalogLines()}
 Hunyuan presets: eco, balanced, quality, multiview
 Rig profiles: ${RECIPE_RIG_PROFILES.join(', ')}
 Rig clips: ${RECIPE_RIG_ANIMATIONS.join(', ')}
@@ -747,6 +750,11 @@ Semantic mapping hints:
 - A repeatable moving world uses layer.strip with enabled, count, spacing, direction, speed and optional seamOccluder. Use it only when the plate is explicitly seamlessHorizontal: true. A seamOccluder is a pole, lamp, tree or column that masks the tile join; it is not a generated asset.
 - seamlessHorizontal is a verified inventory capability, never a visual guess. Only copy it when the chosen inventory item explicitly has seamlessHorizontal:true. The run-travel-parallax template requires such a plate; otherwise choose a non-travel template or a custom static scene.
 - Use layer.effects for local blur, brightness, contrast, saturation, glow, shadow, blendMode or mask. Keep a hidden alternate layer hidden with visible:false; do not delete it. Existing visual layers may use relationship parent, follow or lookAt only when the request explicitly establishes that dependency.
+- Requested titles, captions, quotes, chapters, end cards and lyric banners go in textTemplates. Each id must be a text-template id, with that template's field strings in values. Do not paint that lettering into an image or video prompt.
+- Requested timed on-screen texts go in scene.texts. font must be a kinetic font id. Non-kinetic font ids are not a text or lyric face.
+- Requested sung or displayed lyrics go in scene.lyrics. mode is karaoke, word-pop, line-fade or bounce. style.font must be a kinetic font id. Do not bake the lyric lines into a plate prompt.
+- A full-frame finish uses exactly one finish id. When the request names that look, set scene.finish to the id. Do not invent another finish id and do not restate the preset as raw grade numbers.
+- Requested screen effects go in scene.sfx. kind must be a screen-effect id. They are not atmosphere layers and not generated image or video assets. Atmosphere ids stay on effect layers.
 - rise/take off -> liftoff or diagonal-rise; descend/land -> landing; cross frame/fly past -> space-cruise, glide or pass-camera.
 - reveal/appear -> fade-reveal, portal-arrival or center-reveal; approach -> cinematic-push or zoom-in; depart -> exit-frame or zoom-out.
 - calm observational shot -> camera-locked or camera-dolly; follow horizontal action -> camera-pan-right/left; urgency -> camera-handheld or camera-whip-pan.
@@ -1298,6 +1306,7 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
       mood: GRADE_MOODS.includes(sceneRaw.mood as SceneGradeMood) ? sceneRaw.mood as SceneGradeMood : undefined,
       palette: GRADE_PALETTES.includes(sceneRaw.palette as SceneGradePalette) ? sceneRaw.palette as SceneGradePalette : undefined,
       intensity: ([1, 2, 3] as const).includes(sceneRaw.intensity as SceneGradeIntensity) ? sceneRaw.intensity as SceneGradeIntensity : undefined,
+      ...recipeFinishId(sceneRaw.finish),
       layers,
     },
   }
@@ -1411,6 +1420,7 @@ export function compileRecipeShot(
       ...scene,
       ...sceneFxFields(recipe.scene.sfx),
       ...recipeLettering(recipe, scene.duration),
+      ...recipeFinishPatch(recipe.scene.finish),
       ...sceneGenerationPolicyFields(recipe.generationPolicy),
       layers: dialogue.layers,
       ...(audioTracks.length ? { audioTracks } : {}),
@@ -1660,6 +1670,7 @@ export function compileSceneRecipe(
     name: recipe.name,
     ...sceneFxFields(recipe.scene.sfx),
     ...recipeLettering(recipe, duration),
+    ...recipeFinishPatch(recipe.scene.finish),
     ...sceneGenerationPolicyFields(recipe.generationPolicy),
     width: recipe.scene.width || 1280,
     height: recipe.scene.height || 720,

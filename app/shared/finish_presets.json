@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "ranges": {
+    "grade": {
+      "exposure": [
+        -1,
+        1
+      ],
+      "contrast": [
+        -1,
+        1
+      ],
+      "saturation": [
+        -1,
+        1
+      ],
+      "temperature": [
+        -1,
+        1
+      ],
+      "tint": [
+        -1,
+        1
+      ],
+      "fade": [
+        0,
+        1
+      ],
+      "beatFlash": [
+        0,
+        1
+      ]
+    },
+    "bloom": {
+      "amount": [
+        0,
+        1
+      ],
+      "threshold": [
+        0,
+        1
+      ],
+      "radius": [
+        0,
+        1
+      ],
+      "beat": [
+        0,
+        1
+      ]
+    },
+    "rays": {
+      "amount": [
+        0,
+        1
+      ],
+      "x": [
+        0,
+        100
+      ],
+      "y": [
+        0,
+        100
+      ],
+      "length": [
+        0,
+        1
+      ],
+      "threshold": [
+        0,
+        1
+      ]
+    },
+    "vignette": {
+      "amount": [
+        0,
+        1
+      ],
+      "softness": [
+        0,
+        1
+      ]
+    },
+    "grain": {
+      "amount": [
+        0,
+        1
+      ],
+      "size": [
+        0.5,
+        4
+      ]
+    },
+    "texture": {
+      "kinds": [
+        "paper",
+        "film-dust",
+        "scratches"
+      ],
+      "amount": [
+        0,
+        1
+      ]
+    },
+    "letterbox": {
+      "ratios": [
+        1.85,
+        2,
+        2.39
+      ]
+    }
+  },
+  "entries": [
+    {
+      "id": "warmCinema",
+      "grade": {
+        "exposure": 0.05,
+        "contrast": 0.12,
+        "saturation": 0.08,
+        "temperature": 0.25,
+        "tint": 0.04,
+        "fade": 0.08
+      },
+      "vignette": {
+        "amount": 0.35,
+        "softness": 0.6
+      },
+      "letterbox": {
+        "ratio": 2.39,
+        "color": "#000000"
+      }
+    },
+    {
+      "id": "oldDoc",
+      "grade": {
+        "exposure": -0.04,
+        "contrast": 0.18,
+        "saturation": -0.35,
+        "temperature": 0.2,
+        "tint": 0.08,
+        "fade": 0.16
+      },
+      "grain": {
+        "amount": 0.28,
+        "size": 1.4
+      },
+      "texture": {
+        "kind": "scratches",
+        "amount": 0.2
+      }
+    },
+    {
+      "id": "nightNeon",
+      "grade": {
+        "exposure": 0.02,
+        "contrast": 0.2,
+        "saturation": 0.25,
+        "temperature": -0.15,
+        "tint": 0.2,
+        "fade": 0
+      },
+      "bloom": {
+        "amount": 0.45,
+        "threshold": 0.55,
+        "radius": 0.5
+      }
+    },
+    {
+      "id": "paperComic",
+      "grade": {
+        "exposure": 0.04,
+        "contrast": 0.08,
+        "saturation": -0.1,
+        "temperature": 0.12,
+        "tint": 0,
+        "fade": 0.05
+      },
+      "texture": {
+        "kind": "paper",
+        "amount": 0.45
+      }
+    }
+  ]
+}

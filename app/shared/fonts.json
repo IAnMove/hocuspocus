@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "sans",
+      "family": "system-ui",
+      "weights": [],
+      "license": null,
+      "licenseNote": "System face. Not vendored and not listed in ui/public/fonts/LICENSES.md.",
+      "files": [],
+      "kineticRole": "sans",
+      "stack": "system-ui, sans-serif"
+    },
+    {
+      "id": "mono",
+      "family": "ui-monospace",
+      "weights": [],
+      "license": null,
+      "licenseNote": "System face. Not vendored and not listed in ui/public/fonts/LICENSES.md.",
+      "files": [],
+      "kineticRole": "mono",
+      "stack": "ui-monospace, monospace"
+    },
+    {
+      "id": "display",
+      "family": "Hocus Display",
+      "weights": [400],
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright Dharma Type / Ryoichi Tsunekawa.",
+      "source": "Bebas Neue 400, latin and latin-ext, fontsource 5.2.5",
+      "files": ["/fonts/bebas-neue-latin-ext.woff2", "/fonts/bebas-neue-latin.woff2"],
+      "kineticRole": "display",
+      "stack": "\"Hocus Display\", Impact, sans-serif"
+    },
+    {
+      "id": "condensed",
+      "family": "Hocus Condensed",
+      "weights": [600],
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright Jeremy Tribby.",
+      "source": "Barlow Condensed 600, latin and latin-ext, fontsource 5.2.5",
+      "files": ["/fonts/barlow-condensed-latin-ext.woff2", "/fonts/barlow-condensed-latin.woff2"],
+      "kineticRole": "condensed",
+      "stack": "\"Hocus Condensed\", \"Arial Narrow\", sans-serif"
+    },
+    {
+      "id": "serif",
+      "family": "Hocus Serif",
+      "weights": [500],
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright Claus Eggers Sørensen.",
+      "source": "Playfair Display 500, latin and latin-ext, fontsource 5.2.5",
+      "files": ["/fonts/playfair-display-latin-ext.woff2", "/fonts/playfair-display-latin.woff2"],
+      "kineticRole": "serif",
+      "stack": "\"Hocus Serif\", Georgia, serif"
+    },
+    {
+      "id": "hand",
+      "family": "Hocus Hand",
+      "weights": [500],
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright Impallari Type.",
+      "source": "Caveat 500, latin and latin-ext, fontsource 5.2.5",
+      "files": ["/fonts/caveat-latin-ext.woff2", "/fonts/caveat-latin.woff2"],
+      "kineticRole": "hand",
+      "stack": "\"Hocus Hand\", cursive"
+    },
+    {
+      "id": "marker",
+      "family": "Hocus Marker",
+      "weights": [400],
+      "license": "Apache License 2.0",
+      "copyright": "Copyright Font Diner.",
+      "source": "Permanent Marker 400, latin, fontsource 5.2.5",
+      "files": ["/fonts/permanent-marker-latin.woff2"],
+      "kineticRole": "marker",
+      "stack": "\"Hocus Marker\", cursive"
+    },
+    {
+      "id": "wordmark",
+      "family": "HocusPocus Wordmark",
+      "weights": [600],
+      "license": null,
+      "licenseNote": "Not stated in ui/public/fonts/LICENSES.md. Six-glyph subset and not a text face.",
+      "source": "cormorant-garamond-600-wordmark.woff2",
+      "files": ["/fonts/cormorant-garamond-600-wordmark.woff2"],
+      "stack": "\"HocusPocus Wordmark\", ui-serif, Georgia, serif"
+    }
+  ]
+}

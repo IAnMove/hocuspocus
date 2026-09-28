@@ -1,5 +1,6 @@
 // Pure Video 2D layer styling: effects, strips, masks and procedural atmosphere.
 // Shared by the Scene Animator preview/export and the headless scene2d renderer.
+import atmospheres from '../../../../app/shared/atmospheres.json' with { type: 'json' }
 import { withAlpha } from '../../features/sceneFx/color'
 import { emitterSample, parseEmitter } from './motion'
 import type { SceneAtmosphereKind, SceneBlendMode, SceneLayer, SceneMask } from '../../types'
@@ -7,27 +8,14 @@ import { normalizeSeamOccluder } from '../seamOccluder'
 import type { AnimatorLayer, Atmosphere, LayerEffects, LayerStrip, VisualAnimatorLayer } from './types'
 export const DEFAULT_EFFECTS: LayerEffects = { blur: 0, brightness: 1, contrast: 1, saturation: 1, hue: 0, glow: 0, shadow: 0, blendMode: 'normal', mask: 'none', maskRadius: 12 }
 export const DEFAULT_STRIP: LayerStrip = { enabled: false, count: 5, spacing: 24, direction: 'down', speed: 18, phase: 0, seamOccluder: { enabled: false, kind: 'pole', scale: 1, opacity: .82 } }
-export const ATMOSPHERE_KINDS: SceneAtmosphereKind[] = ['rain', 'snow', 'dust', 'embers', 'fog', 'smoke', 'ash', 'fireflies', 'confetti', 'bokeh', 'sparkles', 'bubbles', 'speedlines', 'leaves']
-export const ATMOSPHERE_OPACITY: Record<SceneAtmosphereKind, number> = {
-  rain: .92, snow: .95, dust: .78, embers: .92, fog: .58, smoke: .62, ash: .72,
-  fireflies: .95, confetti: 1, bokeh: .58, sparkles: .9, bubbles: .85, speedlines: .7, leaves: .95,
-}
-export const ATMOSPHERE_PRESETS: Record<SceneAtmosphereKind, Atmosphere> = {
-  rain: { kind: 'rain', density: 145, speed: 1.3, size: 1.65, wind: -10, color: '#dbeafe' },
-  snow: { kind: 'snow', density: 90, speed: .42, size: 2.15, wind: 8, color: '#ffffff' },
-  dust: { kind: 'dust', density: 58, speed: .25, size: 2.5, wind: 18, color: '#fde68a' },
-  embers: { kind: 'embers', density: 68, speed: .62, size: 1.55, wind: 10, color: '#fb923c' },
-  fog: { kind: 'fog', density: 16, speed: .18, size: 1.15, wind: 28, color: '#dbeafe' },
-  smoke: { kind: 'smoke', density: 22, speed: .3, size: .85, wind: 12, color: '#cbd5e1' },
-  ash: { kind: 'ash', density: 95, speed: .34, size: 1.35, wind: 14, color: '#d1d5db' },
-  fireflies: { kind: 'fireflies', density: 38, speed: .22, size: 1.4, wind: 4, color: '#fde047' },
-  confetti: { kind: 'confetti', density: 86, speed: .72, size: 1.65, wind: 12, color: '#f472b6' },
-  bokeh: { kind: 'bokeh', density: 24, speed: .12, size: 2.8, wind: 6, color: '#f0abfc' },
-  sparkles: { kind: 'sparkles', density: 42, speed: .18, size: 1.8, wind: 4, color: '#ffffff' },
-  bubbles: { kind: 'bubbles', density: 46, speed: .45, size: 1.6, wind: 5, color: '#bae6fd' },
-  speedlines: { kind: 'speedlines', density: 72, speed: 1.65, size: 1.15, wind: 45, color: '#e0f2fe' },
-  leaves: { kind: 'leaves', density: 54, speed: .48, size: 1.8, wind: 20, color: '#f59e0b' },
-}
+type AtmosphereEntry = { id: SceneAtmosphereKind; density: number; speed: number; size: number; wind: number; color: string; opacity: number }
+const atmosphereEntries = atmospheres.entries as AtmosphereEntry[]
+const atmospherePreset = (entry: AtmosphereEntry): Atmosphere => ({
+  kind: entry.id, density: entry.density, speed: entry.speed, size: entry.size, wind: entry.wind, color: entry.color,
+})
+export const ATMOSPHERE_KINDS: SceneAtmosphereKind[] = atmosphereEntries.map(entry => entry.id)
+export const ATMOSPHERE_OPACITY: Record<SceneAtmosphereKind, number> = Object.fromEntries(atmosphereEntries.map(entry => [entry.id, entry.opacity])) as Record<SceneAtmosphereKind, number>
+export const ATMOSPHERE_PRESETS: Record<SceneAtmosphereKind, Atmosphere> = Object.fromEntries(atmosphereEntries.map(entry => [entry.id, atmospherePreset(entry)])) as Record<SceneAtmosphereKind, Atmosphere>
 export const finiteNumber = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback
 export const boundedNumber = (value: unknown, fallback: number, min: number, max: number) => Math.max(min, Math.min(max, finiteNumber(value, fallback)))
 export const normalizedEffects = (value: SceneLayer['effects'] | undefined): LayerEffects => ({

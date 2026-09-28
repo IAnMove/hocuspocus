@@ -1,22 +1,17 @@
+import fontCatalog from '../../../../app/shared/fonts.json' with { type: 'json' }
 import type { KineticText, TextFont } from './types'
 
-export const TEXT_FONT_STACK: Record<TextFont, string> = {
-  sans: 'system-ui, sans-serif',
-  mono: 'ui-monospace, monospace',
-  display: '"Hocus Display", Impact, sans-serif',
-  condensed: '"Hocus Condensed", "Arial Narrow", sans-serif',
-  serif: '"Hocus Serif", Georgia, serif',
-  hand: '"Hocus Hand", cursive',
-  marker: '"Hocus Marker", cursive',
-}
+type FontEntry = { kineticRole?: string; stack?: string; family: string; files: string[] }
 
-const CUSTOM_FACE: Partial<Record<TextFont, string>> = {
-  display: 'Hocus Display',
-  condensed: 'Hocus Condensed',
-  serif: 'Hocus Serif',
-  hand: 'Hocus Hand',
-  marker: 'Hocus Marker',
-}
+const kineticFaces = (fontCatalog.entries as FontEntry[]).filter(entry => entry.kineticRole && entry.stack)
+
+export const TEXT_FONT_STACK = Object.fromEntries(
+  kineticFaces.map(entry => [entry.kineticRole, entry.stack]),
+) as Record<TextFont, string>
+
+const CUSTOM_FACE = Object.fromEntries(
+  kineticFaces.filter(entry => entry.files.length > 0).map(entry => [entry.kineticRole, entry.family]),
+) as Partial<Record<TextFont, string>>
 
 /** Resolve vendored faces before the first headless frame. System faces return immediately. */
 export async function ensureTextFonts(texts: readonly Pick<KineticText, 'font'>[] | undefined) {
