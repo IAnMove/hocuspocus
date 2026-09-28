@@ -424,7 +424,11 @@ def _reorder(document: dict, operation: dict, warnings: list) -> None:
     if len(ids) != len(current) or len(set(ids)) != len(ids) or set(ids) != set(current):
         _fail("invalid_reorder", "Reorder ids must be a permutation of the layer ids")
     by_id = {layer["id"]: layer for layer in layers}
-    document["layers"] = [by_id[item] for item in ids]
+    # Paint, the editor list and normalizeZ all key off z, not array order.
+    stacked = [by_id[item] for item in ids]
+    for index, layer in enumerate(stacked):
+        layer["z"] = index * 10
+    document["layers"] = stacked
 
 
 def _cue(cue_id: str, text: str, frame: dict, extra: dict) -> dict:
@@ -724,8 +728,14 @@ def _apply_text_patch(cue: dict, patch: dict, scene_duration: float) -> None:
 
 
 def _patch_text_time(cue: dict, patch: dict, scene_duration: float) -> None:
+    if "start" not in patch and "end" not in patch:
+        return
     start = _number(patch["start"], 0, 600, "invalid_input", "Text start is out of range") if "start" in patch else cue.get("start", 0)
     end = _number(patch["end"], 0, 600, "invalid_input", "Text end is out of range") if "end" in patch else cue.get("end", start)
+    if isinstance(start, bool) or not isinstance(start, (int, float)) or start != start:
+        _fail("invalid_input", "Text start is out of range")
+    if isinstance(end, bool) or not isinstance(end, (int, float)) or end != end:
+        _fail("invalid_input", "Text end is out of range")
     if end <= start:
         _fail("invalid_input", "Text end must be later than start")
     if end - scene_duration > 1e-6:
@@ -1157,6 +1167,7 @@ def command_catalog() -> list[dict]:
         "set_finish accepts warmCinema, oldDoc, nightNeon, paperComic or raw finish values. "
         "set_lyrics stores lines with start/end/text and does not fetch. set_rhythm stores bpm and beats and does not analyze audio. "
         "set_duration is greater than 0 and at most 600 seconds. set_format width and height are even integers from 240 to 3840. "
+        "reorder assigns z as 0, 10, 20… in the new order, matching editor assignZ. "
         "An unknown op fails with invalid_operation."
     )
     operations = {"type": "array", "maxItems": MAX_OPERATIONS, "items": {"oneOf": [

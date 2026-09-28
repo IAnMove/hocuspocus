@@ -62,9 +62,29 @@ def test_remove_layer():
 def test_reorder_layers():
     document = _result([{"op": "reorder", "ids": ["c", "a", "b"]}])["document"]
     assert [layer["id"] for layer in document["layers"]] == ["c", "a", "b"]
+    assert [layer["z"] for layer in document["layers"]] == [0, 10, 20]
     with pytest.raises(Video2dEditError) as error:
         _edit([{"op": "reorder", "ids": ["a", "b"]}])
     assert error.value.code == "invalid_reorder"
+
+
+def test_update_text_after_shorter_duration_keeps_unrelated_patches():
+    result = _result([
+        {"op": "add_title", "template": "title-card", "fields": {"title": "Uno"}, "start": 0, "duration": 8},
+        {"op": "set_duration", "duration": 3},
+        {"op": "update_text", "id": "title", "patch": {"text": "Dos"}},
+    ])
+    cue = result["document"]["texts"][0]
+    assert cue["text"] == "Dos"
+    assert cue["start"] == 0
+    assert cue["end"] == 8
+    assert result["warnings"][0]["code"] == "content_after_duration"
+    with pytest.raises(Video2dEditError) as error:
+        _edit([
+            {"op": "add_title", "template": "title-card", "fields": {"title": "Uno"}, "start": 0, "duration": 3},
+            {"op": "update_text", "id": "title", "patch": {"end": 9}},
+        ])
+    assert error.value.code == "timing_exceeds_duration"
 
 
 def test_set_finish_preset():
