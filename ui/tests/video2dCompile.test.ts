@@ -4,6 +4,21 @@ import { compilePayload } from '../scripts/video2dCompile.ts'
 
 const ASSETS = { hero: '/api/v1/file/hero.png', plate: '/api/v1/file/plate.png' }
 
+test('bundled example URLs compile on a regular template', () => {
+  const result = compilePayload({
+    operation: 'scenes.template.compile',
+    input: {
+      templateId: 'cinema-establishing',
+      assets: { hero: '/examples/hero.png', plate: '/examples/plate.png' },
+    },
+  })
+  assert.equal(result.ok, true)
+  if (!result.ok || !('document' in result.result)) return
+  const layers = Object.fromEntries(result.result.document.layers.map(layer => [layer.id, layer]))
+  assert.equal(layers.hero?.source, '/examples/hero.png')
+  assert.equal(layers.plate?.source, '/examples/plate.png')
+})
+
 test('a known scene template compiles to the builder layer ids', () => {
   const result = compilePayload({
     operation: 'scenes.template.compile',
