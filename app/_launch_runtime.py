@@ -24617,6 +24617,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                             # their byte-progress loop to this exact job's
                             # durable abort state so Cancel works before the
                             # model has finished downloading or loading.
+                            from services.generation_memory import prepare_queued_params
+                            prepare_queued_params(params)
                             with safe_download.cancellable_downloads(
                                 lambda: is_cancel_requested(job)
                                 or bool(gen.get("abort")),
@@ -24715,7 +24717,11 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                                 total = 0
                                 progress_updates.update(step=0, total_steps=0)
                             from shared.utils.generation_timing import inference_progress_clock
+                            from services.generation_memory import note_inference_step
                             progress_updates.update(inference_progress_clock(job, msg, step, time.time()))
+                            progress_updates.update(note_inference_step(
+                                job, step=step, now=time.time(), message=msg,
+                            ))
                             progress_updates.update(message=msg, phase=msg, last_progress_at=time.time())
                             if not update_job(job, **progress_updates):
                                 continue
@@ -26347,12 +26353,13 @@ def get_status(job_id: str):
         "oom_info": j.get("oom_info"),
     }
     from services.generation_output_name import status_output_fields
+    from services.generation_memory import include_performance
     payload.update(status_output_fields(
         payload.get("output_files"),
         workspace=str(j.get("workspace") or ""),
         workspace_dir=str(j.get("out_dir") or ""),
     ))
-    return payload
+    return include_performance(payload, j)
 
 
 @api.post("/api/v1/cancel/{job_id}")
@@ -36073,6 +36080,7 @@ def _generation_task_fields(job: dict) -> dict:
     provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
     command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
     from services.generation_provenance import task_fields_from_provenance
+    from services.generation_memory import performance_fields
 
     task_identity = task_fields_from_provenance(
         provenance,
@@ -36094,6 +36102,7 @@ def _generation_task_fields(job: dict) -> dict:
         "run_id": command.get("run_id"),
     }
     task_metadata.update(task_identity.pop("metadata", {}))
+    task_metadata.update(performance_fields(job.get("performance")))
     if owner_id.startswith("series:"):
         series_job_id = owner_id.split(":", 1)[1]
         parent_task_id = f"task-series-render-{series_job_id}"
