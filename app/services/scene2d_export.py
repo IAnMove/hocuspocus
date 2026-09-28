@@ -25,6 +25,7 @@ from services import resource_scheduler
 from services.media_refs import parse_media_ref
 from services.scene2d_schema import document_schema
 from services.scene_commands import DocumentInput, command_error as scene_error
+from services.export_receipts import project_export_receipt
 from services.world3d_export import (
     World3DExportPending,
     World3DExportService,
@@ -38,63 +39,6 @@ from services.world3d_export import (
 
 OPERATION = "scenes.video2d.export"
 RECEIPT_OPERATION = "scenes.video2d.export.receipt"
-
-
-def _output_artifact(output: dict, task: dict) -> dict | None:
-    name = output.get("name")
-    url = output.get("url")
-    workspace = output.get("workspace") if isinstance(output.get("workspace"), str) else task.get("workspace")
-    if isinstance(name, str) and name and isinstance(url, str) and url and isinstance(workspace, str) and workspace:
-        return {"name": name, "url": url, "workspace": workspace}
-    return None
-
-
-def _ref_artifact(task: dict) -> dict | None:
-    if task.get("status") != "completed":
-        return None
-    refs = task.get("result_refs")
-    workspace = task.get("workspace")
-    if not isinstance(refs, list) or not refs or not isinstance(refs[0], str) or not refs[0]:
-        return None
-    if not isinstance(workspace, str) or not workspace:
-        return None
-    return {"name": refs[0], "url": f"/api/v1/file/{refs[0]}", "workspace": workspace}
-
-
-def _published_artifact(task: dict) -> dict | None:
-    metadata = task.get("metadata")
-    output = metadata.get("output") if isinstance(metadata, dict) else None
-    if isinstance(output, dict):
-        artifact = _output_artifact(output, task)
-        if artifact is not None:
-            return artifact
-    return _ref_artifact(task)
-
-
-def _with_task_status(receipt: dict, task: dict) -> dict:
-    status = task.get("status")
-    if not isinstance(status, str) or not status:
-        return receipt
-    updated = {**receipt, "status": status}
-    result = receipt.get("result")
-    if isinstance(result, dict):
-        updated["result"] = {**result, "status": status}
-    return updated
-
-
-def project_export_receipt(receipt: dict, task: dict | None) -> dict:
-    """Copy of the admission receipt whose status and artifacts follow the task.
-
-    The stored admission stays queued. Callers of scenes.video2d.export.receipt
-    see the canonical task status and, once an MP4 exists, one artifact.
-    """
-    if not isinstance(task, dict):
-        return deepcopy(receipt)
-    projected = _with_task_status(deepcopy(receipt), task)
-    artifact = _published_artifact(task)
-    if artifact is not None:
-        projected["artifacts"] = [artifact]
-    return projected
 
 
 CANCEL_OPERATION = "scenes.video2d.export.cancel"
@@ -296,13 +240,6 @@ class Scene2DExportService(World3DExportService):
 
     def resource_lane(self):
         return resource_scheduler.cpu_lane("scene2d-render")
-
-    def receipt(self, workspace: str, intent_id: str) -> dict:
-        viewed = super().receipt(workspace, intent_id)
-        receipt = viewed.get("receipt")
-        if not isinstance(receipt, dict):
-            return viewed
-        return {**viewed, "receipt": project_export_receipt(receipt, viewed.get("task"))}
 
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
         workspace_root = Path(self.workspace_dir(workspace))
