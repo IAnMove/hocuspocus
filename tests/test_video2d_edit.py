@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -176,10 +177,21 @@ def test_raw_finish_clamps_like_the_ui_parser_and_preset_duration_is_limited():
     assert result["warnings"][0]["code"] == "preset_duration_clamped"
 
 
-def test_motion_preset_is_rejected_until_m1_json():
+def test_camera_and_finish_ids_come_from_the_shared_catalogs():
+    motion = json.loads((Path(__file__).resolve().parents[1] / "app/shared/motion_presets.json").read_text(encoding="utf-8"))
+    finish = json.loads((Path(__file__).resolve().parents[1] / "app/shared/finish_presets.json").read_text(encoding="utf-8"))
+    cameras = [entry["id"] for entry in motion["entries"] if entry["kind"] == "camera"]
+    description = command_catalog()[0]["description"]
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["operations"]["items"]["oneOf"]
+    layer = next(item for item in schema if item["properties"]["op"]["const"] == "add_layer")
+    finish_schema = next(item for item in schema if item["properties"]["op"]["const"] == "set_finish")
+    assert layer["properties"]["preset"]["enum"] == cameras
+    assert finish_schema["properties"]["preset"]["enum"] == [entry["id"] for entry in finish["entries"]]
+    assert "M1" not in description and "hardcoded" not in description.lower()
     with pytest.raises(Video2dEditError) as error:
         _edit([{"op": "add_layer", "id": "ship", "source": "/examples/ship.png", "preset": "zoom-in"}])
     assert error.value.code == "unknown_preset"
+    assert "motion_presets.json" in str(error.value)
 
 
 def test_http_and_mcp_return_the_same_document(tmp_path):

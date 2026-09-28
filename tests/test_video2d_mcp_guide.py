@@ -21,6 +21,60 @@ def _examples(text: str) -> list[dict]:
     return [json.loads(block) for block in re.findall(r"```json\n(.*?)\n```", text, flags=re.DOTALL)]
 
 
+def _known_tools() -> set[str]:
+    from services.montage_commands import command_catalog as montages
+    from services.scene2d_export import command_catalog as export_catalog
+    from services.scene2d_validate import command_catalog as validate_catalog
+    from services.scene_asset_facts import command_catalog as assets
+    from services.scene_commands import command_catalog as effects
+    from services.scene_documents import command_catalog as documents
+    from services.video2d_catalogs import command_catalog as catalogs
+    from services.video2d_catalogs import query_operation
+    from services.video2d_compile import command_catalog as compile_catalog
+    from services.video2d_edit import command_catalog as edit_catalog
+    from services.video2d_preview import command_catalog as preview_catalog
+
+    names: set[str] = set()
+    groups = (
+        effects(), catalogs(), [query_operation()], compile_catalog(), edit_catalog(),
+        preview_catalog(), validate_catalog(), documents(), export_catalog(), montages(), assets(),
+    )
+    for group in groups:
+        for item in group:
+            if isinstance(item, dict) and isinstance(item.get("name"), str):
+                names.add(item["name"])
+    return names
+
+
+def test_guide_names_only_real_tools_and_does_not_forbid_one():
+    text = GUIDE.read_text(encoding="utf-8")
+    known = _known_tools()
+    named = set(re.findall(r"\b((?:scenes|montages)\.[a-z0-9_.]+)\b", text))
+    assert named, "guide must name the tools an agent calls"
+    assert sorted(named - known) == []
+    forbid = re.compile(r"no está disponible|no llames|no invoques|unavailable|do not call|don't call", re.IGNORECASE)
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+        if not forbid.search(sentence):
+            continue
+        banned = [name for name in re.findall(r"\b((?:scenes|montages)\.[a-z0-9_.]+)\b", sentence) if name in known]
+        assert banned == [], sentence
+    order = [
+        "scenes.catalog",
+        "scenes.assets.inspect",
+        "scenes.template.compile",
+        "scenes.text.template",
+        "scenes.lyrics.import",
+        "scenes.video2d.edit",
+        "scenes.video2d.validate",
+        "scenes.video2d.preview",
+        "scenes.document.save",
+        "scenes.video2d.export",
+        "montages.save",
+    ]
+    indexes = [text.index(name) for name in order]
+    assert indexes == sorted(indexes)
+
+
 def test_guide_template_ids_exist_in_shared_catalogs():
     examples = _examples(GUIDE.read_text(encoding="utf-8"))
     scene_ids = _ids("scene_templates.json")

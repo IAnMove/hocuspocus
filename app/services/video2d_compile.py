@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import json
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from services import resource_scheduler
+from services.resource_scheduler import ResourceAcquireCancelled
 from services.video2d_catalogs import CATALOGS
 
 BRIDGE_TIMEOUT = 30
@@ -284,7 +287,7 @@ def _parse_bridge(stdout: str) -> dict:
     return parsed
 
 
-def spawn_bridge(payload: dict) -> dict:
+def _run_bridge(payload: dict) -> dict:
     try:
         completed = subprocess.run(
             ["node", str(TSX), "--tsconfig", "tsconfig.app.json", str(SCRIPT)],
@@ -304,6 +307,19 @@ def spawn_bridge(payload: dict) -> dict:
         detail = (completed.stderr or completed.stdout or "compile failed").strip()
         raise CompileError("compile_bridge_failed", detail[:300])
     return _parse_bridge(completed.stdout)
+
+
+def spawn_bridge(payload: dict) -> dict:
+    """Run one TypeScript compile on the video2d-compile CPU lane (one at a time)."""
+    try:
+        with resource_scheduler.coordinator.acquire(
+            resource_scheduler.cpu_lane("video2d-compile"),
+            task_id=f"video2d-compile-{uuid.uuid4().hex}",
+            description="Video 2D TypeScript compile",
+        ):
+            return _run_bridge(payload)
+    except ResourceAcquireCancelled as error:
+        raise CompileError("compile_bridge_timeout", "TypeScript compile timed out") from error
 
 
 def _bridge_result(bridged: dict) -> dict:

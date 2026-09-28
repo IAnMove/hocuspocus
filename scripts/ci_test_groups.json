@@ -149,6 +149,7 @@
         "tests/test_video2d_catalog_query.py",
         "tests/test_video2d_compile.py",
         "tests/test_video2d_mcp_guide.py",
+        "tests/test_video2d_title_parity.py",
         "tests/test_video2d_preview.py",
         "tests/test_video_decode_metadata.py",
         "tests/test_video_editor_replacement_ui.py",

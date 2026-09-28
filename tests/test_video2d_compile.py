@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from services.video2d_compile import CompileError, command_catalog, execute
+from services.video2d_compile import CompileError, command_catalog, execute, spawn_bridge
 
 ROOT = Path(__file__).resolve().parents[1]
 TSX = ROOT / "ui" / "node_modules" / "tsx" / "dist" / "cli.mjs"
@@ -134,3 +135,19 @@ def test_video2d_candidate_compile_keeps_slot_images():
     assert layers["plate"]["source"] == ASSETS["plate"]
     assert layers["plate"]["type"] == "image"
     assert layers["atmosphere-plate"]["type"] == "effect"
+
+
+def test_compile_bridge_holds_the_cpu_lane(monkeypatch):
+    from services import resource_scheduler
+
+    seen = {}
+
+    def fake_run(*_args, **_kwargs):
+        lane = resource_scheduler.cpu_lane("video2d-compile")
+        state = resource_scheduler.coordinator._state[lane.key]
+        seen["active"] = state["active"]
+        return SimpleNamespace(returncode=0, stdout='{"ok": true, "result": {"texts": []}}\n', stderr="")
+
+    monkeypatch.setattr("services.video2d_compile.subprocess.run", fake_run)
+    assert spawn_bridge({"operation": "scenes.text.template", "input": {}})["ok"] is True
+    assert seen["active"] == 1
