@@ -1,24 +1,32 @@
-# Music video in three MCP calls
+# Music video from one spec
 
 For agents that drive HocusPocus through MCP. The agent writes one spec (the creative part);
 the studio does the rest and decides by numbers what a model used to decide by watching.
+One `production.run` calls `audio.analyze`, `generation.music`, `generation.image`,
+`scenes.video2d.edit`, `scenes.video2d.export`, `montages.save` and `montages.export`.
+Export stays inside that run. Do not also call `montages.export`.
+Do not add a planning call before `production.run`: the spec is the plan.
 
-```text
-production.run      {workspace, production_id, spec}   → starts in the background, returns at once
-production.status   {workspace, production_id}         → short summary; poll until completed or failed
-(look at contact_sheet once; fix the spec and call production.run again with the same id to resume)
-production.run       {workspace, production_id, retake:["key"]} → shoot those clips again (new seeds, better take kept);
-                                                     only the scenes whose clip changed are re-exported
-production.run       {workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}
-                    → generate three look tests without making a song; URLs appear in production.status.preview_frames
-production.run       {workspace, production_id, spec, through:"frames"}
-                    → stop after cast and frames; restart the isolated runtime if a large image model would slow H3,
-                      then resume with production.run {workspace, production_id}
-```
+## Call order
+
+The agent makes these calls for a finished video:
+
+1. `production.run` `{workspace, production_id, spec}` — starts in the background and returns at once (`production_id`, `running: true`). It does not return a job id.
+2. `production.status` `{workspace, production_id}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status`. A pause of 60 s or more is enough.
+3. `production.review` version 1 on the `contact_sheet` URL from that status.
+4. If the verdict is `retake`, `production.run` again with `{workspace, production_id, retake:[keys]}`, then repeat steps 2 and 3. The run shoots those clips again (new seeds, the better take is kept) and re-exports only the scenes whose clip changed.
+
+Two other `production.run` forms are optional and still the same command. They are not extra tools, and they do not replace steps 2–4 once a full video exists:
+
+- `{workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}` generates three look tests and no song. Poll `production.status` until `preview_completed` or `failed`. The three URLs are `preview_frames` on that status. There is no contact sheet yet, so do not call `production.review`.
+- `{workspace, production_id, spec, through:"frames"}` stops after cast and frames (`status` `frames_ready`). Restart the isolated runtime if a large image model would slow H3, then resume with `production.run` `{workspace, production_id}` and continue at step 2.
 
 Do not call `tools/list` or `models` to plan a production: everything the run needs is here.
 Do not read the song, clips or scenes yourself: `production.status` reports lip-sync verdicts,
-the video URL and a contact-sheet URL. Open the contact sheet as an image once at the end.
+the video URL and a contact-sheet URL. Do not judge that sheet yourself. `production.review`
+asks the vision model; if it cannot run, do not invent its answers.
+
+A later `production.run` with the same id and no `retake` resumes from the last finished step.
 
 ## What the run does
 
@@ -34,6 +42,60 @@ the video URL and a contact-sheet URL. Open the contact sheet as an image once a
 
 State is saved in `<workspace>/<production_id>.production.json`: a restart or a new
 `production.run` with the same id continues from the last finished step.
+The montage export in the table is internal. The agent does not call `montages.export` after the run.
+
+## production.review
+
+Version 1. A local vision model looks at the contact sheet. The tool does not render, export or start a generation.
+
+`input` is `{workspace, sheet, shots?}`. Pass it in the same version-1 envelope as the other production commands: `{version: 1, input: {...}}`. `sheet` is the `contact_sheet` URL from `production.status` (the run writes `<production_id>-contact.jpg`). `shots` is optional, the shot keys in sheet order, so a retake can name frames.
+
+```json
+{
+  "workspace": "musical",
+  "sheet": "/api/v1/file/hocuspocus-musical-contact.jpg?workspace=musical",
+  "shots": ["intro", "l0", "ch1"]
+}
+```
+
+The model is asked four questions: `words_readable`, `duplicate_people`, `face_consistent`, `text_covers_face`.
+
+Reply: `{verdict, answers, retake, reason?}`. `verdict` is `ok`, `retake` or `unreliable`. `answers` is those four booleans when the model ran. `retake` is a list of shot keys. `reason` is optional.
+
+```json
+{
+  "verdict": "retake",
+  "answers": {
+    "words_readable": true,
+    "duplicate_people": false,
+    "face_consistent": true,
+    "text_covers_face": true
+  },
+  "retake": ["l0"],
+  "reason": "the title covers the singer's face on l0"
+}
+```
+
+`ok` means keep the video (`retake` is empty). `retake` means call `production.run` again with those keys and the same id:
+
+```json
+{
+  "workspace": "musical",
+  "production_id": "hocuspocus-musical",
+  "retake": ["l0"]
+}
+```
+
+If vision cannot run, the verdict is `unreliable` and `reason` is `vision_unavailable`. `answers` is null. The agent must not invent the answers and must not guess a retake.
+
+```json
+{
+  "verdict": "unreliable",
+  "answers": null,
+  "retake": [],
+  "reason": "vision_unavailable"
+}
+```
 
 ## Spec
 
@@ -90,7 +152,8 @@ Style fields for native Video 2D finishing:
 
 A 60 s video with 5 H3 shots is about 25–35 min of GPU on an RTX 4090. The agent's side is the spec
 (~2–3k tokens), one `production.run`, a few `production.status` polls (~300 tokens each) and one
-contact-sheet image. Poll with a pause of 60 s or more; nothing is lost by polling slowly.
+`production.review` of the contact-sheet URL. A retake is another `production.run` only when that
+verdict says so. Poll with a pause of 60 s or more; nothing is lost by polling slowly.
 
 ## Things to avoid
 
@@ -98,4 +161,6 @@ contact-sheet image. Poll with a pause of 60 s or more; nothing is lost by polli
 - Close-ups for `sing` shots are fine, but extreme close-ups make `qa.lipsync` report `unreliable`
   (the face is not detected); prefer medium close-ups.
 - Titles on the right edge of the frame collide with nothing, but keep them off faces: put the
-  performer to one side in the `frame` prompt when a shot has a title.
+  performer to one side in the `frame` prompt when a shot has a title. `production.review` asks
+  `text_covers_face` for this.
+- Do not invent `production.review` answers. `vision_unavailable` means stop, not a guessed retake.
