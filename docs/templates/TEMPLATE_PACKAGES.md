@@ -9,6 +9,15 @@ Code: `app/services/template_format.py`, `app/services/template_library.py`,
 `app/services/template_commands.py`, `app/routers/templates.py`.
 Plan and roadmap: [TEMPLATE_LIBRARY_PLAN](../development/TEMPLATE_LIBRARY_PLAN_2026-09-28.md).
 
+## In the app
+
+**Video 3D → Change shot → My templates**: save the current shot as a template
+(name, tags, author and X handle, license, sample files or empty slots, adjustable
+duration; the current frame becomes its preview), click a template to apply it
+(sample media are copied into the workspace; *Keep assets* keeps your current
+characters), download it as `.hptemplate` or import one after reviewing what it
+contains. Video 2D follows (plan T3).
+
 ## What a template is
 
 * **Slots**: what the person must provide (a character GLB, a background image…).
@@ -52,7 +61,7 @@ slots that are still empty.
 |---|---|
 | `templates.list` `{editor?, tag?, query?}` | `GET /api/v1/templates?editor=&tag=&q=` |
 | `templates.get` `{id}` | `GET /api/v1/templates/{author}/{slug}` |
-| `templates.save` `{workspace, editor, document, title, …, include_media?, preview?, expected_updated_at?}` | `POST /api/v1/templates` |
+| `templates.save` `{workspace, editor, document, title, …, include_media?, preview?, expected_updated_at?}` (`preview`: workspace image or `data:image/…;base64`) | `POST /api/v1/templates` |
 | `templates.apply` `{id, workspace, slots?, controls?}` | `POST /api/v1/templates/{author}/{slug}/apply` |
 | `templates.export` `{id, workspace}` (writes the file into the workspace) | `GET /api/v1/templates/{author}/{slug}/package` |
 | `templates.preflight` `{workspace, file}` | `POST /api/v1/templates/preflight` (file as body) |

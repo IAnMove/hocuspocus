@@ -1,6 +1,6 @@
 # Plan: plantillas de usuario y de la comunidad (crear, compartir, importar)
 
-Fecha: 28 de septiembre de 2026. Responsable: Claude. Estado: **T1 en revisión (PR abajo); T2 en curso**.
+Fecha: 28 de septiembre de 2026. Responsable: Claude. Estado: **T1+T2 en revisión (#532); T3 en curso**.
 Sin migraciones: empezamos de cero. Las plantillas antiguas guardadas en el
 navegador (`localStorage`, `hocuspocus-world3d-user-templates`) no se leen ni se
 borran; la biblioteca nueva vive en el servidor.
@@ -126,8 +126,8 @@ Después (fuera de este plan): packs de efectos, rótulos y fuentes con el mismo
 
 | Bloque | PR | Estado |
 |---|---|---|
-| T1 | | en curso |
-| T2 | | pendiente |
+| T1 | [#532](https://github.com/IAnMove/hocuspocus/pull/532) | en revisión |
+| T2 | [#532](https://github.com/IAnMove/hocuspocus/pull/532) | en revisión (miniatura del fotograma actual incluida) |
 | T3 | | pendiente |
 | T4 | | pendiente |
 | T5 | | pendiente (necesita OK para crear el repo público) |

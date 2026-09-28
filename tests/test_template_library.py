@@ -218,3 +218,14 @@ def test_http_routes_save_apply_download_and_import(env):
     assert other_client.post("/api/v1/templates/import", content=package.content).status_code == 409
     assert other_client.delete("/api/v1/templates/local/web").json() == {"deleted": "local/web"}
     assert other_client.get("/api/v1/templates/local/web").status_code == 404
+
+
+def test_inline_preview_data_url(env):
+    import base64
+    library, _, _ = env
+    png = b"\x89PNG\r\n\x1a\nframe"
+    saved = library.save(workspace=WS, editor="video3d", document=_world(), metadata={"title": "Inline"},
+                         preview="data:image/png;base64," + base64.b64encode(png).decode())
+    assert library.preview_path(saved["id"]).read_bytes() == png
+    with pytest.raises(TemplateError):
+        library.save(workspace=WS, editor="video3d", document=_world(), metadata={"title": "Bad"}, preview="data:image/png;base64,@@@")

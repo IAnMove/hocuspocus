@@ -33,7 +33,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
                         "author": {"type": "object", "properties": {"name": {"type": "string"}, "x": {"type": "string"}, "url": {"type": "string"}}},
                         "license": {"enum": list(LICENSES)}, "id": TEMPLATE_ID, "templateVersion": {"type": "string"},
                         "slots": {"type": "array", "items": SLOT, "maxItems": 16}, "controls": {"type": "array", "items": CONTROL, "maxItems": 32},
-                        "include_media": {"type": "boolean"}, "preview": {"type": "string"},
+                        "include_media": {"type": "boolean"},
+                        "preview": {"type": "string", "description": "Workspace image file name or a data:image/png|jpeg|webp;base64 URL (≤ 2 MB)"},
                         "expected_updated_at": {"type": "string"}},
                        ["workspace", "editor", "document", "title"], True,
                        "Save a Video 3D (slots) or Video 2D (layers) scene from a workspace as a reusable template. Declare slots "

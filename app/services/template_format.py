@@ -195,26 +195,55 @@ def _resolve_pointer(document: Any, pointer: str) -> tuple[Any, str | int]:
     return node, last
 
 
-def _check_value(control: dict[str, Any], value: Any) -> Any:
-    kind = control["type"]
-    if kind == "number":
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TemplateError(f"{control['id']} must be a number")
-        low, high = control.get("min"), control.get("max")
-        if (low is not None and value < low) or (high is not None and value > high):
-            raise TemplateError(f"{control['id']} must be between {low} and {high}")
-        return value
-    if kind == "boolean":
-        if not isinstance(value, bool):
-            raise TemplateError(f"{control['id']} must be true or false")
-        return value
-    if kind == "color" and not (isinstance(value, str) and COLOR_RE.fullmatch(value)):
+def _number(control: dict[str, Any], value: Any) -> Any:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TemplateError(f"{control['id']} must be a number")
+    low, high = control.get("min"), control.get("max")
+    if (low is not None and value < low) or (high is not None and value > high):
+        raise TemplateError(f"{control['id']} must be between {low} and {high}")
+    return value
+
+
+def _boolean(control: dict[str, Any], value: Any) -> Any:
+    if not isinstance(value, bool):
+        raise TemplateError(f"{control['id']} must be true or false")
+    return value
+
+
+def _color(control: dict[str, Any], value: Any) -> Any:
+    if not (isinstance(value, str) and COLOR_RE.fullmatch(value)):
         raise TemplateError(f"{control['id']} must be a #rrggbb color")
-    if kind == "choice" and value not in control.get("options", []):
+    return value
+
+
+def _choice(control: dict[str, Any], value: Any) -> Any:
+    if value not in control.get("options", []):
         raise TemplateError(f"{control['id']} must be one of {control.get('options')}")
-    if kind == "text" and (not isinstance(value, str) or len(value) > 500):
+    return value
+
+
+def _free_text(control: dict[str, Any], value: Any) -> Any:
+    if not isinstance(value, str) or len(value) > 500:
         raise TemplateError(f"{control['id']} must be text up to 500 characters")
     return value
+
+
+VALUE_CHECKS = {"number": _number, "boolean": _boolean, "color": _color, "choice": _choice, "text": _free_text}
+
+
+def _check_value(control: dict[str, Any], value: Any) -> Any:
+    return VALUE_CHECKS[control["type"]](control, value)
+
+
+def _control_limits(raw: dict, control: dict[str, Any]) -> None:
+    for key_name in ("min", "max"):
+        if isinstance(raw.get(key_name), (int, float)) and not isinstance(raw.get(key_name), bool):
+            control[key_name] = raw[key_name]
+    if raw["type"] == "choice":
+        options = raw.get("options")
+        if not isinstance(options, list) or not 1 <= len(options) <= 32:
+            raise TemplateError(f"Control {raw['id']} needs 1-32 options")
+        control["options"] = options
 
 
 def _control(raw: Any, document: dict, index: int) -> dict[str, Any]:
@@ -228,29 +257,28 @@ def _control(raw: Any, document: dict, index: int) -> dict[str, Any]:
     except (KeyError, IndexError, ValueError, TypeError) as exc:
         raise TemplateError(f"Control {raw['id']} points at {pointer!r}, which is not in the document") from exc
     control: dict[str, Any] = {"id": raw["id"], "label": _text(raw.get("label") or raw["id"], 80), "type": raw["type"], "pointer": pointer}
-    for key_name in ("min", "max"):
-        if isinstance(raw.get(key_name), (int, float)) and not isinstance(raw.get(key_name), bool):
-            control[key_name] = raw[key_name]
-    if raw["type"] == "choice":
-        options = raw.get("options")
-        if not isinstance(options, list) or not 1 <= len(options) <= 32:
-            raise TemplateError(f"Control {raw['id']} needs 1-32 options")
-        control["options"] = options
+    _control_limits(raw, control)
     control["default"] = _check_value(control, raw["default"] if "default" in raw else container[key])
     return control
+
+
+def _default_3d_slots(document: dict) -> list[dict[str, Any]]:
+    return [{"id": slot["slot"], "label": slot["slot"], "accepts": [slot.get("media") or "model3d"], "target": slot["slot"],
+             "required": bool(slot.get("sourceUrl"))}
+            for slot in document.get("slots") or [] if isinstance(slot, dict) and slot.get("slot")]
+
+
+def _slot_layer(layer: Any) -> bool:
+    return (isinstance(layer, dict) and layer.get("type") in ("image", "video") and bool(layer.get("id"))
+            and bool(layer.get("source")) and not is_bundled_example(str(layer["source"])))
 
 
 def default_slots(editor: str, document: dict) -> list[dict[str, Any]]:
     """Slots inferred from the document when the author declares none."""
     if editor == "video3d":
-        return [{"id": slot["slot"], "label": slot["slot"], "accepts": [slot.get("media") or "model3d"], "target": slot["slot"],
-                 "required": bool(slot.get("sourceUrl"))}
-                for slot in document.get("slots") or [] if isinstance(slot, dict) and slot.get("slot")][:MAX_SLOTS]
+        return _default_3d_slots(document)[:MAX_SLOTS]
     return [{"id": layer["id"], "label": layer.get("name") or layer["id"], "accepts": ["image", "video"], "target": layer["id"],
-             "required": True}
-            for layer in document.get("layers") or []
-            if isinstance(layer, dict) and layer.get("type") in ("image", "video") and layer.get("source") and layer.get("id")
-            and not is_bundled_example(str(layer["source"]))][:MAX_SLOTS]
+             "required": True} for layer in document.get("layers") or [] if _slot_layer(layer)][:MAX_SLOTS]
 
 
 def check_document(editor: str, document: Any) -> dict:
@@ -274,6 +302,32 @@ def check_document(editor: str, document: Any) -> dict:
     return document
 
 
+def _license(raw: Any) -> str:
+    license_name = raw or "all-rights-reserved"
+    if license_name not in LICENSES:
+        raise TemplateError(f"license must be one of {', '.join(LICENSES)}")
+    return license_name
+
+
+def _unique_ids(slots: list[dict], controls: list[dict]) -> None:
+    if len({item["id"] for item in slots}) != len(slots) or len({item["id"] for item in controls}) != len(controls):
+        raise TemplateError("Slot and control ids must be unique")
+
+
+def _slots_and_controls(raw: dict, editor: str, document: dict) -> tuple[list[dict], list[dict]]:
+    slots_raw = raw.get("slots") if raw.get("slots") is not None else default_slots(editor, document)
+    controls_raw = raw.get("controls") or []
+    if not isinstance(slots_raw, list) or len(slots_raw) > MAX_SLOTS or not isinstance(controls_raw, list) or len(controls_raw) > MAX_CONTROLS:
+        raise TemplateError(f"Use at most {MAX_SLOTS} slots and {MAX_CONTROLS} controls")
+    slots = [_slot(item, editor, index) for index, item in enumerate(slots_raw)]
+    controls = [_control(item, document, index) for index, item in enumerate(controls_raw)]
+    _unique_ids(slots, controls)
+    missing = [slot["target"] for slot in slots if slot["target"] not in targets_of(editor, document)]
+    if missing:
+        raise TemplateError(f"Slot targets not found in the document: {', '.join(missing)}", code="unknown_slot_target")
+    return slots, controls
+
+
 def normalize_manifest(raw: Any, document: dict) -> dict[str, Any]:
     """Validate a manifest against its document (slots exist, pointers resolve)."""
     if not isinstance(raw, dict) or raw.get("kind") != KIND or raw.get("version") != VERSION:
@@ -284,28 +338,15 @@ def normalize_manifest(raw: Any, document: dict) -> dict[str, Any]:
     if not title:
         raise TemplateError("A template needs a title")
     author = _author(raw.get("author"))
-    license_name = raw.get("license") or "all-rights-reserved"
-    if license_name not in LICENSES:
-        raise TemplateError(f"license must be one of {', '.join(LICENSES)}")
-    slots_raw = raw.get("slots") if raw.get("slots") is not None else default_slots(editor, document)
-    controls_raw = raw.get("controls") or []
-    if not isinstance(slots_raw, list) or len(slots_raw) > MAX_SLOTS or not isinstance(controls_raw, list) or len(controls_raw) > MAX_CONTROLS:
-        raise TemplateError(f"Use at most {MAX_SLOTS} slots and {MAX_CONTROLS} controls")
-    slots = [_slot(item, editor, index) for index, item in enumerate(slots_raw)]
-    controls = [_control(item, document, index) for index, item in enumerate(controls_raw)]
-    if len({item["id"] for item in slots}) != len(slots) or len({item["id"] for item in controls}) != len(controls):
-        raise TemplateError("Slot and control ids must be unique")
-    targets = targets_of(editor, document)
-    missing = [slot["target"] for slot in slots if slot["target"] not in targets]
-    if missing:
-        raise TemplateError(f"Slot targets not found in the document: {', '.join(missing)}", code="unknown_slot_target")
+    slots, controls = _slots_and_controls(raw, editor, document)
     tags = [slugify(tag, 30) for tag in raw.get("tags") or [] if str(tag).strip()][:MAX_TAGS]
+    requires = raw.get("requires") if isinstance(raw.get("requires"), dict) else {}
     return {
         "kind": KIND, "version": VERSION, "id": template_id(raw.get("id"), title, author), "editor": editor,
         "title": title, "description": _text(raw.get("description"), 600), "tags": sorted(set(tags)),
-        "author": author, "license": license_name, "templateVersion": _text(raw.get("templateVersion") or "1.0.0", 20),
+        "author": author, "license": _license(raw.get("license")), "templateVersion": _text(raw.get("templateVersion") or "1.0.0", 20),
         "createdAt": _text(raw.get("createdAt"), 40), "updatedAt": _text(raw.get("updatedAt"), 40),
-        "requires": {"format": EDITORS[editor], "app": _text((raw.get("requires") or {}).get("app") or ">=0.9.0", 20)},
+        "requires": {"format": EDITORS[editor], "app": _text(requires.get("app") or ">=0.9.0", 20)},
         "slots": slots, "controls": controls,
     }
 
@@ -321,24 +362,29 @@ def set_control(document: dict, control: dict[str, Any], value: Any) -> None:
     container[key] = _check_value(control, value)
 
 
+def _fill_3d(document: dict, target: str, url: str, kind: str) -> None:
+    workspace, filename = parse_media_locator(url)
+    for item in document.get("slots") or []:
+        if isinstance(item, dict) and item.get("slot") == target:
+            item.update({"sourceUrl": url, "media": "model3d" if kind == "model3d" else "image",
+                         "sourceRef": {"workspaceId": workspace or "", "filename": filename, "url": url}})
+            if kind != "model3d":
+                item["clip"] = None
+
+
+def _fill_2d(document: dict, target: str, url: str, kind: str) -> None:
+    for layer in document.get("layers") or []:
+        if isinstance(layer, dict) and layer.get("id") == target:
+            layer.update({"source": url, "missingAsset": False})
+            if layer.get("type") in ("image", "video") and kind in ("image", "video"):
+                layer["type"] = kind
+
+
 def fill_slot(editor: str, document: dict, slot: dict[str, Any], url: str) -> None:
     kind = media_kind(parse_media_locator(url)[1]) or "image"
     if slot["accepts"] and kind not in slot["accepts"]:
         raise TemplateError(f"Slot {slot['id']} accepts {', '.join(slot['accepts'])}, not {kind}", code="slot_type")
-    if editor == "video3d":
-        for item in document.get("slots") or []:
-            if isinstance(item, dict) and item.get("slot") == slot["target"]:
-                workspace, filename = parse_media_locator(url)
-                item.update({"sourceUrl": url, "media": "model3d" if kind == "model3d" else "image",
-                             "sourceRef": {"workspaceId": workspace or "", "filename": filename, "url": url}})
-                if kind != "model3d":
-                    item["clip"] = None
-        return
-    for layer in document.get("layers") or []:
-        if isinstance(layer, dict) and layer.get("id") == slot["target"]:
-            layer.update({"source": url, "missingAsset": False})
-            if layer.get("type") in ("image", "video") and kind in ("image", "video"):
-                layer["type"] = kind
+    (_fill_3d if editor == "video3d" else _fill_2d)(document, slot["target"], url, kind)
 
 
 def clear_slot(editor: str, document: dict, slot: dict[str, Any]) -> None:

@@ -6,6 +6,7 @@ the same library through HTTP and the MCP ``templates.*`` commands.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -239,12 +240,26 @@ class TemplateLibrary:
     def _preview(self, workspace: str, preview: str | None) -> dict[str, bytes]:
         if not preview:
             return {}
+        if preview.startswith("data:image/"):
+            return self._inline_preview(preview)
         owner, filename = parse_media_locator(preview, workspace)
         suffix = Path(filename).suffix.casefold()
         data = self.reader(owner or workspace, filename) if suffix in PREVIEW_EXT else None
         if data is None or len(data) > MAX_PREVIEW_BYTES:
             raise TemplateError("preview must be a PNG, JPEG or WebP image up to 2 MB in the workspace", code="invalid_preview")
         return {f"preview{'.jpg' if suffix == '.jpeg' else suffix}": data}
+
+    @staticmethod
+    def _inline_preview(preview: str) -> dict[str, bytes]:
+        head, _, body = preview.partition(",")
+        suffix = {"data:image/png;base64": ".png", "data:image/jpeg;base64": ".jpg", "data:image/webp;base64": ".webp"}.get(head)
+        try:
+            data = base64.b64decode(body, validate=True) if suffix else b""
+        except ValueError:
+            data = b""
+        if not data or len(data) > MAX_PREVIEW_BYTES:
+            raise TemplateError("preview must be a PNG, JPEG or WebP image up to 2 MB", code="invalid_preview")
+        return {f"preview{suffix}": data}
 
     def save(self, *, workspace: str, editor: str, document: Any, metadata: dict[str, Any], include_media: bool = False,
              preview: str | None = None, expected_updated_at: str | None = None) -> dict[str, Any]:
@@ -270,18 +285,7 @@ class TemplateLibrary:
               controls: dict[str, Any] | None = None) -> dict[str, Any]:
         folder, manifest, document = self._read(template_id)
         editor = manifest["editor"]
-        slots, controls = slots or {}, controls or {}
-        known_slots = {slot["id"]: slot for slot in manifest.get("slots") or []}
-        known_controls = {control["id"]: control for control in manifest.get("controls") or []}
-        unknown = sorted((set(slots) - set(known_slots)) | (set(controls) - set(known_controls)))
-        if unknown:
-            raise TemplateError(f"Unknown slots or controls: {', '.join(unknown)}", code="unknown_input")
-        for control_id, value in controls.items():
-            set_control(document, known_controls[control_id], value)
-        for slot_id, source in slots.items():
-            if classify_url(str(source)) not in {"gallery", "uploads"} and not is_bundled_example(str(source)):
-                raise TemplateError(f"Slot {slot_id} needs a workspace or example file", code="invalid_source")
-            fill_slot(editor, document, known_slots[slot_id], str(source))
+        self._set_inputs(manifest, document, slots or {}, controls or {})
         copied: list[str] = []
 
         def materialize(value: str) -> str | None:
@@ -299,6 +303,20 @@ class TemplateLibrary:
         applied = rewrite_media(editor, document, materialize)
         missing = [slot["id"] for slot in manifest.get("slots") or [] if slot.get("required") and not self._slot_filled(editor, applied, slot)]
         return {"template": template_id, "editor": editor, "document": applied, "copiedMedia": copied, "missingSlots": missing}
+
+    @staticmethod
+    def _set_inputs(manifest: dict, document: dict, slots: dict[str, str], controls: dict[str, Any]) -> None:
+        known_slots = {slot["id"]: slot for slot in manifest.get("slots") or []}
+        known_controls = {control["id"]: control for control in manifest.get("controls") or []}
+        unknown = sorted((set(slots) - set(known_slots)) | (set(controls) - set(known_controls)))
+        if unknown:
+            raise TemplateError(f"Unknown slots or controls: {', '.join(unknown)}", code="unknown_input")
+        for control_id, value in controls.items():
+            set_control(document, known_controls[control_id], value)
+        for slot_id, source in slots.items():
+            if classify_url(str(source)) not in {"gallery", "uploads"} and not is_bundled_example(str(source)):
+                raise TemplateError(f"Slot {slot_id} needs a workspace or example file", code="invalid_source")
+            fill_slot(manifest["editor"], document, known_slots[slot_id], str(source))
 
     @staticmethod
     def _slot_filled(editor: str, document: dict, slot: dict[str, Any]) -> bool:
