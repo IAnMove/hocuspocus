@@ -34,6 +34,7 @@ from services.scene_commands import DocumentInput, command_error as scene_error
 from services.scene_recording import SceneRecordingTranscodeError, validate_scene_recording_output
 from services.task_command_admission import TaskCommandConflict
 from services.task_manager import get_cancellation_token, new_task_id
+from services.export_receipts import project_export_receipt
 
 
 OPERATION = "scenes.world3d.export"
@@ -612,7 +613,7 @@ class World3DExportService:
             if entry is None:
                 raise http_error(404, "receipt_not_found", "No admission exists for this intention in this workspace")
             task = registry.get(entry["task_id"])
-            return {"receipt": entry["receipt"], "task": task, "capabilities": self.capabilities()}
+            return {"receipt": project_export_receipt(entry["receipt"], task), "task": task, "capabilities": self.capabilities()}
         except (OSError, sqlite3.Error) as error:
             raise http_error(503, "storage_unavailable", "Command storage is unavailable") from error
 
