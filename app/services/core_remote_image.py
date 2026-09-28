@@ -91,7 +91,14 @@ def is_minimax_image_request(body: dict[str, Any]) -> bool:
 
 
 def _public(job: dict[str, Any]) -> dict[str, Any]:
-    return {
+    from services.generation_output_name import status_output_fields
+
+    workspace = str(job.get("workspace") or "default")
+    try:
+        workspace_directory = core.workspace_dir(workspace)
+    except ValueError:
+        workspace_directory = ""
+    payload = {
         "job_id": job["id"],
         "task_id": job.get("task_id"),
         "root_task_id": job.get("root_task_id") or job.get("task_id"),
@@ -108,6 +115,10 @@ def _public(job: dict[str, Any]) -> dict[str, Any]:
         "finished_at": job.get("finished_at"),
         "generation_details": {"model_type": MODEL_ID, "generation_mode": "image"},
     }
+    payload.update(status_output_fields(
+        payload["output_files"], workspace=workspace, workspace_dir=workspace_directory,
+    ))
+    return payload
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
@@ -185,7 +196,14 @@ def encode_subject_reference(source: str, workspace: str) -> str:
     return local_image_data_uri(path)
 
 
-def start_job(body: dict[str, Any], *, workspace: str, job_id: str | None = None, on_update=None) -> dict[str, Any]:
+def start_job(
+    body: dict[str, Any],
+    *,
+    workspace: str,
+    job_id: str | None = None,
+    on_update=None,
+    output_name: str | None = None,
+) -> dict[str, Any]:
     from services import execution_mode
 
     prompt = prepare_prompt(str(body.get("prompt") or ""))
@@ -208,7 +226,12 @@ def start_job(body: dict[str, Any], *, workspace: str, job_id: str | None = None
             "created_at": now, "started_at": None, "finished_at": None,
             "_cancel_requested": False,
             "_on_update": on_update,
-            "request": {"prompt": prompt, "aspect_ratio": ratio, "subject_reference": subject},
+            "request": {
+                "prompt": prompt,
+                "aspect_ratio": ratio,
+                "subject_reference": subject,
+                "output_name": output_name or None,
+            },
         }
         _JOBS[job_id] = job
         initial = _public(job)
@@ -238,6 +261,7 @@ def _run(job_id: str) -> None:
             filename_prefix="minimax-image-01",
             task_id=job_id,
             root_task_id=job_id,
+            output_name=request.get("output_name") or None,
         )
         _patch(
             job_id, status="completed", phase="completed", progress=100, step=1,

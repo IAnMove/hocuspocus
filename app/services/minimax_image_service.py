@@ -14,12 +14,12 @@ import os
 import re
 import time
 import threading
-import uuid
 
 import requests
 
 from . import resource_scheduler
 from .asset_manifest import publish_generation_sidecar
+from .generation_output_name import chosen_image_filename
 
 
 MODEL_ID = "minimax:image-01"
@@ -94,6 +94,7 @@ def generate_image(
     filename_prefix: str = "minimax-image-01",
     task_id: str = "",
     root_task_id: str = "",
+    output_name: str | None = None,
 ) -> dict:
     """Generate and persist one Image-01 image plus secret-free metadata."""
     if not str(api_key or "").strip():
@@ -157,8 +158,7 @@ def generate_image(
         raise MiniMaxImageError("MiniMax image is too large", 413)
 
     os.makedirs(output_dir, exist_ok=True)
-    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    name = f"{stamp}_{filename_prefix}_{uuid.uuid4().hex[:8]}.jpg"
+    name = chosen_image_filename(output_name, filename_prefix=filename_prefix)
     path = os.path.join(output_dir, name)
     with open(path + ".tmp", "wb") as handle:
         handle.write(image_bytes)

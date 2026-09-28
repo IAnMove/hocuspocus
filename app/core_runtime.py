@@ -233,7 +233,15 @@ async def generate(request: Request):
     if core_remote_image.is_minimax_image_request(body):
         workspace = str(body.get("workspace") or core.active_workspace() or "default")
         try:
-            return core_remote_image.start_job(body, workspace=workspace)
+            from services.generation_output_name import OutputNameError, apply_output_name
+            output_name = apply_output_name(body)
+        except OutputNameError as error:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": error.code, "message": str(error), "retryable": False},
+            ) from error
+        try:
+            return core_remote_image.start_job(body, workspace=workspace, output_name=output_name)
         except Exception as error:
             from services.minimax_image_service import MiniMaxImageError
             if isinstance(error, MiniMaxImageError):
