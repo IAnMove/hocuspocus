@@ -76,3 +76,24 @@ def test_remap_drops_a_gap_and_trims_the_overlap(tmp_path: Path):
     destination = tmp_path / "out.wav"
     write_wav(str(destination), np.zeros(1000, dtype=np.float32), 8000)
     assert destination.stat().st_size > 44
+
+
+def test_remap_keeps_a_clip_that_already_overlaps_the_keep_window():
+    """A 1s crossfade puts clip 2 on screen at t=9. Keeping 0–9.5 of the
+    soundtrack must trim that clip, not drop it as if it started at t=10."""
+    document = {
+        "clips": [
+            {"id": "c1", "trimStart": 0, "trimEnd": 10, "transition": "crossfade", "transitionDuration": 1},
+            {"id": "c2", "trimStart": 0, "trimEnd": 10},
+        ],
+        "overlays": [{"id": "edge", "start": 9.0, "end": 10.0}],
+        "audioCues": [],
+    }
+    updated, report = remap_montage(document, [[0.0, 0.0, 9.5]])
+    assert [clip["id"] for clip in updated["clips"]] == ["c1", "c2"]
+    assert updated["clips"][0]["trimEnd"] == 9.5
+    assert updated["clips"][1]["trimStart"] == 0
+    assert updated["clips"][1]["trimEnd"] == 0.5
+    dropped = {item["id"] for item in report["dropped"]}
+    assert "c2" not in dropped
+    assert updated["overlays"][0]["start"] == 9.0 and updated["overlays"][0]["end"] == 9.5

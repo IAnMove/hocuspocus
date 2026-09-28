@@ -13,6 +13,8 @@ from typing import Any
 
 import numpy as np
 
+from services.montage_shots import timeline_slots
+
 SEARCH_SECONDS = 1.6
 CONTEXT_SECONDS = 4.0
 FADE_SECONDS = 0.012
@@ -234,13 +236,18 @@ def _piece_changed(pieces: list, start: float, end: float) -> bool:
     return abs(pieces[0][2] - start) > 0.001 or abs(pieces[0][3] - end) > 0.001
 
 
+def _clip_span(clip: dict[str, Any]) -> float:
+    return max(0.0, float(clip.get("trimEnd") or 0) - float(clip.get("trimStart") or 0))
+
+
 def _remap_clips(document: dict[str, Any], time_map: list[list[float]], report: dict[str, list]) -> list:
-    cursor = 0.0
+    # Overlays/cues already sit on soundtrack time. Clips must use the same
+    # overlap-aware slots as export and the shot board, or a crossfade makes
+    # the second clip look like it starts after the cut and gets dropped.
+    source = list(document.get("clips") or [])
+    slots = timeline_slots(source, _clip_span)
     clips = []
-    for clip in document.get("clips") or []:
-        span = float(clip.get("trimEnd") or 0) - float(clip.get("trimStart") or 0)
-        start, end = cursor, cursor + max(span, 0.0)
-        cursor = end
+    for clip, (start, end) in zip(source, slots):
         pieces = _remap_interval(start, end, time_map)
         if not pieces:
             report["dropped"].append({"kind": "clip", "id": clip.get("id"), "start": round(start, 3), "end": round(end, 3)})
