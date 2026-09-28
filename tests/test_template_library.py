@@ -187,6 +187,21 @@ def test_include_media_packs_speech_and_apply_rewrites_it(env):
     url = applied["document"]["slots"][0]["speech"]["audio"]["url"]
     assert url.startswith("/api/v1/file/tpl-") and url.endswith("?workspace=space")
     assert applied["document"]["slots"][0]["speech"]["facePack"]["url"].startswith("/api/v1/file/tpl-")
+
+
+def test_apply_keeps_audio_track_filename_as_basename(env):
+    library, _, workspace = env
+    (workspace / "song.wav").write_bytes(b"RIFF-song")
+    scene = _scene2d()
+    scene["audioTracks"] = [{"id": "m", "filename": f"/api/v1/file/song.wav?workspace={WS}", "kind": "music"}]
+    saved = library.save(workspace=WS, editor="video2d", document=scene, include_media=True,
+                         metadata={"title": "Scored card"})
+    applied = library.apply(saved["id"], workspace=WS)
+    tracks = applied["document"]["audioTracks"]
+    filename = tracks[0]["filename"]
+    name = filename.split("?", 1)[0].rsplit("/", 1)[-1]
+    assert filename.startswith("/api/v1/file/tpl-") and filename.endswith(".wav?workspace=space")
+    assert (workspace / name).is_file()
     assert any(name.endswith(".wav") for name in applied["copiedMedia"])
 
 

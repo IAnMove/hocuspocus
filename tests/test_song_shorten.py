@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from services.song_shorten import remap_montage, shorten_audio, snap_time, suggest_keep, write_wav
 
@@ -18,6 +19,7 @@ def _clicks(seconds: float = 8.0, bpm: float = 120.0, sample_rate: int = 22050) 
 
 
 def test_cut_snaps_to_the_click_phase_not_the_original_instant():
+    pytest.importorskip("librosa")
     sample_rate = 22050
     audio = _clicks(sample_rate=sample_rate)
     snapped = snap_time(audio, sample_rate, 2.1)
