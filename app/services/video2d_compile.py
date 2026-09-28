@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import json
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from services import resource_scheduler
+from services.mcp_compact import compact_compile
+from services.resource_scheduler import ResourceAcquireCancelled
 from services.video2d_catalogs import CATALOGS
 
 BRIDGE_TIMEOUT = 30
@@ -21,9 +25,9 @@ OPERATIONS = ("scenes.template.compile", "scenes.text.template", "scenes.lyrics.
 LYRIC_FORMATS = ("srt", "lrc", "plain", "timing-bundle")
 FRAME_RATES = (24, 30, 60)
 FIELDS = {
-    "scenes.template.compile": frozenset({"templateId", "controls", "assets", "width", "height", "duration", "fps"}),
-    "scenes.text.template": frozenset({"templateId", "fields", "start", "duration", "width", "height"}),
-    "scenes.lyrics.import": frozenset({"format", "text", "duration"}),
+    "scenes.template.compile": frozenset({"templateId", "controls", "assets", "width", "height", "duration", "fps", "full"}),
+    "scenes.text.template": frozenset({"templateId", "fields", "start", "duration", "width", "height", "full"}),
+    "scenes.lyrics.import": frozenset({"format", "text", "duration", "full"}),
 }
 REQUIRED = {
     "scenes.template.compile": frozenset({"templateId"}),
@@ -33,17 +37,18 @@ REQUIRED = {
 DESCRIPTIONS = {
     "scenes.template.compile": (
         "Compile one scene template with the UI TypeScript builders. assets maps slot id to a durable "
-        "source. Returns result.document and result.warnings. template_unknown and template_missing_slot "
+        "source. Default result is layer ids, text ids, warning codes, duration and size. "
+        "Pass full true for result.document and result.warnings. template_unknown and template_missing_slot "
         "are stable errors. Does not save or export. No GPU."
     ),
     "scenes.text.template": (
-        "Build kinetic text cues with buildTextTemplate. Returns result.texts. "
-        "text_template_unknown is a stable error. Does not save or export. No GPU."
+        "Build kinetic text cues with buildTextTemplate. Default result is text ids and textCount. "
+        "Pass full true for result.texts. text_template_unknown is a stable error. Does not save or export. No GPU."
     ),
     "scenes.lyrics.import": (
-        "Import srt, lrc, plain, or timing-bundle text with the UI lyrics parser. Returns result.lyrics "
-        "in the scene document shape. lyrics_bad_format and lyrics_bad_file are stable errors. "
-        "Does not save, export, or fetch the network. No GPU."
+        "Import srt, lrc, plain, or timing-bundle text with the UI lyrics parser. Default result is "
+        "line ids, duration and lineCount. Pass full true for result.lyrics. lyrics_bad_format and "
+        "lyrics_bad_file are stable errors. Does not save, export, or fetch the network. No GPU."
     ),
 }
 _SOURCE_PREFIXES = ("javascript:", "blob:", "file:", "filesystem:")
@@ -284,7 +289,7 @@ def _parse_bridge(stdout: str) -> dict:
     return parsed
 
 
-def spawn_bridge(payload: dict) -> dict:
+def _run_bridge(payload: dict) -> dict:
     try:
         completed = subprocess.run(
             ["node", str(TSX), "--tsconfig", "tsconfig.app.json", str(SCRIPT)],
@@ -304,6 +309,19 @@ def spawn_bridge(payload: dict) -> dict:
         detail = (completed.stderr or completed.stdout or "compile failed").strip()
         raise CompileError("compile_bridge_failed", detail[:300])
     return _parse_bridge(completed.stdout)
+
+
+def spawn_bridge(payload: dict) -> dict:
+    """Run one TypeScript compile on the video2d-compile CPU lane (one at a time)."""
+    try:
+        with resource_scheduler.coordinator.acquire(
+            resource_scheduler.cpu_lane("video2d-compile"),
+            task_id=f"video2d-compile-{uuid.uuid4().hex}",
+            description="Video 2D TypeScript compile",
+        ):
+            return _run_bridge(payload)
+    except ResourceAcquireCancelled as error:
+        raise CompileError("compile_bridge_timeout", "TypeScript compile timed out") from error
 
 
 def _bridge_result(bridged: dict) -> dict:
@@ -335,9 +353,16 @@ def _shape(name: str, result: dict) -> dict:
 
 
 def execute(command: Any) -> dict[str, Any]:
-    name, data = _envelope(command)
+    name, raw = _envelope(command)
+    data = dict(raw)
+    full = data.pop("full", False)
+    if type(full) is not bool:
+        raise CompileError("compile_bad_envelope", "full")
     bridged = spawn_bridge({"operation": name, "input": _prepare(name, data)})
-    return {"version": 1, "status": "completed", "operation": name, "result": _shape(name, _bridge_result(bridged))}
+    shaped = _shape(name, _bridge_result(bridged))
+    if full is not True:
+        shaped = compact_compile(name, shaped)
+    return {"version": 1, "status": "completed", "operation": name, "result": shaped}
 
 
 def _schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -384,7 +409,7 @@ def command_catalog() -> list[dict[str, Any]]:
         "name": name,
         "description": DESCRIPTIONS[name],
         "mutation": False,
-        "inputSchema": _schema(properties, required),
+        "inputSchema": _schema({**properties, "full": {"type": "boolean"}}, required),
     } for name, (properties, required) in specs.items()]
 
 

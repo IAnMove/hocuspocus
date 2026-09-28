@@ -26,7 +26,7 @@ REQUEST_TOOLS = MUTATIONS | {'analyze'}
 # separate /api/v1/model3d/generate contract and is intentionally not routed
 # through this MCP tool.
 GENERATION_MODES = ('image', 'video', 'audio', 'avatar')
-LEGACY_TOOLS = REQUEST_TOOLS | {'models', 'processors', 'status', 'assets', 'collections'}
+LEGACY_TOOLS = REQUEST_TOOLS | {'models', 'models.list', 'processors', 'status', 'assets', 'collections'}
 
 
 def _selected_operations(command_operations):
@@ -57,7 +57,8 @@ def _command_tool(operation):
 def tool_definitions(available=None, command_operations=None):
     tools = []
     for name, description in [
-        ('models', 'Discover exact model identifiers and capabilities.'),
+        ('models', 'List model summaries (id, name, one-line description, counts). Pass detail true for the full catalog, or model_type for one model\'s options, including allowed selector values.'),
+        ('models.list', 'Same summary list as models. Pass detail true for the full catalog, or model_type for one model\'s options, including allowed selector values.'),
         ('processors', 'Discover available postprocessors and hardware restrictions.'),
         ('status', 'Read the canonical status of a previously submitted job.'),
         ('assets', 'Find existing canonical media IDs and URLs. Paginate with limit and offset; never invent filenames.'),
@@ -102,8 +103,11 @@ def tool_definitions(available=None, command_operations=None):
         elif name == 'assets':
             properties = {key: {'type': 'string'} for key in ('search', 'kind', 'workspace')}
             properties.update(limit={'type': 'integer', 'minimum': 1, 'maximum': 500}, offset={'type': 'integer', 'minimum': 0})
-        elif name == 'models':
-            properties = {'model_type': {'type': 'string', 'description': 'Optional exact ID to get input/options instead of the catalog.'}}
+        elif name in {'models', 'models.list'}:
+            properties = {
+                'model_type': {'type': 'string', 'description': 'Optional exact ID. Returns that model\'s input and options instead of the summary list.'},
+                'detail': {'type': 'boolean', 'description': 'When true, return the full model catalog. Default is a short summary.'},
+            }
         tools.append({'name': name, 'description': description,
                       'inputSchema': {'type': 'object', 'properties': properties, 'required': required, 'additionalProperties': False},
                       'annotations': {'readOnlyHint': name not in MUTATIONS, 'destructiveHint': False, 'idempotentHint': True}})
@@ -251,7 +255,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
             return result
         if name == 'status':
             result = handlers[name](arguments['job_id'])
-        elif name in {'assets', 'models'}:
+        elif name in {'assets', 'models', 'models.list'}:
             result = handlers[name](arguments)
         else:
             result = handlers[name]()

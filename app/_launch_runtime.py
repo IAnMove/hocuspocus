@@ -441,6 +441,7 @@ from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
     acknowledge_cancel,
     collect_job_outputs,
+    ensure_generation_priority,
     finish_job,
     generation_queue_position,
     generation_slot,
@@ -1323,8 +1324,12 @@ def _check_model_downloaded(model_type: str) -> bool:
 
 
 @api.get("/api/v1/models")
-def list_models():
-    """List available model families and model types."""
+def list_models(detail: bool = True):
+    """List available model families and model types.
+
+    HTTP defaults to the full catalog so the Studio UI keeps working.
+    Pass detail=false for the short MCP summary.
+    """
     from services.director_model_compat import assess_director_model
 
     # Families
@@ -1424,7 +1429,21 @@ def list_models():
         "tool_only": True,
     })
 
-    return {"families": families, "models": models}
+    payload = {"families": families, "models": models}
+    if detail:
+        return payload
+    from services.mcp_compact import summarize_model_catalog
+    return summarize_model_catalog(payload)
+
+
+def mcp_model_list(args):
+    """models and models.list: summaries unless detail is true or one id is named."""
+    if not isinstance(args, dict):
+        args = {}
+    model_type = args.get("model_type")
+    if isinstance(model_type, str) and model_type.strip():
+        return get_model_options(model_type)
+    return list_models(detail=args.get("detail") is True)
 
 
 _MODEL_VISIBILITY_CONFIG_KEY = "maestro_model_visibility"
@@ -6498,6 +6517,7 @@ def _minimax_h3_runtime_advisory(model_def: dict) -> dict | None:
 def get_model_options(model_type: str):
     """Return UI-relevant model options for dynamic rendering."""
     from services.image_edit_workflow import image_edit_capabilities
+    from services.model_selectors import selector_catalog
     if _is_legacy_h3_model(model_type):
         return dict(minimax_h3_service.MODEL_OPTIONS)
     if model_type in model3d_service.MODEL_BY_ID:
@@ -6728,6 +6748,7 @@ def get_model_options(model_type: str):
         # Max voice slots the model accepts. UI caps the "Add Voice" button
         # at this number. Defaults to 6 (Kugel); Scenema sets 2.
         "max_voice_count": md.get("max_voice_count"),
+        "selectors": selector_catalog(md),
     }
 
 
@@ -10885,7 +10906,20 @@ async def generate(request: Request):
     from services.generation_provenance import normalize_submission_provenance
 
     body = await request.json()
+    if isinstance(body, dict):
+        try:
+            ensure_generation_priority(body)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
     provenance = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
+    try:
+        from services.generation_output_name import OutputNameError, apply_output_name
+        apply_output_name(body)
+    except OutputNameError as error:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": error.code, "message": str(error), "retryable": False},
+        ) from error
     collection_id = provenance.get("workspace_id")
     if collection_id and not _workspace_collection_registry.get(collection_id):
         raise HTTPException(status_code=400, detail="Unknown Workspace collection")
@@ -10917,6 +10951,11 @@ async def generate(request: Request):
     except Exception:
         _base_model_type = body.get("model_type")
     _generation_model_def = wgp.get_model_def(body["model_type"]) or {}
+    from services.model_selectors import InvalidSelector, validate_submitted_selectors
+    try:
+        validate_submitted_selectors(body, _generation_model_def)
+    except InvalidSelector as error:
+        raise HTTPException(status_code=400, detail=error.detail) from error
     from services.wangp_submission import prepare_generation_inputs
     try:
         prepare_generation_inputs(body, _generation_model_def, requested_workspace,
@@ -11365,6 +11404,13 @@ async def generate(request: Request):
 
     # Capture workspace at submission time — NOT at execution time
     workspace = body.pop("workspace", None) or _get_active_workspace()
+    leftovers = globals().get("_job_leftovers")
+    if leftovers is not None:
+        duplicate = leftovers.duplicate_for_submit(body, workspace)
+        if duplicate is not None:
+            if callable(getattr(request, "admit_generation_command", None)):
+                raise HTTPException(status_code=409, detail=duplicate)
+            return duplicate
     admission = getattr(request, "admit_generation_command", None)
     if callable(admission):
         return admission(body, workspace, provenance)
@@ -26254,6 +26300,11 @@ def _run_outpaint_shot_generation(job_id):
 def get_status(job_id: str):
     """Get generation job status."""
     if job_id not in _jobs:
+        leftovers = globals().get("_job_leftovers")
+        if leftovers is not None:
+            found = leftovers.status_for(job_id)
+            if found is not None:
+                return found
         raise HTTPException(status_code=404, detail="Job not found")
     j = snapshot_job(_jobs[job_id])
     started_at = j.get("started_at")
@@ -26262,7 +26313,7 @@ def get_status(job_id: str):
         max(0.0, float(finished_at or time.time()) - float(started_at))
         if started_at else None
     )
-    return {
+    payload = {
         "job_id": j["id"],
         "task_id": j.get("task_id"),
         "root_task_id": j.get("root_task_id") or j.get("task_id"),
@@ -26295,6 +26346,13 @@ def get_status(job_id: str):
         # renders the OOM recovery banner when this is non-null.
         "oom_info": j.get("oom_info"),
     }
+    from services.generation_output_name import status_output_fields
+    payload.update(status_output_fields(
+        payload.get("output_files"),
+        workspace=str(j.get("workspace") or ""),
+        workspace_dir=str(j.get("out_dir") or ""),
+    ))
+    return payload
 
 
 @api.post("/api/v1/cancel/{job_id}")
@@ -26392,6 +26450,43 @@ def get_generation_queue_recovery():
     return {"jobs": [_recovery_job_summary(record) for record in candidates]}
 
 
+def _queue_recovered_generation(record: dict):
+    """Put one durable leftover back on the live queue without starting it.
+
+    Returns ``(job, created)``. ``created`` is false when that id is already
+    live, so resume cannot start a second worker for the same leftover.
+    """
+    job_id = str(record.get("id") or "").strip()
+    params = record.get("params")
+    if not job_id or not isinstance(params, dict) or not params.get("model_type"):
+        if job_id:
+            _durable_generation_queue.remove(job_id)
+        return None, False
+    existing = _jobs.get(job_id)
+    if existing is not None:
+        return existing, False
+    workspace = str(record.get("workspace") or "default")
+    _reset_canonical_task_for_resume(
+        workspace,
+        f"task-generation-{job_id}",
+    )
+    job = _new_generation_job(
+        params,
+        workspace,
+        job_id=job_id,
+        created_at=float(record.get("created_at") or time.time()),
+        recovered=True,
+        reserve_generation=not isinstance(
+            params.get("_h3_window_plan_pending"), dict,
+        ),
+        provenance=record.get("provenance") if isinstance(record.get("provenance"), dict) else None,
+    )
+    _jobs[job_id] = job
+    _persist_generation_job(job)
+    _cancel_h3_idle_release()
+    return job, True
+
+
 @api.post("/api/v1/jobs/recovery/resume")
 def resume_generation_queue():
     """Requeue persisted requests in their original submission order.
@@ -26406,35 +26501,13 @@ def resume_generation_queue():
         candidates = _image_generation_commands.filter_recovery(
             _durable_generation_queue.list(exclude_ids=_jobs.keys()))
         for record in candidates:
-            job_id = str(record.get("id") or "").strip()
-            params = record.get("params")
-            if not job_id or not isinstance(params, dict) or not params.get("model_type"):
-                if job_id:
-                    _durable_generation_queue.remove(job_id)
+            job, created = _queue_recovered_generation(record)
+            if not created or job is None:
                 continue
-            workspace = str(record.get("workspace") or "default")
-            _reset_canonical_task_for_resume(
-                workspace,
-                f"task-generation-{job_id}",
-            )
-            job = _new_generation_job(
-                params,
-                workspace,
-                job_id=job_id,
-                created_at=float(record.get("created_at") or time.time()),
-                recovered=True,
-                reserve_generation=not isinstance(
-                    params.get("_h3_window_plan_pending"), dict,
-                ),
-                provenance=record.get("provenance") if isinstance(record.get("provenance"), dict) else None,
-            )
-            _jobs[job_id] = job
-            _persist_generation_job(job)
-            _cancel_h3_idle_release()
             threads.append(threading.Thread(
                 target=_run_generation_with_preparation,
-                args=(job_id,),
-                name=f"recovered-generation-{job_id}",
+                args=(job["id"],),
+                name=f"recovered-generation-{job['id']}",
                 daemon=False,
             ))
             resumed.append(_recovery_job_summary(record))
@@ -36777,6 +36850,11 @@ from routers.audio_shorten import (
     command_handlers as audio_shorten_handlers,
     create_audio_shorten_router,
 )
+from services.job_leftovers import (
+    JobLeftovers,
+    command_catalog as job_leftover_catalog,
+    command_handlers as job_leftover_handlers,
+)
 
 def _resolve_shorten_source(source: str, workspace: str) -> str:
     return _resolve_request_media_path(source, workspace=workspace, kinds=("audio",))
@@ -36797,14 +36875,48 @@ api.include_router(create_publish_router(
     resolve_source=lambda source, workspace: _resolve_request_media_path(source, workspace=workspace, kinds=("video", "audio")),
     workspace_dir=_workspace_dir,
 ))
+from services.jobs_wait import command_catalog as jobs_wait_catalog, command_handlers as jobs_wait_handlers
+_jobs_wait_handlers = jobs_wait_handlers(get_status, lambda job_id: _jobs.get(job_id))
+
+
+def _prepare_generation_leftovers(records):
+    _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
+    return _image_generation_commands.filter_recovery(records)
+
+
+def _start_recovered_generation(job):
+    threading.Thread(
+        target=_run_generation_with_preparation,
+        args=(job["id"],),
+        name=f"recovered-generation-{job['id']}",
+        daemon=False,
+    ).start()
+
+
+def _discard_generation_leftover(record):
+    _image_generation_commands.discard_recovery([record])
+    _durable_generation_queue.remove(str(record.get("id") or ""))
+
+
+_job_leftovers = JobLeftovers(
+    queue=_durable_generation_queue,
+    jobs=_jobs,
+    lock=_queue_recovery_lock,
+    prepare=_prepare_generation_leftovers,
+    rehydrate=_queue_recovered_generation,
+    start=_start_recovered_generation,
+    discard_record=_discard_generation_leftover,
+)
+_image_generation_commands.leftover_receipt_lookup = _job_leftovers.receipt_for
+_job_leftover_handlers = job_leftover_handlers(_job_leftovers)
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
-    handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
+    handlers={"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers},
+              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *template_command_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog()],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *template_command_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())

@@ -69,11 +69,20 @@ def image_command_catalog(additional_operations=()):
                              "required": ["version", "operation", "input"]}}, *additional_operations]
 
 
+def _generation_arguments(arguments):
+    if not isinstance(arguments, dict):
+        raise command_error(422, "invalid_command", "Use version, intent_id and input for the generation tool")
+    if "validate" in arguments and type(arguments.get("validate")) is not bool:
+        raise command_error(422, "invalid_command", "validate must be true or false")
+    if set(arguments) - {"validate"} != {"version", "intent_id", "input"}:
+        raise command_error(422, "invalid_command", "Use version, intent_id and input for the generation tool")
+    return arguments
+
+
 def image_command_handlers(service):
     def submission_handler(operation):
         async def submit(arguments):
-            if not isinstance(arguments, dict) or set(arguments) != {"version", "intent_id", "input"}:
-                raise command_error(422, "invalid_command", "Use version, intent_id and input for the generation tool")
+            _generation_arguments(arguments)
             return await service.submit({**arguments, "operation": operation}, trusted_tool="external_agent")
         return submit
 

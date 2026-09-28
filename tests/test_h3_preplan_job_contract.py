@@ -321,6 +321,7 @@ def _harness(
         "update_job": update_job,
         "finish_job": finish_job,
         "acknowledge_cancel": acknowledge_cancel,
+        "ensure_generation_priority": lambda _body: None,
         "snapshot_job": lambda job: dict(job),
         "_run_generation": lambda job_id, **_kwargs: gpu_calls.append(job_id),
         "_image_generation_commands": SimpleNamespace(native_worker=lambda _job: None),
@@ -436,6 +437,7 @@ def test_preplanner_exception_fails_without_leaking_a_fifo_ticket(
 
 def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
     resume = _function("resume_generation_queue")
+    helper = _function("_queue_recovered_generation")
     targets = [
         keyword.value.id
         for call in ast.walk(resume)
@@ -448,10 +450,15 @@ def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
 
     assert targets
     assert set(targets) == {"_run_generation_with_preparation"}
+    resume_calls = [
+        node.func.id for node in ast.walk(resume)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    ]
+    assert "_queue_recovered_generation" in resume_calls
 
     calls = {
         node.func.id: node.lineno
-        for node in ast.walk(resume)
+        for node in ast.walk(helper)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
         and node.func.id in {
             "_reset_canonical_task_for_resume", "_new_generation_job",
@@ -459,3 +466,5 @@ def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
     }
     assert "_reset_canonical_task_for_resume" in calls
     assert calls["_reset_canonical_task_for_resume"] < calls["_new_generation_job"]
+    assert "duplicate_for_submit" in ast.unparse(_function("generate"))
+    assert "status_for" in ast.unparse(_function("get_status"))

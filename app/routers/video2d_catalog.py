@@ -10,12 +10,20 @@ def create_video2d_catalog_router() -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/v1/scenes/catalog")
-    def catalog(kind: str | None = None, family: str | None = None, q: str | None = None):
+    def catalog(
+        kind: str | None = None,
+        family: str | None = None,
+        q: str | None = None,
+        detail: bool = False,
+        id: str | None = None,
+    ):
         payload = {
             key: value
-            for key, value in (("kind", kind), ("family", family), ("q", q))
+            for key, value in (("kind", kind), ("family", family), ("q", q), ("id", id))
             if value is not None
         }
+        if detail:
+            payload["detail"] = True
         try:
             return query_catalog(payload)
         except CatalogError as error:

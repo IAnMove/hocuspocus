@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from services.video2d_compile import CompileError, command_catalog, execute
+from services.video2d_compile import CompileError, command_catalog, execute, spawn_bridge
 
 ROOT = Path(__file__).resolve().parents[1]
 TSX = ROOT / "ui" / "node_modules" / "tsx" / "dist" / "cli.mjs"
 ASSETS = {"hero": "/api/v1/file/hero.png", "plate": "/api/v1/file/plate.png"}
 
 
-def _compile(template_id="cinema-establishing", **extra):
+def _compile(template_id="cinema-establishing", *, full=False, **extra):
     payload = {"templateId": template_id, "assets": ASSETS, **extra}
+    if full:
+        payload["full"] = True
     return {"version": 1, "operation": "scenes.template.compile", "input": payload}
 
 
@@ -69,9 +72,13 @@ def test_compile_envelope_returns_the_document_and_does_not_save(monkeypatch):
     monkeypatch.setattr("services.video2d_compile.spawn_bridge", fake_bridge)
     result = execute(_compile())
     assert seen["payload"]["input"]["templateId"] == "cinema-establishing"
+    assert "full" not in seen["payload"]["input"]
     assert result["status"] == "completed"
-    assert set(result["result"]) == {"document", "warnings"}
-    assert result["result"]["document"]["layers"][0]["id"] == "plate"
+    assert result["result"]["layerIds"] == ["plate"]
+    assert "document" not in result["result"]
+    full = execute(_compile(full=True))
+    assert set(full["result"]) == {"document", "warnings"}
+    assert full["result"]["document"]["layers"][0]["id"] == "plate"
 
 
 @pytest.mark.parametrize(
@@ -91,7 +98,7 @@ def test_bad_envelopes_use_a_stable_code(command, code, monkeypatch):
 
 @pytest.mark.skipif(not TSX.is_file(), reason="ui node_modules is not installed")
 def test_compile_calls_the_typescript_builders():
-    result = execute(_compile())
+    result = execute(_compile(full=True))
     assert result["result"]["document"]["name"] == "Plano de establecimiento · candidata"
     assert [layer["id"] for layer in result["result"]["document"]["layers"]] == ["plate", "hero", "camera", "atmosphere-dust"]
 
@@ -127,10 +134,26 @@ def test_video2d_candidate_forwards_catalog_duration_and_keeps_assets(monkeypatc
 
 @pytest.mark.skipif(not TSX.is_file(), reason="ui node_modules is not installed")
 def test_video2d_candidate_compile_keeps_slot_images():
-    result = execute(_compile("documentary-history"))
+    result = execute(_compile("documentary-history", full=True))
     layers = {layer["id"]: layer for layer in result["result"]["document"]["layers"]}
     assert result["result"]["document"]["duration"] == 4
     assert layers["hero"]["source"] == ASSETS["hero"]
     assert layers["plate"]["source"] == ASSETS["plate"]
     assert layers["plate"]["type"] == "image"
     assert layers["atmosphere-plate"]["type"] == "effect"
+
+
+def test_compile_bridge_holds_the_cpu_lane(monkeypatch):
+    from services import resource_scheduler
+
+    seen = {}
+
+    def fake_run(*_args, **_kwargs):
+        lane = resource_scheduler.cpu_lane("video2d-compile")
+        state = resource_scheduler.coordinator._state[lane.key]
+        seen["active"] = state["active"]
+        return SimpleNamespace(returncode=0, stdout='{"ok": true, "result": {"texts": []}}\n', stderr="")
+
+    monkeypatch.setattr("services.video2d_compile.subprocess.run", fake_run)
+    assert spawn_bridge({"operation": "scenes.text.template", "input": {}})["ok"] is True
+    assert seen["active"] == 1

@@ -12,9 +12,26 @@ import time
 import uuid
 
 from fastapi import HTTPException
+from services.generation_output_name import (
+    OutputNameError,
+    attach_output_name,
+    generation_receipt_view,
+    prepare_command_output_name,
+)
 from services.image_generation_spec import freeze_image_generation_spec, ImageGenerationSpecError
+from services.job_lifecycle import priority_fields, take_submission_priority
 from services.task_command_admission import TaskCommandConflict
 from services.wangp_submission import JsonRequest
+
+
+def _validate_only_result(command, frozen, params):
+    """Version 3 may build a generate payload and stop before admission."""
+    if not isinstance(command, dict) or command.get("validate") is not True:
+        return None
+    if frozen.get("effective", {}).get("version") != 3:
+        raise command_error(422, "invalid_command", "validate is only supported for generation.video version 3")
+    payload = {key: value for key, value in params.items() if not str(key).startswith("_")}
+    return {"validated": True, "enqueued": False, "payload": payload}
 
 
 def command_error(status: int, code: str, message: str):
@@ -138,7 +155,13 @@ class ImageGenerationCommands:
 
     async def submit(self, command, *, trusted_tool=None, submission_context=None):
         try:
+            command, output_name = prepare_command_output_name(command)
+            priority = take_submission_priority(command)
             frozen, params = self._freeze(command)
+            frozen, params = attach_output_name(frozen, params, output_name)
+            validate_only = _validate_only_result(command, frozen, params)
+            if validate_only is not None:
+                return validate_only
             registry = self._registry(params["workspace"])
             previous = registry.command_admission(command["intent_id"])
             if previous is not None:
@@ -156,8 +179,13 @@ class ImageGenerationCommands:
                 frozen["effective"]["resources"] = resources
             else:
                 self.preflight(params)
-            request = JsonRequest({**deepcopy(params), "provenance": self._provenance(
-                frozen, trusted_tool, submission_context)}, trusted_tool=trusted_tool)
+            if output_name and isinstance(params, dict):
+                params["output_name"] = output_name
+            request = JsonRequest({
+                **deepcopy(params),
+                "provenance": self._provenance(frozen, trusted_tool, submission_context),
+                **priority_fields(priority),
+            }, trusted_tool=trusted_tool)
             request.prepared_studio_images = command["operation"] == "generation.image" and command["version"] == 2
             request.prepared_studio_speech = command["operation"] == "generation.speech"
             request.prepared_studio_audio = command["operation"] == "generation.music"
@@ -168,10 +196,14 @@ class ImageGenerationCommands:
             request.admit_generation_command = lambda body, workspace, provenance: self._admit(frozen, body, workspace, provenance)
             prepare_request = adapter.prepare_request if adapter and adapter.prepare_request else self.prepare
             return await prepare_request(request)
+        except OutputNameError as error:
+            raise command_error(422, error.code, str(error)) from error
         except ImageGenerationSpecError as error:
-            raise command_error(422, "invalid_command", str(error)) from error
+            raise command_error(422, getattr(error, "code", None) or "invalid_command", str(error)) from error
         except TaskCommandConflict as error:
             raise command_error(409, "intent_conflict", str(error)) from error
+        except ValueError as error:
+            raise command_error(422, "invalid_command", str(error)) from error
         except (OSError, sqlite3.Error) as error:
             raise command_error(503, "storage_unavailable", "Command storage is unavailable; retry with the same intention") from error
 
@@ -197,10 +229,22 @@ class ImageGenerationCommands:
             registry = self._registry(workspace)
             entry = registry.command_admission(intent_id)
             if entry is None:
+                recovered = self._leftover_receipt(workspace, intent_id)
+                if recovered is not None:
+                    return recovered
                 raise command_error(404, "receipt_not_found", "No admission exists for this intention in this workspace")
-            return {"receipt": entry["receipt"], "task": registry.get(entry["task_id"])}
+            task = registry.get(entry["task_id"])
+            return generation_receipt_view(
+                entry["receipt"], task, workspace=workspace, workspace_dir=registry.workspace_dir,
+            )
         except (OSError, sqlite3.Error) as error:
             raise command_error(503, "storage_unavailable", "Command storage is unavailable") from error
+
+    def _leftover_receipt(self, workspace, intent_id):
+        callback = getattr(self, "leftover_receipt_lookup", None)
+        if not callable(callback):
+            return None
+        return callback(workspace, intent_id)
 
     def native_worker(self, job):
         """Select a tool worker only for its real durable admission.

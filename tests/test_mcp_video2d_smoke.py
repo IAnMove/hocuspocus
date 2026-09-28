@@ -10,8 +10,11 @@ from scripts.mcp_video2d_smoke import PLANNED, dry_problems, painter_reason, run
 
 
 def test_smoke_imports_and_dry_envelopes_are_wired():
+    source = Path(__file__).resolve().parents[1].joinpath("scripts/mcp_video2d_smoke.py").read_text(encoding="utf-8")
     assert "scenes.video2d.export" in PLANNED
+    assert "scenes.video2d.edit" in PLANNED
     assert "montages.save" in PLANNED
+    assert "not on this branch" not in source
     assert dry_problems() == []
 
 

@@ -1,10 +1,9 @@
 """Edit a Video 2D document with small operations. Nothing is saved or rendered.
 
-``add_layer`` camera presets are the ``RECIPE_CAMERA_PRESETS`` table from
-``ui/src/lib/sceneRecipe.ts``. M1's JSON catalog should replace that hardcoded
-list. Motion preset ids are not accepted until then. Title cues are a Python
-port of the defaults in ``ui/src/lib/kineticText/templates.ts``; this module
-does not execute the TypeScript ``build()``.
+``add_layer`` camera presets are the ``kind: camera`` entries of
+``app/shared/motion_presets.json``. Other motion ids are not camera presets.
+Finish presets are the entries of ``app/shared/finish_presets.json``. Title cues
+are a Python port of the defaults in ``ui/src/lib/kineticText/templates.ts``.
 """
 from __future__ import annotations
 
@@ -14,7 +13,9 @@ from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
+from services.mcp_compact import compact_scene
 from services.scene_commands import DocumentInput, command_error
+from services.video2d_preset_catalog import camera_presets, finish_presets
 
 OPERATION = "scenes.video2d.edit"
 MAX_OPERATIONS = 32
@@ -29,8 +30,7 @@ _LAYER_TYPES = frozenset({"image", "video", "overlay", "model3d"})
 _CURVES = frozenset({"linear", "ease", "dramatic", "bounce", "hold"})
 _AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"})
 _AUDIO_KINDS = frozenset({"speech", "music", "sfx", "audio"})
-_FINISH_PRESET_IDS = ("warmCinema", "oldDoc", "nightNeon", "paperComic")
-_FINISH_KEYS = frozenset({"grade", "bloom", "rays", "vignette", "grain", "texture", "letterbox", "applyToTexts"})
+_FINISH_KEYS = frozenset({"grade", "bloom", "rays", "vignette", "grain", "texture", "letterbox", "applyToTexts", "riso"})
 _TEXTURES = frozenset({"paper", "film-dust", "scratches"})
 _LETTERBOX = {1.85, 2, 2.39}
 _LYRIC_MODES = frozenset({"karaoke", "word-pop", "line-fade", "bounce"})
@@ -49,7 +49,10 @@ _TEXT_RANGES = {"x": (0, 100), "y": (0, 100), "size": (2, 25), "rotation": (-45,
 _TEXT_ENUMS = {"font": _TEXT_FONTS, "align": _TEXT_ALIGNS, "preset": _TEXT_PRESETS, "loop": _TEXT_LOOPS}
 _TEXT_FIELDS = set(_TEXT_RANGES) | set(_TEXT_ENUMS) | {"text", "start", "end", "weight", "uppercase", "italic", "enter", "exit", "box", "counter", "color"}
 _POINT_RANGES = {"x": (-50, 150), "y": (-50, 150), "scale": (0.01, 20), "opacity": (0, 1), "rotation": (-180, 180)}
-_LAYER_PATCH = frozenset({"name", "source", "visible", "locked", "z", "fill", "type", "transform", "animation"})
+# Corner zooms use layer focus {x, y}: that frame point stays on the anchor while
+# scale changes (x = anchor - (focus - 50) * scale). Positions stay in _POINT_RANGES
+# so saved scenes keep the same limits. focus is omitted unless update_layer sets it.
+_LAYER_PATCH = frozenset({"name", "source", "visible", "locked", "z", "fill", "type", "transform", "animation", "focus"})
 _TRANSFORM_KEYS = frozenset({"x", "y", "scale", "opacity", "rotation"})
 
 
@@ -120,39 +123,6 @@ def _clamp_num(value, fallback: float, low: float, high: float) -> float:
     return max(low, min(high, float(value)))
 
 
-def _point(x: float, y: float, scale: float, rotation: float) -> dict:
-    return {"x": x, "y": y, "scale": scale, "rotation": rotation}
-
-
-def _camera(start: dict, end: dict, duration: float, curve: str, shake: dict | None = None) -> dict:
-    preset = {"start": start, "end": end, "duration": duration, "spin": False, "curve": curve}
-    if shake is not None:
-        preset["shake"] = shake
-    return preset
-
-
-# Hardcoded until M1 publishes app/shared/motion_presets.json.
-# Values match ui/src/lib/sceneRecipe.ts RECIPE_CAMERA_PRESETS.
-CAMERA_PRESETS = {
-    "camera-locked": _camera(_point(50, 50, 1, 0), _point(50, 50, 1, 0), 5, "linear"),
-    "camera-pan-right": _camera(_point(35, 50, 1, 0), _point(65, 50, 1, 0), 5, "ease"),
-    "camera-pan-left": _camera(_point(65, 50, 1, 0), _point(35, 50, 1, 0), 5, "ease"),
-    "camera-push-in": _camera(_point(50, 50, 1, 0), _point(50, 50, 1.55, 0), 6, "ease"),
-    "camera-pull-out": _camera(_point(50, 50, 1.6, 0), _point(50, 50, 1, 0), 5, "ease"),
-    "camera-crane-up": _camera(_point(50, 68, 1.15, 0), _point(50, 34, 1, 0), 5, "ease"),
-    "camera-dutch-drift": _camera(_point(44, 54, 1.05, -6), _point(57, 46, 1.28, 7), 6, "ease"),
-    "camera-handheld": _camera(_point(50, 50, 1.08, 0), _point(51, 49, 1.12, 0.6), 6, "ease", {"amount": 0.75, "frequency": 3.2, "seed": 1.7}),
-    "camera-whip-pan": _camera(_point(28, 50, 1.18, -2), _point(72, 50, 1.05, 2), 1.1, "dramatic", {"amount": 0.35, "frequency": 7, "seed": 3.1}),
-    "camera-dolly": _camera(_point(36, 57, 1.5, -2), _point(58, 46, 0.92, 0), 5.5, "ease"),
-}
-
-FINISH_PRESETS = {
-    "warmCinema": {"grade": {"exposure": 0.05, "contrast": 0.12, "saturation": 0.08, "temperature": 0.25, "tint": 0.04, "fade": 0.08}, "vignette": {"amount": 0.35, "softness": 0.6}, "letterbox": {"ratio": 2.39, "color": "#000000"}},
-    "oldDoc": {"grade": {"exposure": -0.04, "contrast": 0.18, "saturation": -0.35, "temperature": 0.2, "tint": 0.08, "fade": 0.16}, "grain": {"amount": 0.28, "size": 1.4}, "texture": {"kind": "scratches", "amount": 0.2}},
-    "nightNeon": {"grade": {"exposure": 0.02, "contrast": 0.2, "saturation": 0.25, "temperature": -0.15, "tint": 0.2, "fade": 0}, "bloom": {"amount": 0.45, "threshold": 0.55, "radius": 0.5}},
-    "paperComic": {"grade": {"exposure": 0.04, "contrast": 0.08, "saturation": -0.1, "temperature": 0.12, "tint": 0, "fade": 0.05}, "texture": {"kind": "paper", "amount": 0.45}},
-}
-
 _TITLE_DEFAULTS = {
     "lower-third-date": {"date": "1991", "caption": "A city keeps its name"},
     "chorus-banner": {"line": "The bird is freed"},
@@ -194,8 +164,10 @@ def _payload(command) -> dict:
     if type(command.get("version")) is not int or command.get("version") != 1:
         _fail("invalid_command", "Use version 1")
     data = command.get("input")
-    if not isinstance(data, dict) or set(data) != {"document", "operations"}:
+    if not isinstance(data, dict) or set(data) - {"document", "operations", "full"} or {"document", "operations"} - set(data):
         _fail("invalid_command", "input must include document and operations only")
+    if "full" in data and type(data["full"]) is not bool:
+        _fail("invalid_command", "full must be boolean")
     return data
 
 
@@ -231,9 +203,9 @@ def _static_motion(scene_duration: float) -> tuple[dict, dict]:
 def _preset_motion(preset_id, scene_duration: float, warnings: list) -> tuple[dict, dict]:
     if not isinstance(preset_id, str):
         _fail("invalid_input", "preset must be a camera preset id")
-    preset = CAMERA_PRESETS.get(preset_id)
+    preset = camera_presets().get(preset_id)
     if preset is None:
-        _fail("unknown_preset", "Unknown camera preset. Motion presets wait for the M1 JSON catalog.")
+        _fail("unknown_preset", "Unknown camera preset. Use a kind=camera id from motion_presets.json.")
     start = dict(preset["start"])
     end = dict(preset["end"])
     duration = preset["duration"]
@@ -377,6 +349,15 @@ def _patch_layer_flags(layer: dict, patch: dict) -> None:
         layer[key] = patch[key]
 
 
+def _focus(value) -> dict:
+    if not isinstance(value, dict) or set(value) != {"x", "y"}:
+        _fail("invalid_input", "focus needs x and y")
+    return {
+        "x": _number(value["x"], 0, 100, "invalid_input", "focus is out of range"),
+        "y": _number(value["y"], 0, 100, "invalid_input", "focus is out of range"),
+    }
+
+
 def _apply_layer_patch(layer: dict, patch: dict, scene_duration: float) -> None:
     if not patch or any(key not in _LAYER_PATCH for key in patch):
         _fail("invalid_input", "update_layer patch has unsupported fields")
@@ -392,6 +373,8 @@ def _apply_layer_patch(layer: dict, patch: dict, scene_duration: float) -> None:
         _merge_transform(layer, patch["transform"])
     if "animation" in patch:
         _merge_animation(layer, patch["animation"], scene_duration)
+    if "focus" in patch:
+        layer["focus"] = _focus(patch["focus"])
 
 
 def _update_layer(document: dict, operation: dict, warnings: list) -> None:
@@ -713,11 +696,60 @@ def _letterbox(raw) -> dict | None:
     return {"ratio": section["ratio"], "color": _hex(section.get("color"), "#000000")}
 
 
+def _hex_list(raw, limit: int):
+    if not isinstance(raw, list) or not 1 <= len(raw) <= limit:
+        return None
+    colors = []
+    for item in raw:
+        if not isinstance(item, str):
+            return None
+        colors.append(_hex(item, None, "invalid_finish"))
+    return colors
+
+
+def _series(raw, count: int, fallback: tuple, low: float, high: float) -> list:
+    values = raw if isinstance(raw, list) else []
+    parsed = []
+    for index in range(count):
+        item = values[index] if index < len(values) else None
+        parsed.append(_clamp_num(item, fallback[min(index, len(fallback) - 1)], low, high))
+    return parsed
+
+
+_RISO_NUMBERS = (
+    ("misreg", 1.2, 0, 8), ("cutKick", 16, 0, 48), ("beatKick", 4, 0, 24),
+    ("gamma", 1.25, 0.2, 3), ("gain", 1, 0, 2), ("kLo", 0.5, 0, 1), ("kHi", 0.72, 0, 1),
+    ("lift", 0, -0.2, 0.2), ("grain", 0.022, 0, 0.2), ("fibre", 1, 0, 2),
+    ("inkTex", 0.22, 0, 1), ("vignette", 0.35, 0, 1),
+)
+
+
+def _riso(raw) -> dict | None:
+    section = _section(raw, "riso")
+    if section is None:
+        return None
+    inks = _hex_list(section.get("inks"), 4)
+    if not inks:
+        return None
+    count = len(inks)
+    parsed = {
+        "paper": _hex(section.get("paper"), "#EFE6D2"),
+        "sepPaper": _hex(section.get("sepPaper"), "#F4EEE2"),
+        "inks": inks,
+        "angles": _series(section.get("angles"), count, (15, 75, 45, 105), 0, 180),
+        "cells": _series(section.get("cells"), count, (7, 7, 7, 6), 2, 24),
+        "solids": _series(section.get("solids"), count, (0.88, 0.88, 0.88, 0.5), 0, 1),
+    }
+    for key, fallback, low, high in _RISO_NUMBERS:
+        parsed[key] = _clamp_num(section.get(key), fallback, low, high)
+    return parsed
+
+
 def _parse_finish(raw) -> dict:
     if not isinstance(raw, dict) or any(key not in _FINISH_KEYS for key in raw):
         _fail("invalid_finish", "Finish values are not valid")
     finish = {}
-    for key, parser in (("grade", _grade), ("bloom", _bloom), ("rays", _rays), ("vignette", _vignette), ("grain", _grain), ("texture", _texture), ("letterbox", _letterbox)):
+    for key, parser in (("grade", _grade), ("bloom", _bloom), ("rays", _rays), ("vignette", _vignette), ("grain", _grain), ("texture", _texture), ("letterbox", _letterbox), ("riso", _riso)):
         parsed = parser(raw.get(key))
         if parsed:
             finish[key] = parsed
@@ -737,9 +769,10 @@ def _set_finish(document: dict, operation: dict, warnings: list) -> None:
         _fail("invalid_finish", "Use a finish preset or raw finish values, not both")
     if has_preset:
         preset = operation["preset"]
-        if preset not in FINISH_PRESETS:
+        known = finish_presets()
+        if preset not in known:
             _fail("unknown_preset", "Unknown finish preset")
-        document["finish"] = deepcopy(FINISH_PRESETS[preset])
+        document["finish"] = deepcopy(known[preset])
         return
     document["finish"] = _parse_finish(operation["finish"])
 
@@ -1030,7 +1063,11 @@ def edit(command) -> dict:
     for operation in _operation_list(payload["operations"]):
         _apply(document, operation, warnings)
     _ensure_document(document)
-    return {"version": 1, "status": "completed", "operation": OPERATION, "result": {"document": document, "warnings": warnings, "saved": False}}
+    if payload.get("full") is True:
+        body = {"document": document, "warnings": warnings, "saved": False}
+    else:
+        body = compact_scene(document, warnings, saved=False)
+    return {"version": 1, "status": "completed", "operation": OPERATION, "result": body}
 
 
 def _schema_string(max_length: int) -> dict:
@@ -1042,18 +1079,20 @@ def _op_schema(op: str, required: list[str], properties: dict) -> dict:
 
 
 def command_catalog() -> list[dict]:
-    preset = {"type": "string", "enum": list(CAMERA_PRESETS)}
+    preset = {"type": "string", "enum": list(camera_presets())}
     identity = _schema_string(160)
     description = (
-        "Return an edited version 1 Video 2D document and warnings. Does not save, export, render or fetch. "
+        "Return layer ids, text ids, warning codes, duration and size. Pass input.full true for the document and warnings. Does not save, export, render or fetch. "
         "At most 32 operations. Ids are 1..160 characters. add_layer, add_title and add_audio_track replace an object with the same id. "
-        "add_layer source must be a durable /api/v1/file, /api/v1/uploads or /examples URL. Optional preset ids are the hardcoded "
-        "RECIPE_CAMERA_PRESETS list; M1 JSON should replace it, and RECIPE_MOTION_PRESETS are not accepted yet. "
-        "add_title is a Python port of the defaults in kineticText/templates.ts, not the TypeScript build(). "
-        "set_finish accepts warmCinema, oldDoc, nightNeon, paperComic or raw finish values. "
+        "add_layer source must be a durable /api/v1/file, /api/v1/uploads or /examples URL. Optional preset ids are the "
+        "kind=camera entries of app/shared/motion_presets.json. Other motion ids are not camera presets. "
+        "add_title is a Python port of the defaults in kineticText/templates.ts. "
+        "set_finish accepts an id from app/shared/finish_presets.json, including risoPress, or raw finish values. "
         "set_lyrics stores lines with start/end/text and does not fetch. set_rhythm stores bpm and beats and does not analyze audio. "
         "set_duration is greater than 0 and at most 600 seconds. set_format width and height are even integers from 240 to 3840. "
         "reorder assigns z as 0, 10, 20… in the new order, matching editor assignZ. "
+        "update_layer focus {x, y} is the layer-frame point (0-100) that stays on the anchor while scale changes. "
+        "Omit it, or use 50,50, and scenes keep scaling around the center. "
         "An unknown op fails with invalid_operation."
     )
     operations = {"type": "array", "maxItems": MAX_OPERATIONS, "items": {"oneOf": [
@@ -1064,14 +1103,14 @@ def command_catalog() -> list[dict]:
         _op_schema("add_title", ["template", "start", "duration"], {"template": {"enum": list(_TITLE_BUILDERS)}, "fields": {"type": "object"}, "start": {"type": "number", "minimum": 0}, "duration": {"type": "number", "exclusiveMinimum": 0}, "id": identity}),
         _op_schema("update_text", ["id", "patch"], {"id": identity, "patch": {"type": "object"}}),
         _op_schema("remove_text", ["id"], {"id": identity}),
-        _op_schema("set_finish", [], {"preset": {"enum": list(_FINISH_PRESET_IDS)}, "finish": {"type": "object"}}),
+        _op_schema("set_finish", [], {"preset": {"enum": list(finish_presets())}, "finish": {"type": "object"}}),
         _op_schema("set_lyrics", ["lyrics"], {"lyrics": {"type": "object"}}),
         _op_schema("set_rhythm", ["rhythm"], {"rhythm": {"type": "object"}}),
         _op_schema("add_audio_track", ["track"], {"track": {"type": "object"}}),
         _op_schema("set_duration", ["duration"], {"duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 600}}),
         _op_schema("set_format", ["width", "height"], {"width": {"type": "integer", "minimum": 240, "maximum": 3840}, "height": {"type": "integer", "minimum": 240, "maximum": 3840}}),
     ]}}
-    envelope = {"type": "object", "additionalProperties": False, "properties": {"version": {"type": "integer", "const": 1}, "input": {"type": "object", "additionalProperties": False, "properties": {"document": {"type": "object"}, "operations": operations}, "required": ["document", "operations"]}}, "required": ["version", "input"]}
+    envelope = {"type": "object", "additionalProperties": False, "properties": {"version": {"type": "integer", "const": 1}, "input": {"type": "object", "additionalProperties": False, "properties": {"document": {"type": "object"}, "operations": operations, "full": {"type": "boolean"}}, "required": ["document", "operations"]}}, "required": ["version", "input"]}
     return [{"name": OPERATION, "version": 1, "domain": "scenes", "mutation": False, "description": description, "inputSchema": envelope}]
 
 

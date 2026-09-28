@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -26,7 +27,7 @@ def _document():
 
 
 def _edit(operations, document=None):
-    return edit({"version": 1, "input": {"document": _document() if document is None else document, "operations": operations}})
+    return edit({"version": 1, "input": {"document": _document() if document is None else document, "operations": operations, "full": True}})
 
 
 def _result(operations, document=None):
@@ -49,6 +50,26 @@ def test_add_layer_replaces_existing_id_and_keeps_order():
     assert replaced["animation"]["duration"] == 6
     assert result["warnings"] == []
     assert original == snapshot
+
+
+def test_update_layer_focus_pins_a_frame_point_without_moving_the_anchor():
+    result = _result([{
+        "op": "update_layer",
+        "id": "a",
+        "patch": {
+            "focus": {"x": 0, "y": 100},
+            "animation": {"end": {"x": 50, "y": 50, "scale": 4}},
+        },
+    }])
+    layer = result["document"]["layers"][0]
+    assert layer["focus"] == {"x": 0, "y": 100}
+    assert layer["animation"]["end"]["x"] == 50
+    assert layer["animation"]["end"]["scale"] == 4
+    untouched = _result([{"op": "update_layer", "id": "b", "patch": {"name": "plate"}}])["document"]["layers"][1]
+    assert "focus" not in untouched
+    with pytest.raises(Video2dEditError) as error:
+        _edit([{"op": "update_layer", "id": "a", "patch": {"focus": {"x": 140, "y": 50}}}])
+    assert error.value.code == "invalid_input"
 
 
 def test_remove_layer():
@@ -92,6 +113,17 @@ def test_set_finish_preset():
     assert finish["letterbox"] == {"ratio": 2.39, "color": "#000000"}
     assert finish["grade"]["temperature"] == 0.25
     assert finish["vignette"]["amount"] == 0.35
+    assert "riso" not in finish
+
+
+def test_riso_press_preset_is_opt_in():
+    old = _result([{"op": "set_finish", "preset": "oldDoc"}])["document"]["finish"]
+    assert "riso" not in old
+    assert old["texture"]["kind"] == "scratches"
+    riso = _result([{"op": "set_finish", "preset": "risoPress"}])["document"]["finish"]
+    assert "grade" not in riso
+    assert len(riso["riso"]["inks"]) == 4
+    assert riso["riso"]["inks"][0] == "#FF6A2B"
 
 
 @pytest.mark.parametrize("duration", [0, 601, -1, True])
@@ -176,10 +208,21 @@ def test_raw_finish_clamps_like_the_ui_parser_and_preset_duration_is_limited():
     assert result["warnings"][0]["code"] == "preset_duration_clamped"
 
 
-def test_motion_preset_is_rejected_until_m1_json():
+def test_camera_and_finish_ids_come_from_the_shared_catalogs():
+    motion = json.loads((Path(__file__).resolve().parents[1] / "app/shared/motion_presets.json").read_text(encoding="utf-8"))
+    finish = json.loads((Path(__file__).resolve().parents[1] / "app/shared/finish_presets.json").read_text(encoding="utf-8"))
+    cameras = [entry["id"] for entry in motion["entries"] if entry["kind"] == "camera"]
+    description = command_catalog()[0]["description"]
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["operations"]["items"]["oneOf"]
+    layer = next(item for item in schema if item["properties"]["op"]["const"] == "add_layer")
+    finish_schema = next(item for item in schema if item["properties"]["op"]["const"] == "set_finish")
+    assert layer["properties"]["preset"]["enum"] == cameras
+    assert finish_schema["properties"]["preset"]["enum"] == [entry["id"] for entry in finish["entries"]]
+    assert "M1" not in description and "hardcoded" not in description.lower()
     with pytest.raises(Video2dEditError) as error:
         _edit([{"op": "add_layer", "id": "ship", "source": "/examples/ship.png", "preset": "zoom-in"}])
     assert error.value.code == "unknown_preset"
+    assert "motion_presets.json" in str(error.value)
 
 
 def test_http_and_mcp_return_the_same_document(tmp_path):

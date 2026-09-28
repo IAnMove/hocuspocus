@@ -31,7 +31,7 @@ def test_each_catalog_operation_returns_its_json_ids():
     assert all(item["mutation"] is False and item["name"].endswith(".catalog") for item in published)
     for operation, filename in CATALOG_FILES.items():
         payload = json.loads((SHARED / filename).read_text(encoding="utf-8"))
-        result = execute({"version": 1, "operation": operation, "input": {}})
+        result = execute({"version": 1, "operation": operation, "input": {"detail": True}})
         assert result["status"] == "completed"
         assert result["result"] == payload
         assert _ids(result["result"]) == _ids(payload)
@@ -51,7 +51,7 @@ def test_catalog_results_are_copies_and_effects_json_loads():
     [
         ({"version": 1, "input": {}}, "catalog_bad_envelope"),
         ({"version": True, "operation": "scenes.fonts.catalog", "input": {}}, "catalog_bad_envelope"),
-        ({"version": 1, "operation": "scenes.fonts.catalog", "input": {"id": "sans"}}, "catalog_bad_envelope"),
+        ({"version": 1, "operation": "scenes.fonts.catalog", "input": {"nope": True}}, "catalog_bad_envelope"),
         ({"version": 1, "operation": "scenes.missing.catalog", "input": {}}, "catalog_unknown_operation"),
     ],
 )

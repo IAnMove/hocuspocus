@@ -100,9 +100,9 @@ export function paintScene2D(canvas: HTMLCanvasElement, current: AnimatorScene, 
     })
   paintSceneFx(context, canvas.width, canvas.height, sceneSeconds, current.sfx)
   const envelope = beatEnvelope(current.rhythm, sceneSeconds)
-  if (!current.finish?.applyToTexts) paintSceneFinish(context, canvas.width, canvas.height, sceneSeconds, current.finish, envelope)
+  if (!current.finish?.applyToTexts) paintSceneFinish(context, canvas.width, canvas.height, sceneSeconds, current.finish, envelope, current.layers, current.duration)
   paintKineticTexts(context, canvas.width, canvas.height, sceneSeconds, current.texts, envelope)
   paintSceneLyrics(context, canvas.width, canvas.height, sceneSeconds, current.lyrics, envelope)
-  if (current.finish?.applyToTexts) paintSceneFinish(context, canvas.width, canvas.height, sceneSeconds, current.finish, envelope)
+  if (current.finish?.applyToTexts) paintSceneFinish(context, canvas.width, canvas.height, sceneSeconds, current.finish, envelope, current.layers, current.duration)
   return true
 }
