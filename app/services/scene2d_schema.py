@@ -253,6 +253,17 @@ def _finish() -> dict:
         "texture": _object({"kind": _enum(["none", "paper", "film-dust", "scratches"]), "amount": _number(0, 1)}, ["kind", "amount"]),
         "letterbox": _object({"ratio": _enum([1.85, 2, 2.39]), "color": HEX}, ["ratio", "color"]),
         "applyToTexts": {"type": "boolean"},
+        "riso": _object({
+            "paper": HEX, "sepPaper": HEX,
+            "inks": _array(HEX, max_items=4, min_items=1),
+            "angles": _array(_number(0, 180), max_items=4),
+            "cells": _array(_number(2, 24), max_items=4),
+            "solids": _array(_number(0, 1), max_items=4),
+            "misreg": _number(0, 8), "cutKick": _number(0, 48), "beatKick": _number(0, 24),
+            "gamma": _number(0.2, 3), "gain": _number(0, 2), "kLo": _number(0, 1), "kHi": _number(0, 1),
+            "lift": _number(-0.2, 0.2), "grain": _number(0, 0.2), "fibre": _number(0, 2),
+            "inkTex": _number(0, 1), "vignette": _number(0, 1),
+        }),
     })
 
 

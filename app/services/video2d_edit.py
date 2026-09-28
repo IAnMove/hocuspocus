@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from pydantic import ValidationError
 
 from services.scene_commands import DocumentInput, command_error
+from services.video2d_catalogs import CATALOGS
 
 OPERATION = "scenes.video2d.edit"
 MAX_OPERATIONS = 32
@@ -29,8 +30,7 @@ _LAYER_TYPES = frozenset({"image", "video", "overlay", "model3d"})
 _CURVES = frozenset({"linear", "ease", "dramatic", "bounce", "hold"})
 _AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"})
 _AUDIO_KINDS = frozenset({"speech", "music", "sfx", "audio"})
-_FINISH_PRESET_IDS = ("warmCinema", "oldDoc", "nightNeon", "paperComic")
-_FINISH_KEYS = frozenset({"grade", "bloom", "rays", "vignette", "grain", "texture", "letterbox", "applyToTexts"})
+_FINISH_KEYS = frozenset({"grade", "bloom", "rays", "vignette", "grain", "texture", "letterbox", "applyToTexts", "riso"})
 _TEXTURES = frozenset({"paper", "film-dust", "scratches"})
 _LETTERBOX = {1.85, 2, 2.39}
 _LYRIC_MODES = frozenset({"karaoke", "word-pop", "line-fade", "bounce"})
@@ -146,12 +146,15 @@ CAMERA_PRESETS = {
     "camera-dolly": _camera(_point(36, 57, 1.5, -2), _point(58, 46, 0.92, 0), 5.5, "ease"),
 }
 
-FINISH_PRESETS = {
-    "warmCinema": {"grade": {"exposure": 0.05, "contrast": 0.12, "saturation": 0.08, "temperature": 0.25, "tint": 0.04, "fade": 0.08}, "vignette": {"amount": 0.35, "softness": 0.6}, "letterbox": {"ratio": 2.39, "color": "#000000"}},
-    "oldDoc": {"grade": {"exposure": -0.04, "contrast": 0.18, "saturation": -0.35, "temperature": 0.2, "tint": 0.08, "fade": 0.16}, "grain": {"amount": 0.28, "size": 1.4}, "texture": {"kind": "scratches", "amount": 0.2}},
-    "nightNeon": {"grade": {"exposure": 0.02, "contrast": 0.2, "saturation": 0.25, "temperature": -0.15, "tint": 0.2, "fade": 0}, "bloom": {"amount": 0.45, "threshold": 0.55, "radius": 0.5}},
-    "paperComic": {"grade": {"exposure": 0.04, "contrast": 0.08, "saturation": -0.1, "temperature": 0.12, "tint": 0, "fade": 0.05}, "texture": {"kind": "paper", "amount": 0.45}},
-}
+def _finish_presets_from_catalog() -> dict:
+    presets = {}
+    for entry in CATALOGS["scenes.finish.catalog"]["entries"]:
+        presets[entry["id"]] = {key: deepcopy(value) for key, value in entry.items() if key != "id"}
+    return presets
+
+
+FINISH_PRESETS = _finish_presets_from_catalog()
+_FINISH_PRESET_IDS = tuple(FINISH_PRESETS)
 
 _TITLE_DEFAULTS = {
     "lower-third-date": {"date": "1991", "caption": "A city keeps its name"},
@@ -713,11 +716,60 @@ def _letterbox(raw) -> dict | None:
     return {"ratio": section["ratio"], "color": _hex(section.get("color"), "#000000")}
 
 
+def _hex_list(raw, limit: int):
+    if not isinstance(raw, list) or not 1 <= len(raw) <= limit:
+        return None
+    colors = []
+    for item in raw:
+        if not isinstance(item, str):
+            return None
+        colors.append(_hex(item, None, "invalid_finish"))
+    return colors
+
+
+def _series(raw, count: int, fallback: tuple, low: float, high: float) -> list:
+    values = raw if isinstance(raw, list) else []
+    parsed = []
+    for index in range(count):
+        item = values[index] if index < len(values) else None
+        parsed.append(_clamp_num(item, fallback[min(index, len(fallback) - 1)], low, high))
+    return parsed
+
+
+_RISO_NUMBERS = (
+    ("misreg", 1.2, 0, 8), ("cutKick", 16, 0, 48), ("beatKick", 4, 0, 24),
+    ("gamma", 1.25, 0.2, 3), ("gain", 1, 0, 2), ("kLo", 0.5, 0, 1), ("kHi", 0.72, 0, 1),
+    ("lift", 0, -0.2, 0.2), ("grain", 0.022, 0, 0.2), ("fibre", 1, 0, 2),
+    ("inkTex", 0.22, 0, 1), ("vignette", 0.35, 0, 1),
+)
+
+
+def _riso(raw) -> dict | None:
+    section = _section(raw, "riso")
+    if section is None:
+        return None
+    inks = _hex_list(section.get("inks"), 4)
+    if not inks:
+        return None
+    count = len(inks)
+    parsed = {
+        "paper": _hex(section.get("paper"), "#EFE6D2"),
+        "sepPaper": _hex(section.get("sepPaper"), "#F4EEE2"),
+        "inks": inks,
+        "angles": _series(section.get("angles"), count, (15, 75, 45, 105), 0, 180),
+        "cells": _series(section.get("cells"), count, (7, 7, 7, 6), 2, 24),
+        "solids": _series(section.get("solids"), count, (0.88, 0.88, 0.88, 0.5), 0, 1),
+    }
+    for key, fallback, low, high in _RISO_NUMBERS:
+        parsed[key] = _clamp_num(section.get(key), fallback, low, high)
+    return parsed
+
+
 def _parse_finish(raw) -> dict:
     if not isinstance(raw, dict) or any(key not in _FINISH_KEYS for key in raw):
         _fail("invalid_finish", "Finish values are not valid")
     finish = {}
-    for key, parser in (("grade", _grade), ("bloom", _bloom), ("rays", _rays), ("vignette", _vignette), ("grain", _grain), ("texture", _texture), ("letterbox", _letterbox)):
+    for key, parser in (("grade", _grade), ("bloom", _bloom), ("rays", _rays), ("vignette", _vignette), ("grain", _grain), ("texture", _texture), ("letterbox", _letterbox), ("riso", _riso)):
         parsed = parser(raw.get(key))
         if parsed:
             finish[key] = parsed
@@ -1050,7 +1102,7 @@ def command_catalog() -> list[dict]:
         "add_layer source must be a durable /api/v1/file, /api/v1/uploads or /examples URL. Optional preset ids are the hardcoded "
         "RECIPE_CAMERA_PRESETS list; M1 JSON should replace it, and RECIPE_MOTION_PRESETS are not accepted yet. "
         "add_title is a Python port of the defaults in kineticText/templates.ts, not the TypeScript build(). "
-        "set_finish accepts warmCinema, oldDoc, nightNeon, paperComic or raw finish values. "
+        "set_finish accepts a preset id from finish_presets.json or raw finish values. "
         "set_lyrics stores lines with start/end/text and does not fetch. set_rhythm stores bpm and beats and does not analyze audio. "
         "set_duration is greater than 0 and at most 600 seconds. set_format width and height are even integers from 240 to 3840. "
         "reorder assigns z as 0, 10, 20… in the new order, matching editor assignZ. "

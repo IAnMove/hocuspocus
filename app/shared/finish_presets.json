@@ -108,6 +108,21 @@
         2,
         2.39
       ]
+    },
+    "riso": {
+      "inks": [1, 4],
+      "misreg": [0, 8],
+      "cutKick": [0, 48],
+      "beatKick": [0, 24],
+      "gamma": [0.2, 3],
+      "gain": [0, 2],
+      "kLo": [0, 1],
+      "kHi": [0, 1],
+      "lift": [-0.2, 0.2],
+      "grain": [0, 0.2],
+      "fibre": [0, 2],
+      "inkTex": [0, 1],
+      "vignette": [0, 1]
     }
   },
   "entries": [
@@ -178,6 +193,29 @@
       "texture": {
         "kind": "paper",
         "amount": 0.45
+      }
+    },
+    {
+      "id": "risoPress",
+      "riso": {
+        "paper": "#EFE6D2",
+        "sepPaper": "#F4EEE2",
+        "inks": ["#FF6A2B", "#FF48B0", "#0078BF", "#1B1718"],
+        "angles": [15, 75, 45, 105],
+        "cells": [7, 7, 7, 6],
+        "solids": [0.88, 0.88, 0.88, 0.5],
+        "misreg": 1.2,
+        "cutKick": 16,
+        "beatKick": 4,
+        "gamma": 1.25,
+        "gain": 1,
+        "kLo": 0.5,
+        "kHi": 0.72,
+        "lift": 0,
+        "grain": 0.022,
+        "fibre": 1,
+        "inkTex": 0.22,
+        "vignette": 0.35
       }
     }
   ]

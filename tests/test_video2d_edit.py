@@ -92,6 +92,17 @@ def test_set_finish_preset():
     assert finish["letterbox"] == {"ratio": 2.39, "color": "#000000"}
     assert finish["grade"]["temperature"] == 0.25
     assert finish["vignette"]["amount"] == 0.35
+    assert "riso" not in finish
+
+
+def test_riso_press_preset_is_opt_in():
+    old = _result([{"op": "set_finish", "preset": "oldDoc"}])["document"]["finish"]
+    assert "riso" not in old
+    assert old["texture"]["kind"] == "scratches"
+    riso = _result([{"op": "set_finish", "preset": "risoPress"}])["document"]["finish"]
+    assert "grade" not in riso
+    assert len(riso["riso"]["inks"]) == 4
+    assert riso["riso"]["inks"][0] == "#FF6A2B"
 
 
 @pytest.mark.parametrize("duration", [0, 601, -1, True])
