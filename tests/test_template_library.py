@@ -113,6 +113,65 @@ def test_contract_errors_are_explicit(env):
     assert exists.value.code == "exists"
 
 
+def test_save_without_media_clears_slot_owned_and_scene_audio(env):
+    """Default save (no sample files) must empty every slot-owned locator and drop
+    scene audio that cannot be a slot. Otherwise a spoken Video 3D shot, a TV
+    screen, world SFX, a 2D frame sequence or attached music makes Save fail."""
+    library, _, workspace = env
+    (workspace / "voice.wav").write_bytes(b"RIFF-voice")
+    (workspace / "tv.mp4").write_bytes(b"mp4-tv")
+    (workspace / "portal.png").write_bytes(b"\x89PNG-portal")
+    (workspace / "f1.png").write_bytes(b"\x89PNG-f1")
+    (workspace / "f2.png").write_bytes(b"\x89PNG-f2")
+    (workspace / "line.wav").write_bytes(b"RIFF-line")
+    spoken = _world()
+    spoken["slots"][0]["speech"] = {
+        "version": 1, "enabled": True, "start": 0, "offset": 0, "gain": 1, "strength": 0.8,
+        "audio": {"url": f"/api/v1/file/voice.wav?workspace={WS}", "filename": "voice.wav"},
+        "clips": [{"id": "line-1", "audio": {"url": f"/api/v1/file/line.wav?workspace={WS}", "filename": "line.wav"}}],
+    }
+    spoken["slots"][1]["screen"] = {
+        "sourceUrl": f"/api/v1/file/tv.mp4?workspace={WS}",
+        "poseSequence": [{"sourceUrl": f"/api/v1/file/sky.png?workspace={WS}", "duration": 1}],
+    }
+    spoken["worldSfx"] = [{"id": "portal", "kind": "media_portal", "sourceUrl": f"/api/v1/file/portal.png?workspace={WS}"}]
+    saved = library.save(workspace=WS, editor="video3d", document=spoken, metadata={"title": "Spoken"})
+    stored = library.get(saved["id"])["document"]
+    assert stored["slots"][0]["sourceUrl"] == "" and "audio" not in stored["slots"][0]["speech"]
+    assert "audio" not in stored["slots"][0]["speech"]["clips"][0]
+    assert stored["slots"][1]["screen"]["sourceUrl"] == "" and "poseSequence" not in stored["slots"][1]["screen"]
+    assert "sourceUrl" not in stored["worldSfx"][0] and "soundtrack" not in stored
+
+    scene = _scene2d()
+    scene["layers"][0]["sequence"] = {"kind": "frames", "sources": [
+        f"/api/v1/file/f1.png?workspace={WS}", f"/api/v1/file/f2.png?workspace={WS}"], "fps": 12, "loop": "loop"}
+    scene["audioTracks"] = [{"id": "m", "filename": f"/api/v1/file/song.wav?workspace={WS}"}]
+    saved2d = library.save(workspace=WS, editor="video2d", document=scene, metadata={"title": "Card seq"})
+    stored2d = library.get(saved2d["id"])["document"]
+    assert stored2d["layers"][0]["source"] == "" and stored2d["layers"][0]["sequence"]["sources"] == ["", ""]
+    assert "audioTracks" not in stored2d
+
+
+def test_include_media_packs_speech_and_apply_rewrites_it(env):
+    library, _, workspace = env
+    (workspace / "voice.wav").write_bytes(b"RIFF-voice")
+    spoken = _world()
+    spoken["slots"][0]["speech"] = {
+        "audio": {"url": f"/api/v1/file/voice.wav?workspace={WS}", "filename": "voice.wav"},
+        "facePack": {"url": f"/api/v1/file/sky.png?workspace={WS}", "filename": "sky.png"},
+    }
+    saved = library.save(workspace=WS, editor="video3d", document=spoken, include_media=True,
+                         metadata={"title": "With voice"})
+    stored = library.get(saved["id"])["document"]
+    assert stored["slots"][0]["speech"]["audio"]["url"].startswith("media/")
+    assert stored["slots"][0]["speech"]["facePack"]["url"].startswith("media/")
+    applied = library.apply(saved["id"], workspace=WS)
+    url = applied["document"]["slots"][0]["speech"]["audio"]["url"]
+    assert url.startswith("/api/v1/file/tpl-") and url.endswith("?workspace=space")
+    assert applied["document"]["slots"][0]["speech"]["facePack"]["url"].startswith("/api/v1/file/tpl-")
+    assert any(name.endswith(".wav") for name in applied["copiedMedia"])
+
+
 def test_video2d_slots_unbound_media_and_examples(env):
     library, _, workspace = env
     with pytest.raises(TemplateError) as unbound:

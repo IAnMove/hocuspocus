@@ -34,6 +34,7 @@ from services.template_format import (
     TemplateError,
     check_document,
     clear_slot,
+    default_slots,
     fill_slot,
     is_bundled_example,
     media_kind,
@@ -231,11 +232,23 @@ class TemplateLibrary:
 
     @staticmethod
     def _drop_unbound(editor: str, document: dict) -> dict:
-        """Without media, a Video 3D soundtrack is removed (it is not a slot)."""
-        if editor == "video3d" and document.get("soundtrack"):
-            document = {**document}
-            document.pop("soundtrack", None)
-        return document
+        """Without media, scene-level audio/sfx that cannot be slots are removed."""
+        next_doc = document
+        if editor == "video3d":
+            if next_doc.get("soundtrack"):
+                next_doc = {**next_doc}
+                next_doc.pop("soundtrack", None)
+            cues = next_doc.get("worldSfx")
+            if isinstance(cues, list) and any(isinstance(cue, dict) and cue.get("sourceUrl") for cue in cues):
+                next_doc = {**next_doc}
+                next_doc["worldSfx"] = [
+                    {key: value for key, value in cue.items() if key != "sourceUrl"} if isinstance(cue, dict) else cue
+                    for cue in cues
+                ]
+        elif editor == "video2d" and next_doc.get("audioTracks"):
+            next_doc = {**next_doc}
+            next_doc.pop("audioTracks", None)
+        return next_doc
 
     def _preview(self, workspace: str, preview: str | None) -> dict[str, bytes]:
         if not preview:
@@ -413,11 +426,9 @@ class TemplateLibrary:
         if not isinstance(raw, dict) or raw.get("kind") != LEGACY_WORLD3D_KIND or not isinstance(raw.get("document"), dict):
             raise TemplateError("Not a .hptemplate or a Video 3D *.world3d.template.json", code="invalid_package")
         document = raw["document"]
-        for slot in document.get("slots") or []:
-            if isinstance(slot, dict) and classify_url(str(slot.get("sourceUrl") or "")) in {"gallery", "uploads", "relative"}:
-                slot.update({"sourceUrl": "", "clip": None})
-                slot.pop("sourceRef", None)
-        document.pop("soundtrack", None)
+        for spec in default_slots("video3d", document):
+            clear_slot("video3d", document, spec)
+        document = TemplateLibrary._drop_unbound("video3d", document)
         title = str(raw.get("title") or "Imported scenario")
         manifest = normalize_manifest({"kind": KIND, "version": 1, "editor": "video3d", "title": title,
                                        "description": raw.get("description") or "", "id": f"local/{slugify(title)}",

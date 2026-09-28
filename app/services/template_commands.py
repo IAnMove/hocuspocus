@@ -39,7 +39,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
                        ["workspace", "editor", "document", "title"], True,
                        "Save a Video 3D (slots) or Video 2D (layers) scene from a workspace as a reusable template. Declare slots "
                        "(what the user must provide) and controls (JSON Pointer values to tune). Without include_media, slot media "
-                       "are emptied and any other workspace media is an error. To update pass expected_updated_at."),
+                       "(including speech, screens and 2D sequences) are emptied, scene audio/SFX that cannot be a slot is dropped, "
+                       "and any other workspace media is an error. To update pass expected_updated_at."),
     "templates.apply": ({"id": TEMPLATE_ID, "workspace": WORKSPACE, "slots": {"type": "object", "additionalProperties": {"type": "string"}},
                          "controls": {"type": "object"}}, ["id", "workspace"], True,
                         "Return a ready scene document from a template: fills slots with workspace/example files, sets controls and "
