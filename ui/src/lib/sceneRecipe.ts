@@ -1,6 +1,8 @@
 import atmospheres from '../../../app/shared/atmospheres.json' with { type: 'json' }
+import fontCatalog from '../../../app/shared/fonts.json' with { type: 'json' }
 import motionPresets from '../../../app/shared/motion_presets.json' with { type: 'json' }
-import { sceneFxFields, SCENE_FX_SCHEMA } from '../features/sceneFx/types'
+import { FX_CATALOG, sceneFxFields, SCENE_FX_SCHEMA } from '../features/sceneFx/types'
+import { FINISH_PRESETS } from './scene2d/finish'
 import { kineticTextFields, KINETIC_TEXT_SCHEMA, lyricFields, TEXT_TEMPLATES, textTemplatesFromRecipe, type KineticText, type SceneLyrics } from './kineticText'
 import type { Scene, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../types'
 import { applyCutoutDialogue, findCutoutMouthLayers, normalizeFaceBinding, planCutoutDialogue } from './cutoutDialogue'
@@ -234,6 +236,8 @@ export interface SceneRecipe {
     mood?: SceneGradeMood
     palette?: SceneGradePalette
     intensity?: SceneGradeIntensity
+    /** Preset id from finish_presets.json. Expanded when the shot is compiled. */
+    finish?: string
     layers: SceneRecipeLayer[]
   }
 }
@@ -612,6 +616,7 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] },
         palette: { enum: ['natural', 'cool', 'warm', 'neon'] },
         intensity: { enum: [1, 2, 3] },
+        finish: { enum: Object.keys(FINISH_PRESETS) },
         layers: { type: 'array', minItems: 1, maxItems: 24, items: recipeLayerSchema },
       },
       required: ['width', 'height', 'fps', 'duration', 'layers'],
@@ -634,13 +639,40 @@ function boundedInventory(inventory: SceneRecipeInventoryItem[] = []): SceneReci
   }))
 }
 
+const catalogLine = (label: string, ids: readonly string[]) => `${label}: ${ids.join(', ')}`
+
+function recipeFinishId(raw: unknown): { finish?: string } {
+  if (typeof raw !== 'string' || !Object.hasOwn(FINISH_PRESETS, raw)) return {}
+  return { finish: raw }
+}
+
+function recipeFinishPatch(id: string | undefined): { finish?: (typeof FINISH_PRESETS)[string] } {
+  if (!id || !Object.hasOwn(FINISH_PRESETS, id)) return {}
+  return { finish: FINISH_PRESETS[id] }
+}
+
+/** Planner ids from the shared JSON catalogs. Do not hand-maintain a second list. */
+function recipeCatalogLines(): string {
+  const fonts = fontCatalog.entries as Array<{ id: string; kineticRole?: string }>
+  const kineticFonts = fonts.filter(entry => entry.kineticRole).map(entry => entry.id)
+  const otherFonts = fonts.filter(entry => !entry.kineticRole).map(entry => entry.id)
+  return [
+    catalogLine('Motion', Object.keys(RECIPE_MOTION_PRESETS)),
+    catalogLine('Camera', Object.keys(RECIPE_CAMERA_PRESETS)),
+    catalogLine('Atmosphere', ATMOSPHERE),
+    catalogLine('Text templates', TEXT_TEMPLATES.map(template => template.id)),
+    catalogLine('Fonts', fonts.map(entry => entry.id)),
+    catalogLine('Kinetic fonts', kineticFonts),
+    catalogLine('Non-kinetic fonts', otherFonts),
+    catalogLine('Finish', Object.keys(FINISH_PRESETS)),
+    catalogLine('Screen effects', FX_CATALOG.map(item => item.id)),
+  ].join('\n')
+}
+
 export function buildRecipeSystemPrompt(options: {
   mode: 'auto' | 'manual'
   inventory?: SceneRecipeInventoryItem[]
 }): string {
-  const motion = Object.keys(RECIPE_MOTION_PRESETS).join(', ')
-  const cameras = Object.keys(RECIPE_CAMERA_PRESETS).join(', ')
-  const fx = ATMOSPHERE.join(', ')
   const templates = JSON.stringify(NARRATIVE_SCENE_TEMPLATES.map(template => ({
     id: template.id, category: template.category, visualIntent: template.visualIntent,
     slots: template.assetSlots.map(slot => ({ id: slot.id, types: slot.types, required: slot.required })), controls: template.controls,
@@ -695,10 +727,8 @@ VIRTUAL-PRODUCTION RULES:
 - One action beat normally lasts 3-7 seconds. Use multiple shots instead of compressing unrelated actions into one move.
 - Effects are free and require no generated asset.
 
-SUPPORTED IDS:
-Motion: ${motion}
-Camera: ${cameras}
-Atmosphere: ${fx}
+SUPPORTED IDS (copy exactly; never invent an id):
+${recipeCatalogLines()}
 Hunyuan presets: eco, balanced, quality, multiview
 Rig profiles: ${RECIPE_RIG_PROFILES.join(', ')}
 Rig clips: ${RECIPE_RIG_ANIMATIONS.join(', ')}
@@ -720,6 +750,11 @@ Semantic mapping hints:
 - A repeatable moving world uses layer.strip with enabled, count, spacing, direction, speed and optional seamOccluder. Use it only when the plate is explicitly seamlessHorizontal: true. A seamOccluder is a pole, lamp, tree or column that masks the tile join; it is not a generated asset.
 - seamlessHorizontal is a verified inventory capability, never a visual guess. Only copy it when the chosen inventory item explicitly has seamlessHorizontal:true. The run-travel-parallax template requires such a plate; otherwise choose a non-travel template or a custom static scene.
 - Use layer.effects for local blur, brightness, contrast, saturation, glow, shadow, blendMode or mask. Keep a hidden alternate layer hidden with visible:false; do not delete it. Existing visual layers may use relationship parent, follow or lookAt only when the request explicitly establishes that dependency.
+- Requested titles, captions, quotes, chapters, end cards and lyric banners go in textTemplates. Each id must be a text-template id, with that template's field strings in values. Do not paint that lettering into an image or video prompt.
+- Requested timed on-screen texts go in scene.texts. font must be a kinetic font id. Non-kinetic font ids are not a text or lyric face.
+- Requested sung or displayed lyrics go in scene.lyrics. mode is karaoke, word-pop, line-fade or bounce. style.font must be a kinetic font id. Do not bake the lyric lines into a plate prompt.
+- A full-frame finish uses exactly one finish id. When the request names that look, set scene.finish to the id. Do not invent another finish id and do not restate the preset as raw grade numbers.
+- Requested screen effects go in scene.sfx. kind must be a screen-effect id. They are not atmosphere layers and not generated image or video assets. Atmosphere ids stay on effect layers.
 - rise/take off -> liftoff or diagonal-rise; descend/land -> landing; cross frame/fly past -> space-cruise, glide or pass-camera.
 - reveal/appear -> fade-reveal, portal-arrival or center-reveal; approach -> cinematic-push or zoom-in; depart -> exit-frame or zoom-out.
 - calm observational shot -> camera-locked or camera-dolly; follow horizontal action -> camera-pan-right/left; urgency -> camera-handheld or camera-whip-pan.
@@ -1271,6 +1306,7 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
       mood: GRADE_MOODS.includes(sceneRaw.mood as SceneGradeMood) ? sceneRaw.mood as SceneGradeMood : undefined,
       palette: GRADE_PALETTES.includes(sceneRaw.palette as SceneGradePalette) ? sceneRaw.palette as SceneGradePalette : undefined,
       intensity: ([1, 2, 3] as const).includes(sceneRaw.intensity as SceneGradeIntensity) ? sceneRaw.intensity as SceneGradeIntensity : undefined,
+      ...recipeFinishId(sceneRaw.finish),
       layers,
     },
   }
@@ -1384,6 +1420,7 @@ export function compileRecipeShot(
       ...scene,
       ...sceneFxFields(recipe.scene.sfx),
       ...recipeLettering(recipe, scene.duration),
+      ...recipeFinishPatch(recipe.scene.finish),
       ...sceneGenerationPolicyFields(recipe.generationPolicy),
       layers: dialogue.layers,
       ...(audioTracks.length ? { audioTracks } : {}),
@@ -1633,6 +1670,7 @@ export function compileSceneRecipe(
     name: recipe.name,
     ...sceneFxFields(recipe.scene.sfx),
     ...recipeLettering(recipe, duration),
+    ...recipeFinishPatch(recipe.scene.finish),
     ...sceneGenerationPolicyFields(recipe.generationPolicy),
     width: recipe.scene.width || 1280,
     height: recipe.scene.height || 720,
