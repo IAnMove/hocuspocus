@@ -219,6 +219,11 @@ def _normalize_finish(document: dict) -> None:
     _clamp_into(finish.get("vignette"), {"amount": (0, 1), "softness": (0, 1)})
     _clamp_into(finish.get("grain"), {"amount": (0, 1), "size": (0.5, 4)})
     _clamp_into(finish.get("texture"), {"amount": (0, 1)})
+    _clamp_into(finish.get("riso"), {
+        "misreg": (0, 8), "cutKick": (0, 48), "beatKick": (0, 24), "gamma": (0.2, 3), "gain": (0, 2),
+        "kLo": (0, 1), "kHi": (0, 1), "lift": (-0.2, 0.2), "grain": (0, 0.2), "fibre": (0, 2),
+        "inkTex": (0, 1), "vignette": (0, 1),
+    })
 
 
 def _normalize_rhythm(document: dict) -> None:
