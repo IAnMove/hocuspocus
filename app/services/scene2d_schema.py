@@ -210,7 +210,7 @@ def _texts() -> dict:
             "from": _number(), "to": _number(), "decimals": {"type": "integer", "minimum": 0, "maximum": 4},
             "ease": _enum(["linear", "ease"]),
         }, ["from", "to", "decimals", "ease"]),
-        "template": _string(80), "beatPulse": _number(0, 1),
+        "template": _string(80), "beatPulse": _number(0, 1), "trap": {"type": "boolean"},
     }, ["id", "text", "start", "end", "preset"]), max_items=48)
 
 

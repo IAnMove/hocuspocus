@@ -3,6 +3,7 @@ export {
   KINETIC_PRESETS, TEXT_FONTS, TEXT_ENTERS, TEXT_EXITS, TEXT_LOOPS, TEXT_WEIGHTS, TEXT_ALIGNS, TEXT_BOX_KINDS,
   TEXT_FONT_STACK, KINETIC_TEXT_SCHEMA, parseKineticTexts, kineticTextFields, isLegacyKineticText,
   derivedTextMotion, kineticTextState, paintKineticTexts, ensureTextFonts, displayedKineticText, wrapKineticLines,
+  type TextInkTrap,
   parseSceneLyrics, lyricFields, importLrc, importLyricsText, importSrt, importPlainLyrics, importTimingBundle, paintSceneLyrics,
   TEXT_TEMPLATES, buildTextTemplate, textTemplatesFromRecipe,
 } from './kineticText/index'
