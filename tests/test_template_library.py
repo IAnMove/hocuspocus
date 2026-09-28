@@ -220,6 +220,39 @@ def test_http_routes_save_apply_download_and_import(env):
     assert other_client.get("/api/v1/templates/local/web").status_code == 404
 
 
+def test_save_update_keeps_packed_media_and_preview(env):
+    library, _, workspace = env
+    saved = library.save(workspace=WS, editor="video3d", document=_world(), include_media=True, preview="shot.png",
+                         metadata={"title": "Keep media", "id": "local/keep-media"})
+    packed = library.get(saved["id"])
+    media_before = {item["path"]: item["sha256"] for item in packed["manifest"]["media"]}
+    preview_before = library.preview_path(saved["id"]).read_bytes()
+    updated = library.save(workspace=WS, editor="video3d", document=packed["document"], include_media=True,
+                           metadata={"title": "Keep media", "id": saved["id"], "description": "edited"},
+                           expected_updated_at=saved["updatedAt"])
+    after = library.get(updated["id"])
+    assert {item["path"]: item["sha256"] for item in after["manifest"]["media"]} == media_before
+    assert after["document"]["slots"][0]["sourceUrl"].startswith("media/")
+    assert library.preview_path(updated["id"]).read_bytes() == preview_before
+    applied = library.apply(updated["id"], workspace=WS)
+    assert applied["copiedMedia"] and applied["document"]["slots"][0]["sourceUrl"].startswith("/api/v1/file/tpl-")
+    with pytest.raises(TemplateError) as missing:
+        library.save(workspace=WS, editor="video3d", document=packed["document"], include_media=True,
+                     metadata={"title": "Clone", "id": "local/clone-media"})
+    assert missing.value.code == "missing_media"
+
+
+def test_apply_reports_missing_packaged_media(env):
+    library, _, _ = env
+    saved = library.save(workspace=WS, editor="video3d", document=_world(), include_media=True,
+                         metadata={"title": "Broken apply"})
+    media = next(path for path in library.file(saved["id"], "template.json").parent.glob("media/*"))
+    media.unlink()
+    with pytest.raises(TemplateError) as missing:
+        library.apply(saved["id"], workspace=WS)
+    assert missing.value.code == "missing_media"
+
+
 def test_inline_preview_data_url(env):
     import base64
     library, _, _ = env

@@ -128,6 +128,8 @@ class TemplateLibrary:
             manifest["createdAt"] = current.get("createdAt") or manifest["createdAt"]
         folder.parent.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix=".tpl-", dir=folder.parent))
+        backup = folder.with_name(folder.name + ".old")
+        moved = False
         try:
             (staging / MANIFEST).write_bytes(_dump(manifest))
             (staging / DOCUMENT).write_bytes(_dump(document))
@@ -136,11 +138,17 @@ class TemplateLibrary:
                 target = staging / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
-            backup = folder.with_name(folder.name + ".old")
             if folder.exists():
+                if backup.exists():
+                    shutil.rmtree(backup)
                 folder.rename(backup)
+                moved = True
             staging.rename(folder)
             shutil.rmtree(backup, ignore_errors=True)
+        except Exception:
+            if moved and backup.exists() and not folder.exists():
+                backup.rename(folder)
+            raise
         finally:
             shutil.rmtree(staging, ignore_errors=True)
         return self.summary(manifest["id"])
@@ -269,9 +277,41 @@ class TemplateLibrary:
                                        "createdAt": now, "updatedAt": now}, document)
         packed, files = self._pack_workspace_media(editor, document, workspace, include_media, manifest)
         files.update(self._preview(workspace, preview))
+        self._reuse_library_files(manifest["id"], editor, packed, files)
         manifest.update(self._media_manifest(files))
         return self._write(manifest, packed, files, {"source": "user", "savedAt": now, "workspace": workspace},
                            replace=False, expected_updated_at=expected_updated_at)
+
+    def _reuse_library_files(self, template_id: str, editor: str, document: dict, files: dict[str, bytes]) -> None:
+        """Keep sample media and preview already stored for this id when save() does not resupply them.
+
+        ``_pack_workspace_media`` leaves ``media/<sha>.<ext>`` locators untouched and does not put those
+        bytes in ``files``. ``_write`` then replaces the whole folder, so an update from ``templates.get``
+        (or any already-packed document) would delete the samples and leave dangling refs.
+        """
+        folder = self._folder(template_id)
+        missing: list[str] = []
+        for container, key in media_refs(editor, document):
+            value = container.get(key)
+            if not (isinstance(value, str) and MEDIA_REF_RE.fullmatch(value)) or value in files:
+                continue
+            path = folder / value
+            if path.is_file():
+                files[value] = path.read_bytes()
+            else:
+                missing.append(value)
+        if missing:
+            raise TemplateError("The template references media it does not contain: " + ", ".join(missing)[:400],
+                                code="missing_media")
+        if any(name.startswith("preview") for name in files):
+            return
+        try:
+            current = json.loads((folder / MANIFEST).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        name = current.get("preview") if isinstance(current, dict) else None
+        if isinstance(name, str) and name.startswith("preview") and (folder / name).is_file():
+            files[name] = (folder / name).read_bytes()
 
     @staticmethod
     def _media_manifest(files: dict[str, bytes]) -> dict[str, Any]:
@@ -292,11 +332,15 @@ class TemplateLibrary:
             match = MEDIA_REF_RE.fullmatch(value)
             if not match:
                 return None
+            source = folder / value
+            if not source.is_file():
+                raise TemplateError(f"The template references media it does not contain: {value}",
+                                    status=409, code="missing_media")
             name = f"tpl-{match.group(1)[:16]}{match.group(2)}"
             target = Path(self.workspace_dir(workspace)) / name
             if not target.exists():
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(folder / value, target)
+                shutil.copyfile(source, target)
                 copied.append(name)
             return gallery_url(workspace, name)
 
