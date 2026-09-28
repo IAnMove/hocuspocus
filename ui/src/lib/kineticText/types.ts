@@ -5,7 +5,7 @@ export const TEXT_EXITS = ['none', 'fade', 'fall', 'blur', 'wipe', 'scale', 'sli
 export const TEXT_LOOPS = ['none', 'wave', 'pulse', 'shake', 'float', 'flicker'] as const
 export const TEXT_WEIGHTS = [400, 500, 600, 700, 800, 900] as const
 export const TEXT_ALIGNS = ['left', 'center', 'right'] as const
-export const TEXT_BOX_KINDS = ['none', 'solid', 'paper', 'pill', 'bar', 'underline', 'plate'] as const
+export const TEXT_BOX_KINDS = ['none', 'solid', 'paper', 'pill', 'bar', 'underline', 'plate', 'tape', 'card'] as const
 
 export type TextFont = (typeof TEXT_FONTS)[number]
 export type TextEnter = (typeof TEXT_ENTERS)[number]

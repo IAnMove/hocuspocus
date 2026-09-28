@@ -69,7 +69,7 @@ def _text_paint() -> dict:
             "kind": _enum(["solid", "gradient"]), "from": HEX, "to": HEX, "angle": _number(-180, 180),
         }, ["kind"]),
         "box": _object({
-            "kind": _enum(["none", "solid", "paper", "pill", "bar", "underline", "plate"]),
+            "kind": _enum(["none", "solid", "paper", "pill", "bar", "underline", "plate", "tape", "card"]),
             "color": HEX, "opacity": _number(0, 1), "padding": _number(0, 4), "radius": _number(0, 2),
         }, ["kind", "color", "opacity", "padding"]),
     }
