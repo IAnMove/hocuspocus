@@ -38,8 +38,10 @@ def test_monitor_and_export_share_the_selected_resolution_and_fit_mode():
     assert source.count("height={resolution.height}") == 3
     assert "width: resolution.width" in source
     assert "height: resolution.height" in source
-    assert "clip.fit === 'fill' ? 'object-cover' : 'object-contain'" in source
-    assert "selected.fit === 'fill' ? 'object-cover' : 'object-contain'" in source
+    assert "clipPreviewClass(clip.fit)" in source
+    assert "clipPreviewClass(selected.fit)" in source
+    frame = (PANEL.parent / "clipFrame.ts").read_text(encoding="utf-8")
+    assert "fit === 'fill' ? `${base} object-cover` : `${base} object-contain`" in frame
     assert "resolution.width >= resolution.height ? 'w-full' : 'h-full'" not in source
 
 
