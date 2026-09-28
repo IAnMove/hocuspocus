@@ -346,7 +346,8 @@
         "tests/test_publish_presets.py",
         "tests/test_video_editor_layers.py",
         "tests/test_montage_shots.py",
-        "tests/test_template_library.py"
+        "tests/test_template_library.py",
+        "tests/test_qa_people.py"
       ]
     }
   ],
