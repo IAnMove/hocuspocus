@@ -934,7 +934,9 @@
     "keyframesCopied": "{{count}} keyframes copiados.",
     "keyframesPasted": "{{count}} keyframes pegados.",
     "sceneSavedName": "{{name}} guardado.",
-    "narrativeMounted": "{{title}} montado como escena editable de {{duration}} segundos."
+    "narrativeMounted": "{{title}} montado como escena editable de {{duration}} segundos.",
+    "myTemplates": "Mis plantillas",
+    "templateApplied": "Plantilla «{{name}}» aplicada."
   },
   "stage": {
     "badge": "Escenario 3D",

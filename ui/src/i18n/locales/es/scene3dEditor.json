@@ -318,25 +318,9 @@
   "yaw": "Giro Y (°)",
   "keepAssets": "Conservar mis objetos al cambiar de plano",
   "userTemplates": {
-    "title": "Mis escenarios",
-    "help": "Exporta un tipo de escenario (cámara, decorado, disposición, recorrido) como JSON intercambiable. Impórtalo aquí para reutilizarlo. No es el JSON de un plano y no empaqueta los GLB.",
-    "name": "Nombre del escenario",
-    "description": "Descripción (opcional)",
-    "includeAssets": "Incluir URL duraderas de la galería (nunca archivos blob:)",
-    "export": "Exportar plantilla de escenario",
-    "import": "Importar plantilla de escenario",
-    "chooseFile": "Archivo JSON de plantilla de escenario",
-    "exported": "Escenario guardado en este navegador y descargado como archivo .world3d.template.json.",
-    "imported": "Escenario añadido a Mis escenarios. Púlsalo para aplicarlo a este plano.",
-    "removed": "Escenario eliminado de este navegador.",
-    "empty": "Aún no hay escenarios importados. Exporta el plano actual o importa un archivo .world3d.template.json.",
-    "noDescription": "Cámara, decorado y disposición de objetos de un escenario compartido.",
-    "remove": "Quitar",
-    "needTitle": "Pon un nombre al escenario antes de exportarlo.",
-    "invalid": "No se pudo importar: el archivo no es una plantilla de escenario de Video 3D.",
-    "tooLarge": "El archivo de plantilla supera 1,5 MB.",
-    "saveFailed": "No se pudo guardar el escenario en este navegador (almacenamiento lleno o bloqueado).",
-    "openAsShot": "Este archivo es una plantilla de escenario. Impórtalo desde Mis escenarios, no como JSON de plano."
+    "title": "Mis plantillas",
+    "noDescription": "Cámara, decorado y disposición de un escenario.",
+    "openAsShot": "Este archivo es una plantilla. Impórtalo desde Mis plantillas, no como JSON de plano."
   },
   "cameraHelp": "Puedes cambiar la cámara; tus objetos conservan su identidad.",
   "category": {
@@ -1895,7 +1879,7 @@
     "catalog": "Contenido de la biblioteca",
     "templates": "Plantillas",
     "examples": "Ejemplos y variantes"
-},
+  },
   "shotLibrary": {
     "optionalExamples": "Aquí tienes los tipos de plano avanzados y todos los mundos pixel. Los aspectos adicionales de composiciones repetidas están en Ejemplos y variantes. Los recursos de ejemplo son opcionales.",
     "change": "Cambiar plano",

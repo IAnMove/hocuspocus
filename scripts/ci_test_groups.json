@@ -335,7 +335,8 @@
         "tests/test_song_shorten.py",
         "tests/test_publish_presets.py",
         "tests/test_video_editor_layers.py",
-        "tests/test_montage_shots.py"
+        "tests/test_montage_shots.py",
+        "tests/test_template_library.py"
       ]
     }
   ],
@@ -464,6 +465,42 @@
       "prefix": "app/routers/about.py",
       "paths": [
         "tests/test_about.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_format.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_library.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_commands.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/templates.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_community.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "scripts/community_index.py",
+      "paths": [
+        "tests/test_template_library.py"
       ]
     }
   ]

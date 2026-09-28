@@ -348,7 +348,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       <Scene3DSoundtrackControls tracks={sceneDoc.soundtrack} disabled={editingLocked}
         onChange={soundtrack => applyScene(current => ({ ...current, soundtrack }))} />
       <Scene3DShotLibraryCard document={sceneDoc} userTemplateId={selectedUserTemplateId} applyDisabled={exporting} editingLocked={editingLocked}
-        keepAssets={keepAssets} onKeepAssets={setKeepAssets} onTemplate={mountTemplate} onUserTemplate={mountUserTemplate} />
+        keepAssets={keepAssets} onKeepAssets={setKeepAssets} onTemplate={mountTemplate} onUserTemplate={mountUserTemplate}
+        workspace={workspace} preview={() => stageRef.current?.paint(seconds, sceneDoc)?.toDataURL('image/png')} />
       <Scene3DDocumentControls document={sceneDoc} disabled={editingLocked}
         workspace={workspace} identity={session.identity} preview={() => stageRef.current?.paint(seconds, sceneDoc)?.toDataURL('image/png')}
         onChange={next => { applyScene(next); setFrame(0) }}

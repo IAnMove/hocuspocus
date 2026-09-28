@@ -934,7 +934,9 @@
     "keyframesCopied": "{{count}} keyframes copied.",
     "keyframesPasted": "{{count}} keyframes pasted.",
     "sceneSavedName": "{{name}} saved.",
-    "narrativeMounted": "{{title}} mounted as an editable {{duration}}-second scene."
+    "narrativeMounted": "{{title}} mounted as an editable {{duration}}-second scene.",
+    "myTemplates": "My templates",
+    "templateApplied": "Template “{{name}}” applied."
   },
   "stage": {
     "badge": "3D stage",
