@@ -35,6 +35,12 @@ have your own template with that id; installing replaces it only if you confirm)
 MCP: `templates.community.list` and `templates.community.install`; HTTP:
 `GET /api/v1/templates/community` and `POST /api/v1/templates/community/install`.
 
+The community site is a separate repository (`hocuspocus-community`): packages live
+in `templates/<author>/<slug>.hptemplate`, and its CI runs
+`scripts/community_index.py` from this repository to validate every package with
+the same import code, write `index.json` (with SHA-256 and sizes), extract previews
+and publish a static page to GitHub Pages.
+
 ## What a template is
 
 * **Slots**: what the person must provide (a character GLB, a background image…).

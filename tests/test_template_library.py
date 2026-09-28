@@ -260,3 +260,25 @@ def test_community_index_lists_installs_and_verifies(env):
     with pytest.raises(TemplateError) as unavailable:
         down.listing()
     assert unavailable.value.code == "index_unavailable"
+
+
+def test_community_index_builder_validates_paths_and_publishes_hashes(env, tmp_path):
+    import hashlib
+    import importlib.util
+    library, _, _ = env
+    saved = library.save(workspace=WS, editor="video3d", document=_world(), preview="shot.png", metadata={"title": "Launch", "author": {"x": "ana"}})
+    _, package = library.export(saved["id"])
+    templates = tmp_path / "templates"
+    (templates / "ana").mkdir(parents=True)
+    (templates / "ana" / "launch.hptemplate").write_bytes(package)
+    (templates / "bob").mkdir()
+    (templates / "bob" / "stolen.hptemplate").write_bytes(package)
+    spec = importlib.util.spec_from_file_location("community_index", Path(__file__).resolve().parents[1] / "scripts" / "community_index.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    index, errors = module.build(templates, tmp_path / "site", "https://example.org/community/")
+    assert [entry["id"] for entry in index["templates"]] == ["ana/launch"]
+    entry = index["templates"][0]
+    assert entry["sha256"] == hashlib.sha256(package).hexdigest() and entry["package"] == "https://example.org/community/templates/ana/launch.hptemplate"
+    assert entry["preview"].endswith("previews/ana--launch.png") and (tmp_path / "site" / "previews" / "ana--launch.png").is_file()
+    assert len(errors) == 1 and "bob/stolen" in errors[0]

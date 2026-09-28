@@ -482,6 +482,12 @@
       "paths": [
         "tests/test_template_library.py"
       ]
+    },
+    {
+      "prefix": "scripts/community_index.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
     }
   ]
 }
