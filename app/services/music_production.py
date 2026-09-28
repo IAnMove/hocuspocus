@@ -50,13 +50,18 @@ SPEC_SCHEMA: dict[str, Any] = {
             "key": {"type": "string"}, "seeds": {"type": "array", "items": {"type": "integer"}, "maxItems": 6},
             "model": {"type": "string"}, "file": {"type": "string", "description": "Use an existing workspace song instead of generating"}}},
         "style": {"type": "object", "properties": {"image": {"type": "string"}, "video": {"type": "string"},
-                                                   "lyric_template": {"type": "string"}, "finish": {"type": "object"}}},
-        "cast": {"type": "array", "items": {"type": "object", "required": ["id", "sheet_prompt"]}},
+                                                   "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
+                                                   "lyric_template": {"type": "string"}, "lyric_style": {"type": "object"},
+                                                   "title_style": {"type": "object"}, "footer": {"type": "string"},
+                                                   "footer_style": {"type": "object"}, "finish": {"type": "object"}}},
+        "cast": {"type": "array", "items": {"type": "object", "required": ["id", "sheet_prompt"],
+                                         "properties": {"image_model": {"type": "string"}, "image_steps": {"type": "integer"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
         "shots": {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
             "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
             "frame": {"type": "string"}, "action": {"type": "string"}, "still": {"type": "string"}, "clip": {"type": "string"},
+            "image_model": {"type": "string"}, "image_steps": {"type": "integer"}, "graphic": {"type": "object"},
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"}}}},
         "fill": {"type": "array", "description": "Shots used to fill instrumental stretches longer than a clip"},
         "max_takes": {"type": "integer", "minimum": 1, "maximum": 5}},
@@ -72,6 +77,13 @@ def validate_spec(spec: Any) -> dict:
     song = spec["song"]
     if not isinstance(song, dict) or not all(k in song for k in ("lyrics", "caption", "duration", "bpm")):
         raise ProductionError("invalid_spec", "spec.song needs lyrics, caption, duration and bpm")
+    style = spec.get("style")
+    if not isinstance(style, dict):
+        raise ProductionError("invalid_spec", "spec.style must be an object")
+    for model in [style.get("image_model"), *(c.get("image_model") for c in spec.get("cast", []) if isinstance(c, dict)),
+                  *(s.get("image_model") for s in spec["shots"] if isinstance(s, dict))]:
+        if model is not None and (not isinstance(model, str) or not 1 <= len(model) <= 120):
+            raise ProductionError("invalid_spec", "image_model must be a model selector")
     keys = set()
     for shot in spec["shots"]:
         if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip"):
@@ -245,8 +257,10 @@ class Production:
                 time.sleep(poll)
         return done
 
-    def image(self, key: str, prompt: str, refs: list[str] | None, res: str, seed: int) -> str | None:
-        params = {"prompt": prompt, "model_type": "flux2_klein_9b", "resolution": res, "seed": seed, "guidance_scale": 1, "num_inference_steps": 4}
+    def image(self, key: str, prompt: str, refs: list[str] | None, res: str, seed: int,
+              model: str = "flux2_klein_9b", steps: int | None = None) -> str | None:
+        params = {"prompt": prompt, "model_type": model, "resolution": res, "seed": seed, "guidance_scale": 1,
+                  "num_inference_steps": steps or (40 if model.startswith("qwen_image_21") else 4)}
         if refs:
             params.update(image_refs=refs, video_prompt_type="I")
         r = self.mcp("generation.image", {"version": 2, "intent_id": f"{self.id}-{key}-{seed}", "input": {"workspace": self.ws, "params": params}})
@@ -295,8 +309,10 @@ class Production:
 
     def cast(self, spec: dict) -> None:
         cast = self.state.setdefault("cast", {})
-        style = (spec.get("style") or {}).get("image", "")
-        jobs = {c["id"]: self.image("cast-" + c["id"], c["sheet_prompt"] if style in c["sheet_prompt"] else f"{c['sheet_prompt']} {style}".strip(), None, "1536x1024", c.get("seed", 5))
+        settings = spec.get("style") or {}
+        style = settings.get("image", "")
+        jobs = {c["id"]: self.image("cast-" + c["id"], c["sheet_prompt"] if style in c["sheet_prompt"] else f"{c['sheet_prompt']} {style}".strip(), None, "1536x1024", c.get("seed", 5),
+                                     c.get("image_model", settings.get("image_model", "flux2_klein_9b")), c.get("image_steps", settings.get("image_steps")))
                 for c in spec.get("cast") or [] if c["id"] not in cast}
         for cid, name in self.wait(jobs).items():
             if name:
@@ -305,17 +321,37 @@ class Production:
 
     def frames(self, spec: dict, windows: list[dict]) -> None:
         frames = self.state.setdefault("frames", {})
-        style = (spec.get("style") or {}).get("image", "")
+        settings = spec.get("style") or {}
+        style = settings.get("image", "")
         jobs = {}
         for w in windows:
             if w["kind"] != "h3" or w["key"] in frames:
                 continue
             refs = [self.state["cast"][c] for c in w.get("cast", []) if c in self.state.get("cast", {})]
-            jobs[w["key"]] = self.image("frame-" + w["key"], f"{style} {w['frame']}".strip(), refs or None, "1280x704", w.get("seed", 3))
+            jobs[w["key"]] = self.image("frame-" + w["key"], f"{style} {w['frame']}".strip(), refs or None, "1280x704", w.get("seed", 3),
+                                        w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")))
         for key, name in self.wait(jobs).items():
             if name:
                 frames[key] = name
         self.log(f"frames: {len(frames)}")
+
+    def preview(self, request: dict) -> None:
+        """Generate three look tests before committing GPU time to a song or clips."""
+        self.state.update(status="running", preview_frames={})
+        self.save()
+        try:
+            model = request.get("image_model", "flux2_klein_9b")
+            jobs = {str(index): self.image(f"preview-{index}", prompt, None, request.get("resolution", "1280x704"),
+                                           (request.get("seeds") or [101, 102, 103])[index], model,
+                                           request.get("image_steps"))
+                    for index, prompt in enumerate(request["prompts"])}
+            self.state["preview_frames"] = {key: self.upload(name)[1] for key, name in self.wait(jobs).items() if name}
+            self.state["status"] = "preview_completed" if len(self.state["preview_frames"]) == 3 else "failed"
+            self.log(f"preview: {len(self.state['preview_frames'])}/3")
+        except Exception as error:
+            self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
+        self.state["finished"] = time.time()
+        self.save()
 
     def clip_job(self, spec: dict, w: dict, seed: int, take: int = 0) -> str | None:
         """Retakes change strategy, not only the seed: even takes are driven by the full mix (best on the
@@ -443,31 +479,65 @@ class Production:
             ops += [{"op": "add_layer", "id": "bg", "source": source, "type": "image", "preset": shot.get("camera", "camera-push-in")},
                     {"op": "update_layer", "id": "bg", "patch": {"fill": True, "focus": shot.get("focus", {"x": 50, "y": 50}), "animation": {
                         "start": {"x": 50, "y": 50, "scale": zoom[0], "rotation": 0}, "end": {"x": 50, "y": 50, "scale": zoom[1], "rotation": 0}}}}]
-        used = 0
-        if shot.get("title") and (span := title_span(dur)):
-            template = shot["title"].get("template", "lower-third-date")
-            fields = shot["title"]["fields"]
-            used += title_cue_count(template, fields, *span)
-            ops.append({"op": "add_title", "id": "tt", "template": template, "fields": fields,
-                        "start": span[0], "duration": span[1]})
-            if template == "lower-third-date":   # section label on top; lyrics own the bottom
-                ops += [{"op": "update_text", "id": "tt-date", "patch": {"y": 12}}, {"op": "update_text", "id": "tt-caption", "patch": {"y": 20}}]
-        lyric_template = style.get("lyric_template", "social-caption")
+        title_ops, used = self._title_ops(shot, dur, style)
+        ops.extend(title_ops)
+        ops.extend(self._lyric_ops(shot, a, b, dur, score, style, used))
+        ops.extend(self._footer_ops(dur, style))
+        if style.get("finish"):
+            ops.append({"op": "set_finish", **style["finish"]})
+        return ops
+
+    @staticmethod
+    def _title_ops(shot: dict, dur: float, style: dict) -> tuple[list[dict], int]:
+        span = title_span(dur)
+        if not shot.get("title") or not span:
+            return [], 0
+        template = shot["title"].get("template", "lower-third-date")
+        fields = shot["title"]["fields"]
+        ops = [{"op": "add_title", "id": "tt", "template": template, "fields": fields,
+                "start": span[0], "duration": span[1]}]
+        cues = TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080})
+        for index, cue in enumerate(cues):
+            patch = dict(style.get("title_style") or {})
+            if shot.get("graphic") and index == 0:
+                patch["graphic"] = shot["graphic"]
+            if patch:
+                ops.append({"op": "update_text", "id": f"tt-{cue['id']}", "patch": patch})
+        if template == "lower-third-date":   # section label on top; lyrics own the bottom
+            ops += [{"op": "update_text", "id": "tt-date", "patch": {"y": 12}},
+                    {"op": "update_text", "id": "tt-caption", "patch": {"y": 20}}]
+        return ops, title_cue_count(template, fields, *span)
+
+    def _lyric_ops(self, shot: dict, a: float, b: float, dur: float, score: dict, style: dict, used: int) -> list[dict]:
+        ops: list[dict] = []
+        template = style.get("lyric_template", "social-caption")
+        limit = MAX_TEXTS - bool(style.get("footer"))
         for index, line in enumerate(score.get("lines") or []):
             span = lyric_span(line, a, b, dur)
             if span is None:
                 continue
-            fields = {"caption": line["text"]}
-            cues = title_cue_count(lyric_template, fields, *span)
-            if used + cues > MAX_TEXTS:
+            fields = {"line": line["text"]} if template in ("ransom", "dymo") else {"caption": line["text"]}
+            cues = title_cue_count(template, fields, *span)
+            if used + cues > limit:
                 self.log(f"scene {shot.get('key')}: dropped lyrics after {used} text cues")
                 break
             used += cues
-            ops.append({"op": "add_title", "id": f"ly{index}", "template": lyric_template, "fields": fields,
+            ops.append({"op": "add_title", "id": f"ly{index}", "template": template, "fields": fields,
                         "start": span[0], "duration": span[1]})
-        if style.get("finish"):
-            ops.append({"op": "set_finish", **style["finish"]})
+            if style.get("lyric_style"):
+                for cue in TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080}):
+                    ops.append({"op": "update_text", "id": f"ly{index}-{cue['id']}", "patch": style["lyric_style"]})
         return ops
+
+    @staticmethod
+    def _footer_ops(dur: float, style: dict) -> list[dict]:
+        if not style.get("footer"):
+            return []
+        return [{"op": "add_title", "id": "footer", "template": "social-caption", "fields": {"caption": str(style["footer"])},
+                 "start": 0, "duration": dur},
+                {"op": "update_text", "id": "footer-social", "patch": {"y": 96, "size": 2, "font": "mono", "maxWidth": 96,
+                 "color": "#EFE6D2", "box": {"kind": "solid", "color": "#1B1718", "opacity": 0.85, "padding": 0.25},
+                 **(style.get("footer_style") or {})}}]
 
     def montage(self, spec: dict) -> None:
         score, scenes = self.score(), self.state["scenes"]
@@ -502,7 +572,7 @@ class Production:
             self.state["contact_sheet"] = sheet
         self.log(f"montage: {status.get('status')}")
 
-    def run(self, spec: dict, retake: tuple[str, ...] = ()) -> None:
+    def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
         self.save()
         try:
@@ -511,14 +581,19 @@ class Production:
             self.cast(spec)
             windows = shot_windows(spec, self.score())
             self.frames(spec, windows)
+            if through == "frames":
+                self.state["status"] = "frames_ready"
+                self.log("frames: ready for a clean restart before clips")
+                return
             self.clips(spec, windows, retake)
             self.scenes(spec, windows)
             self.montage(spec)
             self.state["status"] = "completed" if self.state.get("final") else "failed"
         except Exception as error:  # the run is resumable; keep the reason
             self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
-        self.state["finished"] = time.time()
-        self.save()
+        finally:
+            self.state["finished"] = time.time()
+            self.save()
 
 
 def status_summary(state: dict, workspace: str) -> dict[str, Any]:
@@ -528,6 +603,8 @@ def status_summary(state: dict, workspace: str) -> dict[str, Any]:
             "song": (state.get("song") or {}).get("file"),
             "clips": {**{k: "failed" for k in state.get("clip_failures") or {}}, **{k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()}},
             "failures": state.get("clip_failures") or None,
+            "preview_frames": state.get("preview_frames") or None,
+            "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
             "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:]}
 
@@ -548,7 +625,13 @@ def command_catalog() -> list[dict[str, Any]]:
                                       "Returns immediately; "
                                       "poll production.status. See docs/agents/VIDEO_PRODUCTION_RUNBOOK.md."),
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
-                                          "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20}},
+                                          "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
+                                          "through": {"enum": ["all", "frames"]},
+                                          "preview": {"type": "object", "required": ["prompts"], "properties": {
+                                              "prompts": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}},
+                                              "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
+                                              "resolution": {"type": "string"},
+                                              "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
         {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, last log lines.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid}, ["workspace", "production_id"])},
@@ -585,15 +668,29 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         if not token() or not app_url():
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         production = Production(data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=loopback_mcp(app_url, token))
-        try:
-            spec = validate_spec(data.get("spec") or production.state.get("spec"))
-        except ProductionError as error:
-            raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
+        preview = data.get("preview")
+        if preview is not None:
+            if (not isinstance(preview, dict) or not isinstance(preview.get("prompts"), list)
+                    or len(preview["prompts"]) != 3 or any(not isinstance(p, str) or not p.strip() for p in preview["prompts"])
+                    or ("seeds" in preview and (not isinstance(preview["seeds"], list) or len(preview["seeds"]) != 3))):
+                raise HTTPException(422, {"code": "invalid_preview", "message": "preview needs three prompts and optionally three seeds", "retryable": False})
+            target = production.preview
+            args = (preview,)
+        else:
+            try:
+                spec = validate_spec(data.get("spec") or production.state.get("spec"))
+            except ProductionError as error:
+                raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
+            through = data.get("through", "all")
+            if through not in ("all", "frames"):
+                raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all or frames", "retryable": False})
+            target = production.run
+            args = (spec, tuple(data.get("retake") or ()), through)
         key = f"{data['workspace']}/{data['production_id']}"
         with _lock:
             thread = _threads.get(key)
             if not (thread and thread.is_alive()):
-                thread = threading.Thread(target=production.run, args=(spec, tuple(data.get("retake") or ())), name=f"production-{data['production_id']}", daemon=True)
+                thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
                 _threads[key] = thread
                 thread.start()
         return {"version": 1, "status": "completed", "operation": RUN, "result": {"production_id": data["production_id"], "running": True}}

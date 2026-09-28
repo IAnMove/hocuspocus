@@ -9,6 +9,11 @@ production.status   {workspace, production_id}         → short summary; poll u
 (look at contact_sheet once; fix the spec and call production.run again with the same id to resume)
 production.run       {workspace, production_id, retake:["key"]} → shoot those clips again (new seeds, better take kept);
                                                      only the scenes whose clip changed are re-exported
+production.run       {workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}
+                    → generate three look tests without making a song; URLs appear in production.status.preview_frames
+production.run       {workspace, production_id, spec, through:"frames"}
+                    → stop after cast and frames; restart the isolated runtime if a large image model would slow H3,
+                      then resume with production.run {workspace, production_id}
 ```
 
 Do not call `tools/list` or `models` to plan a production: everything the run needs is here.
@@ -72,6 +77,14 @@ Shot fields:
 - `h3`: `frame` (start-frame prompt), `action` (what moves; use `(S1)` for the singer), `sing: true` for lip-sync, `cast` ids used as image references.
 - `still`: `focus` {x, y} (percent of the image kept centred while zooming), `zoom` [start, end], `camera` preset.
 - `title`: a text template (`lower-third-date`, `end-card`, `title-card`, …) with its fields. Lyric captions are added automatically.
+- `graphic`: a drawing from `app/shared/scene_graphics.json` attached to the first title cue, for example `{"id":"shatter","params":{"pieces":12}}`.
+
+Style fields for native Video 2D finishing:
+
+- `image_model` chooses the Studio image model for cast and frames (default `flux2_klein_9b`; `qwen_image_21` is useful for a recognizable public-person caricature). `image_steps` sets its step count; individual cast members or H3 shots may override either field.
+- `finish` accepts the same `set_finish` values as Video 2D, including `{"preset":"risoPress"}`. Riso automatically traps text on the black plate.
+- `lyric_template` may be `ransom` or `dymo` as well as `social-caption`. `title_style` and `lyric_style` are Video 2D text patches, for example `{"font":"mono","color":"#A9B1D6"}`.
+- `footer` adds a persistent small-print line to every scene. `footer_style` can set its color, font and background through the Video 2D text patch fields.
 
 ## Cost
 

@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 from pydantic import ValidationError
 
 from services.mcp_compact import compact_scene
+from services.scene2d_schema import GRAPHIC_IDS
 from services.scene_commands import DocumentInput, command_error
 from services.video2d_preset_catalog import camera_presets, finish_presets
 
@@ -47,7 +48,7 @@ _TEXT_LOOPS = frozenset({"none", "wave", "pulse", "shake", "float", "flicker"})
 _TEXT_BOXES = frozenset({"none", "solid", "paper", "pill", "bar", "underline", "plate"})
 _TEXT_RANGES = {"x": (0, 100), "y": (0, 100), "size": (2, 25), "rotation": (-45, 45), "maxWidth": (10, 100), "lineHeight": (0.8, 2), "letterSpacing": (-0.1, 0.5)}
 _TEXT_ENUMS = {"font": _TEXT_FONTS, "align": _TEXT_ALIGNS, "preset": _TEXT_PRESETS, "loop": _TEXT_LOOPS}
-_TEXT_FIELDS = set(_TEXT_RANGES) | set(_TEXT_ENUMS) | {"text", "start", "end", "weight", "uppercase", "italic", "enter", "exit", "box", "counter", "color"}
+_TEXT_FIELDS = set(_TEXT_RANGES) | set(_TEXT_ENUMS) | {"text", "start", "end", "weight", "uppercase", "italic", "enter", "exit", "box", "counter", "color", "graphic", "trap"}
 _POINT_RANGES = {"x": (-50, 150), "y": (-50, 150), "scale": (0.01, 20), "opacity": (0, 1), "rotation": (-180, 180)}
 # Corner zooms use layer focus {x, y}: that frame point stays on the anchor while
 # scale changes (x = anchor - (focus - 50) * scale). Positions stay in _POINT_RANGES
@@ -584,7 +585,7 @@ def _patch_text_words(cue: dict, patch: dict) -> None:
 
 
 def _patch_text_flags(cue: dict, patch: dict) -> None:
-    for key in ("uppercase", "italic"):
+    for key in ("uppercase", "italic", "trap"):
         if key not in patch:
             continue
         if not isinstance(patch[key], bool):
@@ -601,6 +602,14 @@ def _patch_text_nested(cue: dict, patch: dict) -> None:
         cue["box"] = _text_box(patch["box"])
     if "counter" in patch:
         cue["counter"] = _text_counter(patch["counter"])
+    if "graphic" in patch:
+        graphic = patch["graphic"]
+        if not isinstance(graphic, dict) or set(graphic) - {"id", "params"} or graphic.get("id") not in GRAPHIC_IDS:
+            _fail("invalid_input", "Graphic must name a catalog drawing")
+        params = graphic.get("params", {})
+        if not isinstance(params, dict) or len(params) > 6 or any(not isinstance(key, str) or not isinstance(value, (str, int, float)) or isinstance(value, bool) or (isinstance(value, str) and len(value) > 32) for key, value in params.items()):
+            _fail("invalid_input", "Graphic params must be short strings or numbers")
+        cue["graphic"] = {"id": graphic["id"], "params": params}
 
 
 def _apply_text_patch(cue: dict, patch: dict, scene_duration: float) -> None:

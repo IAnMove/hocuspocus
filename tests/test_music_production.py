@@ -64,6 +64,78 @@ def test_validate_spec_rejects_what_the_run_cannot_do():
         validate_spec(_spec(shots=[{"key": "x", "kind": "h3", "frame": "f"}]))
     with pytest.raises(ProductionError):
         validate_spec(_spec(shots=[{"key": "x", "kind": "still"}, {"key": "x", "kind": "still"}]))
+    with pytest.raises(ProductionError):
+        validate_spec(_spec(style={"image_model": ""}))
+
+
+def test_image_model_is_selected_for_cast_and_frames(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    requested = []
+    production.image = lambda *args: requested.append(args) or "job"
+    production.wait = lambda jobs: {key: "test.png" for key in jobs}
+    production.upload = lambda name: (name, "/u/" + name)
+    spec = _spec(style={"image": "riso", "image_model": "qwen_image_21", "image_steps": 40},
+                 cast=[{"id": "dhh", "sheet_prompt": "David caricature", "seed": 8}])
+    production.cast(spec)
+    production.frames(spec, [{"key": "s0", "kind": "h3", "frame": "at a keyboard", "cast": ["dhh"], "seed": 9}])
+    assert requested[0][-2:] == ("qwen_image_21", 40)
+    assert requested[1][-2:] == ("qwen_image_21", 40)
+    assert requested[1][2] == ["/u/test.png"]
+
+
+def test_qwen_image_request_keeps_model_and_reference(tmp_path):
+    calls = []
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, args: calls.append((tool, args)) or {"receipt": {"result": {"job_id": "j"}}})
+    assert production.image("frame", "David at a keyboard", ["/api/v1/uploads/reference.png"], "1280x704", 17,
+                            "qwen_image_21", 40) == "j"
+    tool, request = calls[0]
+    params = request["input"]["params"]
+    assert tool == "generation.image"
+    assert params["model_type"] == "qwen_image_21" and params["num_inference_steps"] == 40
+    assert params["image_refs"] == ["/api/v1/uploads/reference.png"]
+
+
+def test_preview_produces_three_urls_without_a_song(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    production.image = lambda *args: "job"
+    production.wait = lambda jobs: {key: f"{key}.png" for key in jobs}
+    production.upload = lambda name: (name, "/u/" + name)
+    production.preview({"prompts": ["desktop one", "desktop two", "desktop three"]})
+    summary = status_summary(production.state, "ws")
+    assert summary["status"] == "preview_completed"
+    assert summary["preview_frames"] == {"0": "/u/0.png", "1": "/u/1.png", "2": "/u/2.png"}
+    assert summary["song"] is None
+
+
+def test_frames_stage_stops_before_clips(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    called = []
+    for name in ("song", "analyze", "cast", "frames", "clips"):
+        setattr(production, name, lambda *args, name=name: called.append(name))
+    production.score = lambda: {"duration": 30, "lines": []}
+    production.run(_spec(), through="frames")
+    assert called == ["song", "analyze", "cast", "frames"]
+    assert production.state["status"] == "frames_ready"
+
+
+def test_native_riso_titles_graphic_footer_and_mono_lyrics(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: edit(arguments))
+    shot = {"key": "zine", "kind": "still", "still": "/examples/hero.png",
+            "title": {"template": "ransom", "fields": {"line": "BUILD THE DESKTOP"}},
+            "graphic": {"id": "shatter", "params": {"pieces": 12}}}
+    style = {"lyric_template": "dymo", "lyric_style": {"font": "mono", "color": "#A9B1D6"},
+             "title_style": {"trap": True}, "footer": "Fan-made parody, not affiliated with DHH, 37signals or Omarchy",
+             "finish": {"preset": "risoPress"}}
+    ops = production.scene_ops(shot, 0, 4, 4, {"lines": [{"t0": 1, "t1": 3, "text": "Love the machine"}]}, {}, style, {})
+    doc = {"version": 1, "name": "zine", "width": 1920, "height": 1080, "fps": 24, "duration": 4, "layers": [], "texts": []}
+    built = production.edit(doc, ops)
+    texts = built["texts"]
+    assert built["finish"]["riso"]["inks"]
+    assert any(t.get("graphic", {}).get("id") == "shatter" and t.get("trap") for t in texts)
+    assert any(t["id"] == "footer-social" and t["y"] == 96 for t in texts)
+    assert any(t["text"] == "LOVE THE MACHINE" and t["font"] == "mono" for t in texts)
 
 
 def test_windows_segments_and_instrumental_fill():
