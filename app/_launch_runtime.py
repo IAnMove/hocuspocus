@@ -6517,6 +6517,7 @@ def _minimax_h3_runtime_advisory(model_def: dict) -> dict | None:
 def get_model_options(model_type: str):
     """Return UI-relevant model options for dynamic rendering."""
     from services.image_edit_workflow import image_edit_capabilities
+    from services.model_selectors import selector_catalog
     if _is_legacy_h3_model(model_type):
         return dict(minimax_h3_service.MODEL_OPTIONS)
     if model_type in model3d_service.MODEL_BY_ID:
@@ -6747,6 +6748,7 @@ def get_model_options(model_type: str):
         # Max voice slots the model accepts. UI caps the "Add Voice" button
         # at this number. Defaults to 6 (Kugel); Scenema sets 2.
         "max_voice_count": md.get("max_voice_count"),
+        "selectors": selector_catalog(md),
     }
 
 
@@ -10949,6 +10951,11 @@ async def generate(request: Request):
     except Exception:
         _base_model_type = body.get("model_type")
     _generation_model_def = wgp.get_model_def(body["model_type"]) or {}
+    from services.model_selectors import InvalidSelector, validate_submitted_selectors
+    try:
+        validate_submitted_selectors(body, _generation_model_def)
+    except InvalidSelector as error:
+        raise HTTPException(status_code=400, detail=error.detail) from error
     from services.wangp_submission import prepare_generation_inputs
     try:
         prepare_generation_inputs(body, _generation_model_def, requested_workspace,

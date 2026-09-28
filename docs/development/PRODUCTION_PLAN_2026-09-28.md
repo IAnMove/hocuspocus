@@ -9,3 +9,8 @@ Registro corto. El encargo privado no está en git. B2 ya está en `development`
 | B2 | mezclado | #552 `assets.upload`. |
 | B3 | en este PR | `output_name` opcional. El recibo devuelve asset, URL y ruta. |
 | D1 | en este PR | Prensa riso opcional (`risoPress`). Apagada por defecto. |
+| A3 | en este PR | Un trabajo corto y prioritario sale antes que un vídeo largo. |
+| B3 | en este PR | `output_name` opcional. El recibo devuelve asset, URL y ruta. |
+| B4 | en este PR | Un selector inválido responde `invalid_selector` y los valores permitidos. |
+| B5 | en este PR | `jobs.wait` espera el fin del trabajo o `timeout`. |
+| B6 | en este PR | Catálogos y ediciones resumidos. La hoja de contactos es una URL. |
