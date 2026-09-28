@@ -57,7 +57,7 @@ def _command_tool(operation):
 def tool_definitions(available=None, command_operations=None):
     tools = []
     for name, description in [
-        ('models', 'Discover exact model identifiers and capabilities.'),
+        ('models', 'Discover exact model identifiers and capabilities. Pass model_type for one model\'s options, including allowed selector values.'),
         ('processors', 'Discover available postprocessors and hardware restrictions.'),
         ('status', 'Read the canonical status of a previously submitted job.'),
         ('assets', 'Find existing canonical media IDs and URLs. Paginate with limit and offset; never invent filenames.'),
