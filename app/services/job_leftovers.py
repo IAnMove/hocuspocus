@@ -20,6 +20,14 @@ from services.durable_generation_queue import DurableGenerationQueue
 
 ACTIVE_STATUSES = frozenset({"queued", "waiting_resource", "running", "cancelling"})
 _MAX_INTENT = 160
+# Written after the first durable persist (H3 window planning). A crash during
+# GPU work must still match the original submit body.
+_RUNTIME_PARAM_KEYS = frozenset({
+    "h3_window_prompts",
+    "h3_window_plan",
+    "h3_window_plan_signature",
+    "minimax_h3_window_storyboard",
+})
 
 
 def _error(status: int, code: str, message: str) -> HTTPException:
@@ -43,7 +51,11 @@ def content_fingerprint(params: Any, workspace: Any) -> str:
     clean: dict[str, Any] = {}
     if isinstance(params, dict):
         for key in sorted(params):
-            if isinstance(key, str) and not key.startswith("_"):
+            if (
+                isinstance(key, str)
+                and not key.startswith("_")
+                and key not in _RUNTIME_PARAM_KEYS
+            ):
                 clean[key] = params[key]
     payload = {"workspace": _workspace(workspace), "params": clean}
     try:
@@ -292,15 +304,21 @@ class JobLeftovers:
             discard_record=self.discard_record,
         )
 
+    def _queue_records_unlocked(self) -> list[dict]:
+        """Durable leftovers that are not live. Never projects command recovery."""
+        return self.queue.list(exclude_ids=list(self.jobs.keys()))
+
     def _records_unlocked(self) -> list[dict]:
-        records = self.queue.list(exclude_ids=list(self.jobs.keys()))
+        records = self._queue_records_unlocked()
         if self.prepare is None:
             return records
         prepared = self.prepare(records)
         return list(prepared or [])
 
     def _duplicate_unlocked(self, params: Any, workspace: Any) -> dict | None:
-        record = match_fingerprint(self._records_unlocked(), params, workspace)
+        # Submit/status must not run restore/filter: a sqlite failure in one
+        # workspace must not 503 every generation.
+        record = match_fingerprint(self._queue_records_unlocked(), params, workspace)
         if record is None:
             return None
         return duplicate_payload(record)
@@ -359,7 +377,7 @@ class JobLeftovers:
         if not isinstance(job_id, str) or not job_id.strip():
             return None
         with self.lock:
-            record = find_leftover(self._records_unlocked(), job_id.strip())
+            record = find_leftover(self._queue_records_unlocked(), job_id.strip())
         if record is None:
             return None
         return status_document(record)
@@ -368,7 +386,7 @@ class JobLeftovers:
         if not isinstance(intent_id, str) or not intent_id.strip():
             return None
         with self.lock:
-            record = find_leftover(self._records_unlocked(), intent_id.strip(), workspace=workspace)
+            record = find_leftover(self._queue_records_unlocked(), intent_id.strip(), workspace=workspace)
         if record is None:
             return None
         return receipt_document(record)

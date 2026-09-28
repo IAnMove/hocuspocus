@@ -262,3 +262,53 @@ def test_discard_removes_one_leftover_and_leaves_a_running_job(tmp_path):
         handlers["jobs.resume"]({"version": 1, "intent_id": "drop"})
     assert missing.value.detail["code"] == "leftover_not_found"
     assert "not found" not in json.dumps(missing.value.detail).lower()
+
+
+def test_submit_and_status_do_not_run_the_recovery_projection(tmp_path):
+    def explode(_records):
+        raise HTTPException(status_code=503, detail={"code": "storage_unavailable"})
+
+    path = tmp_path / "queue.json"
+    created = JobLeftovers(queue=DurableGenerationQueue(str(path)), jobs={}).enqueue(
+        _payload("harbor"), workspace="lab", intent_id="intent-beta",
+    )
+    recovered = JobLeftovers(
+        queue=DurableGenerationQueue(str(path)), jobs={}, prepare=explode,
+    )
+
+    status = recovered.status_for(created["job_id"])
+    assert status is not None
+    assert status["job_id"] == created["job_id"]
+    assert recovered.receipt_for("lab", "intent-beta")["receipt"]["result"]["job_id"] == created["job_id"]
+    duplicate = recovered.duplicate_for_submit(_payload("harbor"), "lab")
+    assert duplicate is not None
+    assert duplicate["code"] == "duplicate_leftover"
+    assert duplicate["job_id"] == created["job_id"]
+    with pytest.raises(HTTPException) as error:
+        recovered.list_response()
+    assert error.value.status_code == 503
+
+
+def test_planned_h3_leftover_still_matches_the_original_submit(tmp_path):
+    original = _payload("long harbor")
+    planned = {
+        **original,
+        "h3_window_prompts": ["one", "two"],
+        "h3_window_plan": {"windows": 2},
+        "h3_window_plan_signature": "sig",
+        "minimax_h3_window_storyboard": True,
+    }
+    assert content_fingerprint(original, "lab") == content_fingerprint(planned, "lab")
+
+    path = tmp_path / "queue.json"
+    created = JobLeftovers(queue=DurableGenerationQueue(str(path)), jobs={}).enqueue(
+        original, workspace="lab", intent_id="intent-h3",
+    )
+    stored = DurableGenerationQueue(str(path)).list()[0]
+    stored["params"] = planned
+    DurableGenerationQueue(str(path)).upsert(stored)
+
+    recovered = JobLeftovers(queue=DurableGenerationQueue(str(path)), jobs={})
+    duplicate = recovered.duplicate_for_submit(original, "lab")
+    assert duplicate is not None
+    assert duplicate["job_id"] == created["job_id"]
