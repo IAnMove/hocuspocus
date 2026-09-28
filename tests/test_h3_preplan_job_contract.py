@@ -321,6 +321,7 @@ def _harness(
         "update_job": update_job,
         "finish_job": finish_job,
         "acknowledge_cancel": acknowledge_cancel,
+        "ensure_generation_priority": lambda _body: None,
         "snapshot_job": lambda job: dict(job),
         "_run_generation": lambda job_id, **_kwargs: gpu_calls.append(job_id),
         "_image_generation_commands": SimpleNamespace(native_worker=lambda _job: None),

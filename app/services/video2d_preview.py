@@ -83,7 +83,7 @@ def _preview_input(data: Any) -> dict:
     if not isinstance(data, dict) or not {"document", "times"} <= set(data) <= FIELDS:
         raise PreviewError("preview_bad_envelope", "input must be document and times")
     if "workspace" in data and not (isinstance(data["workspace"], str) and WORKSPACE_RE.fullmatch(data["workspace"])):
-        raise PreviewError("preview_bad_workspace", "workspace")
+        raise PreviewError("preview_bad_envelope", "workspace")
     return data
 
 
@@ -336,9 +336,9 @@ def paint_contact_sheet(document: dict, times: list[float], size: tuple[int, int
 
 
 def _result(png: bytes, times: list[float], size: tuple[int, int, int], workspace: str) -> dict[str, Any]:
-    if _WORKSPACE_DIR is None:
-        raise PreviewError("preview_bad_workspace", "workspace directory is not configured")
-    stored = store_contact_sheet(png, workspace=workspace, workspace_dir=_WORKSPACE_DIR)
+    stored = {"sha256": hashlib.sha256(png).hexdigest(), "bytes": len(png)}
+    if _WORKSPACE_DIR is not None:
+        stored = store_contact_sheet(png, workspace=workspace, workspace_dir=_WORKSPACE_DIR)
     return {
         "version": 1,
         "status": "completed",
