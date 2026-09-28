@@ -13,6 +13,7 @@ import uuid
 
 from fastapi import HTTPException
 from services.image_generation_spec import freeze_image_generation_spec, ImageGenerationSpecError
+from services.job_lifecycle import priority_fields, take_submission_priority
 from services.task_command_admission import TaskCommandConflict
 from services.wangp_submission import JsonRequest
 
@@ -138,6 +139,7 @@ class ImageGenerationCommands:
 
     async def submit(self, command, *, trusted_tool=None, submission_context=None):
         try:
+            priority = take_submission_priority(command)
             frozen, params = self._freeze(command)
             registry = self._registry(params["workspace"])
             previous = registry.command_admission(command["intent_id"])
@@ -156,8 +158,11 @@ class ImageGenerationCommands:
                 frozen["effective"]["resources"] = resources
             else:
                 self.preflight(params)
-            request = JsonRequest({**deepcopy(params), "provenance": self._provenance(
-                frozen, trusted_tool, submission_context)}, trusted_tool=trusted_tool)
+            request = JsonRequest({
+                **deepcopy(params),
+                "provenance": self._provenance(frozen, trusted_tool, submission_context),
+                **priority_fields(priority),
+            }, trusted_tool=trusted_tool)
             request.prepared_studio_images = command["operation"] == "generation.image" and command["version"] == 2
             request.prepared_studio_speech = command["operation"] == "generation.speech"
             request.prepared_studio_audio = command["operation"] == "generation.music"
@@ -172,6 +177,8 @@ class ImageGenerationCommands:
             raise command_error(422, "invalid_command", str(error)) from error
         except TaskCommandConflict as error:
             raise command_error(409, "intent_conflict", str(error)) from error
+        except ValueError as error:
+            raise command_error(422, "invalid_command", str(error)) from error
         except (OSError, sqlite3.Error) as error:
             raise command_error(503, "storage_unavailable", "Command storage is unavailable; retry with the same intention") from error
 

@@ -441,6 +441,7 @@ from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
     acknowledge_cancel,
     collect_job_outputs,
+    ensure_generation_priority,
     finish_job,
     generation_queue_position,
     generation_slot,
@@ -10885,6 +10886,11 @@ async def generate(request: Request):
     from services.generation_provenance import normalize_submission_provenance
 
     body = await request.json()
+    if isinstance(body, dict):
+        try:
+            ensure_generation_priority(body)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
     provenance = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
     collection_id = provenance.get("workspace_id")
     if collection_id and not _workspace_collection_registry.get(collection_id):
