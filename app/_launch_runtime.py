@@ -36731,9 +36731,11 @@ from services.scene_packages import make_workspace_reader as _template_reader
 from services.template_library import TemplateLibrary, resolve_template_library_root
 from services.template_commands import TemplateCommands, command_catalog as template_command_catalog
 from routers.templates import create_templates_router
-_template_commands = TemplateCommands(TemplateLibrary(
+from services.template_community import CommunityIndex
+_template_library = TemplateLibrary(
     resolve_template_library_root(_app_dir), workspace_dir=_workspace_dir,
-    reader=_template_reader(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))))
+    reader=_template_reader(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")))
+_template_commands = TemplateCommands(_template_library, CommunityIndex(_template_library))
 api.include_router(create_templates_router(_template_commands))
 from services.scene_documents import command_catalog as scene_document_catalog, command_handlers as scene_document_handlers
 

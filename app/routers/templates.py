@@ -71,6 +71,15 @@ def create_templates_router(commands: TemplateCommands) -> APIRouter:
     async def import_template(request: Request, replace: bool = False):
         return await call(library.import_package, await package_body(request), replace=replace)
 
+    @router.get("/api/v1/templates/community")
+    async def community(editor: str | None = None, q: str | None = None, refresh: bool = False):
+        payload = {key: value for key, value in (("editor", editor), ("query", q)) if value}
+        return await run("templates.community.list", {**payload, "refresh": refresh})
+
+    @router.post("/api/v1/templates/community/install")
+    async def community_install(request: Request):
+        return await run("templates.community.install", await json_body(request, {"id", "replace"}))
+
     @router.get("/api/v1/templates/{author}/{slug}")
     async def get_template(author: str, slug: str):
         return await run("templates.get", {"id": f"{author}/{slug}"})

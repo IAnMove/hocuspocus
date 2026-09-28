@@ -263,6 +263,23 @@
       "imported": "imported",
       "community": "community"
     },
-    "confirmImport": "Import this template"
+    "confirmImport": "Import this template",
+    "tabs": {
+      "mine": "My library",
+      "community": "Community"
+    },
+    "community": {
+      "title": "Community templates",
+      "help": "Templates shared by the HocusPocus community. Downloads are checked against their SHA-256 and land in your library.",
+      "refresh": "Refresh",
+      "loading": "Loading the community index…",
+      "empty": "The community index has no templates for this editor yet.",
+      "install": "Install",
+      "update": "Update",
+      "replace": "Replace mine",
+      "installed": "Installed",
+      "conflictHint": "You already have your own template with this id.",
+      "done": "“{{title}}” installed in your library."
+    }
   }
 }

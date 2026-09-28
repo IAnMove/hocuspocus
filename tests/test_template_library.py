@@ -229,3 +229,34 @@ def test_inline_preview_data_url(env):
     assert library.preview_path(saved["id"]).read_bytes() == png
     with pytest.raises(TemplateError):
         library.save(workspace=WS, editor="video3d", document=_world(), metadata={"title": "Bad"}, preview="data:image/png;base64,@@@")
+
+
+def test_community_index_lists_installs_and_verifies(env):
+    import hashlib
+    from services.template_community import CommunityIndex
+    library, make, workspace = env
+    saved = library.save(workspace=WS, editor="video3d", document=_world(), include_media=True, metadata={"title": "Shared", "author": {"x": "ana"}})
+    name, package = library.export(saved["id"])
+    index = {"kind": "hocuspocus.community-index", "version": 1, "updatedAt": "2026-09-28", "templates": [
+        {"id": saved["id"], "editor": "video3d", "title": "Shared", "author": {"x": "ana"}, "license": "CC0-1.0",
+         "sha256": hashlib.sha256(package).hexdigest(), "bytes": len(package),
+         "package": f"https://community.example/templates/{name}", "preview": "https://community.example/p.jpg"},
+        {"id": "evil/elsewhere", "sha256": "0" * 64, "package": "https://evil.example/x.hptemplate"},
+        {"id": "bad", "sha256": "nope", "package": "http://community.example/x"}]}
+    served = {"https://community.example/index.json": json.dumps(index).encode(), f"https://community.example/templates/{name}": package}
+    fetch = lambda url, limit: served[url]  # noqa: E731
+    other = make("other")
+    community = CommunityIndex(other, index_url="https://community.example/index.json", fetch=fetch)
+    listing = community.listing()
+    assert [item["id"] for item in listing["templates"]] == [saved["id"]] and listing["templates"][0]["state"] == "available"
+    installed = community.install(saved["id"])
+    assert installed["source"] == "community"
+    assert community.listing(refresh=True)["templates"][0]["state"] == "installed"
+    served[f"https://community.example/templates/{name}"] = package + b"tampered"
+    with pytest.raises(TemplateError) as mismatch:
+        community.install(saved["id"])
+    assert mismatch.value.code == "checksum_mismatch"
+    down = CommunityIndex(other, index_url="https://down.example/index.json", fetch=lambda url, limit: (_ for _ in ()).throw(OSError("offline")))
+    with pytest.raises(TemplateError) as unavailable:
+        down.listing()
+    assert unavailable.value.code == "index_unavailable"

@@ -7,6 +7,7 @@ import {
 } from '../../api/templates'
 import type { TemplateEditor } from '../../api/templates'
 import { authorLabel, readAuthor, rememberAuthor, saveInput, type TemplateForm } from './templateForm'
+import { CommunityTemplates } from './CommunityTemplates'
 
 const field = 'mt-1 block min-h-10 w-full rounded-lg border border-border bg-bg-primary px-3 text-text-primary'
 const button = 'inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-xs hover:bg-bg-hover disabled:opacity-40'
@@ -118,6 +119,7 @@ export function TemplateLibraryPanel<T>({ editor, document, workspace = 'default
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [review, setReview] = useState<{ file: File; report: TemplatePreflight } | null>(null)
+  const [tab, setTab] = useState<'mine' | 'community'>('mine')
 
   const reload = useCallback(async () => {
     try { setTemplates(await listTemplates(editor)) } catch (failure) { setError((failure as Error).message) }
@@ -158,6 +160,11 @@ export function TemplateLibraryPanel<T>({ editor, document, workspace = 'default
         onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) choose(file) }} />
     </div>
     <p className="mt-1 text-xs leading-5 text-text-secondary">{t('templateLibrary.help')}</p>
+    <div role="tablist" className="mt-2 flex gap-1">
+      {(['mine', 'community'] as const).map(value => <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}
+        className={`rounded-lg border px-3 py-1.5 text-xs ${tab === value ? 'border-cyan-300 bg-cyan-300/10 text-text-primary' : 'border-border text-text-secondary'}`}>{t(`templateLibrary.tabs.${value}`)}</button>)}
+    </div>
+    {tab === 'community' ? <CommunityTemplates editor={editor} onInstalled={() => void reload()} /> : <>
     <SaveForm disabled={disabled} busy={busy} fallbackTitle={fallbackTitle} onSave={save} testIdPrefix={testIdPrefix} />
     {review && <ImportReview report={review.report} busy={busy} onConfirm={confirmImport} onCancel={() => setReview(null)} />}
     {note && <p role="status" className="mt-2 text-xs text-text-secondary">{note}</p>}
@@ -167,5 +174,6 @@ export function TemplateLibraryPanel<T>({ editor, document, workspace = 'default
         onPick={() => pick(item)} onDelete={() => remove(item)} testIdPrefix={testIdPrefix} />)}
     </div>
     {templates?.length === 0 && <p role="status" className="p-3 text-xs text-text-secondary">{t('templateLibrary.empty')}</p>}
+    </>}
   </section>
 }

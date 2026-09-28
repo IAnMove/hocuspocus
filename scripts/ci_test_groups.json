@@ -476,6 +476,12 @@
       "paths": [
         "tests/test_template_library.py"
       ]
+    },
+    {
+      "prefix": "app/services/template_community.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
     }
   ]
 }

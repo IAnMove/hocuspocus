@@ -52,6 +52,12 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "templates.import": ({"workspace": WORKSPACE, "file": FILE, "replace": {"type": "boolean"}}, ["workspace", "file"], True,
                          "Import a .hptemplate from a workspace into the library. An existing id needs replace=true."),
     "templates.delete": ({"id": TEMPLATE_ID}, ["id"], True, "Delete a template from the local library."),
+    "templates.community.list": ({"editor": EDITOR, "query": {"type": "string", "maxLength": 120}, "refresh": {"type": "boolean"}}, [], False,
+                                 "Browse the community template index (fetched from the community site on demand): id, title, "
+                                 "author, license, preview, size and whether it is available, installed, has an update or "
+                                 "conflicts with a local template."),
+    "templates.community.install": ({"id": TEMPLATE_ID, "replace": {"type": "boolean"}}, ["id"], True,
+                                    "Download a community template (checked against the index SHA-256) into the local library."),
 }
 SAVE_METADATA = ("title", "description", "tags", "author", "license", "id", "templateVersion", "slots", "controls")
 
@@ -82,8 +88,14 @@ def _payload(arguments: Any, name: str) -> dict[str, Any]:
 
 
 class TemplateCommands:
-    def __init__(self, library: TemplateLibrary) -> None:
+    def __init__(self, library: TemplateLibrary, community: Any = None) -> None:
         self.library = library
+        self.community = community
+
+    def _community(self) -> Any:
+        if self.community is None:
+            raise TemplateError("The community index is not configured", status=503, code="unavailable")
+        return self.community
 
     def _dispatch(self) -> dict[str, Callable[[dict[str, Any]], Any]]:
         lib = self.library
@@ -99,6 +111,9 @@ class TemplateCommands:
             "templates.preflight": lambda p: self._preflight(p["workspace"], p["file"]),
             "templates.import": lambda p: lib.import_from_workspace(p["workspace"], p["file"], replace=bool(p.get("replace"))),
             "templates.delete": lambda p: lib.delete(p["id"]),
+            "templates.community.list": lambda p: self._community().listing(
+                refresh=bool(p.get("refresh")), editor=p.get("editor"), query=p.get("query")),
+            "templates.community.install": lambda p: self._community().install(p["id"], replace=bool(p.get("replace"))),
         }
 
     def _preflight(self, workspace: str, file: str) -> dict[str, Any]:

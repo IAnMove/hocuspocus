@@ -23,6 +23,18 @@ slots are image/video layers with workspace media, the preview is the current fr
 and using a template opens it in the animator. Save the scene first if it still has
 local (unsaved) files: templates only reference workspace or example media.
 
+## Community
+
+The **Community** tab (next to *My library*) reads the community index
+(`HOCUS_TEMPLATE_COMMUNITY_INDEX`, default
+`https://ianmove.github.io/hocuspocus-community/index.json`) only when opened. The
+server downloads packages only from the index host or `raw.githubusercontent.com`,
+checks size and SHA-256 against the index and that the package id matches, then
+imports them as `community`. States: available, installed, update, conflict (you
+have your own template with that id; installing replaces it only if you confirm).
+MCP: `templates.community.list` and `templates.community.install`; HTTP:
+`GET /api/v1/templates/community` and `POST /api/v1/templates/community/install`.
+
 ## What a template is
 
 * **Slots**: what the person must provide (a character GLB, a background image…).

@@ -263,6 +263,23 @@
       "imported": "importada",
       "community": "comunidad"
     },
-    "confirmImport": "Importar esta plantilla"
+    "confirmImport": "Importar esta plantilla",
+    "tabs": {
+      "mine": "Mi biblioteca",
+      "community": "Comunidad"
+    },
+    "community": {
+      "title": "Plantillas de la comunidad",
+      "help": "Plantillas compartidas por la comunidad de HocusPocus. Se descargan comprobadas con su huella SHA-256 y quedan en tu biblioteca.",
+      "refresh": "Actualizar",
+      "loading": "Cargando el índice de la comunidad…",
+      "empty": "El índice de la comunidad aún no tiene plantillas para este editor.",
+      "install": "Instalar",
+      "update": "Actualizar",
+      "replace": "Reemplazar la mía",
+      "installed": "Instalada",
+      "conflictHint": "Ya tienes una plantilla propia con este id.",
+      "done": "«{{title}}» instalada en tu biblioteca."
+    }
   }
 }

@@ -100,3 +100,32 @@ export function templatePackageUrl(id: string): string {
 export function templatePreviewUrl(summary: Pick<TemplateSummary, 'previewUrl'>): string | null {
   return summary.previewUrl ? `${BASE}${summary.previewUrl}` : null
 }
+
+export interface CommunityTemplate {
+  id: string
+  editor: TemplateEditor
+  title: string
+  description: string
+  tags: string[]
+  author: TemplateAuthor
+  license: string
+  templateVersion: string
+  slots: number
+  controls: number
+  media: number
+  bytes: number
+  preview: string | null
+  state: 'available' | 'installed' | 'update' | 'conflict'
+}
+
+export async function listCommunityTemplates(editor: TemplateEditor, refresh = false): Promise<{ url: string; updatedAt: string; templates: CommunityTemplate[] }> {
+  const res = await fetch(`${BASE}/api/v1/templates/community?editor=${editor}${refresh ? '&refresh=true' : ''}`)
+  return readJson(res, 'The community index is not available')
+}
+
+export async function installCommunityTemplate(id: string, replace = false): Promise<TemplateSummary> {
+  const res = await fetch(`${BASE}/api/v1/templates/community/install`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, replace }),
+  })
+  return readJson(res, 'Could not install the template')
+}
