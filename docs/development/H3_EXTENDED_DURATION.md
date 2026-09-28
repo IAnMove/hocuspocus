@@ -6,6 +6,7 @@ This is not the published 15 s envelope and not a Series Lab planner change.
 
 Related: [H3 implementation notes](H3_IMPLEMENTATION_NOTES.md),
 [IMAGE / video commands](../minimax-h3-prompting.md),
+[VIDEO_COMMANDS](VIDEO_COMMANDS.md) (the same flag on `generation.video` v3),
 [Series Lab](../series-lab/IMPLEMENTATION.md) (still 5 / 10 / 15 s shots).
 
 ---
@@ -24,7 +25,7 @@ The catalog JSON is never rewritten. The override is job-local.
 
 | Item | Value |
 |---|---|
-| Flag | `params.minimax_h3_extended_duration === true` |
+| Flag | `params.minimax_h3_extended_duration === true` (Studio and `generation.video` v3) |
 | Default | `false` / omitted — 15 s catalog ceiling |
 | Frames | `H3_EXPERIMENTAL_MAX_FRAMES = 719` |
 | Seconds | `H3_EXPERIMENTAL_MAX_SECONDS = 30` (display); actual pass is 29.958 s |

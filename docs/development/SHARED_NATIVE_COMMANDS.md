@@ -31,7 +31,8 @@ repeat clicks in that interval share the pending UI action. Admission and its
 identity are reported by the command panel/Activity. Failed local placeholders
 do not increase the active-job count on the button.
 
-The shared native routes currently cover image, speech, local music, SFX and upscale. Other
+The shared native routes currently cover image, speech, local music, SFX,
+upscale and typed `generation.video` (Wan 2.1 v2; H3 / LTX-2.3 v3). Other
 Studio modes continue through their existing paths until migrated. Speech
 model duration controls have model-specific meanings: for example, a 20-second
 Kugel setting does not force a short sentence to occupy exactly 20 seconds.
@@ -69,13 +70,17 @@ Relevant tools include:
 | --- | --- |
 | `models`, `processors` | Discover exact model IDs and processor availability |
 | `assets` | Find source IDs and workspace-qualified media URLs |
+| `assets.upload` | Store one image/audio/video (≤8 MiB) and return `{asset_id, url}` |
 | `generation.image` | Submit the shared image specification |
+| `generation.video` | Wan 2.1 Text2Video (v2) or typed H3 / LTX-2.3 (v3). See [VIDEO_COMMANDS](VIDEO_COMMANDS.md). |
 | `generation.speech` | Submit the shared speech specification |
 | `generation.music` | Submit literal lyrics and a music caption to an installed local model |
 | `generation.sfx` | Generate MMAudio effects from text or replace a canonical video's audio |
 | `tools.upscale` | Submit a typed upscale request for an existing image/video |
-| `generation.receipt` | Recover a shared admission and its canonical task |
+| `generation.receipt` | Recover a shared admission, its canonical task, and projected output URLs |
 | `status` | Follow the returned native job ID |
+| `jobs.wait` | Block until that job is terminal or `timeout_s` (default 30, max 120) |
+| `jobs.leftovers` / `jobs.resume` / `jobs.discard` | Recover the durable queue after a restart. Do not submit a second copy. |
 
 The previous `generate`, `upscale` and other legacy tools remain available.
 Their schemas differ from the typed operations above; do not mix envelopes.
@@ -135,6 +140,10 @@ interrupted job.
 Validation errors do not establish admission. A storage/dispatch error can
 require recovery, so do not replace its intention automatically. Native task
 status remains the completion authority. Read [image](IMAGE_COMMANDS.md),
+[video](VIDEO_COMMANDS.md),
+[jobs and assets](JOBS_AND_ASSETS.md),
 [speech](SPEECH_COMMANDS.md), [music](MUSIC_COMMANDS.md), [SFX](SFX_COMMANDS.md) and [upscale](TOOLS_COMMANDS.md) contracts for
 supported inputs and current limits. Hashes record inspected sources; they do
 not make external source files immutable throughout queue lifetime.
+Optional `output_name` and integer `priority` apply to `generation.*`
+submissions; see [jobs and assets](JOBS_AND_ASSETS.md).

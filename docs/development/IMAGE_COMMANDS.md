@@ -7,15 +7,17 @@ including references, LoRAs and advanced options. Version 1 remains available
 for small text-to-image clients. Audio, Tools, editorial domains and
 workflow execution are not covered by this slice.
 
-`generation.video` version 2 remains the closed Wan 2.1 Text2Video command.
-Version 3 types MiniMax H3 FL2VA, Ref2VA, and wired LTX-2.3 frames plus
-driving audio. `validate: true` on version 3 builds the generate payload and
-does not enqueue. H3 Advanced is a separate family and is not part of version 3.
+`generation.video` is a separate published operation. Version 2 remains the
+closed Wan 2.1 Text2Video command. Version 3 types MiniMax H3 FL2VA, Ref2VA,
+and wired LTX-2.3 frames plus driving audio. See [VIDEO_COMMANDS](VIDEO_COMMANDS.md).
+`validate: true` on version 3 builds the generate payload and does not enqueue.
+H3 Advanced is a separate family and is not part of version 3.
 
 ## Contract and discovery
 
-`GET /api/v1/generation/commands` describes the two executable operations.
-The same entries generate MCP `generation.image` and `generation.receipt`.
+`GET /api/v1/generation/commands` describes the published operations, including
+`generation.image`, `generation.receipt` and `generation.video`.
+The image entries generate MCP `generation.image` and `generation.receipt`.
 The original ten MCP tools retain their existing names and behavior.
 The Python schemas also generate `ui/src/api/imageCommandCatalog.json` through
 `python scripts/export_image_command_catalog.py`; `--check` rejects stale
