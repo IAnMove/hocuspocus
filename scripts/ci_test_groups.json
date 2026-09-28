@@ -50,6 +50,7 @@
         "tests/test_execution_mode.py",
         "tests/test_generation_output_name.py",
         "tests/test_generation_provenance_submission.py",
+        "tests/test_generation_queue_priority.py",
         "tests/test_generation_record.py",
         "tests/test_generation_runtime.py",
         "tests/test_example_assets.py",
