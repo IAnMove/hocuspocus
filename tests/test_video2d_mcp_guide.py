@@ -23,6 +23,7 @@ def _examples(text: str) -> list[dict]:
 
 def _known_tools() -> set[str]:
     from services.montage_commands import command_catalog as montages
+    from services.montage_preview import command_catalog as montage_preview
     from services.scene2d_export import command_catalog as export_catalog
     from services.scene2d_validate import command_catalog as validate_catalog
     from services.scene_asset_facts import command_catalog as assets
@@ -37,7 +38,7 @@ def _known_tools() -> set[str]:
     names: set[str] = set()
     groups = (
         effects(), catalogs(), [query_operation()], compile_catalog(), edit_catalog(),
-        preview_catalog(), validate_catalog(), documents(), export_catalog(), montages(), assets(),
+        preview_catalog(), validate_catalog(), documents(), export_catalog(), montages(), montage_preview(), assets(),
     )
     for group in groups:
         for item in group:
