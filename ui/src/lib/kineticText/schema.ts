@@ -1,3 +1,4 @@
+import graphicCatalog from '../../../../app/shared/scene_graphics.json' with { type: 'json' }
 import { KINETIC_PRESETS, TEXT_ALIGNS, TEXT_BOX_KINDS, TEXT_ENTERS, TEXT_EXITS, TEXT_FONTS, TEXT_LOOPS, TEXT_WEIGHTS } from './types'
 
 const color = { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }
@@ -40,6 +41,16 @@ export const KINETIC_TEXT_SCHEMA = {
       template: { type: 'string', maxLength: 80 },
       beatPulse: { type: 'number', minimum: 0, maximum: 1 },
       trap: { type: 'boolean' },
+      graphic: {
+        type: 'object', additionalProperties: false, required: ['id'],
+        properties: {
+          id: { enum: graphicCatalog.entries.map(entry => entry.id) },
+          params: {
+            type: 'object', maxProperties: 6,
+            additionalProperties: { anyOf: [{ type: 'number' }, { type: 'string', maxLength: 32 }] },
+          },
+        },
+      },
     },
   },
 } as const

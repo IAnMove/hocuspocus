@@ -20,6 +20,7 @@ export type TextShadow = { color: string; blur: number; x: number; y: number }
 export type TextFill = { kind: 'solid' } | { kind: 'gradient'; from: string; to: string; angle: number }
 export type TextBox = { kind: TextBoxKind; color: string; opacity: number; padding: number; radius?: number }
 export type TextCounter = { from: number; to: number; decimals: number; ease: 'linear' | 'ease' }
+export type TextGraphic = { id: string; params?: Record<string, number | string> }
 export type TextSpan = { preset: TextEnter | TextExit; duration: number }
 
 export type KineticText = {
@@ -49,6 +50,8 @@ export type KineticText = {
   fill?: TextFill
   box?: TextBox
   counter?: TextCounter
+  /** Catalog drawing from scene_graphics.json. Absent cues paint text only. */
+  graphic?: TextGraphic
   /** Provenance for a template. It does not change painting. */
   template?: string
   /** Live scale added on stored beats. Absent means the cue does not pulse. */

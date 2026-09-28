@@ -74,9 +74,10 @@ def load_catalog(name: str) -> Any:
 
 CATALOGS = {operation: load_catalog(filename) for operation, filename in CATALOG_FILES.items()}
 EFFECTS_CATALOG = load_catalog("scene_effects.json")
+GRAPHICS_CATALOG = load_catalog("scene_graphics.json")
 
 OPERATION = "scenes.catalog"
-KINDS = ("templates", "text", "finish", "fonts", "atmospheres", "motion", "effects")
+KINDS = ("templates", "text", "finish", "fonts", "atmospheres", "motion", "effects", "graphics")
 PAGE_LIMIT = 200
 QUERY_LIMIT = 80
 _KIND_SOURCE = {
@@ -159,6 +160,8 @@ def command_handlers() -> dict[str, Callable[[Any], Any]]:
 def _kind_data(kind: str) -> Any:
     if kind == "effects":
         return EFFECTS_CATALOG
+    if kind == "graphics":
+        return GRAPHICS_CATALOG
     return CATALOGS[_KIND_SOURCE[kind]]
 
 
@@ -305,6 +308,7 @@ def query_operation() -> dict[str, Any]:
             "q matches id and name, case-insensitive, at most 80 characters. "
             f"At most {PAGE_LIMIT} entries; truncated and total when over the cap. "
             "Effects entries are scene_effects.json; world kinds stay on scenes.effects.catalog. "
+            "Graphics entries are scene_graphics.json: parameterized drawings timed in beats, no custom code. "
             "Read-only; no GPU, save or export."
         ),
         "mutation": False,
@@ -348,6 +352,7 @@ __all__ = [
     "CATALOG_FILES",
     "CatalogError",
     "EFFECTS_CATALOG",
+    "GRAPHICS_CATALOG",
     "KINDS",
     "command_catalog",
     "command_handlers",

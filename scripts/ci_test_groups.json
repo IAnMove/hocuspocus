@@ -277,6 +277,7 @@
         "tests/test_remove_background_tool.py",
         "tests/test_video2d_catalogs.py",
         "tests/test_video2d_edit.py",
+        "tests/test_video2d_graphics.py",
         "tests/test_export_receipts.py",
         "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",

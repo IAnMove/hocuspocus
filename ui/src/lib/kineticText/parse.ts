@@ -1,3 +1,4 @@
+import { parseGraphicCue } from '../scene2d/graphics'
 import { KINETIC_PRESETS, TEXT_ALIGNS, TEXT_BOX_KINDS, TEXT_ENTERS, TEXT_EXITS, TEXT_FONTS, TEXT_LOOPS, TEXT_WEIGHTS, type KineticText, type TextBox, type TextCounter, type TextEnter, type TextExit, type TextFill, type TextLoop, type TextShadow, type TextStroke } from './types'
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -86,6 +87,7 @@ function cueLook(value: Partial<KineticText>) {
     fill: parseFill(value.fill),
     box: parseBox(value.box),
     counter: parseCounter(value.counter),
+    graphic: parseGraphicCue(value.graphic),
     template: template || undefined,
     beatPulse: bounded(value.beatPulse, 0, 1),
     trap: value.trap === true ? true : undefined,
@@ -125,7 +127,7 @@ export function kineticTextFields(raw: unknown): { texts?: KineticText[] } {
   return texts.length ? { texts } : {}
 }
 
-const MODERN_FIELDS = ['enter', 'exit', 'loop', 'weight', 'align', 'maxWidth', 'lineHeight', 'letterSpacing', 'uppercase', 'italic', 'stroke', 'shadow', 'fill', 'box', 'counter'] as const
+const MODERN_FIELDS = ['enter', 'exit', 'loop', 'weight', 'align', 'maxWidth', 'lineHeight', 'letterSpacing', 'uppercase', 'italic', 'stroke', 'shadow', 'fill', 'box', 'counter', 'graphic'] as const
 
 export function isLegacyKineticText(cue: KineticText) {
   if (cue.font != null && cue.font !== 'sans' && cue.font !== 'mono') return false

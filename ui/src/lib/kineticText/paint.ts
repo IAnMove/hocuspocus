@@ -1,3 +1,4 @@
+import { paintSceneGraphic } from '../scene2d/graphics'
 import { INK_TRAP_PAPER, reserveBlackPlate, type InkTrapPaint } from '../scene2d/inkTrap'
 import { TEXT_FONT_STACK } from './fonts'
 import { displayedKineticText, wrapKineticLines } from './layout'
@@ -263,5 +264,6 @@ export function paintKineticTexts(ctx: CanvasRenderingContext2D, width: number, 
     const trap = riso || cue.trap === true
     if (isLegacyKineticText(cue)) paintLegacyCue(ctx, width, height, seconds, cue, pulse, { trap, color: cue.color, paper })
     else paintV2Cue(ctx, width, height, seconds, cue, pulse, { trap, color: cue.color, paper, fill: cue.fill?.kind })
+    if (cue.graphic) paintSceneGraphic(ctx, width, height, seconds, cue, pulse)
   }
 }
