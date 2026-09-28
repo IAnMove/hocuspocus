@@ -8,11 +8,16 @@ El recorrido es: catálogo, inspeccionar el asset, compilar, rótulo, letra,
 editar, validar, vista previa, guardar, exportar y montar. Nada de esto genera
 medios en GPU. Los assets tienen que ser ya URLs durables del workspace
 (`/api/v1/file/...`, `/api/v1/uploads/...`) o de ejemplos (`/examples/...`).
+Para subir un archivo nuevo usa `assets.upload` (≤8 MiB) y pasa la `url`
+devuelta; ver [JOBS_AND_ASSETS](../development/JOBS_AND_ASSETS.md).
 
 ## 1. Catálogo — `scenes.catalog`
 
 Descubre ids. No guarda. `kind` es uno de: `templates`, `text`, `finish`,
-`fonts`, `atmospheres`, `motion`, `effects`.
+`fonts`, `atmospheres`, `motion`, `effects`. Por defecto la respuesta es
+`{id, name, description, counts}` (una línea, sin imágenes). Pasa
+`detail: true` para el JSON completo, o `id` para una entrada. Lo mismo
+aplica a `models` / `models.list`.
 
 - `templates` → `app/shared/scene_templates.json`
 - `text` → `app/shared/text_templates.json`
@@ -32,8 +37,8 @@ Descubre ids. No guarda. `kind` es uno de: `templates`, `text`, `finish`,
 ```
 
 Repite la llamada con `"kind": "text"` antes de elegir un rótulo y con
-`"kind": "finish"` antes de `set_finish`. La respuesta es el JSON del catálogo:
-objetos con `id`. Copia esos ids; no los inventes.
+`"kind": "finish"` antes de `set_finish`. La respuesta resumida trae `id`.
+Pasa `detail: true` si necesitas controles. Copia esos ids; no los inventes.
 
 ## 2. Inspeccionar — `scenes.assets.inspect`
 
@@ -136,7 +141,8 @@ Si no hay letra que mostrar, omite esta llamada.
 ## 6. Editar — `scenes.video2d.edit`
 
 No guarda ni renderiza. `operations` es una lista (máximo 32). `set_finish`
-copia un id de `finish_presets.json`. `add_title` construye los cues de un id
+copia un id de `finish_presets.json`, incluido `risoPress` (prensa riso
+opcional; apagada por defecto). `add_title` construye los cues de un id
 de `text_templates.json`. `reorder` asigna z 0, 10, 20… en el orden nuevo y
 debe ser una permutación de los ids de capa. Las cámaras de `add_layer` salen
 de los ids `kind: camera` de `motion_presets.json`.
@@ -349,11 +355,13 @@ Usa el `document` devuelto por validate en las llamadas siguientes.
 
 ## 8. Vista previa — `scenes.video2d.preview`
 
-Pinta hasta 8 instantes y devuelve una hoja de contactos PNG. No guarda la
-escena ni escribe un MP4. No usa la GPU: el pintor va por el carril CPU
-`scene2d-render`. Cada tiempo está entre 0 y `duration`. `input.workspace` es
-opcional y usa la misma cadena que validate y export. Quien no lo envía sigue
-igual: la hoja sale de `document` y `times`.
+Pinta hasta 8 instantes y guarda una hoja de contactos PNG en el workspace.
+No guarda la escena ni escribe un MP4. No usa la GPU: el pintor va por el
+carril CPU `scene2d-render`. Cada tiempo está entre 0 y `duration`.
+`input.workspace` es opcional y usa la misma cadena que validate y export.
+Con workspace, el resultado incluye `url` (`/api/v1/file/video2d-contact-….png?workspace=…`),
+`file`, `sha256` y `bytes`. Quien no envía workspace sigue igual: la hoja
+sale de `document` y `times`.
 
 ```json
 {
@@ -421,8 +429,9 @@ recibo con `scenes.video2d.export.receipt` (`input.workspace` e
 `input.intent_id`). Ese recibo copia el `status` de la tarea: no se queda en
 `queued` cuando el MP4 ya existe. `receipt.artifacts` es entonces
 `[{name, url, workspace}]` del archivo publicado. La admisión guardada no
-cambia. El MP4 publicado es el `source` del clip; no inventes el nombre del
-archivo.
+cambia. `scenes.world3d.export.receipt` usa la misma proyección
+(`export_receipts.project_export_receipt`, #563). El MP4 publicado es el
+`source` del clip; no inventes el nombre del archivo.
 
 ```json
 {

@@ -15,10 +15,15 @@ Each cue has start/end, position in screen percent, size, intensity, rotation, c
 and optional sound/volume. These are canvas overlays in screen space, including
 in the 3D editor; they do not simulate volumetric particles or physical collisions.
 
-Video 3D also stores a separate `worldSfx` track in meters. Portal, magic circle,
-summoning gate, lightning, energy beam, laser, orb, aura, missiles and shockwave
-occupy the scene graph: the camera changes their perspective and opaque meshes can
-occlude them. Beams use `anchor`/`target` slot ids. Screen overlays remain available.
+Video 3D also stores a separate `worldSfx` track in meters. The core kinds
+(portal, magic circle, summoning gate, lightning, energy beam, laser, orb,
+aura, missiles, shockwave, plus fire/rain/snow/fog/shield/tornado/splash/dust/
+ice burst/black hole/`media_portal`) occupy the scene graph: the camera changes
+their perspective and opaque meshes can occlude them. The world picker also
+lists **90** packed cinematic recipes (`PACKED_FX` in
+`ui/src/features/sceneFx/packedRecipes.ts`: torch, waterfall, nova, …) on that
+same track. Beams use `anchor`/`target` slot ids. Screen overlays remain available.
+The 30-effect showcase above is the screen-space catalog, not the packed list.
 Do not convert legacy percent coordinates to meters. `scenes.effects.apply` accepts
 `worldCues` only on a world3d document.
 Absolute scene time and a fixed seed make scrubbing and exports repeatable.

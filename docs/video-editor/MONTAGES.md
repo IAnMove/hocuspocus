@@ -84,6 +84,7 @@ and `duck`.
 | `montages.save` | `POST /api/v1/montages` `{workspace, montage, file?, expected_revision?}` |
 | `montages.export` | `POST /api/v1/montages/{file}/export?workspace=` → Video Editor job |
 | `montages.derive` | `POST /api/v1/montages/{file}/derive` `{workspace, format: 9:16\|1:1\|4:5, fit: blur\|fill, output_file?, expected_revision?}` saves a new montage. The source file stays as it is. |
+| `audio.shorten` | `POST /api/v1/audio/shorten` — CPU WAV cut; optional `montage` remap. See [Video Editor HOWUSEIT](HOWUSEIT.md) § Publish / Shorten. |
 | `montages.export.status` | `GET /api/v1/video-editor/export/{job_id}` |
 | `montages.shots.get`, `montages.shot.regenerate`, `montages.shot.select` | see §5 |
 | `scenes.document.save` / `.get` | — (MCP; the UI keeps its existing save routes) |

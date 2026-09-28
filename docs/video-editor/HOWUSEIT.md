@@ -6,7 +6,7 @@ This is not MiniMax H3 and not the 3D compositor. The editor **never regenerates
 
 UI tab: **Video Editor** (`mediaFilter: videoeditor`). Code: `ui/src/features/video-editor/`. Render: `app/services/video_editor.py`. HTTP: `app/_launch_runtime.py`. Mix kinds: `app/services/output_result_kind.py`.
 
-Related: [Studio Tools](../tools/HOWUSEIT.md) (upscale / revoice / rembg), [3D Video compositor](../3d-video-compositor/HOWUSEIT.md) §5.8, [Workspaces / Director threads](../workspaces/HOWUSEIT.md).
+Related: [Studio Tools](../tools/HOWUSEIT.md) (upscale / revoice / rembg), [3D Video compositor](../3d-video-compositor/HOWUSEIT.md) §5.8, [Workspaces / Director threads](../workspaces/HOWUSEIT.md), [Editable montages](MONTAGES.md) (`montages.derive`, shot board).
 
 ---
 
@@ -131,6 +131,29 @@ Poll `GET /api/v1/video-editor/export/{job_id}`. Cancel with `POST /api/v1/video
 Job `status`: `queued`, `waiting_resource`, `running`, `cancelling`, `completed`, `failed`, `cancelled`.
 
 Completed MP4 sidecar: `params.source = "video_editor"`, `generation_mode = "video"`. **No `result_kind`.**
+
+### Publish presets (CPU FFmpeg)
+
+Does not enter the generation queue. Check first, then encode a copy.
+
+| Preset | Aspect | Standard max | Premium max | Audio |
+|---|---|---|---|---|
+| `x` | 16:9 | 140 s | 180 s | AAC 128k |
+| `youtube` | 16:9 | — | — | AAC 192k |
+| `shorts` | 9:16 | 60 s | 90 s | AAC 128k |
+| `archive` | any | — | — | AAC 320k |
+
+`POST /api/v1/video-editor/publish-check` → `{warnings, args}`.
+`POST /api/v1/video-editor/publish` `{source, workspace, preset, premium?, loudnorm?, width, height, duration, overlays?}` → `{file, url, thumbnail, sidecar, warnings, loudnorm}`.
+Warning codes: `duration`, `aspect`, `safe_area` (shorts overlays with `y < 12` or `y > 80` or `width > 90`).
+Sidecar: `<stem>_<preset>.publish.json`. Code: `app/services/publish_presets.py`.
+
+A 9:16 / 1:1 / 4:5 **timeline** copy (blur fill or crop) is `montages.derive`, not this encode pass. See [MONTAGES](MONTAGES.md).
+
+### Shorten a song (CPU)
+
+`POST /api/v1/audio/shorten` and MCP `audio.shorten`. `{workspace, source, keep?, duration_max?, analysis?, montage?, preview?}`.
+`keep` is `[[start, end], ...]` in original seconds. Omit it to drop a repeated chorus / shorten bridges from analysis. `preview: true` returns the snapped time map without writing. With `montage`, clips and cues are remapped; a clip that falls entirely in a gap is dropped. Output: `<stamp>_<stem>_short.wav`. Never uses the GPU queue. Overlapping clips on the timeline stay when the song gets shorter (`#551`).
 
 Optional task IDs (`task_id`, `root_task_id`, `parent_task_id`) must match `task-[A-Za-z0-9_-]{1,180}`.
 
