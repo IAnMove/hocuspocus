@@ -1,14 +1,8 @@
 # Estado de desarrollo y punto de entrada
 
-## Cola — prioridad A3 (28 septiembre 2026)
+## Plan de producción — 28 septiembre 2026
 
-Nota de progreso: no hay `PRODUCTION_PLAN_2026-09-28.md` en esta base.
-Un vídeo de 30 segundos que aún no ha tomado la GPU no bloquea un still de
-un segundo detrás de él. `priority` es opcional en generate/submit: un número
-mayor sale antes y, si se omite, el empate conserva el orden de registro.
-Con una sola GPU no se interrumpe el trabajo en curso. La prueba encola
-largo prioridad baja, corto prioridad alta y medio; el siguiente en arrancar
-es el corto de prioridad alta.
+La cola acepta `priority` opcional. `generation.video` versión 3 tipa MiniMax H3 (FL2VA y Ref2VA) y LTX-2.3 con fotogramas y audio conductor. `validate: true` no encola.
 
 Verificado el 7 de septiembre de 2026 contra `origin/development` **`ef5b0871`**.
 Es una fotografía con evidencia, no un sustituto de Git. Antes de reservar trabajo:

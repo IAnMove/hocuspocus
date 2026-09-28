@@ -328,6 +328,9 @@ def _fingerprint(content: dict[str, Any]) -> str:
 
 def freeze_video_generation_spec(command: Any) -> dict[str, Any]:
     """Validate and detach one generation.video command without I/O."""
+    if type(command) is dict and command.get("version") == 3:
+        from services.video_generation_v3 import freeze_video_generation_v3
+        return freeze_video_generation_v3(command)
     if type(command) is not dict:
         raise VideoGenerationSpecError("generation.video command must be an object")
     try:
