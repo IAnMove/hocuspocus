@@ -5,6 +5,9 @@
     "import": "Import",
     "fromHocusPocus": "From HocusPocus",
     "exportMp4": "Export MP4",
+    "vertical": "Create vertical version",
+    "verticalTitle": "Save a 9:16 copy with blur fill. The original montage stays as it is.",
+    "verticalWorking": "Creating vertical version…",
     "cancelling": "Cancelling…"
   },
   "empty": {
@@ -50,7 +53,13 @@
     "unmute": "Unmute clip",
     "mute": "Mute clip",
     "fit": "Fit · no crop",
-    "fill": "Fill · crop"
+    "fill": "Fill · crop",
+    "blur": "Blur · fill the frame",
+    "frame": "Frame",
+    "focus": "Crop focus",
+    "focusHint": "Drag the thumbnail to choose what stays in frame",
+    "blurAmount": "Blur",
+    "backgroundDim": "Dim"
   },
   "timeline": {
     "aria": "Video editor timeline",

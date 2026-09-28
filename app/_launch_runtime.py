@@ -35000,6 +35000,10 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                                 "volume",
                                 "muted",
                                 "fit",
+                                "focus_x",
+                                "focus_y",
+                                "blur_amount",
+                                "background_dim",
                                 "transition",
                                 "transition_duration",
                                 "transition_text",
@@ -35116,6 +35120,7 @@ def start_video_editor_export(body: dict):
         "later-tropical",
         "later-cinematic",
     }
+    from services.video_layout import stamp_layout
     clean_clips = []
     for index, clip in enumerate(clips):
         if not isinstance(clip, dict):
@@ -35140,6 +35145,7 @@ def start_video_editor_export(body: dict):
             "transition_text": transition_text,
             "transition_text_size": transition_text_size,
         })
+        stamp_layout(clean_clip)
         clean_clips.append(clean_clip)
 
     soundtrack = body.get("soundtrack")

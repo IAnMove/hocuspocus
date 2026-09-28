@@ -9,7 +9,11 @@ export interface MontageClip {
   trimEnd: number
   volume: number
   muted: boolean
-  fit: 'fit' | 'fill'
+  fit: 'fit' | 'fill' | 'blur'
+  focusX?: number
+  focusY?: number
+  blurAmount?: number
+  backgroundDim?: number
   transition: string
   transitionDuration: number
   transitionText: string
@@ -78,6 +82,7 @@ export interface MontageDocument {
   notes?: string
   revision?: number
   updatedAt?: string
+  derivedFrom?: { file: string; revision: number }
 }
 
 export interface MontageSummary {
@@ -122,6 +127,26 @@ export async function saveMontage(payload: {
     body: JSON.stringify(payload),
   })
   return readJson(res, 'Could not save montage')
+}
+
+export async function deriveMontage(workspace: string, file: string, input: {
+  format: '9:16' | '1:1' | '4:5'
+  fit: 'blur' | 'fill'
+  outputFile?: string
+  expectedRevision?: number
+}): Promise<{ file: string; revision: number; url: string }> {
+  const res = await fetch(`${BASE}/api/v1/montages/${encodeURIComponent(file)}/derive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspace,
+      format: input.format,
+      fit: input.fit,
+      ...(input.outputFile ? { output_file: input.outputFile } : {}),
+      ...(input.expectedRevision !== undefined ? { expected_revision: input.expectedRevision } : {}),
+    }),
+  })
+  return readJson(res, 'Could not derive montage')
 }
 
 export async function exportMontage(workspace: string, file: string): Promise<{ file: string; job: VideoEditorExportJob }> {
