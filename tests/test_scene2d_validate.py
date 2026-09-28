@@ -281,6 +281,8 @@ def test_left_align_uses_the_text_edge_and_outside_frame_uses_that_box(tmp_path)
     assert "text_outside_frame" in _codes(_validate(right, tmp_path)["warnings"])
     bad_focus = _document(layers=[_layer(focus={"x": -1, "y": 50})])
     assert list(Draft202012Validator(document_schema()).iter_errors(bad_focus))
+    assert not list(Draft202012Validator(document_schema()).iter_errors(_document(layers=[_layer(cover=True)])))
+    assert list(Draft202012Validator(document_schema()).iter_errors(_document(layers=[_layer(cover="yes")])))
 
 
 def test_empty_timespan_warns_only_for_gaps_over_two_seconds(tmp_path):

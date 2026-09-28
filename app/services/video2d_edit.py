@@ -53,7 +53,8 @@ _POINT_RANGES = {"x": (-50, 150), "y": (-50, 150), "scale": (0.01, 20), "opacity
 # Corner zooms use layer focus {x, y}: that frame point stays on the anchor while
 # scale changes (x = anchor - (focus - 50) * scale). Positions stay in _POINT_RANGES
 # so saved scenes keep the same limits. focus is omitted unless update_layer sets it.
-_LAYER_PATCH = frozenset({"name", "source", "visible", "locked", "z", "fill", "type", "transform", "animation", "focus"})
+# cover is stored only. The painter clamps at draw time and does not rewrite motion.
+_LAYER_PATCH = frozenset({"name", "source", "visible", "locked", "z", "fill", "cover", "type", "transform", "animation", "focus"})
 _TRANSFORM_KEYS = frozenset({"x", "y", "scale", "opacity", "rotation"})
 
 
@@ -251,8 +252,10 @@ def _build_layer(document: dict, operation: dict, warnings: list) -> dict:
 
 
 def _add_layer(document: dict, operation: dict, warnings: list) -> None:
-    _only(operation, {"op", "id", "source", "preset", "name", "type", "z"})
+    _only(operation, {"op", "id", "source", "preset", "name", "type", "z", "cover"})
     layer = _build_layer(document, operation, warnings)
+    if "cover" in operation:
+        _patch_layer_flags(layer, {"cover": operation["cover"]})
     layers = document["layers"]
     for index, current in enumerate(layers):
         if current.get("id") == layer["id"]:
@@ -360,7 +363,7 @@ def _patch_layer_name(layer: dict, patch: dict) -> None:
 
 
 def _patch_layer_flags(layer: dict, patch: dict) -> None:
-    for key in ("visible", "locked", "fill"):
+    for key in ("visible", "locked", "fill", "cover"):
         if key not in patch:
             continue
         if not isinstance(patch[key], bool):
@@ -1120,10 +1123,11 @@ def command_catalog() -> list[dict]:
         "reorder assigns z as 0, 10, 20… in the new order, matching editor assignZ. "
         "update_layer focus {x, y} is the layer-frame point (0-100) that stays on the anchor while scale changes. "
         "Omit it, or use 50,50, and scenes keep scaling around the center. "
+        "cover true on add_layer or update_layer keeps an image or video over the frame during zoom, pan, and focus. "
         "An unknown op fails with invalid_operation."
     )
     operations = {"type": "array", "maxItems": MAX_OPERATIONS, "items": {"oneOf": [
-        _op_schema("add_layer", ["id", "source"], {"id": identity, "source": _schema_string(2000), "preset": preset, "name": _schema_string(120), "type": {"enum": sorted(_LAYER_TYPES)}, "z": {"type": "number"}}),
+        _op_schema("add_layer", ["id", "source"], {"id": identity, "source": _schema_string(2000), "preset": preset, "name": _schema_string(120), "type": {"enum": sorted(_LAYER_TYPES)}, "z": {"type": "number"}, "cover": {"type": "boolean"}}),
         _op_schema("update_layer", ["id", "patch"], {"id": identity, "patch": {"type": "object"}}),
         _op_schema("remove_layer", ["id"], {"id": identity}),
         _op_schema("reorder", ["ids"], {"ids": {"type": "array", "items": identity, "maxItems": MAX_LAYERS}}),

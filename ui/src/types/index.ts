@@ -468,6 +468,9 @@ export interface SceneLayer {
   missingAsset?: boolean
   /** Image/video is cropped to cover the complete scene frame. */
   fill?: boolean
+  /** Image or video stays over the whole frame during zoom, pan, and focus.
+   *  Applied at draw time; saved motion is unchanged. Omitted or false matches older scenes. */
+  cover?: boolean
   /** Layer-frame point, 0–100, that stays on the anchor while scale changes.
    *  Absent or 50,50 keeps scaling around the center. Camera and effect layers ignore it. */
   focus?: { x: number; y: number }

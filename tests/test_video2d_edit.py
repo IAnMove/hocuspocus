@@ -52,6 +52,30 @@ def test_add_layer_replaces_existing_id_and_keeps_order():
     assert original == snapshot
 
 
+def test_cover_is_stored_without_rewriting_motion():
+    added = _result([{"op": "add_layer", "id": "plate", "source": "/examples/plate.png", "cover": True}])
+    plate = next(item for item in added["document"]["layers"] if item["id"] == "plate")
+    assert plate["cover"] is True
+    assert plate["animation"]["start"]["scale"] == 1
+    assert plate["transform"]["x"] == 50
+    updated = _result([{
+        "op": "update_layer",
+        "id": "a",
+        "patch": {"cover": True, "animation": {"end": {"x": 12, "y": 88, "scale": 0.45}}},
+    }])
+    layer = updated["document"]["layers"][0]
+    assert layer["cover"] is True
+    assert layer["animation"]["end"] == {"x": 12, "y": 88, "scale": 0.45}
+    assert layer["animation"]["start"]["x"] == 50
+    cleared = _result([{"op": "update_layer", "id": "a", "patch": {"cover": False}}])
+    assert cleared["document"]["layers"][0]["cover"] is False
+    untouched = _result([{"op": "update_layer", "id": "b", "patch": {"name": "plate"}}])["document"]["layers"][1]
+    assert "cover" not in untouched
+    with pytest.raises(Video2dEditError) as error:
+        _edit([{"op": "add_layer", "id": "bad", "source": "/examples/bad.png", "cover": "yes"}])
+    assert error.value.code == "invalid_input"
+
+
 def test_update_layer_focus_pins_a_frame_point_without_moving_the_anchor():
     result = _result([{
         "op": "update_layer",
