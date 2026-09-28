@@ -1,6 +1,6 @@
 # Plan: plantillas de usuario y de la comunidad (crear, compartir, importar)
 
-Fecha: 28 de septiembre de 2026. Responsable: Claude. Estado: **T1–T4 en revisión (#532); T5 preparado, pendiente de crear el repo público**.
+Fecha: 28 de septiembre de 2026. Responsable: Claude. Estado: **en pausa, PR #532 en borrador** (ver §10 para retomar).
 Sin migraciones: empezamos de cero. Las plantillas antiguas guardadas en el
 navegador (`localStorage`, `hocuspocus-world3d-user-templates`) no se leen ni se
 borran; la biblioteca nueva vive en el servidor.
@@ -130,4 +130,47 @@ Después (fuera de este plan): packs de efectos, rótulos y fuentes con el mismo
 | T2 | [#532](https://github.com/IAnMove/hocuspocus/pull/532) | en revisión (miniatura del fotograma actual incluida) |
 | T3 | [#532](https://github.com/IAnMove/hocuspocus/pull/532) | en revisión (panel genérico compartido con Video 3D) |
 | T4 | [#532](https://github.com/IAnMove/hocuspocus/pull/532) | en revisión (descarga en el servidor con lista de dominios y SHA-256) |
-| T5 | | pendiente (necesita OK para crear el repo público) |
+| T5 | [#532](https://github.com/IAnMove/hocuspocus/pull/532) | generador del índice y semilla del repo en `community/repo-seed/`; **repo público sin crear** |
+
+## 10. Resumen para retomar (28/9)
+
+**Qué hay hecho (PR #532, en borrador, sin fusionar ni desplegar):**
+
+- Formato `.hptemplate` v1 (huecos, controles por JSON Pointer, autor con @X, licencia,
+  etiquetas, miniatura, medios de ejemplo por SHA-256; solo datos) y biblioteca en el
+  servidor (`$PINOKIO_HOME/cache/maestro/template-library`).
+- HTTP `/api/v1/templates…` y MCP `templates.list|get|save|apply|export|preflight|import|delete`
+  y `templates.community.list|install`.
+- Video 3D y Video 2D: «Mis plantillas» con un panel común (guardar con el fotograma como
+  miniatura, usar, descargar, importar tras revisar, borrar, **Compartir**).
+- Pestaña **Comunidad**: el servidor lee el índice solo al abrirla, descarga únicamente del host
+  del índice o de `raw.githubusercontent.com` y verifica tamaño, SHA-256 e id.
+- `scripts/community_index.py`: valida paquetes con el mismo importador y genera `index.json`.
+- `community/repo-seed/`: contenido del repo comunitario (web estática probada en escritorio
+  y móvil, publicación en GitHub Pages, formulario «Enviar una plantilla» y bot que abre el PR).
+
+**Qué hemos decidido y por qué:**
+
+- Sin migraciones: lo guardado antes en el navegador no se lee.
+- Frontera con Grok: él hace las plantillas **incluidas** en la app (catálogo, MCP, compilación,
+  vista previa); esto cubre las plantillas **de la gente**. Punto de contacto: `scenes.catalog`
+  debe listar también `TemplateLibrary.summaries()`.
+- Comunidad sobre GitHub (no servidor propio por ahora): subir exige cuenta de GitHub y
+  nada se publica sin que el responsable fusione el PR; el CI valida cada paquete. Para
+  quitar fricción: formulario de issue + bot que convierte el envío en PR, y botón
+  «Compartir» en la app que descarga el fichero y abre el formulario rellenado.
+- Una web propia con cuentas se deja para más adelante (coste, spam, moderación y
+  responsabilidad legal); el formato y el índice sirven igual si se monta.
+
+**Para retomar, en orden:**
+
+1. Revisar el PR #532, sacarlo de borrador y fusionarlo; desplegar.
+2. Crear el repo público `IAnMove/hocuspocus-community` con `community/repo-seed/`, activar
+   GitHub Pages (fuente: GitHub Actions) y crear la etiqueta `template-submission`.
+   Confirmar que la URL por defecto (`https://ianmove.github.io/hocuspocus-community/index.json`)
+   coincide; si no, cambiar `DEFAULT_INDEX` y `COMMUNITY_REPO`.
+3. Subir 2–3 plantillas propias de ejemplo (sin personas reales) para que la web no esté vacía.
+4. Probar el ciclo completo: guardar → Compartir → issue → bot → PR → fusionar → Comunidad → instalar.
+5. Pendientes conocidos: el test de interfaz no cubre «Eliminar» (el `confirm` del navegador se
+   cuelga en jsdom; el borrado sí está probado en el servidor); miniatura en la plantilla
+   importada del formato antiguo; integración con `scenes.catalog` de Grok.

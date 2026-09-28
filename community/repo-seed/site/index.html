@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HocusPocus Templates</title>
+<meta name="description" content="Scene templates for HocusPocus made by the community: Video 3D and Video 2D shots you can download and use.">
+<style>
+:root {
+  --bg: #0b1020; --panel: #121a2e; --panel-2: #18223b; --line: #26324f; --text: #e8edf7; --muted: #95a3bf;
+  --accent: #67e8f9; --accent-2: #a78bfa; --ok: #6ee7b7; --radius: 14px;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f5f7fb; --panel: #ffffff; --panel-2: #eef2f8; --line: #d9e0ec; --text: #111827; --muted: #5b6477; --accent: #0891b2; --accent-2: #7c3aed; --ok: #047857; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); }
+header { padding: 40px 16px 24px; max-width: 1180px; margin: 0 auto; }
+h1 { margin: 0; font-size: clamp(28px, 5vw, 44px); letter-spacing: -0.02em; }
+h1 span { background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lead { color: var(--muted); max-width: 720px; margin: 10px 0 0; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.bar input, .bar select { min-height: 42px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 0 12px; font: inherit; }
+.bar input { flex: 1 1 260px; }
+main { max-width: 1180px; margin: 0 auto; padding: 0 16px 48px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+.thumb { aspect-ratio: 16 / 9; background: var(--panel-2); display: block; width: 100%; object-fit: cover; }
+.body { padding: 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.title { font-weight: 650; font-size: 16px; }
+.desc { color: var(--muted); font-size: 13px; }
+.meta { color: var(--muted); font-size: 12px; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { font-size: 11px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 999px; padding: 2px 8px; }
+.badge { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); }
+.actions { display: flex; gap: 8px; margin-top: auto; padding-top: 6px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); text-decoration: none; font-size: 13px; cursor: pointer; }
+.btn.primary { background: var(--accent); color: #041018; border-color: transparent; font-weight: 600; }
+.empty, .error { color: var(--muted); padding: 32px 0; text-align: center; }
+section.help { margin-top: 36px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+section.help article { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+section.help h2 { margin: 0 0 6px; font-size: 16px; }
+section.help p, section.help li { color: var(--muted); font-size: 14px; }
+footer { color: var(--muted); font-size: 13px; text-align: center; padding: 24px 16px 40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>HocusPocus</span> templates</h1>
+  <p class="lead">Scene templates made by the community for <a href="https://github.com/IAnMove/hocuspocus">HocusPocus</a>.
+    Download one and import it in <b>My templates</b>, or install it straight from the <b>Community</b> tab inside the app.
+    <br>Plantillas de escena de la comunidad: descárgalas o instálalas desde la pestaña <b>Comunidad</b>.</p>
+  <div class="bar">
+    <input id="q" type="search" placeholder="Search templates · Buscar" aria-label="Search templates">
+    <select id="editor" aria-label="Editor"><option value="">All editors</option><option value="video3d">Video 3D</option><option value="video2d">Video 2D</option></select>
+    <select id="tag" aria-label="Tag"><option value="">All tags</option></select>
+  </div>
+</header>
+<main>
+  <div id="grid" class="grid" aria-live="polite"></div>
+  <p id="status" class="empty">Loading…</p>
+  <section class="help">
+    <article><h2>Use a template</h2><p>Install it from <b>My templates → Community</b> in HocusPocus, or download the <code>.hptemplate</code> and use <b>Import</b>. Fill its slots with your own characters and backgrounds.</p></article>
+    <article><h2>Share yours</h2><p>Save your shot as a template in HocusPocus, download it and open a pull request adding it as <code>templates/&lt;your-handle&gt;/&lt;slug&gt;.hptemplate</code> in <a href="https://github.com/IAnMove/hocuspocus-community">the community repo</a>.</p></article>
+    <article><h2>Safe by design</h2><p>Templates are data only. Every package is validated before publishing and HocusPocus checks its SHA-256 before importing it.</p></article>
+  </section>
+</main>
+<footer>Made with <a href="https://github.com/IAnMove/hocuspocus">HocusPocus</a> · by <a href="https://x.com/theinaog">@theinaog</a> and the community</footer>
+<script>
+const grid = document.getElementById('grid'), status = document.getElementById('status')
+const q = document.getElementById('q'), editorSelect = document.getElementById('editor'), tagSelect = document.getElementById('tag')
+let templates = []
+const el = (tag, props = {}, children = []) => { const node = Object.assign(document.createElement(tag), props); node.append(...children); return node }
+const kb = bytes => bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+function card(item) {
+  const author = item.author?.x ? el('a', { href: `https://x.com/${encodeURIComponent(item.author.x)}`, textContent: `@${item.author.x}`, rel: 'noopener' }) : document.createTextNode(item.author?.name || 'anonymous')
+  const thumb = item.preview ? el('img', { className: 'thumb', src: item.preview, alt: '', loading: 'lazy' }) : el('div', { className: 'thumb' })
+  return el('article', { className: 'card' }, [thumb, el('div', { className: 'body' }, [
+    el('div', { className: 'title', textContent: item.title }),
+    el('div', { className: 'desc', textContent: item.description || '' }),
+    el('div', { className: 'meta' }, [author, document.createTextNode(` · ${item.editor === 'video2d' ? 'Video 2D' : 'Video 3D'} · ${item.slots} ${item.slots === 1 ? "slot" : "slots"} · ${kb(item.bytes)}`)]),
+    el('div', { className: 'tags' }, [el('span', { className: 'badge', textContent: item.license }), ...item.tags.map(tag => el('span', { className: 'tag', textContent: `#${tag}` }))]),
+    el('div', { className: 'actions' }, [el('a', { className: 'btn primary', href: item.package, download: '', textContent: 'Download' })]),
+  ])])
+}
+function render() {
+  const text = q.value.trim().toLowerCase(), editor = editorSelect.value, tag = tagSelect.value
+  const shown = templates.filter(item => (!editor || item.editor === editor) && (!tag || item.tags.includes(tag))
+    && (!text || `${item.title} ${item.description} ${item.tags.join(' ')} ${item.author?.x || ''} ${item.author?.name || ''}`.toLowerCase().includes(text)))
+  grid.replaceChildren(...shown.map(card))
+  status.textContent = shown.length ? '' : templates.length ? 'No templates match.' : 'No templates yet — be the first to share one!'
+}
+fetch('index.json', { cache: 'no-store' }).then(response => response.ok ? response.json() : Promise.reject(new Error(response.status)))
+  .then(index => {
+    templates = index.templates || []
+    const tags = [...new Set(templates.flatMap(item => item.tags))].sort()
+    tagSelect.append(...tags.map(tag => el('option', { value: tag, textContent: `#${tag}` })))
+    render()
+  })
+  .catch(() => { status.className = 'error'; status.textContent = 'The template index could not be loaded.' })
+for (const control of [q, editorSelect, tagSelect]) control.addEventListener('input', render)
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+name: Submit a template · Enviar una plantilla
+description: Share a HocusPocus scene template. A bot validates it and opens a pull request for review.
+title: "[Template] "
+labels: ["template-submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Export your template from HocusPocus (**My templates → Download**), rename `.hptemplate` to `.zip` and attach it below.
+        Exporta tu plantilla desde HocusPocus (**Mis plantillas → Descargar**), cambia `.hptemplate` por `.zip` y adjúntala abajo.
+  - type: input
+    id: template_title
+    attributes: { label: Title / Título }
+    validations: { required: true }
+  - type: textarea
+    id: description
+    attributes: { label: Description / Descripción }
+  - type: input
+    id: tags
+    attributes: { label: Tags / Etiquetas, placeholder: "space, launch" }
+  - type: dropdown
+    id: license
+    attributes:
+      label: License / Licencia
+      options: [CC0-1.0, CC-BY-4.0, CC-BY-SA-4.0, CC-BY-NC-4.0, MIT, all-rights-reserved]
+    validations: { required: true }
+  - type: textarea
+    id: file
+    attributes:
+      label: Template file (.zip) / Archivo de la plantilla (.zip)
+      description: Drag the .zip here. / Arrastra el .zip aquí.
+    validations: { required: true }
+  - type: checkboxes
+    id: rights
+    attributes:
+      label: Rights / Derechos
+      options:
+        - label: I have the right to share everything in this template and it has no images of real people without their consent. / Tengo derecho a compartir todo lo que contiene y no incluye imágenes de personas reales sin su consentimiento.
+          required: true

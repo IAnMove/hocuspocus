@@ -1,0 +1,58 @@
+name: Template submission
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  submit:
+    if: contains(github.event.issue.labels.*.name, 'template-submission')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: IAnMove/hocuspocus
+          ref: development
+          path: hocuspocus
+          sparse-checkout: |
+            app/services
+            app/app_identity.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pydantic
+      - id: check
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: python .github/scripts/submission.py | tee -a "$GITHUB_OUTPUT"
+      - if: steps.check.outputs.error != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MESSAGE: ${{ steps.check.outputs.error }}
+        run: gh issue comment ${{ github.event.issue.number }} --body "❌ $MESSAGE"
+      - if: steps.check.outputs.id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ID: ${{ steps.check.outputs.id }}
+          TEMPLATE_PATH: ${{ steps.check.outputs.path }}
+          TITLE: ${{ steps.check.outputs.title }}
+          ISSUE: ${{ github.event.issue.number }}
+          AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          branch="submission/${ISSUE}"
+          git config user.name "hocuspocus-community-bot"
+          git config user.email "actions@github.com"
+          git checkout -B "$branch"
+          git add "$TEMPLATE_PATH"
+          git commit -m "Add template ${ID} (submitted in #${ISSUE} by @${AUTHOR})"
+          git push -f origin "$branch"
+          if ! gh pr view "$branch" >/dev/null 2>&1; then
+            gh pr create --head "$branch" --title "Template: ${TITLE}" --body "Submitted by @${AUTHOR} in #${ISSUE}. Validated with the HocusPocus importer. Closes #${ISSUE}."
+          fi
+          gh issue comment "$ISSUE" --body "✅ Valid template \`${ID}\`. A pull request is open for review; it will be published once merged."

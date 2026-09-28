@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Download, Loader2, Trash2, Upload } from 'lucide-react'
+import { Download, Loader2, Share2, Trash2, Upload } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import {
   applyTemplate, deleteTemplate, importTemplate, listTemplates, preflightTemplate, saveTemplate, templatePackageUrl,
   templatePreviewUrl, TEMPLATE_LICENSES, type TemplatePreflight, type TemplateSummary,
 } from '../../api/templates'
 import type { TemplateEditor } from '../../api/templates'
-import { authorLabel, readAuthor, rememberAuthor, saveInput, type TemplateForm } from './templateForm'
+import { authorLabel, communitySubmitUrl, readAuthor, rememberAuthor, saveInput, type TemplateForm } from './templateForm'
 import { CommunityTemplates } from './CommunityTemplates'
 
 const field = 'mt-1 block min-h-10 w-full rounded-lg border border-border bg-bg-primary px-3 text-text-primary'
@@ -92,6 +92,9 @@ function TemplateCard({ item, selected, disabled, onPick, onDelete, testIdPrefix
     </button>
     <div className="flex gap-3 border-t border-border px-3 py-2 text-xs">
       <a href={templatePackageUrl(item.id)} download className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary"><Download size={12} /> {t('templateLibrary.download')}</a>
+      {item.source !== 'community' && <a href={communitySubmitUrl(item)} target="_blank" rel="noreferrer" title={t('templateLibrary.shareHint')}
+        onClick={() => { const link = window.document.createElement('a'); link.href = templatePackageUrl(item.id); link.download = ''; link.click() }}
+        className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary"><Share2 size={12} /> {t('templateLibrary.share')}</a>}
       <button type="button" disabled={disabled} className="inline-flex items-center gap-1 text-text-muted hover:text-red-300" aria-label={`${t('templateLibrary.remove')} ${item.title}`}
         onClick={onDelete}><Trash2 size={12} /> {t('templateLibrary.remove')}</button>
     </div>

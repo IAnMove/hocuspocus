@@ -280,6 +280,8 @@
       "installed": "Installed",
       "conflictHint": "You already have your own template with this id.",
       "done": "“{{title}}” installed in your library."
-    }
+    },
+    "share": "Share",
+    "shareHint": "Downloads the template and opens the community form already filled in: rename .hptemplate to .zip and attach it. It is published after review."
   }
 }

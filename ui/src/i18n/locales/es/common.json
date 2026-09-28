@@ -280,6 +280,8 @@
       "installed": "Instalada",
       "conflictHint": "Ya tienes una plantilla propia con este id.",
       "done": "«{{title}}» instalada en tu biblioteca."
-    }
+    },
+    "share": "Compartir",
+    "shareHint": "Descarga la plantilla y abre el formulario de la comunidad ya rellenado: cambia .hptemplate por .zip y adjúntala. Se publica cuando se revisa."
   }
 }

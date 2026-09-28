@@ -38,3 +38,13 @@ test('community tab lists the index and installs a template', async () => {
     cleanup()
   }
 })
+
+test('share opens the pre-filled community submission form', async () => {
+  const { communitySubmitUrl } = await import('../src/features/templates/templateForm')
+  const url = new URL(communitySubmitUrl({ title: 'Mars at dusk', description: 'Two moons', tags: ['space', 'mars'], license: 'CC-BY-4.0' }))
+  assert.equal(url.origin + url.pathname, 'https://github.com/IAnMove/hocuspocus-community/issues/new')
+  assert.equal(url.searchParams.get('template'), 'submit-template.yml')
+  assert.equal(url.searchParams.get('template_title'), 'Mars at dusk')
+  assert.equal(url.searchParams.get('tags'), 'space, mars')
+  assert.equal(url.searchParams.get('license'), 'CC-BY-4.0')
+})

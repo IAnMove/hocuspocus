@@ -1,0 +1,55 @@
+name: Validate and publish
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: IAnMove/hocuspocus
+          ref: development
+          path: hocuspocus
+          sparse-checkout: |
+            app/services
+            app/app_identity.py
+            scripts/community_index.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pydantic
+      - name: Validate templates and build the index
+        run: |
+          python hocuspocus/scripts/community_index.py --templates templates --out _site \
+            --base-url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+          cp -r site/. _site/
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
