@@ -7,6 +7,8 @@ the studio does the rest and decides by numbers what a model used to decide by w
 production.run      {workspace, production_id, spec}   → starts in the background, returns at once
 production.status   {workspace, production_id}         → short summary; poll until completed or failed
 (look at contact_sheet once; fix the spec and call production.run again with the same id to resume)
+production.run       {workspace, production_id, retake:["key"]} → shoot those clips again (new seeds, better take kept);
+                                                     only the scenes whose clip changed are re-exported
 ```
 
 Do not call `tools/list` or `models` to plan a production: everything the run needs is here.
@@ -21,7 +23,7 @@ the video URL and a contact-sheet URL. Open the contact sheet as an image once a
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
 | cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member |
 | frames | `generation.image` with the cast sheets as references | one start frame per `h3` shot |
-| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots; retake with a new seed until ok or `max_takes` |
+| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots; retake with a new seed until ok or `max_takes`. A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 

@@ -141,6 +141,17 @@ def pick_song(candidates: dict[str, dict]) -> str:
 
 
 # ---------------------------------------------------------------- run
+def failure_reason(status: dict) -> str:
+    """One short line for the log and production.status: an OOM, the job error, or what the status said."""
+    if status.get("oom_info"):
+        return "out of GPU memory"
+    error = status.get("error")
+    if isinstance(error, dict):
+        error = error.get("message") or error.get("text") or json.dumps(error)
+    text = str(error or status.get("message") or status.get("status") or "no output")
+    return " ".join(text.split())[:120]
+
+
 class Production:
     def __init__(self, workspace: str, production_id: str, *, workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str],
                  mcp: Callable[[str, dict], dict]):
@@ -171,20 +182,31 @@ class Production:
         shutil.copyfile(src, target)
         return str(target), f"/api/v1/uploads/{target.name}"
 
-    def wait(self, jobs: dict[str, str]) -> dict[str, str | None]:
+    def wait(self, jobs: dict[str, str | None], poll: float = 6) -> dict[str, str | None]:
+        """Output file per key, or None. Why a job gave nothing is kept in self.failures[key]."""
         done: dict[str, str | None] = {}
+        self.failures: dict[str, str] = {}
+        unknown: dict[str, int] = {}
         while len(done) < len(jobs):
             for key, job in jobs.items():
-                if key in done or not job:
-                    done.setdefault(key, None)
+                if key in done:
+                    continue
+                if not job:
+                    done[key], self.failures[key] = None, "not admitted"
                     continue
                 s = self.mcp("status", {"job_id": job})
                 if s.get("status") == "completed":
                     done[key] = (s.get("output_files") or [None])[0]
+                elif s.get("status") is None:            # a status hiccup is not a lost job yet
+                    unknown[key] = unknown.get(key, 0) + 1
+                    if unknown[key] >= 5:
+                        done[key] = None
                 elif s.get("status") in ("failed", "error", "cancelled", "discarded"):
                     done[key] = None
+                if key in done and not done[key]:
+                    self.failures[key] = failure_reason(s)
             if len(done) < len(jobs):
-                time.sleep(6)
+                time.sleep(poll)
         return done
 
     def image(self, key: str, prompt: str, refs: list[str] | None, res: str, seed: int) -> str | None:
@@ -283,33 +305,44 @@ class Production:
             self.log(f"clip {w['key']} not admitted: {json.dumps(r)[:140]}")
         return job
 
-    def clips(self, spec: dict, windows: list[dict]) -> None:
-        clips = self.state.setdefault("clips", {})
+    def clips(self, spec: dict, windows: list[dict], retake: tuple[str, ...] = (), pause: float = 60) -> None:
+        """Up to max_takes per run for each missing clip (or each key in retake). Takes count across runs, so a
+        resumed or retaken clip gets new seeds; the best take by lip-sync r is kept. Failed takes are logged with
+        their reason and, when a whole round failed (a busy GPU), the next round waits instead of burning takes."""
+        clips, tried = self.state.setdefault("clips", {}), self.state.setdefault("clip_takes", {})
         max_takes = int(spec.get("max_takes", 3))
         vocals = self.score().get("vocals_file")
-        pending = [w for w in windows if w["kind"] == "h3" and w["key"] not in clips and w["key"] in self.state.get("frames", {})]
-        takes = {w["key"]: 0 for w in pending}
+        pending = [w for w in windows if w["kind"] == "h3" and w["key"] in self.state.get("frames", {}) and (w["key"] not in clips or w["key"] in retake)]
+        for w in pending:          # productions saved before clip_takes existed: count their logged takes
+            tried.setdefault(w["key"], sum(1 for line in self.state.get("log") or [] if line.startswith(f"clip {w['key']} take ")))
+        budget = {w["key"]: tried[w["key"]] + max_takes for w in pending}
         while pending:
-            names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + takes[w["key"]], takes[w["key"]]) for w in pending})
+            names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + tried[w["key"]], tried[w["key"]]) for w in pending})
             retry = []
             for w in pending:
-                takes[w["key"]] += 1
-                name = names.get(w["key"])
-                if not name:
-                    self.log(f"clip {w['key']} take {takes[w['key']]}: no output")
-                    if takes[w["key"]] < max_takes:
-                        retry.append(w)
-                    continue
-                qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"]) if w.get("sing") and vocals else {"verdict": "ok"}
-                drive = "vocals" if (takes[w["key"]] - 1) % 2 == 1 and w.get("sing") else "mix"
-                self.log(f"clip {w['key']} take {takes[w['key']]} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
-                best = clips.get(w["key"])
-                if not best or (qa.get("best_r") or 0) >= ((best.get("qa") or {}).get("best_r") or 0):
-                    clips[w["key"]] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
-                if qa["verdict"] == "retake" and takes[w["key"]] < max_takes:
+                tried[w["key"]] += 1
+                if not self.judge_take(w, names.get(w["key"]), tried[w["key"]], vocals) and tried[w["key"]] < budget[w["key"]]:
                     retry.append(w)
             self.save()
+            if retry and not any(names.values()):
+                time.sleep(pause)
             pending = retry
+
+    def judge_take(self, w: dict, name: str | None, take: int, vocals: str | None) -> bool:
+        """Record one take; True when the clip needs no more takes. The best take by lip-sync r is kept."""
+        key, failed, clips = w["key"], self.state.setdefault("clip_failures", {}), self.state.setdefault("clips", {})
+        if not name:
+            failed[key] = self.failures.get(key, "no output")
+            self.log(f"clip {key} take {take}: failed ({failed[key]})")
+            return False
+        failed.pop(key, None)
+        qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"]) if w.get("sing") and vocals else {"verdict": "ok"}
+        drive = "vocals" if (take - 1) % 2 == 1 and w.get("sing") else "mix"
+        self.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
+        best = clips.get(key)
+        if not best or (qa.get("best_r") or 0) >= ((best.get("qa") or {}).get("best_r") or 0):
+            clips[key] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
+        return qa["verdict"] != "retake"
 
     def scenes(self, spec: dict, windows: list[dict]) -> None:
         score = self.score()
@@ -320,13 +353,15 @@ class Production:
         style, stills = spec.get("style") or {}, spec.get("stills") or {}
         for shot, a, b in segs:
             dur = round(b - a, 3)
-            if done.get(shot["key"], {}).get("dur") == dur and done[shot["key"]].get("file"):
+            used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
+            prior = done.get(shot["key"], {})
+            if prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used:
                 continue
             doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
             doc = self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
             r = self.mcp("scenes.video2d.export", {"version": 1, "intent_id": f"{self.id}-scene-{shot['key']}-{int(time.time())}",
                                                    "input": {"workspace": self.ws, "document": doc}})
-            done[shot["key"]] = {"intent": (r.get("receipt") or {}).get("commandId"), "dur": dur, "file": None}
+            done[shot["key"]] = {"intent": (r.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used, "file": None}
             self.save()
         for key, scene in done.items():
             while scene.get("intent") and not scene.get("file"):
@@ -415,7 +450,7 @@ class Production:
             self.state["contact_sheet"] = sheet
         self.log(f"montage: {status.get('status')}")
 
-    def run(self, spec: dict) -> None:
+    def run(self, spec: dict, retake: tuple[str, ...] = ()) -> None:
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
         self.save()
         try:
@@ -424,7 +459,7 @@ class Production:
             self.cast(spec)
             windows = shot_windows(spec, self.score())
             self.frames(spec, windows)
-            self.clips(spec, windows)
+            self.clips(spec, windows, retake)
             self.scenes(spec, windows)
             self.montage(spec)
             self.state["status"] = "completed" if self.state.get("final") else "failed"
@@ -438,7 +473,9 @@ def status_summary(state: dict, workspace: str) -> dict[str, Any]:
     url = lambda name: f"/api/v1/file/{name}?workspace={workspace}" if name else None
     clips = state.get("clips") or {}
     return {"status": state.get("status", "unknown"), "error": state.get("error"),
-            "song": (state.get("song") or {}).get("file"), "clips": {k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()},
+            "song": (state.get("song") or {}).get("file"),
+            "clips": {**{k: "failed" for k in state.get("clip_failures") or {}}, **{k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()}},
+            "failures": state.get("clip_failures") or None,
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
             "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:]}
 
@@ -454,9 +491,13 @@ def command_catalog() -> list[dict[str, Any]]:
         {"name": RUN, "description": ("Produce a music video from one spec, in the background: K song candidates (best lyric recall, no cut "
                                       "ending), analysis, cast sheets, start frames, H3 clips driven by the exact song slice with automatic "
                                       "lip-sync retakes, one Video 2D scene per shot with timed lyric captions, instrumental gaps filled on bar "
-                                      "lines, montage and export. Pass spec to start; pass only production_id to resume. Returns immediately; "
+                                      "lines, montage and export. Pass spec to start; pass only production_id to resume (missing clips are retried "
+                                      "and their scenes re-exported); retake lists clip keys to shoot again, keeping the better take. "
+                                      "Returns immediately; "
                                       "poll production.status. See docs/agents/VIDEO_PRODUCTION_RUNBOOK.md."),
-         "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA}, ["workspace", "production_id"])},
+         "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
+                                          "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20}},
+                                         ["workspace", "production_id"])},
         {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, last log lines.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid}, ["workspace", "production_id"])},
     ]
@@ -500,7 +541,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         with _lock:
             thread = _threads.get(key)
             if not (thread and thread.is_alive()):
-                thread = threading.Thread(target=production.run, args=(spec,), name=f"production-{data['production_id']}", daemon=True)
+                thread = threading.Thread(target=production.run, args=(spec, tuple(data.get("retake") or ())), name=f"production-{data['production_id']}", daemon=True)
                 _threads[key] = thread
                 thread.start()
         return {"version": 1, "status": "completed", "operation": RUN, "result": {"production_id": data["production_id"], "running": True}}

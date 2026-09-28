@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 
 from services import lipsync_qa, song_analysis as audio_analysis
-from services.music_production import (ProductionError, h3_frames_for, pick_song, segments, shot_windows,
-                                       status_summary, validate_spec)
+from services.music_production import (Production, ProductionError, failure_reason, h3_frames_for, pick_song, segments,
+                                       shot_windows, status_summary, validate_spec)
 from services.video2d_edit import edit
 
 
@@ -95,3 +95,55 @@ def test_video_layer_can_skip_the_head_of_its_clip_for_the_whole_scene():
     too_long = [ops[0], {"op": "update_layer", "id": "v", "patch": {"animation": {"duration": 4.5}}}]
     with pytest.raises(Exception):
         edit({"version": 1, "input": {"document": doc, "operations": too_long, "full": True}})
+
+
+def test_wait_keeps_why_a_job_gave_nothing():
+    replies = {"a": [{"status": "running"}, {"status": "completed", "output_files": ["a.mp4"]}],
+               "b": [{"status": "failed", "error": "CUDA error:\n out of memory", "oom_info": None}],
+               "c": [{"error": {"content": "Job not found"}}] * 5}
+    production = Production.__new__(Production)
+    production.mcp = lambda tool, arguments: replies[arguments["job_id"]].pop(0)
+    names = production.wait({"a": "a", "b": "b", "c": "c", "d": None}, poll=0)
+    assert names == {"a": "a.mp4", "b": None, "c": None, "d": None}
+    assert production.failures["b"] == "CUDA error: out of memory" and production.failures["d"] == "not admitted"
+    assert failure_reason({"status": "failed", "oom_info": {"frames": 192}}) == "out of GPU memory"
+
+
+def test_failed_takes_keep_their_reason_and_get_new_seeds(tmp_path, monkeypatch):
+    (tmp_path / "s.score.json").write_text('{"lines": [], "vocals_file": "v.wav"}')
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    production.state = {"score": "s.score.json", "frames": {"a": "f.png"}, "log": ["clip a take 1: no output"]}
+    production.upload = lambda name: (name, "/u/" + name)
+    seeds, outputs = [], iter([None, "a2.mp4"])
+    production.clip_job = lambda spec, w, seed, take: seeds.append(seed) or f"job{seed}"
+
+    def wait(jobs):
+        production.failures = {"a": "out of GPU memory"}
+        return {key: next(outputs) for key in jobs}
+    production.wait = wait
+    monkeypatch.setattr("services.music_production.lipsync_qa.measure", lambda *a: {"verdict": "ok", "best_r": 0.5})
+    window = {"key": "a", "kind": "h3", "i": 0, "t0": 1.0, "t1": 4.0, "sing": True}
+    production.clips({"max_takes": 3}, [window], pause=0)
+    assert seeds == [7001, 7002]                     # the logged take 1 is not reshot with its old seed
+    assert production.state["clips"]["a"]["file"] == "a2.mp4" and production.state["clip_failures"] == {}
+    assert "clip a take 2: failed (out of GPU memory)" in production.state["log"][-2]
+    summary = status_summary(production.state | {"clip_failures": {"b": "out of GPU memory"}}, "ws")
+    assert summary["clips"] == {"b": "failed", "a": "ok"} and summary["failures"] == {"b": "out of GPU memory"}
+
+
+def test_a_new_clip_reexports_only_its_scene(tmp_path):
+    (tmp_path / "s.score.json").write_text('{"duration": 6.0, "beat": 0.5, "lines": []}')
+    exported = []
+
+    def mcp(tool, arguments):
+        if tool == "scenes.video2d.export":
+            exported.append(arguments["input"]["document"]["name"])
+            return {"receipt": {"commandId": "c1"}}
+        return {"receipt": {"artifacts": [{"name": "new-scene.mp4"}]}}
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=mcp)
+    production.edit = lambda doc, ops: doc
+    production.state = {"score": "s.score.json", "clips": {"a": {"file": "new.mp4", "url": "/u/new.mp4"}},
+                        "scenes": {"a": {"dur": 3.0, "file": "old-a.mp4", "clip": "old.mp4"}, "b": {"dur": 3.0, "file": "b.mp4", "clip": None}}}
+    windows = [{"key": "a", "kind": "h3", "i": 0, "t0": 0.0, "t1": 3.0}, {"key": "b", "kind": "still", "still": "/k.png", "i": 1, "t0": 3.0, "t1": 7.0}]
+    production.scenes({"shots": []}, windows)
+    assert exported == ["a"] and production.state["scenes"]["a"] == {"intent": "c1", "dur": 3.0, "clip": "new.mp4", "file": "new-scene.mp4"}
