@@ -35000,6 +35000,10 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                                 "volume",
                                 "muted",
                                 "fit",
+                                "focus_x",
+                                "focus_y",
+                                "blur_amount",
+                                "background_dim",
                                 "transition",
                                 "transition_duration",
                                 "transition_text",
@@ -35116,6 +35120,7 @@ def start_video_editor_export(body: dict):
         "later-tropical",
         "later-cinematic",
     }
+    from services.video_layout import stamp_layout
     clean_clips = []
     for index, clip in enumerate(clips):
         if not isinstance(clip, dict):
@@ -35140,6 +35145,7 @@ def start_video_editor_export(body: dict):
             "transition_text": transition_text,
             "transition_text_size": transition_text_size,
         })
+        stamp_layout(clean_clip)
         clean_clips.append(clean_clip)
 
     soundtrack = body.get("soundtrack")
@@ -36727,6 +36733,16 @@ _montage_commands = MontageCommands(_montage_store, start_export=start_video_edi
                                     shots=ShotBoard(_montage_store, workspace_dir=_workspace_dir,
                                                     submit=_submit_shot_generation, job_status=_shot_job_status))
 api.include_router(create_montages_router(_montage_commands))
+from services.scene_packages import make_workspace_reader as _template_reader
+from services.template_library import TemplateLibrary, resolve_template_library_root
+from services.template_commands import TemplateCommands, command_catalog as template_command_catalog
+from routers.templates import create_templates_router
+from services.template_community import CommunityIndex
+_template_library = TemplateLibrary(
+    resolve_template_library_root(_app_dir), workspace_dir=_workspace_dir,
+    reader=_template_reader(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")))
+_template_commands = TemplateCommands(_template_library, CommunityIndex(_template_library))
+api.include_router(create_templates_router(_template_commands))
 from services.scene_documents import command_catalog as scene_document_catalog, command_handlers as scene_document_handlers
 from services.scene2d_validate import command_catalog as scene2d_validate_catalog, command_handlers as scene2d_validate_handlers
 from services.video2d_catalogs import command_catalog as video2d_catalog, command_handlers as video2d_catalog_handlers
@@ -36756,14 +36772,33 @@ _wizard_workflow_executor = WizardWorkflowExecutor(
     get_task=lambda workspace, task_id: _task_registry(workspace).get(task_id),
 )
 api.include_router(create_wizard_workflow_executor_router(_wizard_workflow_executor, list_workspaces=_list_workspaces))
+from routers.audio_shorten import (
+    command_catalog as audio_shorten_catalog,
+    command_handlers as audio_shorten_handlers,
+    create_audio_shorten_router,
+)
+
+def _resolve_shorten_source(source: str, workspace: str) -> str:
+    return _resolve_request_media_path(source, workspace=workspace, kinds=("audio",))
+
+_audio_shorten_handlers = audio_shorten_handlers(_resolve_shorten_source, _workspace_dir)
+api.include_router(create_audio_shorten_router(
+    resolve_source=_resolve_shorten_source,
+    workspace_dir=_workspace_dir,
+))
+from routers.publish_presets import create_publish_router
+api.include_router(create_publish_router(
+    resolve_source=lambda source, workspace: _resolve_request_media_path(source, workspace=workspace, kinds=("video", "audio")),
+    workspace_dir=_workspace_dir,
+))
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
     handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url), **video2d_edit_handlers()},
+              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url), **video2d_edit_handlers(), **_audio_shorten_handlers},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog()],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *template_command_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())

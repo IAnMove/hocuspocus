@@ -3,7 +3,7 @@ import { commandResultFromSlice, type CommandResult } from '../../lib/commandCon
 import { useStore } from '../../stores/useStore'
 import { clipId, loadEditorDraft, persistEditorDraft, RESOLUTIONS, type EditorSoundtrack } from './editorDraft'
 import { sequenceTotalDuration } from './editorTimeline'
-import type { EditorClip } from './editorClipNormalization'
+import { exportClipBody, type EditorClip } from './editorClipNormalization'
 import type {
   AddVideoEditorAudioCommand,
   AddVideoEditorClipsCommand,
@@ -184,19 +184,7 @@ export async function exportAgentVideoEditor(command: ExportVideoEditorCommand):
       volume: draft.soundtrack.volume,
       loop: draft.soundtrack.loop,
     } : null,
-    clips: draft.clips.map(clip => ({
-      name: clip.name,
-      source: clip.source,
-      trim_start: clip.trimStart,
-      trim_end: clip.trimEnd,
-      volume: clip.volume,
-      muted: clip.muted,
-      fit: clip.fit,
-      transition: clip.transition,
-      transition_duration: clip.transitionDuration,
-      transition_text: clip.transitionText,
-      transition_text_size: clip.transitionTextSize,
-    })),
+    clips: draft.clips.map(clip => exportClipBody(clip)),
   })
   if (!job.job_id) throw new Error('El exportador devolvió éxito sin jobId.')
   try {

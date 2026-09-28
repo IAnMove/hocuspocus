@@ -318,25 +318,9 @@
   "yaw": "Rotation Y (°)",
   "keepAssets": "Keep my objects when changing shots",
   "userTemplates": {
-    "title": "My scenarios",
-    "help": "Export a scenario type (camera, set, layout, motion) as a shareable JSON file. Import it here to reuse it. This is not a shot JSON and it does not bundle GLB files.",
-    "name": "Scenario name",
-    "description": "Description (optional)",
-    "includeAssets": "Include durable gallery URLs (never blob: files)",
-    "export": "Export scenario template",
-    "import": "Import scenario template",
-    "chooseFile": "Scenario template JSON file",
-    "exported": "Scenario saved in this browser and downloaded as a .world3d.template.json file.",
-    "imported": "Scenario added to My scenarios. Click it to apply it to this shot.",
-    "removed": "Scenario removed from this browser.",
-    "empty": "No imported scenarios yet. Export the current shot or import a .world3d.template.json file.",
-    "noDescription": "Camera, set and object layout from a shared scenario.",
-    "remove": "Remove",
-    "needTitle": "Give the scenario a name before exporting it.",
-    "invalid": "Could not import: this is not a Video 3D scenario template.",
-    "tooLarge": "The template file is larger than 1.5 MB.",
-    "saveFailed": "Could not save the scenario in this browser (storage is full or blocked).",
-    "openAsShot": "This file is a scenario template. Import it from My scenarios, not as a shot JSON."
+    "title": "My templates",
+    "noDescription": "Camera, set and layout of a scenario.",
+    "openAsShot": "This file is a template. Import it from My templates, not as a shot JSON."
   },
   "cameraHelp": "Camera changes are editable; your objects keep their identity.",
   "category": {
@@ -1895,7 +1879,7 @@
     "catalog": "Library content",
     "templates": "Templates",
     "examples": "Examples and variants"
-},
+  },
   "shotLibrary": {
     "optionalExamples": "Advanced shot types and all Pixel worlds stay here. Additional looks for repeated compositions are under Examples and variants. Example media is optional.",
     "change": "Change shot",

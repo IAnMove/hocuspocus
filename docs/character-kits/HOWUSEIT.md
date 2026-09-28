@@ -73,6 +73,11 @@ without creating or moving files. See the
    character. Face Rig still uses them to build overlay prompts.
 8. **Delete is record-only:** deleting a kit removes its library entry, not its
    pose PNGs, cleaned overlays, or scene layers.
+9. **Voice is local only.** Presets use `qwen3_tts_customvoice` plus a named
+   id (`vivian`, `serena`, `uncle_fu`, `dylan`, `eric`, `ryan`, `aiden`,
+   `ono_anna`, `sohee`) and optional direction (max 1000 chars). Custom
+   recordings use `qwen3_tts_base` with `voiceId: "reference"`. Do not store
+   credentials on the kit.
 
 ---
 
@@ -86,7 +91,10 @@ CharacterKit
   identityReference?, base?, poses{}
   mouth { closed?, small?, wide?, round? }
   eyes { open?, blink? }
-  voice? { provider: local, model: qwen3_tts_customvoice, voiceId, instructions? }
+  voice? PresetCharacterVoice | CustomCharacterVoice
+    preset: { provider: local, model: qwen3_tts_customvoice, voiceId, instructions? }
+    custom: { provider: local, model: qwen3_tts_base, voiceId: "reference",
+              name, referenceAudio, transcript, language }
   lookNotes?
   speech3d? { model, digest, settings? }
   anchors { [poseId]: { mouth, mouthStates?, eyes? } }
@@ -186,6 +194,38 @@ copies the box to `open-eyes` and `blink`.
 `previewFaceRigDialogue` plans **2–4 seconds** of visemes with the same cadence
 as scene dialogue. Missing shapes fall back from `wide` to `small`, `round`, or
 `closed` as available. The preview does not write scene keyframes.
+
+### 4.5 Preferred voice (preset or recording)
+
+`CharacterVoiceFields` on the kit (and Character Creator speech) stores a
+public preference only. Audition generates a short sample; choosing a voice
+does not create audio.
+
+**Named preset** (`qwen3_tts_customvoice`): pick a catalog speaker and optional
+acting notes. Tijeral ships these presets; they are not cloned actors.
+
+**Add your own voice** (`qwen3_tts_base`):
+
+1. Choose **Add your own voice: import or record**.
+2. Name the voice (max 120 chars).
+3. Import WAV/MP3/M4A/FLAC/OGG (or record on HTTPS / localhost).
+4. Enter the **exact transcript** of that sample (max 4000 chars). This is
+   not the dialogue to generate later.
+5. Pick the language for new lines (`auto` or one of
+   `CHARACTER_VOICE_LANGUAGES`).
+6. Audition, then **Save everything** on the character.
+
+Constraints from `uploadVoiceReference` / `parseCharacterVoice`:
+
+- Duration 3–30 seconds. A microphone overrun keeps the first 30 s instead
+  of rejecting the take. Imports longer than 30 s are rejected.
+- File ≤ 20 MB, nonempty, decodable in the browser.
+- `referenceAudio` is a persistent `/api/v1/uploads/…` or
+  `/api/v1/file/…?workspace=` URL. Host paths, credentials, and query
+  strings on uploads are rejected.
+- Saved custom voices appear in the selector for other kits (`saved:<id>`).
+  Existing takes stay; new or regenerated 2D/3D dialogue uses the stored
+  recording + transcript.
 
 ---
 

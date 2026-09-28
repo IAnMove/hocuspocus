@@ -55,12 +55,8 @@ durable. `controls` usa solo controles que el catálogo declara para ese id.
       "intensity": 0.6
     },
     "assets": {
-      "hero": {
-        "source": "/examples/hero.png"
-      },
-      "plate": {
-        "source": "/examples/plate.png"
-      }
+      "hero": "/examples/hero.png",
+      "plate": "/examples/plate.png"
     },
     "width": 1280,
     "height": 720,

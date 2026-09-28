@@ -1,6 +1,6 @@
 import type { VideoEditorProbe } from '../../api/client'
 
-export type ClipFit = 'fit' | 'fill'
+export type ClipFit = 'fit' | 'fill' | 'blur'
 export type Transition =
   | 'none'
   | 'crossfade'
@@ -28,6 +28,10 @@ export interface EditorClip extends VideoEditorProbe {
   volume: number
   muted: boolean
   fit: ClipFit
+  focusX?: number
+  focusY?: number
+  blurAmount?: number
+  backgroundDim?: number
   transition: Transition
   transitionDuration: number
   transitionText: string
@@ -41,7 +45,7 @@ export interface EditorClipNormalizationResult {
 }
 
 const MIN_TRIM_DURATION = 0.05
-const FIT_VALUES = new Set<ClipFit>(['fit', 'fill'])
+const FIT_VALUES = new Set<ClipFit>(['fit', 'fill', 'blur'])
 const TRANSITION_VALUES = new Set<Transition>([
   'none', 'crossfade', 'fade-black', 'wipe-left', 'slide-left', 'slide-right',
   'circle-open', 'dissolve', 'pixelize', 'blur', 'zoom-in', 'later-clock',
@@ -60,6 +64,24 @@ const positiveInteger = (value: unknown): number => {
 const clamp = (value: number, minimum: number, maximum: number): number => (
   Math.max(minimum, Math.min(maximum, value))
 )
+
+function optionalUnit(value: unknown, maximum: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  return clamp(value, 0, maximum)
+}
+
+function frameKnobs(raw: Record<string, unknown>): Pick<EditorClip, 'focusX' | 'focusY' | 'blurAmount' | 'backgroundDim'> {
+  const focusX = optionalUnit(raw.focusX, 100)
+  const focusY = optionalUnit(raw.focusY, 100)
+  const blurAmount = optionalUnit(raw.blurAmount, 1)
+  const backgroundDim = optionalUnit(raw.backgroundDim, 1)
+  return {
+    ...(focusX !== undefined ? { focusX } : {}),
+    ...(focusY !== undefined ? { focusY } : {}),
+    ...(blurAmount !== undefined ? { blurAmount } : {}),
+    ...(backgroundDim !== undefined ? { backgroundDim } : {}),
+  }
+}
 
 function uniqueClipId(rawId: unknown, usedIds: Set<string>, idFactory: () => string): string {
   const candidate = typeof rawId === 'string' ? rawId.trim() : ''
@@ -132,6 +154,7 @@ export function normalizeEditorClips(
       volume: clamp(finiteNumber(raw.volume, 1), 0, 1),
       muted: raw.muted === true,
       fit: FIT_VALUES.has(raw.fit as ClipFit) ? raw.fit as ClipFit : 'fit',
+      ...frameKnobs(raw),
       transition: TRANSITION_VALUES.has(raw.transition as Transition) ? raw.transition as Transition : 'none',
       transitionDuration: clamp(finiteNumber(raw.transitionDuration, 0.5), 0.05, 5),
       transitionText: typeof raw.transitionText === 'string' ? raw.transitionText : 'Momentos después…',
@@ -194,6 +217,26 @@ export function trimClipFromDelta(
   return {
     ...clip,
     trimEnd: Math.max(clip.trimStart + floor, Math.min(clip.duration, clip.trimEnd + deltaSeconds)),
+  }
+}
+
+export function exportClipBody(clip: EditorClip) {
+  return {
+    name: clip.name,
+    source: clip.source,
+    trim_start: clip.trimStart,
+    trim_end: clip.trimEnd,
+    volume: clip.volume,
+    muted: clip.muted,
+    fit: clip.fit,
+    ...(clip.focusX !== undefined ? { focus_x: clip.focusX } : {}),
+    ...(clip.focusY !== undefined ? { focus_y: clip.focusY } : {}),
+    ...(clip.blurAmount !== undefined ? { blur_amount: clip.blurAmount } : {}),
+    ...(clip.backgroundDim !== undefined ? { background_dim: clip.backgroundDim } : {}),
+    transition: clip.transition,
+    transition_duration: clip.transitionDuration,
+    transition_text: clip.transitionText,
+    transition_text_size: clip.transitionTextSize,
   }
 }
 

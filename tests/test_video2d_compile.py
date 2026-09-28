@@ -96,6 +96,21 @@ def test_compile_calls_the_typescript_builders():
     assert [layer["id"] for layer in result["result"]["document"]["layers"]] == ["plate", "hero", "camera", "atmosphere-dust"]
 
 
+def test_example_urls_are_durable_and_reach_the_bridge(monkeypatch):
+    seen = {}
+
+    def fake_bridge(payload):
+        seen["payload"] = payload
+        return {"ok": True, "result": {"document": {"version": 1, "layers": []}, "warnings": []}}
+
+    monkeypatch.setattr("services.video2d_compile.spawn_bridge", fake_bridge)
+    examples = {"hero": "/examples/hero.png", "plate": "/examples/plate.png"}
+    execute(_compile("trailer-teaser", assets=examples))
+    assert seen["payload"]["input"]["assets"] == examples
+    execute(_compile("cinema-establishing", assets=examples))
+    assert seen["payload"]["input"]["assets"] == examples
+
+
 def test_video2d_candidate_forwards_catalog_duration_and_keeps_assets(monkeypatch):
     seen = {}
 

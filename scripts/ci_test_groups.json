@@ -123,6 +123,7 @@
         "tests/test_series_reference_router.py",
         "tests/test_series_render.py",
         "tests/test_sex_act_leet_strip.py",
+        "tests/test_song_shorten.py",
         "tests/test_spoken_language_contract.py",
         "tests/test_story_lab_id_repair.py",
         "tests/test_story_lab_music_plan.py",
@@ -318,6 +319,7 @@
         "tests/test_video_editor_provenance.py",
         "tests/test_video_editor_router.py",
         "tests/test_video_extra_info.py",
+        "tests/test_video_layout.py",
         "tests/test_vocal_isolation.py",
         "tests/test_wangp_analysis.py",
         "tests/test_wangp_frame_extraction.py",
@@ -327,11 +329,14 @@
         "tests/test_workspace_command_failures.py",
         "tests/test_world3d_export.py",
         "tests/test_world3d_media_cache.py",
+        "tests/test_montage_derive.py",
         "tests/test_montage_documents.py",
         "tests/test_scene2d_export.py",
         "tests/test_scene2d_validate.py",
+        "tests/test_publish_presets.py",
         "tests/test_video_editor_layers.py",
-        "tests/test_montage_shots.py"
+        "tests/test_montage_shots.py",
+        "tests/test_template_library.py"
       ]
     }
   ],
@@ -460,6 +465,42 @@
       "prefix": "app/routers/about.py",
       "paths": [
         "tests/test_about.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_format.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_library.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_commands.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/templates.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_community.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "scripts/community_index.py",
+      "paths": [
+        "tests/test_template_library.py"
       ]
     }
   ]

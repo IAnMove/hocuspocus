@@ -92,20 +92,23 @@ test('while exporting the library can be browsed but not applied', async () => {
 })
 
 test('my scenarios live in the library: pick one, then use it', async () => {
-  const { screen, fireEvent, cleanup } = await import('@testing-library/react')
-  const { createUserTemplate, saveUserTemplate } = await import('../src/features/scene3d/userTemplates')
+  const { screen, fireEvent, cleanup, waitFor } = await import('@testing-library/react')
   const { applyScene3DTemplate } = await import('../src/features/scene3d/templates')
-  const pack = createUserTemplate({ document: applyScene3DTemplate('cafe-dance'), title: 'Harbor cafe', description: '', includeAssets: false })!
-  saveUserTemplate(pack)
+  const summary = { id: 'ina/harbor-cafe', editor: 'video3d', title: 'Harbor cafe', description: '', tags: [], author: { x: 'theinaog' },
+    license: 'CC-BY-4.0', templateVersion: '1.0.0', createdAt: '', updatedAt: '', slots: [], controls: [], media: 0, source: 'user', previewUrl: null }
+  const original = globalThis.fetch
+  globalThis.fetch = (async (url: string) => new Response(JSON.stringify(String(url).endsWith('/apply')
+    ? { document: applyScene3DTemplate('cafe-dance'), missingSlots: [], copiedMedia: [] } : { templates: [summary] }), { status: 200 })) as typeof fetch
   try {
     const calls = await openLibrary()
-    fireEvent.click(screen.getByRole('button', { name: 'My scenarios' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Harbor cafe' }))
+    fireEvent.click(screen.getByRole('button', { name: 'My templates' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Harbor cafe' }))
+    await waitFor(() => assert.match(screen.getByTestId('world3d-shot-preview').textContent ?? '', /Harbor cafe/))
     assert.deepEqual(calls.packs, [])
-    assert.match(screen.getByTestId('world3d-shot-preview').textContent ?? '', /Harbor cafe/)
     fireEvent.click(screen.getByTestId('world3d-use-shot'))
-    assert.deepEqual(calls.packs, [pack.id])
+    assert.deepEqual(calls.packs, ['ina/harbor-cafe'])
   } finally {
+    globalThis.fetch = original
     cleanup()
   }
 })
