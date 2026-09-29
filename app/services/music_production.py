@@ -12,6 +12,7 @@ State lives in <workspace>/<id>.production.json. A running file younger than 24h
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -31,7 +32,7 @@ from services.production_resume import open_mcp
 from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
 from services.production_timing import StageWatch, timing_summary
 from services.production_usage import attach_usage, usage_summary
-from services.production_review import review_production
+from services.production_review import review_for_status
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_style_presets import expand_style_preset
 from services.production_takes import another_take, note_seconds, pending_windows, take_settled
@@ -41,6 +42,9 @@ from services.video2d_edit_titles import TITLE_BUILDERS
 
 RUN, STATUS, PLAN = "production.run", "production.status", "production.plan"
 OMARCHY_THEMES: dict[str, dict] = json.loads((Path(__file__).resolve().parents[1] / "shared" / "omarchy_themes.json").read_text(encoding="utf-8"))["entries"]
+FRAME_ATTEMPTS = 2                                       # start-frame rounds per run
+FRAME_RESOLUTIONS = ("1280x704", "1152x640", "1024x576")   # after an out-of-memory the next attempt is smaller
+MAX_LOST_JOBS = 3                                        # per shot: then a vanished job counts as a failed take
 H3_FRAMES = [124 + 17 * k for k in range(14)]            # H3 window lengths (124 … 345 frames at 24 fps)
 STEPS = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
 _threads: dict[str, threading.Thread] = {}
@@ -66,10 +70,13 @@ SPEC_SCHEMA: dict[str, Any] = {
                                                    "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
                                                    "lyric_template": {"type": "string"}, "lyric_style": {"type": "object"},
                                                    "theme": {"type": "string", "description": "Omarchy colour theme id (app/shared/omarchy_themes.json): screen shots, lyric and footer colours"},
+                                                   "content": {"enum": ["screen"], "description": "what auto-planned non-sung shots are: the native desktop (default: a short H3 clip, or stills when given)"},
+                                                   "singer": {"type": "boolean", "description": "false: nobody sings on screen (auto-planned shots have no sung H3 shots)"},
                                                    "title_style": {"type": "object"}, "footer": {"type": "string"},
                                                    "footer_style": {"type": "object"}, "finish": {"type": "object"}}},
         "cast": {"type": "array", "items": {"type": "object", "required": ["id", "sheet_prompt"],
-                                         "properties": {"image_model": {"type": "string"}, "image_steps": {"type": "integer"}}}},
+                                         "properties": {"image_model": {"type": "string"}, "image_steps": {"type": "integer"},
+                                                        "count": {"type": "integer", "minimum": 1, "maximum": 6, "description": "how many distinct subjects this reference stands for (a group image); default 1"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
             "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
@@ -274,6 +281,7 @@ class Production:
         self.path = self.root / f"{production_id}.production.json"
         self.state = json.loads(self.path.read_text()) if self.path.exists() else {}
         self.mcp = attach_usage(mcp, self.state, self.save)
+        self.lost: set[str] = set()
 
     # state
     def save(self) -> None:
@@ -299,6 +307,7 @@ class Production:
         """Output file per key, or None. Why a job gave nothing is kept in self.failures[key]."""
         done: dict[str, str | None] = {}
         self.failures: dict[str, str] = {}
+        self.lost = set()
         unknown: dict[str, int] = {}
         while len(done) < len(jobs):
             for key, job in jobs.items():
@@ -314,6 +323,7 @@ class Production:
                     unknown[key] = unknown.get(key, 0) + 1
                     if unknown[key] >= 5:
                         done[key] = None
+                        self.lost.add(key)      # the queue no longer knows this job (a restart drops the queue)
                 elif s.get("status") in ("failed", "error", "cancelled", "discarded"):
                     done[key] = None
                 if key in done and not done[key]:
@@ -323,12 +333,13 @@ class Production:
         return done
 
     def image(self, key: str, prompt: str, refs: list[str] | None, res: str, seed: int,
-              model: str = "flux2_klein_9b", steps: int | None = None) -> str | None:
+              model: str = "flux2_klein_9b", steps: int | None = None, attempt: int = 0) -> str | None:
         params = {"prompt": prompt, "model_type": model, "resolution": res, "seed": seed, "guidance_scale": 1,
                   "num_inference_steps": steps or (40 if model.startswith("qwen_image_21") else 4)}
         if refs:
             params.update(image_refs=refs, video_prompt_type="I")
-        r = self.mcp("generation.image", {"version": 2, "intent_id": f"{self.id}-{key}-{seed}", "input": {"workspace": self.ws, "params": params}})
+        r = self.mcp("generation.image", {"version": 2, "intent_id": f"{self.id}-{key}-{seed}" + (f"-r{attempt}" if attempt else ""),
+                                                 "input": {"workspace": self.ws, "params": params}})       # the journal answers a repeated intent with the old (maybe failed) job
         return ((r.get("receipt") or {}).get("result") or {}).get("job_id")
 
     # steps
@@ -377,28 +388,64 @@ class Production:
         settings = spec.get("style") or {}
         style = settings.get("image", "")
         jobs = {c["id"]: self.image("cast-" + c["id"], c["sheet_prompt"] if style in c["sheet_prompt"] else f"{c['sheet_prompt']} {style}".strip(), None, "1536x1024", c.get("seed", 5),
-                                     c.get("image_model", settings.get("image_model", "flux2_klein_9b")), c.get("image_steps", settings.get("image_steps")))
+                                     c.get("image_model", settings.get("image_model", "flux2_klein_9b")), c.get("image_steps", settings.get("image_steps")),
+                                     self._attempt("cast_attempts", c["id"]))
                 for c in spec.get("cast") or [] if c["id"] not in cast}
         for cid, name in self.wait(jobs).items():
             if name:
                 cast[cid] = self.upload(name)[1]
         self.log(f"cast: {len(cast)}")
+        absent = [c["id"] for c in spec.get("cast") or [] if c["id"] not in cast]
+        if absent:
+            raise ProductionError("cast_incomplete", "no reference sheet for " + ", ".join(f"{cid} ({self.failures.get(cid, 'no output')})" for cid in absent))
+
+    def _attempt(self, group: str, key: str) -> int:
+        """How many times this image was already submitted, so a resume asks for a fresh job instead of the journal's old answer."""
+        counts = self.state.setdefault(group, {})
+        if key not in counts:
+            counts[key] = 1 if any(line.startswith(("frames:", "cast:")) for line in self.state.get("log") or []) else 0
+            return counts[key]
+        counts[key] += 1
+        return counts[key]
+
+    def frame_prompt(self, spec: dict, w: dict) -> str:
+        """Start-frame prompt: the look, the shot, and how many distinct subjects the cast references stand for
+        (a model given a sheet with several views tends to draw the character several times)."""
+        style = (spec.get("style") or {}).get("image", "")
+        counts = {c["id"]: int(c.get("count", 1)) for c in spec.get("cast") or [] if isinstance(c, dict)}
+        subjects = sum(counts.get(c, 1) for c in w.get("cast", []) if c in self.state.get("cast", {}))
+        guard = f" Exactly {subjects} distinct {'subject' if subjects == 1 else 'subjects'} in the frame, no duplicated characters." if subjects else ""
+        return f"{style} {w['frame']}{guard}".strip()
 
     def frames(self, spec: dict, windows: list[dict]) -> None:
+        """One start frame per H3 shot. A missing frame is asked for again (new job; a smaller picture after an
+        out-of-memory) up to FRAME_ATTEMPTS times; what still fails is reported in ``frame_failures``."""
         frames = self.state.setdefault("frames", {})
+        failures = self.state.setdefault("frame_failures", {})
         settings = spec.get("style") or {}
-        style = settings.get("image", "")
-        jobs = {}
-        for w in windows:
-            if w["kind"] != "h3" or w["key"] in frames:
-                continue
-            refs = [self.state["cast"][c] for c in w.get("cast", []) if c in self.state.get("cast", {})]
-            jobs[w["key"]] = self.image("frame-" + w["key"], f"{style} {w['frame']}".strip(), refs or None, "1280x704", w.get("seed", 3),
-                                        w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")))
-        for key, name in self.wait(jobs).items():
-            if name:
-                frames[key] = name
+        for _round in range(FRAME_ATTEMPTS):
+            missing = [w for w in windows if w["kind"] == "h3" and w["key"] not in frames]
+            if not missing:
+                break
+            jobs = {}
+            for w in missing:
+                attempt = self._attempt("frame_attempts", w["key"])
+                res = FRAME_RESOLUTIONS[min(attempt, len(FRAME_RESOLUTIONS) - 1)] if "memory" in failures.get(w["key"], "") else FRAME_RESOLUTIONS[0]
+                refs = [self.state["cast"][c] for c in w.get("cast", []) if c in self.state.get("cast", {})]
+                jobs[w["key"]] = self.image("frame-" + w["key"], self.frame_prompt(spec, w), refs or None, res, w.get("seed", 3) + (attempt or 0),
+                                            w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")), attempt)
+            for key, name in self.wait(jobs).items():
+                if name:
+                    frames[key] = name
+                    failures.pop(key, None)
+                else:
+                    failures[key] = self.failures.get(key, "no output")
+                    self.log(f"frame {key} failed ({failures[key]})")
+            self.save()
         self.log(f"frames: {len(frames)}")
+        absent = [w["key"] for w in windows if w["kind"] == "h3" and w["key"] not in frames]
+        if absent:
+            raise ProductionError("frames_incomplete", "no start frame for " + ", ".join(f"{key} ({failures.get(key, 'no output')})" for key in absent[:6]))
 
     def preview(self, request: dict) -> None:
         """Generate three look tests before committing GPU time to a song or clips."""
@@ -458,7 +505,13 @@ class Production:
             started = time.perf_counter()
             names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + tried[w["key"]], tried[w["key"]]) for w in pending})
             retry = []
+            lost = self.state.setdefault("clip_lost", {})
             for w in pending:
+                if w["key"] in self.lost and lost.get(w["key"], 0) < MAX_LOST_JOBS:
+                    lost[w["key"]] = lost.get(w["key"], 0) + 1      # not a take: the job vanished, so shoot it again
+                    self.log(f"clip {w['key']}: job lost (queue restarted), not counted as a take")
+                    retry.append(w)
+                    continue
                 tried[w["key"]] += 1
                 if another_take(self.judge_take(w, names.get(w["key"]), tried[w["key"]], vocals), tried[w["key"]], budget[w["key"]], w["key"] in retake):
                     retry.append(w)
@@ -688,13 +741,14 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
             "song": (state.get("song") or {}).get("file"),
             "clips": {**{k: "failed" for k in state.get("clip_failures") or {}}, **{k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()}},
             "failures": state.get("clip_failures") or None,
+            "frame_failures": state.get("frame_failures") or None,
             "held": list(state.get("held", [])),
             "preview_frames": state.get("preview_frames") or None,
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
             "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:],
             "timing": timing_summary(state), "usage": usage_summary(state)}
-    summary.update(review_production(state, root))
+    summary.update(review_for_status(state, root))
     return summary
 
 
@@ -717,6 +771,7 @@ def command_catalog() -> list[dict[str, Any]]:
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
                                           "dry_run": {"type": "boolean"},
+                                          "auto_resume": {"type": "boolean", "description": "true: after a server restart this production continues by itself (for 24 h). Off unless asked (or HOCUS_PRODUCTION_AUTORESUME=1)."},
                                           "through": {"enum": ["all", "frames"]},
                                           "preview": {"type": "object", "required": ["prompts"], "properties": {
                                               "prompts": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}},
@@ -724,7 +779,7 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": PLAN, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites. Optional lyrics replace the draft.",
+        {"name": PLAN, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them) and an optional footer (small print on every scene).",
          "inputSchema": envelope({"brief": {"type": "object"}}, ["brief"])},
         {"name": STATUS, "description": "Short summary of a production: status, stage timings, usage (mcp_calls, response_bytes, h3_takes), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (verdict, failures, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
@@ -766,7 +821,14 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             return {"version": 1, "status": "completed", "operation": RUN, "result": dry_run(data.get("spec"))}
         if not token() or not app_url():
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
+        key = f"{data['workspace']}/{data['production_id']}"
+        with _lock:
+            running = _threads.get(key)
+        if running and running.is_alive():
+            raise HTTPException(409, {"code": "already_running", "message": "This production is running: wait for production.status to finish (or use another production_id) before sending a new spec", "retryable": True})
         production = Production(data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=loopback_mcp(app_url, token))
+        if "auto_resume" in data:
+            production.state["auto_resume"] = data["auto_resume"] is True
         preview = data.get("preview")
         if preview is not None:
             if (not isinstance(preview, dict) or not isinstance(preview.get("prompts"), list)
@@ -786,13 +848,13 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
                 raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all or frames", "retryable": False})
             target = production.run
             args = (spec, tuple(data.get("retake") or ()), through)
-        key = f"{data['workspace']}/{data['production_id']}"
         with _lock:
             thread = _threads.get(key)
-            if not (thread and thread.is_alive()):
-                thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
-                _threads[key] = thread
-                thread.start()
+            if thread and thread.is_alive():
+                raise HTTPException(409, {"code": "already_running", "message": "This production is running", "retryable": True})
+            thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
+            _threads[key] = thread
+            thread.start()
         return {"version": 1, "status": "completed", "operation": RUN, "result": {"production_id": data["production_id"], "running": True}}
 
     async def status(arguments: Any) -> dict:
@@ -801,7 +863,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         if not path.exists():
             raise HTTPException(404, {"code": "production_not_found", "message": "No production with this id in the workspace", "retryable": False})
         state = await wait_for_status(path, data.get("wait_s", 0))
-        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(state, data["workspace"], str(path.parent))}
+        summary = await asyncio.to_thread(status_summary, state, data["workspace"], str(path.parent))    # the review opens video files
+        return {"version": 1, "status": "completed", "operation": STATUS, "result": summary}
 
     async def plan(arguments: Any) -> dict:
         from services.production_plan import PlanError, plan_brief

@@ -1,6 +1,8 @@
 """production.plan turns three briefs into specs that pass dry_run unedited."""
 from __future__ import annotations
 
+import pytest
+
 import asyncio
 
 from services.music_production import command_handlers, validate_spec
@@ -18,6 +20,7 @@ def _brief(**extra):
         "protagonista": "a friendly inventor at a desk",
         "cta": "Try the studio",
         "limites": "no real people",
+        "lyrics": "[Verse]\nA small inventor wakes up\nThe desk is full of light\nA spark begins to hum\nThe night is turning bright\n[Chorus]\nTry the studio now\nMake it move, make it glow\nTry the studio now\nLet the whole world know\n",
     }
     brief.update(extra)
     return brief
@@ -68,3 +71,38 @@ def test_handler_returns_the_spec_without_a_thread():
     assert result["operation"] == "production.plan"
     assert result["result"]["spec"]["shots"]
     assert result["result"]["spec"]["song"]["bpm"] == 120
+
+
+def test_no_lyrics_is_an_error_not_a_placeholder_song():
+    brief = _brief()
+    del brief["lyrics"]
+    with pytest.raises(PlanError) as error:
+        plan_brief(brief)
+    assert error.value.code == "invalid_brief" and "lyrics" in str(error.value)
+    assert plan_brief(brief, lyricist=lambda fields: "[Verse]\nwritten by a caller\n")["song"]["lyrics"].startswith("[Verse]")
+
+
+def test_an_explicit_look_word_beats_a_subject_word():
+    assert plan_brief(_brief(estilo="zine riso sobre Omarchy"))["style"]["lyric_template"] == "dymo"
+    assert plan_brief(_brief(estilo="escritorio Omarchy"))["style"]["theme"] == "tokyo-night"
+    assert plan_brief(_brief(estilo="Omarchy en anime"))["style"]["image"].startswith("Cinematic anime")
+
+
+def test_tempo_and_length_are_read_the_way_a_person_writes_them():
+    assert plan_brief(_brief(musica="pop de los 2000s, 120 BPM"))["song"]["bpm"] == 120
+    assert plan_brief(_brief(musica="pop de los 2000s"))["song"]["bpm"] == 120
+    assert plan_brief(_brief(musica="synth-pop 110-125 BPM"))["song"]["bpm"] == 118
+    assert plan_brief(_brief(duracion="1:30 minutos"))["song"]["duration"] == 90
+    assert plan_brief(_brief(duracion="2 minutos"))["song"]["duration"] == 120
+    assert plan_brief(_brief(duracion="75 segundos"))["song"]["duration"] == 75
+
+
+def test_accents_survive_in_the_title():
+    assert plan_brief(_brief(tema="Educación para niños"))["title"] == "Educación"
+
+
+def test_the_brief_footer_and_cta_reach_the_spec():
+    spec = plan_brief(_brief(footer="Fan-made, not affiliated with anyone", cta="Prueba el estudio"))
+    assert spec["style"]["footer"] == "Fan-made, not affiliated with anyone"
+    outro = next(shot for shot in spec["shots"] if shot["key"] == "outro")
+    assert outro["title"]["fields"]["cta"] == "Prueba el estudio"

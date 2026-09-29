@@ -124,7 +124,7 @@ def test_agent_call_order_is_run_status_review_retake():
 
 def test_review_contract_names_the_code_checks():
     section = _section(_text(), "production.review")
-    for token in ("black_bars", "frozen_shot", "title_cut_off", "text_covers_face", "duplicate_people", "face_consistent", "retake_keys"):
+    for token in ("black_bars", "frozen_shot", "title_cut_off", "text_covers_face", "duplicate_people", "appearance_changed", "retake_keys"):
         assert token in section
     assert "not a language model looking at the contact sheet" in section
     assert "must not invent yes or no" in section

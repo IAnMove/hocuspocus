@@ -9,6 +9,8 @@ import time
 import urllib.error
 from pathlib import Path
 
+import pytest
+
 import services.music_production as music_production
 from services.music_production import Production, command_handlers, loopback_mcp, status_summary
 from services.production_resume import resume_on_startup
@@ -109,7 +111,7 @@ def test_stopped_worker_resumes_mid_clips_without_another_agent_call(tmp_path, m
     workspace_dir, uploads_dir = _dirs(tmp_path)
     handlers = command_handlers(workspace_dir, uploads_dir, lambda: "http://127.0.0.1:9", lambda: "token")
     agent_calls: list = []
-    payload = {"version": 1, "input": {"workspace": "musical", "production_id": "show", "spec": _spec()}}
+    payload = {"version": 1, "input": {"workspace": "musical", "production_id": "show", "spec": _spec(), "auto_resume": True}}
 
     async def agent(arguments):
         agent_calls.append(arguments)
@@ -246,7 +248,7 @@ def test_resume_skips_stale_finished_live_and_inactive_mcp(tmp_path, monkeypatch
     done = tmp_path / "done"
     live = tmp_path / "live"
     plain = tmp_path / "plain"
-    _running(fresh, "keep")
+    _running(fresh, "keep", auto_resume=True)
     old = _running(stale, "old")
     _write(done, "done", {"status": "failed", "spec": _spec(), "error": "URLError: refused"})
     _running(live, "live")
@@ -279,3 +281,44 @@ def test_resume_skips_stale_finished_live_and_inactive_mcp(tmp_path, monkeypatch
         hold.set()
         thread.join(timeout=2)
         _forget(key, "fresh/keep")
+
+
+def test_a_running_production_that_did_not_ask_to_resume_stays_stopped(tmp_path, monkeypatch):
+    monkeypatch.setattr(Production, "run", lambda self, spec, retake=(), through="all": None)
+    workspace = tmp_path / "quiet"
+    _running(workspace, "show")
+    listed = [{"name": "quiet", "path": str(workspace)}]
+    monkeypatch.delenv("HOCUS_PRODUCTION_AUTORESUME", raising=False)
+    assert _startup(tmp_path, listed) == []
+    monkeypatch.setenv("HOCUS_PRODUCTION_AUTORESUME", "1")
+    try:
+        assert _startup(tmp_path, listed) == ["quiet/show"]
+        music_production._threads["quiet/show"].join(timeout=2)
+    finally:
+        _forget("quiet/show")
+
+
+def test_a_second_run_while_one_is_running_is_an_error(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    workspace_dir, uploads_dir = _dirs(tmp_path)
+    (tmp_path / "musical").mkdir()
+    handlers = command_handlers(workspace_dir, uploads_dir, lambda: "http://127.0.0.1:9", lambda: "token")
+    release = threading.Event()
+    started = threading.Event()
+
+    def slow(self, spec, retake=(), through="all"):
+        started.set()
+        release.wait(timeout=5)
+
+    monkeypatch.setattr(Production, "run", slow)
+    payload = {"version": 1, "input": {"workspace": "musical", "production_id": "busy", "spec": _spec()}}
+    try:
+        asyncio.run(handlers[RUN](payload))
+        assert started.wait(timeout=2)
+        with pytest.raises(HTTPException) as error:
+            asyncio.run(handlers[RUN](payload))
+        assert error.value.status_code == 409 and error.value.detail["code"] == "already_running"
+    finally:
+        release.set()
+        music_production._threads["musical/busy"].join(timeout=2)
+        _forget("musical/busy")

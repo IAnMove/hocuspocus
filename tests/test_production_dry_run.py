@@ -113,3 +113,33 @@ def test_handler_returns_before_the_thread_and_does_not_call_mcp(monkeypatch):
     codes = {item["code"] for item in report["warnings"]}
     assert result["operation"] == RUN and report["running"] is False
     assert "line_without_shot" in codes and "title_too_long" in codes
+
+
+def _quality_spec(**extra):
+    lyrics = "\n".join(f"line {i}" for i in range(8))
+    spec = {"title": "t", "song": {"lyrics": lyrics, "caption": "pop", "duration": 80, "bpm": 120, "seeds": [1, 2, 3]}, "style": {},
+            "max_takes": 2, "shots": [{"key": "still0", "kind": "still", "line": 0, "span": 8, "still": "a.png"}], "fill": []}
+    spec.update(extra)
+    return spec
+
+
+def test_a_mostly_still_video_is_flagged_before_any_gpu_work():
+    report = dry_run(_quality_spec())
+    assert report["motion"]["static_ratio"] == 1.0 and report["motion"]["longest_shot"] == "still0"
+    codes = {item["code"] for item in report["warnings"]}
+    assert {"too_static", "long_shot"} <= codes
+
+
+def test_a_moving_video_with_retakes_and_seeds_has_no_quality_warnings():
+    shots = [{"key": f"c{i}", "kind": "h3", "line": i, "frame": "f", "action": "a"} for i in range(8)]
+    report = dry_run(_quality_spec(shots=shots))
+    assert report["motion"]["static_ratio"] == 0.0 and report["motion"]["avg_shot_s"] == 10.0
+    assert not {"too_static", "single_take", "few_song_seeds", "still_reused"} & {item["code"] for item in report["warnings"]}
+
+
+def test_single_take_few_seeds_and_a_reused_still_are_named():
+    shots = [{"key": f"s{i}", "kind": "still", "line": i, "still": "same.png"} for i in range(3)] + [{"key": "h", "kind": "h3", "line": 3, "span": 5, "frame": "f", "action": "a"}]
+    spec = _quality_spec(shots=shots, max_takes=1)
+    spec["song"]["seeds"] = [7]
+    codes = {item["code"]: item for item in dry_run(spec)["warnings"]}
+    assert codes["single_take"] and codes["few_song_seeds"]["seeds"] == 1 and codes["still_reused"]["shots"] == 3
