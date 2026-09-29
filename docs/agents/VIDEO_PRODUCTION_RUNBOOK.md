@@ -29,6 +29,8 @@ face-embedding model is already loaded; do not invent that answer.
 
 A later `production.run` with the same id and no `retake` resumes from the last finished step.
 
+`production.run` with `dry_run: true` checks the spec before any GPU work. It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check.
+
 ## What the run does
 
 | Step | Tool it uses | Decision made by code |
@@ -54,6 +56,7 @@ A production left `running` resumes itself for 24 hours after a server restart w
 Lip-sync stops when the next measured `r` does not beat the best `r` already kept:
 0.04, then 0.17, then 0.06 keeps 0.17 and does not shoot the next take. A shot with
 4 recorded takes is not shot again unless that key is in `retake`.
+`production.status` includes `timing` in seconds for song, analyze, cast, frames, clips, scenes and montage (0 when that stage did not run), and `timing.shots` lists each clip's `key`, `seconds` and take count.
 The montage export in the table is internal. The agent does not call `montages.export` after the run.
 
 ## production.review
@@ -154,6 +157,8 @@ Style fields beyond the example:
   a square mono plate in the theme colours and `screen` shots use it. `lyric_style` is an `update_text` patch applied to
   every lyric cue (`color`, `font`, `weight`, `size`, `box`, `enter`) and wins over the theme.
 
+`shots` may be `"auto"`. The agent then writes lyrics and an optional action phrase per section (`section_actions`, keys `verse` and `chorus`). A verse alternates a sung H3 shot with a still or screen, a chorus is one H3 spanning two lines, the intro and outro are end cards, and fill shots cover any gap longer than two bars.
+
 Shot fields:
 
 - `kind`: `h3` (generated clip), `still` (image from `stills` or a URL), `clip` (reuse an `h3` shot's clip, for `fill`),
@@ -177,7 +182,7 @@ Style fields for native Video 2D finishing:
 
 ## Cost
 
-A 60 s video with 5 H3 shots is about 25–35 min of GPU on an RTX 4090. The agent's side is the spec
+A 60 s video with 5 H3 shots is about 25–35 min of GPU on an RTX 4090. Two finished Omarchy videos on that card took 74 min (10 H3 shots, no singing) and 154 min (lip-sync retakes). `timing` on `production.status` is where those minutes show up, stage by stage. The agent's side is the spec
 (~2–3k tokens, less when `style` is only a `preset`), one `production.run`, and a few `production.status` polls (~300 tokens each). The `review` is already on that status: four checks in code, not a model looking at the sheet. A retake is another `production.run` only when that
 verdict says so, using `retake_keys` unchanged. Poll `production.status` with `wait_s` 300 instead of many short polls.
 
