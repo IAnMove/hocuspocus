@@ -13,6 +13,7 @@ import { pickFace } from './speech/pickFace'
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import { adoptCafeMaps, loadCafeMaps } from './cafeSet.ts'
 import { syncDressing } from './dressing.ts'
+import { isAtmosDressing } from './atmos/index.ts'
 import { adoptDriveMaps, isDriveDressing, loadDriveMaps } from './driveSet.ts'
 import {
   applyLight,
@@ -201,7 +202,10 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     },
     setExportQuality(enabled) {
       const world = worldRef.current
-      if (world) setWorldExportQuality(world, enabled)
+      if (!world) return
+      setWorldExportQuality(world, enabled)
+      const doc = documentRef.current
+      if (isAtmosDressing(doc.dressing)) syncDressing(world, doc.dressing, undefined, doc.atmos)
     },
     restoreSize() {
       const world = worldRef.current
@@ -285,8 +289,8 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       return () => { gone = true }
     }
     world.dressingReady = true
-    syncDressing(world, document.dressing)
-  }, [document.dressing])
+    syncDressing(world, document.dressing, undefined, document.atmos)
+  }, [document.dressing, document.atmos])
 
   useEffect(() => {
     const world = worldRef.current

@@ -8,6 +8,7 @@ import { scene3dPlaybackSpeed } from './clock.ts'
 import { reviewClipNumber } from './performance.ts'
 import { normalizeScene3DSlot, parseDressing } from './documentSlot.ts'
 import { parsePixelWorld } from './pixel/pixelWorld'
+import { parseAtmosSettings } from './atmos/params.ts'
 import { SCENE3D_TEMPLATE_IDS, type Scene3DDocument, type Scene3DSlot, type Scene3DTemplateId } from './types.ts'
 
 const SLOT_COLORS: Record<string, [number, number, number]> = {
@@ -94,6 +95,11 @@ function pixelWorldField(raw: unknown): Pick<Scene3DDocument, 'pixelWorld'> {
   return pixelWorld ? { pixelWorld } : {}
 }
 
+function atmosField(raw: unknown): Pick<Scene3DDocument, 'atmos'> {
+  const atmos = parseAtmosSettings(raw)
+  return atmos ? { atmos } : {}
+}
+
 export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Partial<Scene3DDocument>
@@ -108,6 +114,6 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const dressing = parseDressing(value.dressing)
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
-  const { pixelWorld, ...fields } = value
-  return { ...fields, ...pixelWorldField(pixelWorld), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
+  const { pixelWorld, atmos: rawAtmos, ...fields } = value
+  return { ...fields, ...pixelWorldField(pixelWorld), ...atmosField(rawAtmos), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }
