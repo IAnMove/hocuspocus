@@ -132,3 +132,27 @@ test('left and right text sit on x while center and omitted align stay centered'
   assert.equal(legacy.min, center.min)
   assert.ok(Math.abs(right.max - (anchor - 1)) <= 1, `right edge ${right.max}`)
 })
+
+test('tape width is measured with the same letter spacing used to paint its glyphs', () => {
+  const measuredSpacing: string[] = []
+  let tapeWidth = 0
+  const ctx = {
+    letterSpacing: '0em', globalAlpha: 1, fillStyle: '', strokeStyle: '', shadowColor: '', shadowBlur: 0,
+    shadowOffsetX: 0, shadowOffsetY: 0, lineWidth: 0, textAlign: 'center', lineJoin: 'round',
+    save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, beginPath() {}, closePath() {},
+    moveTo() {}, arcTo() {}, fill() {}, strokeText() {}, fillText() {},
+    measureText(text: string) {
+      measuredSpacing.push(this.letterSpacing)
+      return { width: text.length * (10 + (this.letterSpacing === '0.1em' ? 5 : 0)) }
+    },
+  } as unknown as CanvasRenderingContext2D
+  const originalMove = ctx.moveTo.bind(ctx)
+  ctx.moveTo = (x: number, _y: number) => { if (!tapeWidth) tapeWidth = Math.abs(x) * 2; originalMove(x, _y) }
+  const cue = parseKineticTexts([{ id: 'tape', text: 'OPEN', start: 0, end: 4, preset: 'impact',
+    x: 50, y: 50, size: 10, letterSpacing: 0.1, enter: { preset: 'none', duration: 0.1 },
+    box: { kind: 'tape', color: '#ffffff', opacity: 1, padding: 0.2 } }])[0]
+  paintKineticTexts(ctx, 400, 100, 1, [cue])
+  assert.ok(measuredSpacing.length > 0)
+  assert.ok(measuredSpacing.every(spacing => spacing === '0.1em'))
+  assert.ok(tapeWidth > 55, `tape width ${tapeWidth}`)
+})
