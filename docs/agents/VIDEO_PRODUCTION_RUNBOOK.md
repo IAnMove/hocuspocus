@@ -132,6 +132,21 @@ If vision cannot run, the verdict is `unreliable` and `reason` is `vision_unavai
 }
 ```
 
+`style` may be only a preset. That stands in for the long image, video, finish and lyric block (about 2k tokens when the prompts are written out). `production.run` expands `style.preset` before it checks the spec. The expansion fills `image`, `video`, `finish`, `lyric_template`, `theme` and `image_model`, plus the other style fields from the production that already rendered that look. A key you set next to `preset` replaces that field.
+
+| preset | look it copies |
+|---|---|
+| `anime` | cinematic anime key frame from the promo musical |
+| `riso-zine` | Love the Machine risograph zine (`love-the-machine.production.json`) |
+| `omarchy-desktop` | native Omarchy Tokyo Night desktop (`keyboard-first`) |
+| `neo-noir-realista` | photoreal rain-soaked neo-noir (`city-of-windows`) |
+
+```json
+{"style": {"preset": "riso-zine"}}
+```
+
+An unknown id fails with code `unknown_style_preset`. The full style block in the example above still works when a video needs a one-off look.
+
 Style fields beyond the example:
 
 - `image_model` (default `flux2_klein_9b`) and `image_params`: model for cast sheets and frames. Flux 2 Klein does not
@@ -166,7 +181,7 @@ Style fields for native Video 2D finishing:
 ## Cost
 
 A 60 s video with 5 H3 shots is about 25–35 min of GPU on an RTX 4090. The agent's side is the spec
-(~2–3k tokens), one `production.run`, a few `production.status` polls (~300 tokens each) and one
+(~2–3k tokens, less when `style` is only a `preset`), one `production.run`, a few `production.status` polls (~300 tokens each) and one
 `production.review` of the contact-sheet URL. A retake is another `production.run` only when that
 verdict says so. Poll with a pause of 60 s or more; nothing is lost by polling slowly.
 
