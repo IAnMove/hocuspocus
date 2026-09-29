@@ -14,7 +14,7 @@ The agent makes these calls for a finished video:
 1. `production.run` `{workspace, production_id, spec}` — starts in the background and returns at once (`production_id`, `running: true`). It does not return a job id.
 2. `production.status` `{workspace, production_id}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status`. A pause of 60 s or more is enough.
 3. `production.review` version 1 on the `contact_sheet` URL from that status.
-4. If the verdict is `retake`, `production.run` again with `{workspace, production_id, retake:[keys]}`, then repeat steps 2 and 3. The run shoots those clips again (new seeds, the better take is kept) and re-exports only the scenes whose clip changed.
+4. If the verdict is `retake`, `production.run` again with `{workspace, production_id, retake:[keys]}`, then repeat steps 2 and 3. The run shoots those clips again (new seeds, the better take is kept), including a shot that already has 4 takes, and re-exports only the scenes whose clip changed.
 
 Two other `production.run` forms are optional and still the same command. They are not extra tools, and they do not replace steps 2–4 once a full video exists:
 
@@ -36,12 +36,15 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
 | cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member |
 | frames | `generation.image` with the cast sheets as references | one start frame per `h3` shot |
-| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots; retake with a new seed until ok or `max_takes`. A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing |
+| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots; retake with a new seed until ok, the best `r` stops rising, `max_takes`, or 4 recorded takes. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 
 State is saved in `<workspace>/<production_id>.production.json`: a restart or a new
 `production.run` with the same id continues from the last finished step.
+Lip-sync stops when the next measured `r` does not beat the best `r` already kept:
+0.04, then 0.17, then 0.06 keeps 0.17 and does not shoot the next take. A shot with
+4 recorded takes is not shot again unless that key is in `retake`.
 The montage export in the table is internal. The agent does not call `montages.export` after the run.
 
 ## production.review
