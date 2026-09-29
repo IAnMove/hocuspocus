@@ -29,6 +29,7 @@ import numpy as np
 from services import lipsync_qa, song_analysis as audio_analysis
 from services.production_disk import discard, release_completed, require_free_disk
 from services.production_resume import open_mcp
+from services.production_resource_gate import guard_mcp
 from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
 from services.production_timing import StageWatch, timing_summary
 from services.production_usage import attach_usage, usage_summary
@@ -307,7 +308,7 @@ class Production:
         self.uploads = Path(uploads_dir())
         self.path = self.root / f"{production_id}.production.json"
         self.state = json.loads(self.path.read_text()) if self.path.exists() else {}
-        self.mcp = attach_usage(mcp, self.state, self.save)
+        self.mcp = attach_usage(guard_mcp(self, mcp), self.state, self.save)
         self.lost: set[str] = set()
 
     # state

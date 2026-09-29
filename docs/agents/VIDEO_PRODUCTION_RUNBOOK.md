@@ -265,3 +265,16 @@ State stores each native document in `clips[key].world3d_document`, the export
 receipt identity and a config/duration fingerprint. Resume reuses unchanged
 clips; a changed scene or `retake: [key]` exports that shot again. A retake updates
 its revision so the following resume keeps the new clip.
+
+
+### Shared workstation resource gate
+
+An isolated runtime can set `HOCUS_PRODUCTION_MIN_FREE_GB=15` and
+`HOCUS_PRODUCTION_EXTERNAL_VRAM_MB=2048` in its process environment. Before each
+music/image/H3 or native video export admission, the runner invokes `df -h` and
+`nvidia-smi`. It waits in 30-second intervals while another GPU process exceeds
+the limit; its own resident model is excluded. A disk shortfall stops the
+resumable production with `resource_disk_low`, without deleting files. The agent
+must propose a cleanup and wait for the user's approval before resuming.
+These opt-in checks leave other instances untouched. They require the named
+local commands when enabled; absent commands fail before admission.
