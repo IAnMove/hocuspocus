@@ -25,6 +25,7 @@ from typing import Any, Callable
 import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
+from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
@@ -453,6 +454,7 @@ class Production:
         self.state["segments"] = [[s["key"], a, b] for s, a, b in segs]
         done = self.state.setdefault("scenes", {})
         style, stills = spec.get("style") or {}, spec.get("stills") or {}
+        docs: dict[str, dict] = {}
         for shot, a, b in segs:
             dur = round(b - a, 3)
             used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
@@ -463,22 +465,14 @@ class Production:
                 continue
             doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
             doc = self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
+            docs[shot["key"]] = doc
             r = self.mcp("scenes.video2d.export", {"version": 1, "intent_id": f"{self.id}-scene-{shot['key']}-{int(time.time())}",
                                                    "input": {"workspace": self.ws, "document": doc}})
             done[shot["key"]] = {"intent": (r.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used,
                                   "fingerprint": fingerprint, "file": None}
             self.save()
-        for key, scene in done.items():
-            while scene.get("intent") and not scene.get("file"):
-                r = self.mcp("scenes.video2d.export.receipt", {"version": 1, "input": {"workspace": self.ws, "intent_id": scene["intent"]}})
-                arts = (r.get("receipt") or {}).get("artifacts") or []
-                if arts:
-                    scene["file"] = arts[0]["name"]
-                elif (r.get("task") or {}).get("status") in ("failed", "cancelled"):
-                    self.log(f"scene {key} failed")
-                    break
-                else:
-                    time.sleep(4)
+        failed = finish_scene_exports(self.mcp, self.ws, self.id, done, docs, time.sleep, self.save, self.log)
+        apply_scene_export_failure(self.state, failed)
         self.log(f"scenes: {sum(1 for s in done.values() if s.get('file'))}/{len(segs)}")
 
     def edit(self, doc: dict, ops: list[dict]) -> dict:
@@ -580,6 +574,8 @@ class Production:
                  **(style.get("footer_style") or {})}}]
 
     def montage(self, spec: dict) -> None:
+        if skip_montage(self.state):
+            return
         score, scenes = self.score(), self.state["scenes"]
         clips = [{"id": k, "name": k, "source": f"/api/v1/file/{scenes[k]['file']}?workspace={self.ws}", "trimStart": 0, "trimEnd": scenes[k]["dur"],
                   "muted": True, "fit": "fill", "transition": "none"} for k, _, _ in self.state["segments"] if scenes.get(k, {}).get("file")]
