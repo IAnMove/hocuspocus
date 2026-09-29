@@ -24,6 +24,7 @@ from routers.lan_auth import create_lan_auth_router
 from routers.llm import create_llm_prompt_router, create_llm_router
 from routers.mcp_access import create_mcp_access_router
 from routers.projects import create_projects_router
+from routers.music_productions import create_music_productions_router
 from routers.productions import create_productions_router
 from routers.recipes import create_recipes_router
 from routers.scene_commands import create_scene_commands_router
@@ -92,6 +93,10 @@ api.include_router(create_recipes_router(
 api.include_router(create_productions_router(
     list_workspaces=core.list_workspaces,
     list_pipelines=lambda _workspace: [],
+))
+api.include_router(create_music_productions_router(
+    workspace_dir=core.workspace_dir,
+    uploads_dir=core.uploads_dir,
 ))
 api.include_router(create_workspace_collections_router(
     registry=lambda: WorkspaceRegistry(os.path.join(str(core.outputs_root()), "_hocuspocus", "workspaces-v1.json")),

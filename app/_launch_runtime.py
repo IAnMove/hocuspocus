@@ -36842,6 +36842,13 @@ from services.mcp_access import McpAccess
 from routers.mcp_access import create_mcp_access_router
 _mcp_access = McpAccess(os.path.join(os.path.dirname(__file__), 'settings', 'mcp-access.json'))
 api.include_router(create_mcp_access_router(_mcp_access))
+from routers.music_productions import create_music_productions_router
+api.include_router(create_music_productions_router(
+    workspace_dir=_workspace_dir,
+    uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
+    app_url=lambda: _scene2d_export.app_url or "",
+    token=_mcp_access.token,
+))
 
 _image_generation_commands = create_image_generation_commands(globals())
 api.include_router(create_image_generation_commands_router(_image_generation_commands))
