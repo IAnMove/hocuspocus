@@ -38,8 +38,12 @@ from services.production_review import review_for_status
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_scene3d import export_scene3d_clips, validate_scene3d_shot
 from services.production_style_presets import expand_style_preset
+from services.production_commands import extra_catalog, extra_handlers
+from services.production_control import Cancelled, arm, checkpoint, disarm, sleep_until
 from services.production_package import (attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, editable_summary,
                                          lyric_for, manifest_rows, write_manifest)
+from services.production_shot_edit import render_shot
+from services.production_song_switch import remember_candidates
 from services.production_sheets import compose_group, make_frames_sheet
 from services.production_takes import another_take, better_take, note_seconds, pending_windows, take_settled
 from services.production_wait import MAX_WAIT_S, wait_for_status
@@ -322,6 +326,13 @@ class Production:
         self.state["log"] = self.state["log"][-60:]
         self.save()
 
+    def note_stop(self, error: BaseException) -> None:
+        """A cooperative cancel stays resumable. Anything else is a failed run with its reason."""
+        if isinstance(error, Cancelled):
+            self.state.update(status="cancelled", error=None)
+            return
+        self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
+
     # media helpers
     def upload(self, name: str) -> tuple[str, str]:
         """Copy a workspace file into uploads; returns (path, url) as /api/v1/upload would."""
@@ -359,7 +370,7 @@ class Production:
                 if key in done and self.on_landed:
                     self.on_landed(key, done[key])      # each result is recorded the moment it lands, not when the slowest one does
             if len(done) < len(jobs):
-                time.sleep(poll)
+                sleep_until(getattr(self, "_cancel", None), poll, time.sleep)
         return done
 
     def image(self, key: str, prompt: str, refs: list[str] | None, res: str, seed: int,
@@ -379,6 +390,7 @@ class Production:
         sp = spec["song"]
         if sp.get("file"):
             self.state["song"] = {"file": sp["file"]}
+            remember_candidates(self.state, {"file": {"file": sp["file"]}})
             return self.log(f"song: using {sp['file']}")
         jobs = {}
         for seed in sp.get("seeds") or [11, 22, 33]:
@@ -396,6 +408,7 @@ class Production:
             self.log(f"song seed {seed}: recall {score['recall']} tail {score['tail_rms']}")
         if not candidates:
             raise ProductionError("song_failed", "No song candidate finished")
+        remember_candidates(self.state, candidates)
         best = pick_song(candidates)
         self.state["song"] = candidates[best]
         self.log(f"song: picked seed {best}")
@@ -486,6 +499,7 @@ class Production:
 
     def preview(self, request: dict) -> None:
         """Generate three look tests before committing GPU time to a song or clips."""
+        self._cancel = arm(self.ws, self.id)
         self.state.update(status="running", preview_frames={})
         self.save()
         try:
@@ -498,7 +512,8 @@ class Production:
             self.state["status"] = "preview_completed" if len(self.state["preview_frames"]) == 3 else "failed"
             self.log(f"preview: {len(self.state['preview_frames'])}/3")
         except Exception as error:
-            self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
+            self.note_stop(error)
+        disarm(self.ws, self.id)
         self.state["finished"] = time.time()
         self.save()
 
@@ -539,6 +554,7 @@ class Production:
             tried.setdefault(w["key"], sum(1 for line in self.state.get("log") or [] if line.startswith(f"clip {w['key']} take ")))
         budget = {w["key"]: tried[w["key"]] + max_takes for w in pending}
         while pending:
+            checkpoint(getattr(self, "_cancel", None))
             started = time.perf_counter()
             by_key = {w["key"]: w for w in pending}
             retry_keys: set[str] = set()
@@ -571,7 +587,7 @@ class Production:
             note_seconds(self.state, pending, time.perf_counter() - started)
             self.save()
             if retry and not any(names.values()):
-                time.sleep(pause)
+                sleep_until(getattr(self, "_cancel", None), pause, time.sleep)
             pending = retry
 
     def judge_take(self, w: dict, name: str | None, take: int, vocals: str | None) -> bool:
@@ -620,11 +636,14 @@ class Production:
             done[shot["key"]] = {"intent": (r.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used,
                                   "fingerprint": fingerprint, "file": None}
             self.save()
-        failed = finish_scene_exports(self.mcp, self.ws, self.id, done, docs, time.sleep, self.save, self.log)
+        failed = finish_scene_exports(
+            self.mcp, self.ws, self.id, done, docs,
+            lambda seconds: sleep_until(getattr(self, "_cancel", None), seconds, time.sleep), self.save, self.log)
         apply_scene_export_failure(self.state, failed)
         self.log(f"scenes: {sum(1 for s in done.values() if s.get('file'))}/{len(segs)}")
 
     def scene_document(self, shot: dict, a: float, b: float, score: dict, clips: dict, style: dict, stills: dict) -> dict:
+        shot, style = render_shot(shot, style)
         dur = round(b - a, 3)
         doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
         return self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
@@ -828,7 +847,7 @@ class Production:
             status = (status.get("result") or status).get("job", status)
             if status.get("status") in ("completed", "failed"):
                 break
-            time.sleep(4)
+            sleep_until(getattr(self, "_cancel", None), 4, time.sleep)
         self.state["final"] = status.get("filename")
         if self.state["final"]:
             import subprocess
@@ -839,9 +858,11 @@ class Production:
         self.log(f"montage: {status.get('status')}")
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
+        self._cancel = arm(self.ws, self.id)
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
         self.save()
         try:
+            checkpoint(self._cancel)
             watch = StageWatch(self)
             watch.call("song", self.song, spec)
             watch.call("analyze", self.analyze, spec)
@@ -868,9 +889,10 @@ class Production:
                 self.state.update(status="completed", error=None)
             elif self.state.get("status") != "failed":
                 self.state["status"] = "failed"
-        except Exception as error:  # the run is resumable; keep the reason
-            self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
+        except Exception as error:  # the run is resumable; a cancel keeps the files and the spec
+            self.note_stop(error)
         finally:
+            disarm(self.ws, self.id)
             self.state["finished"] = time.time()
             release_completed(self.root, self.state, self.id)
             self.save()
@@ -930,6 +952,7 @@ def command_catalog() -> list[dict[str, Any]]:
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
                                              "description": "Seconds to wait until status changes. 0 returns at once. Maximum 300."}},
                                  ["workspace", "production_id"])},
+        *extra_catalog(),
     ]
 
 
@@ -1026,4 +1049,4 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
         return {"version": 1, "status": "completed", "operation": PLAN, "result": {"spec": spec}}
 
-    return {RUN: run, STATUS: status, PLAN: plan}
+    return {RUN: run, STATUS: status, PLAN: plan, **extra_handlers(workspace_dir, uploads_dir, app_url, token)}

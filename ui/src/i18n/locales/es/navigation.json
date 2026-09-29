@@ -69,6 +69,7 @@
     "characterReplacement": "Reemplaza un personaje de un vídeo con un fotograma editado y Viggle.",
     "animate3d": "Anima personajes y objetos dentro de una escena 3D.",
     "productions": "Consulta las producciones preparadas y su progreso.",
+    "musicProductions": "Planos, tomas y montaje de un videoclip.",
     "characters": "Crea personajes y referencias reutilizables.",
     "projects": "Documentos creativos duraderos que puedes reabrir y editar.",
     "assets": "Archivos fuente y resultados generados reutilizables.",
@@ -108,6 +109,7 @@
     "comics": "Cómics",
     "videoEditor": "Video Editor",
     "productions": "Producciones",
+    "musicProductions": "Producciones musicales",
     "scene3d": "Vídeo 2,5D",
     "world3d": "Vídeo 3D",
     "characterReplacement": "Reemplazar personaje",
@@ -168,5 +170,27 @@
     "switch": "Cambiar carpeta de salida",
     "list": "Carpetas de salida",
     "uploads": "Subidas"
+  },
+  "musicProductions": {
+    "title": "Producciones musicales",
+    "empty": "No hay producciones musicales en este espacio.",
+    "loading": "Cargando…",
+    "open": "Abrir",
+    "close": "Cerrar",
+    "back": "Volver",
+    "status": "Estado",
+    "duration": "Duración",
+    "sung": "Cantado",
+    "notSung": "Sin canto",
+    "lyric": "Letra",
+    "takes": "Tomas",
+    "noTakes": "Sin tomas",
+    "openScene": "Abrir escena",
+    "anotherTake": "Otra toma",
+    "useTake": "Usar esta toma",
+    "openMontage": "Abrir montaje",
+    "clip": "Clip",
+    "scene": "Escena",
+    "failed": "No se pudo completar"
   }
 }
