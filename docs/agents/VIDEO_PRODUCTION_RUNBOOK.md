@@ -12,7 +12,7 @@ Do not add a planning call before `production.run`: the spec is the plan.
 The agent makes these calls for a finished video:
 
 1. `production.run` `{workspace, production_id, spec}` — starts in the background and returns at once (`production_id`, `running: true`). It does not return a job id.
-2. `production.status` `{workspace, production_id}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status`. A pause of 60 s or more is enough.
+2. `production.status` `{workspace, production_id, wait_s}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status` with `wait_s` 300 instead of many short polls.
 3. `production.review` version 1 on the `contact_sheet` URL from that status.
 4. If the verdict is `retake`, `production.run` again with `{workspace, production_id, retake:[keys]}`, then repeat steps 2 and 3. The run shoots those clips again (new seeds, the better take is kept) and re-exports only the scenes whose clip changed.
 
@@ -168,7 +168,7 @@ Style fields for native Video 2D finishing:
 A 60 s video with 5 H3 shots is about 25–35 min of GPU on an RTX 4090. The agent's side is the spec
 (~2–3k tokens), one `production.run`, a few `production.status` polls (~300 tokens each) and one
 `production.review` of the contact-sheet URL. A retake is another `production.run` only when that
-verdict says so. Poll with a pause of 60 s or more; nothing is lost by polling slowly.
+verdict says so. Poll `production.status` with `wait_s` 300 instead of many short polls.
 
 ## Things to avoid
 
