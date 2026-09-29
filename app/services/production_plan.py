@@ -118,11 +118,14 @@ def _duration(text: str) -> float:
 
 
 def _bpm(text: str) -> int:
-    match = re.search(r"(\d{2,3})", text)
+    """Read an explicit BPM. Bare numbers are sample rates (48k) or decades (90s)."""
+    match = re.search(r"(?<![A-Za-z0-9])(\d{2,3})\s*bpm\b", text, re.IGNORECASE) or re.search(
+        r"\bbpm\s*[=:]?\s*(\d{2,3})\b", text, re.IGNORECASE
+    )
     if not match:
         return 120
     bpm = int(match.group(1))
-    return bpm if 40 <= bpm <= 220 else 120
+    return bpm if 60 <= bpm <= 200 else 120
 
 
 def _preset(style: str) -> str:
