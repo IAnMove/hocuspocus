@@ -3693,13 +3693,23 @@
     },
     {
       "method": "POST",
+      "path": "/api/v1/model3d/compose",
+      "endpoint": "compose",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/model3d_compose.py",
+      "ordinal": 369
+    },
+    {
+      "method": "POST",
       "path": "/api/v1/wangp/mcp",
       "endpoint": "mcp",
       "status_code": null,
       "response_model": null,
       "include_in_schema": false,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 369
+      "ordinal": 370
     },
     {
       "method": "POST",
@@ -3709,7 +3719,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 370
+      "ordinal": 371
     },
     {
       "method": "GET",
@@ -3719,7 +3729,7 @@
       "response_model": null,
       "include_in_schema": false,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 371
+      "ordinal": 372
     },
     {
       "method": "GET",
@@ -3729,7 +3739,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 372
+      "ordinal": 373
     },
     {
       "method": "GET",
@@ -3739,7 +3749,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/system_capabilities.py",
-      "ordinal": 373
+      "ordinal": 374
     },
     {
       "method": "GET",
@@ -3749,7 +3759,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/about.py",
-      "ordinal": 374
+      "ordinal": 375
     },
     {
       "method": "GET",
@@ -3759,7 +3769,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 375
+      "ordinal": 376
     },
     {
       "method": "POST",
@@ -3769,7 +3779,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 376
+      "ordinal": 377
     },
     {
       "method": "DELETE",
@@ -3779,7 +3789,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 377
+      "ordinal": 378
     },
     {
       "method": "GET",
@@ -3789,7 +3799,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 378
+      "ordinal": 379
     },
     {
       "method": "GET",
@@ -3799,7 +3809,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 379
+      "ordinal": 380
     }
   ]
 }
