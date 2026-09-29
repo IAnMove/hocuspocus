@@ -225,6 +225,8 @@ export type Scene3DLight = {
 }
 
 export type Scene3DDocument = {
+  /** Whole-frame low-resolution, flat-shaded, close-fog look for authored models. */
+  renderLook?: 'n64'
   soundtrack?: Scene3DSoundtrack[]
   production?: { kind: 'song' | 'dialogue' | 'episode' | 'trailer'; title: string; sourceId?: string; workspace: string }
   version: 1

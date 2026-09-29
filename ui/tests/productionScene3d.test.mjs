@@ -38,3 +38,10 @@ test('explicit slots receive distinct identities and full documents remain edita
   assert.equal(edited.camera.fov, 40)
   assert.equal(edited.duration, 8)
 })
+
+
+test('the production compiler preserves the N64 render look on native scenes', () => {
+  const doc = compile({ template: 'product-orbit', subject: '/api/v1/file/hero.glb?workspace=movie', renderLook: 'n64' })
+  assert.equal(doc.renderLook, 'n64')
+  assert.equal(doc.slots[0].media, 'model3d')
+})
