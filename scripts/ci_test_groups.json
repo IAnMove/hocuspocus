@@ -271,6 +271,7 @@
         "tests/test_procedural_3d_assets_router.py",
         "tests/test_procedural_glb_inspector.py",
         "tests/test_production_run.py",
+        "tests/test_production_style_presets.py",
         "tests/test_productions_router.py",
         "tests/test_project_catalog.py",
         "tests/test_projects_router.py",
@@ -533,6 +534,12 @@
       "prefix": "app/services/clip_align.py",
       "paths": [
         "tests/test_clip_align.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_style_presets.py",
+      "paths": [
+        "tests/test_production_style_presets.py"
       ]
     }
   ]
