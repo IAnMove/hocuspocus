@@ -69,7 +69,8 @@ def collect_jobs(state: Any, root: str | None) -> list[dict[str, Any]] | None:
     if not base.is_dir():
         return None
     shots = _shots(state)
-    return [_job(base, key, _scene_row(state, key), shots.get(key)) for key in _scene_order(state)]
+    counts = _cast_counts(state)
+    return [_job(base, key, _scene_row(state, key), shots.get(key), counts) for key in _scene_order(state)]
 
 
 def scene_failures(job: dict, clip: Any, people: Callable[..., Any] | None) -> list[dict[str, str]]:
@@ -442,7 +443,7 @@ def _scene_row(state: dict, key: str) -> dict:
     return {}
 
 
-def _job(base: Path, key: str, row: dict, shot: dict | None) -> dict[str, Any]:
+def _job(base: Path, key: str, row: dict, shot: dict | None, counts: dict[str, int] | None = None) -> dict[str, Any]:
     kind = ""
     if isinstance(shot, dict) and isinstance(shot.get("kind"), str):
         kind = shot["kind"]
@@ -452,7 +453,7 @@ def _job(base: Path, key: str, row: dict, shot: dict | None) -> dict[str, Any]:
         "key": key,
         "kind": kind,
         "held": _marked(row, shot) or _image_hold(document, kind),
-        "expected": _expected(shot),
+        "expected": _expected(shot, counts),
         "path": None if path is None else str(path),
         "document": document,
     }
@@ -474,10 +475,34 @@ def _image_hold(document: dict | None, kind: str) -> bool:
     return "video" not in types and "image" in types
 
 
-def _expected(shot: dict | None) -> int | None:
+def _cast_counts(state: dict) -> dict[str, int]:
+    """How many distinct subjects each cast id stands for (``count``, default 1)."""
+    spec = state.get("spec") if isinstance(state.get("spec"), dict) else {}
+    counts: dict[str, int] = {}
+    for item in spec.get("cast") or []:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
+            continue
+        raw = item.get("count", 1)
+        try:
+            number = int(raw)
+        except (TypeError, ValueError):
+            number = 1
+        counts[item["id"]] = number if number > 0 else 1
+    return counts
+
+
+def _expected(shot: dict | None, counts: dict[str, int] | None = None) -> int | None:
+    """People this shot may show: the sum of each referenced cast entry's ``count``."""
     if not isinstance(shot, dict) or not isinstance(shot.get("cast"), list):
         return None
-    return len(shot["cast"])
+    total = 0
+    seen = False
+    for cid in shot["cast"]:
+        if not isinstance(cid, str) or not cid:
+            continue
+        seen = True
+        total += (counts or {}).get(cid, 1)
+    return total if seen else None
 
 
 def _document(path: Path | None) -> dict | None:
