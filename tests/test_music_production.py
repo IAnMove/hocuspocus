@@ -11,6 +11,37 @@ from services.music_production import (OMARCHY_THEMES, Production, ProductionErr
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS, Video2dEditError, edit
 
 
+def test_song_separator_uses_cpu_even_when_library_auto_selects_cuda(tmp_path, monkeypatch):
+    import sys
+    from types import ModuleType
+
+    class Separator:
+        def __init__(self, **kwargs):
+            self.torch_device_cpu = "cpu"
+            self.torch_device = "cuda"
+            self.onnx_execution_provider = ["CUDAExecutionProvider"]
+
+        def load_model(self, **kwargs):
+            assert self.torch_device == "cpu"
+            assert self.onnx_execution_provider == ["CPUExecutionProvider"]
+
+        def separate(self, song):
+            (tmp_path / "output_Vocals.wav").write_bytes(b"vocals")
+            (tmp_path / "output_Instrumental.wav").write_bytes(b"instrumental")
+            return ["output_Vocals.wav", "output_Instrumental.wav"]
+
+    package = ModuleType("audio_separator")
+    module = ModuleType("audio_separator.separator")
+    module.Separator = Separator
+    package.separator = module
+    monkeypatch.setitem(sys.modules, "audio_separator", package)
+    monkeypatch.setitem(sys.modules, "audio_separator.separator", module)
+    target = audio_analysis._separate_vocals("song.wav", str(tmp_path))
+    assert target == str(tmp_path / "song.vocals.wav")
+    assert (tmp_path / "song.vocals.wav").read_bytes() == b"vocals"
+    assert not (tmp_path / "output_Instrumental.wav").exists()
+
+
 def test_tempo_grid_finds_132_bpm_not_a_half_or_double():
     beat, sr_hop = 60 / 132, 0.01
     times = np.arange(0, 20, sr_hop)

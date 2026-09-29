@@ -121,6 +121,9 @@ def verdict(recall: float | None, tail_rms: float) -> str:
 def _separate_vocals(song: str, out_dir: str) -> str:
     from audio_separator.separator import Separator
     separator = Separator(model_file_dir=str(CKPTS / "roformer"), output_dir=out_dir, output_format="WAV")
+    # Separator auto-selects CUDA; this operation promises the CPU scheduler lane.
+    separator.torch_device = separator.torch_device_cpu
+    separator.onnx_execution_provider = ["CPUExecutionProvider"]
     separator.load_model(model_filename=ROFORMER)
     target = os.path.join(out_dir, Path(song).stem + ".vocals.wav")
     for name in separator.separate(song):
