@@ -25,8 +25,18 @@ def recorded_takes(state: dict, key: str) -> int:
     return sum(1 for line in state.get("log") or [] if isinstance(line, str) and line.startswith(prefix))
 
 
+def obsolete_clip(clip: object) -> bool:
+    """True when this kept clip was shot against a different song window."""
+    return isinstance(clip, dict) and clip.get("obsolete") is True
+
+
 def pending_windows(windows: list[dict], state: dict, retake: tuple[str, ...] | list[str]) -> list[dict]:
-    """H3 shots that still need a clip, skipping automatic shots already at the cap."""
+    """H3 shots that still need a clip, skipping automatic shots already at the cap.
+
+    A clip marked ``obsolete`` (its audio window moved after ``production.song.use``)
+    is shot again even when a file is still on the shot: that file belongs to the
+    previous song. The file stays on disk; only the ranking baseline is ignored.
+    """
     frames = state.get("frames") or {}
     clips = state.get("clips") or {}
     listed = set(retake)
@@ -35,7 +45,8 @@ def pending_windows(windows: list[dict], state: dict, retake: tuple[str, ...] | 
         key = window.get("key")
         if window.get("kind") != "h3" or key not in frames:
             continue
-        if key in listed or (key not in clips and recorded_takes(state, key) < RECORDED_CAP):
+        stale = obsolete_clip(clips.get(key))
+        if key in listed or stale or (key not in clips and recorded_takes(state, key) < RECORDED_CAP):
             pending.append(window)
     return pending
 

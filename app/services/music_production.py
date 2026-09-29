@@ -45,7 +45,7 @@ from services.production_package import (attach_origins, clip_replacements, cont
 from services.production_shot_edit import render_shot
 from services.production_song_switch import remember_candidates
 from services.production_sheets import compose_group, make_frames_sheet
-from services.production_takes import another_take, better_take, note_seconds, pending_windows, take_settled
+from services.production_takes import another_take, better_take, note_seconds, obsolete_clip, pending_windows, take_settled
 from services.production_wait import MAX_WAIT_S, wait_for_status
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
@@ -549,6 +549,10 @@ class Production:
         tried = self.state.setdefault("clip_takes", {})
         max_takes = int(spec.get("max_takes", 3))
         vocals = self.score().get("vocals_file")
+        # A song switch leaves files on disk and flags the shot. Treat those keys
+        # like an explicit retake so the new window can spend max_takes again.
+        stale = tuple(key for key, clip in self.state["clips"].items() if obsolete_clip(clip))
+        retake = tuple(dict.fromkeys((*retake, *stale)))
         pending = pending_windows(windows, self.state, retake)
         for w in pending:          # productions saved before clip_takes existed: count their logged takes
             tried.setdefault(w["key"], sum(1 for line in self.state.get("log") or [] if line.startswith(f"clip {w['key']} take ")))
@@ -604,10 +608,13 @@ class Production:
         self.state.setdefault("takes", {}).setdefault(key, []).append(
             {"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive})
         best = clips.get(key)
-        previous = (best.get("qa") or {}).get("best_r") if best else None
-        if not best or better_take(qa, (best.get("qa") or {})):
-            if best and best.get("file") and best["file"] != name:
-                discard(self.state, best["file"])
+        # Obsolete r was measured on the previous song; ranking it would keep the
+        # old take and throw away the clip shot against the new window.
+        ranking = None if obsolete_clip(best) else best
+        previous = (ranking.get("qa") or {}).get("best_r") if ranking else None
+        if not ranking or better_take(qa, (ranking.get("qa") or {})):
+            if ranking and ranking.get("file") and ranking["file"] != name:
+                discard(self.state, ranking["file"])
             clips[key] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
         else:
             discard(self.state, name)

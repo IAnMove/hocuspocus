@@ -6,6 +6,7 @@ from pathlib import Path
 
 from services.music_production import Production
 from services.production_song_switch import mark_moved_clips, use_candidate, windows_by_key
+from services.production_takes import pending_windows
 
 
 def _production(tmp_path: Path, state: dict | None = None) -> Production:
@@ -107,3 +108,10 @@ def test_use_candidate_keeps_a_shot_whose_window_barely_moved(tmp_path: Path, mo
     assert production.state["clips"]["s1"]["obsolete"] is True
     assert (root / "s0.mp4").read_bytes() == b"s0"
     assert (root / "s1.mp4").read_bytes() == b"s1"
+    windows = [
+        {"key": "s0", "kind": "h3", "i": 0, "t0": 0.85, "t1": 3.3},
+        {"key": "s1", "kind": "h3", "i": 1, "t0": 13.75, "t1": 16.2},
+    ]
+    frames = {"frames": {"s0": "f0.png", "s1": "f1.png"}, "clip_takes": {"s0": 4, "s1": 4}}
+    pending = pending_windows(windows, {**production.state, **frames}, ())
+    assert [row["key"] for row in pending] == ["s1"]
