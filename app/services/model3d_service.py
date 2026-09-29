@@ -289,7 +289,7 @@ def installation_status() -> dict[str, Any]:
         "v21_source": v21_source.is_dir(),
         "isolated_runtime": True,
         "releases_vram_after_job": True,
-        "install_hint": None if installed else "Run HocusPocus Lab's standard Install or Update action.",
+        "install_hint": None if installed else "Optional engine: in Pinokio, run Advanced > Install 3D Generation (Hunyuan3D).",
     }
 
 

@@ -44,6 +44,17 @@ A finished production is not a black box. At the end of every run the studio pac
 
 To fix a shot: open the montage in the Video Editor, press **Open scene** on the shot, change the clip layer to another take or retouch the text/camera in Video 2D, export, replace the clip in the timeline (the usual replace-clip handoff), export the montage. To redo a shot with the GPU, `production.run` with `retake: ["shot"]`; that re-exports only that scene.
 
+## Change a take, a look, the song, or stop the run
+
+People use **Music productions** in the sidebar. It lists each `*.production.json` (status, title, duration, montage contact sheet). Opening one shows the rows of `<id>.shots.json`: start frame, clip, lyric, whether it is sung, every take with its r, and the scene. **Open scene** opens that shot's scene in Video 2D. **Another take** is `production.run` with that shot in `retake`. **Use this take** swaps that take in without a GPU. **Open montage** loads the montage into the Video Editor.
+
+Agents use the same actions as commands:
+
+- `production.shot.use_take` `{workspace, production_id, shot, take_file}` sets that kept take as the shot clip, saves a new scene revision, re-exports only that scene and replaces its montage clip under the same `expected_revision` a repackage uses. The clip origin stays. `take_not_found` when the file is not one of that shot's takes. No GPU.
+- `production.shot.update` `{workspace, production_id, shot, lyric_style?, title?, camera?}` stores those fields on `spec.shots[i].overrides` and re-exports only that scene. A `lyric_style` override replaces the global lyric look for that shot. This is the agent path; people use the panel.
+- `production.song.use` `{workspace, production_id, candidate}` switches to a candidate kept in `song_candidates` (its id or its file). The switch re-analyses the song, recomputes windows and marks a clip `obsolete` when its audio window moved by more than 0.3 s. It does not delete clip files. Shots whose window stayed put keep their clip.
+- `production.cancel` `{workspace, production_id}` asks a live run to stop between rounds. Status becomes `cancelled` (a restart will not treat that as `running` and will not launch a GPU run by itself). The files and the spec stay. A later `production.run` with the same id resumes.
+
 `production.run {workspace, production_id, package: true}` does the packaging for a production made before this existed (no GPU, no export; it saves the scene documents, the manifest and the montage clips' origins). Each document goes through the Video 2D scene validator: `production.status` → `editable.warnings` counts what it flags (text cut off or overlapping, low contrast when it can sample it), listed per shot in the manifest. It does not see everything: `dymo` lyrics used to punch their letters out of black tape and vanished on dark pictures; `dymo` now defaults to dark letters on cream tape (set `lyric_style.box` to choose your own).
 
 ## Quality: what the run spends
@@ -52,7 +63,7 @@ To fix a shot: open the montage in the Video Editor, press **Open scene** on the
 
 While it runs:
 
-- each clip is judged and saved the moment it lands (a restart mid-round keeps what was already shot), and a better verdict beats a higher lip-sync number (an `unreliable` r never pushes out a take that measured `ok`);
+- each clip is judged and saved the moment it lands (a restart mid-round keeps what was already shot), and a better verdict beats a higher lip-sync number (an `unreliable` result never pushes out a take that measured `ok` or `retake`);
 - after the start frames, `production.status` gives `frames_sheet` (one labelled picture of every frame): look at it before the clips, where a wrong frame is minutes of GPU per clip;
 - a cast entry may be `{"id": "trio", "group": ["hum", "tinker", "zap"]}`: one reference image with their sheets side by side (letterboxed, nothing cropped), for shots with several characters when the image model runs out of memory with three references. `count` defaults to the group's size;
 - a shot with one character gets "Only this character appears; no other characters" in its action (the planner does it; write it yourself in a hand-made spec), because a video model invents company otherwise.
@@ -61,7 +72,7 @@ While it runs:
 
 | Step | Tool it uses | Decision made by code |
 |---|---|---|
-| song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL) | keeps the candidate with the best lyric recall whose last 2 s are not cut |
+| song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL) | keeps the candidate with the best lyric recall whose last 2 s are not cut; every candidate stays in `song_candidates` |
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
 | cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member |
 | frames | `generation.image` with the cast sheets as references | one start frame per `h3` shot |
@@ -278,3 +289,14 @@ resumable production with `resource_disk_low`, without deleting files. The agent
 must propose a cleanup and wait for the user's approval before resuming.
 These opt-in checks leave other instances untouched. They require the named
 local commands when enabled; absent commands fail before admission.
+
+
+### N64-inspired render look
+
+Set `scene3d.renderLook: "n64"` (or `document.renderLook`) to use the native
+whole-frame pixel pass at an effective 240-pixel height, 32 color levels per
+channel and no bloom/dither. All loaded mesh materials use flat shading and
+nearest texture sampling; linear fog starts at 4 m and closes at 28 m in the
+background color. Camera motion, model motion and GLB geometry stay fully 3D.
+The flag survives scene save/load and applies to both preview and server export.
+Removing it restores authored shading, texture filters and atmosphere fog.

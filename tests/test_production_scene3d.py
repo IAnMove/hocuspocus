@@ -85,6 +85,17 @@ def test_failed_export_retries_once_then_raises_without_still_fallback(tmp_path)
     assert not production.state.get("held")
 
 
+def test_failed_retake_keeps_the_last_native_clip(tmp_path):
+    production = Production(tmp_path)
+    render(production)
+    kept = dict(production.state["clips"]["hero"])
+    production.fail = True
+    with pytest.raises(ValueError, match="scene3d_export_failed"):
+        render(production, retake=("hero",))
+    assert production.state["clips"]["hero"] == kept
+    assert (tmp_path / kept["file"]).is_file()
+
+
 @pytest.mark.parametrize("config", [{}, {"template": "hero-push", "document": {}}, {"unknown": 1}])
 def test_rejects_missing_or_ambiguous_native_scene(config):
     with pytest.raises(ValueError):
@@ -98,8 +109,9 @@ def test_does_not_claim_rigid_models_sing():
 
 @pytest.mark.skipif(not (Path(__file__).resolve().parents[1] / "ui/node_modules/tsx/dist/loader.mjs").is_file(), reason="UI dependencies not installed in Python-only CI")
 def test_real_native_template_compiler_keeps_model_camera_atmosphere_and_motion():
-    doc = compile_document(shot(motion={"to": [3, 0, 0], "turnTo": 6.283}, atmos={"timeOfDay": "dawn"},
+    doc = compile_document(shot(renderLook="n64", motion={"to": [3, 0, 0], "turnTo": 6.283}, atmos={"timeOfDay": "dawn"},
                                 camera={"family": "orbit", "orbitRadius": 5}), 6)
+    assert doc["renderLook"] == "n64"
     assert doc["templateId"] == "product-orbit"
     assert doc["duration"] == 6
     assert len(doc["slots"]) == 1 and doc["slots"][0]["media"] == "model3d"
@@ -128,12 +140,13 @@ def test_uncertain_admission_resumes_with_the_exact_same_intent(tmp_path):
     assert production.state["world3d_exports"]["hero"]["attempt"] == 1
 
 
-def test_scene3d_spec_enters_runner_and_montage_as_video_not_image(tmp_path, monkeypatch):
+@pytest.mark.parametrize("look", [None, "n64"])
+def test_scene3d_spec_enters_runner_and_montage_as_video_not_image(tmp_path, monkeypatch, look):
     from services import music_production as runner
     from services.production_dry_run import dry_run
 
     spec = runner.validate_spec({"title": "3D", "song": {"lyrics": "hello", "caption": "synth", "duration": 60, "bpm": 120},
-                                "style": {}, "shots": [shot() | {"key": f"s{index}", "t0": index * 6} for index in range(10)]})
+                                "style": {}, "shots": [shot(**({"renderLook": look} if look else {})) | {"key": f"s{index}", "t0": index * 6} for index in range(10)]})
     assert 'scene3d' in runner.SPEC_SCHEMA['properties']['shots']['anyOf'][1]['items']['properties']['kind']['enum']
     report = dry_run(spec)
     assert report['h3_frames'] == 0

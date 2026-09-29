@@ -87,6 +87,32 @@ export function LazyHelpOverlay() {
   </Suspense>
 }
 
+const MusicProductionsOverlay = lazy(() => import('./features/music-productions/MusicProductionsOverlay').then(module => ({
+  default: module.MusicProductionsOverlay,
+})))
+
+export function LazyMusicProductionsOverlay() {
+  const [open, setOpen] = useState(false)
+  const [everOpened, setEverOpened] = useState(false)
+  useEffect(() => {
+    const openPanel = () => {
+      setEverOpened(true)
+      setOpen(true)
+    }
+    const closePanel = () => setOpen(false)
+    window.addEventListener('hocuspocus:music-productions-open', openPanel)
+    window.addEventListener('hocuspocus:music-productions-close', closePanel)
+    return () => {
+      window.removeEventListener('hocuspocus:music-productions-open', openPanel)
+      window.removeEventListener('hocuspocus:music-productions-close', closePanel)
+    }
+  }, [])
+  if (!everOpened) return null
+  return <Suspense fallback={null}>
+    <MusicProductionsOverlay open={open} onClose={() => setOpen(false)} />
+  </Suspense>
+}
+
 function AppContent() {
   const [introComplete, setIntroComplete] = useState(false)
   const completeIntro = useCallback(() => setIntroComplete(true), [])
@@ -230,6 +256,7 @@ function AppContent() {
       <RuntimeUpdateNotice identity={runtimeIdentity} />
       <LazySettingsDrawer open={settingsOpen} />
       <LazyHelpOverlay />
+      <LazyMusicProductionsOverlay />
       <LoraBrowser />
       <LazyDirectorOverlay open={dashboardOpen} />
       <StorageDashboard />

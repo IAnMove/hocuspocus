@@ -25,7 +25,7 @@ if (config.subject) document.slots = [slot({
 })]
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
 if (document.camera.framing && !document.slots.some(s => s.id === document.camera.framing.targetSlot)) delete document.camera.framing
-for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld']) {
+for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld', 'renderLook']) {
   if (config[key] !== undefined) document[key] = structuredClone(config[key])
 }
 document.duration = request.duration

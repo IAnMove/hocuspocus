@@ -38,9 +38,10 @@ def command(engine: str, arguments: list[str]) -> tuple[list[str], dict[str, str
     args = [uv, "--no-config", "pip", *arguments, "--python", sys.executable]
     if arguments[0] == "install":
         args.extend(["--constraint", str(constraints),
-                     "--default-index", "https://pypi.org/simple",
-                     "--index", f"https://download.pytorch.org/whl/cu{spec['cuda'].replace('.', '')}",
-                     "--index-strategy", "unsafe-best-match"])
+                     "--default-index", "https://pypi.org/simple"])
+        if spec.get("cuda"):
+            args.extend(["--index", f"https://download.pytorch.org/whl/cu{spec['cuda'].replace('.', '')}",
+                         "--index-strategy", "unsafe-best-match"])
         lock = ROOT / "app" / "runtime" / "locks" / f"{sys.platform}-{engine}.txt"
         if not lock.is_file():
             raise RuntimeError(f"Missing dependency lock for {engine}")

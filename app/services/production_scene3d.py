@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
 CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
-               "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "width", "height", "fps"}
+               "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "width", "height", "fps"}
 
 
 def validate_scene3d_shot(shot):
@@ -103,7 +103,8 @@ def export_scene3d_clips(production, spec, windows, retake=(), *, compiler=compi
         revisions = production.state.setdefault("scene3d_revisions", {})
         if key in retake:
             revisions[key] = revisions.get(key, 0) + 1
-            clips.pop(key, None)
+            # The revision bump already busts the fingerprint. Keep the last good
+            # clip until this export lands; a failed retake must not drop it.
             production.state.setdefault("world3d_exports", {}).pop(key, None)
         source = json.dumps({"config": shot["scene3d"], "duration": duration, "revision": revisions.get(key, 0)}, sort_keys=True)
         fingerprint = hashlib.sha256(source.encode()).hexdigest()[:16]

@@ -30,6 +30,12 @@ def _file_url(name: str, workspace: str) -> str:
     return "/api/v1/file/" + quote(name) + "?workspace=" + quote(workspace, safe="")
 
 
+def _source_name(source: str) -> str:
+    """Basename of a clip or take source. Production montages store
+    ``/api/v1/file/<file>?workspace=<ws>``; pathlib would keep the query in the name."""
+    return Path(str(source).split("?", 1)[0]).name
+
+
 @lru_cache(maxsize=2048)
 def _probe_duration(path: str, _mtime: float) -> float:
     try:
@@ -90,7 +96,7 @@ def _generated_from(origin: dict[str, Any] | None, source: str) -> str:
         match = RETIMED_NOTE.match(str(origin.get("note") or ""))
         if match:
             return match.group("source")
-    return Path(source.split("?")[0]).name
+    return _source_name(source)
 
 
 def _sidecar(root: Path, origin: dict[str, Any] | None, source: str) -> tuple[str, dict[str, Any] | None]:
@@ -190,8 +196,9 @@ class ShotBoard:
             take = self._resolve_pending(root, take)
             if "source" not in take:
                 return take
-        return {**take, "status": take.get("status", "completed"), "url": _file_url(take["source"], workspace),
-                "duration": round(media_duration(root / Path(take["source"]).name), 3),
+        name = _source_name(take["source"])
+        return {**take, "status": take.get("status", "completed"), "url": _file_url(name, workspace),
+                "duration": round(media_duration(root / name), 3),
                 "provenance": describe_origin(root, workspace, take.get("origin"), take["source"])}
 
     def shots(self, workspace: str, file: str) -> dict[str, Any]:
@@ -199,12 +206,12 @@ class ShotBoard:
         montage = saved["montage"]
         root = self._root(workspace)
         clips = montage.get("clips") or []
-        slots = timeline_slots(clips, lambda clip: media_duration(root / Path(clip["source"].split("?")[0]).name))
+        slots = timeline_slots(clips, lambda clip: media_duration(root / _source_name(clip["source"])))
         shots = []
         for index, (clip, (start, end)) in enumerate(zip(clips, slots)):
             shots.append({
                 "index": index, "id": clip["id"], "name": clip["name"], "start": start, "end": end,
-                "source": clip["source"], "url": _file_url(Path(clip["source"]).name, workspace),
+                "source": clip["source"], "url": _file_url(_source_name(clip["source"]), workspace),
                 "trimStart": clip.get("trimStart", 0), "trimEnd": clip.get("trimEnd", 0), "lyric": clip.get("lyric", ""),
                 "provenance": describe_origin(root, workspace, clip.get("origin"), clip["source"]),
                 "takes": [self._take_view(root, workspace, take) for take in clip.get("takes") or []],
@@ -283,17 +290,18 @@ class ShotBoard:
             raise MontageError("Take not found", status=404, code="take_not_found")
         if "source" not in chosen:
             raise MontageError("This take is not finished yet", status=409, code="take_pending")
-        slot = (clip.get("trimEnd") or media_duration(root / Path(clip["source"]).name)) - (clip.get("trimStart") or 0)
-        source, origin = chosen["source"], chosen.get("origin")
-        available = media_duration(root / Path(source).name)
+        slot = (clip.get("trimEnd") or media_duration(root / _source_name(clip["source"]))) - (clip.get("trimStart") or 0)
+        source, origin = _source_name(chosen["source"]), chosen.get("origin")
+        available = media_duration(root / source)
         if retime and available and slot and available + 0.05 < slot:
             source, origin = self._retimed(root, source, slot, available)
-        previous = {"id": f"take-was-{int(time.time())}", "source": clip["source"], "createdAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        previous = {"id": f"take-was-{int(time.time())}", "source": _source_name(clip["source"]),
+                    "createdAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
                     **({"origin": clip["origin"]} if clip.get("origin") else {}), "note": "previous selection"}
         kept = [self._stored_take(take) for take in takes if take["id"] != take_id]
         clip["takes"] = [previous, *kept][:MAX_TAKES]
         clip["source"], clip["trimStart"] = source, 0
-        clip["trimEnd"] = round(min(slot, media_duration(root / Path(source).name) or slot), 4)
+        clip["trimEnd"] = round(min(slot, media_duration(root / _source_name(source)) or slot), 4)
         clip.pop("origin", None)
         if origin:
             clip["origin"] = origin
@@ -308,8 +316,9 @@ class ShotBoard:
     @staticmethod
     def _retimed(root: Path, source: str, slot: float, available: float) -> tuple[str, dict[str, Any]]:
         factor = slot / max(0.1, available - 0.1)
-        target = f"{Path(source).stem[:60]}_retimed{factor:.2f}x.mp4"
-        src, dest = root / Path(source).name, root / target
+        name = _source_name(source)
+        target = f"{Path(name).stem[:60]}_retimed{factor:.2f}x.mp4"
+        src, dest = root / name, root / target
         keep_audio = _has_audio(src)
         # Re-encode when missing, or when a previous silent render discarded the take's audio.
         if not dest.exists() or (keep_audio and not _has_audio(dest)):

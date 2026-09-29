@@ -5,11 +5,14 @@ imports Torch or CUDA libraries.
 """
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 from typing import Any, Mapping
 
 FEATURE_UNAVAILABLE = "feature_unavailable"
+# Set by launch.py when it boots core_runtime: no local engine exists in this process.
+CORE_RUNTIME_ENV = "HOCUS_RUNTIME"
 
 AVAILABLE = "available"
 DISABLED = "disabled"
@@ -130,9 +133,9 @@ def _nvidia_local_entries() -> dict[str, dict[str, Any]]:
     }
 
 
-def _core_remote_entries(*, hide: bool) -> dict[str, dict[str, Any]]:
+def _core_remote_entries(*, hide: bool, reason: str | None = None) -> dict[str, dict[str, Any]]:
     state = HIDDEN if hide else DISABLED
-    reason = "macos_core_remote" if hide else "requires_nvidia"
+    reason = reason or ("macos_core_remote" if hide else "requires_nvidia")
     return {
         capability: _entry(
             state,
@@ -165,17 +168,23 @@ def build_capabilities(
         capabilities.update(_core_remote_entries(hide=True))
         show_cuda = False
         mode = "macosIntel"
-    else:
+    elif profile == PROFILE_MACOS_ARM64:
         capabilities.update(_core_remote_entries(hide=True))
         show_cuda = False
-        mode = "macosCoreRemote" if profile == PROFILE_MACOS_ARM64 else "coreRemote"
+        mode = "macosCoreRemote"
+    else:
+        capabilities.update(_core_remote_entries(hide=True, reason="requires_nvidia"))
+        show_cuda = False
+        mode = "coreRemote"
 
     ffmpeg = True if ffmpeg_present is None else ffmpeg_present
     rhubarb = False if rhubarb_present is None else rhubarb_present
     if ffmpeg_present is None:
         ffmpeg = shutil.which("ffmpeg") is not None
     if rhubarb_present is None:
-        rhubarb = shutil.which("rhubarb") is not None
+        # Same lookup as lip sync itself, including the copy Install places in app/.runtime.
+        from services.scene3d_speech import rhubarb_executable
+        rhubarb = rhubarb_executable() is not None
     capabilities["ffmpeg"] = _binary_state(ffmpeg)
     capabilities["rhubarb"] = _binary_state(rhubarb)
 
@@ -197,10 +206,13 @@ def build_capabilities(
 
 
 def platform_capabilities(**overrides: Any) -> dict[str, Any]:
+    nvidia_local = overrides.get("nvidia_local")
+    if nvidia_local is None and os.environ.get(CORE_RUNTIME_ENV) == "core":
+        nvidia_local = False
     return build_capabilities(
         system=overrides.get("system") or host_platform(),
         machine=overrides.get("machine") or host_machine(),
-        nvidia_local=overrides.get("nvidia_local"),
+        nvidia_local=nvidia_local,
         ffmpeg_present=overrides.get("ffmpeg_present"),
         rhubarb_present=overrides.get("rhubarb_present"),
     )

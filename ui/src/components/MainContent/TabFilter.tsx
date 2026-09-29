@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Activity, BookOpen, Boxes, CircleHelp, Clapperboard, FolderKanban, Languages,
-  Library, MonitorPlay, Search, Settings, Sparkles, Video, WandSparkles, X,
+  Library, MonitorPlay, Music, Search, Settings, Sparkles, Video, WandSparkles, X,
 } from 'lucide-react'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
 import {
@@ -266,6 +266,14 @@ export function TabFilter() {
       state.setSettingsOpen(false)
       state.setSidebarOpen(false)
       state.setDashboardOpen(true)
+    } },
+    { label: t('tabs.musicProductions'), description: t('descriptions.musicProductions'), icon: <Music size={15} />, action: () => {
+      setActiveCategory('production')
+      setExpandedCategory('production')
+      const state = useStore.getState()
+      state.setSettingsOpen(false)
+      state.setDashboardOpen(false)
+      window.dispatchEvent(new Event('hocuspocus:music-productions-open'))
     } },
   ]
   const mediaItems: MenuItem[] = [
