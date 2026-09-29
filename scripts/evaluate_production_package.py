@@ -74,7 +74,7 @@ class Audit:
         path = self.root / name
         try:
             contained = path.resolve().is_relative_to(self.root)
-        except (OSError, RuntimeError):
+        except (OSError, RuntimeError, ValueError):
             contained = False
         if name in (".", "..") or any(c in name for c in ("/", "\\", ":", "\x00")) or not contained:
             self.fail("unsafe_path", subject, "reference must remain inside the workspace")

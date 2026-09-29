@@ -324,7 +324,7 @@ def test_package_rejects_outside_paths_and_symlinks_without_probing_them(tmp_pat
     def probe(path):
         seen.append(path)
         return _package_probe(path)
-    for name in ("../outside.mp4", str(outside), "link.mp4", "https://host/movie.mp4"):
+    for name in ("../outside.mp4", str(outside), "link.mp4", "https://host/movie.mp4", "bad\x00name"):
         _change_package_json(root, "p.production.json", lambda s: s.update(final=name))
         assert "unsafe_path" in _package_codes(_package_report(root, probe))
     assert outside not in seen
