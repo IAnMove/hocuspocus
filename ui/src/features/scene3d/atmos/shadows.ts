@@ -43,12 +43,16 @@ export function prepareAtmosShadows(world: GpuWorld) {
   shadeSlots(world)
 }
 
-/** Preview-only shadows. Export keeps the 2048 map that setWorldExportQuality installed. */
+/** Preview-only shadows. Export keeps the 2048 map that setWorldExportQuality installed.
+ *  Camera tests paint a partial world that has no directional light. */
 export function releaseAtmosShadows(world: GpuWorld) {
-  if (world.dir.shadow.mapSize.x >= 2048 || !world.renderer.shadowMap.enabled) return
-  world.renderer.shadowMap.enabled = false
-  world.dir.castShadow = false
-  world.floor.receiveShadow = false
+  const light = world.dir
+  const shadowMap = world.renderer?.shadowMap
+  if (!light?.shadow || !shadowMap) return
+  if (light.shadow.mapSize.x >= 2048 || !shadowMap.enabled) return
+  shadowMap.enabled = false
+  light.castShadow = false
+  if (world.floor) world.floor.receiveShadow = false
 }
 
 export function atmosHandle(world: GpuWorld): AtmosHandle | undefined {
