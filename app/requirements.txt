@@ -57,7 +57,12 @@ segment-anything==1.0
 rembg[gpu]==2.0.65
 onnxruntime-gpu==1.22.0; python_version < "3.11"
 onnxruntime-gpu==1.25.0.dev20260210001; python_version >= "3.11"
-decord==0.6.0
+# decord 0.6.0 has no manylinux wheel newer than cp36: on Linux/Python 3.10 the
+# Pinokio venv installs it but `uv pip check` rejects it (different platform) and
+# the runtime install aborts with HOCUS_RUNTIME_FAILED. eva-decord is a drop-in
+# replacement providing the `decord` module with current manylinux wheels.
+decord==0.6.0; sys_platform == "win32"
+eva-decord==0.6.1; sys_platform == "linux"
 timm==1.0.24
 # insightface: prebuilt Windows wheels hosted on a deepbeepmeep GitHub
 # release mirror (PyPI only ships sdist, which fails to build on Windows
