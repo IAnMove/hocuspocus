@@ -48,7 +48,7 @@ _TEXT_LOOPS = frozenset({"none", "wave", "pulse", "shake", "float", "flicker"})
 _TEXT_BOXES = frozenset({"none", "solid", "paper", "pill", "bar", "underline", "plate"})
 _TEXT_RANGES = {"x": (0, 100), "y": (0, 100), "size": (2, 25), "rotation": (-45, 45), "maxWidth": (10, 100), "lineHeight": (0.8, 2), "letterSpacing": (-0.1, 0.5)}
 _TEXT_ENUMS = {"font": _TEXT_FONTS, "align": _TEXT_ALIGNS, "preset": _TEXT_PRESETS, "loop": _TEXT_LOOPS}
-_TEXT_FIELDS = set(_TEXT_RANGES) | set(_TEXT_ENUMS) | {"text", "start", "end", "weight", "uppercase", "italic", "enter", "exit", "box", "counter", "color", "graphic", "trap"}
+_TEXT_FIELDS = set(_TEXT_RANGES) | set(_TEXT_ENUMS) | {"text", "start", "end", "weight", "uppercase", "italic", "enter", "exit", "box", "counter", "color", "graphic", "trap", "stroke", "shadow"}
 _POINT_RANGES = {"x": (-50, 150), "y": (-50, 150), "scale": (0.01, 20), "opacity": (0, 1), "rotation": (-180, 180)}
 # Corner zooms use layer focus {x, y}: that frame point stays on the anchor while
 # scale changes (x = anchor - (focus - 50) * scale). Positions stay in _POINT_RANGES
@@ -573,6 +573,29 @@ def _text_counter(value) -> dict:
     return {"from": value["from"], "to": value["to"], "decimals": int(_number(value["decimals"], 0, 4, "invalid_input", "Text counter is invalid")), "ease": value["ease"]}
 
 
+def _text_stroke(value) -> dict:
+    if not isinstance(value, dict) or set(value) != {"color", "width"}:
+        _fail("invalid_input", "Text stroke needs color and width")
+    return {"color": _hex(value["color"], None),
+            "width": _number(value["width"], 0, 0.3, "invalid_input", "Text stroke width is out of range")}
+
+
+def _text_shadow(value) -> dict:
+    if not isinstance(value, dict) or set(value) != {"color", "blur", "x", "y"}:
+        _fail("invalid_input", "Text shadow needs color, blur, x and y")
+    return {"color": _hex(value["color"], None),
+            "blur": _number(value["blur"], 0, 2, "invalid_input", "Text shadow blur is out of range"),
+            "x": _number(value["x"], -1, 1, "invalid_input", "Text shadow x is out of range"),
+            "y": _number(value["y"], -1, 1, "invalid_input", "Text shadow y is out of range")}
+
+
+def _patch_text_ink(cue: dict, patch: dict) -> None:
+    if "stroke" in patch:
+        cue["stroke"] = _text_stroke(patch["stroke"])
+    if "shadow" in patch:
+        cue["shadow"] = _text_shadow(patch["shadow"])
+
+
 def _patch_text_words(cue: dict, patch: dict) -> None:
     if "text" in patch:
         if not isinstance(patch["text"], str) or len(patch["text"]) > 240:
@@ -623,6 +646,7 @@ def _apply_text_patch(cue: dict, patch: dict, scene_duration: float) -> None:
     _patch_text_ranges(cue, patch)
     _patch_text_enums(cue, patch)
     _patch_text_nested(cue, patch)
+    _patch_text_ink(cue, patch)
     _patch_text_time(cue, patch, scene_duration)
 
 
