@@ -115,14 +115,21 @@ def _duration(text: str) -> float:
 
 
 def _bpm(text: str) -> int:
-    """Tempo from "124 BPM", "110-125 bpm" (the middle) or a bare 60-200 number; decades such as 2000s are not tempos."""
-    tagged = re.search(r"(\d{2,3})(?:\s*[-–]\s*(\d{2,3}))?\s*bpm", text, re.IGNORECASE)
-    if tagged:
-        low = int(tagged.group(1))
-        high = int(tagged.group(2) or low)
+    """Tempo from "124 BPM", "BPM: 95", or "110-125 bpm" (the middle).
+
+    Sample rates (48k, 44.1k, 96k) and decades (2000s) are not tempos.
+    """
+    span = re.search(r"(\d{2,3})(?:\s*[-–]\s*(\d{2,3}))?\s*bpm\b", text, re.IGNORECASE)
+    if span:
+        low = int(span.group(1))
+        high = int(span.group(2) or low)
         bpm = round((low + high) / 2)
         return bpm if 40 <= bpm <= 220 else 120
-    for found in re.finditer(r"(?<![\d.:])(\d{2,3})(?![\d.:])(?!\s*s\b)(?!s)", text):
+    labeled = re.search(r"\bbpm\s*[=:]?\s*(\d{2,3})\b", text, re.IGNORECASE)
+    if labeled:
+        bpm = int(labeled.group(1))
+        return bpm if 60 <= bpm <= 200 else 120
+    for found in re.finditer(r"(?<![\d.:])(\d{2,3})(?![\d.:kK])(?!\s*k\b)(?!\s*s\b)(?!s)", text):
         bpm = int(found.group(1))
         if 60 <= bpm <= 200:
             return bpm

@@ -48,6 +48,16 @@ def test_three_briefs_pass_dry_run_unedited():
     assert noir["style"]["image_model"] == "flux2_klein_9b"
 
 
+def test_sample_rate_in_musica_is_not_the_song_bpm():
+    """ACE-Step uses spec.song.bpm. '48k' and '44.1k' are mix specs, not tempo."""
+    analog = plan_brief(_brief(musica="44.1k analog mix 128 BPM"))
+    studio = plan_brief(_brief(musica="48k studio pop"))
+    labeled = plan_brief(_brief(musica="BPM: 95 house"))
+    assert analog["song"]["bpm"] == 128
+    assert studio["song"]["bpm"] == 120
+    assert labeled["song"]["bpm"] == 95
+
+
 def test_caller_lyrics_are_kept():
     lyrics = "[Verse]\nhello there\nstay a while\n[Chorus]\nsing it back\nonce again\n"
     spec = plan_brief(_brief(lyrics=lyrics))
