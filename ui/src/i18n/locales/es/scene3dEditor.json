@@ -347,6 +347,7 @@
     "moon": "Luna",
     "space": "Espacio",
     "jungle": "Selva",
+    "forest": "Bosque",
     "snow": "Nieve",
     "casino": "Casino",
     "studio": "Estudio",
@@ -1505,7 +1506,24 @@
     "pixel-metaphysical-square": {
       "title": "Plaza metafísica",
       "description": "Inspirado en De Chirico: un sol bajo cruza tras una arcada, una estatua y una chimenea alta, y sus largas sombras, con los arcos incluidos, giran despacio sobre la plaza vacía."
+    },
+    "atmos-clearing-wide": {
+      "title": "Claro de bosque · plano abierto",
+      "description": "Un claro procedural al sol. Un personaje en el hueco recibe la misma luz y la misma sombra que los troncos."
+    },
+    "atmos-clearing-backlight": {
+      "title": "Claro de bosque · contraluz",
+      "description": "El mismo claro con el sol detrás de los troncos."
     }
+  },
+  "atmos": {
+    "time": "Hora",
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada" },
+    "palette": "Paleta",
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul" },
+    "fogDensity": "Niebla",
+    "wind": "Viento",
+    "motes": "Motas"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

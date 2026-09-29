@@ -69,6 +69,7 @@
     "characterReplacement": "Replace a character in a video using an edited frame with Viggle.",
     "animate3d": "Animate characters and objects inside a 3D scene.",
     "productions": "Review prepared productions and their progress.",
+    "musicProductions": "Shots, takes and the montage of a music video.",
     "characters": "Build reusable characters and references.",
     "projects": "Durable creative documents you can reopen and edit.",
     "assets": "Reusable source files and generated results.",
@@ -108,6 +109,7 @@
     "comics": "Comics",
     "videoEditor": "Video Editor",
     "productions": "Productions",
+    "musicProductions": "Music productions",
     "scene3d": "Video 2.5D",
     "world3d": "Video 3D",
     "characterReplacement": "Replace character",
@@ -168,5 +170,27 @@
     "switch": "Switch output folder",
     "list": "Output folders",
     "uploads": "Uploads"
+  },
+  "musicProductions": {
+    "title": "Music productions",
+    "empty": "No music productions in this workspace.",
+    "loading": "Loading…",
+    "open": "Open",
+    "close": "Close",
+    "back": "Back",
+    "status": "Status",
+    "duration": "Duration",
+    "sung": "Sung",
+    "notSung": "Not sung",
+    "lyric": "Lyric",
+    "takes": "Takes",
+    "noTakes": "No takes",
+    "openScene": "Open scene",
+    "anotherTake": "Another take",
+    "useTake": "Use this take",
+    "openMontage": "Open montage",
+    "clip": "Clip",
+    "scene": "Scene",
+    "failed": "Could not complete that"
   }
 }

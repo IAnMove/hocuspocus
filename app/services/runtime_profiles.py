@@ -136,9 +136,10 @@ def installation_current(engine: str, platform: str) -> bool:
         return False
 
 
-def _common_reason(manifest: dict, platform: str, arch: str, gpu: str) -> str | None:
+def _cuda_reason(manifest: dict, platform: str, arch: str, gpu: str) -> str | None:
+    """Why the local NVIDIA recipes cannot run on this machine, if they cannot."""
     if platform == "darwin" and arch == "arm64":
-        return None
+        return "Local NVIDIA engine; hidden on Apple Silicon core/remote."
     if platform not in manifest["platforms"]:
         return f"No installation recipe for {platform}. Supported: Windows, Linux and Apple Silicon."
     if arch not in manifest["architectures"]:
@@ -148,37 +149,53 @@ def _common_reason(manifest: dict, platform: str, arch: str, gpu: str) -> str | 
     return None
 
 
-def _engine_support(definition: dict, platform: str, arch: str, driver: str | None, common: str | None, manifest: dict) -> tuple[str | None, str | None, str | None]:
-    macos_core = platform == "darwin" and arch == "arm64"
-    reason = common
+def _engine_support(definition: dict, platform: str, arch: str, driver: str | None, cuda_reason: str | None, manifest: dict) -> tuple[str | None, str | None, str | None]:
     warning = None
-    if macos_core and definition.get("cuda"):
-        reason = "Local NVIDIA engine; hidden on Apple Silicon core/remote."
-    elif not reason and platform not in definition["platforms"]:
-        reason = definition.get("unsupportedReason", "No compatible engine recipe.")
     minimum = None
-    if definition.get("cuda"):
-        minimum = manifest["driverMinimum"][definition["cuda"]].get(platform)
+    if not definition.get("cuda"):
+        # Core has no accelerator: only the OS and CPU architecture matter.
+        if platform not in definition["platforms"]:
+            return f"No installation recipe for {platform}. Supported: Windows, Linux and Apple Silicon.", None, None
+        if arch not in definition["architectures"][platform]:
+            return f"No installation recipe for {platform} on {arch}.", None, None
+        return None, None, None
+    reason = cuda_reason
+    if not reason and platform not in definition["platforms"]:
+        reason = definition.get("unsupportedReason", "No compatible engine recipe.")
+    minimum = manifest["driverMinimum"][definition["cuda"]].get(platform)
     if not reason and driver and minimum and _version(driver) < _version(minimum):
         reason = f"{definition['label']} needs NVIDIA driver >= {minimum} for CUDA {definition['cuda']} (detected {driver})."
-    if not reason and not driver and definition.get("cuda"):
+    if not reason and not driver:
         warning = "NVIDIA driver version could not be verified; the runtime check must confirm CUDA before use."
     return reason, warning, minimum
 
 
 def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = None) -> dict:
-    """Pure selection; unknown/unsupported capabilities never silently use CUDA."""
+    """Pure selection; unknown/unsupported capabilities never silently use CUDA.
+
+    An engine with ``fallbackFor`` (core) shares its primary's environment and
+    is selected only where the primary (WanGP) cannot run, so every machine
+    installs exactly one main runtime.
+    """
     arch = normalize_arch(arch)
     gpu = (gpu or "unknown").lower()
     manifest = catalog()
-    common = _common_reason(manifest, platform, arch, gpu)
+    cuda_reason = _cuda_reason(manifest, platform, arch, gpu)
     engines = {}
     for name, definition in manifest["engines"].items():
-        reason, warning, minimum = _engine_support(definition, platform, arch, driver, common, manifest)
+        reason, warning, minimum = _engine_support(definition, platform, arch, driver, cuda_reason, manifest)
         engines[name] = {**recipe(name, platform, arch), "supported": reason is None, "reason": reason,
                          "warning": warning, "driverMinimum": minimum}
+    partners = {}
+    for name, definition in manifest["engines"].items():
+        primary = definition.get("fallbackFor")
+        if primary:
+            partners[name], partners[primary] = primary, name
+            if engines[name]["supported"] and engines[primary]["supported"]:
+                engines[name].update(supported=False, supersededBy=primary,
+                                     reason=f"Not needed: {engines[primary]['label']} includes it.")
     required = [
-        engines[name]["supported"]
+        engines[name]["supported"] or (name in partners and engines[partners[name]]["supported"])
         for name, definition in manifest["engines"].items()
         if definition.get("required") and platform in definition.get("platforms", [])
     ]
@@ -195,13 +212,13 @@ WINDOWS_COMPILER_ENGINES = {"hunyuan3d"}
 MSVC_MISSING_REASON = (
     "{label} needs the Microsoft C++ Build Tools to compile its native parts on Windows. "
     "Install Visual Studio 2022 Build Tools with \"Desktop development with C++\" from "
-    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Install again."
+    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Advanced > Install 3D Generation (Hunyuan3D) in Pinokio."
 )
 MSVC_TOO_NEW_REASON = (
     "{label} compiles CUDA 12.8 extensions, and CUDA 12.8 only accepts Visual Studio 2019 "
     "or 2022 compilers (MSVC 14.2x-14.4x); only MSVC {found} was found. Install Visual "
     "Studio 2022 Build Tools with \"Desktop development with C++\" alongside it from "
-    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Install again."
+    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Advanced > Install 3D Generation (Hunyuan3D) in Pinokio."
 )
 # nvcc 12.8 host_config.h rejects _MSC_VER >= 1950 (Visual Studio 2026).
 MSVC_CUDA_LIMIT = (14, 50)

@@ -53,6 +53,7 @@ def _catalog_groups() -> list:
     from services.montage_commands import command_catalog as montages
     from services.music_production import command_catalog as production
     from services.scene2d_export import command_catalog as scene_export
+    from services.world3d_export import command_catalog as world_export
     from services.song_analysis import command_catalog as audio
     from services.video2d_edit import command_catalog as scene_edit
 
@@ -62,6 +63,7 @@ def _catalog_groups() -> list:
         montages(),
         scene_edit(),
         scene_export(),
+        world_export(),
         image_command_catalog(),
         [music_command_catalog()],
     ]
@@ -124,7 +126,7 @@ def test_agent_call_order_is_run_status_review_retake():
 
 def test_review_contract_names_the_code_checks():
     section = _section(_text(), "production.review")
-    for token in ("black_bars", "frozen_shot", "title_cut_off", "text_covers_face", "duplicate_people", "face_consistent", "retake_keys"):
+    for token in ("black_bars", "frozen_shot", "title_cut_off", "text_covers_face", "duplicate_people", "appearance_changed", "retake_keys"):
         assert token in section
     assert "not a language model looking at the contact sheet" in section
     assert "must not invent yes or no" in section

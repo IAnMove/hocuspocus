@@ -3,7 +3,7 @@
 For agents that drive HocusPocus through MCP. The agent writes one spec (the creative part);
 the studio does the rest and decides by numbers what a model used to decide by watching.
 One `production.run` calls `audio.analyze`, `generation.music`, `generation.image`,
-`scenes.video2d.edit`, `scenes.video2d.export`, `montages.save` and `montages.export`.
+`scenes.world3d.export` for `scene3d` shots, `scenes.video2d.edit`, `scenes.video2d.export`, `montages.save` and `montages.export`.
 Export stays inside that run. Do not also call `montages.export`.
 Call `production.plan` with the eight-field brief when you do not already have a spec. It returns the spec. Then `production.run`.
 
@@ -11,10 +11,10 @@ Call `production.plan` with the eight-field brief when you do not already have a
 
 The agent makes these calls for a finished video:
 
-`production.plan` `{brief}` returns the spec when the agent has a brief and no spec yet. The brief fields are `tema`, `publico`, `duracion`, `musica`, `estilo`, `protagonista`, `cta` and `limites`. Pass `lyrics` to use the caller's words; otherwise the plan writes a short draft. Then start at step 1.
+`production.plan` `{brief}` returns the spec when the agent has a brief and no spec yet. The brief fields are `tema`, `publico`, `duracion`, `musica`, `estilo`, `protagonista`, `cta` and `limites`. `lyrics` (or `letra`) is required: the plan does not write placeholder lines that a singer would perform (`invalid_brief` without it). An optional `footer` (or `aviso`) is the small print on every scene. Reading rules: an explicit look word beats a subject word ("zine riso sobre Omarchy" is `riso-zine`), `124 BPM` or `110-125 bpm` is the tempo (decades such as `2000s` are not), `1:30`, `90 s` and `2 minutos` are lengths, and accents survive in titles. What the non-sung shots are follows the look: your `stills`, the native desktop for `omarchy-desktop` (nobody sings on screen), otherwise short H3 clips of the protagonist. Then start at step 1.
 
 1. `production.run` `{workspace, production_id, spec}` — starts in the background and returns at once (`production_id`, `running: true`). It does not return a job id.
-2. `production.status` `{workspace, production_id, wait_s}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status` with `wait_s` 300 instead of many short polls.
+2. `production.status` `{workspace, production_id, wait_s}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status` with `wait_s` 300 instead of many short polls. Do not save tokens at the expense of the result: opening `frames_sheet` before the clips and one real-size frame of each sung shot and of the first caption before delivering costs a few thousand tokens, and it is what catches a duplicated character, an unreadable caption or a title that covers the picture. A retake with a stricter action is cheaper than a video that is delivered wrong.
 3. Read `review` and `retake_keys` from that `production.status`. The four checks are code. Do not call `production.review` to ask a model to look at the sheet.
 4. If the verdict is `retake`, `production.run` again with `{workspace, production_id, retake: retake_keys}`, then repeat steps 2 and 3. The run shoots those clips again (new seeds, the better take is kept), including a shot that already has 4 takes, and re-exports only the scenes whose clip changed. Pass `retake_keys` unchanged.
 
@@ -26,24 +26,61 @@ Two other `production.run` forms are optional and still the same command. They a
 Do not call `tools/list` or `models` to plan a production: everything the run needs is here.
 Do not read the song, clips or scenes yourself: `production.status` reports lip-sync verdicts,
 the video URL, a contact-sheet URL, and `review`. Do not judge that sheet yourself. The four
-checks are code, not a model looking at the sheet. `face_consistent` stays unknown unless a
+checks are code, not a model looking at the sheet. `appearance_changed` stays unknown unless a
 face-embedding model is already loaded; do not invent that answer.
 
 A later `production.run` with the same id and no `retake` resumes from the last finished step.
 
-`production.run` with `dry_run: true` checks the spec before any GPU work. It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check.
+`production.run` with `dry_run: true` checks the spec before any GPU work. It also reports `motion` (`static_s`, `static_ratio`, `longest_shot_s`, `avg_shot_s`) and warns about a static video (`too_static`, over 35 % of the runtime on still images: the 160 s videos with 9 clips were 43–56 %), a hold over 10 s (`long_shot`), a still used three times (`still_reused`), `max_takes` 1 (`single_take`) and fewer than three song seeds (`few_song_seeds`). It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check.
+
+## Edit it by hand, shot by shot
+
+A finished production is not a black box. At the end of every run the studio packages it (`package` in the log):
+
+- one durable `<production_id>-<shot>-<hash>.scene.json` per shot (the clip layer, the lyric captions, the title, the finish), which opens in Video 2D;
+- the montage (`production.status` → `editable.montage`, a `*.montage.json` that opens in the Video Editor) with each clip named after its shot, carrying its lyric and an origin (`scene2d`, the scene document, the production and the shot). The shot board (Video Editor → Shots) shows them and has an **Open scene** button;
+- `<production_id>.shots.json` (`editable.manifest`): for every shot its time span, lyric, prompts, seed, start frame, every take with its lip-sync number, scene document and scene video;
+- every take of every clip stays on disk (only the audio slices and the takes nobody recorded are cleaned up), so swapping one in is possible.
+
+To fix a shot: open the montage in the Video Editor, press **Open scene** on the shot, change the clip layer to another take or retouch the text/camera in Video 2D, export, replace the clip in the timeline (the usual replace-clip handoff), export the montage. To redo a shot with the GPU, `production.run` with `retake: ["shot"]`; that re-exports only that scene.
+
+## Change a take, a look, the song, or stop the run
+
+People use **Music productions** in the sidebar. It lists each `*.production.json` (status, title, duration, montage contact sheet). Opening one shows the rows of `<id>.shots.json`: start frame, clip, lyric, whether it is sung, every take with its r, and the scene. **Open scene** opens that shot's scene in Video 2D. **Another take** is `production.run` with that shot in `retake`. **Use this take** swaps that take in without a GPU. **Open montage** loads the montage into the Video Editor.
+
+Agents use the same actions as commands:
+
+- `production.shot.use_take` `{workspace, production_id, shot, take_file}` sets that kept take as the shot clip, saves a new scene revision, re-exports only that scene and replaces its montage clip under the same `expected_revision` a repackage uses. The clip origin stays. `take_not_found` when the file is not one of that shot's takes. No GPU.
+- `production.shot.update` `{workspace, production_id, shot, lyric_style?, title?, camera?}` stores those fields on `spec.shots[i].overrides` and re-exports only that scene. A `lyric_style` override replaces the global lyric look for that shot. This is the agent path; people use the panel.
+- `production.song.use` `{workspace, production_id, candidate}` switches to a candidate kept in `song_candidates` (its id or its file). The switch re-analyses the song, recomputes windows and marks a clip `obsolete` when its audio window moved by more than 0.3 s. It does not delete clip files. Shots whose window stayed put keep their clip.
+- `production.cancel` `{workspace, production_id}` asks a live run to stop between rounds. Status becomes `cancelled` (a restart will not treat that as `running` and will not launch a GPU run by itself). The files and the spec stay. A later `production.run` with the same id resumes.
+
+`production.run {workspace, production_id, package: true}` does the packaging for a production made before this existed (no GPU, no export; it saves the scene documents, the manifest and the montage clips' origins). Each document goes through the Video 2D scene validator: `production.status` → `editable.warnings` counts what it flags (text cut off or overlapping, low contrast when it can sample it), listed per shot in the manifest. It does not see everything: `dymo` lyrics used to punch their letters out of black tape and vanished on dark pictures; `dymo` now defaults to dark letters on cream tape (set `lyric_style.box` to choose your own).
+
+## Quality: what the run spends
+
+`quality` in the spec is `draft`, `standard` or `max` (a brief may say `calidad`). It fills only what the spec left out (song seeds: 1 / 3 / 4, `max_takes`: 1 / 2 / 3) and sets the bar `dry_run` measures the plan against: the share of the runtime that may be a still image (60 % / 35 % / 15 %) and the clips a minute (2 / 5 / 7); missing the bar is a `too_static` or `few_clips` warning before any GPU work. No `quality` keeps the spec as written and the `standard` bar. What made the long videos thin was the plan, not a bug: 160 s with 9 clips and `max_takes` 1 is 45 % still pictures and no quality gate. Give a long song more shots, not a slower zoom.
+
+While it runs:
+
+- each clip is judged and saved the moment it lands (a restart mid-round keeps what was already shot), and a better verdict beats a higher lip-sync number (an `unreliable` result never pushes out a take that measured `ok` or `retake`);
+- after the start frames, `production.status` gives `frames_sheet` (one labelled picture of every frame): look at it before the clips, where a wrong frame is minutes of GPU per clip;
+- a cast entry may be `{"id": "trio", "group": ["hum", "tinker", "zap"]}`: one reference image with their sheets side by side (letterboxed, nothing cropped), for shots with several characters when the image model runs out of memory with three references. `count` defaults to the group's size;
+- a shot with one character gets "Only this character appears; no other characters" in its action (the planner does it; write it yourself in a hand-made spec), because a video model invents company otherwise.
 
 ## What the run does
 
 | Step | Tool it uses | Decision made by code |
 |---|---|---|
-| song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL) | keeps the candidate with the best lyric recall whose last 2 s are not cut |
+| song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL) | keeps the candidate with the best lyric recall whose last 2 s are not cut; every candidate stays in `song_candidates` |
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
 | cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member |
 | frames | `generation.image` with the cast sheets as references | one start frame per `h3` shot |
 | clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots; retake with a new seed until ok, the best `r` stops rising, `max_takes`, or 4 recorded takes. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
+
+A start frame that does not arrive is asked for again (a new job, and a smaller picture after an out-of-memory) twice per run; if it still fails the run stops as `failed` with `frames_incomplete` and `production.status` lists `frame_failures`. A cast entry may set `count` (how many distinct subjects that reference image shows, default 1); the frame prompt then says "Exactly N distinct subjects, no duplicated characters", because a sheet with several views makes the model draw the character several times. A group reference (several characters in one image) is the way to keep three references under the image model's memory limit.
 
 Lip-sync is measured on the sung span.
 When an H3 clip fails, its scene holds that shot's start frame and `production.status` lists the shot key in `held`.
@@ -53,8 +90,8 @@ State is saved in `<workspace>/<production_id>.production.json`: a restart or a 
 `production.run` with the same id continues from the last finished step.
 `production.run` refuses to start when the workspace volume has under 10 GiB free and the error code is `disk_low`.
 When the run reaches `completed` it deletes this production's losing takes and `{id}-slice-*.wav` audio slices. Other videos in the same workspace stay. It keeps the chosen song, the best take of each shot, the scene exports and the final video; a failed run deletes nothing.
-A production left `running` resumes itself for 24 hours after a server restart when MCP is on
-(a token and an app URL). That resume is not another agent call. A run that finishes completed clears `error`.
+A production left `running` resumes itself for 24 hours after a server restart only when it asked for it: `production.run` with `auto_resume: true` (kept in its state file), or the server started with `HOCUS_PRODUCTION_AUTORESUME=1`; MCP must be on (a token and an app URL). Without that a stopped server stays stopped and no GPU work restarts on its own. That resume is not another agent call. A run that finishes completed clears `error`.
+A second `production.run` for a production that is still running fails with `already_running` (409): wait for `production.status`, or use another `production_id`. A job the queue forgot (a restart drops the queue) is shot again up to 3 times per shot and is not counted as a take.
 Lip-sync stops when the next measured `r` does not beat the best `r` already kept:
 0.04, then 0.17, then 0.06 keeps 0.17 and does not shoot the next take. A shot with
 4 recorded takes is not shot again unless that key is in `retake`.
@@ -64,7 +101,7 @@ The montage export in the table is internal. The agent does not call `montages.e
 
 ## production.review
 
-The four checks are code. They are not a language model looking at the contact sheet. `production.status` runs them when the workspace files are on disk. The reply stays small: no image bytes.
+The four checks are code. They are not a language model looking at the contact sheet. `production.status` runs them once the run is over (`completed` or `failed`) and remembers the answer, because they open the video files; while a run is going `review` is `unreliable` and empty. The reply stays small: no image bytes.
 
 `review` is `{verdict, failures, unknown}`. `verdict` is `ok`, `retake`, or `unreliable`. `failures` is `[{key, question}]`. `retake_keys` is the shot keys from those failures, in scene order, and is passed unchanged as `production.run` `retake`.
 
@@ -75,14 +112,14 @@ The four code questions:
 3. `title_cut_off` — a Video 2D text box outside the frame. `text_covers_face` — that box over a face from `qa.people` when `ckpts/pose/yolox_l.onnx` can run on CPU. If the detector cannot run, the face part is skipped and the box is still checked against the frame. No count and no face box are invented.
 4. `duplicate_people` — `qa.people` on one frame per scene. More people than the shot's `cast` is a failure. If the detector cannot run, this check is skipped.
 
-`face_consistent` asks whether the protagonist changes appearance. It stays in `unknown` unless a face-embedding model is already loaded and injected. The review does not download one and must not invent yes or no. Unknown identity does not by itself retake the video.
+`appearance_changed` asks whether the protagonist changes appearance. It stays in `unknown` unless a face-embedding model is already loaded and injected. The review does not download one and must not invent yes or no. Unknown identity does not by itself retake the video.
 
 ```json
 {
   "review": {
     "verdict": "retake",
     "failures": [{"key": "chorus_one", "question": "frozen_shot"}],
-    "unknown": ["face_consistent"]
+    "unknown": ["appearance_changed"]
   },
   "retake_keys": ["chorus_one"]
 }
@@ -98,7 +135,7 @@ The four code questions:
 }
 ```
 
-`unreliable` means the frames could not be read (no finished video yet, or the files are missing). Do not guess a retake. `failures` is empty and `retake_keys` is empty. `unknown` still lists `face_consistent` when no embedding backend ran.
+`unreliable` means the frames could not be read (no finished video yet, or the files are missing). Do not guess a retake. `failures` is empty and `retake_keys` is empty. `unknown` still lists `appearance_changed` when no embedding backend ran.
 
 ## Spec
 
@@ -135,7 +172,7 @@ The four code questions:
 }
 ```
 
-`style` may be only a preset. That stands in for the long image, video, finish and lyric block (about 2k tokens when the prompts are written out). `production.run` expands `style.preset` before it checks the spec. The expansion fills `image`, `video`, `finish`, `lyric_template`, `theme` and `image_model`, plus the other style fields from the production that already rendered that look. A key you set next to `preset` replaces that field.
+`style` may be only a preset. That stands in for the long image, video, finish and lyric block (about 2k tokens when the prompts are written out). `production.run` expands `style.preset` before it checks the spec. The expansion fills `image`, `video`, `finish`, `lyric_template`, `theme` and `image_model`, plus the other style fields from the production that already rendered that look. A key you set next to `preset` replaces that field. Presets live in `app/shared/style_presets.json` and carry no person or project names: put a footer, a name or a lip-sync rule for one production in the spec (for example `footer`).
 
 | preset | look it copies |
 |---|---|
@@ -185,7 +222,7 @@ Style fields for native Video 2D finishing:
 
 ## Cost
 
-A 60 s video with 5 H3 shots is about 25–35 min of GPU on an RTX 4090. Two finished Omarchy videos on that card took 74 min (10 H3 shots, no singing) and 154 min (lip-sync retakes). `timing` on `production.status` is where those minutes show up, stage by stage. The agent's side is the spec
+A 60 s video with 5 H3 shots is about 25–35 min of GPU on an RTX 4090; 17 clips of 4–8 s (one take each) took about 60 min of clips, plus 20 minutes of Qwen images and 30 of scene export (CPU, one after another). Two finished Omarchy videos on that card took 74 min (10 H3 shots, no singing) and 154 min (lip-sync retakes). `timing` on `production.status` is where those minutes show up, stage by stage. The agent's side is the spec
 (~2–3k tokens, less when `style` is only a `preset`), one `production.run`, and a few `production.status` polls (~300 tokens each). The `review` is already on that status: four checks in code, not a model looking at the sheet. A retake is another `production.run` only when that
 verdict says so, using `retake_keys` unchanged. Poll `production.status` with `wait_s` 300 instead of many short polls.
 
@@ -197,4 +234,69 @@ verdict says so, using `retake_keys` unchanged. Poll `production.status` with `w
 - Titles on the right edge of the frame collide with nothing, but keep them off faces: put the
   performer to one side in the `frame` prompt when a shot has a title. The code review checks
   `title_cut_off` and `text_covers_face` for this.
-- Do not invent `face_consistent`. Unknown means stop on that question, not a guessed yes or no. Do not guess a retake when `review.verdict` is `unreliable`.
+- Do not invent `appearance_changed`. Unknown means stop on that question, not a guessed yes or no. Do not guess a retake when `review.verdict` is `unreliable`.
+
+
+## Native Video 3D shots
+
+Use explicit `shots` with `kind: "scene3d"`. `scene3d` takes exactly one native
+`template` id or a complete Video 3D `document`. A template also needs `subject`
+(a workspace GLB URL) or explicit `slots`. The runner uses the existing UI template
+factory and document parser; it does not build a separate renderer.
+
+```json
+{
+  "title": "A moving model",
+  "song": {"lyrics": "We move together", "caption": "original synth pop", "duration": 60, "bpm": 120},
+  "style": {},
+  "shots": [{"key": "orbit", "kind": "scene3d", "t0": 0,
+    "scene3d": {"template": "product-orbit", "subject": "/api/v1/file/hero.glb?workspace=movie",
+      "motion": {"to": [2, 0, 0], "turnTo": 6.283}, "grounded": true,
+      "camera": {"family": "orbit", "orbitRadius": 5}, "atmos": {"timeOfDay": "dawn"}}}]
+}
+```
+
+Overrides include `camera`, `atmos`, `environment`, `light`, `dressing`,
+`pixelWorld`, `width`, `height` and `fps`. `subject` also accepts `clip` (an authored
+GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
+`grounded`. Explicit `slots` use the native Video 3D slot fields. A rigid GLB can
+turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
+no H3 lip-sync is implied.
+
+Each export covers its actual cut duration, defaults to 1280×720 at 24 fps, and
+uses `scenes.world3d.export` followed by `scenes.world3d.export.receipt`. Durable
+intents recover an uncertain admission. A failed or lost export is retried once;
+a second failure stops the production without substituting a still or H3 clip.
+The exported MP4 enters Video 2D as a video layer for captions/finishing and the
+montage adds the song normally. Empty `cast` and all-3D shots request no cast
+images, start frames or H3 generation. Both template and full-document shots
+are supported in `fill`.
+
+State stores each native document in `clips[key].world3d_document`, the export
+receipt identity and a config/duration fingerprint. Resume reuses unchanged
+clips; a changed scene or `retake: [key]` exports that shot again. A retake updates
+its revision so the following resume keeps the new clip.
+
+
+### Shared workstation resource gate
+
+An isolated runtime can set `HOCUS_PRODUCTION_MIN_FREE_GB=15` and
+`HOCUS_PRODUCTION_EXTERNAL_VRAM_MB=2048` in its process environment. Before each
+music/image/H3 or native video export admission, the runner invokes `df -h` and
+`nvidia-smi`. It waits in 30-second intervals while another GPU process exceeds
+the limit; its own resident model is excluded. A disk shortfall stops the
+resumable production with `resource_disk_low`, without deleting files. The agent
+must propose a cleanup and wait for the user's approval before resuming.
+These opt-in checks leave other instances untouched. They require the named
+local commands when enabled; absent commands fail before admission.
+
+
+### N64-inspired render look
+
+Set `scene3d.renderLook: "n64"` (or `document.renderLook`) to use the native
+whole-frame pixel pass at an effective 240-pixel height, 32 color levels per
+channel and no bloom/dither. All loaded mesh materials use flat shading and
+nearest texture sampling; linear fog starts at 4 m and closes at 28 m in the
+background color. Camera motion, model motion and GLB geometry stay fully 3D.
+The flag survives scene save/load and applies to both preview and server export.
+Removing it restores authored shading, texture filters and atmosphere fog.

@@ -12,10 +12,12 @@ caller injects an embedding backend that is already loaded.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
 import re
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qsl, quote, unquote, urlsplit
@@ -381,6 +383,29 @@ def _sheet_value(payload: dict) -> str:
 
 
 _AUTO = object()
+
+
+_DONE = frozenset({"completed", "failed"})
+_CACHE: OrderedDict[tuple, dict] = OrderedDict()
+_CACHE_SIZE = 16
+
+
+def review_for_status(state: Any, root: str | None = None) -> dict:
+    """The review ``production.status`` attaches. It opens video files, so it runs only once a run is over and
+    the result is remembered until that run's outputs change (a polling agent asks every minute)."""
+    from services.production_review_checks import empty_review
+
+    if not isinstance(state, dict) or state.get("status") not in _DONE:
+        return empty_review()
+    key = (root, state.get("final"), state.get("finished"), len(state.get("scenes") or {}))
+    if key in _CACHE:
+        _CACHE.move_to_end(key)
+        return copy.deepcopy(_CACHE[key])
+    result = review_production(state, root)
+    _CACHE[key] = copy.deepcopy(result)
+    while len(_CACHE) > _CACHE_SIZE:
+        _CACHE.popitem(last=False)
+    return result
 
 
 def review_production(state: Any, root: str | None = None, *, people: Any = _AUTO, embed: Any = None, sample: Any = None) -> dict:

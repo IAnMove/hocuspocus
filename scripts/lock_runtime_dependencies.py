@@ -23,7 +23,8 @@ from services.runtime_profiles import catalog, recipe  # noqa: E402
 def resolve(engine: str, platform: str) -> None:
     spec = recipe(engine, platform)
     constraints = ROOT / spec["constraintFile"]
-    pins = {**spec["constraints"], **{k: spec[k] + "+cu" + spec["cuda"].replace(".", "")
+    cuda = spec["cuda"].replace(".", "") if spec.get("cuda") else None
+    pins = {**spec["constraints"], **{k: spec[k] + "+cu" + cuda
             for k in ("torch", "torchvision", "torchaudio") if k in spec}}
     constraints.write_text("# ABI contract from app/runtime/profiles.json\n" +
                            "".join(f"{k}=={v}\n" for k, v in pins.items()), encoding="utf-8")
@@ -42,15 +43,18 @@ def resolve(engine: str, platform: str) -> None:
         inputs.write_text(f"-r {source.as_posix()}\n" + "\n".join(spec.get("acceleratorPackages", [])) +
                           ("\nhf-xet\npip\n" if engine == "wangp" else "\n"), encoding="utf-8")
         output = folder / "resolved.txt"
+        indexes = ["--extra-index-url", f"https://download.pytorch.org/whl/cu{cuda}",
+                   "--index-strategy", "unsafe-best-match"] if cuda else []
         subprocess.run(["uv", "--no-config", "pip", "compile", str(inputs), "--constraint", str(constraints),
-                        "--extra-index-url", f"https://download.pytorch.org/whl/cu{spec['cuda'].replace('.', '')}",
-                        "--index-strategy", "unsafe-best-match", "--python-version", spec["python"],
-                        "--python-platform", {"linux": "x86_64-unknown-linux-gnu", "win32": "x86_64-pc-windows-msvc"}[platform],
+                        *indexes, "--python-version", spec["python"],
+                        "--python-platform", {"linux": "x86_64-unknown-linux-gnu", "win32": "x86_64-pc-windows-msvc",
+                                              "darwin": "aarch64-apple-darwin"}[platform],
                         "--no-annotate", "--quiet", "--output-file", str(output)], cwd=ROOT, check=True)
         content = "\n".join(line for line in output.read_text().splitlines() if not line.startswith("#"))
         lock = ROOT / "app/runtime/locks" / f"{platform}-{engine}.txt"
         lock.parent.mkdir(exist_ok=True)
-        lock.write_text(f"# Resolved for {platform} x64 / {engine}, {datetime.date.today()}.\n"
+        arch = "arm64" if platform == "darwin" else "x64"
+        lock.write_text(f"# Resolved for {platform} {arch} / {engine}, {datetime.date.today()}.\n"
                         "# Regenerate with scripts/lock_runtime_dependencies.py; native extensions use explicit recipe pins.\n" +
                         content.strip() + "\n", encoding="utf-8")
 
@@ -58,7 +62,8 @@ def resolve(engine: str, platform: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--engine", required=True, choices=catalog()["engines"])
-    parser.add_argument("--platform", required=True, choices=catalog()["platforms"])
+    parser.add_argument("--platform", required=True,
+                        choices=sorted({p for e in catalog()["engines"].values() for p in e["platforms"]}))
     args = parser.parse_args()
     if args.platform not in catalog()["engines"][args.engine]["platforms"]:
         parser.error("No recipe for that engine/platform")

@@ -12,6 +12,7 @@ State lives in <workspace>/<id>.production.json. A running file younger than 24h
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -28,19 +29,34 @@ import numpy as np
 from services import lipsync_qa, song_analysis as audio_analysis
 from services.production_disk import discard, release_completed, require_free_disk
 from services.production_resume import open_mcp
+from services.production_resource_gate import guard_mcp
 from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
 from services.production_timing import StageWatch, timing_summary
 from services.production_usage import attach_usage, usage_summary
-from services.production_review import review_production
+from services.production_quality import expand_quality
+from services.production_review import review_for_status
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
+from services.production_scene3d import export_scene3d_clips, validate_scene3d_shot
 from services.production_style_presets import expand_style_preset
-from services.production_takes import another_take, note_seconds, pending_windows, take_settled
+from services.production_commands import extra_catalog, extra_handlers
+from services.production_control import Cancelled, arm, checkpoint, disarm, sleep_until
+from services.production_package import (attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, editable_summary,
+                                         lyric_for, manifest_rows, write_manifest)
+from services.production_shot_edit import render_shot
+from services.production_song_switch import remember_candidates
+from services.production_sheets import compose_group, make_frames_sheet
+from services.production_takes import another_take, better_take, note_seconds, pending_windows, take_settled
 from services.production_wait import MAX_WAIT_S, wait_for_status
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
 RUN, STATUS, PLAN = "production.run", "production.status", "production.plan"
 OMARCHY_THEMES: dict[str, dict] = json.loads((Path(__file__).resolve().parents[1] / "shared" / "omarchy_themes.json").read_text(encoding="utf-8"))["entries"]
+FRAME_ATTEMPTS = 2                                       # start-frame rounds per run
+FRAME_RESOLUTIONS = ("1280x704", "1152x640", "1024x576")   # after an out-of-memory the next attempt is smaller
+# dymo punches its letters out of the tape: on a dark picture they vanish. Dark letters on cream tape read on any picture.
+DYMO_READABLE = {"color": "#141210", "box": {"kind": "tape", "color": "#F4EEE2", "opacity": 1, "padding": 0.72, "radius": 0.18}}
+MAX_LOST_JOBS = 3                                        # per shot: then a vanished job counts as a failed take
 H3_FRAMES = [124 + 17 * k for k in range(14)]            # H3 window lengths (124 … 345 frames at 24 fps)
 STEPS = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
 _threads: dict[str, threading.Thread] = {}
@@ -66,25 +82,32 @@ SPEC_SCHEMA: dict[str, Any] = {
                                                    "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
                                                    "lyric_template": {"type": "string"}, "lyric_style": {"type": "object"},
                                                    "theme": {"type": "string", "description": "Omarchy colour theme id (app/shared/omarchy_themes.json): screen shots, lyric and footer colours"},
+                                                   "content": {"enum": ["screen"], "description": "what auto-planned non-sung shots are: the native desktop (default: a short H3 clip, or stills when given)"},
+                                                   "singer": {"type": "boolean", "description": "false: nobody sings on screen (auto-planned shots have no sung H3 shots)"},
                                                    "title_style": {"type": "object"}, "footer": {"type": "string"},
                                                    "footer_style": {"type": "object"}, "finish": {"type": "object"}}},
         "cast": {"type": "array", "items": {"type": "object", "required": ["id", "sheet_prompt"],
-                                         "properties": {"image_model": {"type": "string"}, "image_steps": {"type": "integer"}}}},
+                                         "properties": {"image_model": {"type": "string"}, "image_steps": {"type": "integer"},
+                                                        "count": {"type": "integer", "minimum": 1, "maximum": 6, "description": "how many distinct subjects this reference stands for (a group image); default 1, or the size of its group"},
+                                                        "group": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4,
+                                                                  "description": "ids of other cast entries: one reference image with their sheets side by side (no sheet_prompt needed)"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
-            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
+            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
             "frame": {"type": "string"}, "action": {"type": "string"}, "still": {"type": "string"}, "clip": {"type": "string"},
             "image_model": {"type": "string"}, "image_steps": {"type": "integer"}, "graphic": {"type": "object"},
+            "scene3d": {"type": "object", "description": "Native Video 3D: template or document, GLB subject/slots, camera, atmosphere and movement"},
             "desktop": {"type": "object", "description": "kind screen: tiling desktop fields (layout, apps, focus, workspace, switch, theme)"},
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"}}}}]},
         "fill": {"type": "array", "description": "Shots used to fill instrumental stretches longer than a clip"},
-        "max_takes": {"type": "integer", "minimum": 1, "maximum": 5}},
+        "max_takes": {"type": "integer", "minimum": 1, "maximum": 5},
+        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: fills song seeds and max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"}},
 }
 
 
 def validate_spec(spec: Any) -> dict:
-    spec = expand_style_preset(spec)
+    spec = expand_quality(expand_style_preset(spec))
     spec = plan_shots(spec)
     if not isinstance(spec, dict):
         raise ProductionError("invalid_spec", "spec must be an object")
@@ -103,13 +126,19 @@ def validate_spec(spec: Any) -> dict:
             raise ProductionError("invalid_spec", "image_model must be a model selector")
     keys = set()
     for shot in spec["shots"]:
-        if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip", "screen"):
-            raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip|screen")
+        if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip", "screen", "scene3d"):
+            raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip|screen|scene3d")
         if shot["key"] in keys:
             raise ProductionError("invalid_spec", f"duplicate shot key {shot['key']}")
         keys.add(shot["key"])
         if shot["kind"] == "h3" and not (shot.get("frame") and shot.get("action")):
             raise ProductionError("invalid_spec", f"h3 shot {shot['key']} needs frame and action")
+    for shot in [*spec["shots"], *(spec.get("fill") or [])]:
+        if shot.get("kind") == "scene3d":
+            try:
+                validate_scene3d_shot(shot)
+            except ValueError as error:
+                raise ProductionError("invalid_spec", str(error)) from error
     return spec
 
 
@@ -121,6 +150,10 @@ def h3_frames_for(seconds: float) -> int:
 
 def shot_windows(spec: dict, score: dict) -> list[dict]:
     lines = score.get("lines") or []
+    try:
+        duration = float(score.get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = 0.0
     out = []
     for index, shot in enumerate(spec["shots"]):
         if is_auto_pad(shot):
@@ -134,6 +167,10 @@ def shot_windows(spec: dict, score: dict) -> list[dict]:
             t0 = lines[shot["after"]]["t1"] + 0.3
         else:
             t0 = 0.0
+        # an `after` card uses last.t1 + 0.3; when the last lyric ends at the song
+        # end that start is past duration and segments() drops it (b - a <= 0).
+        if duration > 0 and t0 >= duration:
+            t0 = max(0.0, duration - 4.0)
         if line:
             last = lines[min(len(lines) - 1, shot["line"] + shot.get("span", 1) - 1)]
             t1 = last["t1"] + 0.2
@@ -146,7 +183,7 @@ def shot_windows(spec: dict, score: dict) -> list[dict]:
         bpm = 120.0
     shots = spec.get("shots") if isinstance(spec.get("shots"), list) else []
     if spec.get("auto_pads") or any(is_auto_pad(shot) for shot in shots):
-        return place_pads(out, spec, float(score.get("duration") or 0), bpm)
+        return place_pads(out, spec, duration, bpm)
     return out
 
 
@@ -266,6 +303,8 @@ def note_held(state: dict, key: str, hold: bool = True) -> None:
 
 
 class Production:
+    on_landed: Callable[[str, str | None], None] | None = None      # set while a round of clips is being waited for
+
     def __init__(self, workspace: str, production_id: str, *, workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str],
                  mcp: Callable[[str, dict], dict]):
         self.ws, self.id = workspace, production_id
@@ -273,7 +312,8 @@ class Production:
         self.uploads = Path(uploads_dir())
         self.path = self.root / f"{production_id}.production.json"
         self.state = json.loads(self.path.read_text()) if self.path.exists() else {}
-        self.mcp = attach_usage(mcp, self.state, self.save)
+        self.mcp = attach_usage(guard_mcp(self, mcp), self.state, self.save)
+        self.lost: set[str] = set()
 
     # state
     def save(self) -> None:
@@ -285,6 +325,13 @@ class Production:
         self.state.setdefault("log", []).append(line[:200])
         self.state["log"] = self.state["log"][-60:]
         self.save()
+
+    def note_stop(self, error: BaseException) -> None:
+        """A cooperative cancel stays resumable. Anything else is a failed run with its reason."""
+        if isinstance(error, Cancelled):
+            self.state.update(status="cancelled", error=None)
+            return
+        self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
 
     # media helpers
     def upload(self, name: str) -> tuple[str, str]:
@@ -299,6 +346,7 @@ class Production:
         """Output file per key, or None. Why a job gave nothing is kept in self.failures[key]."""
         done: dict[str, str | None] = {}
         self.failures: dict[str, str] = {}
+        self.lost = set()
         unknown: dict[str, int] = {}
         while len(done) < len(jobs):
             for key, job in jobs.items():
@@ -314,21 +362,25 @@ class Production:
                     unknown[key] = unknown.get(key, 0) + 1
                     if unknown[key] >= 5:
                         done[key] = None
+                        self.lost.add(key)      # the queue no longer knows this job (a restart drops the queue)
                 elif s.get("status") in ("failed", "error", "cancelled", "discarded"):
                     done[key] = None
                 if key in done and not done[key]:
                     self.failures[key] = failure_reason(s)
+                if key in done and self.on_landed:
+                    self.on_landed(key, done[key])      # each result is recorded the moment it lands, not when the slowest one does
             if len(done) < len(jobs):
-                time.sleep(poll)
+                sleep_until(getattr(self, "_cancel", None), poll, time.sleep)
         return done
 
     def image(self, key: str, prompt: str, refs: list[str] | None, res: str, seed: int,
-              model: str = "flux2_klein_9b", steps: int | None = None) -> str | None:
+              model: str = "flux2_klein_9b", steps: int | None = None, attempt: int = 0) -> str | None:
         params = {"prompt": prompt, "model_type": model, "resolution": res, "seed": seed, "guidance_scale": 1,
                   "num_inference_steps": steps or (40 if model.startswith("qwen_image_21") else 4)}
         if refs:
             params.update(image_refs=refs, video_prompt_type="I")
-        r = self.mcp("generation.image", {"version": 2, "intent_id": f"{self.id}-{key}-{seed}", "input": {"workspace": self.ws, "params": params}})
+        r = self.mcp("generation.image", {"version": 2, "intent_id": f"{self.id}-{key}-{seed}" + (f"-r{attempt}" if attempt else ""),
+                                                 "input": {"workspace": self.ws, "params": params}})       # the journal answers a repeated intent with the old (maybe failed) job
         return ((r.get("receipt") or {}).get("result") or {}).get("job_id")
 
     # steps
@@ -338,6 +390,7 @@ class Production:
         sp = spec["song"]
         if sp.get("file"):
             self.state["song"] = {"file": sp["file"]}
+            remember_candidates(self.state, {"file": {"file": sp["file"]}})
             return self.log(f"song: using {sp['file']}")
         jobs = {}
         for seed in sp.get("seeds") or [11, 22, 33]:
@@ -355,6 +408,7 @@ class Production:
             self.log(f"song seed {seed}: recall {score['recall']} tail {score['tail_rms']}")
         if not candidates:
             raise ProductionError("song_failed", "No song candidate finished")
+        remember_candidates(self.state, candidates)
         best = pick_song(candidates)
         self.state["song"] = candidates[best]
         self.log(f"song: picked seed {best}")
@@ -377,31 +431,75 @@ class Production:
         settings = spec.get("style") or {}
         style = settings.get("image", "")
         jobs = {c["id"]: self.image("cast-" + c["id"], c["sheet_prompt"] if style in c["sheet_prompt"] else f"{c['sheet_prompt']} {style}".strip(), None, "1536x1024", c.get("seed", 5),
-                                     c.get("image_model", settings.get("image_model", "flux2_klein_9b")), c.get("image_steps", settings.get("image_steps")))
-                for c in spec.get("cast") or [] if c["id"] not in cast}
+                                     c.get("image_model", settings.get("image_model", "flux2_klein_9b")), c.get("image_steps", settings.get("image_steps")),
+                                     self._attempt("cast_attempts", c["id"]))
+                for c in spec.get("cast") or [] if c["id"] not in cast and not c.get("group")}
         for cid, name in self.wait(jobs).items():
             if name:
                 cast[cid] = self.upload(name)[1]
+        for c in spec.get("cast") or []:      # a group reference: the members' sheets side by side in one picture
+            members = c.get("group") or []
+            if members and c["id"] not in cast and all(member in cast for member in members):
+                out = f"{self.id}-group-{c['id']}.png"
+                if compose_group([self.uploads / Path(cast[member]).name for member in members], self.root / out):
+                    cast[c["id"]] = self.upload(out)[1]
         self.log(f"cast: {len(cast)}")
+        absent = [c["id"] for c in spec.get("cast") or [] if c["id"] not in cast]
+        if absent:
+            raise ProductionError("cast_incomplete", "no reference sheet for " + ", ".join(f"{cid} ({self.failures.get(cid, 'no output')})" for cid in absent))
+
+    def _attempt(self, group: str, key: str) -> int:
+        """How many times this image was already submitted, so a resume asks for a fresh job instead of the journal's old answer."""
+        counts = self.state.setdefault(group, {})
+        if key not in counts:
+            counts[key] = 1 if any(line.startswith(("frames:", "cast:")) for line in self.state.get("log") or []) else 0
+            return counts[key]
+        counts[key] += 1
+        return counts[key]
+
+    def frame_prompt(self, spec: dict, w: dict) -> str:
+        """Start-frame prompt: the look, the shot, and how many distinct subjects the cast references stand for
+        (a model given a sheet with several views tends to draw the character several times)."""
+        style = (spec.get("style") or {}).get("image", "")
+        counts = {c["id"]: int(c.get("count", len(c.get("group") or []) or 1)) for c in spec.get("cast") or [] if isinstance(c, dict)}
+        subjects = sum(counts.get(c, 1) for c in w.get("cast", []) if c in self.state.get("cast", {}))
+        guard = f" Exactly {subjects} distinct {'subject' if subjects == 1 else 'subjects'} in the frame, no duplicated characters." if subjects else ""
+        return f"{style} {w['frame']}{guard}".strip()
 
     def frames(self, spec: dict, windows: list[dict]) -> None:
+        """One start frame per H3 shot. A missing frame is asked for again (new job; a smaller picture after an
+        out-of-memory) up to FRAME_ATTEMPTS times; what still fails is reported in ``frame_failures``."""
         frames = self.state.setdefault("frames", {})
+        failures = self.state.setdefault("frame_failures", {})
         settings = spec.get("style") or {}
-        style = settings.get("image", "")
-        jobs = {}
-        for w in windows:
-            if w["kind"] != "h3" or w["key"] in frames:
-                continue
-            refs = [self.state["cast"][c] for c in w.get("cast", []) if c in self.state.get("cast", {})]
-            jobs[w["key"]] = self.image("frame-" + w["key"], f"{style} {w['frame']}".strip(), refs or None, "1280x704", w.get("seed", 3),
-                                        w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")))
-        for key, name in self.wait(jobs).items():
-            if name:
-                frames[key] = name
+        for _round in range(FRAME_ATTEMPTS):
+            missing = [w for w in windows if w["kind"] == "h3" and w["key"] not in frames]
+            if not missing:
+                break
+            jobs = {}
+            for w in missing:
+                attempt = self._attempt("frame_attempts", w["key"])
+                res = FRAME_RESOLUTIONS[min(attempt, len(FRAME_RESOLUTIONS) - 1)] if "memory" in failures.get(w["key"], "") else FRAME_RESOLUTIONS[0]
+                refs = [self.state["cast"][c] for c in w.get("cast", []) if c in self.state.get("cast", {})]
+                jobs[w["key"]] = self.image("frame-" + w["key"], self.frame_prompt(spec, w), refs or None, res, w.get("seed", 3) + (attempt or 0),
+                                            w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")), attempt)
+            for key, name in self.wait(jobs).items():
+                if name:
+                    frames[key] = name
+                    failures.pop(key, None)
+                else:
+                    failures[key] = self.failures.get(key, "no output")
+                    self.log(f"frame {key} failed ({failures[key]})")
+            self.save()
         self.log(f"frames: {len(frames)}")
+        self.state["frames_sheet"] = make_frames_sheet(self.root, frames, f"{self.id}-frames.jpg")
+        absent = [w["key"] for w in windows if w["kind"] == "h3" and w["key"] not in frames]
+        if absent:
+            raise ProductionError("frames_incomplete", "no start frame for " + ", ".join(f"{key} ({failures.get(key, 'no output')})" for key in absent[:6]))
 
     def preview(self, request: dict) -> None:
         """Generate three look tests before committing GPU time to a song or clips."""
+        self._cancel = arm(self.ws, self.id)
         self.state.update(status="running", preview_frames={})
         self.save()
         try:
@@ -414,7 +512,8 @@ class Production:
             self.state["status"] = "preview_completed" if len(self.state["preview_frames"]) == 3 else "failed"
             self.log(f"preview: {len(self.state['preview_frames'])}/3")
         except Exception as error:
-            self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
+            self.note_stop(error)
+        disarm(self.ws, self.id)
         self.state["finished"] = time.time()
         self.save()
 
@@ -455,17 +554,40 @@ class Production:
             tried.setdefault(w["key"], sum(1 for line in self.state.get("log") or [] if line.startswith(f"clip {w['key']} take ")))
         budget = {w["key"]: tried[w["key"]] + max_takes for w in pending}
         while pending:
+            checkpoint(getattr(self, "_cancel", None))
             started = time.perf_counter()
-            names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + tried[w["key"]], tried[w["key"]]) for w in pending})
-            retry = []
+            by_key = {w["key"]: w for w in pending}
+            retry_keys: set[str] = set()
+            landed: set[str] = set()
+            lost = self.state.setdefault("clip_lost", {})
+
+            def land(key: str, name: str | None) -> None:
+                """Judge and record one clip as soon as it exists: a restart mid-round keeps the ones already shot."""
+                if key in landed:
+                    return
+                landed.add(key)
+                if key in self.lost and lost.get(key, 0) < MAX_LOST_JOBS:
+                    lost[key] = lost.get(key, 0) + 1      # not a take: the job vanished, so shoot it again
+                    self.log(f"clip {key}: job lost (queue restarted), not counted as a take")
+                    retry_keys.add(key)
+                    return
+                tried[key] += 1
+                if another_take(self.judge_take(by_key[key], name, tried[key], vocals), tried[key], budget[key], key in retake):
+                    retry_keys.add(key)
+                self.save()
+
+            self.on_landed = land
+            try:
+                names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + tried[w["key"]], tried[w["key"]]) for w in pending})
+            finally:
+                self.on_landed = None
             for w in pending:
-                tried[w["key"]] += 1
-                if another_take(self.judge_take(w, names.get(w["key"]), tried[w["key"]], vocals), tried[w["key"]], budget[w["key"]], w["key"] in retake):
-                    retry.append(w)
+                land(w["key"], names.get(w["key"]))         # a wait that reports only at the end (a stub) lands them here
+            retry = [w for w in pending if w["key"] in retry_keys]
             note_seconds(self.state, pending, time.perf_counter() - started)
             self.save()
             if retry and not any(names.values()):
-                time.sleep(pause)
+                sleep_until(getattr(self, "_cancel", None), pause, time.sleep)
             pending = retry
 
     def judge_take(self, w: dict, name: str | None, take: int, vocals: str | None) -> bool:
@@ -479,9 +601,11 @@ class Production:
         qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"], [w["t0"], w["t1"]]) if w.get("sing") and vocals else {"verdict": "ok"}
         drive = "vocals" if (take - 1) % 2 == 1 and w.get("sing") else "mix"
         self.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
+        self.state.setdefault("takes", {}).setdefault(key, []).append(
+            {"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive})
         best = clips.get(key)
         previous = (best.get("qa") or {}).get("best_r") if best else None
-        if not best or (qa.get("best_r") or 0) >= (previous or 0):
+        if not best or better_take(qa, (best.get("qa") or {})):
             if best and best.get("file") and best["file"] != name:
                 discard(self.state, best["file"])
             clips[key] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
@@ -505,17 +629,94 @@ class Production:
             if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
                     and prior.get("fingerprint") == fingerprint):
                 continue
-            doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
-            doc = self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
+            doc = self.scene_document(shot, a, b, score, clips, style, stills)
             docs[shot["key"]] = doc
             r = self.mcp("scenes.video2d.export", {"version": 1, "intent_id": f"{self.id}-scene-{shot['key']}-{int(time.time())}",
                                                    "input": {"workspace": self.ws, "document": doc}})
             done[shot["key"]] = {"intent": (r.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used,
                                   "fingerprint": fingerprint, "file": None}
             self.save()
-        failed = finish_scene_exports(self.mcp, self.ws, self.id, done, docs, time.sleep, self.save, self.log)
+        failed = finish_scene_exports(
+            self.mcp, self.ws, self.id, done, docs,
+            lambda seconds: sleep_until(getattr(self, "_cancel", None), seconds, time.sleep), self.save, self.log)
         apply_scene_export_failure(self.state, failed)
         self.log(f"scenes: {sum(1 for s in done.values() if s.get('file'))}/{len(segs)}")
+
+    def scene_document(self, shot: dict, a: float, b: float, score: dict, clips: dict, style: dict, stills: dict) -> dict:
+        shot, style = render_shot(shot, style)
+        dur = round(b - a, 3)
+        doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
+        return self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
+
+    def package(self, spec: dict, windows: list[dict]) -> None:
+        """Save what a person needs to retouch the video shot by shot: a durable scene document per shot and a manifest
+        (see production_package). Never fails the run: the video is already made."""
+        score, clips = self.score(), self.state.get("clips", {})
+        segs = segments(windows, score, lambda k: k in clips, spec.get("fill") or [])
+        style, stills = spec.get("style") or {}, spec.get("stills") or {}
+        swap, saved = clip_replacements(clips, self.ws), self.state.setdefault("scene_docs", {})
+        for shot, a, b in segs:
+            key = shot["key"]
+            try:
+                doc = durable_document(self.scene_document(shot, a, b, score, clips, style, stills), swap)
+                digest = doc_digest(doc)
+                if (saved.get(key) or {}).get("digest") == digest:
+                    continue
+                result = self.mcp("scenes.document.save", {"version": 1, "intent_id": f"{self.id}-doc-{key}-{digest}",
+                                                           "input": {"workspace": self.ws, "name": f"{self.id}-{key}", "document": doc}})
+                name = (result.get("result") or {}).get("name")
+                if not name:
+                    raise ProductionError("scene_doc_failed", json.dumps(result)[:160])
+                note = " · ".join(part for part in (shot.get("action"), f"seed {shot['seed']}" if shot.get("seed") is not None else "") if part)
+                saved[key] = {"scene": name, "digest": digest, "lyric": lyric_for(score.get("lines") or [], a, b), "note": note,
+                              "warnings": contrast_warnings(self.mcp, doc)}
+            except Exception as error:      # one shot's document must not stop the others
+                self.log(f"package {key}: {type(error).__name__}: {error}"[:200])
+        manifest = write_manifest(self.root, self.id, spec.get("title", self.id), manifest_rows(self.state, spec, segs, score, saved),
+                                  self.state.get("montage_file"))
+        self.state["package"] = {"manifest": manifest, "scene_docs": len(saved),
+                                 "warnings": sum(len(item.get("warnings") or []) for item in saved.values())}
+        self.log(f"package: {len(saved)} scene documents, manifest {manifest}")
+
+    def _finish_package(self, previous: str | None, previous_error: object, package_error: str | None) -> None:
+        """Restore the finished status. A leftover final is not success, and this must never look running:
+        auto-resume would start a full GPU production.run."""
+        if package_error:
+            self.state["error"] = package_error
+            self.state["status"] = previous if previous in ("completed", "failed") else "failed"
+        elif previous == "failed":
+            self.state["status"] = "failed"
+            self.state["error"] = previous_error
+        elif self.state.get("final"):
+            self.state.update(status="completed", error=None)
+        else:
+            self.state["status"] = "failed"
+            if previous_error:
+                self.state["error"] = previous_error
+        self.state["finished"] = time.time()
+        self.save()
+
+    def repackage(self, spec: dict) -> None:
+        """Package a production that is already finished (no GPU, no export): scene documents, manifest and the
+        montage clips' origins. This is how an older production becomes editable."""
+        previous, previous_error = self.state.get("status"), self.state.get("error")
+        try:
+            windows = shot_windows(spec, self.score())
+            self.package(spec, windows)
+            file = self.state.get("montage_file")
+            if file:
+                current = (self.mcp("montages.get", {"version": 1, "input": {"workspace": self.ws, "file": file}}).get("result") or {})
+                montage = current.get("montage") or current
+                if attach_origins(montage, self.state.get("scene_docs") or {}, self.id) and montage.get("clips"):
+                    revision = current.get("revision") or montage.get("revision")
+                    saved = self.mcp("montages.save", {"version": 1, "intent_id": f"{self.id}-origins-{int(time.time())}",
+                                                       "input": {"workspace": self.ws, "montage": montage, "file": file, "expected_revision": revision}})
+                    if "result" not in saved:
+                        raise ProductionError("montage_failed", json.dumps(saved)[:200])
+        except Exception as error:
+            self._finish_package(previous, previous_error, f"{type(error).__name__}: {error}"[:300])
+            return
+        self._finish_package(previous, previous_error, None)
 
     def edit(self, doc: dict, ops: list[dict]) -> dict:
         # scenes.video2d.edit admits 32 ops; a long still with timed lyrics exceeds that in one shot.
@@ -530,6 +731,8 @@ class Production:
     def scene_ops(self, shot: dict, a: float, b: float, dur: float, score: dict, clips: dict, style: dict, stills: dict) -> list[dict]:
         ops: list[dict] = []
         clip = clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None)
+        if shot["kind"] == "scene3d" and not clip:
+            raise ProductionError("scene3d_export_failed", f"scene3d clip missing: {shot['key']}")
         if clip:
             note_held(self.state, shot["key"], False)
             ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-locked")})
@@ -600,7 +803,8 @@ class Production:
             used += cues
             ops.append({"op": "add_title", "id": f"ly{index}", "template": template, "fields": fields,
                         "start": span[0], "duration": span[1]})
-            look = {**theme_lyric_style(style.get("theme")), **(style.get("lyric_style") or {})}
+            own = style.get("lyric_style") or {}
+            look = {**theme_lyric_style(style.get("theme")), **(DYMO_READABLE if template == "dymo" and "box" not in own else {}), **own}
             if look:
                 for cue in TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080}):
                     ops.append({"op": "update_text", "id": f"ly{index}-{cue['id']}", "patch": look})
@@ -625,6 +829,7 @@ class Production:
                   "muted": True, "fit": "fill", "transition": "none"} for k, _, _ in self.state["segments"] if scenes.get(k, {}).get("file")]
         montage = {"version": 1, "name": spec["title"], "width": 1920, "height": 1080, "fps": 24, "clips": clips, "audioCues": [], "overlays": [],
                    "soundtrack": {"source": f"/api/v1/file/{self.state['song']['file']}?workspace={self.ws}", "trimStart": 0, "trimEnd": score["duration"], "volume": 1.0, "loop": False}}
+        attach_origins(montage, self.state.get("scene_docs") or {}, self.id)
         body: dict[str, Any] = {"workspace": self.ws, "montage": montage}
         if self.state.get("montage_file"):
             current = (self.mcp("montages.get", {"version": 1, "input": {"workspace": self.ws, "file": self.state["montage_file"]}}).get("result") or {})
@@ -642,7 +847,7 @@ class Production:
             status = (status.get("result") or status).get("job", status)
             if status.get("status") in ("completed", "failed"):
                 break
-            time.sleep(4)
+            sleep_until(getattr(self, "_cancel", None), 4, time.sleep)
         self.state["final"] = status.get("filename")
         if self.state["final"]:
             import subprocess
@@ -653,9 +858,11 @@ class Production:
         self.log(f"montage: {status.get('status')}")
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
+        self._cancel = arm(self.ws, self.id)
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
         self.save()
         try:
+            checkpoint(self._cancel)
             watch = StageWatch(self)
             watch.call("song", self.song, spec)
             watch.call("analyze", self.analyze, spec)
@@ -667,15 +874,25 @@ class Production:
                 self.log("frames: ready for a clean restart before clips")
                 return
             watch.call("clips", self.clips, spec, windows, retake)
+            if any(s.get("kind") == "scene3d" for s in [*spec["shots"], *(spec.get("fill") or [])]):
+                watch.call("clips", export_scene3d_clips, self, spec, windows, retake)
             watch.call("scenes", self.scenes, spec, windows)
+            try:
+                self.package(spec, windows)
+            except Exception as error:      # the video is made; editability is a bonus that must not fail the run
+                self.log(f"package failed: {type(error).__name__}: {error}"[:200])
             watch.call("montage", self.montage, spec)
-            if self.state.get("final"):
+            self.state["package"] = {**(self.state.get("package") or {}), "montage": self.state.get("montage_file")}
+            # A leftover final from a previous completed run is not success: scene
+            # export can fail, skip montage, and still leave that filename in state.
+            if self.state.get("status") != "failed" and self.state.get("final"):
                 self.state.update(status="completed", error=None)
-            else:
+            elif self.state.get("status") != "failed":
                 self.state["status"] = "failed"
-        except Exception as error:  # the run is resumable; keep the reason
-            self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
+        except Exception as error:  # the run is resumable; a cancel keeps the files and the spec
+            self.note_stop(error)
         finally:
+            disarm(self.ws, self.id)
             self.state["finished"] = time.time()
             release_completed(self.root, self.state, self.id)
             self.save()
@@ -688,13 +905,15 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
             "song": (state.get("song") or {}).get("file"),
             "clips": {**{k: "failed" for k in state.get("clip_failures") or {}}, **{k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()}},
             "failures": state.get("clip_failures") or None,
+            "frame_failures": state.get("frame_failures") or None,
+            "frames_sheet": url(state.get("frames_sheet")),
             "held": list(state.get("held", [])),
             "preview_frames": state.get("preview_frames") or None,
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
             "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:],
-            "timing": timing_summary(state), "usage": usage_summary(state)}
-    summary.update(review_production(state, root))
+            "timing": timing_summary(state), "usage": usage_summary(state), "editable": editable_summary(state)}
+    summary.update(review_for_status(state, root))
     return summary
 
 
@@ -717,6 +936,8 @@ def command_catalog() -> list[dict[str, Any]]:
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
                                           "dry_run": {"type": "boolean"},
+                                          "package": {"type": "boolean", "description": "true: make a finished production editable shot by shot (scene documents, manifest, montage origins) without any GPU or export"},
+                                          "auto_resume": {"type": "boolean", "description": "true: after a server restart this production continues by itself (for 24 h). Off unless asked (or HOCUS_PRODUCTION_AUTORESUME=1)."},
                                           "through": {"enum": ["all", "frames"]},
                                           "preview": {"type": "object", "required": ["prompts"], "properties": {
                                               "prompts": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}},
@@ -724,13 +945,14 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": PLAN, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites. Optional lyrics replace the draft.",
+        {"name": PLAN, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them) and an optional footer (small print on every scene).",
          "inputSchema": envelope({"brief": {"type": "object"}}, ["brief"])},
         {"name": STATUS, "description": "Short summary of a production: status, stage timings, usage (mcp_calls, response_bytes, h3_takes), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (verdict, failures, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
                                              "description": "Seconds to wait until status changes. 0 returns at once. Maximum 300."}},
                                  ["workspace", "production_id"])},
+        *extra_catalog(),
     ]
 
 
@@ -766,7 +988,14 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             return {"version": 1, "status": "completed", "operation": RUN, "result": dry_run(data.get("spec"))}
         if not token() or not app_url():
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
+        key = f"{data['workspace']}/{data['production_id']}"
+        with _lock:
+            running = _threads.get(key)
+        if running and running.is_alive():
+            raise HTTPException(409, {"code": "already_running", "message": "This production is running: wait for production.status to finish (or use another production_id) before sending a new spec", "retryable": True})
         production = Production(data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=loopback_mcp(app_url, token))
+        if "auto_resume" in data:
+            production.state["auto_resume"] = data["auto_resume"] is True
         preview = data.get("preview")
         if preview is not None:
             if (not isinstance(preview, dict) or not isinstance(preview.get("prompts"), list)
@@ -784,15 +1013,20 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             through = data.get("through", "all")
             if through not in ("all", "frames"):
                 raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all or frames", "retryable": False})
-            target = production.run
-            args = (spec, tuple(data.get("retake") or ()), through)
-        key = f"{data['workspace']}/{data['production_id']}"
+            if data.get("package") is True:
+                if production.state.get("status") not in ("completed", "failed"):
+                    raise HTTPException(422, {"code": "not_finished", "message": "package needs a finished production", "retryable": False})
+                target, args = production.repackage, (spec,)
+            else:
+                target = production.run
+                args = (spec, tuple(data.get("retake") or ()), through)
         with _lock:
             thread = _threads.get(key)
-            if not (thread and thread.is_alive()):
-                thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
-                _threads[key] = thread
-                thread.start()
+            if thread and thread.is_alive():
+                raise HTTPException(409, {"code": "already_running", "message": "This production is running", "retryable": True})
+            thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
+            _threads[key] = thread
+            thread.start()
         return {"version": 1, "status": "completed", "operation": RUN, "result": {"production_id": data["production_id"], "running": True}}
 
     async def status(arguments: Any) -> dict:
@@ -801,7 +1035,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         if not path.exists():
             raise HTTPException(404, {"code": "production_not_found", "message": "No production with this id in the workspace", "retryable": False})
         state = await wait_for_status(path, data.get("wait_s", 0))
-        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(state, data["workspace"], str(path.parent))}
+        summary = await asyncio.to_thread(status_summary, state, data["workspace"], str(path.parent))    # the review opens video files
+        return {"version": 1, "status": "completed", "operation": STATUS, "result": summary}
 
     async def plan(arguments: Any) -> dict:
         from services.production_plan import PlanError, plan_brief
@@ -814,4 +1049,4 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
         return {"version": 1, "status": "completed", "operation": PLAN, "result": {"spec": spec}}
 
-    return {RUN: run, STATUS: status, PLAN: plan}
+    return {RUN: run, STATUS: status, PLAN: plan, **extra_handlers(workspace_dir, uploads_dir, app_url, token)}

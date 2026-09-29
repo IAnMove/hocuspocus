@@ -147,3 +147,88 @@ def test_a_failed_round_waits_on_the_injected_pause(tmp_path, monkeypatch):
     assert production.state["clip_takes"]["a"] == 2
     assert production.state["clip_seconds"]["a"] >= 0
     assert "clip a take 1: failed (no output)" in production.state["log"]
+
+
+def test_a_job_lost_to_a_queue_restart_is_shot_again_and_is_not_a_take(tmp_path, monkeypatch):
+    measure, seen, _scores = _measure([0.5])
+    production, calls, _files = _runner(tmp_path, monkeypatch, [None, "good.mp4"], measure)
+    rounds = iter([{"a": None}, {"a": "good.mp4"}])
+
+    def wait(jobs, poll=6):
+        production.failures = {}
+        result = next(rounds)
+        production.lost = {"a"} if result["a"] is None else set()
+        return result
+
+    production.wait = wait
+    production.clips({"max_takes": 1}, [WINDOW], pause=0)
+    assert len(calls) == 2 and seen == [0.5]
+    assert production.state["clip_takes"]["a"] == 1               # the vanished job did not use the single take
+    assert production.state["clip_lost"]["a"] == 1
+    assert any("job lost" in line for line in production.state["log"])
+    assert production.state["clips"]["a"]["file"] == "good.mp4"
+
+
+def test_a_shot_whose_jobs_keep_vanishing_counts_them_after_three_losses(tmp_path, monkeypatch):
+    measure, _seen, _scores = _measure([])
+    production, calls, _files = _runner(tmp_path, monkeypatch, [], measure)
+
+    def wait(jobs, poll=6):
+        production.failures = {}
+        production.lost = set(jobs)
+        return {key: None for key in jobs}
+
+    production.wait = wait
+    production.clips({"max_takes": 1}, [WINDOW], pause=0)
+    assert len(calls) == 4                                       # three losses, then the fourth counts as the take
+    assert production.state["clip_takes"]["a"] == 1
+    assert production.state["clip_lost"]["a"] == 3
+
+
+def test_each_clip_is_recorded_when_it_lands_not_when_the_round_ends(tmp_path, monkeypatch):
+    measure, seen, _scores = _measure([0.5, 0.5])
+    production, calls, _files = _runner(tmp_path, monkeypatch, [], measure)
+    windows = [{**WINDOW, "key": "a", "i": 0}, {**WINDOW, "key": "b", "i": 1}]
+    production.state["frames"]["b"] = "f.png"
+    recorded_when_b_lands = {}
+
+    def wait(jobs, poll=6):
+        production.failures = {}
+        production.on_landed("a", "a.mp4")                    # the wait reports a first...
+        recorded_when_b_lands.update(dict(production.state["clips"]))     # ...and it is already saved before b exists
+        production.on_landed("b", "b.mp4")
+        return {"a": "a.mp4", "b": "b.mp4"}
+
+    production.wait = wait
+    production.clips({"max_takes": 1}, windows, pause=0)
+    assert list(recorded_when_b_lands) == ["a"] and set(production.state["clips"]) == {"a", "b"}
+    assert production.state["clip_takes"] == {"a": 1, "b": 1} and production.on_landed is None
+
+
+def test_an_unreliable_take_does_not_push_out_one_that_measured_ok():
+    from services.production_takes import better_take
+    ok, unreliable, retake = {"verdict": "ok", "best_r": 0.3}, {"verdict": "unreliable", "best_r": 0.9}, {"verdict": "retake", "best_r": 0.1}
+    assert not better_take(unreliable, ok) and better_take(ok, unreliable) and better_take(ok, retake)
+    assert not better_take(unreliable, retake) and better_take(retake, unreliable)
+    assert better_take({"verdict": "ok", "best_r": 0.4}, ok) and not better_take({"verdict": "ok", "best_r": 0.2}, ok)
+    assert better_take({"verdict": "ok"}, {"verdict": "ok"})                       # non-sung shots: the newest ok take wins
+
+
+def test_an_unreliable_followup_keeps_the_measured_retake(tmp_path, monkeypatch):
+    """Take 1 is a measured retake. Take 2 cannot see the face (unreliable, noisy r).
+    The unmeasured clip must not become the kept one; take_settled still stops."""
+    answers = iter([
+        {"verdict": "retake", "best_r": 0.22},
+        {"verdict": "unreliable", "best_r": 0.9},
+        {"verdict": "ok", "best_r": 0.5},
+    ])
+
+    def measure(*_args, **_kwargs):
+        return next(answers)
+
+    production, calls, files = _runner(tmp_path, monkeypatch, ["t1.mp4", "t2.mp4", "t3.mp4"], measure)
+    production.clips({"max_takes": 3}, [WINDOW], pause=0)
+    kept = production.state["clips"]["a"]
+    assert kept["file"] == "t1.mp4" and kept["qa"]["verdict"] == "retake" and kept["qa"]["best_r"] == 0.22
+    assert production.state["discarded"] == ["t2.mp4"]
+    assert len(calls) == 2 and next(files) == "t3.mp4"

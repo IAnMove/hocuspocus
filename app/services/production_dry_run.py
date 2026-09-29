@@ -2,7 +2,9 @@
 
 ``dry_run`` lists shot windows, H3 frame counts, lyric lines no shot covers,
 instrumental gaps with no fill, titles over 12 characters, captions over 32,
-and an estimated minute count. It never calls the client passed as ``mcp``.
+an estimated minute count, and ``motion`` (seconds and share of the runtime on still
+images, the longest hold) with warnings for a static video, a long hold, a still used
+three times, ``max_takes`` 1 and fewer than three song seeds. It never calls the client passed as ``mcp``.
 ``shots: "auto"`` expands through ``services.production_shot_plan.plan_shots``.
 """
 from __future__ import annotations
@@ -10,16 +12,22 @@ from __future__ import annotations
 from typing import Any
 
 from services.music_production import h3_frames_for, shot_windows
+from services.production_quality import expand_quality, profile_of
+from services.production_style_presets import expand_style_preset
 from services.song_analysis import lyric_lines
 
 TITLE_LIMIT = 12
 CAPTION_LIMIT = 32
-_TITLE_FIELDS = ("title", "date", "cta", "line")
-_CAPTION_FIELDS = ("caption", "sub")
+_TITLE_FIELDS = ("title", "date", "line")
+_CAPTION_FIELDS = ("caption", "sub", "cta")
 # Runbook: about 25–35 min for 5 H3 shots. Three song seeds and five shots land near 32.
 _MINUTES_PER_SEED = 2
 _MINUTES_PER_H3 = 5
 _MINUTES_TAIL = 1
+# What made the last long videos look thin: 160-178 s songs with 9-10 clips left 43-56 % of the runtime on stills.
+LONG_SHOT_S = 10.0
+REUSED_STILL = 3
+MIN_SONG_SEEDS = 3
 
 
 def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
@@ -35,6 +43,7 @@ def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
     texts = [line["text"] for line in score["lines"]]
     missing = _uncovered(texts, usable)
     gaps = _gaps(windows, float(score["duration"]), spec.get("fill") or [])
+    motion = _motion(windows, float(score["duration"]))
     titles = _spec_title(spec) + _field_hits(usable, _TITLE_FIELDS, TITLE_LIMIT)
     captions = _song_caption(spec) + _field_hits(usable, _CAPTION_FIELDS, CAPTION_LIMIT) + _lyric_captions(texts)
     return {
@@ -49,7 +58,8 @@ def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
         "long_titles": titles,
         "long_captions": captions,
         "minutes": _minutes(spec, sum(1 for row in rows if row.get("kind") == "h3")),
-        "warnings": pending + _warnings(missing, gaps, titles, captions),
+        "motion": motion,
+        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion),
     }
 
 
@@ -61,7 +71,7 @@ def _expand_shots(spec: dict) -> tuple[dict, bool, list[dict]]:
         from services.production_shot_plan import plan_shots
     except ImportError:
         return spec, False, [{"code": "shots_auto_unavailable"}]
-    planned = plan_shots(spec)
+    planned = plan_shots(expand_quality(expand_style_preset(spec)))
     if isinstance(planned, list):
         planned = {**spec, "shots": planned}
     if not isinstance(planned, dict):
@@ -133,6 +143,63 @@ def _gaps(windows: list[dict], duration: float, fill: Any) -> list[dict]:
         if end - start > clip + 0.3:
             gaps.append({"key": shot.get("key"), "t0": round(start + max(clip, 0.0), 3), "t1": round(end, 3)})
     return gaps
+
+
+def _motion(windows: list[dict], duration: float) -> dict[str, Any]:
+    """How long the picture stands still. A still image (Ken Burns at best) is static; clips and the native desktop move."""
+    if not windows or duration <= 0:
+        return {"static_s": 0.0, "static_ratio": 0.0, "longest_shot_s": 0.0, "avg_shot_s": 0.0}
+    starts = [float(shot["t0"]) for shot in windows]
+    starts[0] = 0.0
+    holds = [(shot, end - start) for shot, start, end in zip(windows, starts, [*starts[1:], duration])]
+    static = sum(hold for shot, hold in holds if shot.get("kind") == "still")
+    longest = max(holds, key=lambda item: item[1])
+    return {"static_s": round(static, 1), "static_ratio": round(static / duration, 2), "longest_shot_s": round(longest[1], 1),
+            "longest_shot": longest[0].get("key"), "avg_shot_s": round(duration / len(holds), 1)}
+
+
+def _quality_warnings(spec: dict, shots: list[dict], motion: dict) -> list[dict]:
+    """Choices that leave the result thin, reported before any GPU work."""
+    profile = profile_of(spec)
+    return [*_static_warnings(motion, profile), *_pace_warnings(spec, shots, profile), *_reused_stills(shots), *_setup_warnings(spec, shots, profile)]
+
+
+def _static_warnings(motion: dict, profile: dict) -> list[dict]:
+    found = []
+    if motion.get("static_ratio", 0) > profile["static"]:
+        found.append({"code": "too_static", "ratio": motion["static_ratio"], "limit": profile["static"],
+                      "hint": "add H3 shots or shorten the still scenes"})
+    if motion.get("longest_shot_s", 0) > LONG_SHOT_S:
+        found.append({"code": "long_shot", "key": motion.get("longest_shot"), "seconds": motion["longest_shot_s"], "limit": LONG_SHOT_S})
+    return found
+
+
+def _pace_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
+    minutes = float((spec.get("song") or {}).get("duration") or 0) / 60
+    clips = sum(1 for shot in shots if shot.get("kind") in ("h3", "scene3d"))
+    if minutes <= 0 or clips / minutes >= profile["clips_per_minute"]:
+        return []
+    return [{"code": "few_clips", "per_minute": round(clips / minutes, 1), "minimum": profile["clips_per_minute"],
+             "hint": "more H3 or scene3d shots, or a shorter song, or quality: draft"}]
+
+
+def _reused_stills(shots: list[dict]) -> list[dict]:
+    uses: dict[str, int] = {}
+    for shot in shots:
+        if shot.get("kind") == "still" and isinstance(shot.get("still"), str):
+            uses[shot["still"]] = uses.get(shot["still"], 0) + 1
+    return [{"code": "still_reused", "still": name, "shots": count} for name, count in uses.items() if count >= REUSED_STILL]
+
+
+def _setup_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
+    found = []
+    if any(shot.get("kind") == "h3" for shot in shots) and int(spec.get("max_takes") or 3) < min(2, profile["max_takes"]):
+        found.append({"code": "single_take", "hint": "max_takes 1 keeps the first clip whatever it looks like"})
+    song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
+    seeds = song.get("seeds")
+    if not song.get("file") and isinstance(seeds, list) and 0 < len(seeds) < min(MIN_SONG_SEEDS, profile["seeds"]):
+        found.append({"code": "few_song_seeds", "seeds": len(seeds), "hint": "the best of three candidates is picked by lyric recall"})
+    return found
 
 
 def _over(value: Any, limit: int) -> bool:

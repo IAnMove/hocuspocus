@@ -92,6 +92,8 @@
         "tests/test_minimax_h3_prompting.py",
         "tests/test_minimax_song_writer_prompt.py",
         "tests/test_model3d_external.py",
+        "tests/test_model3d_commands.py",
+        "tests/test_model3d_compose.py",
         "tests/test_model_cache_job_guards.py",
         "tests/test_model_selection_persistence.py",
         "tests/test_model_selector_errors.py",
@@ -186,7 +188,9 @@
         "tests/test_production_held.py",
         "tests/test_production_timing.py",
         "tests/test_production_shot_plan.py",
-        "tests/test_production_dry_run.py"
+        "tests/test_production_dry_run.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_song_switch.py"
       ]
     },
     {
@@ -280,8 +284,12 @@
         "tests/test_production_run.py",
         "tests/test_production_review_checks.py",
         "tests/test_production_scene_retry.py",
+      "tests/test_production_scene3d.py",
+      "tests/test_production_resource_gate.py",
         "tests/test_production_style_presets.py",
         "tests/test_production_takes.py",
+        "tests/test_production_package.py",
+        "tests/test_production_sheets.py",
         "tests/test_production_plan.py",
         "tests/test_production_usage.py",
         "tests/test_productions_router.py",
@@ -369,7 +377,9 @@
         "tests/test_montage_shots.py",
         "tests/test_template_library.py",
         "tests/test_qa_people.py",
-        "tests/test_clip_align.py"
+        "tests/test_clip_align.py",
+        "tests/test_production_cancel.py",
+        "tests/test_music_productions_router.py"
       ]
     }
   ],
@@ -577,7 +587,56 @@
         "tests/test_production_dry_run.py",
         "tests/test_production_shot_plan.py",
         "tests/test_production_plan.py",
-        "tests/test_production_usage.py"
+        "tests/test_production_package.py",
+        "tests/test_production_usage.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_song_switch.py",
+        "tests/test_production_cancel.py",
+        "tests/test_music_productions_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_edit.py",
+      "paths": [
+        "tests/test_production_shot_edit.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_song_switch.py",
+      "paths": [
+        "tests/test_production_song_switch.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_control.py",
+      "paths": [
+        "tests/test_production_cancel.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_commands.py",
+      "paths": [
+        "tests/test_production_cancel.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_song_switch.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/music_productions.py",
+      "paths": [
+        "tests/test_music_productions_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_sheets.py",
+      "paths": [
+        "tests/test_production_sheets.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_package.py",
+      "paths": [
+        "tests/test_production_package.py"
       ]
     },
     {

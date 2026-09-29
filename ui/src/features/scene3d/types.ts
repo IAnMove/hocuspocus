@@ -5,6 +5,8 @@ import { SPEECH_TEMPLATE_IDS } from './speech/templateIds'
 import type { Scene3DSpeech, Scene3DSoundtrack } from './speech/types'
 import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
 import { PIXEL_TEMPLATE_IDS } from './pixel/pixelTemplateIds'
+import { ATMOS_TEMPLATE_IDS } from './atmos/templateIds.ts'
+import type { AtmosSettings } from './atmos/params.ts'
 
 export type Vec3 = readonly [number, number, number]
 
@@ -122,6 +124,7 @@ export const SCENE3D_TEMPLATE_IDS = [
   'hangar-talk',
   'sea-talk',
   'voxel-talk',
+  ...ATMOS_TEMPLATE_IDS,
 ] as const
 
 export type Scene3DTemplateId = (typeof SCENE3D_TEMPLATE_IDS)[number]
@@ -152,7 +155,7 @@ export type Scene3DLoop = {
   speed: number
 }
 
-export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino' | 'pixel-lake' | 'pixel-peaks' | 'pixel-gallery' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza'
+export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino' | 'pixel-lake' | 'pixel-peaks' | 'pixel-gallery' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza' | 'atmos-clearing'
 
 export type Scene3DSourceRef = {
   workspaceId: string
@@ -222,6 +225,8 @@ export type Scene3DLight = {
 }
 
 export type Scene3DDocument = {
+  /** Whole-frame low-resolution, flat-shaded, close-fog look for authored models. */
+  renderLook?: 'n64'
   soundtrack?: Scene3DSoundtrack[]
   production?: { kind: 'song' | 'dialogue' | 'episode' | 'trailer'; title: string; sourceId?: string; workspace: string }
   version: 1
@@ -247,6 +252,7 @@ export type Scene3DDocument = {
   light: Scene3DLight
   environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road'; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number }
   dressing?: Scene3DDressing
+  atmos?: AtmosSettings
   workshopScreen?: 'code' | 'error' | 'success'
   slots: Scene3DSlot[]
 }

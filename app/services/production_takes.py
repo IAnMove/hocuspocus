@@ -58,8 +58,24 @@ def another_take(settled: bool, tried: int, budget: int, explicit: bool) -> bool
 
 
 def note_seconds(state: dict, windows: list[dict], elapsed: float) -> None:
-    """Add this round's generation seconds onto each shot that was in it."""
+    """Add this round's generation seconds onto the shots that were in it, split evenly (the GPU shoots one at a time)."""
+    if not windows:
+        return
     seconds = state.setdefault("clip_seconds", {})
+    part = float(elapsed) / len(windows)
     for window in windows:
         key = window["key"]
-        seconds[key] = round(float(seconds.get(key) or 0) + float(elapsed), 3)
+        seconds[key] = round(float(seconds.get(key) or 0) + part, 3)
+
+
+_RANK = {"ok": 2, "retake": 1, "unreliable": 0}
+
+
+def better_take(new: dict, kept: dict) -> bool:
+    """Should this take replace the kept one? A better verdict wins; between equal verdicts the higher lip-sync r does.
+    ``unreliable`` is not a measurement: it must not push out a take that scored ``ok`` or ``retake``.
+    A missing verdict is treated as unreliable. No r means 0."""
+    new_rank, kept_rank = _RANK.get(new.get("verdict"), 0), _RANK.get(kept.get("verdict"), 0)
+    if new_rank != kept_rank:
+        return new_rank > kept_rank
+    return (new.get("best_r") or 0) >= (kept.get("best_r") or 0)

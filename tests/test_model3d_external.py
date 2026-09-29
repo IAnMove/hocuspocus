@@ -114,6 +114,7 @@ def test_trellis_adapter_passes_seed_resolution_and_pbr(monkeypatch, tmp_path):
 @pytest.mark.parametrize("model_id", ["trellis2", "pixal3d"])
 def test_job_dispatches_isolated_worker_and_publishes_actual_engine(monkeypatch, tmp_path, model_id):
     commands = []
+    real_popen = service.subprocess.Popen
     class Process:
         pid = 123456789
         stdout = io.StringIO("")
@@ -122,6 +123,8 @@ def test_job_dispatches_isolated_worker_and_publishes_actual_engine(monkeypatch,
         def wait(self, **kwargs):
             return 0
     def spawn(command, **kwargs):
+        if "--output" not in command:
+            return real_popen(command, **kwargs)
         commands.append((command, kwargs))
         Path(command[command.index("--output") + 1]).write_bytes(b"glTF-fake-contract-output")
         return Process()

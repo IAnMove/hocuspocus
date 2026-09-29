@@ -11,6 +11,7 @@ const install = read("install.js")
 const update = read("update.js")
 const samInstall = read("sam_install.js")
 const rigInstall = read("rigging_install.js")
+const hunyuanInstall = read("hunyuan3d_install.js")
 const start = read("start.js")
 
 const checks = []
@@ -39,9 +40,9 @@ for (const [name, vendor] of Object.entries(vendors)) {
 for (const source of [install, update]) {
   check(source.includes('runtime_setup.js'), 'Install/Update must share setup')
 }
-for (const [engine, source] of [['sam', samInstall], ['rigging', rigInstall]]) {
+for (const [engine, source] of [['hunyuan3d', hunyuanInstall], ['sam', samInstall], ['rigging', rigInstall]]) {
   check(source.includes(`installEngines(['${engine}'])`), `${engine}: installer bypasses profile builder`)
-  check(setup.run.some(s => s.method === 'script.start' && s.params.uri === `${engine === 'sam' ? 'sam' : 'rigging'}_install.js`), `${engine}: optional update missing`)
+  check(setup.run.some(s => s.method === 'script.start' && s.params.uri === `${engine}_install.js`), `${engine}: optional update missing`)
 }
 check(start.includes('"event": "/(http:\\/\\/[0-9.:]+)/"'), "start: URL capture block changed")
 check(start.includes('url: "{{input.event[1]}}"'), "start: captured URL is not input.event[1]")
