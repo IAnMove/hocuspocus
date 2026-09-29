@@ -139,6 +139,21 @@ def test_native_riso_titles_graphic_footer_and_mono_lyrics(tmp_path):
     assert any(t["text"] == "LOVE THE MACHINE" and t["font"] == "mono" for t in texts)
 
 
+def test_clip_keeps_its_own_camera_and_title_can_use_shot_palette(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    shot = {"key": "hero", "kind": "h3", "title": {"template": "title-card", "fields": {"title": "OPEN"},
+            "style": {"box": {"kind": "plate", "color": "#122337", "opacity": 1, "padding": 0}},
+            "cues": {"title": {"color": "#f5d270"}}}}
+    clips = {"hero": {"url": "/api/v1/file/hero.mp4", "qa": {"verdict": "ok"}}}
+    ops = production.scene_ops(shot, 0, 4, 4, {"lines": []}, clips, {"title_style": {"font": "mono"}}, {})
+    assert ops[0]["preset"] == "camera-locked"
+    assert ops[1]["patch"]["animation"]["end"]["scale"] == 1.0
+    title = next(op for op in ops if op.get("op") == "update_text" and op.get("id") == "tt-title")
+    assert title["patch"]["font"] == "mono"
+    assert title["patch"]["color"] == "#f5d270"
+    assert title["patch"]["box"]["color"] == "#122337"
+
+
 def test_windows_segments_and_instrumental_fill():
     score = {"duration": 30.0, "beat": 0.5, "lines": [{"t0": 1.0, "t1": 3.0}, {"t0": 20.0, "t1": 22.0}]}
     windows = shot_windows(_spec(), score)

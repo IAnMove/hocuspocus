@@ -220,6 +220,9 @@ function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number
   let size = height * cue.size / 100
   ctx.save()
   ctx.font = fontCss(cue, size)
+  // Canvas includes letter spacing in measureText only after it is configured.
+  // The box and wrapping must measure with the same spacing used for glyphs.
+  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${cue.letterSpacing ?? 0}em`
   const maxWidth = cue.maxWidth != null ? width * cue.maxWidth / 100 : 0
   const lines = wrapKineticLines(ctx, shown, maxWidth)
   const textWidth = Math.max(1, ...lines.map(line => ctx.measureText(line).width || 1))
@@ -236,7 +239,6 @@ function paintV2Cue(ctx: CanvasRenderingContext2D, width: number, height: number
   ctx.translate(anchorOffset(cue.align ?? 'center', blockWidth), 0)
   ctx.globalAlpha = motion.opacity
   if (motion.blur > .2 && 'filter' in ctx) ctx.filter = `blur(${motion.blur}px)`
-  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${cue.letterSpacing ?? 0}em`
   paintBox(ctx, cue, blockWidth, blockHeight)
   if (motion.clip < .999) {
     ctx.beginPath()

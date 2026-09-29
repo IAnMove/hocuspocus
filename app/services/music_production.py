@@ -495,11 +495,11 @@ class Production:
         ops: list[dict] = []
         clip = clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None)
         if clip:
-            ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-push-in")})
+            ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-locked")})
             skip = round(max(0.0, a - shot.get("t0", a)) + ((clip.get("qa") or {}).get("suggested_sync_s") or 0), 3) if shot["kind"] == "h3" else 0
             # the animation duration is also the video span (sceneTimeline.getSceneLayerTiming): a camera preset's
             # shorter duration would freeze the clip mid-scene, so it always covers the scene (+ the skipped head)
-            anim: dict[str, Any] = {"end": {"x": 50, "y": 50, "scale": 1.08 if shot["kind"] == "h3" else 1.15, "rotation": 0},
+            anim: dict[str, Any] = {"end": {"x": 50, "y": 50, "scale": 1.0, "rotation": 0},
                                     "duration": round(dur + skip, 3)}
             if skip > 0:
                 anim["trimStart"] = skip
@@ -535,7 +535,8 @@ class Production:
                 "start": span[0], "duration": span[1]}]
         cues = TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080})
         for index, cue in enumerate(cues):
-            patch = dict(style.get("title_style") or {})
+            patch = {**(style.get("title_style") or {}), **(shot["title"].get("style") or {}),
+                     **((shot["title"].get("cues") or {}).get(cue["id"]) or {})}
             if shot.get("graphic") and index == 0:
                 patch["graphic"] = shot["graphic"]
             if patch:
