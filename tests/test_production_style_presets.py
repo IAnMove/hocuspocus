@@ -8,15 +8,14 @@ import pytest
 from services.music_production import ProductionError, validate_spec
 from services.production_style_presets import PRESET_IDS, expand_style_preset
 
-# Style object from omarchy-riso-20260929/love-the-machine.production.json (Love the Machine).
+# The Love the Machine look without its DHH-specific footer and lip-sync line (those live in that spec).
 RISO_ZINE = json.loads(r"""
 {
   "image": "Wide 16:9 cyberpunk paper zine, bold flat risograph spot inks in persimmon orange, electric pink, cobalt blue and near-black on warm paper, coarse halftone grain, tiny offset registration, torn paper collage, punchy editorial composition, hand-cut shapes, expressive caricature, zero anime, zero photorealism, no embedded words or letters.",
-  "video": "Cyberpunk paper zine motion, flat risograph ink, halftone texture, paper fibers and offset registration. Handmade cutout movement and snappy editorial rhythm. No realistic lip movement for DHH; only the fictional narrator sings.",
+  "video": "Cyberpunk paper zine motion, flat risograph ink, halftone texture, paper fibers and offset registration. Handmade cutout movement and snappy editorial rhythm.",
   "image_model": "qwen_image_21",
   "image_steps": 40,
   "lyric_template": "dymo",
-  "footer": "Fan-made parody, not affiliated with DHH, 37signals or Omarchy",
   "footer_style": {
     "color": "#F4EEE2",
     "box": {
@@ -61,7 +60,7 @@ def test_preset_ids_are_the_four_rendered_looks():
     assert PRESET_IDS == ("anime", "riso-zine", "omarchy-desktop", "neo-noir-realista")
 
 
-def test_riso_zine_expands_to_love_the_machine_style():
+def test_riso_zine_expands_to_the_generic_zine_look():
     spec = validate_spec(_spec({"preset": "riso-zine"}))
     assert spec["style"] == RISO_ZINE
     assert "preset" not in spec["style"]
@@ -100,3 +99,17 @@ def test_unknown_preset_is_a_stable_production_error():
 
 def test_style_without_a_preset_is_unchanged():
     assert validate_spec(_spec({}))["style"] == {}
+
+
+def test_no_preset_carries_a_person_or_project_name():
+    from services.production_style_presets import PRESETS
+    text = json.dumps(PRESETS).lower()
+    for name in ("dhh", "37signals", "musk", "openai"):
+        assert name not in text
+    assert all("footer" not in style or style["footer"] for style in PRESETS.values())
+
+
+def test_the_desktop_preset_puts_nobody_on_screen_and_the_others_do():
+    from services.production_style_presets import PRESETS
+    assert PRESETS["omarchy-desktop"]["singer"] is False and PRESETS["omarchy-desktop"]["content"] == "screen"
+    assert all("singer" not in PRESETS[name] for name in PRESETS if name != "omarchy-desktop")

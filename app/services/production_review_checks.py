@@ -57,7 +57,7 @@ def run_review(
 
 def empty_review() -> dict[str, Any]:
     return {
-        "review": {"verdict": "unreliable", "failures": [], "unknown": ["face_consistent"]},
+        "review": {"verdict": "unreliable", "failures": [], "unknown": ["appearance_changed"]},
         "retake_keys": [],
     }
 
@@ -118,7 +118,7 @@ def identity_failures(identity: str, jobs: list[dict]) -> list[dict[str, str]]:
     if identity != "yes" or not jobs:
         return []
     keys = [job["key"] for job in jobs if job.get("kind") == "h3"] or [jobs[0]["key"]]
-    return [_fail(key, "face_consistent") for key in keys]
+    return [_fail(key, "appearance_changed") for key in keys]
 
 
 def pack(failures: list[dict[str, str]], jobs: list[dict], identity: str, evaluated: bool) -> dict[str, Any]:
@@ -129,7 +129,7 @@ def pack(failures: list[dict[str, str]], jobs: list[dict], identity: str, evalua
         verdict = "ok"
     else:
         verdict = "unreliable"
-    unknown = [] if identity in {"yes", "no"} else ["face_consistent"]
+    unknown = [] if identity in {"yes", "no"} else ["appearance_changed"]
     return {"review": {"verdict": verdict, "failures": unique, "unknown": unknown}, "retake_keys": _retake_keys(unique, jobs)}
 
 

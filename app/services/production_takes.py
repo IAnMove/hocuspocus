@@ -58,8 +58,11 @@ def another_take(settled: bool, tried: int, budget: int, explicit: bool) -> bool
 
 
 def note_seconds(state: dict, windows: list[dict], elapsed: float) -> None:
-    """Add this round's generation seconds onto each shot that was in it."""
+    """Add this round's generation seconds onto the shots that were in it, split evenly (the GPU shoots one at a time)."""
+    if not windows:
+        return
     seconds = state.setdefault("clip_seconds", {})
+    part = float(elapsed) / len(windows)
     for window in windows:
         key = window["key"]
-        seconds[key] = round(float(seconds.get(key) or 0) + float(elapsed), 3)
+        seconds[key] = round(float(seconds.get(key) or 0) + part, 3)

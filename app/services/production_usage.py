@@ -6,6 +6,7 @@ each loopback reply it actually receives. ``h3_takes`` is the sum of ``clip_take
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Callable
 
 
@@ -24,11 +25,22 @@ def usage_summary(state: dict) -> dict[str, int]:
     }
 
 
-def attach_usage(mcp: Callable[[str, dict], dict], state: dict, save: Callable[[], None]) -> Callable[[str, dict], dict]:
+SAVE_EVERY_S = 5.0
+
+
+def attach_usage(mcp: Callable[[str, dict], dict], state: dict, save: Callable[[], None],
+                 clock: Callable[[], float] = time.monotonic) -> Callable[[str, dict], dict]:
+    """Count each reply. The counters ride along with the next save the run makes anyway; the polling loops
+    (a status call every few seconds per job) write the state file at most every SAVE_EVERY_S seconds."""
+    last = [float("-inf")]
+
     def call(tool: str, arguments: dict) -> dict:
         result = mcp(tool, arguments)
         note_call(state, result)
-        save()
+        moment = clock()
+        if moment - last[0] >= SAVE_EVERY_S:
+            last[0] = moment
+            save()
         return result
     return call
 

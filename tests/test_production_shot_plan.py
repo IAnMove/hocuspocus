@@ -62,11 +62,16 @@ def test_auto_shots_cover_twelve_lines_without_a_two_bar_gap():
     bar = 2.0
     assert all(gap <= 2 * bar + 1e-3 for gap in _start_gaps(windows, score["duration"]))
     assert any(shot["key"].startswith("fill") for shot in windows)
+    assert all(shot["kind"] == "clip" for shot in windows if shot["key"].startswith("fill"))
     intro, outro = shots[0], next(shot for shot in shots if shot["key"] == "outro")
     assert intro["title"]["template"] == "end-card" and outro["title"]["template"] == "end-card"
     verse = [shot for shot in shots if shot["key"][0] in "vs" and shot.get("line", 99) < 4]
-    assert [shot["kind"] for shot in verse] == ["h3", "screen", "h3", "screen"]
-    assert all(shot.get("sing") and shot["action"].strip() and shot["frame"] for shot in verse if shot["kind"] == "h3")
+    # no stills and no desktop look: the non-sung shots are short H3 clips of the protagonist, never a terminal
+    assert [shot["kind"] for shot in verse] == ["h3", "h3", "h3", "h3"]
+    assert [bool(shot.get("sing")) for shot in verse] == [True, False, True, False]
+    assert all(shot["action"].strip() and shot["frame"] and shot["cast"] == ["singer"] for shot in verse)
+    assert not any(shot["kind"] == "screen" for shot in shots)
+    assert planned["fill"] == [{"kind": "clip", "clip": "v0"}]
     assert [shot["line"] for shot in shots if shot.get("span") == 2] == [4, 6, 10]
     assert all(shot.get("cast") == ["singer"] for shot in shots if shot["kind"] == "h3")
 
@@ -105,3 +110,19 @@ def test_analyzed_lyric_times_keep_the_last_chorus_and_outro():
     assert "c2" in keys
     assert "outro" in keys
     assert all(b > a for _, a, b in segs)
+
+
+def test_stills_give_still_shots_and_a_theme_gives_the_desktop():
+    stills = validate_spec(_spec(stills={"art": "/api/v1/uploads/a.png"}))["shots"]
+    assert [shot["kind"] for shot in stills if shot["key"][0] == "s"] == ["still", "still", "still"]
+    desktop = validate_spec(_spec(style={"theme": "tokyo-night"}))
+    assert {shot["kind"] for shot in desktop["shots"] if shot["key"][0] == "s"} == {"screen"}
+    assert desktop["fill"][0]["kind"] == "screen"
+
+
+def test_a_look_with_no_singer_plans_no_sung_shots():
+    planned = validate_spec(_spec(style={"preset": "omarchy-desktop"}))
+    assert not any(shot.get("sing") for shot in planned["shots"])
+    assert {shot["kind"] for shot in planned["shots"]} == {"screen"}
+    chorus = [shot for shot in planned["shots"] if shot.get("span") == 2]
+    assert [shot["line"] for shot in chorus] == [4, 6, 10]

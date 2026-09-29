@@ -116,3 +116,26 @@ def test_status_without_a_run_is_zeros_and_a_normal_one_stays_small():
     assert status["timing"]["shots"][0] == {"key": "s0", "seconds": 80, "takes": 1}
     assert "frame.png" not in json.dumps(status["timing"]) and "prompt" not in json.dumps(status["timing"])
     assert timing_summary({"timing": {"song": -3, "shots": [{"key": "", "seconds": 1}]}})["song"] == 0
+
+
+def test_short_stages_add_up_instead_of_rounding_to_zero_each_time():
+    from services.production_timing import StageWatch
+    now = {"t": 0.0}
+    production = type("P", (), {"state": {}})()
+    watch = StageWatch(production, clock=lambda: now["t"])
+    for _ in range(3):
+        watch.start("song")
+        now["t"] += 0.4
+        watch.stop()
+    assert production.state["timing"]["song"] == 1.2
+    assert timing_summary(production.state)["song"] == 1
+
+
+def test_the_watch_reads_shot_rows_from_the_take_loop_and_wraps_nothing():
+    from services.production_timing import StageWatch
+    production = type("P", (), {"state": {"clip_seconds": {"a": 7.5, "b": 2.25}, "clip_takes": {"a": 2, "b": 1}}})()
+    production.clip_job = production.wait = "untouched"
+    watch = StageWatch(production, clock=lambda: 0.0)
+    watch.call("clips", lambda: None)
+    assert production.state["timing"]["shots"] == [{"key": "a", "seconds": 7.5, "takes": 2}, {"key": "b", "seconds": 2.25, "takes": 1}]
+    assert (production.clip_job, production.wait) == ("untouched", "untouched")
