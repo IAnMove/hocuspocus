@@ -56,3 +56,18 @@ export function subjectIsClear(trunks: readonly Trunk[]): boolean {
     return dx * dx + dz * dz >= CLEAR_RADIUS * CLEAR_RADIUS
   })
 }
+
+export type Area = { x0: number; x1: number; z0: number; z1: number }
+
+/** Deterministic ground spots for understory props. They never sit in the subject's lane or inside a trunk. */
+export function scatter(count: number, seed: number, salt: number, trunks: readonly Trunk[], area: Area, gap = 0.5): Array<[number, number]> {
+  const spots: Array<[number, number]> = []
+  for (let n = 0; spots.length < count && n < count * 24; n += 1) {
+    const x = area.x0 + (area.x1 - area.x0) * hash2(n, salt, seed)
+    const z = area.z0 + (area.z1 - area.z0) * hash2(n, salt + 1, seed)
+    if (blocked(x, z)) continue
+    if (trunks.some(trunk => (trunk.x - x) ** 2 + (trunk.z - z) ** 2 < (trunk.radius + gap) ** 2)) continue
+    spots.push([x, z])
+  }
+  return spots
+}

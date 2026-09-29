@@ -79,7 +79,7 @@ export function resolveAtmos(settings: AtmosSettings | undefined, quality: Atmos
     grass: look.grass,
     stone: look.stone,
     shaftSteps: high ? 24 : 8,
-    grassBlades: high ? 24000 : 4000,
+    grassBlades: high ? 60000 : 12000,
     moteCount: high ? 700 : 220,
     dof: high,
   }

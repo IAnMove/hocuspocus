@@ -22,9 +22,21 @@ User-facing settings, parsed by `parseAtmosSettings`:
 
 Passes, inserted after the scene render: shafts, depth of field, grade, then the existing bloom and output.
 
-Depth of field is constructed and then left disabled. `sync` sets `dof.enabled` to false. The circle-of-confusion blur was smearing the ground, and reading the depth attachment of the buffer being written turned the frame black. Shafts are a radial luminance blur of the bright pixels. The shadow-map march runs only when export quality has enabled a 2048 shadow map. Preview grass is 4000 blades. Export grass is 24000.
+Depth of field is constructed and then left disabled. `sync` sets `dof.enabled` to false. The circle-of-confusion blur was smearing the ground, and reading the depth attachment of the buffer being written turned the frame black. Shafts are a radial luminance blur of the bright pixels. The shadow-map march runs only when export quality has enabled a 2048 shadow map. Preview grass is 12000 blades. Export grass is 60000.
 
 Without WebGL2 the set degrades to a flat sky and ground color in `softwareRender.ts` and does not throw.
+
+### Look (stylised game forest)
+
+The clearing is built in one flat-shaded, low-poly style so the geometry reads as a game world rather than a scan.
+
+- Ground: a tileable painterly floor (`floorTexture` in `textures.ts`: moss, worn dirt, dark pockets and a few fallen leaves) over a 96 × 96 mesh with gentle mounds and low-frequency vertex tint, so the tile does not repeat visibly.
+- Trunks (`forest.ts`): nine-sided, tapered, with a flared root base, a slight lean, moss climbing from the ground and a streaked bark texture. Each trunk has its own tint.
+- Canopies: flat-shaded leaf clusters near each trunk top, all in one instanced draw call.
+- Understory: bushes, flower tufts, red mushrooms at trunk bases, mossy rocks and a fallen log. `scatter` in `layout.ts` places them and never uses the subject's lane or a trunk's footprint.
+- Grass: tapered blades in tufts of 18, denser toward the camera, each with its own tint. Preview 12,000 blades, export 60,000.
+
+Materials use a small emissive term as fake bounce light, because the sun is a single spot and the trunks otherwise fall to black.
 
 This clearing is a base. Shafts, dappled cobble shadows, and out-of-focus leaves at the frame edge still need another pass.
 
