@@ -194,6 +194,47 @@ def test_more_people_than_the_cast_retakes(tmp_path):
     assert result["retake_keys"] == ["hero"]
 
 
+def test_cast_count_is_how_many_people_the_shot_may_show(tmp_path):
+    """A group sheet's count is the allowed people, not the number of cast ids.
+
+    production.run writes Exactly N subjects into the start-frame prompt. The
+    review used len(shot.cast), so a correct trio was duplicate_people forever.
+    """
+    _touch(tmp_path, "hero.mp4", _video_scene())
+    def people(_image):
+        return [[0, 0, 40, 160], [80, 0, 120, 160], [160, 0, 200, 160]]
+
+    state = _state(cast=["band"])
+    state["spec"]["cast"] = [{"id": "band", "sheet_prompt": "three musicians", "count": 3}]
+    allowed = review_production(
+        state, str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
+    )
+    assert allowed["review"]["failures"] == []
+    assert allowed["review"]["verdict"] == "ok"
+    assert allowed["retake_keys"] == []
+
+    state["spec"]["cast"] = [{"id": "band", "sheet_prompt": "one singer", "count": 1}]
+    denied = review_production(
+        state, str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
+    )
+    assert denied["review"]["failures"] == [{"key": "hero", "question": "duplicate_people"}]
+    assert denied["retake_keys"] == ["hero"]
+
+    state = _state(cast=["singer", "band"])
+    state["spec"]["cast"] = [
+        {"id": "singer", "sheet_prompt": "lead", "count": 1},
+        {"id": "band", "sheet_prompt": "three musicians", "count": 3},
+    ]
+    def four(_image):
+        return [[0, 0, 30, 160], [40, 0, 70, 160], [80, 0, 110, 160], [120, 0, 150, 160]]
+
+    summed = review_production(
+        state, str(tmp_path), people=four, sample=_sample({"hero.mp4": _moving()}),
+    )
+    assert summed["review"]["failures"] == []
+    assert summed["retake_keys"] == []
+
+
 def test_identity_stays_unknown_unless_an_embedding_backend_is_injected(tmp_path):
     _touch(tmp_path, "hero.mp4")
     sample = _sample({"hero.mp4": _moving()})
