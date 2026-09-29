@@ -106,3 +106,9 @@ def test_the_brief_footer_and_cta_reach_the_spec():
     assert spec["style"]["footer"] == "Fan-made, not affiliated with anyone"
     outro = next(shot for shot in spec["shots"] if shot["key"] == "outro")
     assert outro["title"]["fields"]["cta"] == "Prueba el estudio"
+
+
+def test_the_brief_can_ask_for_a_quality_profile():
+    assert plan_brief(_brief())["quality"] == "standard"
+    assert plan_brief(_brief(calidad="max"))["quality"] == "max"
+    assert plan_brief(_brief(quality="nonsense"))["quality"] == "standard"

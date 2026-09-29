@@ -473,3 +473,50 @@ def test_the_frame_prompt_says_how_many_subjects_the_references_stand_for(tmp_pa
     assert production.frame_prompt(spec, {"frame": "solo", "cast": ["hero"]}) == "look solo Exactly 1 distinct subject in the frame, no duplicated characters."
     assert "Exactly 3 distinct subjects" in production.frame_prompt(spec, {"frame": "group", "cast": ["trio"]})
     assert production.frame_prompt(spec, {"frame": "no cast"}) == "look no cast"
+
+
+def test_a_quality_profile_fills_seeds_and_takes_but_never_overrides_the_spec():
+    base = {"title": "t", "song": {"lyrics": "a", "caption": "b", "duration": 20, "bpm": 100}, "style": {}, "shots": [{"key": "s", "kind": "screen"}]}
+    standard = validate_spec({**base, "quality": "standard"})
+    assert len(standard["song"]["seeds"]) == 3 and standard["max_takes"] == 2
+    maximal = validate_spec({**base, "quality": "max"})
+    assert len(maximal["song"]["seeds"]) == 4 and maximal["max_takes"] == 3
+    kept = validate_spec({**base, "quality": "max", "max_takes": 1, "song": {**base["song"], "seeds": [9]}})
+    assert kept["max_takes"] == 1 and kept["song"]["seeds"] == [9]
+    assert "seeds" not in validate_spec(base)["song"] and "max_takes" not in validate_spec(base)
+    with pytest.raises(ProductionError):
+        validate_spec({**base, "quality": "ultra"})
+
+
+def test_dymo_lyrics_default_to_dark_letters_on_cream_tape(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=lambda tool, arguments: edit(arguments))
+    lines = [{"t0": 0.5, "t1": 2.0, "text": "keyboard first"}]
+    shot = {"key": "s", "kind": "still", "still": "/examples/hero.png"}
+    for own, expected in (({}, "#F4EEE2"), ({"box": {"kind": "solid", "color": "#112233", "opacity": 1, "padding": 0.3}}, "#112233")):
+        ops = production.scene_ops(shot, 0.0, 4.0, 4.0, {"lines": lines}, {}, {"lyric_template": "dymo", "lyric_style": own}, {})
+        doc = production.edit({"version": 1, "name": "s", "width": 1920, "height": 1080, "fps": 24, "duration": 4, "layers": [], "texts": []}, ops)
+        assert next(cue for cue in doc["texts"] if cue["id"].startswith("ly"))["box"]["color"].upper() == expected
+
+
+def test_a_group_reference_is_composed_from_the_members_sheets(tmp_path, monkeypatch):
+    production, calls = _image_production(tmp_path, [("a.png", None), ("b.png", None)])
+    (tmp_path / "uploads").mkdir()
+    production.uploads = tmp_path / "uploads"
+    production.state["cast"] = {}
+    production.upload = lambda name: (str(tmp_path / name), "/api/v1/uploads/" + name)
+    composed = []
+    monkeypatch.setattr("services.music_production.compose_group", lambda paths, out: composed.append(([p.name for p in paths], out.name)) or True)
+    spec = {"style": {}, "cast": [{"id": "a", "sheet_prompt": "x"}, {"id": "b", "sheet_prompt": "y"}, {"id": "duo", "group": ["a", "b"]}]}
+    production.cast(spec)
+    assert len(calls) == 2                                          # the group has no sheet of its own
+    assert composed == [(["a.png", "b.png"], "p-group-duo.png")] and production.state["cast"]["duo"].endswith("p-group-duo.png")
+    assert "Exactly 2 distinct subjects" in production.frame_prompt(spec, {"frame": "x", "cast": ["duo"]})
+
+
+def test_the_frames_sheet_is_made_and_reported(tmp_path, monkeypatch):
+    production, _calls = _image_production(tmp_path, [("f.png", None)])
+    made = []
+    monkeypatch.setattr("services.music_production.make_frames_sheet", lambda root, frames, out: made.append((dict(frames), out)) or out)
+    production.frames({"style": {}, "cast": []}, [{"key": "a", "kind": "h3", "frame": "wide"}])
+    assert made == [({"a": "f.png"}, "p-frames.jpg")] and production.state["frames_sheet"] == "p-frames.jpg"
+    assert status_summary(production.state, "ws")["frames_sheet"] == "/api/v1/file/p-frames.jpg?workspace=ws"

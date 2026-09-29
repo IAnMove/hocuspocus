@@ -143,3 +143,13 @@ def test_single_take_few_seeds_and_a_reused_still_are_named():
     spec["song"]["seeds"] = [7]
     codes = {item["code"]: item for item in dry_run(spec)["warnings"]}
     assert codes["single_take"] and codes["few_song_seeds"]["seeds"] == 1 and codes["still_reused"]["shots"] == 3
+
+
+def test_the_bar_follows_the_quality_profile():
+    shots = [{"key": f"c{i}", "kind": "h3", "line": i, "frame": "f", "action": "a"} for i in range(4)] + [{"key": "s", "kind": "still", "line": 4, "span": 4, "still": "a.png"}]
+    spec = _quality_spec(shots=shots)                                     # 80 s, 4 clips: 3 a minute, half the runtime on a still
+    codes = {item["code"] for item in dry_run(spec)["warnings"]}
+    assert {"too_static", "few_clips"} <= codes
+    draft = {item["code"] for item in dry_run({**spec, "quality": "draft"})["warnings"]}
+    assert "too_static" not in draft and "few_clips" not in draft          # a draft may be mostly stills
+    assert "too_static" in {item["code"] for item in dry_run({**spec, "quality": "max"})["warnings"]}

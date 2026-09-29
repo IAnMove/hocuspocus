@@ -183,3 +183,31 @@ def test_a_shot_whose_jobs_keep_vanishing_counts_them_after_three_losses(tmp_pat
     assert len(calls) == 4                                       # three losses, then the fourth counts as the take
     assert production.state["clip_takes"]["a"] == 1
     assert production.state["clip_lost"]["a"] == 3
+
+
+def test_each_clip_is_recorded_when_it_lands_not_when_the_round_ends(tmp_path, monkeypatch):
+    measure, seen, _scores = _measure([0.5, 0.5])
+    production, calls, _files = _runner(tmp_path, monkeypatch, [], measure)
+    windows = [{**WINDOW, "key": "a", "i": 0}, {**WINDOW, "key": "b", "i": 1}]
+    production.state["frames"]["b"] = "f.png"
+    recorded_when_b_lands = {}
+
+    def wait(jobs, poll=6):
+        production.failures = {}
+        production.on_landed("a", "a.mp4")                    # the wait reports a first...
+        recorded_when_b_lands.update(dict(production.state["clips"]))     # ...and it is already saved before b exists
+        production.on_landed("b", "b.mp4")
+        return {"a": "a.mp4", "b": "b.mp4"}
+
+    production.wait = wait
+    production.clips({"max_takes": 1}, windows, pause=0)
+    assert list(recorded_when_b_lands) == ["a"] and set(production.state["clips"]) == {"a", "b"}
+    assert production.state["clip_takes"] == {"a": 1, "b": 1} and production.on_landed is None
+
+
+def test_an_unreliable_take_does_not_push_out_one_that_measured_ok():
+    from services.production_takes import better_take
+    ok, unreliable, retake = {"verdict": "ok", "best_r": 0.3}, {"verdict": "unreliable", "best_r": 0.9}, {"verdict": "retake", "best_r": 0.1}
+    assert not better_take(unreliable, ok) and better_take(ok, unreliable) and better_take(ok, retake)
+    assert better_take({"verdict": "ok", "best_r": 0.4}, ok) and not better_take({"verdict": "ok", "best_r": 0.2}, ok)
+    assert better_take({"verdict": "ok"}, {"verdict": "ok"})                       # non-sung shots: the newest ok take wins

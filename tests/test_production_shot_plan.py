@@ -80,8 +80,7 @@ def test_section_actions_replace_the_fixed_phrase():
     planned = plan_shots(_spec(section_actions={"verse": "taps the desk", "chorus": "lifts both hands"}))
     verse = next(shot for shot in planned["shots"] if shot.get("line") == 0)
     chorus = next(shot for shot in planned["shots"] if shot.get("span") == 2)
-    assert verse["action"] == "taps the desk"
-    assert chorus["action"] == "lifts both hands"
+    assert verse["action"].startswith("taps the desk") and chorus["action"].startswith("lifts both hands")
 
 
 def test_listed_shots_stay_the_same_object():
@@ -126,3 +125,12 @@ def test_a_look_with_no_singer_plans_no_sung_shots():
     assert {shot["kind"] for shot in planned["shots"]} == {"screen"}
     chorus = [shot for shot in planned["shots"] if shot.get("span") == 2]
     assert [shot["line"] for shot in chorus] == [4, 6, 10]
+
+
+def test_a_shot_with_one_character_says_nobody_else_appears():
+    from services.production_shot_plan import ALONE
+    planned = plan_shots(_spec())
+    sung = [shot for shot in planned["shots"] if shot.get("sing")]
+    assert sung and all(shot["action"].endswith(ALONE) for shot in sung)
+    two = plan_shots(_spec(cast=[{"id": "a", "sheet_prompt": "x"}, {"id": "b", "sheet_prompt": "y"}]))
+    assert not any(ALONE in shot["action"] for shot in two["shots"] if shot["kind"] == "h3")
