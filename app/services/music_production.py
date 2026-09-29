@@ -232,6 +232,18 @@ def failure_reason(status: dict) -> str:
     return " ".join(text.split())[:120]
 
 
+def note_held(state: dict, key: str, hold: bool = True) -> None:
+    """Record or clear a shot whose scene plays its start frame instead of a clip."""
+    if hold:
+        held = state.setdefault("held", [])
+        if key not in held:
+            held.append(key)
+        return
+    held = state.get("held")
+    if held and key in held:
+        held.remove(key)
+
+
 class Production:
     def __init__(self, workspace: str, production_id: str, *, workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str],
                  mcp: Callable[[str, dict], dict]):
@@ -497,6 +509,7 @@ class Production:
         ops: list[dict] = []
         clip = clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None)
         if clip:
+            note_held(self.state, shot["key"], False)
             ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-locked")})
             skip = round(max(0.0, a - shot.get("t0", a)) + ((clip.get("qa") or {}).get("suggested_sync_s") or 0), 3) if shot["kind"] == "h3" else 0
             # the animation duration is also the video span (sceneTimeline.getSceneLayerTiming): a camera preset's
@@ -515,6 +528,7 @@ class Production:
             source = stills.get(shot.get("still"), shot.get("still"))
             if not source and shot["kind"] == "h3" and shot["key"] in self.state.get("frames", {}):
                 source = self.upload(self.state["frames"][shot["key"]])[1]      # clip failed: hold its start frame
+                note_held(self.state, shot["key"])
             ops += [{"op": "add_layer", "id": "bg", "source": source, "type": "image", "preset": shot.get("camera", "camera-push-in")},
                     {"op": "update_layer", "id": "bg", "patch": {"fill": True, "focus": shot.get("focus", {"x": 50, "y": 50}), "animation": {
                         "start": {"x": 50, "y": 50, "scale": zoom[0], "rotation": 0}, "end": {"x": 50, "y": 50, "scale": zoom[1], "rotation": 0}}}}]
@@ -645,6 +659,7 @@ def status_summary(state: dict, workspace: str) -> dict[str, Any]:
             "song": (state.get("song") or {}).get("file"),
             "clips": {**{k: "failed" for k in state.get("clip_failures") or {}}, **{k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()}},
             "failures": state.get("clip_failures") or None,
+            "held": list(state.get("held", [])),
             "preview_frames": state.get("preview_frames") or None,
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
