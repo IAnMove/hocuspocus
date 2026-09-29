@@ -233,6 +233,7 @@
         "tests/test_image_generation_spec.py",
         "tests/test_krea2_features.py",
         "tests/test_live_stats.py",
+        "tests/test_lipsync_span.py",
         "tests/test_llm_activity_tracking.py",
         "tests/test_llm_resource_scheduling.py",
         "tests/test_llm_router.py",

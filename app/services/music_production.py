@@ -438,7 +438,7 @@ class Production:
             self.log(f"clip {key} take {take}: failed ({failed[key]})")
             return False
         failed.pop(key, None)
-        qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"]) if w.get("sing") and vocals else {"verdict": "ok"}
+        qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"], [w["t0"], w["t1"]]) if w.get("sing") and vocals else {"verdict": "ok"}
         drive = "vocals" if (take - 1) % 2 == 1 and w.get("sing") else "mix"
         self.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
         best = clips.get(key)

@@ -40,6 +40,8 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 
+Lip-sync is measured on the sung span.
+
 State is saved in `<workspace>/<production_id>.production.json`: a restart or a new
 `production.run` with the same id continues from the last finished step.
 The montage export in the table is internal. The agent does not call `montages.export` after the run.

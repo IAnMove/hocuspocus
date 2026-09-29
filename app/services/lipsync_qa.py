@@ -5,6 +5,8 @@ correlates it with the vocal envelope of the matching audio, searching ±8 frame
 It returns a verdict so an agent never has to watch the clip to decide a retake:
 ok (best_r >= 0.35 and |lag| <= 0.2 s), retake, or unreliable (the face is not
 detected well enough, e.g. an extreme close-up; no misleading number is reported).
+``span`` is [t0, t1] in seconds of the song; only that interval is scored. A sung
+span under 1.5 s is unreliable, not a retake.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ import numpy as np
 
 POSE = Path(__file__).resolve().parents[1] / "ckpts" / "pose"
 OPERATION = "qa.lipsync"
-MIN_R, MAX_LAG_S, MIN_FACE = 0.35, 0.2, 0.5
+MIN_R, MAX_LAG_S, MIN_FACE, MIN_SUNG_S = 0.35, 0.2, 0.5, 1.5
 LAGS = range(-8, 9)
 
 
@@ -92,7 +94,29 @@ class _Pose:
         return float(gap / height), float(conf[23:91].mean())
 
 
-def measure(clip: str, audio: str, offset: float = 0.0) -> dict[str, Any]:
+def _song_span(span: Any) -> tuple[float, float] | None:
+    if not isinstance(span, (list, tuple)) or len(span) != 2:
+        return None
+    return float(span[0]), float(span[1])
+
+
+def _frame_bounds(count: int, fps: float, offset: float, span: tuple[float, float] | None) -> tuple[int, int]:
+    """Frame slice of a song-time span inside a clip that starts at offset."""
+    if span is None:
+        return 0, count
+    start, end = span
+    i0 = int(np.floor((start - offset) * fps + 1e-4))
+    i1 = int(np.ceil((end - offset) * fps - 1e-4))
+    i0 = min(max(i0, 0), count)
+    return i0, min(max(i1, i0), count)
+
+
+def measure(clip: str, audio: str, offset: float = 0.0,
+            span: list[float] | tuple[float, float] | None = None) -> dict[str, Any]:
+    """Score mouth motion against the audio. ``span`` is [t0, t1] in seconds of the song."""
+    bounds = _song_span(span)
+    if bounds is not None and bounds[1] - bounds[0] < MIN_SUNG_S:
+        return {"verdict": "unreliable", "frames": 0, "reason": "sung_span_short"}
     import cv2
     import librosa
     pose, cap, values, box, index = _Pose(), cv2.VideoCapture(clip), [], None, 0
@@ -108,8 +132,12 @@ def measure(clip: str, audio: str, offset: float = 0.0) -> dict[str, Any]:
     if not values:
         return {"verdict": "unreliable", "frames": 0}
     data = np.array(values)
+    i0, i1 = _frame_bounds(len(data), fps, offset, bounds)
+    data = data[i0:i1]
+    if len(data) == 0:
+        return {"verdict": "unreliable", "frames": 0}
     mouth = np.convolve(data[:, 0], np.ones(3) / 3, "same")
-    wave, sr = librosa.load(audio, sr=16000, offset=max(0.0, offset), duration=len(mouth) / fps + 0.5)
+    wave, sr = librosa.load(audio, sr=16000, offset=max(0.0, offset + i0 / fps), duration=len(mouth) / fps + 0.5)
     envelope = np.convolve(librosa.feature.rms(y=wave, frame_length=1024, hop_length=int(sr / fps))[0], np.ones(3) / 3, "same")
     r0, r, lag = best_lag(mouth, envelope, fps)
     face = round(float(data[:, 1].mean()), 3)
@@ -124,7 +152,9 @@ def command_catalog() -> list[dict[str, Any]]:
         "description": ("Check lip-sync of a workspace video against the audio that drove it: DWPose mouth opening vs vocal "
                         "envelope, ±8 frames of lag. Returns verdict ok|retake|unreliable, best_r, best_lag_s and "
                         "suggested_sync_s (seconds to shift the clip). audio is a workspace file (the song or its "
-                        "isolated vocals); offset is where the clip starts inside it. CPU lane, no downloads."),
+                        "isolated vocals); offset is where the clip starts inside it. span is [t0, t1] in seconds of "
+                        "the song and scores only that interval; under 1.5 s the verdict is unreliable, not a retake. "
+                        "CPU lane, no downloads."),
         "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "input"], "properties": {
             "version": {"type": "integer", "const": 1},
             "input": {"type": "object", "additionalProperties": False, "required": ["workspace", "clip", "audio"], "properties": {
@@ -132,9 +162,21 @@ def command_catalog() -> list[dict[str, Any]]:
                 "clip": {"type": "string", "minLength": 1, "maxLength": 300},
                 "audio": {"type": "string", "minLength": 1, "maxLength": 300},
                 "offset": {"type": "number", "minimum": 0, "maximum": 3600},
+                "span": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"},
+                         "description": "Song seconds [t0, t1] to score. Omit to score the whole clip."},
             }},
         }},
     }]
+
+
+def _optional_span(data: dict) -> list[float] | None:
+    raw = data.get("span")
+    if not isinstance(raw, (list, tuple)) or len(raw) != 2:
+        return None
+    try:
+        return [float(raw[0]), float(raw[1])]
+    except (TypeError, ValueError):
+        return None
 
 
 def _inside(root: Path, name: str) -> Path:
@@ -160,7 +202,7 @@ def command_handlers(workspace_dir: Callable[[str], str]) -> dict[str, Callable[
         def run() -> dict[str, Any]:
             with resource_scheduler.coordinator.acquire(resource_scheduler.cpu_lane("audio-analysis"),
                                                         task_id=f"lipsync-{uuid.uuid4().hex}", description="Lip-sync check"):
-                return measure(str(clip), str(audio), float(data.get("offset") or 0))
+                return measure(str(clip), str(audio), float(data.get("offset") or 0), _optional_span(data))
         return {"version": 1, "status": "completed", "operation": OPERATION, "result": await run_in_threadpool(run)}
 
     return {OPERATION: handle}
