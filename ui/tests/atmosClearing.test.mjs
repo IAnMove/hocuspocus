@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { atmosEye } from '../src/features/scene3d/atmos/eye.ts'
 import { atmosFallbackLook } from '../src/features/scene3d/atmos/degrade.ts'
-import { clearingTrunks, subjectIsClear, CLEARING_SUBJECT } from '../src/features/scene3d/atmos/layout.ts'
+import { clearingTrunks, scatter, subjectIsClear, CLEARING_SUBJECT } from '../src/features/scene3d/atmos/layout.ts'
 import { atmosFingerprint, parseAtmosSettings, resolveAtmos } from '../src/features/scene3d/atmos/params.ts'
 import { windAt } from '../src/features/scene3d/atmos/wind.ts'
 import { buildClearing } from '../src/features/scene3d/atmos/clearing.ts'
@@ -61,4 +61,18 @@ test('clearing camera stays at eye height while the dolly moves', () => {
   assert.equal(frame.pixels[1], sky[1])
   assert.equal(frame.pixels[2], sky[2])
   assert.notEqual(sky[0], 18)
+})
+
+test('understory props stay out of the lane, the subject and every trunk', () => {
+  const resolved = resolveAtmos(parseAtmosSettings({}), 'low')
+  const trunks = clearingTrunks(resolved.seed)
+  const area = { x0: -10, x1: 10, z0: 3, z1: -15 }
+  const spots = scatter(40, resolved.seed, 71, trunks, area, 0.4)
+  assert.deepEqual(spots, scatter(40, resolved.seed, 71, trunks, area, 0.4))
+  assert.ok(spots.length >= 30)
+  for (const [x, z] of spots) {
+    assert.equal(z > -1.15 && z < 3.5 && x > -1.05 && x < 1.7, false)
+    assert.ok((x - CLEARING_SUBJECT[0]) ** 2 + (z - CLEARING_SUBJECT[2]) ** 2 >= 1.4 * 1.4)
+    for (const trunk of trunks) assert.ok((trunk.x - x) ** 2 + (trunk.z - z) ** 2 >= (trunk.radius + 0.4) ** 2)
+  }
 })

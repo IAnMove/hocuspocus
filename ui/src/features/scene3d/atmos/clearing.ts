@@ -9,8 +9,6 @@ import {
   Group,
   InstancedBufferAttribute,
   InstancedMesh,
-  IcosahedronGeometry,
-  Material,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -31,12 +29,11 @@ import type { Pass } from 'three/addons/postprocessing/Pass.js'
 import { hash2 } from './noise.ts'
 import { fbm2 } from './noise.ts'
 import { windAt } from './wind.ts'
-import { clearingTrunks, CLEARING_SUBJECT, type Trunk } from './layout.ts'
-import { barkTexture, cobbleJoint, cobbleTextures, leafCookie, leafSprite } from './textures.ts'
+import { clearingTrunks, CLEARING_SUBJECT } from './layout.ts'
+import { barkTexture, floorTexture, leafCookie, leafSprite } from './textures.ts'
+import { addCanopies, addTrunks, addUnderstory, type Kept } from './forest.ts'
 import { bindShaftLight, createDofPass, createGradePass, createShaftPass, projectSun } from './passes.ts'
 import type { AtmosQuality, AtmosSettings, ResolvedAtmos } from './params.ts'
-
-type Kept = { geometries: BufferGeometry[]; materials: Material[]; textures: Texture[]; lights: SpotLight[] }
 
 export type AtmosHandle = {
   sync: (seconds: number, camera: Camera, light: DirectionalLight, quality: AtmosQuality, focus: number, live?: AtmosSettings) => void
@@ -53,11 +50,14 @@ const GRASS = {
     uniform vec3 uCam;
     varying vec2 vUv;
     varying float vDist;
+    varying float vTint;
     varying vec3 vWorld;
     void main() {
       vUv = uv;
+      vTint = fract(aPhase * 3.71);
       vec3 transformed = position;
       float h = uv.y;
+      transformed.x *= 1.0 - h * 0.92;
       float sway = sin(uTime * 1.7 + aPhase) * uBend;
       transformed.x += sway * h * h;
       transformed.z += cos(uTime * 1.15 + aPhase) * uBend * 0.45 * h * h;
@@ -73,16 +73,18 @@ const GRASS = {
     uniform vec2 uCookie;
     varying vec2 vUv;
     varying float vDist;
+    varying float vTint;
     varying vec3 vWorld;
     float hash(vec2 p) {
       return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
     }
     void main() {
-      float blade = smoothstep(0.0, 0.15, vUv.x) * smoothstep(1.0, 0.85, vUv.x);
-      if (blade < 0.2) discard;
       float cell = hash(floor((vWorld.xz + uCookie) * 1.7));
       float dapple = smoothstep(0.38, 0.62, cell);
-      vec3 color = mix(uBase, uTip, vUv.y) * mix(0.42, 1.2, dapple);
+      vec3 color = mix(uBase, uTip, pow(vUv.y, 0.8));
+      color *= mix(0.78, 1.22, vTint);
+      color = mix(color, color * vec3(1.22, 1.08, 0.62), smoothstep(0.82, 1.0, vTint) * 0.65);
+      color *= mix(0.5, 1.15, dapple);
       color = mix(color, vec3(0.78, 0.86, 0.7), smoothstep(16.0, 34.0, vDist));
       gl_FragColor = vec4(color, 1.0);
     }
@@ -94,62 +96,22 @@ function keepTexture(kept: Kept, texture: Texture | null): Texture | null {
   return texture
 }
 
-function addTrunks(root: Group, trunks: readonly Trunk[], kept: Kept, seed: number) {
-  const bark = keepTexture(kept, barkTexture(seed))
-  const wood = new MeshStandardMaterial({ map: bark ?? null, color: bark ? 0xffffff : 0x6a5344, roughness: 0.9 })
-  const canopy = new MeshStandardMaterial({ color: 0x87b85a, roughness: 0.8, transparent: true, opacity: 0.92 })
-  kept.materials.push(wood, canopy)
-  const branchGeo = new CylinderGeometry(0.045, 0.07, 1.15, 5)
-  kept.geometries.push(branchGeo)
-  for (const trunk of trunks) {
-    const geo = new CylinderGeometry(trunk.radius * 0.72, trunk.radius, trunk.height, 7)
-    const mesh = new Mesh(geo, wood)
-    mesh.position.set(trunk.x, trunk.height / 2, trunk.z)
-    mesh.rotation.y = trunk.yaw
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    root.add(mesh)
-    kept.geometries.push(geo)
-    const crownGeo = new SphereGeometry(trunk.radius * (trunk.layer === 1 ? 2.4 : 3.2), 6, 5)
-    const crown = new Mesh(crownGeo, canopy)
-    crown.position.set(trunk.x, trunk.height * 1.08, trunk.z)
-    crown.scale.set(1.15, 0.28, 1.15)
-    crown.castShadow = true
-    root.add(crown)
-    kept.geometries.push(crownGeo)
-    if (trunk.layer === 1) {
-      addBranch(root, branchGeo, wood, trunk, 1)
-      addBranch(root, branchGeo, wood, trunk, -1)
-    }
-  }
-}
-
-function addBranch(root: Group, geo: CylinderGeometry, wood: MeshStandardMaterial, trunk: Trunk, side: number) {
-  const branch = new Mesh(geo, wood)
-  branch.position.set(trunk.x + side * 0.15, trunk.height * 0.58, trunk.z)
-  branch.rotation.set(0.35, trunk.yaw, side * 1.05)
-  branch.castShadow = true
-  root.add(branch)
-}
-
 function addGround(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new PlaneGeometry(48, 48, 40, 40)
+  const geo = new PlaneGeometry(48, 48, 96, 96)
   geo.rotateX(-Math.PI / 2)
   const pos = geo.attributes.position as BufferAttribute
+  const colors: number[] = []
   for (let i = 0; i < pos.count; i += 1) {
-    const lift = fbm2(pos.getX(i) * 0.12, pos.getZ(i) * 0.12, resolved.seed) * 0.09
-    pos.setY(i, lift)
+    const x = pos.getX(i)
+    const z = pos.getZ(i)
+    pos.setY(i, fbm2(x * 0.16, z * 0.16, resolved.seed) * 0.22 - 0.05)
+    const tint = 0.78 + fbm2(x * 0.07 + 9, z * 0.07, resolved.seed + 4) * 0.5
+    colors.push(tint, tint * 0.98, tint * 0.9)
   }
+  geo.setAttribute('color', new Float32BufferAttribute(colors, 3))
   geo.computeVertexNormals()
-  const maps = cobbleTextures(resolved.stone, resolved.seed)
-  keepTexture(kept, maps.albedo)
-  keepTexture(kept, maps.normal)
-  const mat = new MeshStandardMaterial({
-    map: maps.albedo ?? null,
-    normalMap: maps.normal ?? null,
-    color: maps.albedo ? 0xffffff : resolved.stone,
-    roughness: 0.92,
-  })
+  const albedo = keepTexture(kept, floorTexture(resolved.grass, resolved.stone, resolved.seed))
+  const mat = new MeshStandardMaterial({ map: albedo ?? null, vertexColors: true, color: albedo ? 0xffffff : resolved.stone, roughness: 0.95 })
   const mesh = new Mesh(geo, mat)
   mesh.name = 'atmos-ground'
   mesh.receiveShadow = true
@@ -158,14 +120,15 @@ function addGround(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   kept.materials.push(mat)
 }
 
+/** Blades grow in tufts of 18, denser near the camera, and step out of the subject's spot. */
 function seatBlade(i: number, seed: number): [number, number] {
-  let x = (hash2(i, 1, seed) - 0.5) * 22
-  let z = 4.2 - hash2(i, 2, seed) * 18
-  for (let n = 0; n < 4; n += 1) {
-    if (cobbleJoint(x, z, seed) < 0.28) break
-    x += (hash2(i, 11 + n, seed) - 0.5) * 0.7
-    z += (hash2(i, 17 + n, seed) - 0.5) * 0.7
-  }
+  const tuft = Math.floor(i / 18)
+  const cx = (hash2(tuft, 1, seed) - 0.5) * 24
+  const cz = 4.6 - hash2(tuft, 2, seed) ** 1.5 * 20
+  const angle = hash2(i, 3, seed) * Math.PI * 2
+  const radius = Math.sqrt(hash2(i, 4, seed)) * 0.42
+  const x = cx + Math.cos(angle) * radius
+  let z = cz + Math.sin(angle) * radius
   const dx = x - CLEARING_SUBJECT[0]
   const dz = z - CLEARING_SUBJECT[2]
   if (dx * dx + dz * dz < 0.85 * 0.85) z -= 2.4
@@ -173,15 +136,16 @@ function seatBlade(i: number, seed: number): [number, number] {
 }
 
 function addGrass(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new PlaneGeometry(0.016, 0.2, 1, 3)
+  const geo = new PlaneGeometry(0.05, 0.3, 1, 3)
+  geo.translate(0, 0.15, 0)
   const phases = new Float32Array(resolved.grassBlades)
   const mat = new ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
       uBend: { value: 0.25 + resolved.wind * 0.45 },
       uCam: { value: new Vector3() },
-      uBase: { value: new Color(resolved.grass).multiplyScalar(0.45) },
-      uTip: { value: new Color(resolved.grass) },
+      uBase: { value: new Color(resolved.grass).multiplyScalar(0.36) },
+      uTip: { value: new Color(resolved.grass).multiplyScalar(0.82) },
       uCookie: { value: new Vector2() },
     },
     vertexShader: GRASS.vertex,
@@ -196,10 +160,10 @@ function addGrass(root: Group, resolved: ResolvedAtmos, kept: Kept) {
     const [x, z] = seatBlade(i, resolved.seed)
     dummy.position.set(x, 0, z)
     dummy.rotation.y = hash2(i, 3, resolved.seed) * Math.PI * 2
-    dummy.scale.setScalar(0.55 + hash2(i, 4, resolved.seed) * 0.7)
+    dummy.scale.setScalar(0.7 + hash2(i, 5, resolved.seed) * 0.9)
     dummy.updateMatrix()
     mesh.setMatrixAt(i, dummy.matrix)
-    phases[i] = hash2(i, 5, resolved.seed) * Math.PI * 2
+    phases[i] = hash2(i, 6, resolved.seed) * Math.PI * 2
   }
   mesh.geometry.setAttribute('aPhase', new InstancedBufferAttribute(phases, 1))
   mesh.instanceMatrix.needsUpdate = true
@@ -315,16 +279,6 @@ function addFallingLeaf(root: Group, kept: Kept) {
 }
 
 function addProps(root: Group, kept: Kept, figure: boolean) {
-  const rockGeo = new IcosahedronGeometry(0.42, 1)
-  const rockMat = new MeshStandardMaterial({ color: 0x9aa392, roughness: 0.95 })
-  const rock = new Mesh(rockGeo, rockMat)
-  rock.position.set(2.15, 0.2, 1.05)
-  rock.scale.set(1.4, 0.7, 1.1)
-  rock.castShadow = true
-  rock.receiveShadow = true
-  root.add(rock)
-  kept.geometries.push(rockGeo)
-  kept.materials.push(rockMat)
   addLitter(root, kept)
   addFallingLeaf(root, kept)
   if (!figure) return
@@ -364,7 +318,11 @@ export function buildClearing(resolved: ResolvedAtmos, webgl2: boolean): { root:
   const root = new Group()
   root.name = 'atmos-clearing'
   addGround(root, resolved, kept)
-  addTrunks(root, clearingTrunks(resolved.seed), kept, resolved.seed)
+  const trunks = clearingTrunks(resolved.seed)
+  const bark = keepTexture(kept, barkTexture(resolved.seed))
+  addTrunks(root, trunks, bark, resolved.seed, kept)
+  addCanopies(root, trunks, resolved, kept)
+  addUnderstory(root, trunks, resolved, bark, kept)
   const grass = addGrass(root, resolved, kept)
   const motes = addMotes(root, resolved, kept)
   const sky = addSky(root, resolved, kept)

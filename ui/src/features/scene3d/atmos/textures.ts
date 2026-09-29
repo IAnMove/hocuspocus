@@ -1,5 +1,5 @@
-import { CanvasTexture, NoColorSpace, RepeatWrapping, SRGBColorSpace, type Texture } from 'three'
-import { hash2 } from './noise.ts'
+import { CanvasTexture, RepeatWrapping, SRGBColorSpace, type Texture } from 'three'
+import { hash2, tileNoise } from './noise.ts'
 
 type Paint = (ctx: CanvasRenderingContext2D, size: number) => void
 
@@ -40,73 +40,77 @@ function nearest(px: number, py: number, cells: number, seed: number): { d1: num
   return { d1, d2, id }
 }
 
-const COBBLE_REPEAT = 16
+const FLOOR_SIZE = 512
 
-/** Same voronoi as the albedo, in world metres. Low values are the joints. */
-export function cobbleJoint(x: number, z: number, seed: number): number {
-  const span = COBBLE_REPEAT * 256
-  const px = ((x + 24) / 48) * span
-  const py = ((-z + 24) / 48) * span
-  const cell = nearest(px, py, 28, seed)
-  return Math.min(1, Math.max(0, (cell.d2 - cell.d1) / 5))
+function channels(hex: string): [number, number, number] {
+  const rgb = Number.parseInt(hex.slice(1), 16)
+  return [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255]
 }
 
-export function cobbleTextures(stone: string, seed: number): { albedo: Texture | null; normal: Texture | null } {
-  const albedo = canvasTexture(256, (ctx, size) => {
+function smooth(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+/** Painterly forest floor: mossy grass with worn dirt, dark pockets and fallen leaves. Tiles without a seam. */
+export function floorTexture(grass: string, dirt: string, seed: number): Texture | null {
+  const moss = channels(grass)
+  const soil = channels(dirt).map((v, i) => v * 0.42 + [64, 44, 26][i] * 0.58)
+  const leaf = [214, 150, 58]
+  const texture = canvasTexture(FLOOR_SIZE, (ctx, size) => {
     const img = ctx.createImageData(size, size)
-    const rgb = Number.parseInt(stone.slice(1), 16)
     for (let y = 0; y < size; y += 1) {
       for (let x = 0; x < size; x += 1) {
-        const cell = nearest(x, y, 28, seed)
-        const joint = Math.min(1, Math.max(0, (cell.d2 - cell.d1) / 5))
-        const moss = joint < 0.35 ? (0.35 - joint) * 2 : 0
-        const tint = 0.82 + cell.id * 0.28
+        const u = x / size
+        const v = y / size
+        const patch = tileNoise(u * 4, v * 4, 4, seed)
+        const mid = tileNoise(u * 16, v * 16, 16, seed + 1)
+        const fine = tileNoise(u * 128, v * 128, 128, seed + 2)
+        const worn = smooth(0.56, 0.74, patch)
+        const shade = 0.78 + mid * 0.42 + (fine - 0.5) * 0.16
+        const leafy = fine > 0.86 && mid > 0.4 ? 0.8 : 0
+        const pocket = fine < 0.12 ? 0.8 : 1
         const i = (y * size + x) * 4
-        img.data[i] = Math.min(255, ((rgb >> 16) & 255) * tint * (0.55 + joint * 0.45))
-        img.data[i + 1] = Math.min(255, ((rgb >> 8) & 255) * tint * (0.55 + joint * 0.45) + moss * 70)
-        img.data[i + 2] = Math.min(255, (rgb & 255) * tint * (0.5 + joint * 0.4))
+        for (let c = 0; c < 3; c += 1) {
+          const base = moss[c] * shade * (1 - worn) + soil[c] * (0.78 + mid * 0.4) * worn
+          img.data[i + c] = Math.min(255, (base * (1 - leafy) + leaf[c] * (0.7 + mid * 0.4) * leafy) * pocket)
+        }
         img.data[i + 3] = 255
       }
     }
     ctx.putImageData(img, 0, 0)
   }, true)
-  const normal = canvasTexture(128, (ctx, size) => {
-    const img = ctx.createImageData(size, size)
-    for (let y = 0; y < size; y += 1) {
-      for (let x = 0; x < size; x += 1) {
-        const scale = 256 / size
-        const here = nearest(x * scale, y * scale, 28, seed)
-        const right = nearest((x + 1) * scale, y * scale, 28, seed)
-        const up = nearest(x * scale, (y + 1) * scale, 28, seed)
-        const dx = (right.d1 - here.d1) * 8
-        const dy = (up.d1 - here.d1) * 8
-        const i = (y * size + x) * 4
-        img.data[i] = Math.max(0, Math.min(255, 128 - dx * 40))
-        img.data[i + 1] = Math.max(0, Math.min(255, 128 - dy * 40))
-        img.data[i + 2] = 200
-        img.data[i + 3] = 255
-      }
-    }
-    ctx.putImageData(img, 0, 0)
-  }, true)
-  if (albedo) albedo.repeat.set(COBBLE_REPEAT, COBBLE_REPEAT)
-  if (normal) {
-    normal.colorSpace = NoColorSpace
-    normal.repeat.set(COBBLE_REPEAT, COBBLE_REPEAT)
-  }
-  return { albedo, normal }
+  if (texture) texture.repeat.set(8, 8)
+  return texture
 }
 
+/** Vertical bark ridges with dark crevices, lichen flecks and a few knots. Tiles around the trunk. */
 export function barkTexture(seed: number): Texture | null {
-  return canvasTexture(128, (ctx, size) => {
-    ctx.fillStyle = '#6a5344'
+  const texture = canvasTexture(256, (ctx, size) => {
+    ctx.fillStyle = '#7a5d44'
     ctx.fillRect(0, 0, size, size)
-    for (let i = 0; i < 80; i += 1) {
-      const x = hash2(i, 1, seed) * size
-      ctx.fillStyle = `rgba(40,28,20,${0.25 + hash2(i, 2, seed) * 0.4})`
-      ctx.fillRect(x, 0, 1 + (i % 3), size)
+    const stroke = (x: number, y: number, w: number, h: number, color: string) => {
+      ctx.fillStyle = color
+      for (const dx of [-size, 0, size]) for (const dy of [-size, 0, size]) ctx.fillRect(x + dx, y + dy, w, h)
     }
-  })
+    for (let i = 0; i < 340; i += 1) {
+      const x = hash2(i, 1, seed) * size
+      const y = hash2(i, 2, seed) * size
+      const w = 1 + Math.floor(hash2(i, 3, seed) * 4)
+      const h = 30 + hash2(i, 4, seed) * 130
+      const dark = hash2(i, 5, seed) < 0.55
+      stroke(x, y, w, h, dark ? `rgba(24,15,9,${0.5 + hash2(i, 6, seed) * 0.4})` : `rgba(190,150,108,${0.28 + hash2(i, 6, seed) * 0.3})`)
+    }
+    for (let i = 0; i < 46; i += 1) stroke(hash2(i, 7, seed) * size, hash2(i, 8, seed) * size, 3, 3, 'rgba(150,170,110,0.35)')
+    for (let i = 0; i < 4; i += 1) {
+      ctx.fillStyle = 'rgba(24,16,10,0.55)'
+      ctx.beginPath()
+      ctx.ellipse(hash2(i, 9, seed) * size, hash2(i, 10, seed) * size, 9, 16, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }, true)
+  if (texture) texture.repeat.set(3, 1)
+  return texture
 }
 
 /** White where the sun passes, dark where a leaf blocks it. */

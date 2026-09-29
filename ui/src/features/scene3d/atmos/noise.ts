@@ -33,3 +33,17 @@ export function fbm2(x: number, z: number, seed: number): number {
   const b = valueNoise(x * 2.03 + 4.2, z * 2.03, seed + 11)
   return a * 0.65 + b * 0.35
 }
+
+/** Value noise that repeats every `period` cells, so a texture built from it tiles without a seam. */
+export function tileNoise(x: number, y: number, period: number, seed: number): number {
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const sx = fade(x - x0)
+  const sy = fade(y - y0)
+  const wrap = (v: number) => ((v % period) + period) % period
+  const a = hash2(wrap(x0), wrap(y0), seed)
+  const b = hash2(wrap(x0 + 1), wrap(y0), seed)
+  const c = hash2(wrap(x0), wrap(y0 + 1), seed)
+  const d = hash2(wrap(x0 + 1), wrap(y0 + 1), seed)
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy
+}
