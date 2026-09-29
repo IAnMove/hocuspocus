@@ -34,7 +34,7 @@ export function paintTilingDesktop(ctx: CanvasRenderingContext2D, width: number,
   const unit = height / 1080
   const gap = Math.round(10 * unit)
   const barH = Math.round(38 * unit)
-  const font = Math.max(9, Math.round(22 * unit))
+  const font = Math.max(9, Math.round(26 * unit))
   const stagger = beats.stagger ?? 0.5
   const typing = beats.type ?? 3
   ctx.save()
@@ -206,7 +206,7 @@ function paintBtop(ctx: CanvasRenderingContext2D, theme: Theme, box: Rect, typed
     const y = rowsTop + line * (index + 0.5)
     if (typed < 0.3 + index * 0.1) return
     text(ctx, name.padEnd(12, ' '), box.x, y, theme.fg, font)
-    text(ctx, (cpu + Math.sin(seconds * 3 + index)).toFixed(1).padStart(5, ' ') + '%', box.x + font * 8, y, theme.cyan, font)
+    text(ctx, Math.max(0.1, cpu + Math.sin(seconds * 3 + index) * 0.3).toFixed(1).padStart(5, ' ') + '%', box.x + font * 8, y, theme.cyan, font)
   })
 }
 
