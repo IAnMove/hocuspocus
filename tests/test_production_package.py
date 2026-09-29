@@ -119,10 +119,7 @@ def test_one_failing_shot_does_not_stop_the_package(tmp_path):
     assert any(line.startswith("package a:") for line in production.state["log"])
 
 
-def test_repackage_gives_an_old_production_scene_documents_and_montage_origins(tmp_path):
-    calls: list = []
-    production = _production(tmp_path, calls)
-    production.state.update(status="completed", final="v.mp4", montage_file="song.montage.json", error="URLError: an old failure")
+def _repackage_mcp(production, calls):
     real = production.mcp
 
     def mcp(tool, arguments):
@@ -135,12 +132,55 @@ def test_repackage_gives_an_old_production_scene_documents_and_montage_origins(t
         return real(tool, arguments)
 
     production.mcp = mcp
+    return production
+
+
+def test_repackage_gives_an_old_production_scene_documents_and_montage_origins(tmp_path):
+    calls: list = []
+    production = _repackage_mcp(_production(tmp_path, calls), calls)
+    production.state.update(status="completed", final="v.mp4", montage_file="song.montage.json", error="URLError: an old failure")
     production.repackage({**SPEC, "shots": [{"key": "a", "kind": "h3", "line": 0, "frame": "wide", "action": "moves"}]})
     save = next(arguments for tool, arguments in calls if tool == "montages.save")
     clip = save["input"]["montage"]["clips"][0]
     assert save["input"]["expected_revision"] == 3 and clip["origin"]["shotId"] == "a" and clip["origin"]["scene"].startswith("p-a-")
     assert production.state["status"] == "completed" and production.state["error"] is None
     assert not any(tool in ("scenes.video2d.export", "generate", "montages.export") for tool, _ in calls)      # no GPU, no render
+
+
+def test_repackage_does_not_complete_a_failed_retake_from_a_leftover_final(tmp_path):
+    """production.run {package:true} is allowed on a failed run. A leftover
+    final.mp4 from the previous completed take must not mark that retake
+    completed or clear the scene-export error."""
+    calls: list = []
+    production = _repackage_mcp(_production(tmp_path, calls), calls)
+    (tmp_path / "old-lose.mp4").write_bytes(b"lose")
+    production.state.update(status="failed", final="old-final.mp4", montage_file="song.montage.json",
+                            error="scene_export_failed: a", discarded=["old-lose.mp4"])
+    production.repackage({**SPEC, "shots": [{"key": "a", "kind": "h3", "line": 0, "frame": "wide", "action": "moves"}]})
+    assert production.state["status"] == "failed"
+    assert production.state["error"] == "scene_export_failed: a"
+    assert production.state.get("final") == "old-final.mp4"
+    assert (tmp_path / "old-lose.mp4").exists()
+    assert (tmp_path / "p.shots.json").exists()
+
+
+def test_repackage_never_writes_running_so_auto_resume_cannot_rerun_the_gpu(tmp_path):
+    """A crash mid-package used to leave status=running. auto_resume would then
+    start production.run and regenerate a finished video."""
+    calls: list = []
+    production = _repackage_mcp(_production(tmp_path, calls), calls)
+    production.state.update(status="completed", final="v.mp4", montage_file="song.montage.json")
+    seen: list = []
+    real_save = production.save
+
+    def save() -> None:
+        seen.append(production.state.get("status"))
+        real_save()
+
+    production.save = save
+    production.repackage({**SPEC, "shots": [{"key": "a", "kind": "h3", "line": 0, "frame": "wide", "action": "moves"}]})
+    assert "running" not in seen
+    assert production.state["status"] == "completed"
 
 
 def test_the_run_handler_packages_only_a_finished_production(tmp_path, monkeypatch):

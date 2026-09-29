@@ -608,11 +608,28 @@ class Production:
                                  "warnings": sum(len(item.get("warnings") or []) for item in saved.values())}
         self.log(f"package: {len(saved)} scene documents, manifest {manifest}")
 
+    def _finish_package(self, previous: str | None, previous_error: object, package_error: str | None) -> None:
+        """Restore the finished status. A leftover final is not success, and this must never look running:
+        auto-resume would start a full GPU production.run."""
+        if package_error:
+            self.state["error"] = package_error
+            self.state["status"] = previous if previous in ("completed", "failed") else "failed"
+        elif previous == "failed":
+            self.state["status"] = "failed"
+            self.state["error"] = previous_error
+        elif self.state.get("final"):
+            self.state.update(status="completed", error=None)
+        else:
+            self.state["status"] = "failed"
+            if previous_error:
+                self.state["error"] = previous_error
+        self.state["finished"] = time.time()
+        self.save()
+
     def repackage(self, spec: dict) -> None:
         """Package a production that is already finished (no GPU, no export): scene documents, manifest and the
         montage clips' origins. This is how an older production becomes editable."""
-        self.state.update(status="running", error=None)
-        self.save()
+        previous, previous_error = self.state.get("status"), self.state.get("error")
         try:
             windows = shot_windows(spec, self.score())
             self.package(spec, windows)
@@ -627,10 +644,9 @@ class Production:
                     if "result" not in saved:
                         raise ProductionError("montage_failed", json.dumps(saved)[:200])
         except Exception as error:
-            self.state["error"] = f"{type(error).__name__}: {error}"[:300]
-        self.state["status"] = "completed" if self.state.get("final") else "failed"
-        self.state["finished"] = time.time()
-        self.save()
+            self._finish_package(previous, previous_error, f"{type(error).__name__}: {error}"[:300])
+            return
+        self._finish_package(previous, previous_error, None)
 
     def edit(self, doc: dict, ops: list[dict]) -> dict:
         # scenes.video2d.edit admits 32 ops; a long still with timed lyrics exceeds that in one shot.
