@@ -829,7 +829,11 @@ class Production:
             if status.get("status") in ("completed", "failed"):
                 break
             time.sleep(4)
-        self.state["final"] = status.get("filename")
+        # start_export pre-fills filename when the job is created. A failed
+        # render still carries that planned name; only a completed export is a video.
+        if not isinstance(status, dict) or status.get("status") != "completed" or not status.get("filename"):
+            raise ProductionError("montage_failed", failure_reason(status) if isinstance(status, dict) else "export job lost")
+        self.state["final"] = status["filename"]
         if self.state["final"]:
             import subprocess
             sheet = f"{self.id}-contact.jpg"

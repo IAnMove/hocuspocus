@@ -166,6 +166,51 @@ def test_completed_run_clears_error(tmp_path):
     assert status_summary(production.state, "ws")["error"] is None
 
 
+def test_failed_montage_export_does_not_complete_from_a_planned_filename(tmp_path):
+    """core_editor.start_export writes filename when the job is created. A failed
+    FFmpeg render still returns that name; it must not mark the run completed
+    or let release_completed delete discarded takes."""
+    (tmp_path / "lose.mp4").write_bytes(b"lose")
+    replies = {
+        "montages.save": {"result": {"file": "p.montage.json"}},
+        "montages.export": {"result": {"job": {"job_id": "export-1"}}},
+        "montages.export.status": {"result": {"job": {
+            "status": "failed", "filename": "2026-09-29_song.mp4", "error": "ffmpeg exit 1",
+        }}},
+    }
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, _arguments: replies[tool])
+    production.state.update(song={"file": "s.wav"}, scenes={"s0": {"file": "s0.mp4", "dur": 4}},
+                            segments=[["s0", 0, 4]], discarded=["lose.mp4"])
+    production.score = lambda: {"duration": 4, "lines": [], "beat": 0.5}
+    for name in ("song", "analyze", "cast", "frames", "clips", "scenes"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.run(_spec())
+    assert production.state["status"] == "failed"
+    assert "ffmpeg exit 1" in (production.state.get("error") or "")
+    assert production.state.get("final") != "2026-09-29_song.mp4"
+    assert (tmp_path / "lose.mp4").exists()
+
+
+def test_completed_montage_export_keeps_the_filename(tmp_path):
+    replies = {
+        "montages.save": {"result": {"file": "p.montage.json"}},
+        "montages.export": {"result": {"job": {"job_id": "export-1"}}},
+        "montages.export.status": {"result": {"job": {"status": "completed", "filename": "song.mp4"}}},
+    }
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, _arguments: replies[tool])
+    production.state.update(song={"file": "s.wav"}, scenes={"s0": {"file": "s0.mp4", "dur": 4}},
+                            segments=[["s0", 0, 4]])
+    production.score = lambda: {"duration": 4, "lines": [], "beat": 0.5}
+    for name in ("song", "analyze", "cast", "frames", "clips", "scenes"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.run(_spec())
+    assert production.state["status"] == "completed"
+    assert production.state["final"] == "song.mp4"
+    assert production.state["error"] is None
+
+
 def test_a_run_without_a_video_keeps_the_previous_error(tmp_path):
     production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=lambda *_: {})
     production.state = {"error": "URLError: <urlopen error [Errno 111] Connection refused>"}
