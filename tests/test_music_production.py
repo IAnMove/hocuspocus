@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from services import lipsync_qa, song_analysis as audio_analysis
-from services.music_production import (Production, ProductionError, contact_sheet_filter, failure_reason, h3_frames_for,
+from services.music_production import (OMARCHY_THEMES, Production, ProductionError, contact_sheet_filter, failure_reason, h3_frames_for,
                                        lyric_span, pick_song, scene_fingerprint, segments, shot_windows, status_summary,
                                        title_span, validate_spec)
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS, Video2dEditError, edit
@@ -305,3 +305,28 @@ def test_contact_sheet_covers_a_long_song():
     rate = float(frame_filter.split(",", 1)[0].split("=", 1)[1])
     assert "tile=6x4" in frame_filter
     assert 23 / rate > 70  # the last cell reaches the ending of a 76-second video
+
+
+def test_a_screen_shot_paints_the_desktop_and_the_theme_styles_the_lyrics(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: edit(arguments))
+    style = {"theme": "gruvbox", "lyric_template": "ransom"}
+    shot = {"key": "desk", "kind": "screen", "desktop": {"layout": "quad", "workspace": 2, "switch": "left"}}
+    lines = [{"t0": 0.5, "t1": 2.0, "text": "keyboard first"}]
+    ops = production.scene_ops(shot, 0.0, 4.0, 4.0, {"lines": lines}, {}, style, {})
+    doc = {"version": 1, "name": "desk", "width": 1920, "height": 1080, "fps": 24, "duration": 4, "layers": [], "texts": []}
+    built = production.edit(doc, ops)
+    assert built["layers"] == []
+    desktop = next(cue for cue in built["texts"] if cue["id"].startswith("desk"))
+    assert desktop["graphic"] == {"id": "tiling", "params": {"theme": "gruvbox", "layout": "quad", "apps": "mixed", "focus": 0, "workspace": 2, "switch": "left"}}
+    words = [cue for cue in built["texts"] if cue["id"].startswith("ly")]
+    assert [cue["text"] for cue in words] == ["KEYBOARD", "FIRST"]
+    assert all(cue["font"] == "mono" and cue["color"] == OMARCHY_THEMES["gruvbox"]["fg"] for cue in words)
+
+
+def test_desktop_rejects_unknown_theme_or_layout():
+    doc = {"version": 1, "name": "d", "width": 1920, "height": 1080, "fps": 24, "duration": 4, "layers": [], "texts": []}
+    for fields in ({"theme": "vaporwave"}, {"layout": "grid"}, {"workspace": "12"}):
+        with pytest.raises(Video2dEditError):
+            edit({"version": 1, "input": {"document": doc, "operations": [{"op": "add_title", "template": "desktop", "fields": fields, "start": 0, "duration": 2}]}})
+    assert validate_spec({"title": "t", "song": {"lyrics": "a", "caption": "b", "duration": 10, "bpm": 100}, "style": {}, "shots": [{"key": "s", "kind": "screen"}]})

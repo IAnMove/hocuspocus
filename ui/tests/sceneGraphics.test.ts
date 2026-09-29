@@ -97,3 +97,21 @@ test('a cue without graphic stays on the text painter', () => {
   assert.equal(rects, 0)
   assert.equal(parseKineticTexts([{ id: 'bad', text: 'a', start: 0, end: 1, preset: 'impact', graphic: { id: 'custom-js' } }])[0].graphic, undefined)
 })
+
+test('tiling paints a full-frame desktop whose windows open one after another', () => {
+  const cue = parseKineticTexts([{
+    id: 'desk', text: '', start: 0, end: 8, preset: 'impact', x: 50, y: 50, size: 10,
+    graphic: { id: 'tiling', params: { theme: 'tokyo-night', layout: 'quad', apps: 'mixed' } },
+  }])[0]
+  assert.equal(cue.graphic?.id, 'tiling')
+  const covered = (seconds: number) => {
+    const buffer = raster(160, 90)
+    paintKineticTexts(buffer.ctx, 160, 90, seconds, [cue])
+    return buffer.pixels.reduce((sum, pixel) => sum + pixel, 0)
+  }
+  const early = covered(0.05)
+  const late = covered(6)
+  assert.ok(early > 160 * 90 * 0.9, 'the wallpaper and bar fill the frame from the first frame')
+  assert.equal(late >= early, true)
+  assert.equal(parseKineticTexts([{ id: 'x', text: '', start: 0, end: 1, preset: 'impact', graphic: { id: 'tiling', params: { theme: 'nope' } } }])[0].graphic?.params?.theme, 'tokyo-night')
+})

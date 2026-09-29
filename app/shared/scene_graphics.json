@@ -73,6 +73,20 @@
         { "key": "rings", "type": "number", "min": 0, "max": 1, "integer": true, "default": 1 },
         { "key": "ticks", "type": "number", "min": 4, "max": 16, "integer": true, "default": 8 }
       ]
+    },
+    {
+      "id": "tiling",
+      "name": "Tiling desktop",
+      "description": "A dark tiling-window-manager desktop (top bar, gapped windows with thin borders, terminal, editor, monitor) painted full frame in a colour theme. Windows open one after another.",
+      "beats": { "span": 8, "stagger": 0.5, "type": 3 },
+      "params": [
+        { "key": "theme", "type": "enum", "values": ["tokyo-night", "catppuccin", "gruvbox", "nord", "rose-pine", "kanagawa"], "default": "tokyo-night" },
+        { "key": "layout", "type": "enum", "values": ["single", "split", "triple", "quad", "master"], "default": "triple" },
+        { "key": "apps", "type": "enum", "values": ["dev", "system", "mixed"], "default": "mixed" },
+        { "key": "focus", "type": "number", "min": 0, "max": 3, "integer": true, "default": 0},
+        { "key": "workspace", "type": "number", "min": 1, "max": 9, "integer": true, "default": 1 },
+        { "key": "switch", "type": "enum", "values": ["none", "left", "right"], "default": "none" }
+      ]
     }
   ]
 }

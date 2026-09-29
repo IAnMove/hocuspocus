@@ -2,6 +2,7 @@
 // reaches them through paintKineticTexts. No cue graphic means these never run.
 import catalog from '../../../../app/shared/scene_graphics.json' with { type: 'json' }
 import type { KineticText, TextGraphic } from '../kineticText/types'
+import { paintTilingDesktop } from './tilingDesktop'
 
 type GraphicParam = {
   key: string
@@ -245,6 +246,10 @@ function paintTicks(ctx: CanvasRenderingContext2D, size: number, ticks: number, 
   ctx.restore()
 }
 
+function paintTiling(ctx: CanvasRenderingContext2D, cue: KineticText, width: number, height: number, seconds: number, params: Resolved, beats: Record<string, number>) {
+  paintTilingDesktop(ctx, width, height, seconds, cueBeat(cue, seconds, beatOf(beats, 'span', 8)), beats, params)
+}
+
 const PAINTERS: Record<string, Painter> = {
   chart: paintChart,
   odometer: paintOdometer,
@@ -252,6 +257,7 @@ const PAINTERS: Record<string, Painter> = {
   silhouette: paintSilhouette,
   shatter: paintShatter,
   countdown: paintCountdown,
+  tiling: paintTiling,
 }
 
 export function paintSceneGraphic(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, cue: KineticText, pulse = 1) {

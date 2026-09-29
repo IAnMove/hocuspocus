@@ -6,19 +6,19 @@ import json
 
 from services.video2d_catalogs import GRAPHICS_CATALOG, query_catalog
 
-IDS = ["chart", "odometer", "orbit", "silhouette", "shatter", "countdown"]
+IDS = ["chart", "odometer", "orbit", "silhouette", "shatter", "countdown", "tiling"]
 PARAM_TYPES = {"number", "color", "enum"}
 
 
-def test_graphics_catalog_lists_the_six_drawings():
+def test_graphics_catalog_lists_the_drawings():
     listed = query_catalog({"kind": "graphics"})["result"]
     assert [item["id"] for item in listed["entries"]] == IDS
-    assert listed["total"] == 6
+    assert listed["total"] == 7
     assert listed["truncated"] is False
     detail = query_catalog({"kind": "graphics", "detail": True})["result"]
     assert detail["entries"] == GRAPHICS_CATALOG["entries"]
     summary = query_catalog({})["result"]["kinds"]
-    assert summary[-1] == {"kind": "graphics", "count": 6}
+    assert summary[-1] == {"kind": "graphics", "count": 7}
     for entry in detail["entries"]:
         params = entry["params"]
         assert 3 <= len(params) <= 6

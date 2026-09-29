@@ -29,6 +29,7 @@ from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
 RUN, STATUS = "production.run", "production.status"
+OMARCHY_THEMES: dict[str, dict] = json.loads((Path(__file__).resolve().parents[1] / "shared" / "omarchy_themes.json").read_text(encoding="utf-8"))["entries"]
 H3_FRAMES = [124 + 17 * k for k in range(14)]            # H3 window lengths (124 … 345 frames at 24 fps)
 STEPS = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
 _threads: dict[str, threading.Thread] = {}
@@ -53,16 +54,18 @@ SPEC_SCHEMA: dict[str, Any] = {
         "style": {"type": "object", "properties": {"image": {"type": "string"}, "video": {"type": "string"},
                                                    "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
                                                    "lyric_template": {"type": "string"}, "lyric_style": {"type": "object"},
+                                                   "theme": {"type": "string", "description": "Omarchy colour theme id (app/shared/omarchy_themes.json): screen shots, lyric and footer colours"},
                                                    "title_style": {"type": "object"}, "footer": {"type": "string"},
                                                    "footer_style": {"type": "object"}, "finish": {"type": "object"}}},
         "cast": {"type": "array", "items": {"type": "object", "required": ["id", "sheet_prompt"],
                                          "properties": {"image_model": {"type": "string"}, "image_steps": {"type": "integer"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
         "shots": {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
-            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
+            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
             "frame": {"type": "string"}, "action": {"type": "string"}, "still": {"type": "string"}, "clip": {"type": "string"},
             "image_model": {"type": "string"}, "image_steps": {"type": "integer"}, "graphic": {"type": "object"},
+            "desktop": {"type": "object", "description": "kind screen: tiling desktop fields (layout, apps, focus, workspace, switch, theme)"},
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"}}}},
         "fill": {"type": "array", "description": "Shots used to fill instrumental stretches longer than a clip"},
         "max_takes": {"type": "integer", "minimum": 1, "maximum": 5}},
@@ -87,8 +90,8 @@ def validate_spec(spec: Any) -> dict:
             raise ProductionError("invalid_spec", "image_model must be a model selector")
     keys = set()
     for shot in spec["shots"]:
-        if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip"):
-            raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip")
+        if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip", "screen"):
+            raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip|screen")
         if shot["key"] in keys:
             raise ProductionError("invalid_spec", f"duplicate shot key {shot['key']}")
         keys.add(shot["key"])
@@ -198,6 +201,21 @@ def scene_fingerprint(shot: dict, style: dict, stills: dict, score: dict) -> str
 def contact_sheet_filter(duration: float) -> str:
     """Sample the whole song into the 24-cell review sheet, including its final card."""
     return f"fps={24 / max(duration, 1):.8f},scale=320:-1,tile=6x4"
+
+
+def theme_colours(theme: str | None) -> dict:
+    if not theme:
+        return {}
+    if theme not in OMARCHY_THEMES:
+        raise ProductionError("invalid_spec", f"unknown theme {theme}")
+    return OMARCHY_THEMES[theme]
+
+
+def theme_lyric_style(theme: str | None) -> dict:
+    """Default lyric look for an Omarchy theme: square mono plate in the theme's surface colour."""
+    colours = theme_colours(theme)
+    return {"color": colours["fg"], "font": "mono", "weight": 700,
+            "box": {"kind": "solid", "color": colours["surface"], "opacity": 0.92, "padding": 0.5, "radius": 0}} if colours else {}
 
 
 # ---------------------------------------------------------------- run
@@ -486,6 +504,10 @@ class Production:
             if skip > 0:
                 anim["trimStart"] = skip
             ops.append({"op": "update_layer", "id": "bg", "patch": {"fill": True, "animation": anim}})
+        elif shot["kind"] == "screen":
+            desktop = {"theme": style.get("theme") or "tokyo-night", "layout": "triple", "apps": "mixed", "focus": "0", "workspace": "1",
+                       "switch": "none", **{k: str(v) for k, v in (shot.get("desktop") or {}).items()}}
+            ops.append({"op": "add_title", "id": "desk", "template": "desktop", "fields": desktop, "start": 0, "duration": dur})
         else:
             zoom = shot.get("zoom") or [1.0, 1.1]
             source = stills.get(shot.get("still"), shot.get("still"))
@@ -539,9 +561,10 @@ class Production:
             used += cues
             ops.append({"op": "add_title", "id": f"ly{index}", "template": template, "fields": fields,
                         "start": span[0], "duration": span[1]})
-            if style.get("lyric_style"):
+            look = {**theme_lyric_style(style.get("theme")), **(style.get("lyric_style") or {})}
+            if look:
                 for cue in TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080}):
-                    ops.append({"op": "update_text", "id": f"ly{index}-{cue['id']}", "patch": style["lyric_style"]})
+                    ops.append({"op": "update_text", "id": f"ly{index}-{cue['id']}", "patch": look})
         return ops
 
     @staticmethod
@@ -552,6 +575,7 @@ class Production:
                  "start": 0, "duration": dur},
                 {"op": "update_text", "id": "footer-social", "patch": {"y": 96, "size": 2, "font": "mono", "maxWidth": 96,
                  "color": "#EFE6D2", "box": {"kind": "solid", "color": "#1B1718", "opacity": 0.85, "padding": 0.25},
+                 **({"color": colours["fg"], "box": {"kind": "solid", "color": colours["surface"], "opacity": 0.92, "padding": 0.25}} if (colours := theme_colours(style.get("theme"))) else {}),
                  **(style.get("footer_style") or {})}}]
 
     def montage(self, spec: dict) -> None:
