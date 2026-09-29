@@ -14,6 +14,7 @@ import { cafeGroup, type CafeMaps } from './cafeSet.ts'
 import { citadelGroup } from './citadelSet.ts'
 import { driveGroup, isDriveDressing, type DriveMaps } from './driveSet.ts'
 import { actionGroup, applyActionAtmosphere, isActionDressing } from './actionSets.ts'
+import { applyAtmosAtmosphere, buildClearing, hasWebGL2, isAtmosDressing, resolveAtmos, type AtmosSettings } from './atmos/index.ts'
 import { clearDrive } from './driveMotion.ts'
 import type { GpuWorld } from './gpu.ts'
 import type { Scene3DDressing } from './types.ts'
@@ -27,6 +28,7 @@ export function dropDressing(world: GpuWorld) {
     world.dressing = null
     return
   }
+  if (releaseAtmos(world)) return
   world.dressing.traverse(child => {
     if (!(child instanceof Mesh)) return
     child.geometry.dispose()
@@ -73,15 +75,32 @@ function spaceGroup(): Object3D {
   return root
 }
 
+function releaseAtmos(world: GpuWorld): boolean {
+  const handle = world.dressing?.userData.atmos as { dispose?: () => void } | undefined
+  if (!handle?.dispose || !world.dressing) return false
+  world.cinema?.detachAtmos()
+  handle.dispose()
+  world.dressing = null
+  return true
+}
+
+function mountAtmos(world: GpuWorld, settings?: AtmosSettings) {
+  const high = world.renderer.shadowMap.enabled && world.dir.shadow.mapSize.x >= 2048
+  const built = buildClearing(resolveAtmos(settings, high ? 'high' : 'low'), hasWebGL2(world.renderer.getContext()))
+  world.dressing = built.root
+}
+
 export function syncDressing(
   world: GpuWorld,
   kind: Scene3DDressing | undefined,
   maps?: { cafe?: CafeMaps; drive?: DriveMaps },
+  settings?: AtmosSettings,
 ) {
   dropDressing(world)
   clearDrive(world)
   applyActionAtmosphere(world.scene, kind)
-  world.floor.visible = kind !== 'space' && kind !== 'treadmill' && kind !== 'cafe' && !isDriveDressing(kind) && !isActionDressing(kind) && !isPixelDressing(kind)
+  applyAtmosAtmosphere(world.scene, kind, settings)
+  world.floor.visible = kind !== 'space' && kind !== 'treadmill' && kind !== 'cafe' && !isDriveDressing(kind) && !isActionDressing(kind) && !isPixelDressing(kind) && !isAtmosDressing(kind)
   world.floor.position.y = world.floor.visible ? 0 : -80
   if (kind === 'street') world.dressing = streetGroup()
   if (kind === 'retro-lab' || kind === 'observatory' || kind === 'broadcast-plaza') world.dressing = mediaSet(kind)
@@ -90,6 +109,7 @@ export function syncDressing(
   if (kind === 'citadel') world.dressing = citadelGroup()
   if (kind === 'space') world.dressing = spaceGroup()
   if (isPixelDressing(kind)) world.dressing = pixelWorldGroup(kind)
+  if (isAtmosDressing(kind)) mountAtmos(world, settings)
   if (isActionDressing(kind)) world.dressing = actionGroup(kind)
   if (kind === 'cafe') world.dressing = cafeGroup(maps?.cafe ?? { facade: null, floor: null, back: null })
   if (isDriveDressing(kind)) {

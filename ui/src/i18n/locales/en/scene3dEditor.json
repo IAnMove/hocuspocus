@@ -347,6 +347,7 @@
     "moon": "Moon",
     "space": "Space",
     "jungle": "Jungle",
+    "forest": "Forest",
     "snow": "Snow",
     "casino": "Casino",
     "studio": "Studio",
@@ -1505,7 +1506,24 @@
     "pixel-metaphysical-square": {
       "title": "Metaphysical square",
       "description": "After De Chirico: a low sun crosses behind an arcade, a statue and a tall chimney, and their long shadows — arches and all — swing slowly across the empty square."
+    },
+    "atmos-clearing-wide": {
+      "title": "Forest clearing · wide",
+      "description": "A procedural sunlit clearing. A character placed in the open takes the same light and shadow as the trunks."
+    },
+    "atmos-clearing-backlight": {
+      "title": "Forest clearing · backlight",
+      "description": "The same clearing with the sun behind the trunks."
     }
+  },
+  "atmos": {
+    "time": "Time of day",
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour" },
+    "palette": "Palette",
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue" },
+    "fogDensity": "Fog",
+    "wind": "Wind",
+    "motes": "Motes"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",

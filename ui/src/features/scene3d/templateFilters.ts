@@ -5,7 +5,7 @@ import type { Scene3DDressing } from './types.ts'
 
 export const TEMPLATE_SETTINGS = [
   'sea', 'city', 'rooftop', 'hangar', 'desert', 'train', 'moon', 'space',
-  'jungle', 'snow', 'casino', 'studio', 'street', 'stage',
+  'jungle', 'forest', 'snow', 'casino', 'studio', 'street', 'stage',
 ] as const
 export type TemplateSetting = typeof TEMPLATE_SETTINGS[number]
 
@@ -18,6 +18,7 @@ export function settingFromDressing(dressing: Scene3DDressing | undefined): Temp
   if (dressing === 'train') return 'train'
   if (dressing === 'space-lane' || dressing === 'space') return 'space'
   if (dressing === 'jungle') return 'jungle'
+  if (dressing === 'atmos-clearing') return 'forest'
   if (dressing === 'snow') return 'snow'
   if (dressing === 'casino') return 'casino'
   if (dressing === 'chase-street' || dressing === 'street' || dressing === 'drive-city' || dressing === 'drive-coast' || dressing === 'drive-tunnel') return 'city'
