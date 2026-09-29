@@ -7,3 +7,6 @@ pydantic==2.10.6
 python-multipart==0.0.32
 psutil==7.2.2
 requests==2.34.2
+# Procedural rigging; matches the full runtime's NumPy.
+numpy==2.1.2
+pygltflib==1.16.3

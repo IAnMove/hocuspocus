@@ -18,7 +18,8 @@ module.exports = {
     }
     const filterOptional = items => items.filter(item =>
       item.href === 'sam_install.js' ? optionalAvailable('sam')
-        : item.href === 'rigging_install.js' ? optionalAvailable('rigging') : true
+        : item.href === 'rigging_install.js' ? optionalAvailable('rigging')
+        : item.href === 'hunyuan3d_install.js' ? optionalAvailable('hunyuan3d') : true
     ).map(item => item.menu ? {...item, menu: filterOptional(item.menu)} : item)
     // Do not gate this menu on kernel.gpu. Pinokio can render an app menu
     // before its hardware inventory has populated that property, which would
@@ -125,6 +126,12 @@ module.exports = {
             text: "Log in to Hugging Face",
             href: "hf_login.js",
           }]), ...(coreOnly || (kernel.platform || require("os").platform()) === "darwin" ? [] : [{
+            icon: "fa-solid fa-cube",
+            text: info.exists("app/services/hunyuan3d/env")
+              ? "Update 3D Generation (Hunyuan3D)"
+              : "Install 3D Generation (Hunyuan3D)",
+            href: "hunyuan3d_install.js",
+          }, {
             icon: "fa-solid fa-vector-square",
             text: info.exists("app/services/sam/env")
               ? "Update Inpaint Support (SAM 3.1)"

@@ -149,7 +149,7 @@
       "windows": {
         "installStepsVersion": 1
       },
-      "defaultInstall": true
+      "defaultInstall": false
     },
     "minimax_h3": {
       "label": "MiniMax H3 Legacy / ComfyUI",

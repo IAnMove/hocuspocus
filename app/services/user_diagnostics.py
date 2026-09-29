@@ -26,6 +26,10 @@ REPAIR = {
         "id": "install_update",
         "summary": "Run Install or Update to repair the selected runtime before Start.",
     },
+    "install_optional": {
+        "id": "install_optional",
+        "summary": "Optional engine: install it from Pinokio's Advanced menu while HocusPocus is stopped.",
+    },
     "repair_web_ui": {
         "id": "repair_web_ui",
         "summary": "Retry Repair Web UI, then restart Start. This does not reinstall engines.",
@@ -342,7 +346,7 @@ def engine_blockers(
         label = engine.get("label") or spec["component"]
         blockers.append((
             f"{label} is not installed with a matching runtime receipt.",
-            REPAIR["install_update"],
+            REPAIR["install_optional"] if engine.get("optional") else REPAIR["install_update"],
         ))
     if needs_gpu and observed.get("backend") != "nvidia":
         blockers.append((
@@ -394,11 +398,12 @@ def describe_engine(name: str, selected: Mapping[str, Any], receipt: Mapping[str
     if not supported and not selected.get("supersededBy"):
         repair = repair_for_reason(selected.get("reason") if isinstance(selected.get("reason"), str) else None)
     elif supported and not receipt.get("installed"):
-        repair = REPAIR["install_update"]
+        repair = REPAIR["install_update"] if selected.get("defaultInstall") else REPAIR["install_optional"]
     return {
         "id": name,
         "label": selected.get("label"),
         "required": bool(selected.get("required")),
+        "optional": not selected.get("defaultInstall"),
         "supported": supported,
         "installed": bool(receipt.get("installed")) and supported,
         "reason": selected.get("reason"),

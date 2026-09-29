@@ -43,10 +43,17 @@ gains a supported NVIDIA setup installs WanGP into the same environment.
 |---|---|---|---|
 | Core/remote, fallback | Both, plus Apple Silicon; Linux ARM | `app/env` (venv) | 3.10 / none / none |
 | HocusPocus / WanGP, including native H3 | Both | `app/env` (venv) | 3.10 / 2.7.0 Linux, 2.7.1 Windows / 12.8 |
-| Hunyuan3D and procedural rigging | Both | `app/services/hunyuan3d/env` (conda) | 3.10 / 2.7.0 / 12.8 |
+| Hunyuan3D, optional | Both | `app/services/hunyuan3d/env` (conda) | 3.10 / 2.7.0 / 12.8 |
 | H3 **Legacy**, ComfyUI | Both | `app/services/minimax_h3/env` (conda) | 3.11 / 2.10.0 / 13.0 |
 | SAM, optional | Both | `app/services/sam/env` (conda) | 3.12 / 2.7.0 / 12.8 |
 | UniRig, optional | Linux | `app/services/rigging/env` (conda) | 3.11 / 2.7.0 / 12.8 |
+
+Procedural rigging is CPU-only (NumPy + pygltflib) and runs with the main
+`app/env` interpreter on every machine, core included; the Hunyuan3D env is
+only a fallback for installs not yet updated. Hunyuan3D, SAM and UniRig are
+optional (`defaultInstall: false`): Install skips them, the Advanced menu
+installs them, and Update refreshes them only where their env exists. Only
+the Hunyuan3D installer checks the Windows compiler.
 
 CUDA 13 requires driver 580 or newer. CUDA 12 recipes use NVIDIA's minor
 compatibility floor; newer drivers are recommended, especially for JIT kernels.

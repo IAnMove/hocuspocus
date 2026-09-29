@@ -1,8 +1,9 @@
 """Rig & animate job manager for Maestro's 3D outputs.
 
 Runs the procedural rigging worker (app/services/hunyuan3d/rig_worker.py)
-in the Hunyuan3D isolated environment. Jobs are CPU-only and finish in
-seconds, but the lifecycle mirrors model3d_service: short-lived worker
+with the app's own Python on every machine (it only needs numpy and
+pygltflib), or the Hunyuan3D environment on installs not yet updated. Jobs
+are CPU-only and finish in seconds, but the lifecycle mirrors model3d_service: short-lived worker
 subprocess, MAESTRO_EVENT progress streaming, on-disk pid files with a
 startup reaper, watchdog timeouts and a bounded in-memory registry.
 """
@@ -10,12 +11,14 @@ startup reaper, watchdog timeouts and a bounded in-memory registry.
 from __future__ import annotations
 
 import atexit
+import importlib.util
 import json
 import os
 import re
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -171,8 +174,13 @@ _WORKER_TIME_LIMIT_SECONDS = 10 * 60
 
 
 def _python_path() -> Path | None:
-    candidates = [managed_python_path(ENV_DIR)]
-    return next((path for path in candidates if path.is_file() and managed_ready("hunyuan3d")), None)
+    # Procedural rigging must not depend on the optional CUDA 3D engine.
+    if all(importlib.util.find_spec(name) for name in ("numpy", "pygltflib")):
+        return Path(sys.executable)
+    hunyuan = managed_python_path(ENV_DIR)
+    if hunyuan.is_file() and INSTALL_MARKER.is_file() and managed_ready("hunyuan3d"):
+        return hunyuan
+    return None
 
 
 def _unirig_python_path() -> Path | None:
@@ -182,10 +190,10 @@ def _unirig_python_path() -> Path | None:
 
 def installation_status() -> dict[str, Any]:
     python_path = _python_path()
-    installed = bool(python_path and INSTALL_MARKER.is_file() and WORKER_PATH.is_file())
+    installed = bool(python_path and WORKER_PATH.is_file())
     return {
         "installed": installed,
-        "install_hint": None if installed else "Run HocusPocus Lab's standard Install or Update action (the rig worker shares the Hunyuan3D runtime).",
+        "install_hint": None if installed else "Run Update in Pinokio to add procedural rigging to the app environment.",
     }
 
 

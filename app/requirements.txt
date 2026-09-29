@@ -88,6 +88,8 @@ tensordict==0.11.0
 peft==0.17.0
 matplotlib==3.10.8
 gguf==0.17.1
+# Procedural rigging (CPU-only GLB skeletons) runs in this environment on every machine.
+pygltflib==1.16.3
 flash-linear-attention==0.4.1
 
 # Utilities

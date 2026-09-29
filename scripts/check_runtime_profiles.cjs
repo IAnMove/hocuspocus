@@ -34,9 +34,11 @@ for (const platform of ['linux', 'win32']) {
     }
   }
   const all = JSON.stringify(steps)
-  const preflight = runtime.preflight().filter(step => step.method === 'shell.run' &&
-    (!step.when || render(step.when, ctx) === 'true'))
-  assert.equal(JSON.stringify(preflight).includes('windows_toolchain.py'), platform === 'win32')
+  // Only the optional Hunyuan3D installer needs the Windows compiler; Install never asks for it.
+  const toolchain = engine => JSON.stringify(runtime.preflight(engine).filter(step => step.method === 'shell.run' &&
+    (!step.when || render(step.when, ctx) === 'true'))).includes('windows_toolchain.py')
+  assert.equal(toolchain('hunyuan3d'), platform === 'win32')
+  assert(!toolchain() && !toolchain('sam'), 'Main Install must not require Visual Studio')
   if (platform === 'win32') {
     assert(all.includes('uninstall torchcodec flash-attn'), 'Repair must remove incompatible external attention')
     assert(!all.includes('targets/x86_64-linux'))
@@ -83,7 +85,7 @@ for (const input of [undefined, null, {}, {success: false}]) {
   assert.equal(guard.next, null)
 }
 assert.equal(render(guard.when, {input: {success: true}}), 'false')
-for (const filename of ['torch', 'runtime_setup', 'sam_install', 'rigging_install', 'ui_build']) {
+for (const filename of ['torch', 'runtime_setup', 'hunyuan3d_install', 'sam_install', 'rigging_install', 'ui_build', 'hf_login']) {
   const final = require(`../${filename}.js`).run.at(-1)
   assert.equal(final.method, 'script.return')
   assert.equal(final.params.success, true)
@@ -138,7 +140,13 @@ async function checkUiLaunchers() {
   const core = flatten(await menu({}, coreInfo))
   assert(core.some(item => item.href === 'start.js' && !item.params), 'Core must keep Start')
   assert(!core.some(item => item.text === 'LoRAs' || item.params?.compile), 'Core has no WanGP models')
-  assert(!core.some(item => ['sam_install.js', 'rigging_install.js', 'hf_login.js'].includes(item.href)))
+  assert(!core.some(item => ['hunyuan3d_install.js', 'sam_install.js', 'rigging_install.js', 'hf_login.js'].includes(item.href)))
+  const nvidia = flatten(await menu({platform: 'win32', arch: 'x64', gpu: 'nvidia'}, info))
+  assert(nvidia.some(item => item.href === 'hunyuan3d_install.js'), '3D generation must be installable on demand')
+  // Setup installs only default engines; Hunyuan3D is refreshed only where it is present.
+  const setupPlan = JSON.stringify(require('../runtime_setup').run)
+  assert(setupPlan.includes("exists('app/services/hunyuan3d/env')"))
+  assert(!runtime.installEngines(['core', 'wangp', 'minimax_h3']).some(step => JSON.stringify(step).includes('hunyuan3d/env')))
   assert(flatten(await menu({}, info)).some(item => item.href === 'hf_login.js'), 'Login must be retryable')
   console.log('React repair/start/menu contract: PASS')
 }

@@ -212,13 +212,13 @@ WINDOWS_COMPILER_ENGINES = {"hunyuan3d"}
 MSVC_MISSING_REASON = (
     "{label} needs the Microsoft C++ Build Tools to compile its native parts on Windows. "
     "Install Visual Studio 2022 Build Tools with \"Desktop development with C++\" from "
-    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Install again."
+    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Advanced > Install 3D Generation (Hunyuan3D) in Pinokio."
 )
 MSVC_TOO_NEW_REASON = (
     "{label} compiles CUDA 12.8 extensions, and CUDA 12.8 only accepts Visual Studio 2019 "
     "or 2022 compilers (MSVC 14.2x-14.4x); only MSVC {found} was found. Install Visual "
     "Studio 2022 Build Tools with \"Desktop development with C++\" alongside it from "
-    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Install again."
+    "https://visualstudio.microsoft.com/visual-cpp-build-tools/, then run Advanced > Install 3D Generation (Hunyuan3D) in Pinokio."
 )
 # nvcc 12.8 host_config.h rejects _MSC_VER >= 1950 (Visual Studio 2026).
 MSVC_CUDA_LIMIT = (14, 50)

@@ -90,7 +90,7 @@ The gallery loads bounded 320/640 px previews; opening the details dialog loads 
 
 ### Make 3D, then shoot it like a set
 
-**3D** runs [Hunyuan3D](https://github.com/Tencent-Hunyuan/Hunyuan3D-2) in an isolated env: text, one image, or front/left/right/back views → GLB. **Retexture GLB** paints a new copy; the source file stays untouched.
+**3D** runs [Hunyuan3D](https://github.com/Tencent-Hunyuan/Hunyuan3D-2) in an isolated env, installed on demand from Pinokio's **Advanced > Install 3D Generation (Hunyuan3D)**: text, one image, or front/left/right/back views → GLB. Procedural rigging runs on every computer without it. **Retexture GLB** paints a new copy; the source file stays untouched.
 
 **Character Creator:** one photo → H3 360° turntable → pick front/left/back/right → Hunyuan multi-view mesh.
 
@@ -197,7 +197,7 @@ Every step can also start from an existing image, video, audio file or GLB.
 | 12–16 GB | auto-tune offloads; slower |
 | 6–8 GB | works with heavy offload; keep clips short |
 
-Local AI engines use CUDA kernels, so they install only on NVIDIA x64 Windows/Linux. Install checks each computer and installs only what it can run: on AMD, Intel or CPU-only PCs, Apple Silicon, Linux ARM, or NVIDIA drivers older than the recipe minimum, it installs the core studio (projects, editors, 3D worlds, comics, remote LLM/image/music/3D providers) without Torch, and the studio hides the local engines. Intel Macs are not supported. First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Install/Update selects a compatible MSVC toolset, or skips this optional engine with setup instructions while installing the main app. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
+Local AI engines use CUDA kernels, so they install only on NVIDIA x64 Windows/Linux. Install checks each computer and installs only what it can run: on AMD, Intel or CPU-only PCs, Apple Silicon, Linux ARM, or NVIDIA drivers older than the recipe minimum, it installs the core studio (projects, editors, 3D worlds, comics, remote LLM/image/music/3D providers) without Torch, and the studio hides the local engines. Intel Macs are not supported. First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D is optional and not part of the main Install, because it compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Its installer (Advanced menu) selects a compatible MSVC toolset or stops with setup instructions; Update refreshes it only where it is installed. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
 
 For Windows Hunyuan3D, use **CUDA Toolkit 12.8** and a compatible x64 MSVC
 toolset: VS 2022 v143 (14.3x/14.4x) or VS 2019 v142, with a Windows SDK.
@@ -207,7 +207,7 @@ with this CUDA recipe. A preflight reports missing build prerequisites before
 large downloads. Both NVIDIA and Pinokio/conda CUDA library layouts work.
 The Hunyuan3D 2.1 Windows build also applies its required 64-bit integer fixes
 in a temporary source copy, leaving the vendor checkout unchanged.
-After correcting prerequisites, retry **Install** without Reset.
+After correcting prerequisites, retry **Advanced > Install 3D Generation (Hunyuan3D)** without Reset.
 Optional SAM/UniRig launcher entries are hidden for known unsupported hardware
 or operating systems; unknown hardware detection does not hide existing Start.
 Local AMD ROCm, Intel and Apple MPS engines are not available yet.
