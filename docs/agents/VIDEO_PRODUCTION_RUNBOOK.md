@@ -42,6 +42,7 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 
 State is saved in `<workspace>/<production_id>.production.json`: a restart or a new
 `production.run` with the same id continues from the last finished step.
+`production.status` includes `timing` in seconds for song, analyze, cast, frames, clips, scenes and montage (0 when that stage did not run), and `timing.shots` lists each clip's `key`, `seconds` and take count.
 The montage export in the table is internal. The agent does not call `montages.export` after the run.
 
 ## production.review

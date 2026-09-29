@@ -282,6 +282,7 @@
         "tests/test_video2d_edit.py",
         "tests/test_video2d_graphics.py",
         "tests/test_music_production.py",
+        "tests/test_production_timing.py",
         "tests/test_export_receipts.py",
         "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",
@@ -533,6 +534,12 @@
       "prefix": "app/services/clip_align.py",
       "paths": [
         "tests/test_clip_align.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_timing.py",
+      "paths": [
+        "tests/test_production_timing.py"
       ]
     }
   ]

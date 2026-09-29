@@ -25,6 +25,7 @@ from typing import Any, Callable
 import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
+from services.production_timing import StageWatch, timing_summary
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
@@ -616,18 +617,19 @@ class Production:
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
         self.save()
         try:
-            self.song(spec)
-            self.analyze(spec)
-            self.cast(spec)
+            watch = StageWatch(self)
+            watch.call("song", self.song, spec)
+            watch.call("analyze", self.analyze, spec)
+            watch.call("cast", self.cast, spec)
             windows = shot_windows(spec, self.score())
-            self.frames(spec, windows)
+            watch.call("frames", self.frames, spec, windows)
             if through == "frames":
                 self.state["status"] = "frames_ready"
                 self.log("frames: ready for a clean restart before clips")
                 return
-            self.clips(spec, windows, retake)
-            self.scenes(spec, windows)
-            self.montage(spec)
+            watch.call("clips", self.clips, spec, windows, retake)
+            watch.call("scenes", self.scenes, spec, windows)
+            watch.call("montage", self.montage, spec)
             self.state["status"] = "completed" if self.state.get("final") else "failed"
         except Exception as error:  # the run is resumable; keep the reason
             self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
@@ -646,7 +648,8 @@ def status_summary(state: dict, workspace: str) -> dict[str, Any]:
             "preview_frames": state.get("preview_frames") or None,
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
-            "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:]}
+            "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:],
+            "timing": timing_summary(state)}
 
 
 # ---------------------------------------------------------------- MCP
@@ -673,7 +676,7 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, last log lines.",
+        {"name": STATUS, "description": "Short summary of a production: status, stage timings, per-clip lip-sync verdicts, video and contact-sheet URLs, last log lines.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid}, ["workspace", "production_id"])},
     ]
 
