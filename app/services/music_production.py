@@ -611,7 +611,7 @@ class Production:
     def repackage(self, spec: dict) -> None:
         """Package a production that is already finished (no GPU, no export): scene documents, manifest and the
         montage clips' origins. This is how an older production becomes editable."""
-        self.state.update(status="running")
+        self.state.update(status="running", error=None)
         self.save()
         try:
             windows = shot_windows(spec, self.score())

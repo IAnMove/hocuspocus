@@ -122,7 +122,7 @@ def test_one_failing_shot_does_not_stop_the_package(tmp_path):
 def test_repackage_gives_an_old_production_scene_documents_and_montage_origins(tmp_path):
     calls: list = []
     production = _production(tmp_path, calls)
-    production.state.update(status="completed", final="v.mp4", montage_file="song.montage.json")
+    production.state.update(status="completed", final="v.mp4", montage_file="song.montage.json", error="URLError: an old failure")
     real = production.mcp
 
     def mcp(tool, arguments):
@@ -139,7 +139,7 @@ def test_repackage_gives_an_old_production_scene_documents_and_montage_origins(t
     save = next(arguments for tool, arguments in calls if tool == "montages.save")
     clip = save["input"]["montage"]["clips"][0]
     assert save["input"]["expected_revision"] == 3 and clip["origin"]["shotId"] == "a" and clip["origin"]["scene"].startswith("p-a-")
-    assert production.state["status"] == "completed"
+    assert production.state["status"] == "completed" and production.state["error"] is None
     assert not any(tool in ("scenes.video2d.export", "generate", "montages.export") for tool, _ in calls)      # no GPU, no render
 
 
