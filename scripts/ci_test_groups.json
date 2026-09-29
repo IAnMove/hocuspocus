@@ -271,6 +271,7 @@
         "tests/test_procedural_3d_assets_router.py",
         "tests/test_procedural_glb_inspector.py",
         "tests/test_production_run.py",
+        "tests/test_production_review_checks.py",
         "tests/test_productions_router.py",
         "tests/test_project_catalog.py",
         "tests/test_projects_router.py",

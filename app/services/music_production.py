@@ -26,6 +26,7 @@ import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
+from services.production_review import review_production
 from services.video2d_edit_titles import TITLE_BUILDERS
 
 RUN, STATUS = "production.run", "production.status"
@@ -636,10 +637,10 @@ class Production:
             self.save()
 
 
-def status_summary(state: dict, workspace: str) -> dict[str, Any]:
+def status_summary(state: dict, workspace: str, root: str | None = None) -> dict[str, Any]:
     url = lambda name: f"/api/v1/file/{name}?workspace={workspace}" if name else None
     clips = state.get("clips") or {}
-    return {"status": state.get("status", "unknown"), "error": state.get("error"),
+    summary = {"status": state.get("status", "unknown"), "error": state.get("error"),
             "song": (state.get("song") or {}).get("file"),
             "clips": {**{k: "failed" for k in state.get("clip_failures") or {}}, **{k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()}},
             "failures": state.get("clip_failures") or None,
@@ -647,6 +648,8 @@ def status_summary(state: dict, workspace: str) -> dict[str, Any]:
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
             "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:]}
+    summary.update(review_production(state, root))
+    return summary
 
 
 # ---------------------------------------------------------------- MCP
@@ -673,7 +676,7 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, last log lines.",
+        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, code review (verdict, failures, retake_keys), last log lines.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid}, ["workspace", "production_id"])},
     ]
 
@@ -740,6 +743,6 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         path = Path(workspace_dir(data["workspace"])) / f"{data['production_id']}.production.json"
         if not path.exists():
             raise HTTPException(404, {"code": "production_not_found", "message": "No production with this id in the workspace", "retryable": False})
-        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(json.loads(path.read_text()), data["workspace"])}
+        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(json.loads(path.read_text()), data["workspace"], str(path.parent))}
 
     return {RUN: run, STATUS: status}
