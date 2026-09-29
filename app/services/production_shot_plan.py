@@ -230,8 +230,17 @@ def _chorus_shots(start: int, count: int, cast: list[str], action: str, look: di
     return shots
 
 
+ALONE = " Only this character appears; no other characters, creatures or animals."
+
+
+def _alone(cast: list[str]) -> str:
+    """A video model invents extra characters when an action does not say who is alone in the frame."""
+    return ALONE if len(cast) == 1 else ""
+
+
 def _sung(key: str, line: int, span: int, cast: list[str], action: str) -> dict:
-    return {"key": key, "kind": "h3", "line": line, "span": span, "sing": True, "cast": list(cast), "frame": _FRAME, "action": action}
+    return {"key": key, "kind": "h3", "line": line, "span": span, "sing": True, "cast": list(cast), "frame": _FRAME,
+            "action": action + _alone(cast)}
 
 
 def _content(key: str, line: int, look: dict) -> dict:
@@ -259,7 +268,8 @@ def _paint(shot: dict, look: dict) -> None:
     elif kind == "screen":
         shot["desktop"] = {"layout": "single", "apps": "mixed"}
     else:
-        shot.update(cast=list(look["cast"]), frame=_BROLL_FRAME.format(phrase=look["phrase"]), action=_BROLL_ACTION.format(phrase=look["phrase"]))
+        shot.update(cast=list(look["cast"]), frame=_BROLL_FRAME.format(phrase=look["phrase"]),
+                    action=_BROLL_ACTION.format(phrase=look["phrase"]) + _alone(look["cast"]))
 
 
 def _fill_template(look: dict, shots: list[dict]) -> dict:

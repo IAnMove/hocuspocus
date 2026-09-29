@@ -66,3 +66,15 @@ def note_seconds(state: dict, windows: list[dict], elapsed: float) -> None:
     for window in windows:
         key = window["key"]
         seconds[key] = round(float(seconds.get(key) or 0) + part, 3)
+
+
+_RANK = {"ok": 2, "unreliable": 1, "retake": 0}
+
+
+def better_take(new: dict, kept: dict) -> bool:
+    """Should this take replace the kept one? A better verdict wins; between equal verdicts the higher lip-sync r does.
+    (An ``unreliable`` r is noise: it must not push out a take that measured ok, and no r means 0.)"""
+    new_rank, kept_rank = _RANK.get(new.get("verdict"), 1), _RANK.get(kept.get("verdict"), 1)
+    if new_rank != kept_rank:
+        return new_rank > kept_rank
+    return (new.get("best_r") or 0) >= (kept.get("best_r") or 0)

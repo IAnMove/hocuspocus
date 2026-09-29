@@ -38,6 +38,7 @@ def plan_brief(brief: Any, lyricist: Callable[[dict], str] | None = None) -> dic
         "cast": [{"id": "hero", "sheet_prompt": fields["protagonista"][:400]}],
         "shots": "auto",
         "cta": _clip(fields["cta"], 32),
+        "quality": fields.get("quality") if fields.get("quality") in ("draft", "standard", "max") else "standard",
         "section_actions": {"verse": _clip(fields["tema"], 32), "chorus": _clip(fields["cta"], 32)},
     }
     from services.music_production import ProductionError
@@ -60,7 +61,7 @@ def _fields(brief: Any) -> dict[str, str]:
         found[label] = value
     if missing:
         raise PlanError("invalid_brief", "brief needs " + ", ".join(missing))
-    for optional, names in (("lyrics", ("lyrics", "letra")), ("footer", ("footer", "aviso"))):
+    for optional, names in (("lyrics", ("lyrics", "letra")), ("footer", ("footer", "aviso")), ("quality", ("quality", "calidad"))):
         value = next((brief[name].strip() for name in names if isinstance(brief.get(name), str) and brief[name].strip()), "")
         if value:
             found[optional] = value

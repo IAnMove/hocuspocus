@@ -32,12 +32,14 @@ from services.production_resume import open_mcp
 from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
 from services.production_timing import StageWatch, timing_summary
 from services.production_usage import attach_usage, usage_summary
+from services.production_quality import expand_quality
 from services.production_review import review_for_status
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_style_presets import expand_style_preset
 from services.production_package import (attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, editable_summary,
                                          lyric_for, manifest_rows, write_manifest)
-from services.production_takes import another_take, note_seconds, pending_windows, take_settled
+from services.production_sheets import compose_group, make_frames_sheet
+from services.production_takes import another_take, better_take, note_seconds, pending_windows, take_settled
 from services.production_wait import MAX_WAIT_S, wait_for_status
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
@@ -46,6 +48,8 @@ RUN, STATUS, PLAN = "production.run", "production.status", "production.plan"
 OMARCHY_THEMES: dict[str, dict] = json.loads((Path(__file__).resolve().parents[1] / "shared" / "omarchy_themes.json").read_text(encoding="utf-8"))["entries"]
 FRAME_ATTEMPTS = 2                                       # start-frame rounds per run
 FRAME_RESOLUTIONS = ("1280x704", "1152x640", "1024x576")   # after an out-of-memory the next attempt is smaller
+# dymo punches its letters out of the tape: on a dark picture they vanish. Dark letters on cream tape read on any picture.
+DYMO_READABLE = {"color": "#141210", "box": {"kind": "tape", "color": "#F4EEE2", "opacity": 1, "padding": 0.72, "radius": 0.18}}
 MAX_LOST_JOBS = 3                                        # per shot: then a vanished job counts as a failed take
 H3_FRAMES = [124 + 17 * k for k in range(14)]            # H3 window lengths (124 … 345 frames at 24 fps)
 STEPS = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
@@ -78,7 +82,9 @@ SPEC_SCHEMA: dict[str, Any] = {
                                                    "footer_style": {"type": "object"}, "finish": {"type": "object"}}},
         "cast": {"type": "array", "items": {"type": "object", "required": ["id", "sheet_prompt"],
                                          "properties": {"image_model": {"type": "string"}, "image_steps": {"type": "integer"},
-                                                        "count": {"type": "integer", "minimum": 1, "maximum": 6, "description": "how many distinct subjects this reference stands for (a group image); default 1"}}}},
+                                                        "count": {"type": "integer", "minimum": 1, "maximum": 6, "description": "how many distinct subjects this reference stands for (a group image); default 1, or the size of its group"},
+                                                        "group": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4,
+                                                                  "description": "ids of other cast entries: one reference image with their sheets side by side (no sheet_prompt needed)"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
             "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
@@ -88,12 +94,13 @@ SPEC_SCHEMA: dict[str, Any] = {
             "desktop": {"type": "object", "description": "kind screen: tiling desktop fields (layout, apps, focus, workspace, switch, theme)"},
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"}}}}]},
         "fill": {"type": "array", "description": "Shots used to fill instrumental stretches longer than a clip"},
-        "max_takes": {"type": "integer", "minimum": 1, "maximum": 5}},
+        "max_takes": {"type": "integer", "minimum": 1, "maximum": 5},
+        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: fills song seeds and max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"}},
 }
 
 
 def validate_spec(spec: Any) -> dict:
-    spec = expand_style_preset(spec)
+    spec = expand_quality(expand_style_preset(spec))
     spec = plan_shots(spec)
     if not isinstance(spec, dict):
         raise ProductionError("invalid_spec", "spec must be an object")
@@ -275,6 +282,8 @@ def note_held(state: dict, key: str, hold: bool = True) -> None:
 
 
 class Production:
+    on_landed: Callable[[str, str | None], None] | None = None      # set while a round of clips is being waited for
+
     def __init__(self, workspace: str, production_id: str, *, workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str],
                  mcp: Callable[[str, dict], dict]):
         self.ws, self.id = workspace, production_id
@@ -330,6 +339,8 @@ class Production:
                     done[key] = None
                 if key in done and not done[key]:
                     self.failures[key] = failure_reason(s)
+                if key in done and self.on_landed:
+                    self.on_landed(key, done[key])      # each result is recorded the moment it lands, not when the slowest one does
             if len(done) < len(jobs):
                 time.sleep(poll)
         return done
@@ -392,10 +403,16 @@ class Production:
         jobs = {c["id"]: self.image("cast-" + c["id"], c["sheet_prompt"] if style in c["sheet_prompt"] else f"{c['sheet_prompt']} {style}".strip(), None, "1536x1024", c.get("seed", 5),
                                      c.get("image_model", settings.get("image_model", "flux2_klein_9b")), c.get("image_steps", settings.get("image_steps")),
                                      self._attempt("cast_attempts", c["id"]))
-                for c in spec.get("cast") or [] if c["id"] not in cast}
+                for c in spec.get("cast") or [] if c["id"] not in cast and not c.get("group")}
         for cid, name in self.wait(jobs).items():
             if name:
                 cast[cid] = self.upload(name)[1]
+        for c in spec.get("cast") or []:      # a group reference: the members' sheets side by side in one picture
+            members = c.get("group") or []
+            if members and c["id"] not in cast and all(member in cast for member in members):
+                out = f"{self.id}-group-{c['id']}.png"
+                if compose_group([self.uploads / Path(cast[member]).name for member in members], self.root / out):
+                    cast[c["id"]] = self.upload(out)[1]
         self.log(f"cast: {len(cast)}")
         absent = [c["id"] for c in spec.get("cast") or [] if c["id"] not in cast]
         if absent:
@@ -414,7 +431,7 @@ class Production:
         """Start-frame prompt: the look, the shot, and how many distinct subjects the cast references stand for
         (a model given a sheet with several views tends to draw the character several times)."""
         style = (spec.get("style") or {}).get("image", "")
-        counts = {c["id"]: int(c.get("count", 1)) for c in spec.get("cast") or [] if isinstance(c, dict)}
+        counts = {c["id"]: int(c.get("count", len(c.get("group") or []) or 1)) for c in spec.get("cast") or [] if isinstance(c, dict)}
         subjects = sum(counts.get(c, 1) for c in w.get("cast", []) if c in self.state.get("cast", {}))
         guard = f" Exactly {subjects} distinct {'subject' if subjects == 1 else 'subjects'} in the frame, no duplicated characters." if subjects else ""
         return f"{style} {w['frame']}{guard}".strip()
@@ -445,6 +462,7 @@ class Production:
                     self.log(f"frame {key} failed ({failures[key]})")
             self.save()
         self.log(f"frames: {len(frames)}")
+        self.state["frames_sheet"] = make_frames_sheet(self.root, frames, f"{self.id}-frames.jpg")
         absent = [w["key"] for w in windows if w["kind"] == "h3" and w["key"] not in frames]
         if absent:
             raise ProductionError("frames_incomplete", "no start frame for " + ", ".join(f"{key} ({failures.get(key, 'no output')})" for key in absent[:6]))
@@ -505,18 +523,34 @@ class Production:
         budget = {w["key"]: tried[w["key"]] + max_takes for w in pending}
         while pending:
             started = time.perf_counter()
-            names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + tried[w["key"]], tried[w["key"]]) for w in pending})
-            retry = []
+            by_key = {w["key"]: w for w in pending}
+            retry_keys: set[str] = set()
+            landed: set[str] = set()
             lost = self.state.setdefault("clip_lost", {})
+
+            def land(key: str, name: str | None) -> None:
+                """Judge and record one clip as soon as it exists: a restart mid-round keeps the ones already shot."""
+                if key in landed:
+                    return
+                landed.add(key)
+                if key in self.lost and lost.get(key, 0) < MAX_LOST_JOBS:
+                    lost[key] = lost.get(key, 0) + 1      # not a take: the job vanished, so shoot it again
+                    self.log(f"clip {key}: job lost (queue restarted), not counted as a take")
+                    retry_keys.add(key)
+                    return
+                tried[key] += 1
+                if another_take(self.judge_take(by_key[key], name, tried[key], vocals), tried[key], budget[key], key in retake):
+                    retry_keys.add(key)
+                self.save()
+
+            self.on_landed = land
+            try:
+                names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + tried[w["key"]], tried[w["key"]]) for w in pending})
+            finally:
+                self.on_landed = None
             for w in pending:
-                if w["key"] in self.lost and lost.get(w["key"], 0) < MAX_LOST_JOBS:
-                    lost[w["key"]] = lost.get(w["key"], 0) + 1      # not a take: the job vanished, so shoot it again
-                    self.log(f"clip {w['key']}: job lost (queue restarted), not counted as a take")
-                    retry.append(w)
-                    continue
-                tried[w["key"]] += 1
-                if another_take(self.judge_take(w, names.get(w["key"]), tried[w["key"]], vocals), tried[w["key"]], budget[w["key"]], w["key"] in retake):
-                    retry.append(w)
+                land(w["key"], names.get(w["key"]))         # a wait that reports only at the end (a stub) lands them here
+            retry = [w for w in pending if w["key"] in retry_keys]
             note_seconds(self.state, pending, time.perf_counter() - started)
             self.save()
             if retry and not any(names.values()):
@@ -538,7 +572,7 @@ class Production:
             {"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive})
         best = clips.get(key)
         previous = (best.get("qa") or {}).get("best_r") if best else None
-        if not best or (qa.get("best_r") or 0) >= (previous or 0):
+        if not best or better_take(qa, (best.get("qa") or {})):
             if best and best.get("file") and best["file"] != name:
                 discard(self.state, best["file"])
             clips[key] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
@@ -731,7 +765,8 @@ class Production:
             used += cues
             ops.append({"op": "add_title", "id": f"ly{index}", "template": template, "fields": fields,
                         "start": span[0], "duration": span[1]})
-            look = {**theme_lyric_style(style.get("theme")), **(style.get("lyric_style") or {})}
+            own = style.get("lyric_style") or {}
+            look = {**theme_lyric_style(style.get("theme")), **(DYMO_READABLE if template == "dymo" and "box" not in own else {}), **own}
             if look:
                 for cue in TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080}):
                     ops.append({"op": "update_text", "id": f"ly{index}-{cue['id']}", "patch": look})
@@ -826,6 +861,7 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
             "clips": {**{k: "failed" for k in state.get("clip_failures") or {}}, **{k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()}},
             "failures": state.get("clip_failures") or None,
             "frame_failures": state.get("frame_failures") or None,
+            "frames_sheet": url(state.get("frames_sheet")),
             "held": list(state.get("held", [])),
             "preview_frames": state.get("preview_frames") or None,
             "frames_ready": len(state.get("frames") or {}),

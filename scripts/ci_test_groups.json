@@ -283,6 +283,7 @@
         "tests/test_production_style_presets.py",
         "tests/test_production_takes.py",
         "tests/test_production_package.py",
+        "tests/test_production_sheets.py",
         "tests/test_production_plan.py",
         "tests/test_production_usage.py",
         "tests/test_productions_router.py",
@@ -580,6 +581,12 @@
         "tests/test_production_plan.py",
         "tests/test_production_package.py",
         "tests/test_production_usage.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_sheets.py",
+      "paths": [
+        "tests/test_production_sheets.py"
       ]
     },
     {

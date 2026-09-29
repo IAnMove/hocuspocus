@@ -12,6 +12,8 @@ from __future__ import annotations
 from typing import Any
 
 from services.music_production import h3_frames_for, shot_windows
+from services.production_quality import expand_quality, profile_of
+from services.production_style_presets import expand_style_preset
 from services.song_analysis import lyric_lines
 
 TITLE_LIMIT = 12
@@ -23,7 +25,6 @@ _MINUTES_PER_SEED = 2
 _MINUTES_PER_H3 = 5
 _MINUTES_TAIL = 1
 # What made the last long videos look thin: 160-178 s songs with 9-10 clips left 43-56 % of the runtime on stills.
-STATIC_LIMIT = 0.35
 LONG_SHOT_S = 10.0
 REUSED_STILL = 3
 MIN_SONG_SEEDS = 3
@@ -70,7 +71,7 @@ def _expand_shots(spec: dict) -> tuple[dict, bool, list[dict]]:
         from services.production_shot_plan import plan_shots
     except ImportError:
         return spec, False, [{"code": "shots_auto_unavailable"}]
-    planned = plan_shots(spec)
+    planned = plan_shots(expand_quality(expand_style_preset(spec)))
     if isinstance(planned, list):
         planned = {**spec, "shots": planned}
     if not isinstance(planned, dict):
@@ -159,22 +160,44 @@ def _motion(windows: list[dict], duration: float) -> dict[str, Any]:
 
 def _quality_warnings(spec: dict, shots: list[dict], motion: dict) -> list[dict]:
     """Choices that leave the result thin, reported before any GPU work."""
-    found: list[dict] = []
-    if motion.get("static_ratio", 0) > STATIC_LIMIT:
-        found.append({"code": "too_static", "ratio": motion["static_ratio"], "limit": STATIC_LIMIT,
+    profile = profile_of(spec)
+    return [*_static_warnings(motion, profile), *_pace_warnings(spec, shots, profile), *_reused_stills(shots), *_setup_warnings(spec, shots, profile)]
+
+
+def _static_warnings(motion: dict, profile: dict) -> list[dict]:
+    found = []
+    if motion.get("static_ratio", 0) > profile["static"]:
+        found.append({"code": "too_static", "ratio": motion["static_ratio"], "limit": profile["static"],
                       "hint": "add H3 shots or shorten the still scenes"})
     if motion.get("longest_shot_s", 0) > LONG_SHOT_S:
         found.append({"code": "long_shot", "key": motion.get("longest_shot"), "seconds": motion["longest_shot_s"], "limit": LONG_SHOT_S})
+    return found
+
+
+def _pace_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
+    minutes = float((spec.get("song") or {}).get("duration") or 0) / 60
+    clips = sum(1 for shot in shots if shot.get("kind") == "h3")
+    if minutes <= 0 or clips / minutes >= profile["clips_per_minute"]:
+        return []
+    return [{"code": "few_clips", "per_minute": round(clips / minutes, 1), "minimum": profile["clips_per_minute"],
+             "hint": "more H3 shots, or a shorter song, or quality: draft"}]
+
+
+def _reused_stills(shots: list[dict]) -> list[dict]:
     uses: dict[str, int] = {}
     for shot in shots:
         if shot.get("kind") == "still" and isinstance(shot.get("still"), str):
             uses[shot["still"]] = uses.get(shot["still"], 0) + 1
-    found.extend({"code": "still_reused", "still": name, "shots": count} for name, count in uses.items() if count >= REUSED_STILL)
-    if any(shot.get("kind") == "h3" for shot in shots) and int(spec.get("max_takes") or 3) < 2:
+    return [{"code": "still_reused", "still": name, "shots": count} for name, count in uses.items() if count >= REUSED_STILL]
+
+
+def _setup_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
+    found = []
+    if any(shot.get("kind") == "h3" for shot in shots) and int(spec.get("max_takes") or 3) < min(2, profile["max_takes"]):
         found.append({"code": "single_take", "hint": "max_takes 1 keeps the first clip whatever it looks like"})
     song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
     seeds = song.get("seeds")
-    if not song.get("file") and isinstance(seeds, list) and 0 < len(seeds) < MIN_SONG_SEEDS:
+    if not song.get("file") and isinstance(seeds, list) and 0 < len(seeds) < min(MIN_SONG_SEEDS, profile["seeds"]):
         found.append({"code": "few_song_seeds", "seeds": len(seeds), "hint": "the best of three candidates is picked by lyric recall"})
     return found
 
