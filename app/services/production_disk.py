@@ -1,8 +1,10 @@
 """Free-space guard and finished-run cleanup for a music-video production.
 
 ``production.run`` refuses to start under 10 GiB free. A completed run deletes
-losing takes and ``*-slice-*.wav`` audio slices. The chosen song, the best take
-of each shot, scene exports and the final video stay. A failed run deletes nothing.
+losing takes recorded in ``state["discarded"]`` and this production's
+``{id}-slice-*.wav`` audio slices. The workspace is shared, so other videos stay.
+The chosen song, the best take of each shot, scene exports and the final video
+stay. A failed run deletes nothing.
 """
 from __future__ import annotations
 
@@ -12,7 +14,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 MIN_FREE_BYTES = 10 * 1024 ** 3
-_VIDEO = frozenset({".mp4", ".webm", ".mov", ".mkv", ".m4v"})
 
 
 def _free_bytes(usage: Any) -> int:
@@ -48,15 +49,28 @@ def kept_names(state: dict) -> set[str]:
     return {Path(name).name for name in names if isinstance(name, str) and name}
 
 
-def _removable(path: Path) -> bool:
-    return path.match("*-slice-*.wav") or path.suffix.lower() in _VIDEO
+def discard(state: dict, name: object) -> None:
+    """Remember a losing take or audio slice this run may delete when it completes."""
+    if not isinstance(name, str) or not name:
+        return
+    base = Path(name).name
+    if not base or base in {".", ".."}:
+        return
+    names = state.setdefault("discarded", [])
+    if base not in names:
+        names.append(base)
 
 
-def release_completed(root: str | Path, state: dict) -> None:
+def _owned_slice(path: Path, production_id: str) -> bool:
+    return bool(production_id) and path.name.startswith(f"{production_id}-slice-") and path.suffix.lower() == ".wav"
+
+
+def release_completed(root: str | Path, state: dict, production_id: str = "") -> None:
     """Delete this run's losing takes and slices. Other statuses keep every file.
 
-    The workspace is shared, so only videos and slices written after the run
-    started are candidates. Kept names are never removed.
+    Only basenames listed in ``state["discarded"]`` and ``{id}-slice-*.wav`` for
+    this production are candidates. Kept names and every other workspace file
+    stay, including videos from another production in the same root.
     """
     if state.get("status") != "completed":
         return
@@ -64,11 +78,9 @@ def release_completed(root: str | Path, state: dict) -> None:
     if not directory.is_dir():
         return
     keep = kept_names(state)
-    started = state.get("started")
-    cutoff = float(started) - 1 if isinstance(started, (int, float)) else None
+    doomed = {Path(name).name for name in (state.get("discarded") or []) if isinstance(name, str) and name}
     for path in list(directory.iterdir()):
-        if not path.is_file() or path.name in keep or not _removable(path):
+        if not path.is_file() or path.name in keep:
             continue
-        if cutoff is not None and path.stat().st_mtime < cutoff:
-            continue
-        path.unlink()
+        if path.name in doomed or _owned_slice(path, production_id):
+            path.unlink()

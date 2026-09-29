@@ -8,10 +8,11 @@ import pytest
 from fastapi import HTTPException
 
 from services.music_production import Production, ProductionError, command_handlers
-from services.production_disk import MIN_FREE_BYTES, require_free_disk
+from services.production_disk import MIN_FREE_BYTES, discard, release_completed, require_free_disk
 
 KEEP = ("song.wav", "a-best.mp4", "b-best.mp4", "scene-a.mp4", "scene-b.mp4", "final.mp4")
-DROP = ("a-lose.mp4", "b-lose.mp4", "mv-slice-a-0.wav", "mv-slice-b-2.wav")
+LOSE = ("a-lose.mp4", "b-lose.mp4")
+FOREIGN = ("other-prod.mp4", "user-ref.mov", "other-slice-x-0.wav")
 
 
 def _spec():
@@ -34,14 +35,20 @@ def _quiet(production, montage):
     production.montage = montage
 
 
+def _slices(production_id: str) -> tuple[str, str]:
+    return (f"{production_id}-slice-a-0.wav", f"{production_id}-slice-b-2.wav")
+
+
 def _plant(production, *, fail: bool) -> None:
-    for name in (*KEEP, *DROP):
+    slices = _slices(production.id)
+    for name in (*KEEP, *LOSE, *FOREIGN, *slices):
         (production.root / name).write_bytes(b"take")
     production.state.update(
         song={"file": "song.wav"},
         clips={"a": {"file": "a-best.mp4"}, "b": {"file": "b-best.mp4"}},
         scenes={"a": {"file": "scene-a.mp4"}, "b": {"file": "scene-b.mp4"}},
         final="final.mp4",
+        discarded=list(LOSE),
     )
     if fail:
         raise RuntimeError("gpu")
@@ -88,8 +95,38 @@ def test_completed_run_keeps_only_chosen_files_and_failed_run_keeps_all(tmp_path
 
     done = build("done", fail=False)
     assert done.state["status"] == "completed"
-    assert _names(done) == set(KEEP) | {done.path.name}
+    assert _names(done) == set(KEEP) | set(FOREIGN) | {done.path.name}
     failed = build("fail", fail=True)
     assert failed.state["status"] == "failed"
-    assert _names(failed) == set(KEEP) | set(DROP) | {failed.path.name}
+    assert _names(failed) == set(KEEP) | set(LOSE) | set(FOREIGN) | set(_slices("fail")) | {failed.path.name}
     assert calls == []
+
+
+def test_completed_run_does_not_delete_another_production_in_the_same_workspace(tmp_path):
+    root = tmp_path / "shared"
+    root.mkdir()
+    for name in (*KEEP, *LOSE, "b-best-other.mp4", "other-slice-s0-0.wav", "mv-a-slice-s0-0.wav"):
+        (root / name).write_bytes(b"take")
+    state = {
+        "status": "completed",
+        "started": 100.0,
+        "song": {"file": "song.wav"},
+        "clips": {"a": {"file": "a-best.mp4"}},
+        "scenes": {"a": {"file": "scene-a.mp4"}},
+        "final": "final.mp4",
+        "discarded": ["a-lose.mp4"],
+    }
+    release_completed(root, state, "mv-a")
+    names = {path.name for path in root.iterdir()}
+    assert "a-lose.mp4" not in names
+    assert "mv-a-slice-s0-0.wav" not in names
+    assert {"b-best-other.mp4", "other-slice-s0-0.wav", "b-lose.mp4", "a-best.mp4", "final.mp4"} <= names
+
+
+def test_discard_records_unique_basenames():
+    state: dict = {}
+    discard(state, "takes/a-lose.mp4")
+    discard(state, "a-lose.mp4")
+    discard(state, "")
+    discard(state, None)
+    assert state["discarded"] == ["a-lose.mp4"]

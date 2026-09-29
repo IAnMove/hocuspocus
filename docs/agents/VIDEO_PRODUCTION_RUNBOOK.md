@@ -48,7 +48,7 @@ A scene whose `scenes.video2d.export.receipt` is failed or cancelled, or whose j
 State is saved in `<workspace>/<production_id>.production.json`: a restart or a new
 `production.run` with the same id continues from the last finished step.
 `production.run` refuses to start when the workspace volume has under 10 GiB free and the error code is `disk_low`.
-When the run reaches `completed` it deletes losing takes and audio slices matching `*-slice-*.wav`, and it keeps the chosen song, the best take of each shot, the scene exports and the final video; a failed run deletes nothing.
+When the run reaches `completed` it deletes this production's losing takes and `{id}-slice-*.wav` audio slices. Other videos in the same workspace stay. It keeps the chosen song, the best take of each shot, the scene exports and the final video; a failed run deletes nothing.
 A production left `running` resumes itself for 24 hours after a server restart when MCP is on
 (a token and an app URL). That resume is not another agent call. A run that finishes completed clears `error`.
 Lip-sync stops when the next measured `r` does not beat the best `r` already kept:
