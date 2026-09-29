@@ -211,6 +211,44 @@ def test_completed_montage_export_keeps_the_filename(tmp_path):
     assert production.state["error"] is None
 
 
+def test_cancelled_montage_export_fails_the_run_without_polling_forever(tmp_path):
+    """montages.export queues a Video Editor job. cancelled is terminal there; a
+    loop that only stops on completed/failed would hang and leave status=running."""
+    polls = {"n": 0}
+
+    def mcp(tool, _arguments):
+        if tool == "montages.save":
+            return {"result": {"file": "p.montage.json"}}
+        if tool == "montages.export":
+            return {"result": {"job": {"job_id": "export-1"}}}
+        if tool == "montages.export.status":
+            polls["n"] += 1
+            if polls["n"] > 3:
+                raise AssertionError("montage kept polling after a cancelled export")
+            return {"result": {"job": {
+                "status": "cancelled", "filename": None,
+                "message": "Cancelled before FFmpeg started",
+            }}}
+        raise AssertionError(tool)
+
+    production = Production(
+        "ws", "p", workspace_dir=lambda _: str(tmp_path),
+        uploads_dir=lambda: str(tmp_path), mcp=mcp,
+    )
+    production.state.update(
+        song={"file": "s.wav"},
+        scenes={"s0": {"file": "s0.mp4", "dur": 4}},
+        segments=[["s0", 0, 4]],
+    )
+    production.score = lambda: {"duration": 4, "lines": [], "beat": 0.5}
+    for name in ("song", "analyze", "cast", "frames", "clips", "scenes"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.run(_spec())
+    assert polls["n"] == 1
+    assert production.state["status"] == "failed"
+    assert not production.state.get("final")
+
+
 def test_a_run_without_a_video_keeps_the_previous_error(tmp_path):
     production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=lambda *_: {})
     production.state = {"error": "URLError: <urlopen error [Errno 111] Connection refused>"}

@@ -69,3 +69,39 @@ def test_use_take_of_a_missing_file_is_422_and_retake_without_mcp_is_503(tmp_pat
     retake = denied.post("/api/v1/music-productions/show/shots/s0/retake", params={"workspace": "film"})
     assert retake.status_code == 503
     assert retake.json()["detail"]["code"] == "mcp_unavailable"
+
+
+def test_shot_edits_refuse_while_the_production_thread_is_alive(tmp_path: Path):
+    """Another take returns at once; a second Production.save would overwrite the live run."""
+    import threading
+
+    from services import music_production
+
+    root = tmp_path / "film"
+    _write(root)
+    (root / "take-b.mp4").write_bytes(b"take")
+    client = _client(root, token="token")
+    hold = threading.Event()
+    thread = threading.Thread(target=hold.wait, name="production-show", daemon=True)
+    thread.start()
+    music_production._threads["film/show"] = thread
+    try:
+        use_take = client.post(
+            "/api/v1/music-productions/show/shots/s0/use-take",
+            params={"workspace": "film"},
+            json={"take_file": "take-b.mp4"},
+        )
+        update = client.post(
+            "/api/v1/music-productions/show/shots/s0",
+            params={"workspace": "film"},
+            json={"camera": "camera-orbit"},
+        )
+        assert use_take.status_code == 409
+        assert use_take.json()["detail"]["code"] == "already_running"
+        assert update.status_code == 409
+        assert update.json()["detail"]["code"] == "already_running"
+        assert json.loads((root / "show.production.json").read_text(encoding="utf-8"))["status"] == "cancelled"
+    finally:
+        hold.set()
+        thread.join(timeout=2)
+        music_production._threads.pop("film/show", None)
