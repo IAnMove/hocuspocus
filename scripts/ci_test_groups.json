@@ -271,6 +271,7 @@
         "tests/test_polish_dialogue_and_hallucination.py",
         "tests/test_procedural_3d_assets_router.py",
         "tests/test_procedural_glb_inspector.py",
+        "tests/test_production_disk.py",
         "tests/test_production_run.py",
         "tests/test_production_held.py",
         "tests/test_production_style_presets.py",
