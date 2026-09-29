@@ -852,7 +852,9 @@ class Production:
         while True:
             status = self.mcp("montages.export.status", {"version": 1, "input": {"workspace": self.ws, "job_id": job["job_id"]}})
             status = (status.get("result") or status).get("job", status)
-            if status.get("status") in ("completed", "failed"):
+            # montages.export queues a Video Editor job. cancelled is terminal there
+            # (user cancel or resource scheduler); polling only completed/failed hangs.
+            if status.get("status") in ("completed", "failed", "cancelled", "discarded", "error"):
                 break
             sleep_until(getattr(self, "_cancel", None), 4, time.sleep)
         self.state["final"] = status.get("filename")
