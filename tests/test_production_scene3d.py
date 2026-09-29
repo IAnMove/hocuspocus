@@ -85,6 +85,17 @@ def test_failed_export_retries_once_then_raises_without_still_fallback(tmp_path)
     assert not production.state.get("held")
 
 
+def test_failed_retake_keeps_the_last_native_clip(tmp_path):
+    production = Production(tmp_path)
+    render(production)
+    kept = dict(production.state["clips"]["hero"])
+    production.fail = True
+    with pytest.raises(ValueError, match="scene3d_export_failed"):
+        render(production, retake=("hero",))
+    assert production.state["clips"]["hero"] == kept
+    assert (tmp_path / kept["file"]).is_file()
+
+
 @pytest.mark.parametrize("config", [{}, {"template": "hero-push", "document": {}}, {"unknown": 1}])
 def test_rejects_missing_or_ambiguous_native_scene(config):
     with pytest.raises(ValueError):
