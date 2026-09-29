@@ -147,3 +147,39 @@ def test_a_failed_round_waits_on_the_injected_pause(tmp_path, monkeypatch):
     assert production.state["clip_takes"]["a"] == 2
     assert production.state["clip_seconds"]["a"] >= 0
     assert "clip a take 1: failed (no output)" in production.state["log"]
+
+
+def test_a_job_lost_to_a_queue_restart_is_shot_again_and_is_not_a_take(tmp_path, monkeypatch):
+    measure, seen, _scores = _measure([0.5])
+    production, calls, _files = _runner(tmp_path, monkeypatch, [None, "good.mp4"], measure)
+    rounds = iter([{"a": None}, {"a": "good.mp4"}])
+
+    def wait(jobs, poll=6):
+        production.failures = {}
+        result = next(rounds)
+        production.lost = {"a"} if result["a"] is None else set()
+        return result
+
+    production.wait = wait
+    production.clips({"max_takes": 1}, [WINDOW], pause=0)
+    assert len(calls) == 2 and seen == [0.5]
+    assert production.state["clip_takes"]["a"] == 1               # the vanished job did not use the single take
+    assert production.state["clip_lost"]["a"] == 1
+    assert any("job lost" in line for line in production.state["log"])
+    assert production.state["clips"]["a"]["file"] == "good.mp4"
+
+
+def test_a_shot_whose_jobs_keep_vanishing_counts_them_after_three_losses(tmp_path, monkeypatch):
+    measure, _seen, _scores = _measure([])
+    production, calls, _files = _runner(tmp_path, monkeypatch, [], measure)
+
+    def wait(jobs, poll=6):
+        production.failures = {}
+        production.lost = set(jobs)
+        return {key: None for key in jobs}
+
+    production.wait = wait
+    production.clips({"max_takes": 1}, [WINDOW], pause=0)
+    assert len(calls) == 4                                       # three losses, then the fourth counts as the take
+    assert production.state["clip_takes"]["a"] == 1
+    assert production.state["clip_lost"]["a"] == 3

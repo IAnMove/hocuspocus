@@ -37,6 +37,7 @@ import {
   type Texture,
 } from 'three'
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
+import { atmosEye, isAtmosDressing, prepareAtmosShadows, releaseAtmosShadows, resolveAtmos } from './atmos/index.ts'
 import { cameraEyeAtTime, cameraLookAtTime } from './camera.ts'
 import { performanceClipTime, slotPoseAtTime } from './performance.ts'
 import { cylinderUvOffset, isCylinderBackdrop, slotMountKey } from './backdrop.ts'
@@ -46,7 +47,7 @@ import { applyTypingPose, resetTypingPose } from './typingPose.ts'
 import { paintWorkshop } from './workshopSet.ts'
 import { paintCitadel } from './citadelSet.ts'
 import { paintActionSet } from './actionSets.ts'
-import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLight, Scene3DSlot } from './types.ts'
+import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLight, Scene3DSlot, Vec3 } from './types.ts'
 import { syncWorldSfx, type WorldSfxGpu } from '../sceneFx/worldRuntime'
 import { paintPixelWorld } from './pixel/pixelWorldSet'
 import { syncScreenGlow } from './pixel/screenGlow'
@@ -143,6 +144,29 @@ export function viewSize(host: HTMLElement) {
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
+  }
+}
+
+function poseAtmos(world: GpuWorld, document: Scene3DDocument, seconds: number, eye: Vec3): Vec3 {
+  if (!isAtmosDressing(document.dressing)) {
+    releaseAtmosShadows(world)
+    return eye
+  }
+  const high = world.renderer.shadowMap.enabled && world.dir.shadow.mapSize.x >= 2048
+  const resolved = resolveAtmos(document.atmos, high ? 'high' : 'low')
+  applyLight(world.dir, { kind: 'directional', direction: resolved.sun, intensity: document.light.intensity, color: resolved.sunColor })
+  prepareAtmosShadows(world)
+  hideEmptyAtmosSlots(world, document)
+  return atmosEye(eye, seconds, document.duration, document.camera.family)
+}
+
+function hideEmptyAtmosSlots(world: GpuWorld, document: Scene3DDocument) {
+  for (const slot of document.slots) {
+    if (slot.media !== 'model3d' || slot.sourceUrl) continue
+    const gpu = world.slots.get(slot.id)
+    if (!gpu) continue
+    gpu.root.visible = false
+    if (gpu.contactShadow) gpu.contactShadow.visible = false
   }
 }
 
@@ -431,13 +455,15 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const target = posedSlots.find(slot => slot.id === framing?.targetSlot)
   const root = target && world.slots.get(target.id)?.root
   const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor), target, sceneSeconds, document.duration) : null
-  const eye = shot?.eye ?? cameraEyeAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
+  const rawEye = shot?.eye ?? cameraEyeAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
+  const eye = poseAtmos(world, document, sceneSeconds, rawEye)
   const look = shot?.look ?? cameraLookAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   world.camera.fov = document.camera.fov
   world.camera.position.set(...eye)
   world.camera.lookAt(...look)
   if (shot) world.camera.rotateZ(shot.roll)
   world.camera.updateProjectionMatrix()
+  world.camera.updateMatrixWorld()
   world.worldSfx ??= new Map()
   if (world.scene) {
     syncWorldSfx(world.scene, world.worldSfx, document.worldSfx, sceneSeconds, posedSlots.map(slot => ({
@@ -448,7 +474,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
       root: world.slots.get(slot.id)?.root,
     })), { width: world.renderer.domElement?.width ?? document.width, height: world.renderer.domElement?.height ?? document.height })
   }
-  if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment')) {
+  if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment') || isAtmosDressing(document.dressing)) {
     world.cinema ??= new CinematicRuntime(world)
     world.cinema.sync(document, sceneSeconds)
     world.cinema.render(document)

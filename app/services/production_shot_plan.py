@@ -1,10 +1,17 @@
 """Build a shot list when ``spec["shots"]`` is the string ``"auto"``.
 
+What the non-sung shots are follows the look, not a fixed default: uploaded
+``stills`` become still shots, ``style.content == "screen"`` (or a ``style.theme``)
+becomes the native tiling desktop, and anything else is a short H3 clip of the
+protagonist. ``style.singer == false`` (the ``omarchy-desktop`` preset) puts no
+sung H3 shot on screen at all.
+
 Sung lines sit on a bar grid: one bar of intro, then one bar per lyric line
 (bar = 4 * 60 / bpm). A shot that does not name a lyric line covers four
-seconds in ``shot_windows``. Fill shots are placed on that grid so the time
-from one shot start to the next, and from the last start to the end of the
-song, is never longer than two bars.
+seconds in ``shot_windows``. Pad shots are not baked into the spec: the
+planner only writes content shots plus a ``fill`` template. ``shot_windows``
+places pads on the score so the time from one start to the next, and from
+the last start to the end of the song, is never longer than two bars.
 """
 from __future__ import annotations
 
@@ -12,11 +19,14 @@ import re
 from typing import Any
 
 _FRAME = "Medium close-up of the singer from the cast sheet, facing the camera, lips parted"
+_BROLL_FRAME = "Wide cinematic shot of the protagonist from the reference sheet in the scene: {phrase}"
+_BROLL_ACTION = "The protagonist acts out the scene: {phrase}. Clear movement, slow camera."
 _ACTIONS = {
     "verse": "(S1) The singer sings the verse to the camera, swaying gently.",
     "chorus": "(S1) The singer sings the chorus to the camera with a bigger gesture.",
 }
 _HEADER = re.compile(r"^\s*\[([^\]]+)\]\s*$")
+_PAD_KEY = re.compile(r"^fill\d+$")
 
 
 def plan_shots(spec: Any) -> dict:
@@ -25,38 +35,62 @@ def plan_shots(spec: Any) -> dict:
         return spec
     song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
     sections = _sections(str(song.get("lyrics") or ""))
-    kind, still = _content_kind(spec)
     actions = spec.get("section_actions") if isinstance(spec.get("section_actions"), dict) else {}
-    shots = _ordered_shots(spec, sections, _cast_ids(spec), kind, still, actions)
-    count = sum(section["count"] for section in sections)
-    lines = _line_times(_bpm(song), count)
-    shots = _with_fills(shots, lines, _duration(song), _bpm(song), kind, still)
+    look = _look(spec, actions)
+    shots = _ordered_shots(spec, sections, _cast_ids(spec), look, actions)
     planned = dict(spec)
     planned["shots"] = shots
+    planned["auto_pads"] = True
     if not planned.get("fill"):
-        planned["fill"] = [_fill_template(kind, still)]
+        planned["fill"] = [_fill_template(look, shots)]
     return planned
 
 
-def _bpm(song: dict) -> int:
-    try:
-        bpm = int(song.get("bpm") or 120)
-    except (TypeError, ValueError):
-        return 120
-    return bpm if bpm > 0 else 120
+def is_auto_pad(shot: Any) -> bool:
+    """Planner pads: ``pad: True``, or a ``fillN`` key with only a baked ``t0``."""
+    if not isinstance(shot, dict):
+        return False
+    if shot.get("pad") is True:
+        return True
+    key = shot.get("key")
+    if not isinstance(key, str) or not _PAD_KEY.fullmatch(key):
+        return False
+    return "line" not in shot and "after" not in shot
 
 
-def _duration(song: dict) -> float:
-    try:
-        return float(song.get("duration") or 0)
-    except (TypeError, ValueError):
-        return 0.0
+def place_pads(windows: list[dict], spec: dict, duration: float, bpm: float) -> list[dict]:
+    """Insert pad shots so consecutive starts (and the tail) stay within two bars."""
+    content = [window for window in windows if not is_auto_pad(window)]
+    content = _sorted_windows(content)
+    if duration <= 0:
+        return content
+    starts = [float(window["t0"]) for window in content]
+    room = max(0, 60 - len(content))
+    tempo = bpm if bpm > 0 else 120.0
+    look = _look(spec, {})
+    extras = _extra_starts(starts, duration, 240.0 / tempo, room)
+    if not extras:
+        return content
+    base = max((int(window.get("i") or 0) for window in content), default=-1) + 1
+    template = _pad_template(spec, look, content)
+    pads = []
+    for index, t0 in enumerate(extras):
+        shot = {**template, "key": f"fill{index}", "pad": True, "t0": t0}
+        pads.append({**shot, "i": base + index, "t0": round(float(t0), 3), "t1": round(float(t0) + 4, 3)})
+    return _sorted_windows(content + pads)
 
 
-def _line_times(bpm: int, count: int) -> list[tuple[float, float]]:
-    """(t0, t1) for each lyric line. The acceptance test uses this same grid."""
-    bar = 240.0 / bpm
-    return [(bar * (index + 1), bar * (index + 1) + bar * 0.8) for index in range(count)]
+def _pad_template(spec: dict, look: dict, content: list[dict]) -> dict:
+    fill = spec.get("fill")
+    if isinstance(fill, list) and fill and isinstance(fill[0], dict):
+        template = dict(fill[0])
+        if template.get("kind") in ("h3", "still", "clip", "screen"):
+            return template
+    return _fill_template(look, content)
+
+
+def _sorted_windows(windows: list[dict]) -> list[dict]:
+    return sorted(windows, key=lambda window: (float(window["t0"]), int(window.get("i") or 0)))
 
 
 def _sections(lyrics: str) -> list[dict]:
@@ -96,11 +130,20 @@ def _cast_ids(spec: dict) -> list[str]:
     return [item["id"] for item in cast if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"]]
 
 
-def _content_kind(spec: dict) -> tuple[str, str | None]:
+def _look(spec: dict, actions: dict) -> dict:
+    """What the non-sung shots are, and whether anyone sings on screen."""
+    style = spec.get("style") if isinstance(spec.get("style"), dict) else {}
     stills = spec.get("stills")
     if isinstance(stills, dict) and stills:
-        return "still", next(iter(stills))
-    return "screen", None
+        kind, still = "still", next(iter(stills))
+    elif style.get("content") == "screen" or style.get("theme"):
+        kind, still = "screen", None
+    else:
+        kind, still = "h3", None
+    phrase = actions.get("verse") if isinstance(actions.get("verse"), str) and actions["verse"].strip() else str(spec.get("title") or "the song")
+    return {"kind": kind, "still": still, "cast": _cast_ids(spec), "phrase": phrase.strip(),
+            "sings": style.get("singer") is not False,
+            "cta": str(spec.get("cta") or "watch").strip()[:32] or "watch"}
 
 
 def _action(actions: dict, role: str) -> str:
@@ -110,18 +153,18 @@ def _action(actions: dict, role: str) -> str:
     return _ACTIONS.get(role, _ACTIONS["verse"])
 
 
-def _ordered_shots(spec: dict, sections: list[dict], cast: list[str], kind: str, still: str | None, actions: dict) -> list[dict]:
+def _ordered_shots(spec: dict, sections: list[dict], cast: list[str], look: dict, actions: dict) -> list[dict]:
     title = str(spec.get("title") or "Untitled")
     shots: list[dict] = []
     numbers = {"v": 0, "s": 0, "c": 0}
     if not any(section["role"] == "intro" for section in sections):
-        shots.append(_card("intro", title, kind, still, t0=0))
+        shots.append(_card("intro", title, look, t0=0))
     for section in sections:
-        shots.extend(_one_section(section, title, cast, kind, still, actions, numbers))
+        shots.extend(_one_section(section, title, cast, look, actions, numbers))
     if any(section["role"] == "outro" for section in sections):
         return shots
     last = sum(section["count"] for section in sections) - 1
-    card = _card("outro", title, kind, still)
+    card = _card("outro", title, look)
     if last >= 0:
         card["after"] = last
     else:
@@ -130,28 +173,28 @@ def _ordered_shots(spec: dict, sections: list[dict], cast: list[str], kind: str,
     return shots
 
 
-def _one_section(section: dict, title: str, cast: list[str], kind: str, still: str | None, actions: dict, numbers: dict) -> list[dict]:
+def _one_section(section: dict, title: str, cast: list[str], look: dict, actions: dict, numbers: dict) -> list[dict]:
     role, start, count = section["role"], section["start"], section["count"]
     if role == "intro":
-        return [_intro_card(title, kind, still, start, count)]
+        return [_intro_card(title, look, start, count)]
     if role == "outro":
-        return [_outro_card(title, kind, still, start, count)]
+        return [_outro_card(title, look, start, count)]
     action = _action(actions, role)
     if role == "chorus":
-        return _chorus_shots(start, count, cast, action, numbers)
-    return _verse_shots(start, count, cast, action, kind, still, numbers)
+        return _chorus_shots(start, count, cast, action, look, numbers)
+    return _verse_shots(start, count, cast, action, look, numbers)
 
 
-def _intro_card(title: str, kind: str, still: str | None, start: int, count: int) -> dict:
-    shot = _card("intro", title, kind, still, t0=0)
+def _intro_card(title: str, look: dict, start: int, count: int) -> dict:
+    shot = _card("intro", title, look, t0=0)
     if count:
         shot["line"] = start
         shot["span"] = count
     return shot
 
 
-def _outro_card(title: str, kind: str, still: str | None, start: int, count: int) -> dict:
-    shot = _card("outro", title, kind, still)
+def _outro_card(title: str, look: dict, start: int, count: int) -> dict:
+    shot = _card("outro", title, look)
     if count:
         shot["line"] = start
         shot["span"] = count
@@ -162,22 +205,27 @@ def _outro_card(title: str, kind: str, still: str | None, start: int, count: int
     return shot
 
 
-def _verse_shots(start: int, count: int, cast: list[str], action: str, kind: str, still: str | None, numbers: dict) -> list[dict]:
+def _verse_shots(start: int, count: int, cast: list[str], action: str, look: dict, numbers: dict) -> list[dict]:
     shots = []
     for offset in range(count):
-        if offset % 2 == 0:
+        if offset % 2 == 0 and look["sings"]:
             shots.append(_sung(_next(numbers, "v"), start + offset, 1, cast, action))
         else:
-            shots.append(_content(_next(numbers, "s"), start + offset, kind, still))
+            shots.append(_content(_next(numbers, "s"), start + offset, look))
     return shots
 
 
-def _chorus_shots(start: int, count: int, cast: list[str], action: str, numbers: dict) -> list[dict]:
+def _chorus_shots(start: int, count: int, cast: list[str], action: str, look: dict, numbers: dict) -> list[dict]:
     shots = []
     offset = 0
     while offset < count:
         span = 2 if offset + 1 < count else 1
-        shots.append(_sung(_next(numbers, "c"), start + offset, span, cast, action))
+        if look["sings"]:
+            shots.append(_sung(_next(numbers, "c"), start + offset, span, cast, action))
+        else:
+            shot = _content(_next(numbers, "c"), start + offset, look)
+            shot["span"] = span
+            shots.append(shot)
         offset += span
     return shots
 
@@ -186,52 +234,49 @@ def _sung(key: str, line: int, span: int, cast: list[str], action: str) -> dict:
     return {"key": key, "kind": "h3", "line": line, "span": span, "sing": True, "cast": list(cast), "frame": _FRAME, "action": action}
 
 
-def _content(key: str, line: int, kind: str, still: str | None) -> dict:
-    shot: dict[str, Any] = {"key": key, "kind": kind, "line": line}
-    _paint(shot, kind, still)
+def _content(key: str, line: int, look: dict) -> dict:
+    shot: dict[str, Any] = {"key": key, "kind": look["kind"], "line": line}
+    _paint(shot, look)
     return shot
 
 
-def _card(key: str, title: str, kind: str, still: str | None, t0: float | None = None) -> dict:
+def _card(key: str, title: str, look: dict, t0: float | None = None) -> dict:
     shot: dict[str, Any] = {
-        "key": key, "kind": kind,
-        "title": {"template": "end-card", "fields": {"title": title, "cta": "watch"}},
+        "key": key, "kind": look["kind"],
+        "title": {"template": "end-card", "fields": {"title": title, "cta": look["cta"]}},
     }
     if t0 is not None:
         shot["t0"] = t0
-    _paint(shot, kind, still)
+    _paint(shot, look)
     return shot
 
 
-def _paint(shot: dict, kind: str, still: str | None) -> None:
+def _paint(shot: dict, look: dict) -> None:
+    kind = look["kind"]
     if kind == "still":
-        shot["still"] = still
+        shot["still"] = look["still"]
         shot["zoom"] = [1.0, 1.08]
-    else:
+    elif kind == "screen":
         shot["desktop"] = {"layout": "single", "apps": "mixed"}
+    else:
+        shot.update(cast=list(look["cast"]), frame=_BROLL_FRAME.format(phrase=look["phrase"]), action=_BROLL_ACTION.format(phrase=look["phrase"]))
 
 
-def _fill_template(kind: str, still: str | None) -> dict:
-    shot: dict[str, Any] = {"kind": kind}
-    _paint(shot, kind, still)
-    return shot
+def _fill_template(look: dict, shots: list[dict]) -> dict:
+    """Pads are the look's own kind; in H3 mode they reuse a clip that is already planned."""
+    if look["kind"] != "h3":
+        shot: dict[str, Any] = {"kind": look["kind"]}
+        _paint(shot, look)
+        return shot
+    source = next((item["key"] for item in shots if item.get("kind") == "h3" and item.get("key") not in ("intro", "outro")),
+                  next((item["key"] for item in shots if item.get("kind") == "h3"), "intro"))
+    return {"kind": "clip", "clip": source}
 
 
 def _next(numbers: dict, prefix: str) -> str:
     key = f"{prefix}{numbers.get(prefix, 0)}"
     numbers[prefix] = numbers.get(prefix, 0) + 1
     return key
-
-
-def _with_fills(shots: list[dict], lines: list[tuple[float, float]], duration: float, bpm: int, kind: str, still: str | None) -> list[dict]:
-    if duration <= 0:
-        return shots
-    starts = [_window(shot, lines)[0] for shot in shots]
-    room = max(0, 60 - len(shots))
-    fills = [_fill_shot(index, kind, still, t0) for index, t0 in enumerate(_extra_starts(starts, duration, 240.0 / bpm, room))]
-    if not fills:
-        return shots
-    return _merge(shots, fills, lines)
 
 
 def _extra_starts(starts: list[float], duration: float, bar: float, room: int) -> list[float]:
@@ -247,37 +292,3 @@ def _extra_starts(starts: list[float], duration: float, bar: float, room: int) -
                 break
             extra.append(cursor)
     return extra
-
-
-def _fill_shot(index: int, kind: str, still: str | None, t0: float) -> dict:
-    shot: dict[str, Any] = {"key": f"fill{index}", "kind": kind, "t0": t0}
-    _paint(shot, kind, still)
-    return shot
-
-
-def _merge(shots: list[dict], fills: list[dict], lines: list[tuple[float, float]]) -> list[dict]:
-    tagged = [(_window(shot, lines)[0], index, shot) for index, shot in enumerate(shots)]
-    tagged.extend((_window(shot, lines)[0], len(shots) + index, shot) for index, shot in enumerate(fills))
-    tagged.sort(key=lambda item: (item[0], item[1]))
-    return [shot for _, _, shot in tagged]
-
-
-def _window(shot: dict, lines: list[tuple[float, float]]) -> tuple[float, float]:
-    """Same t0/t1 rules as ``music_production.shot_windows``, before rounding."""
-    index = shot.get("line")
-    line = lines[index] if isinstance(index, int) and 0 <= index < len(lines) else None
-    if "t0" in shot:
-        t0 = float(shot["t0"])
-    elif line:
-        t0 = line[0] - 0.25
-    elif isinstance(shot.get("after"), int) and 0 <= shot["after"] < len(lines):
-        t0 = lines[shot["after"]][1] + 0.3
-    else:
-        t0 = 0.0
-    if line:
-        span = shot.get("span", 1)
-        span = span if isinstance(span, int) else 1
-        t1 = lines[min(len(lines) - 1, index + span - 1)][1] + 0.2
-    else:
-        t1 = t0 + 4
-    return round(max(0.0, t0), 3), round(t1, 3)

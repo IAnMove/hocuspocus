@@ -93,10 +93,11 @@ def test_spec_example_keeps_title_song_style_shots():
     assert specs
 
 
-def test_runbook_names_review_and_does_not_call_production_plan():
+def test_runbook_names_review_and_production_plan():
     text = _text()
     assert PENDING in text
-    assert "production.plan" not in text
+    assert "production.plan" in text
+    assert "production.plan" in _known_commands()
 
 
 def test_named_commands_exist_except_pending_review():
@@ -123,7 +124,7 @@ def test_agent_call_order_is_run_status_review_retake():
 
 def test_review_contract_names_the_code_checks():
     section = _section(_text(), "production.review")
-    for token in ("black_bars", "frozen_shot", "title_cut_off", "text_covers_face", "duplicate_people", "face_consistent", "retake_keys"):
+    for token in ("black_bars", "frozen_shot", "title_cut_off", "text_covers_face", "duplicate_people", "appearance_changed", "retake_keys"):
         assert token in section
     assert "not a language model looking at the contact sheet" in section
     assert "must not invent yes or no" in section

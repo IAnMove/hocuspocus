@@ -47,14 +47,14 @@ def timing_summary(state: dict) -> dict[str, Any]:
 
 
 class StageWatch:
-    """Start and stop around Production.run. Clips also time each shot."""
+    """Times each stage of Production.run. The per-shot rows come from ``clip_seconds`` and ``clip_takes``
+    (the same numbers the take loop keeps), so nothing here wraps or patches the production."""
 
     def __init__(self, production: Any, clock: Callable[[], float] | None = None) -> None:
         self.production = production
         self._clock = clock or time.perf_counter
         self._name: str | None = None
         self._t0 = 0.0
-        self._wrapped: list[tuple[str, Any]] = []
         timing = production.state.get("timing")
         if not isinstance(timing, dict):
             timing = {}
@@ -74,82 +74,23 @@ class StageWatch:
     def start(self, name: str) -> None:
         self._name = name
         self._t0 = self._clock()
-        if name == "clips":
-            self._arm_shots()
 
     def stop(self) -> None:
         name = self._name
         self._name = None
         if not name:
             return
-        elapsed = self._clock() - self._t0
         timing = self.production.state.setdefault("timing", {})
-        timing[name] = _seconds(_seconds(timing.get(name)) + elapsed)
-        if name != "clips":
-            return
-        try:
-            self._publish_takes()
-        finally:
-            self._disarm()
+        previous = timing.get(name)
+        timing[name] = round((float(previous) if isinstance(previous, (int, float)) and previous > 0 else 0.0) + self._clock() - self._t0, 3)
+        if name == "clips":
+            self._publish_shots()
 
-    def _arm_shots(self) -> None:
-        if self._wrapped:
-            return
-        production = self.production
-        original_job = production.clip_job
-        original_wait = production.wait
-
-        def wrapped_job(spec, window, seed, take=0):
-            t0 = self._clock()
-            try:
-                return original_job(spec, window, seed, take)
-            finally:
-                self._add_shot(window.get("key") if isinstance(window, dict) else None, self._clock() - t0)
-
-        def wrapped_wait(jobs, poll=6):
-            t0 = self._clock()
-            try:
-                return original_wait(jobs, poll)
-            finally:
-                self._share(jobs, self._clock() - t0)
-
-        production.clip_job = wrapped_job
-        self._wrapped.append(("clip_job", original_job))
-        production.wait = wrapped_wait
-        self._wrapped.append(("wait", original_wait))
-
-    def _disarm(self) -> None:
-        for name, original in self._wrapped:
-            setattr(self.production, name, original)
-        self._wrapped = []
-
-    def _add_shot(self, key: Any, seconds: float) -> None:
-        if not isinstance(key, str) or not key:
-            return
-        row = self._row(key)
-        row["seconds"] = _seconds(_seconds(row.get("seconds")) + seconds)
-
-    def _share(self, jobs: Any, seconds: float) -> None:
-        if not isinstance(jobs, dict) or not jobs:
-            return
-        part = seconds / len(jobs)
-        for key in jobs:
-            self._add_shot(key, part)
-
-    def _row(self, key: str) -> dict[str, Any]:
-        shots = self.production.state.setdefault("timing", {}).setdefault("shots", [])
-        for item in shots:
-            if isinstance(item, dict) and item.get("key") == key:
-                return item
-        item = {"key": key, "seconds": 0, "takes": 0}
-        shots.append(item)
-        return item
-
-    def _publish_takes(self) -> None:
-        takes = self.production.state.get("clip_takes") or {}
-        if not isinstance(takes, dict):
-            return
-        shots = (self.production.state.get("timing") or {}).get("shots") or []
-        for item in shots:
-            if isinstance(item, dict) and isinstance(item.get("key"), str) and item["key"] in takes:
-                item["takes"] = _takes(takes[item["key"]])
+    def _publish_shots(self) -> None:
+        state = self.production.state
+        seconds = state.get("clip_seconds") if isinstance(state.get("clip_seconds"), dict) else {}
+        takes = state.get("clip_takes") if isinstance(state.get("clip_takes"), dict) else {}
+        state.setdefault("timing", {})["shots"] = [
+            {"key": key, "seconds": round(float(value), 3), "takes": _takes(takes.get(key))}
+            for key, value in seconds.items() if isinstance(key, str) and key and isinstance(value, (int, float))
+        ][:60]

@@ -242,10 +242,11 @@
     "queue": "Encolar toma",
     "cancel": "Cancelar",
     "queueHint": "Usa los mismos parámetros e imagen inicial que el plano original, en la cola normal de GPU.",
+    "openScene": "Abrir escena en Video 2D",
     "regenerate": "Regenerar plano",
     "use": "Usar",
     "startImage": "Imagen inicial",
-    "sceneHint": "Este plano sale de una escena: ábrela en su editor, expórtala y reemplaza el clip.",
+    "sceneHint": "Este plano sale de una escena: ábrela, cambia el clip o el texto, expórtala y reemplaza el clip en la línea de tiempo.",
     "notRegenerable": "Sin parámetros de generación guardados para este plano.",
     "status": {
       "queued": "en cola",

@@ -125,7 +125,7 @@ def test_frozen_synthetic_clip_retakes_and_a_moving_one_is_ok(tmp_path):
     assert moving["review"]["verdict"] == "ok"
     assert moving["retake_keys"] == []
     assert moving["review"]["failures"] == []
-    assert moving["review"]["unknown"] == ["face_consistent"]
+    assert moving["review"]["unknown"] == ["appearance_changed"]
     assert "yes" not in json.dumps(moving["review"]["unknown"])
     assert "no" not in json.dumps(moving["review"]["failures"])
 
@@ -194,6 +194,47 @@ def test_more_people_than_the_cast_retakes(tmp_path):
     assert result["retake_keys"] == ["hero"]
 
 
+def test_cast_count_is_how_many_people_the_shot_may_show(tmp_path):
+    """A group sheet's count is the allowed people, not the number of cast ids.
+
+    production.run writes Exactly N subjects into the start-frame prompt. The
+    review used len(shot.cast), so a correct trio was duplicate_people forever.
+    """
+    _touch(tmp_path, "hero.mp4", _video_scene())
+    def people(_image):
+        return [[0, 0, 40, 160], [80, 0, 120, 160], [160, 0, 200, 160]]
+
+    state = _state(cast=["band"])
+    state["spec"]["cast"] = [{"id": "band", "sheet_prompt": "three musicians", "count": 3}]
+    allowed = review_production(
+        state, str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
+    )
+    assert allowed["review"]["failures"] == []
+    assert allowed["review"]["verdict"] == "ok"
+    assert allowed["retake_keys"] == []
+
+    state["spec"]["cast"] = [{"id": "band", "sheet_prompt": "one singer", "count": 1}]
+    denied = review_production(
+        state, str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
+    )
+    assert denied["review"]["failures"] == [{"key": "hero", "question": "duplicate_people"}]
+    assert denied["retake_keys"] == ["hero"]
+
+    state = _state(cast=["singer", "band"])
+    state["spec"]["cast"] = [
+        {"id": "singer", "sheet_prompt": "lead", "count": 1},
+        {"id": "band", "sheet_prompt": "three musicians", "count": 3},
+    ]
+    def four(_image):
+        return [[0, 0, 30, 160], [40, 0, 70, 160], [80, 0, 110, 160], [120, 0, 150, 160]]
+
+    summed = review_production(
+        state, str(tmp_path), people=four, sample=_sample({"hero.mp4": _moving()}),
+    )
+    assert summed["review"]["failures"] == []
+    assert summed["retake_keys"] == []
+
+
 def test_identity_stays_unknown_unless_an_embedding_backend_is_injected(tmp_path):
     _touch(tmp_path, "hero.mp4")
     sample = _sample({"hero.mp4": _moving()})
@@ -202,21 +243,21 @@ def test_identity_stays_unknown_unless_an_embedding_backend_is_injected(tmp_path
     changed = review_production(_state(), str(tmp_path), people=None, embed=lambda _samples: "yes", sample=sample)
     junk = review_production(_state(), str(tmp_path), people=None, embed=lambda _samples: "maybe", sample=sample)
     assert unknown["review"]["verdict"] == "ok"
-    assert unknown["review"]["unknown"] == ["face_consistent"]
+    assert unknown["review"]["unknown"] == ["appearance_changed"]
     assert unknown["retake_keys"] == []
     assert same["review"]["unknown"] == []
     assert same["review"]["verdict"] == "ok"
     assert changed["review"]["verdict"] == "retake"
     assert changed["retake_keys"] == ["hero"]
-    assert {"key": "hero", "question": "face_consistent"} in changed["review"]["failures"]
+    assert {"key": "hero", "question": "appearance_changed"} in changed["review"]["failures"]
     assert changed["review"]["unknown"] == []
     assert junk["review"]["verdict"] == "ok"
-    assert junk["review"]["unknown"] == ["face_consistent"]
+    assert junk["review"]["unknown"] == ["appearance_changed"]
     assert junk["retake_keys"] == []
 
 
 def test_status_summary_retake_keys_are_passable_and_small(tmp_path):
-    summary = status_summary(_state(held=True), "ws", str(tmp_path))
+    summary = status_summary({**_state(held=True), "status": "completed"}, "ws", str(tmp_path))
     assert summary["review"]["verdict"] == "retake"
     assert summary["retake_keys"] == ["hero"]
     assert summary["review"]["failures"] == [{"key": "hero", "question": "frozen_shot"}]
@@ -231,7 +272,7 @@ def test_missing_media_is_unreliable_and_does_not_invent_a_retake():
     assert result["review"]["verdict"] == "unreliable"
     assert result["review"]["failures"] == []
     assert result["retake_keys"] == []
-    assert result["review"]["unknown"] == ["face_consistent"]
+    assert result["review"]["unknown"] == ["appearance_changed"]
 
 
 def _people_detector():
@@ -307,3 +348,38 @@ def test_omarchy_v1_retakes_the_held_chorus_and_v2_is_ok():
     assert summary["review"]["verdict"] == "ok"
     assert summary["retake_keys"] == []
     assert len(json.dumps(summary["review"])) < 4000
+
+
+def test_status_reviews_only_finished_runs_and_remembers_the_answer(tmp_path, monkeypatch):
+    from services import production_review
+
+    calls = []
+    real = production_review.review_production
+    monkeypatch.setattr(production_review, "review_production", lambda state, root=None, **kw: calls.append(root) or real(state, root, people=None))
+    production_review._CACHE.clear()
+    running = {**_state(held=True), "status": "running"}
+    assert status_summary(running, "ws", str(tmp_path))["review"]["verdict"] == "unreliable"
+    assert calls == []                                            # nothing was opened while the run is going
+    done = {**_state(held=True), "status": "completed", "finished": 123.0}
+    first = status_summary(done, "ws", str(tmp_path))
+    second = status_summary(done, "ws", str(tmp_path))
+    assert first["review"] == second["review"] and first["retake_keys"] == ["hero"]
+    assert len(calls) == 1                                        # polled twice, reviewed once
+    status_summary({**done, "finished": 456.0}, "ws", str(tmp_path))
+    assert len(calls) == 2                                        # a new run of the same production is reviewed again
+    first["retake_keys"].append("mutated")
+    assert status_summary(done, "ws", str(tmp_path))["retake_keys"] == ["hero"]   # callers cannot corrupt the cache
+
+
+def test_status_is_computed_off_the_event_loop(tmp_path, monkeypatch):
+    import asyncio
+    import threading
+
+    import services.music_production as mp
+
+    (tmp_path / "p.production.json").write_text('{"status": "completed"}')
+    seen = []
+    monkeypatch.setattr(mp, "status_summary", lambda state, workspace, root=None: seen.append(threading.current_thread().name) or {"status": "completed"})
+    handlers = mp.command_handlers(lambda _ws: str(tmp_path), lambda: str(tmp_path), lambda: "http://x", lambda: "t")
+    asyncio.run(handlers["production.status"]({"version": 1, "input": {"workspace": "w", "production_id": "p"}}))
+    assert seen and seen[0] != threading.main_thread().name

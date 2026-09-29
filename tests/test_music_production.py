@@ -79,8 +79,8 @@ def test_image_model_is_selected_for_cast_and_frames(tmp_path):
                  cast=[{"id": "dhh", "sheet_prompt": "David caricature", "seed": 8}])
     production.cast(spec)
     production.frames(spec, [{"key": "s0", "kind": "h3", "frame": "at a keyboard", "cast": ["dhh"], "seed": 9}])
-    assert requested[0][-2:] == ("qwen_image_21", 40)
-    assert requested[1][-2:] == ("qwen_image_21", 40)
+    assert requested[0][5:7] == ("qwen_image_21", 40)
+    assert requested[1][5:7] == ("qwen_image_21", 40)
     assert requested[1][2] == ["/u/test.png"]
 
 
@@ -396,3 +396,80 @@ def test_desktop_rejects_unknown_theme_or_layout():
         with pytest.raises(Video2dEditError):
             edit({"version": 1, "input": {"document": doc, "operations": [{"op": "add_title", "template": "desktop", "fields": fields, "start": 0, "duration": 2}]}})
     assert validate_spec({"title": "t", "song": {"lyrics": "a", "caption": "b", "duration": 10, "bpm": 100}, "style": {}, "shots": [{"key": "s", "kind": "screen"}]})
+
+
+def test_wait_marks_a_job_the_queue_forgot_as_lost(tmp_path, monkeypatch):
+    monkeypatch.setattr("services.music_production.time.sleep", lambda _s: None)
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=lambda tool, arguments: {})
+    assert production.wait({"a": "job-a"}, poll=0) == {"a": None}
+    assert production.lost == {"a"}
+    production.mcp = lambda tool, arguments: {"status": "failed", "error": "boom"}
+    assert production.wait({"a": "job-a"}, poll=0) == {"a": None}
+    assert production.lost == set() and production.failures["a"] == "boom"
+
+
+def _image_production(tmp_path, outcomes):
+    """Production whose image jobs finish or fail as scripted; records every generation.image call."""
+    calls = []
+
+    def mcp(tool, arguments):
+        if tool == "generation.image":
+            calls.append(arguments)
+            return {"receipt": {"result": {"job_id": f"job{len(calls)}"}}}
+        return {}
+
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=mcp)
+    scripted = iter(outcomes)
+
+    def wait(jobs, poll=6):
+        production.failures = {}
+        out = {}
+        for key in jobs:
+            name, reason = next(scripted)
+            out[key] = name
+            if not name:
+                production.failures[key] = reason
+        return out
+
+    production.wait = wait
+    production.state["cast"] = {"hero": "/api/v1/uploads/hero.png", "trio": "/api/v1/uploads/trio.png"}
+    return production, calls
+
+
+def test_a_missing_frame_is_asked_for_again_with_a_new_job_and_a_smaller_picture_after_oom(tmp_path):
+    production, calls = _image_production(tmp_path, [(None, "out of GPU memory"), ("f.png", None)])
+    spec = {"style": {"image": "look"}, "cast": [{"id": "hero", "sheet_prompt": "x"}]}
+    production.frames(spec, [{"key": "a", "kind": "h3", "frame": "wide shot", "cast": ["hero"]}])
+    assert production.state["frames"] == {"a": "f.png"} and production.state["frame_failures"] == {}
+    first, second = (call["input"]["params"] for call in calls)
+    assert first["resolution"] == "1280x704" and second["resolution"] == "1152x640"
+    assert calls[0]["intent_id"] != calls[1]["intent_id"]                 # the journal would answer a repeated intent with the failed job
+    assert first["seed"] != second["seed"]
+
+
+def test_a_resumed_run_does_not_reuse_the_failed_intent_of_the_earlier_run(tmp_path):
+    production, calls = _image_production(tmp_path, [("f.png", None)])
+    production.state["log"] = ["frames: 4"]
+    production.state["frame_failures"] = {"a": "out of GPU memory"}
+    production.frames({"style": {}, "cast": []}, [{"key": "a", "kind": "h3", "frame": "wide shot"}])
+    assert calls[0]["intent_id"].endswith("-r1")
+
+
+def test_frames_that_never_arrive_stop_the_run_with_their_reasons(tmp_path):
+    production, calls = _image_production(tmp_path, [(None, "out of GPU memory")] * 4)
+    (tmp_path / "s.score.json").write_text('{"duration": 20, "beat": 0.5, "lines": [{"t0": 1.0, "t1": 3.0, "text": "a"}]}')
+    production.state.update(song={"file": "s.wav"}, score="s.score.json")
+    production.song = production.analyze = production.cast = lambda spec: None
+    production.run({"title": "t", "song": {"lyrics": "a", "caption": "b", "duration": 20, "bpm": 120}, "style": {"image_model": "qwen_image_21"},
+                    "shots": [{"key": "a", "kind": "h3", "line": 0, "frame": "f", "action": "a"}]})
+    assert production.state["status"] == "failed"
+    assert production.state["error"].startswith("ProductionError: no start frame for a (out of GPU memory)") or "frames_incomplete" in production.state["error"] or "no start frame for a" in production.state["error"]
+    assert status_summary(production.state, "ws")["frame_failures"] == {"a": "out of GPU memory"}
+
+
+def test_the_frame_prompt_says_how_many_subjects_the_references_stand_for(tmp_path):
+    production, _calls = _image_production(tmp_path, [])
+    spec = {"style": {"image": "look"}, "cast": [{"id": "hero", "sheet_prompt": "x"}, {"id": "trio", "sheet_prompt": "y", "count": 3}]}
+    assert production.frame_prompt(spec, {"frame": "solo", "cast": ["hero"]}) == "look solo Exactly 1 distinct subject in the frame, no duplicated characters."
+    assert "Exactly 3 distinct subjects" in production.frame_prompt(spec, {"frame": "group", "cast": ["trio"]})
+    assert production.frame_prompt(spec, {"frame": "no cast"}) == "look no cast"

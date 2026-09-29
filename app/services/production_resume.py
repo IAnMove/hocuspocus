@@ -1,12 +1,17 @@
 """Resume a music-video production after the server process dies.
 
-A ``*.production.json`` left ``running`` is continued in-process when MCP is on
-and the file was written within 24 hours. The resume is not an agent call.
+A ``*.production.json`` left ``running`` is continued in-process when MCP is on,
+the file was written within 24 hours and the production asked for it
+(``production.run`` with ``auto_resume: true``, kept in the state file) or the
+server was started with ``HOCUS_PRODUCTION_AUTORESUME=1``. Nothing restarts GPU
+work on its own otherwise: stopping a server on purpose stays stopped. The resume
+is not an agent call.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 import urllib.error
@@ -15,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 MAX_AGE_SECONDS = 24 * 60 * 60
+ENV_FLAG = "HOCUS_PRODUCTION_AUTORESUME"
 RETRY_DELAYS = (5, 15, 45)
 log = logging.getLogger(__name__)
 
@@ -57,6 +63,12 @@ def file_is_fresh(path: Path, now: float) -> bool:
         return False
 
 
+def wants_resume(state: dict) -> bool:
+    if state.get("auto_resume") is True:
+        return True
+    return os.environ.get(ENV_FLAG, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def load_running(path: Path) -> dict | None:
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
@@ -64,7 +76,7 @@ def load_running(path: Path) -> dict | None:
         return None
     if not isinstance(state, dict) or state.get("status") != "running":
         return None
-    if not isinstance(state.get("spec"), dict):
+    if not isinstance(state.get("spec"), dict) or not wants_resume(state):
         return None
     return state
 

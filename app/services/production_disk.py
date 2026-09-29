@@ -3,8 +3,8 @@
 ``production.run`` refuses to start under 10 GiB free. A completed run deletes
 losing takes recorded in ``state["discarded"]`` and this production's
 ``{id}-slice-*.wav`` audio slices. The workspace is shared, so other videos stay.
-The chosen song, the best take of each shot, scene exports and the final video
-stay. A failed run deletes nothing.
+The chosen song, every take of each shot (they are what a person swaps in when
+editing a shot), scene exports and the final video stay. A failed run deletes nothing.
 """
 from __future__ import annotations
 
@@ -39,6 +39,8 @@ def kept_names(state: dict) -> set[str]:
     if isinstance(song, dict):
         names.append(song.get("file"))
     names.append(state.get("final"))
+    for rows in (state.get("takes") or {}).values():     # every take stays: a person may swap one in when editing the shot
+        names.extend(take.get("file") for take in rows if isinstance(take, dict))
     for key in ("clips", "scenes"):
         group = state.get(key)
         if not isinstance(group, dict):
