@@ -60,7 +60,15 @@ MAX_LOST_JOBS = 3                                        # per shot: then a vani
 H3_FRAMES = [124 + 17 * k for k in range(14)]            # H3 window lengths (124 … 345 frames at 24 fps)
 STEPS = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
 _threads: dict[str, threading.Thread] = {}
+_edits: dict[str, threading.Thread] = {}
 _lock = threading.Lock()
+
+
+def _slot_busy(key: str) -> bool:
+    """A live run or a shot/song edit is already writing this production JSON."""
+    run = _threads.get(key)
+    edit = _edits.get(key)
+    return bool(run and run.is_alive()) or bool(edit and edit.is_alive())
 
 
 class ProductionError(ValueError):
@@ -1032,8 +1040,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         key = f"{data['workspace']}/{data['production_id']}"
         with _lock:
-            running = _threads.get(key)
-        if running and running.is_alive():
+            busy = _slot_busy(key)
+        if busy:
             raise HTTPException(409, {"code": "already_running", "message": "This production is running: wait for production.status to finish (or use another production_id) before sending a new spec", "retryable": True})
         production = Production(data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=loopback_mcp(app_url, token))
         if "auto_resume" in data:
@@ -1063,8 +1071,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
                 target = production.run
                 args = (spec, tuple(data.get("retake") or ()), through)
         with _lock:
-            thread = _threads.get(key)
-            if thread and thread.is_alive():
+            if _slot_busy(key):
                 raise HTTPException(409, {"code": "already_running", "message": "This production is running", "retryable": True})
             thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
             _threads[key] = thread
