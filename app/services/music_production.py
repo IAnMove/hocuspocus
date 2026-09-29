@@ -189,9 +189,10 @@ def title_cue_count(template: str, fields: dict, start: float, length: float) ->
         return 1
 
 
-def scene_fingerprint(shot: dict, style: dict, stills: dict, score: dict) -> str:
-    """Invalidate a rendered scene when its spec or lyric timing changes on resume."""
-    source = {"shot": shot, "style": style, "stills": stills, "lines": score.get("lines") or []}
+def scene_fingerprint(shot: dict, style: dict, stills: dict, score: dict, start: float, end: float) -> str:
+    """Invalidate a rendered scene when its spec, window, or lyric timing changes on resume."""
+    source = {"shot": shot, "style": style, "stills": stills, "lines": score.get("lines") or [],
+              "start": round(float(start), 3), "end": round(float(end), 3)}
     return hashlib.sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -439,7 +440,7 @@ class Production:
             dur = round(b - a, 3)
             used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
             prior = done.get(shot["key"], {})
-            fingerprint = scene_fingerprint(shot, style, stills, score)
+            fingerprint = scene_fingerprint(shot, style, stills, score, a, b)
             if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
                     and prior.get("fingerprint") == fingerprint):
                 continue

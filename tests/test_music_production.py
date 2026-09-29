@@ -269,7 +269,7 @@ def test_a_new_clip_reexports_only_its_scene(tmp_path):
     production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=mcp)
     production.edit = lambda doc, ops: doc
     windows = [{"key": "a", "kind": "h3", "i": 0, "t0": 0.0, "t1": 3.0}, {"key": "b", "kind": "still", "still": "/k.png", "i": 1, "t0": 3.0, "t1": 7.0}]
-    prior_b = scene_fingerprint(windows[1], {}, {}, {"duration": 6.0, "beat": 0.5, "lines": []})
+    prior_b = scene_fingerprint(windows[1], {}, {}, {"duration": 6.0, "beat": 0.5, "lines": []}, 3.0, 6.0)
     production.state = {"score": "s.score.json", "clips": {"a": {"file": "new.mp4", "url": "/u/new.mp4"}},
                         "scenes": {"a": {"dur": 3.0, "file": "old-a.mp4", "clip": "old.mp4"},
                                    "b": {"dur": 3.0, "file": "b.mp4", "clip": None, "fingerprint": prior_b}}}
@@ -294,10 +294,61 @@ def test_changed_style_reexports_an_existing_scene(tmp_path):
     production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=mcp)
     production.edit = lambda doc, ops: doc
     production.state = {"score": "s.score.json", "scenes": {"cover": {"dur": 5.0, "file": "old-cover.mp4",
-                        "clip": None, "fingerprint": scene_fingerprint(shot, {"lyric_style": {"y": 78}}, {}, score)}}}
+                        "clip": None, "fingerprint": scene_fingerprint(shot, {"lyric_style": {"y": 78}}, {}, score, 0.0, 5.0)}}}
     production.scenes({"style": {"lyric_style": {"y": 86}}}, [shot])
     assert exported == ["cover"]
     assert production.state["scenes"]["cover"]["file"] == "new-cover.mp4"
+
+
+def test_a_shifted_fill_pad_is_not_reused(tmp_path):
+    """A 2-bar fill keeps the same duration when its h3 shot slides, but lyrics are
+    scene-relative. Reusing the old pad would keep the previous window's captions."""
+    score = {"duration": 50.0, "beat": 0.5, "lines": [
+        {"t0": 12.0, "t1": 14.0, "text": "old pad lyrics"},
+        {"t0": 16.0, "t1": 18.0, "text": "new pad lyrics"},
+    ]}
+    (tmp_path / "s.score.json").write_text(
+        '{"duration": 50.0, "beat": 0.5, "lines": ['
+        '{"t0": 12.0, "t1": 14.0, "text": "old pad lyrics"},'
+        '{"t0": 16.0, "t1": 18.0, "text": "new pad lyrics"}]}'
+    )
+    fill = [{"kind": "still", "still": "/art.png"}]
+    before = [
+        {"key": "intro", "kind": "still", "still": "/k.png", "i": 0, "t0": 0.0, "t1": 4.0},
+        {"key": "verse", "kind": "h3", "i": 1, "t0": 8.0, "t1": 12.0, "frame": "f", "action": "a"},
+        {"key": "outro", "kind": "still", "still": "/k.png", "i": 2, "t0": 30.0, "t1": 34.0},
+    ]
+    after = [
+        {**before[0]},
+        {**before[1], "t0": 10.0, "t1": 14.0},
+        {**before[2]},
+    ]
+    old_fill0, old_a, old_b = next(
+        (shot, a, b) for shot, a, b in segments(before, score, lambda key: key == "verse", fill)
+        if shot["key"] == "verse_fill0"
+    )
+    new_fill0, new_a, new_b = next(
+        (shot, a, b) for shot, a, b in segments(after, score, lambda key: key == "verse", fill)
+        if shot["key"] == "verse_fill0"
+    )
+    assert old_fill0 == new_fill0 and round(old_b - old_a, 3) == round(new_b - new_a, 3)
+    assert (round(old_a, 3), round(old_b, 3)) != (round(new_a, 3), round(new_b, 3))
+    exported = []
+
+    def mcp(tool, arguments):
+        if tool == "scenes.video2d.export":
+            exported.append(arguments["input"]["document"]["name"])
+            return {"receipt": {"commandId": "c"}}
+        return {"receipt": {"artifacts": [{"name": "new-fill0.mp4"}]}}
+
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=mcp)
+    production.edit = lambda doc, ops: doc
+    production.state = {"score": "s.score.json", "clips": {"verse": {"file": "verse.mp4", "url": "/u/verse.mp4"}},
+                        "scenes": {"verse_fill0": {"dur": round(old_b - old_a, 3), "file": "old-fill0.mp4",
+                                   "clip": None, "fingerprint": scene_fingerprint(old_fill0, {}, {}, score, old_a, old_b)}}}
+    production.scenes({"style": {}, "fill": fill}, after)
+    assert "verse_fill0" in exported
+    assert production.state["scenes"]["verse_fill0"]["file"] == "new-fill0.mp4"
 
 
 def test_contact_sheet_covers_a_long_song():
