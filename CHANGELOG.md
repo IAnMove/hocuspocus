@@ -6,6 +6,26 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Install on any computer: AMD, Intel and CPU-only PCs, Linux ARM and NVIDIA
+drivers below the CUDA minimum now install the core studio (projects, editors,
+3D worlds, comics and remote providers) without Torch instead of stopping at
+preflight. Each machine installs exactly one main runtime; NVIDIA x64 keeps
+WanGP and never installs core. Start boots the core runtime on those installs,
+the studio reports `coreRemote` and hides local engines, and the launcher hides
+LoRAs, compiled start and CUDA-only installers. Also fixes the macOS core
+install (`KeyError: 'cuda'` in the package helper) and reports the bundled
+Rhubarb as available. The first Update re-runs NVIDIA engine setup because a
+shared install helper changed.
+
+Hunyuan3D is optional: Install no longer compiles it or requires Visual Studio
+on Windows; install it from Advanced > Install 3D Generation (Hunyuan3D), and
+Update refreshes it only where present. Procedural rigging runs with the main
+app Python on every computer, including the core studio. Install ends with a
+plain summary of what this computer installs, what it cannot run and why.
+The optional Hugging Face login now prints its code and link in the terminal,
+opens the browser, reports whether it worked, and can be retried from the
+Advanced menu. Core installs no longer replace the FFmpeg that Pinokio pins.
+
 ## [0.9.0] - 2026-08-24
 
 First HocusPocus preview. Product versioning is independent of the Maestro

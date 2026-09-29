@@ -188,7 +188,7 @@
     "retextureGlb": "Retexturizar GLB",
     "loadingModels": "Cargando modelos...",
     "notInstalled": "El runtime de Hunyuan3D no está instalado",
-    "installHint": "Detén HocusPocus y ejecuta su acción estándar Instalar o Actualizar. El runtime permanece dentro de HocusPocus; los pesos se descargan en el primer uso.",
+    "installHint": "Motor opcional: detén HocusPocus y, en el menú de Pinokio, ejecuta Advanced > Install 3D Generation (Hunyuan3D). Requiere una GPU NVIDIA; los pesos se descargan en el primer uso.",
     "sourceGlb": "GLB de origen",
     "sourceGlbHelp": "El original nunca se sobrescribe. Hunyuan crea una copia estática texturizada nueva.",
     "refreshGallery": "Actualizar galería GLB",

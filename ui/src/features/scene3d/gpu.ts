@@ -1,3 +1,4 @@
+import { applyN64Look, withN64Look } from './n64Look'
 import { imageCutoutMesh, poseImageCutout } from './imageCutout'
 import { CinematicRuntime } from './cinematicRuntime'
 import { MaterializationRuntime } from './materialization'
@@ -442,6 +443,7 @@ function paintPixelLight(world: GpuWorld, document: Scene3DDocument, slots: read
 }
 
 export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
+  document = withN64Look(document)
   const posedSlots = document.slots.map(slot => ({ ...slot, ...slotPoseAtTime(slot, sceneSeconds, document.duration) }))
   applyLoopOffset(world, sceneSeconds)
   paintCitadel(world.dressing, sceneSeconds)
@@ -477,8 +479,12 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment') || isAtmosDressing(document.dressing)) {
     world.cinema ??= new CinematicRuntime(world)
     world.cinema.sync(document, sceneSeconds)
+    applyN64Look(world.scene, document.renderLook === 'n64')
     world.cinema.render(document)
-  } else world.renderer.render(world.scene, world.camera)
+  } else {
+    applyN64Look(world.scene, false)
+    world.renderer.render(world.scene, world.camera)
+  }
 }
 
 export function setWorldSize(world: GpuWorld, width: number, height: number) {

@@ -27,6 +27,7 @@ import type { ParseKeys } from 'i18next'
 import { useUiTranslation } from '../../i18n'
 import { MontageLayersPanel, MontageToolbar, type MontageEditorState } from './MontageControls'
 import { loadMontageIntoEditor } from './montageLoader'
+import { useOpenProductionMontage } from '../music-productions/useOpenProductionMontage'
 import { DeriveVerticalButton } from './DeriveVerticalButton'
 import { ShortenSongPanel } from './ShortenSongPanel'
 import { PublishPresetBar } from './PublishPresetBar'
@@ -742,6 +743,7 @@ export function VideoEditorPanel() {
     persistEditorDraft(state.clips, state.projectName, state.resolution, state.fps, draftWorkspaceRef.current, state.soundtrack)
     setMontage({ layers, ref }); persistMontageState(activeWorkspace, layers, ref)
   }
+  useOpenProductionMontage(activeWorkspace, applyMontage)
   const [previewTime, setPreviewTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [sequenceMode, setSequenceMode] = useState(false)
