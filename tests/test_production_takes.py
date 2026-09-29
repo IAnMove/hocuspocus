@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from services.music_production import Production, status_summary
 from services.production_takes import (
-    RECORDED_CAP, another_take, note_seconds, pending_windows, recorded_takes, take_settled,
+    RECORDED_CAP, another_take, note_seconds, obsolete_clip, pending_windows, recorded_takes,
+    take_settled,
 )
 
 WINDOW = {"key": "a", "kind": "h3", "i": 0, "t0": 1.0, "t1": 4.0, "sing": True}
@@ -29,6 +30,13 @@ def test_recorded_takes_prefer_the_counter_and_otherwise_count_the_log():
     windows = [WINDOW]
     assert pending_windows(windows, {"frames": {"a": "f.png"}, **state}, ()) == []
     assert pending_windows(windows, {"frames": {"a": "f.png"}, "clip_takes": {"a": 4}}, ("a",)) == windows
+    stale = {"frames": {"a": "f.png"}, "clips": {"a": {"file": "old.mp4", "obsolete": True, "qa": {"best_r": 0.9}}},
+             "clip_takes": {"a": 4}}
+    assert pending_windows(windows, stale, ()) == windows
+    assert obsolete_clip(stale["clips"]["a"]) is True
+    assert obsolete_clip({"file": "old.mp4", "qa": {"best_r": 0.9}}) is False
+    kept = {"frames": {"a": "f.png"}, "clips": {"a": {"file": "old.mp4", "qa": {"best_r": 0.9}}}}
+    assert pending_windows(windows, kept, ()) == []
 
 
 def test_note_seconds_accumulates_per_shot():
@@ -125,6 +133,32 @@ def test_four_recorded_takes_shoot_only_from_an_explicit_retake(tmp_path, monkey
     assert production.state["clips"]["a"]["qa"]["best_r"] == 0.17
     assert production.state["discarded"] == ["new.mp4"]
     assert production.state["clip_takes"]["a"] == 5
+
+
+def test_obsolete_clip_is_reshot_and_old_r_does_not_keep_it(tmp_path, monkeypatch):
+    """After production.song.use the kept file is for another window. A weaker new
+    take must still replace it; a failed reshoot must leave the file in place."""
+    measure, seen, scores = _measure([0.05, 0.99])
+    production, calls, _files = _runner(tmp_path, monkeypatch, ["new.mp4", "unused.mp4"], measure)
+    production.state["clip_takes"] = {"a": 4}
+    production.state["clips"] = {"a": {"file": "old.mp4", "obsolete": True, "qa": {"verdict": "ok", "best_r": 0.9},
+                                       "url": "/u/old.mp4"}}
+    production.clips({"max_takes": 1}, [WINDOW], pause=0)
+    assert seen == [0.05] and next(scores) == 0.99
+    assert calls == [(7004, 4)]
+    kept = production.state["clips"]["a"]
+    assert kept["file"] == "new.mp4" and kept["qa"]["best_r"] == 0.05
+    assert "obsolete" not in kept
+    assert "old.mp4" not in (production.state.get("discarded") or [])
+
+    production.state["clip_takes"] = {"a": 4}
+    production.state["clips"] = {"a": {"file": "old.mp4", "obsolete": True, "qa": {"verdict": "ok", "best_r": 0.9},
+                                       "url": "/u/old.mp4"}}
+    production.clip_job = lambda spec, window, seed, take: "job-fail"
+    production.wait = lambda jobs, poll=6: (setattr(production, "failures", {"a": "oom"}) or {"a": None})
+    production.clips({"max_takes": 1}, [WINDOW], pause=0)
+    assert production.state["clips"]["a"]["file"] == "old.mp4"
+    assert production.state["clips"]["a"]["obsolete"] is True
 
 
 def test_logged_takes_count_when_the_counter_was_not_saved(tmp_path, monkeypatch):
