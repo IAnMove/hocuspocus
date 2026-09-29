@@ -26,7 +26,7 @@ from typing import Any, Callable
 import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
-from services.production_disk import release_completed, require_free_disk
+from services.production_disk import discard, release_completed, require_free_disk
 from services.production_resume import open_mcp
 from services.production_review import review_production
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
@@ -414,6 +414,7 @@ class Production:
         import subprocess
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(w["t0"]), "-t", str(frames / 24), "-i", str(self.root / source),
                         "-ar", "48000", "-ac", "2", str(self.root / slice_name)], check=True)
+        discard(self.state, slice_name)
         sing = " (S1) sings the lead vocal of the mapped driving audio, lips, jaw and breath in precise sync with every syllable." if w.get("sing") else ""
         prompt = (f"integrated_multimodal_description: [Shot 1] {(spec.get('style') or {}).get('video', '')} {w['action']}{sing}\n"
                   "overall_soundscape: The mapped driving audio: the song.\nnon_diegetic_music: N/A")
@@ -467,7 +468,11 @@ class Production:
         best = clips.get(key)
         previous = (best.get("qa") or {}).get("best_r") if best else None
         if not best or (qa.get("best_r") or 0) >= (previous or 0):
+            if best and best.get("file") and best["file"] != name:
+                discard(self.state, best["file"])
             clips[key] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
+        else:
+            discard(self.state, name)
         return take_settled(qa, previous)
 
     def scenes(self, spec: dict, windows: list[dict]) -> None:
@@ -657,7 +662,7 @@ class Production:
             self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
         finally:
             self.state["finished"] = time.time()
-            release_completed(self.root, self.state)
+            release_completed(self.root, self.state, self.id)
             self.save()
 
 

@@ -90,6 +90,7 @@ def test_flat_r_stops_after_the_third_take_and_keeps_the_best(tmp_path, monkeypa
     assert len(calls) == 3
     kept = production.state["clips"]["a"]
     assert kept["file"] == "t2.mp4" and kept["qa"]["best_r"] == 0.17
+    assert production.state["discarded"] == ["t1.mp4", "t3.mp4"]
     assert production.state["clip_takes"]["a"] == 3
     assert production.state["clip_seconds"]["a"] == 3.0
     assert "clip_seconds" not in status_summary(production.state, "ws")
@@ -122,6 +123,7 @@ def test_four_recorded_takes_shoot_only_from_an_explicit_retake(tmp_path, monkey
     assert seen == [0.05] and next(scores) == 0.99
     assert production.state["clips"]["a"]["file"] == "old.mp4"
     assert production.state["clips"]["a"]["qa"]["best_r"] == 0.17
+    assert production.state["discarded"] == ["new.mp4"]
     assert production.state["clip_takes"]["a"] == 5
 
 
