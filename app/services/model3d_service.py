@@ -36,7 +36,8 @@ ENV_DIR = SERVICE_DIR / "env"
 INSTALL_MARKER = ENV_DIR / ".maestro_hunyuan3d_v1.installed"
 WORKER_PATH = SERVICE_DIR / "worker.py"
 VENDOR_DIR = SERVICE_DIR / "vendor"
-JOBS_DIR = Path(__file__).resolve().parents[1] / "ckpts" / "model3d" / "jobs"
+# Job control belongs to this instance; checkpoints may be shared by worktrees.
+JOBS_DIR = Path(__file__).resolve().parents[1] / "settings" / "model3d-jobs"
 HF_CACHE_DIR = Path(__file__).resolve().parents[1] / "ckpts" / "model3d" / "huggingface"
 DIT_CONDITION_SUFFIX = (
     ", white background, centered 3D object, studio product shot, no people, no text, no extra objects"
