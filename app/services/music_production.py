@@ -1,7 +1,7 @@
 """Music-video production from one spec: the only creative input an agent writes.
 
 ``production.run`` starts (or resumes) a background run in the workspace; ``production.status``
-returns a short summary. The run drives the same public MCP tools an agent would call
+returns a short summary and can wait until that status changes (``wait_s``, max 300 s). The run drives the same public MCP tools an agent would call
 (generation.music/image, generate with H3 driving audio, scenes.video2d.edit/export,
 montages.save/export) through the app's own MCP endpoint, plus the local audio.analyze and
 qa.lipsync functions. Decisions a model used to make by looking are made here by numbers:
@@ -29,6 +29,7 @@ from services.production_disk import release_completed, require_free_disk
 from services.production_resume import open_mcp
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_style_presets import expand_style_preset
+from services.production_wait import MAX_WAIT_S, wait_for_status
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
@@ -692,8 +693,11 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, last log lines.",
-         "inputSchema": envelope({"workspace": ws, "production_id": pid}, ["workspace", "production_id"])},
+        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, last log lines. wait_s blocks until that status value changes or the wait elapses.",
+         "inputSchema": envelope({"workspace": ws, "production_id": pid,
+                                  "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
+                                             "description": "Seconds to wait until status changes. 0 returns at once. Maximum 300."}},
+                                 ["workspace", "production_id"])},
     ]
 
 
@@ -760,6 +764,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         path = Path(workspace_dir(data["workspace"])) / f"{data['production_id']}.production.json"
         if not path.exists():
             raise HTTPException(404, {"code": "production_not_found", "message": "No production with this id in the workspace", "retryable": False})
-        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(json.loads(path.read_text()), data["workspace"])}
+        state = await wait_for_status(path, data.get("wait_s", 0))
+        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(state, data["workspace"])}
 
     return {RUN: run, STATUS: status}
