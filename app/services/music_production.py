@@ -28,6 +28,7 @@ import numpy as np
 from services import lipsync_qa, song_analysis as audio_analysis
 from services.production_disk import release_completed, require_free_disk
 from services.production_resume import open_mcp
+from services.production_review import review_production
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_style_presets import expand_style_preset
 from services.production_takes import another_take, note_seconds, pending_windows, take_settled
@@ -660,10 +661,10 @@ class Production:
             self.save()
 
 
-def status_summary(state: dict, workspace: str) -> dict[str, Any]:
+def status_summary(state: dict, workspace: str, root: str | None = None) -> dict[str, Any]:
     url = lambda name: f"/api/v1/file/{name}?workspace={workspace}" if name else None
     clips = state.get("clips") or {}
-    return {"status": state.get("status", "unknown"), "error": state.get("error"),
+    summary = {"status": state.get("status", "unknown"), "error": state.get("error"),
             "song": (state.get("song") or {}).get("file"),
             "clips": {**{k: "failed" for k in state.get("clip_failures") or {}}, **{k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()}},
             "failures": state.get("clip_failures") or None,
@@ -672,6 +673,8 @@ def status_summary(state: dict, workspace: str) -> dict[str, Any]:
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
             "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:]}
+    summary.update(review_production(state, root))
+    return summary
 
 
 # ---------------------------------------------------------------- MCP
@@ -698,7 +701,7 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, last log lines. wait_s blocks until that status value changes or the wait elapses.",
+        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, code review (verdict, failures, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
                                              "description": "Seconds to wait until status changes. 0 returns at once. Maximum 300."}},
@@ -770,6 +773,6 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         if not path.exists():
             raise HTTPException(404, {"code": "production_not_found", "message": "No production with this id in the workspace", "retryable": False})
         state = await wait_for_status(path, data.get("wait_s", 0))
-        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(state, data["workspace"])}
+        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(state, data["workspace"], str(path.parent))}
 
     return {RUN: run, STATUS: status}

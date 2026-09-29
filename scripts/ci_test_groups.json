@@ -179,7 +179,11 @@
         "tests/test_workspace_commands.py",
         "tests/test_workspace_registry.py",
         "tests/test_world3d_owned_render_smoke.py",
-        "tests/test_production_review.py"
+        "tests/test_production_review.py",
+        "tests/test_lipsync_span.py",
+        "tests/test_production_disk.py",
+        "tests/test_production_resume.py",
+        "tests/test_production_held.py"
       ]
     },
     {
@@ -233,7 +237,6 @@
         "tests/test_image_generation_spec.py",
         "tests/test_krea2_features.py",
         "tests/test_live_stats.py",
-        "tests/test_lipsync_span.py",
         "tests/test_llm_activity_tracking.py",
         "tests/test_llm_resource_scheduling.py",
         "tests/test_llm_router.py",
@@ -271,10 +274,8 @@
         "tests/test_polish_dialogue_and_hallucination.py",
         "tests/test_procedural_3d_assets_router.py",
         "tests/test_procedural_glb_inspector.py",
-        "tests/test_production_disk.py",
-        "tests/test_production_resume.py",
         "tests/test_production_run.py",
-        "tests/test_production_held.py",
+        "tests/test_production_review_checks.py",
         "tests/test_production_scene_retry.py",
         "tests/test_production_style_presets.py",
         "tests/test_production_takes.py",
