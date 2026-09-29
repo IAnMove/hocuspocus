@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "revision": "runtime-profiles-v1-macos-core",
+  "revision": "runtime-profiles-v1-core-fallback",
   "platforms": [
     "linux",
     "win32"
@@ -39,9 +39,24 @@
       "environment": "venv",
       "python": "3.10",
       "required": true,
+      "fallbackFor": "wangp",
       "platforms": [
-        "darwin"
+        "darwin",
+        "linux",
+        "win32"
       ],
+      "architectures": {
+        "darwin": [
+          "arm64"
+        ],
+        "linux": [
+          "x64",
+          "arm64"
+        ],
+        "win32": [
+          "x64"
+        ]
+      },
       "requirements": "app/runtime/requirements-core.txt",
       "constraints": {
         "fastapi": "0.141.1",

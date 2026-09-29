@@ -93,12 +93,44 @@ def test_older_driver_keeps_core_available_without_claiming_h3_support():
 
 def test_unavailable_platforms_and_accelerators_never_fall_through_to_cuda():
     for platform, arch, gpu in [("linux", "arm64", "nvidia"),
-                                ("win32", "x64", "amd"), ("linux", "x64", "intel"),
+                                ("win32", "x64", "amd"), ("linux", "x64", "amd"), ("linux", "x64", "intel"),
                                 ("linux", "x64", "cpu"), ("linux", "x64", "unknown")]:
         result = profiles.select_profiles(platform, arch, gpu)
-        assert not result["supported"]
         assert all(not engine["supported"] and engine["reason"] for engine in result["engines"].values()
                    if engine.get("cuda"))
+        # The editing/remote studio still installs instead of stopping the installer.
+        assert result["supported"]
+        assert result["engines"]["core"]["supported"]
+        assert result["engines"]["core"]["id"] == f"{platform}-{profiles.normalize_arch(arch)}-core-core"
+
+
+def test_core_is_installed_only_where_wangp_cannot_run():
+    nvidia = profiles.select_profiles("linux", "x64", "nvidia", "580.82.09")
+    assert nvidia["supported"] and nvidia["engines"]["wangp"]["supported"]
+    # Both use app/env; selecting both would make each Update replace the other's receipt.
+    assert not nvidia["engines"]["core"]["supported"]
+    assert nvidia["engines"]["core"]["supersededBy"] == "wangp"
+    old_driver = profiles.select_profiles("win32", "x64", "nvidia", "470.10")
+    assert not old_driver["engines"]["wangp"]["supported"]
+    assert "driver" in old_driver["engines"]["wangp"]["reason"]
+    assert old_driver["engines"]["core"]["supported"] and old_driver["supported"]
+    for platform, arch in [("darwin", "x64"), ("win32", "arm64"), ("linux", "ia32"), ("freebsd", "x64")]:
+        result = profiles.select_profiles(platform, arch, "amd")
+        assert not result["supported"]
+        assert result["engines"]["core"]["reason"]
+
+
+def test_core_package_install_has_no_cuda_index(monkeypatch):
+    module_spec = importlib.util.spec_from_file_location("runtime_pip_test", ROOT / "scripts/runtime_pip.py")
+    helper = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(helper)
+    monkeypatch.setattr(helper.shutil, "which", lambda name: name)
+    for platform in ("linux", "win32", "darwin"):
+        monkeypatch.setattr(helper.sys, "platform", platform)
+        monkeypatch.setattr(helper.sys, "prefix", str(ROOT / "app/env"))
+        arguments, _env = helper.command("core", ["install", "-r", f"app/runtime/locks/{platform}-core.txt"])
+        assert not any("download.pytorch.org" in argument for argument in arguments)
+        assert str(ROOT / f"app/runtime/locks/{platform}-core.txt") in arguments
 
 
 def test_apple_silicon_installs_core_without_cuda_engines():

@@ -263,11 +263,11 @@ def test_shared_environment_does_not_check_an_unsupported_platform_recipe(tmp_pa
     }))
     monkeypatch.setattr(profiles, "APP_DIR", app)
 
-    def unsupported_fingerprint(*args):
-        raise AssertionError("There is no core recipe for Linux or Windows")
+    def unrelated_fingerprint(*args):
+        raise AssertionError("A WanGP receipt is not evidence for core")
 
-    monkeypatch.setattr(profiles, "dependency_fingerprint", unsupported_fingerprint)
-    for platform in ("linux", "win32"):
+    monkeypatch.setattr(profiles, "dependency_fingerprint", unrelated_fingerprint)
+    for platform in ("linux", "win32", "darwin"):
         assert receipt_status("core", platform) == {
             "present": False, "installed": False, "fingerprint_match": False,
         }

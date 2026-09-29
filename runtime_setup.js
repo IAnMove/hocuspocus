@@ -18,7 +18,7 @@ module.exports = {
       when: `{{args.update && exists('app/services/rigging/env') && local.runtime.engines.rigging.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,
     })),
     {method: 'log', params: {
-      raw: '{{"HocusPocus runtime recipes checked. " + Object.values(local.runtime.engines).filter(e => e.defaultInstall && !e.supported).map(e => e.label + ": " + e.reason).join(" ")}}',
+      raw: '{{"HocusPocus runtime recipes checked. " + Object.values(local.runtime.engines).filter(e => e.defaultInstall && !e.supported && !e.supersededBy).map(e => e.label + ": " + e.reason).join(" ")}}',
     }},
     {method: 'script.return', params: {success: true}},
   ],

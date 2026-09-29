@@ -1,4 +1,4 @@
-# Resolved for darwin arm64 / core, 2026-09-29.
+# Resolved for linux x64 / core, 2026-09-29.
 # Regenerate with scripts/lock_runtime_dependencies.py; native extensions use explicit recipe pins.
 annotated-doc==0.0.5
 annotated-types==0.8.0

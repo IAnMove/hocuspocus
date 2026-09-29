@@ -1,4 +1,4 @@
-# Apple Silicon core/remote: FastAPI, UI and editors. No Torch/CUDA.
+# Core/remote on any machine without a local AI recipe: FastAPI, UI and editors. No Torch/CUDA.
 fastapi==0.141.1
 starlette==0.52.1
 uvicorn==0.52.4

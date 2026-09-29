@@ -46,6 +46,20 @@ for (const platform of ['linux', 'win32']) {
   }
 }
 
+// Machines without a local AI recipe (AMD, Intel, CPU, old drivers) install core only.
+for (const platform of ['linux', 'win32', 'darwin']) {
+  const ctx = context(platform)
+  const steps = runtime.installEngines(['core', 'wangp']).filter(step => render(step.when, {
+    ...ctx, local: {runtime: {engines: {core: {supported: true, installed: false}, wangp: {supported: false}}}},
+  }) === 'true')
+  const commands = steps.filter(s => s.method === 'shell.run').map(s => render(s.params.message, ctx))
+  assert(commands.length, `${platform}: core must install`)
+  assert(commands.every(c => c.includes('runtime_failed.py')), 'Every core shell failure must propagate')
+  assert(commands.some(c => c.includes(`app/runtime/locks/${platform}-core.txt`)), `${platform}: core lock unused`)
+  assert(commands.some(c => c.includes('ffmpeg')), `${platform}: core editors need FFmpeg`)
+  assert(!JSON.stringify(steps).match(/torch|\+cu\d|torch\.js|wangp/), `${platform}: core must not install CUDA engines`)
+}
+
 // A child aborts with undefined in Pinokio; the parent must stop, not publish success.
 const guard = runtime.call('torch.js')[1]
 for (const input of [undefined, null, {}, {success: false}]) {
@@ -103,6 +117,12 @@ async function checkUiLaunchers() {
   assert(pending.some(item => item.href === 'sam_install.js'))
   const amd = flatten(await menu({platform: 'linux', gpu: 'amd'}, info))
   assert(!amd.some(item => item.href === 'rigging_install.js'))
+  // A core install hides WanGP-only entries and CUDA installers, even before GPU inventory loads.
+  const coreInfo = {...info, exists: name => name !== 'app/.runtime/wangp.managed'}
+  const core = flatten(await menu({}, coreInfo))
+  assert(core.some(item => item.href === 'start.js' && !item.params), 'Core must keep Start')
+  assert(!core.some(item => item.text === 'LoRAs' || item.params?.compile), 'Core has no WanGP models')
+  assert(!core.some(item => ['sam_install.js', 'rigging_install.js'].includes(item.href)))
   console.log('React repair/start/menu contract: PASS')
 }
 checkUiLaunchers().catch(error => { console.error(error); process.exitCode = 1 })

@@ -1,4 +1,4 @@
-"""Apple Silicon core/remote server: editors, projects and remote APIs without Torch."""
+"""Core/remote server (Apple Silicon and machines without a local AI recipe): editors, projects and remote APIs without Torch."""
 from __future__ import annotations
 
 import json

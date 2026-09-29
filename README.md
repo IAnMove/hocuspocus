@@ -18,7 +18,7 @@ The same clip inside the running studio (gallery, Wizard, Spanish UI):
 
 ![HocusPocus gallery playing the Gandalf Video 3D export](docs/images/readme/studio-gallery.jpg)
 
-Install with [Pinokio](https://pinokio.computer) from [`https://github.com/IAnMove/hocuspocus`](https://github.com/IAnMove/hocuspocus). NVIDIA GPU required.
+Install with [Pinokio](https://pinokio.computer) from [`https://github.com/IAnMove/hocuspocus`](https://github.com/IAnMove/hocuspocus). Local AI generation needs an NVIDIA GPU; other computers install the editing studio with remote providers.
 
 ---
 
@@ -186,7 +186,7 @@ Every step can also start from an existing image, video, audio file or GLB.
 | | Minimum | Recommended |
 |---|---|---|
 | **OS** | Windows 10/11 or Linux | Windows 11 or Linux |
-| **GPU** | NVIDIA, 6 GB VRAM | RTX 3090 / 4090 / 5090, 24 GB+ |
+| **GPU** (local AI) | NVIDIA, 6 GB VRAM | RTX 3090 / 4090 / 5090, 24 GB+ |
 | **RAM** | 16 GB | 32 GB+ |
 | **Disk** | 150 GB free | 500 GB free for a full model shelf |
 | **Python** | Installed by Pinokio | — |
@@ -197,7 +197,7 @@ Every step can also start from an existing image, video, audio file or GLB.
 | 12–16 GB | auto-tune offloads; slower |
 | 6–8 GB | works with heavy offload; keep clips short |
 
-AMD GPUs and macOS are **not** supported (CUDA kernels). First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Install/Update selects a compatible MSVC toolset, or skips this optional engine with setup instructions while installing the main app. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
+Local AI engines use CUDA kernels, so they install only on NVIDIA x64 Windows/Linux. Install checks each computer and installs only what it can run: on AMD, Intel or CPU-only PCs, Apple Silicon, Linux ARM, or NVIDIA drivers older than the recipe minimum, it installs the core studio (projects, editors, 3D worlds, comics, remote LLM/image/music/3D providers) without Torch, and the studio hides the local engines. Intel Macs are not supported. First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Install/Update selects a compatible MSVC toolset, or skips this optional engine with setup instructions while installing the main app. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
 
 For Windows Hunyuan3D, use **CUDA Toolkit 12.8** and a compatible x64 MSVC
 toolset: VS 2022 v143 (14.3x/14.4x) or VS 2019 v142, with a Windows SDK.
@@ -210,7 +210,7 @@ in a temporary source copy, leaving the vendor checkout unchanged.
 After correcting prerequisites, retry **Install** without Reset.
 Optional SAM/UniRig launcher entries are hidden for known unsupported hardware
 or operating systems; unknown hardware detection does not hide existing Start.
-This does not add macOS/MPS support or hide features inside the studio UI.
+Local AMD ROCm, Intel and Apple MPS engines are not available yet.
 
 ## Install
 

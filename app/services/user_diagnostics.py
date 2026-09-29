@@ -258,17 +258,20 @@ def _pick(observe: Mapping[str, Any], key: str, fallback):
 def receipt_status(engine: str, platform: str) -> dict[str, Any]:
     """Read the managed receipt only. Never spawn engine Python or import Torch."""
     spec = profiles.recipe(engine, platform)
-    # Core and WanGP share app/env, but have different platform recipes.
-    # A receipt in that folder is not evidence for an unsupported engine.
+    absent = {"present": False, "installed": False, "fingerprint_match": False}
     if platform not in spec["platforms"]:
-        return {"present": False, "installed": False, "fingerprint_match": False}
+        return absent
     path = profiles.APP_DIR.parent / spec["env"] / ".hocus-runtime-profile.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {"present": False, "installed": False, "fingerprint_match": False}
+        return absent
     if not isinstance(payload, dict):
         return {"present": True, "installed": False, "fingerprint_match": False}
+    # Core and WanGP share app/env: the other engine's receipt is not evidence for this one.
+    owner = payload.get("profile")
+    if isinstance(owner, str) and owner.rsplit("-", 1)[-1] != engine:
+        return absent
     try:
         expected = profiles.dependency_fingerprint(engine, platform)
     except OSError:
@@ -387,9 +390,10 @@ def explain_target(
 def describe_engine(name: str, selected: Mapping[str, Any], receipt: Mapping[str, Any]) -> dict[str, Any]:
     supported = bool(selected.get("supported"))
     repair = None
-    if not supported:
+    # A superseded engine (core beside WanGP) is provided by another; nothing to repair.
+    if not supported and not selected.get("supersededBy"):
         repair = repair_for_reason(selected.get("reason") if isinstance(selected.get("reason"), str) else None)
-    elif not receipt.get("installed"):
+    elif supported and not receipt.get("installed"):
         repair = REPAIR["install_update"]
     return {
         "id": name,

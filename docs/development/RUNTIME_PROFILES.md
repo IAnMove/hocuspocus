@@ -22,14 +22,26 @@ no longer matches still needs Install or Update.
 
 ## Available recipes
 
-All current recipes require **x64 and NVIDIA**. Selection checks OS,
+All local AI recipes require **x64 and NVIDIA**. Selection checks OS,
 architecture and the NVIDIA driver; an unknown driver is explicitly unverified.
-An unsupported optional engine is reported and skipped, while an unsupported
-core stops installation. This is installation compatibility, not a promise that
-every model fits in the available VRAM.
+An unsupported optional engine is reported and skipped. This is installation
+compatibility, not a promise that every model fits in the available VRAM.
+
+Every machine installs exactly one main runtime in `app/env`. `core` declares
+`fallbackFor: "wangp"`: it is selected only where WanGP cannot run (AMD, Intel,
+CPU-only, unknown GPU, Linux ARM, Apple Silicon, or an NVIDIA driver below the
+CUDA minimum) and is marked `supersededBy: "wangp"` elsewhere. Selecting both
+would make each Update replace the other's receipt in the shared environment.
+Installation stops only when neither can run (Intel Mac, Windows ARM, other
+OSes). Core installs FastAPI, the UI and FFmpeg without Torch; `launch.py` boots
+`core_runtime` when `app/.runtime/core.managed` exists without `wangp.managed`
+and sets `HOCUS_RUNTIME=core`, so capabilities report `coreRemote` and local
+engines answer 409 `feature_unavailable`. A later Update on a machine that
+gains a supported NVIDIA setup installs WanGP into the same environment.
 
 | Engine | Linux / Windows | Environment | Python / Torch / CUDA |
 |---|---|---|---|
+| Core/remote, fallback | Both, plus Apple Silicon; Linux ARM | `app/env` (venv) | 3.10 / none / none |
 | HocusPocus / WanGP, including native H3 | Both | `app/env` (venv) | 3.10 / 2.7.0 Linux, 2.7.1 Windows / 12.8 |
 | Hunyuan3D and procedural rigging | Both | `app/services/hunyuan3d/env` (conda) | 3.10 / 2.7.0 / 12.8 |
 | H3 **Legacy**, ComfyUI | Both | `app/services/minimax_h3/env` (conda) | 3.11 / 2.10.0 / 13.0 |
@@ -146,7 +158,7 @@ Pinokio itself through successful preflight, successful child completion, and a
 silent failed child whose parent must not publish completion.
 
 Remaining work: full Windows/Linux installation and model smoke on the final
-branch; CPU/AMD/Intel/MPS recipes; a UI for optional components; transactional
+branch; local AMD ROCm/Intel/MPS/CPU recipes (core covers those machines today); a UI for optional components; transactional
 environment replacement with automatic rollback. Current Update repairs in
 place and stops on failure; it does not promise rollback to the previous stack.
 

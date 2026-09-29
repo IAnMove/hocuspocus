@@ -6,6 +6,17 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Install on any computer: AMD, Intel and CPU-only PCs, Linux ARM and NVIDIA
+drivers below the CUDA minimum now install the core studio (projects, editors,
+3D worlds, comics and remote providers) without Torch instead of stopping at
+preflight. Each machine installs exactly one main runtime; NVIDIA x64 keeps
+WanGP and never installs core. Start boots the core runtime on those installs,
+the studio reports `coreRemote` and hides local engines, and the launcher hides
+LoRAs, compiled start and CUDA-only installers. Also fixes the macOS core
+install (`KeyError: 'cuda'` in the package helper) and reports the bundled
+Rhubarb as available. The first Update re-runs NVIDIA engine setup because a
+shared install helper changed.
+
 ## [0.9.0] - 2026-08-24
 
 First HocusPocus preview. Product versioning is independent of the Maestro

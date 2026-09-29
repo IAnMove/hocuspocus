@@ -3,7 +3,7 @@ const runtimeCatalog = require('./app/runtime/profiles.json')
 module.exports = {
   version: "8.0",
   title: "HocusPocus · Creation Lab",
-  description: "A local creation studio, forked from Maestro, for directing persistent worlds across video, images, sound, comics and 3D. Includes recoverable Director pipelines and optimized MiniMax H3 generation. Requires an NVIDIA GPU (6GB+ VRAM).",
+  description: "A local creation studio, forked from Maestro, for directing persistent worlds across video, images, sound, comics and 3D. Includes recoverable Director pipelines and optimized MiniMax H3 generation. Local AI generation needs an NVIDIA GPU (6GB+ VRAM); other computers install the editing studio with remote providers.",
   icon: "hocuspocus-icon.png",
   menu: async (kernel, info) => {
     const optionalAvailable = engine => {
@@ -22,9 +22,11 @@ module.exports = {
     ).map(item => item.menu ? {...item, menu: filterOptional(item.menu)} : item)
     // Do not gate this menu on kernel.gpu. Pinokio can render an app menu
     // before its hardware inventory has populated that property, which would
-    // hide Start from supported systems. install.js retains the documented
-    // execution-time NVIDIA check for fresh installations.
+    // hide Start from supported systems. install.js checks the hardware when it
+    // runs and installs only the engines this machine supports.
     let installed = info.exists("app/env")
+    // Install selected the core/remote runtime: no WanGP models or compiler.
+    let coreOnly = info.exists("app/.runtime/core.managed") && !info.exists("app/.runtime/wangp.managed")
     let running = {
       install: info.running("install.js"),
       start: info.running("start.js"),
@@ -90,7 +92,7 @@ module.exports = {
           text: "Repair Web UI",
           href: "ui_build.js",
           params: {force: true},
-        }, {
+        }, ...(coreOnly ? [] : [{
           icon: "fa-regular fa-folder-open",
           text: "LoRAs",
           menu: [{
@@ -104,21 +106,21 @@ module.exports = {
             href: "app/loras_i2v",
             fs: true
           }]
-        }, {
+        }]), {
           icon: "fa-solid fa-ellipsis",
           text: "Advanced",
           menu: [{
             icon: "fa-solid fa-comment-dots",
             text: "Repair offline lip sync",
             href: "speech_install.js",
-          }, {
+          }, ...(coreOnly ? [] : [{
             icon: "fa-solid fa-bolt",
             text: "Start compiled (experimental)",
             href: "start.js",
             params: {
               compile: true
             }
-          }, ...((kernel.platform || require("os").platform()) === "darwin" ? [] : [{
+          }]), ...(coreOnly || (kernel.platform || require("os").platform()) === "darwin" ? [] : [{
             icon: "fa-solid fa-vector-square",
             text: info.exists("app/services/sam/env")
               ? "Update Inpaint Support (SAM 3.1)"
