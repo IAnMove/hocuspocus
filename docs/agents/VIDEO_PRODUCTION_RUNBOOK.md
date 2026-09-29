@@ -33,6 +33,19 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 
 `production.run` with `dry_run: true` checks the spec before any GPU work. It also reports `motion` (`static_s`, `static_ratio`, `longest_shot_s`, `avg_shot_s`) and warns about a static video (`too_static`, over 35 % of the runtime on still images: the 160 s videos with 9 clips were 43–56 %), a hold over 10 s (`long_shot`), a still used three times (`still_reused`), `max_takes` 1 (`single_take`) and fewer than three song seeds (`few_song_seeds`). It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check.
 
+## Edit it by hand, shot by shot
+
+A finished production is not a black box. At the end of every run the studio packages it (`package` in the log):
+
+- one durable `<production_id>-<shot>-<hash>.scene.json` per shot (the clip layer, the lyric captions, the title, the finish), which opens in Video 2D;
+- the montage (`production.status` → `editable.montage`, a `*.montage.json` that opens in the Video Editor) with each clip named after its shot, carrying its lyric and an origin (`scene2d`, the scene document, the production and the shot). The shot board (Video Editor → Shots) shows them and has an **Open scene** button;
+- `<production_id>.shots.json` (`editable.manifest`): for every shot its time span, lyric, prompts, seed, start frame, every take with its lip-sync number, scene document and scene video;
+- every take of every clip stays on disk (only the audio slices and the takes nobody recorded are cleaned up), so swapping one in is possible.
+
+To fix a shot: open the montage in the Video Editor, press **Open scene** on the shot, change the clip layer to another take or retouch the text/camera in Video 2D, export, replace the clip in the timeline (the usual replace-clip handoff), export the montage. To redo a shot with the GPU, `production.run` with `retake: ["shot"]`; that re-exports only that scene.
+
+`production.run {workspace, production_id, package: true}` does the packaging for a production made before this existed (no GPU, no export; it saves the scene documents, the manifest and the montage clips' origins). Each document is checked with the Video 2D scene validator: `production.status` → `editable.warnings` counts text a viewer could not read (`text_low_contrast`, cut off, overlapping), listed per shot in the manifest.
+
 ## What the run does
 
 | Step | Tool it uses | Decision made by code |

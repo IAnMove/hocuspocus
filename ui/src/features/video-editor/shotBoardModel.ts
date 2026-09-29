@@ -1,4 +1,5 @@
 import type { MontageShotBoard } from '../../api/montages'
+import type { OutputFile } from '../../types'
 
 const clock = (seconds: number) => {
   const whole = Math.max(0, seconds)
@@ -18,4 +19,12 @@ export function hasPendingTakes(board: MontageShotBoard): boolean {
 export function shortPrompt(prompt: string, limit = 160): string {
   const text = prompt.replace(/\s+/g, ' ').trim()
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text
+}
+
+/** The saved Video 2D scene a shot came from, as the file the editor opens (a production writes one per shot). */
+export function sceneOutput(workspace: string, name: string): OutputFile {
+  return {
+    name, url: `/api/v1/file/${encodeURIComponent(name)}?workspace=${encodeURIComponent(workspace)}`,
+    type: 'scene', mode: null, favorite: false, size: 0, created_at: 0,
+  }
 }
