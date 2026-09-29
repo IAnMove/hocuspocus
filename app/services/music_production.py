@@ -35,6 +35,8 @@ from services.production_usage import attach_usage, usage_summary
 from services.production_review import review_for_status
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_style_presets import expand_style_preset
+from services.production_package import (attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, editable_summary,
+                                         lyric_for, manifest_rows, write_manifest)
 from services.production_takes import another_take, note_seconds, pending_windows, take_settled
 from services.production_wait import MAX_WAIT_S, wait_for_status
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
@@ -532,6 +534,8 @@ class Production:
         qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"], [w["t0"], w["t1"]]) if w.get("sing") and vocals else {"verdict": "ok"}
         drive = "vocals" if (take - 1) % 2 == 1 and w.get("sing") else "mix"
         self.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
+        self.state.setdefault("takes", {}).setdefault(key, []).append(
+            {"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive})
         best = clips.get(key)
         previous = (best.get("qa") or {}).get("best_r") if best else None
         if not best or (qa.get("best_r") or 0) >= (previous or 0):
@@ -558,8 +562,7 @@ class Production:
             if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
                     and prior.get("fingerprint") == fingerprint):
                 continue
-            doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
-            doc = self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
+            doc = self.scene_document(shot, a, b, score, clips, style, stills)
             docs[shot["key"]] = doc
             r = self.mcp("scenes.video2d.export", {"version": 1, "intent_id": f"{self.id}-scene-{shot['key']}-{int(time.time())}",
                                                    "input": {"workspace": self.ws, "document": doc}})
@@ -569,6 +572,65 @@ class Production:
         failed = finish_scene_exports(self.mcp, self.ws, self.id, done, docs, time.sleep, self.save, self.log)
         apply_scene_export_failure(self.state, failed)
         self.log(f"scenes: {sum(1 for s in done.values() if s.get('file'))}/{len(segs)}")
+
+    def scene_document(self, shot: dict, a: float, b: float, score: dict, clips: dict, style: dict, stills: dict) -> dict:
+        dur = round(b - a, 3)
+        doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
+        return self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
+
+    def package(self, spec: dict, windows: list[dict]) -> None:
+        """Save what a person needs to retouch the video shot by shot: a durable scene document per shot and a manifest
+        (see production_package). Never fails the run: the video is already made."""
+        score, clips = self.score(), self.state.get("clips", {})
+        segs = segments(windows, score, lambda k: k in clips, spec.get("fill") or [])
+        style, stills = spec.get("style") or {}, spec.get("stills") or {}
+        swap, saved = clip_replacements(clips, self.ws), self.state.setdefault("scene_docs", {})
+        for shot, a, b in segs:
+            key = shot["key"]
+            try:
+                doc = durable_document(self.scene_document(shot, a, b, score, clips, style, stills), swap)
+                digest = doc_digest(doc)
+                if (saved.get(key) or {}).get("digest") == digest:
+                    continue
+                result = self.mcp("scenes.document.save", {"version": 1, "intent_id": f"{self.id}-doc-{key}-{digest}",
+                                                           "input": {"workspace": self.ws, "name": f"{self.id}-{key}", "document": doc}})
+                name = (result.get("result") or {}).get("name")
+                if not name:
+                    raise ProductionError("scene_doc_failed", json.dumps(result)[:160])
+                note = " · ".join(part for part in (shot.get("action"), f"seed {shot['seed']}" if shot.get("seed") is not None else "") if part)
+                saved[key] = {"scene": name, "digest": digest, "lyric": lyric_for(score.get("lines") or [], a, b), "note": note,
+                              "warnings": contrast_warnings(self.mcp, doc)}
+            except Exception as error:      # one shot's document must not stop the others
+                self.log(f"package {key}: {type(error).__name__}: {error}"[:200])
+        manifest = write_manifest(self.root, self.id, spec.get("title", self.id), manifest_rows(self.state, spec, segs, score, saved),
+                                  self.state.get("montage_file"))
+        self.state["package"] = {"manifest": manifest, "scene_docs": len(saved),
+                                 "warnings": sum(len(item.get("warnings") or []) for item in saved.values())}
+        self.log(f"package: {len(saved)} scene documents, manifest {manifest}")
+
+    def repackage(self, spec: dict) -> None:
+        """Package a production that is already finished (no GPU, no export): scene documents, manifest and the
+        montage clips' origins. This is how an older production becomes editable."""
+        self.state.update(status="running")
+        self.save()
+        try:
+            windows = shot_windows(spec, self.score())
+            self.package(spec, windows)
+            file = self.state.get("montage_file")
+            if file:
+                current = (self.mcp("montages.get", {"version": 1, "input": {"workspace": self.ws, "file": file}}).get("result") or {})
+                montage = current.get("montage") or current
+                if attach_origins(montage, self.state.get("scene_docs") or {}, self.id) and montage.get("clips"):
+                    revision = current.get("revision") or montage.get("revision")
+                    saved = self.mcp("montages.save", {"version": 1, "intent_id": f"{self.id}-origins-{int(time.time())}",
+                                                       "input": {"workspace": self.ws, "montage": montage, "file": file, "expected_revision": revision}})
+                    if "result" not in saved:
+                        raise ProductionError("montage_failed", json.dumps(saved)[:200])
+        except Exception as error:
+            self.state["error"] = f"{type(error).__name__}: {error}"[:300]
+        self.state["status"] = "completed" if self.state.get("final") else "failed"
+        self.state["finished"] = time.time()
+        self.save()
 
     def edit(self, doc: dict, ops: list[dict]) -> dict:
         # scenes.video2d.edit admits 32 ops; a long still with timed lyrics exceeds that in one shot.
@@ -678,6 +740,7 @@ class Production:
                   "muted": True, "fit": "fill", "transition": "none"} for k, _, _ in self.state["segments"] if scenes.get(k, {}).get("file")]
         montage = {"version": 1, "name": spec["title"], "width": 1920, "height": 1080, "fps": 24, "clips": clips, "audioCues": [], "overlays": [],
                    "soundtrack": {"source": f"/api/v1/file/{self.state['song']['file']}?workspace={self.ws}", "trimStart": 0, "trimEnd": score["duration"], "volume": 1.0, "loop": False}}
+        attach_origins(montage, self.state.get("scene_docs") or {}, self.id)
         body: dict[str, Any] = {"workspace": self.ws, "montage": montage}
         if self.state.get("montage_file"):
             current = (self.mcp("montages.get", {"version": 1, "input": {"workspace": self.ws, "file": self.state["montage_file"]}}).get("result") or {})
@@ -721,7 +784,12 @@ class Production:
                 return
             watch.call("clips", self.clips, spec, windows, retake)
             watch.call("scenes", self.scenes, spec, windows)
+            try:
+                self.package(spec, windows)
+            except Exception as error:      # the video is made; editability is a bonus that must not fail the run
+                self.log(f"package failed: {type(error).__name__}: {error}"[:200])
             watch.call("montage", self.montage, spec)
+            self.state["package"] = {**(self.state.get("package") or {}), "montage": self.state.get("montage_file")}
             if self.state.get("final"):
                 self.state.update(status="completed", error=None)
             else:
@@ -747,7 +815,7 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
             "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:],
-            "timing": timing_summary(state), "usage": usage_summary(state)}
+            "timing": timing_summary(state), "usage": usage_summary(state), "editable": editable_summary(state)}
     summary.update(review_for_status(state, root))
     return summary
 
@@ -771,6 +839,7 @@ def command_catalog() -> list[dict[str, Any]]:
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
                                           "dry_run": {"type": "boolean"},
+                                          "package": {"type": "boolean", "description": "true: make a finished production editable shot by shot (scene documents, manifest, montage origins) without any GPU or export"},
                                           "auto_resume": {"type": "boolean", "description": "true: after a server restart this production continues by itself (for 24 h). Off unless asked (or HOCUS_PRODUCTION_AUTORESUME=1)."},
                                           "through": {"enum": ["all", "frames"]},
                                           "preview": {"type": "object", "required": ["prompts"], "properties": {
@@ -846,8 +915,13 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             through = data.get("through", "all")
             if through not in ("all", "frames"):
                 raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all or frames", "retryable": False})
-            target = production.run
-            args = (spec, tuple(data.get("retake") or ()), through)
+            if data.get("package") is True:
+                if production.state.get("status") not in ("completed", "failed"):
+                    raise HTTPException(422, {"code": "not_finished", "message": "package needs a finished production", "retryable": False})
+                target, args = production.repackage, (spec,)
+            else:
+                target = production.run
+                args = (spec, tuple(data.get("retake") or ()), through)
         with _lock:
             thread = _threads.get(key)
             if thread and thread.is_alive():
