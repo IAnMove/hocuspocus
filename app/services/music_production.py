@@ -29,12 +29,14 @@ import numpy as np
 from services import lipsync_qa, song_analysis as audio_analysis
 from services.production_disk import discard, release_completed, require_free_disk
 from services.production_resume import open_mcp
+from services.production_resource_gate import guard_mcp
 from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
 from services.production_timing import StageWatch, timing_summary
 from services.production_usage import attach_usage, usage_summary
 from services.production_quality import expand_quality
 from services.production_review import review_for_status
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
+from services.production_scene3d import export_scene3d_clips, validate_scene3d_shot
 from services.production_style_presets import expand_style_preset
 from services.production_package import (attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, editable_summary,
                                          lyric_for, manifest_rows, write_manifest)
@@ -87,10 +89,11 @@ SPEC_SCHEMA: dict[str, Any] = {
                                                                   "description": "ids of other cast entries: one reference image with their sheets side by side (no sheet_prompt needed)"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
-            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
+            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
             "frame": {"type": "string"}, "action": {"type": "string"}, "still": {"type": "string"}, "clip": {"type": "string"},
             "image_model": {"type": "string"}, "image_steps": {"type": "integer"}, "graphic": {"type": "object"},
+            "scene3d": {"type": "object", "description": "Native Video 3D: template or document, GLB subject/slots, camera, atmosphere and movement"},
             "desktop": {"type": "object", "description": "kind screen: tiling desktop fields (layout, apps, focus, workspace, switch, theme)"},
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"}}}}]},
         "fill": {"type": "array", "description": "Shots used to fill instrumental stretches longer than a clip"},
@@ -119,13 +122,19 @@ def validate_spec(spec: Any) -> dict:
             raise ProductionError("invalid_spec", "image_model must be a model selector")
     keys = set()
     for shot in spec["shots"]:
-        if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip", "screen"):
-            raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip|screen")
+        if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip", "screen", "scene3d"):
+            raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip|screen|scene3d")
         if shot["key"] in keys:
             raise ProductionError("invalid_spec", f"duplicate shot key {shot['key']}")
         keys.add(shot["key"])
         if shot["kind"] == "h3" and not (shot.get("frame") and shot.get("action")):
             raise ProductionError("invalid_spec", f"h3 shot {shot['key']} needs frame and action")
+    for shot in [*spec["shots"], *(spec.get("fill") or [])]:
+        if shot.get("kind") == "scene3d":
+            try:
+                validate_scene3d_shot(shot)
+            except ValueError as error:
+                raise ProductionError("invalid_spec", str(error)) from error
     return spec
 
 
@@ -299,7 +308,7 @@ class Production:
         self.uploads = Path(uploads_dir())
         self.path = self.root / f"{production_id}.production.json"
         self.state = json.loads(self.path.read_text()) if self.path.exists() else {}
-        self.mcp = attach_usage(mcp, self.state, self.save)
+        self.mcp = attach_usage(guard_mcp(self, mcp), self.state, self.save)
         self.lost: set[str] = set()
 
     # state
@@ -703,6 +712,8 @@ class Production:
     def scene_ops(self, shot: dict, a: float, b: float, dur: float, score: dict, clips: dict, style: dict, stills: dict) -> list[dict]:
         ops: list[dict] = []
         clip = clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None)
+        if shot["kind"] == "scene3d" and not clip:
+            raise ProductionError("scene3d_export_failed", f"scene3d clip missing: {shot['key']}")
         if clip:
             note_held(self.state, shot["key"], False)
             ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-locked")})
@@ -842,6 +853,8 @@ class Production:
                 self.log("frames: ready for a clean restart before clips")
                 return
             watch.call("clips", self.clips, spec, windows, retake)
+            if any(s.get("kind") == "scene3d" for s in [*spec["shots"], *(spec.get("fill") or [])]):
+                watch.call("clips", export_scene3d_clips, self, spec, windows, retake)
             watch.call("scenes", self.scenes, spec, windows)
             try:
                 self.package(spec, windows)

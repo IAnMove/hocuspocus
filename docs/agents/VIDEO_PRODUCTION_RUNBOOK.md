@@ -3,7 +3,7 @@
 For agents that drive HocusPocus through MCP. The agent writes one spec (the creative part);
 the studio does the rest and decides by numbers what a model used to decide by watching.
 One `production.run` calls `audio.analyze`, `generation.music`, `generation.image`,
-`scenes.video2d.edit`, `scenes.video2d.export`, `montages.save` and `montages.export`.
+`scenes.world3d.export` for `scene3d` shots, `scenes.video2d.edit`, `scenes.video2d.export`, `montages.save` and `montages.export`.
 Export stays inside that run. Do not also call `montages.export`.
 Call `production.plan` with the eight-field brief when you do not already have a spec. It returns the spec. Then `production.run`.
 
@@ -224,3 +224,57 @@ verdict says so, using `retake_keys` unchanged. Poll `production.status` with `w
   performer to one side in the `frame` prompt when a shot has a title. The code review checks
   `title_cut_off` and `text_covers_face` for this.
 - Do not invent `appearance_changed`. Unknown means stop on that question, not a guessed yes or no. Do not guess a retake when `review.verdict` is `unreliable`.
+
+
+## Native Video 3D shots
+
+Use explicit `shots` with `kind: "scene3d"`. `scene3d` takes exactly one native
+`template` id or a complete Video 3D `document`. A template also needs `subject`
+(a workspace GLB URL) or explicit `slots`. The runner uses the existing UI template
+factory and document parser; it does not build a separate renderer.
+
+```json
+{
+  "title": "A moving model",
+  "song": {"lyrics": "We move together", "caption": "original synth pop", "duration": 60, "bpm": 120},
+  "style": {},
+  "shots": [{"key": "orbit", "kind": "scene3d", "t0": 0,
+    "scene3d": {"template": "product-orbit", "subject": "/api/v1/file/hero.glb?workspace=movie",
+      "motion": {"to": [2, 0, 0], "turnTo": 6.283}, "grounded": true,
+      "camera": {"family": "orbit", "orbitRadius": 5}, "atmos": {"timeOfDay": "dawn"}}}]
+}
+```
+
+Overrides include `camera`, `atmos`, `environment`, `light`, `dressing`,
+`pixelWorld`, `width`, `height` and `fps`. `subject` also accepts `clip` (an authored
+GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
+`grounded`. Explicit `slots` use the native Video 3D slot fields. A rigid GLB can
+turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
+no H3 lip-sync is implied.
+
+Each export covers its actual cut duration, defaults to 1280×720 at 24 fps, and
+uses `scenes.world3d.export` followed by `scenes.world3d.export.receipt`. Durable
+intents recover an uncertain admission. A failed or lost export is retried once;
+a second failure stops the production without substituting a still or H3 clip.
+The exported MP4 enters Video 2D as a video layer for captions/finishing and the
+montage adds the song normally. Empty `cast` and all-3D shots request no cast
+images, start frames or H3 generation. Both template and full-document shots
+are supported in `fill`.
+
+State stores each native document in `clips[key].world3d_document`, the export
+receipt identity and a config/duration fingerprint. Resume reuses unchanged
+clips; a changed scene or `retake: [key]` exports that shot again. A retake updates
+its revision so the following resume keeps the new clip.
+
+
+### Shared workstation resource gate
+
+An isolated runtime can set `HOCUS_PRODUCTION_MIN_FREE_GB=15` and
+`HOCUS_PRODUCTION_EXTERNAL_VRAM_MB=2048` in its process environment. Before each
+music/image/H3 or native video export admission, the runner invokes `df -h` and
+`nvidia-smi`. It waits in 30-second intervals while another GPU process exceeds
+the limit; its own resident model is excluded. A disk shortfall stops the
+resumable production with `resource_disk_low`, without deleting files. The agent
+must propose a cleanup and wait for the user's approval before resuming.
+These opt-in checks leave other instances untouched. They require the named
+local commands when enabled; absent commands fail before admission.

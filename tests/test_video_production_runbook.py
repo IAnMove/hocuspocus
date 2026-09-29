@@ -53,6 +53,7 @@ def _catalog_groups() -> list:
     from services.montage_commands import command_catalog as montages
     from services.music_production import command_catalog as production
     from services.scene2d_export import command_catalog as scene_export
+    from services.world3d_export import command_catalog as world_export
     from services.song_analysis import command_catalog as audio
     from services.video2d_edit import command_catalog as scene_edit
 
@@ -62,6 +63,7 @@ def _catalog_groups() -> list:
         montages(),
         scene_edit(),
         scene_export(),
+        world_export(),
         image_command_catalog(),
         [music_command_catalog()],
     ]
