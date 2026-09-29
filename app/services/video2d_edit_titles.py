@@ -200,6 +200,32 @@ def _card(fields: dict, frame: dict) -> list:
     })]
 
 
+_DESKTOP_KEYS = ("theme", "layout", "apps", "switch")
+_DESKTOP_NUMBERS = ("focus", "workspace")
+
+
+def _desktop(fields: dict, frame: dict) -> list:
+    """Full-frame tiling-desktop graphic (theme, layout and apps come from scene_graphics.json)."""
+    from services.video2d_catalogs import GRAPHICS_CATALOG
+    entry = next(item for item in GRAPHICS_CATALOG["entries"] if item["id"] == "tiling")
+    allowed = {param["key"]: param for param in entry["params"]}
+    params: dict = {}
+    for key in _DESKTOP_KEYS:
+        value = _field(fields, key)
+        if value not in allowed[key]["values"]:
+            _fail("invalid_input", f"desktop {key} must be one of {', '.join(allowed[key]['values'])}")
+        params[key] = value
+    for key in _DESKTOP_NUMBERS:
+        try:
+            value = int(float(_field(fields, key)))
+        except ValueError:
+            _fail("invalid_input", f"desktop {key} must be a number")
+        if not allowed[key]["min"] <= value <= allowed[key]["max"]:
+            _fail("invalid_input", f"desktop {key} is out of range")
+        params[key] = value
+    return [_cue("desktop", "", frame, {"x": 50, "y": 50, "size": 10, "graphic": {"id": "tiling", "params": params}})]
+
+
 TITLE_BUILDERS = {
     "lower-third-date": _lower_third,
     "chorus-banner": _chorus,
@@ -213,12 +239,14 @@ TITLE_BUILDERS = {
     "ransom": _ransom,
     "dymo": _dymo,
     "card": _card,
+    "desktop": _desktop,
 }
 
 TITLE_DEFAULTS = {
     "ransom": {"line": "THE BIRD IS FREED"},
     "dymo": {"line": "KEEP THE LINE", "background": "paper"},
     "card": {"title": "Musktopia"},
+    "desktop": {"theme": "tokyo-night", "layout": "triple", "apps": "mixed", "focus": "0", "workspace": "1", "switch": "none"},
 }
 
 

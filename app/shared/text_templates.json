@@ -220,6 +220,46 @@
           "labelKey": "fields.title"
         }
       ]
+    },
+    {
+      "id": "desktop",
+      "labelKey": "templates.desktop",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "theme",
+          "default": "tokyo-night",
+          "labelKey": "fields.theme"
+        },
+        {
+          "key": "layout",
+          "default": "triple",
+          "labelKey": "fields.layout"
+        },
+        {
+          "key": "apps",
+          "default": "mixed",
+          "labelKey": "fields.apps"
+        },
+        {
+          "key": "focus",
+          "default": "0",
+          "labelKey": "fields.focus"
+        },
+        {
+          "key": "workspace",
+          "default": "1",
+          "labelKey": "fields.workspace"
+        },
+        {
+          "key": "switch",
+          "default": "none",
+          "labelKey": "fields.switch"
+        }
+      ]
     }
   ]
 }

@@ -88,6 +88,13 @@ function buildCard(values: Record<string, string>, frame: TextFrame) {
   })]
 }
 
+function buildDesktop(values: Record<string, string>, frame: TextFrame) {
+  const params: Record<string, number | string> = {}
+  for (const key of ['theme', 'layout', 'apps', 'switch']) params[key] = values[key]
+  for (const key of ['focus', 'workspace']) params[key] = Math.trunc(Number(values[key]))
+  return [cue('desktop', '', frame, { x: 50, y: 50, size: 10, graphic: { id: 'tiling', params } })]
+}
+
 const BUILDS: Record<string, TextTemplate['build']> = {
   'lower-third-date': (values, frame) => {
     const y = vertical(frame.height, frame.width) ? 72 : 78
@@ -111,6 +118,7 @@ const BUILDS: Record<string, TextTemplate['build']> = {
   ransom: buildRansom,
   dymo: buildDymo,
   card: buildCard,
+  desktop: buildDesktop,
 }
 
 export const TEXT_TEMPLATES: TextTemplate[] = (textCatalog.entries as RawText[]).map(entry => {
