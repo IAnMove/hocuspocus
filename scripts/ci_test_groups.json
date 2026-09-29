@@ -190,7 +190,8 @@
         "tests/test_production_shot_plan.py",
         "tests/test_production_dry_run.py",
         "tests/test_production_shot_edit.py",
-        "tests/test_production_song_switch.py"
+        "tests/test_production_song_switch.py",
+        "tests/test_production_publication.py"
       ]
     },
     {

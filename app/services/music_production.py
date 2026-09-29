@@ -28,6 +28,7 @@ import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
 from services.production_disk import discard, release_completed, require_free_disk
+from services.production_publication import publication_catalog, publication_handlers
 from services.production_resume import open_mcp
 from services.production_resource_gate import guard_mcp
 from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
@@ -974,7 +975,7 @@ def command_catalog() -> list[dict[str, Any]]:
         "input": {"type": "object", "additionalProperties": False, "required": required, "properties": props}}}
     ws = {"type": "string", "minLength": 1, "maxLength": 120}
     pid = {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$"}
-    return [
+    return publication_catalog() + [
         {"name": RUN, "description": ("Produce a music video from one spec, in the background: K song candidates (best lyric recall, no cut "
                                       "ending), analysis, cast sheets, start frames, H3 clips driven by the exact song slice with automatic "
                                       "lip-sync retakes, one Video 2D scene per shot with timed lyric captions, instrumental gaps filled on bar "
@@ -1098,4 +1099,4 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
         return {"version": 1, "status": "completed", "operation": PLAN, "result": {"spec": spec}}
 
-    return {RUN: run, STATUS: status, PLAN: plan, **extra_handlers(workspace_dir, uploads_dir, app_url, token)}
+    return {RUN: run, STATUS: status, PLAN: plan, **extra_handlers(workspace_dir, uploads_dir, app_url, token), **publication_handlers(workspace_dir)}
