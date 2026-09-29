@@ -144,6 +144,75 @@ def test_missing_take_is_a_stable_error_and_does_not_swap_the_clip(tmp_path: Pat
     assert production.state["clips"]["s0"]["file"] == before
 
 
+def _fail_scene_export(production):
+    inner = production.mcp
+
+    def failing(tool: str, arguments: dict) -> dict:
+        if tool == "scenes.video2d.export.receipt":
+            return {"receipt": {"status": "failed"}}
+        return inner(tool, arguments)
+
+    production.mcp = failing
+
+
+def _disk_state(root: Path) -> dict:
+    return json.loads((root / "show.production.json").read_text(encoding="utf-8"))
+
+
+def test_failed_use_take_does_not_keep_the_new_clip_or_clear_the_scene(tmp_path: Path):
+    """export_scene used to save clips=new-take and scenes[shot].file=None before the
+    export finished. A 422 then left the montage on the old scene and the JSON swapped."""
+    production, spec, root, saved, _edits = _build(tmp_path)
+    production.state["scenes"]["s0"] = {"file": "old-s0.mp4", "intent": "export-old"}
+    production.save()
+    _fail_scene_export(production)
+    with pytest.raises(ShotEditError) as caught:
+        use_take(production, spec, "s0", "take-b.mp4")
+    assert caught.value.code == "scene_export_failed"
+    assert production.state["clips"]["s0"]["file"] == "take-a.mp4"
+    assert production.state["scenes"]["s0"]["file"] == "old-s0.mp4"
+    assert production.state["clips"]["s1"]["file"] == "take-a.mp4"
+    assert saved == []
+    disk = _disk_state(root)
+    assert disk["clips"]["s0"]["file"] == "take-a.mp4"
+    assert disk["scenes"]["s0"]["file"] == "old-s0.mp4"
+
+
+def test_failed_update_does_not_keep_overrides_or_clear_the_scene(tmp_path: Path):
+    production, spec, root, saved, _edits = _build(tmp_path)
+    production.state["scenes"]["s0"] = {"file": "old-s0.mp4", "intent": "export-old"}
+    production.save()
+    _fail_scene_export(production)
+    with pytest.raises(ShotEditError) as caught:
+        update_shot(production, spec, "s0", camera="camera-orbit", lyric_style={"color": "#ABCDEF"})
+    assert caught.value.code == "scene_export_failed"
+    assert "overrides" not in spec["shots"][0]
+    assert production.state["scenes"]["s0"]["file"] == "old-s0.mp4"
+    assert production.state["clips"]["s0"]["file"] == "take-a.mp4"
+    assert saved == []
+    disk = _disk_state(root)
+    assert disk["scenes"]["s0"]["file"] == "old-s0.mp4"
+    assert "overrides" not in (disk.get("spec") or {}).get("shots", [{}])[0]
+
+
+def test_rejected_montage_save_does_not_keep_the_new_clip(tmp_path: Path):
+    production, spec, root, saved, _edits = _build(tmp_path)
+    inner = production.mcp
+
+    def reject(tool: str, arguments: dict) -> dict:
+        if tool == "montages.save":
+            return {"error": {"code": "revision_conflict"}}
+        return inner(tool, arguments)
+
+    production.mcp = reject
+    with pytest.raises(ShotEditError) as caught:
+        use_take(production, spec, "s0", "take-b.mp4")
+    assert caught.value.code == "montage_failed"
+    assert production.state["clips"]["s0"]["file"] == "take-a.mp4"
+    assert saved == []
+    assert _disk_state(root)["clips"]["s0"]["file"] == "take-a.mp4"
+
+
 def test_update_stores_overrides_and_reexports_only_that_scene(tmp_path: Path):
     production, spec, _root, saved, edits = _build(tmp_path)
     calls: list[str] = []
