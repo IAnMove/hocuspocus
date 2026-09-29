@@ -63,11 +63,17 @@ def _export(production, key, document, fingerprint, *, sleep):
     if record.get("fingerprint") != fingerprint:
         record = {"fingerprint": fingerprint, "attempt": 0}
         exports[key] = record
+    elif not record.get("intent") and record.get("attempt", 0) >= 2:
+        # Two failures stop this run. A later production.run resume has no video, so
+        # review is unreliable and will not pass retake; start a new attempt cycle
+        # whose intent ids cannot recover the previous failed receipts.
+        record.update(attempt=0, cycle=record.get("cycle", 0) + 1, admitted=False)
+        exports[key] = record
     while record.get("attempt", 0) < 2 or record.get("intent"):
         if not record.get("intent"):
             attempt = record.get("attempt", 0) + 1
             identity = hashlib.sha256(key.encode()).hexdigest()[:16]
-            intent = f"{production.id[:60]}-3d-{identity}-{fingerprint}-{attempt}"
+            intent = f"{production.id[:60]}-3d-{identity}-{fingerprint}-{record.get('cycle', 0)}-{attempt}"
             record.update(attempt=attempt, intent=intent, admitted=False)
             production.save()  # Retry an uncertain admission with this exact intent.
         if not record.get("admitted"):
