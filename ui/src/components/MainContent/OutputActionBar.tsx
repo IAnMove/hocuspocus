@@ -298,6 +298,10 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
           video!.onloadeddata = () => resolve()
           video!.onerror = () => reject(new Error('video load failed'))
         })
+        // Chromium may report seeked before it has decoded a frame for a
+        // detached, never-played video. Prime decoding before the saved seek.
+        await video.play()
+        video.pause()
         if (videoTime > 0 && Number.isFinite(video.duration)) {
           await new Promise<void>((resolve, reject) => {
             video!.onseeked = () => resolve()
