@@ -30,6 +30,7 @@ from services.production_disk import discard, release_completed, require_free_di
 from services.production_resume import open_mcp
 from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
 from services.production_timing import StageWatch, timing_summary
+from services.production_usage import attach_usage, usage_summary
 from services.production_review import review_production
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_style_presets import expand_style_preset
@@ -38,7 +39,7 @@ from services.production_wait import MAX_WAIT_S, wait_for_status
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
-RUN, STATUS = "production.run", "production.status"
+RUN, STATUS, PLAN = "production.run", "production.status", "production.plan"
 OMARCHY_THEMES: dict[str, dict] = json.loads((Path(__file__).resolve().parents[1] / "shared" / "omarchy_themes.json").read_text(encoding="utf-8"))["entries"]
 H3_FRAMES = [124 + 17 * k for k in range(14)]            # H3 window lengths (124 … 345 frames at 24 fps)
 STEPS = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
@@ -270,9 +271,9 @@ class Production:
         self.ws, self.id = workspace, production_id
         self.root = Path(workspace_dir(workspace))
         self.uploads = Path(uploads_dir())
-        self.mcp = mcp
         self.path = self.root / f"{production_id}.production.json"
         self.state = json.loads(self.path.read_text()) if self.path.exists() else {}
+        self.mcp = attach_usage(mcp, self.state, self.save)
 
     # state
     def save(self) -> None:
@@ -692,7 +693,7 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
             "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:],
-            "timing": timing_summary(state)}
+            "timing": timing_summary(state), "usage": usage_summary(state)}
     summary.update(review_production(state, root))
     return summary
 
@@ -723,7 +724,9 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": STATUS, "description": "Short summary of a production: status, stage timings, per-clip lip-sync verdicts, video and contact-sheet URLs, code review (verdict, failures, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
+        {"name": PLAN, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites. Optional lyrics replace the draft.",
+         "inputSchema": envelope({"brief": {"type": "object"}}, ["brief"])},
+        {"name": STATUS, "description": "Short summary of a production: status, stage timings, usage (mcp_calls, response_bytes, h3_takes), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (verdict, failures, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
                                              "description": "Seconds to wait until status changes. 0 returns at once. Maximum 300."}},
@@ -800,4 +803,15 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         state = await wait_for_status(path, data.get("wait_s", 0))
         return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(state, data["workspace"], str(path.parent))}
 
-    return {RUN: run, STATUS: status}
+    async def plan(arguments: Any) -> dict:
+        from services.production_plan import PlanError, plan_brief
+        data = (arguments or {}).get("input") if isinstance(arguments, dict) else None
+        if not isinstance(data, dict):
+            raise HTTPException(422, {"code": "invalid_command", "message": "Use version 1 with input.brief", "retryable": False})
+        try:
+            spec = plan_brief(data.get("brief"))
+        except PlanError as error:
+            raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
+        return {"version": 1, "status": "completed", "operation": PLAN, "result": {"spec": spec}}
+
+    return {RUN: run, STATUS: status, PLAN: plan}
