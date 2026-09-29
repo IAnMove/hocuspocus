@@ -96,7 +96,7 @@ Lip-sync stops when the next measured `r` does not beat the best `r` already kep
 0.04, then 0.17, then 0.06 keeps 0.17 and does not shoot the next take. A shot with
 4 recorded takes is not shot again unless that key is in `retake`.
 `production.status` includes `timing` in seconds for song, analyze, cast, frames, clips, scenes and montage (0 when that stage did not run), and `timing.shots` lists each clip's `key`, `seconds` and take count.
-`production.status` also includes `usage`: `mcp_calls`, `response_bytes` and `h3_takes`. Tokens are about `response_bytes / 4`.
+`production.status` also includes `usage`: `mcp_calls`, `response_bytes` (what the run's own runner read from the studio's MCP replies) and `h3_takes`. These are not LLM tokens and are not converted to them: the client that runs the language model (for example Claude Code, which logs usage per message) is the only one that can measure those.
 The montage export in the table is internal. The agent does not call `montages.export` after the run.
 
 ## production.review
