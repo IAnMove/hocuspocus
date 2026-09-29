@@ -663,9 +663,11 @@ def command_catalog() -> list[dict[str, Any]]:
                                       "lines, montage and export. Pass spec to start; pass only production_id to resume (missing clips are retried "
                                       "and their scenes re-exported); retake lists clip keys to shoot again, keeping the better take. "
                                       "Returns immediately; "
-                                      "poll production.status. See docs/agents/VIDEO_PRODUCTION_RUNBOOK.md."),
+                                      "poll production.status. dry_run checks the spec before any GPU work. "
+                                      "See docs/agents/VIDEO_PRODUCTION_RUNBOOK.md."),
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
+                                          "dry_run": {"type": "boolean"},
                                           "through": {"enum": ["all", "frames"]},
                                           "preview": {"type": "object", "required": ["prompts"], "properties": {
                                               "prompts": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}},
@@ -705,6 +707,9 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
 
     async def run(arguments: Any) -> dict:
         data = _input(arguments)
+        if data.get("dry_run") is True:
+            from services.production_dry_run import dry_run
+            return {"version": 1, "status": "completed", "operation": RUN, "result": dry_run(data.get("spec"))}
         if not token() or not app_url():
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         production = Production(data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=loopback_mcp(app_url, token))

@@ -28,6 +28,8 @@ asks the vision model; if it cannot run, do not invent its answers.
 
 A later `production.run` with the same id and no `retake` resumes from the last finished step.
 
+`production.run` with `dry_run: true` checks the spec before any GPU work.
+
 ## What the run does
 
 | Step | Tool it uses | Decision made by code |
