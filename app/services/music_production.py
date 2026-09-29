@@ -862,9 +862,11 @@ class Production:
                 self.log(f"package failed: {type(error).__name__}: {error}"[:200])
             watch.call("montage", self.montage, spec)
             self.state["package"] = {**(self.state.get("package") or {}), "montage": self.state.get("montage_file")}
-            if self.state.get("final"):
+            # A leftover final from a previous completed run is not success: scene
+            # export can fail, skip montage, and still leave that filename in state.
+            if self.state.get("status") != "failed" and self.state.get("final"):
                 self.state.update(status="completed", error=None)
-            else:
+            elif self.state.get("status") != "failed":
                 self.state["status"] = "failed"
         except Exception as error:  # the run is resumable; keep the reason
             self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])

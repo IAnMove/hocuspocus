@@ -76,3 +76,37 @@ def test_two_failures_set_scene_export_failed_and_skip_montage(tmp_path, monkeyp
     assert production.state["status"] == "failed"
     assert production.state["error"] == "scene_export_failed: a, b"
     assert "montages.save" not in calls
+
+
+def test_stale_final_does_not_complete_a_failed_retake(tmp_path, monkeypatch):
+    """The runbook calls production.run again after review. A leftover final.mp4
+    must not mark that retake completed or delete discarded takes."""
+    monkeypatch.setattr(time, "sleep", _refuse_sleep)
+    receipts = iter([
+        {"receipt": {"status": "failed", "artifacts": []}, "task": {"status": "failed"}},
+        {"receipt": {"status": "cancelled", "artifacts": []}, "task": {"status": "cancelled"}},
+    ])
+
+    def mcp(tool, arguments):
+        if tool == "scenes.video2d.export":
+            return {"receipt": {"commandId": arguments["intent_id"]}}
+        if tool == "scenes.video2d.export.receipt":
+            return next(receipts)
+        if tool == "montages.save":
+            raise AssertionError("montage must not run after scene export failed")
+        return {"result": {}}
+
+    production = _production(tmp_path, mcp)
+    (tmp_path / "old-final.mp4").write_bytes(b"old")
+    (tmp_path / "old-lose.mp4").write_bytes(b"lose")
+    production.state.update(status="completed", final="old-final.mp4", discarded=["old-lose.mp4"])
+    for name in ("song", "analyze", "cast", "frames", "clips"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    spec = {"title": "t", "song": {"lyrics": "a", "caption": "b", "duration": 10, "bpm": 100}, "style": {},
+            "shots": [{"key": "a", "kind": "still", "still": "/a.png", "t0": 0}]}
+    production.run(spec)
+    assert production.state["status"] == "failed"
+    assert production.state["error"] == "scene_export_failed: a"
+    assert production.state.get("final") == "old-final.mp4"
+    assert (tmp_path / "old-final.mp4").exists()
+    assert (tmp_path / "old-lose.mp4").exists()
