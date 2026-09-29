@@ -12,9 +12,9 @@ Do not add a planning call before `production.run`: the spec is the plan.
 The agent makes these calls for a finished video:
 
 1. `production.run` `{workspace, production_id, spec}` — starts in the background and returns at once (`production_id`, `running: true`). It does not return a job id.
-2. `production.status` `{workspace, production_id}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status`. A pause of 60 s or more is enough.
-3. `production.review` version 1 on the `contact_sheet` URL from that status.
-4. If the verdict is `retake`, `production.run` again with `{workspace, production_id, retake:[keys]}`, then repeat steps 2 and 3. The run shoots those clips again (new seeds, the better take is kept) and re-exports only the scenes whose clip changed.
+2. `production.status` `{workspace, production_id, wait_s}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status` with `wait_s` 300 instead of many short polls.
+3. Read `review` and `retake_keys` from that `production.status`. The four checks are code. Do not call `production.review` to ask a model to look at the sheet.
+4. If the verdict is `retake`, `production.run` again with `{workspace, production_id, retake: retake_keys}`, then repeat steps 2 and 3. The run shoots those clips again (new seeds, the better take is kept), including a shot that already has 4 takes, and re-exports only the scenes whose clip changed. Pass `retake_keys` unchanged.
 
 Two other `production.run` forms are optional and still the same command. They are not extra tools, and they do not replace steps 2–4 once a full video exists:
 
@@ -23,8 +23,9 @@ Two other `production.run` forms are optional and still the same command. They a
 
 Do not call `tools/list` or `models` to plan a production: everything the run needs is here.
 Do not read the song, clips or scenes yourself: `production.status` reports lip-sync verdicts,
-the video URL and a contact-sheet URL. Do not judge that sheet yourself. `production.review`
-asks the vision model; if it cannot run, do not invent its answers.
+the video URL, a contact-sheet URL, and `review`. Do not judge that sheet yourself. The four
+checks are code, not a model looking at the sheet. `face_consistent` stays unknown unless a
+face-embedding model is already loaded; do not invent that answer.
 
 A later `production.run` with the same id and no `retake` resumes from the last finished step.
 
@@ -36,66 +37,62 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
 | cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member |
 | frames | `generation.image` with the cast sheets as references | one start frame per `h3` shot |
-| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots; retake with a new seed until ok or `max_takes`. A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing |
+| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots; retake with a new seed until ok, the best `r` stops rising, `max_takes`, or 4 recorded takes. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 
+Lip-sync is measured on the sung span.
+When an H3 clip fails, its scene holds that shot's start frame and `production.status` lists the shot key in `held`.
+A scene whose `scenes.video2d.export.receipt` is failed or cancelled, or whose job disappeared after the queue restarted, is exported again, at most twice in total. If it still fails, the run status is `failed` and the error is `scene_export_failed:` followed by the sorted scene keys separated by commas; `montages.save` is not called when no scene file exists.
+
 State is saved in `<workspace>/<production_id>.production.json`: a restart or a new
 `production.run` with the same id continues from the last finished step.
+`production.run` refuses to start when the workspace volume has under 10 GiB free and the error code is `disk_low`.
+When the run reaches `completed` it deletes losing takes and audio slices matching `*-slice-*.wav`, and it keeps the chosen song, the best take of each shot, the scene exports and the final video; a failed run deletes nothing.
+A production left `running` resumes itself for 24 hours after a server restart when MCP is on
+(a token and an app URL). That resume is not another agent call. A run that finishes completed clears `error`.
+Lip-sync stops when the next measured `r` does not beat the best `r` already kept:
+0.04, then 0.17, then 0.06 keeps 0.17 and does not shoot the next take. A shot with
+4 recorded takes is not shot again unless that key is in `retake`.
 The montage export in the table is internal. The agent does not call `montages.export` after the run.
 
 ## production.review
 
-Version 1. A local vision model looks at the contact sheet. The tool does not render, export or start a generation.
+The four checks are code. They are not a language model looking at the contact sheet. `production.status` runs them when the workspace files are on disk. The reply stays small: no image bytes.
 
-`input` is `{workspace, sheet, shots?}`. Pass it in the same version-1 envelope as the other production commands: `{version: 1, input: {...}}`. `sheet` is the `contact_sheet` URL from `production.status` (the run writes `<production_id>-contact.jpg`). `shots` is optional, the shot keys in sheet order, so a retake can name frames.
+`review` is `{verdict, failures, unknown}`. `verdict` is `ok`, `retake`, or `unreliable`. `failures` is `[{key, question}]`. `retake_keys` is the shot keys from those failures, in scene order, and is passed unchanged as `production.run` `retake`.
 
-```json
-{
-  "workspace": "musical",
-  "sheet": "/api/v1/file/hocuspocus-musical-contact.jpg?workspace=musical",
-  "shots": ["intro", "l0", "ch1"]
-}
-```
+The four code questions:
 
-The model is asked four questions: `words_readable`, `duplicate_people`, `face_consistent`, `text_covers_face`.
+1. `black_bars` — sampled frames of the final video and of each scene. A letterbox or pillarbox (a thick black edge, not a vignette) is a failure.
+2. `frozen_shot` — a shot marked held, including an H3 scene whose picture is a still because the clip was missing, or a scene whose frames barely change.
+3. `title_cut_off` — a Video 2D text box outside the frame. `text_covers_face` — that box over a face from `qa.people` when `ckpts/pose/yolox_l.onnx` can run on CPU. If the detector cannot run, the face part is skipped and the box is still checked against the frame. No count and no face box are invented.
+4. `duplicate_people` — `qa.people` on one frame per scene. More people than the shot's `cast` is a failure. If the detector cannot run, this check is skipped.
 
-Reply: `{verdict, answers, retake, reason?}`. `verdict` is `ok`, `retake` or `unreliable`. `answers` is those four booleans when the model ran. `retake` is a list of shot keys. `reason` is optional.
+`face_consistent` asks whether the protagonist changes appearance. It stays in `unknown` unless a face-embedding model is already loaded and injected. The review does not download one and must not invent yes or no. Unknown identity does not by itself retake the video.
 
 ```json
 {
-  "verdict": "retake",
-  "answers": {
-    "words_readable": true,
-    "duplicate_people": false,
-    "face_consistent": true,
-    "text_covers_face": true
+  "review": {
+    "verdict": "retake",
+    "failures": [{"key": "chorus_one", "question": "frozen_shot"}],
+    "unknown": ["face_consistent"]
   },
-  "retake": ["l0"],
-  "reason": "the title covers the singer's face on l0"
+  "retake_keys": ["chorus_one"]
 }
 ```
 
-`ok` means keep the video (`retake` is empty). `retake` means call `production.run` again with those keys and the same id:
+`ok` means keep the video (`retake_keys` is empty). `retake` means call `production.run` again with those keys and the same id:
 
 ```json
 {
   "workspace": "musical",
   "production_id": "hocuspocus-musical",
-  "retake": ["l0"]
+  "retake": ["chorus_one"]
 }
 ```
 
-If vision cannot run, the verdict is `unreliable` and `reason` is `vision_unavailable`. `answers` is null. The agent must not invent the answers and must not guess a retake.
-
-```json
-{
-  "verdict": "unreliable",
-  "answers": null,
-  "retake": [],
-  "reason": "vision_unavailable"
-}
-```
+`unreliable` means the frames could not be read (no finished video yet, or the files are missing). Do not guess a retake. `failures` is empty and `retake_keys` is empty. `unknown` still lists `face_consistent` when no embedding backend ran.
 
 ## Spec
 
@@ -132,6 +129,21 @@ If vision cannot run, the verdict is `unreliable` and `reason` is `vision_unavai
 }
 ```
 
+`style` may be only a preset. That stands in for the long image, video, finish and lyric block (about 2k tokens when the prompts are written out). `production.run` expands `style.preset` before it checks the spec. The expansion fills `image`, `video`, `finish`, `lyric_template`, `theme` and `image_model`, plus the other style fields from the production that already rendered that look. A key you set next to `preset` replaces that field.
+
+| preset | look it copies |
+|---|---|
+| `anime` | cinematic anime key frame from the promo musical |
+| `riso-zine` | Love the Machine risograph zine (`love-the-machine.production.json`) |
+| `omarchy-desktop` | native Omarchy Tokyo Night desktop (`keyboard-first`) |
+| `neo-noir-realista` | photoreal rain-soaked neo-noir (`city-of-windows`) |
+
+```json
+{"style": {"preset": "riso-zine"}}
+```
+
+An unknown id fails with code `unknown_style_preset`. The full style block in the example above still works when a video needs a one-off look.
+
 Style fields beyond the example:
 
 - `image_model` (default `flux2_klein_9b`) and `image_params`: model for cast sheets and frames. Flux 2 Klein does not
@@ -166,9 +178,8 @@ Style fields for native Video 2D finishing:
 ## Cost
 
 A 60 s video with 5 H3 shots is about 25–35 min of GPU on an RTX 4090. The agent's side is the spec
-(~2–3k tokens), one `production.run`, a few `production.status` polls (~300 tokens each) and one
-`production.review` of the contact-sheet URL. A retake is another `production.run` only when that
-verdict says so. Poll with a pause of 60 s or more; nothing is lost by polling slowly.
+(~2–3k tokens, less when `style` is only a `preset`), one `production.run`, and a few `production.status` polls (~300 tokens each). The `review` is already on that status: four checks in code, not a model looking at the sheet. A retake is another `production.run` only when that
+verdict says so, using `retake_keys` unchanged. Poll `production.status` with `wait_s` 300 instead of many short polls.
 
 ## Things to avoid
 
@@ -176,6 +187,6 @@ verdict says so. Poll with a pause of 60 s or more; nothing is lost by polling s
 - Close-ups for `sing` shots are fine, but extreme close-ups make `qa.lipsync` report `unreliable`
   (the face is not detected); prefer medium close-ups.
 - Titles on the right edge of the frame collide with nothing, but keep them off faces: put the
-  performer to one side in the `frame` prompt when a shot has a title. `production.review` asks
-  `text_covers_face` for this.
-- Do not invent `production.review` answers. `vision_unavailable` means stop, not a guessed retake.
+  performer to one side in the `frame` prompt when a shot has a title. The code review checks
+  `title_cut_off` and `text_covers_face` for this.
+- Do not invent `face_consistent`. Unknown means stop on that question, not a guessed yes or no. Do not guess a retake when `review.verdict` is `unreliable`.

@@ -1,13 +1,14 @@
 """Music-video production from one spec: the only creative input an agent writes.
 
 ``production.run`` starts (or resumes) a background run in the workspace; ``production.status``
-returns a short summary. The run drives the same public MCP tools an agent would call
+returns a short summary and can wait until that status changes (``wait_s``, max 300 s). The run drives the same public MCP tools an agent would call
 (generation.music/image, generate with H3 driving audio, scenes.video2d.edit/export,
 montages.save/export) through the app's own MCP endpoint, plus the local audio.analyze and
 qa.lipsync functions. Decisions a model used to make by looking are made here by numbers:
 the song with the best lyric recall and no cut ending wins, clips that fail lip-sync are
-retaken with a new seed (max_takes), long instrumental stretches are filled on bar lines.
-State lives in <workspace>/<id>.production.json, so a restart resumes where it stopped.
+retaken until the next measured r does not beat the best r already kept, or 4 takes are recorded.
+Long instrumental stretches are filled on bar lines.
+State lives in <workspace>/<id>.production.json. A running file younger than 24h resumes on startup when MCP is on.
 """
 from __future__ import annotations
 
@@ -25,6 +26,13 @@ from typing import Any, Callable
 import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
+from services.production_disk import release_completed, require_free_disk
+from services.production_resume import open_mcp
+from services.production_review import review_production
+from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
+from services.production_style_presets import expand_style_preset
+from services.production_takes import another_take, note_seconds, pending_windows, take_settled
+from services.production_wait import MAX_WAIT_S, wait_for_status
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
@@ -73,6 +81,7 @@ SPEC_SCHEMA: dict[str, Any] = {
 
 
 def validate_spec(spec: Any) -> dict:
+    spec = expand_style_preset(spec)
     if not isinstance(spec, dict):
         raise ProductionError("invalid_spec", "spec must be an object")
     for key in SPEC_SCHEMA["required"]:
@@ -228,6 +237,18 @@ def failure_reason(status: dict) -> str:
         error = error.get("message") or error.get("text") or json.dumps(error)
     text = str(error or status.get("message") or status.get("status") or "no output")
     return " ".join(text.split())[:120]
+
+
+def note_held(state: dict, key: str, hold: bool = True) -> None:
+    """Record or clear a shot whose scene plays its start frame instead of a clip."""
+    if hold:
+        held = state.setdefault("held", [])
+        if key not in held:
+            held.append(key)
+        return
+    held = state.get("held")
+    if held and key in held:
+        held.remove(key)
 
 
 class Production:
@@ -408,23 +429,25 @@ class Production:
         return job
 
     def clips(self, spec: dict, windows: list[dict], retake: tuple[str, ...] = (), pause: float = 60) -> None:
-        """Up to max_takes per run for each missing clip (or each key in retake). Takes count across runs, so a
-        resumed or retaken clip gets new seeds; the best take by lip-sync r is kept. Failed takes are logged with
-        their reason and, when a whole round failed (a busy GPU), the next round waits instead of burning takes."""
-        clips, tried = self.state.setdefault("clips", {}), self.state.setdefault("clip_takes", {})
+        """Shoot missing clips (or retake keys). Flat lip-sync r, max_takes, or 4 recorded takes stop an automatic
+        shoot; an explicit retake may pass the cap. The best r is kept. A fully failed round waits before the next."""
+        self.state.setdefault("clips", {})
+        tried = self.state.setdefault("clip_takes", {})
         max_takes = int(spec.get("max_takes", 3))
         vocals = self.score().get("vocals_file")
-        pending = [w for w in windows if w["kind"] == "h3" and w["key"] in self.state.get("frames", {}) and (w["key"] not in clips or w["key"] in retake)]
+        pending = pending_windows(windows, self.state, retake)
         for w in pending:          # productions saved before clip_takes existed: count their logged takes
             tried.setdefault(w["key"], sum(1 for line in self.state.get("log") or [] if line.startswith(f"clip {w['key']} take ")))
         budget = {w["key"]: tried[w["key"]] + max_takes for w in pending}
         while pending:
+            started = time.perf_counter()
             names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + tried[w["key"]], tried[w["key"]]) for w in pending})
             retry = []
             for w in pending:
                 tried[w["key"]] += 1
-                if not self.judge_take(w, names.get(w["key"]), tried[w["key"]], vocals) and tried[w["key"]] < budget[w["key"]]:
+                if another_take(self.judge_take(w, names.get(w["key"]), tried[w["key"]], vocals), tried[w["key"]], budget[w["key"]], w["key"] in retake):
                     retry.append(w)
+            note_seconds(self.state, pending, time.perf_counter() - started)
             self.save()
             if retry and not any(names.values()):
                 time.sleep(pause)
@@ -438,13 +461,14 @@ class Production:
             self.log(f"clip {key} take {take}: failed ({failed[key]})")
             return False
         failed.pop(key, None)
-        qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"]) if w.get("sing") and vocals else {"verdict": "ok"}
+        qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"], [w["t0"], w["t1"]]) if w.get("sing") and vocals else {"verdict": "ok"}
         drive = "vocals" if (take - 1) % 2 == 1 and w.get("sing") else "mix"
         self.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
         best = clips.get(key)
-        if not best or (qa.get("best_r") or 0) >= ((best.get("qa") or {}).get("best_r") or 0):
+        previous = (best.get("qa") or {}).get("best_r") if best else None
+        if not best or (qa.get("best_r") or 0) >= (previous or 0):
             clips[key] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
-        return qa["verdict"] != "retake"
+        return take_settled(qa, previous)
 
     def scenes(self, spec: dict, windows: list[dict]) -> None:
         score = self.score()
@@ -453,6 +477,7 @@ class Production:
         self.state["segments"] = [[s["key"], a, b] for s, a, b in segs]
         done = self.state.setdefault("scenes", {})
         style, stills = spec.get("style") or {}, spec.get("stills") or {}
+        docs: dict[str, dict] = {}
         for shot, a, b in segs:
             dur = round(b - a, 3)
             used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
@@ -463,22 +488,14 @@ class Production:
                 continue
             doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
             doc = self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
+            docs[shot["key"]] = doc
             r = self.mcp("scenes.video2d.export", {"version": 1, "intent_id": f"{self.id}-scene-{shot['key']}-{int(time.time())}",
                                                    "input": {"workspace": self.ws, "document": doc}})
             done[shot["key"]] = {"intent": (r.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used,
                                   "fingerprint": fingerprint, "file": None}
             self.save()
-        for key, scene in done.items():
-            while scene.get("intent") and not scene.get("file"):
-                r = self.mcp("scenes.video2d.export.receipt", {"version": 1, "input": {"workspace": self.ws, "intent_id": scene["intent"]}})
-                arts = (r.get("receipt") or {}).get("artifacts") or []
-                if arts:
-                    scene["file"] = arts[0]["name"]
-                elif (r.get("task") or {}).get("status") in ("failed", "cancelled"):
-                    self.log(f"scene {key} failed")
-                    break
-                else:
-                    time.sleep(4)
+        failed = finish_scene_exports(self.mcp, self.ws, self.id, done, docs, time.sleep, self.save, self.log)
+        apply_scene_export_failure(self.state, failed)
         self.log(f"scenes: {sum(1 for s in done.values() if s.get('file'))}/{len(segs)}")
 
     def edit(self, doc: dict, ops: list[dict]) -> dict:
@@ -495,6 +512,7 @@ class Production:
         ops: list[dict] = []
         clip = clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None)
         if clip:
+            note_held(self.state, shot["key"], False)
             ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-locked")})
             skip = round(max(0.0, a - shot.get("t0", a)) + ((clip.get("qa") or {}).get("suggested_sync_s") or 0), 3) if shot["kind"] == "h3" else 0
             # the animation duration is also the video span (sceneTimeline.getSceneLayerTiming): a camera preset's
@@ -513,6 +531,7 @@ class Production:
             source = stills.get(shot.get("still"), shot.get("still"))
             if not source and shot["kind"] == "h3" and shot["key"] in self.state.get("frames", {}):
                 source = self.upload(self.state["frames"][shot["key"]])[1]      # clip failed: hold its start frame
+                note_held(self.state, shot["key"])
             ops += [{"op": "add_layer", "id": "bg", "source": source, "type": "image", "preset": shot.get("camera", "camera-push-in")},
                     {"op": "update_layer", "id": "bg", "patch": {"fill": True, "focus": shot.get("focus", {"x": 50, "y": 50}), "animation": {
                         "start": {"x": 50, "y": 50, "scale": zoom[0], "rotation": 0}, "end": {"x": 50, "y": 50, "scale": zoom[1], "rotation": 0}}}}]
@@ -580,6 +599,8 @@ class Production:
                  **(style.get("footer_style") or {})}}]
 
     def montage(self, spec: dict) -> None:
+        if skip_montage(self.state):
+            return
         score, scenes = self.score(), self.state["scenes"]
         clips = [{"id": k, "name": k, "source": f"/api/v1/file/{scenes[k]['file']}?workspace={self.ws}", "trimStart": 0, "trimEnd": scenes[k]["dur"],
                   "muted": True, "fit": "fill", "transition": "none"} for k, _, _ in self.state["segments"] if scenes.get(k, {}).get("file")]
@@ -628,25 +649,32 @@ class Production:
             self.clips(spec, windows, retake)
             self.scenes(spec, windows)
             self.montage(spec)
-            self.state["status"] = "completed" if self.state.get("final") else "failed"
+            if self.state.get("final"):
+                self.state.update(status="completed", error=None)
+            else:
+                self.state["status"] = "failed"
         except Exception as error:  # the run is resumable; keep the reason
             self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
         finally:
             self.state["finished"] = time.time()
+            release_completed(self.root, self.state)
             self.save()
 
 
-def status_summary(state: dict, workspace: str) -> dict[str, Any]:
+def status_summary(state: dict, workspace: str, root: str | None = None) -> dict[str, Any]:
     url = lambda name: f"/api/v1/file/{name}?workspace={workspace}" if name else None
     clips = state.get("clips") or {}
-    return {"status": state.get("status", "unknown"), "error": state.get("error"),
+    summary = {"status": state.get("status", "unknown"), "error": state.get("error"),
             "song": (state.get("song") or {}).get("file"),
             "clips": {**{k: "failed" for k in state.get("clip_failures") or {}}, **{k: (v.get("qa") or {}).get("verdict") for k, v in clips.items()}},
             "failures": state.get("clip_failures") or None,
+            "held": list(state.get("held", [])),
             "preview_frames": state.get("preview_frames") or None,
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
             "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:]}
+    summary.update(review_production(state, root))
+    return summary
 
 
 # ---------------------------------------------------------------- MCP
@@ -673,17 +701,20 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, last log lines.",
-         "inputSchema": envelope({"workspace": ws, "production_id": pid}, ["workspace", "production_id"])},
+        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, code review (verdict, failures, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
+         "inputSchema": envelope({"workspace": ws, "production_id": pid,
+                                  "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
+                                             "description": "Seconds to wait until status changes. 0 returns at once. Maximum 300."}},
+                                 ["workspace", "production_id"])},
     ]
 
 
-def loopback_mcp(app_url: Callable[[], str], token: Callable[[], str]) -> Callable[[str, dict], dict]:
+def loopback_mcp(app_url: Callable[[], str], token: Callable[[], str], sleep: Callable[[float], None] = time.sleep) -> Callable[[str, dict], dict]:
     def call(tool: str, arguments: dict) -> dict:
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": arguments}}).encode()
         request = urllib.request.Request(app_url().rstrip("/") + "/api/v1/mcp", data=body, method="POST", headers={
             "Authorization": f"Bearer {token()}", "Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
-        with urllib.request.urlopen(request, timeout=600) as response:
+        with open_mcp(request, timeout=600, sleep=sleep) as response:
             result = json.loads(response.read()).get("result") or {}
         if isinstance(result.get("structuredContent"), dict):
             return result["structuredContent"]
@@ -718,6 +749,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             args = (preview,)
         else:
             try:
+                require_free_disk(production.root)
                 spec = validate_spec(data.get("spec") or production.state.get("spec"))
             except ProductionError as error:
                 raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
@@ -740,6 +772,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         path = Path(workspace_dir(data["workspace"])) / f"{data['production_id']}.production.json"
         if not path.exists():
             raise HTTPException(404, {"code": "production_not_found", "message": "No production with this id in the workspace", "retryable": False})
-        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(json.loads(path.read_text()), data["workspace"])}
+        state = await wait_for_status(path, data.get("wait_s", 0))
+        return {"version": 1, "status": "completed", "operation": STATUS, "result": status_summary(state, data["workspace"], str(path.parent))}
 
     return {RUN: run, STATUS: status}

@@ -121,8 +121,9 @@ def test_agent_call_order_is_run_status_review_retake():
     assert "Do not also call `montages.export`" in _text()
 
 
-def test_review_contract_names_the_vision_questions():
+def test_review_contract_names_the_code_checks():
     section = _section(_text(), "production.review")
-    for token in ("words_readable", "duplicate_people", "face_consistent", "text_covers_face", "vision_unavailable"):
+    for token in ("black_bars", "frozen_shot", "title_cut_off", "text_covers_face", "duplicate_people", "face_consistent", "retake_keys"):
         assert token in section
-    assert "must not invent the answers" in section
+    assert "not a language model looking at the contact sheet" in section
+    assert "must not invent yes or no" in section

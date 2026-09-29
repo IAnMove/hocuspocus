@@ -4,6 +4,11 @@
 injectable. Qwen3-VL-8B in this tree is an image-generation encoder that
 loads weights, and no CPU-free asker is installed, so the default does not
 load a model and does not invent yes/no answers.
+
+``review_production`` is the code review attached to ``production.status``.
+It scores black bars, a held or frozen scene, title boxes, and duplicate
+people without a vision model. Protagonist identity stays unknown unless a
+caller injects an embedding backend that is already loaded.
 """
 from __future__ import annotations
 
@@ -373,3 +378,14 @@ def _sheet_value(payload: dict) -> str:
     if not isinstance(sheet, str) or not sheet or sheet != sheet.strip() or len(sheet) > 2000 or "\x00" in sheet:
         raise ReviewError("invalid_sheet", "sheet is required.")
     return sheet
+
+
+_AUTO = object()
+
+
+def review_production(state: Any, root: str | None = None, *, people: Any = _AUTO, embed: Any = None, sample: Any = None) -> dict:
+    """Code review for production.status. Does not load a vision or embedding model."""
+    from services.production_review_checks import load_people_detector, run_review
+
+    detector = load_people_detector() if people is _AUTO else people
+    return run_review(state, root, people=detector, embed=embed, sample=sample)
