@@ -28,7 +28,7 @@ import numpy as np
 from services import lipsync_qa, song_analysis as audio_analysis
 from services.production_disk import discard, release_completed, require_free_disk
 from services.production_resume import open_mcp
-from services.production_shot_plan import plan_shots
+from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
 from services.production_timing import StageWatch, timing_summary
 from services.production_review import review_production
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
@@ -122,12 +122,14 @@ def shot_windows(spec: dict, score: dict) -> list[dict]:
     lines = score.get("lines") or []
     out = []
     for index, shot in enumerate(spec["shots"]):
-        line = lines[shot["line"]] if isinstance(shot.get("line"), int) and shot["line"] < len(lines) else None
+        if is_auto_pad(shot):
+            continue
+        line = lines[shot["line"]] if isinstance(shot.get("line"), int) and 0 <= shot["line"] < len(lines) else None
         if "t0" in shot:
             t0 = float(shot["t0"])
         elif line:
             t0 = line["t0"] - 0.25
-        elif isinstance(shot.get("after"), int) and shot["after"] < len(lines):
+        elif isinstance(shot.get("after"), int) and 0 <= shot["after"] < len(lines):
             t0 = lines[shot["after"]]["t1"] + 0.3
         else:
             t0 = 0.0
@@ -137,6 +139,13 @@ def shot_windows(spec: dict, score: dict) -> list[dict]:
         else:
             t1 = t0 + 4
         out.append({**shot, "i": index, "t0": round(max(0.0, t0), 3), "t1": round(t1, 3)})
+    try:
+        bpm = float(score.get("bpm") or 120) or 120.0
+    except (TypeError, ValueError):
+        bpm = 120.0
+    shots = spec.get("shots") if isinstance(spec.get("shots"), list) else []
+    if spec.get("auto_pads") or any(is_auto_pad(shot) for shot in shots):
+        return place_pads(out, spec, float(score.get("duration") or 0), bpm)
     return out
 
 

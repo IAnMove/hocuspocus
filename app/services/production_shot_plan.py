@@ -2,9 +2,10 @@
 
 Sung lines sit on a bar grid: one bar of intro, then one bar per lyric line
 (bar = 4 * 60 / bpm). A shot that does not name a lyric line covers four
-seconds in ``shot_windows``. Fill shots are placed on that grid so the time
-from one shot start to the next, and from the last start to the end of the
-song, is never longer than two bars.
+seconds in ``shot_windows``. Pad shots are not baked into the spec: the
+planner only writes content shots plus a ``fill`` template. ``shot_windows``
+places pads on the score so the time from one start to the next, and from
+the last start to the end of the song, is never longer than two bars.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ _ACTIONS = {
     "chorus": "(S1) The singer sings the chorus to the camera with a bigger gesture.",
 }
 _HEADER = re.compile(r"^\s*\[([^\]]+)\]\s*$")
+_PAD_KEY = re.compile(r"^fill\d+$")
 
 
 def plan_shots(spec: Any) -> dict:
@@ -28,35 +30,61 @@ def plan_shots(spec: Any) -> dict:
     kind, still = _content_kind(spec)
     actions = spec.get("section_actions") if isinstance(spec.get("section_actions"), dict) else {}
     shots = _ordered_shots(spec, sections, _cast_ids(spec), kind, still, actions)
-    count = sum(section["count"] for section in sections)
-    lines = _line_times(_bpm(song), count)
-    shots = _with_fills(shots, lines, _duration(song), _bpm(song), kind, still)
     planned = dict(spec)
     planned["shots"] = shots
+    planned["auto_pads"] = True
     if not planned.get("fill"):
         planned["fill"] = [_fill_template(kind, still)]
     return planned
 
 
-def _bpm(song: dict) -> int:
-    try:
-        bpm = int(song.get("bpm") or 120)
-    except (TypeError, ValueError):
-        return 120
-    return bpm if bpm > 0 else 120
+def is_auto_pad(shot: Any) -> bool:
+    """Planner pads: ``pad: True``, or a ``fillN`` key with only a baked ``t0``."""
+    if not isinstance(shot, dict):
+        return False
+    if shot.get("pad") is True:
+        return True
+    key = shot.get("key")
+    if not isinstance(key, str) or not _PAD_KEY.fullmatch(key):
+        return False
+    return "line" not in shot and "after" not in shot
 
 
-def _duration(song: dict) -> float:
-    try:
-        return float(song.get("duration") or 0)
-    except (TypeError, ValueError):
-        return 0.0
+def place_pads(windows: list[dict], spec: dict, duration: float, bpm: float) -> list[dict]:
+    """Insert pad shots so consecutive starts (and the tail) stay within two bars."""
+    content = [window for window in windows if not is_auto_pad(window)]
+    content = _sorted_windows(content)
+    if duration <= 0:
+        return content
+    starts = [float(window["t0"]) for window in content]
+    room = max(0, 60 - len(content))
+    tempo = bpm if bpm > 0 else 120.0
+    kind, still = _content_kind(spec)
+    extras = _extra_starts(starts, duration, 240.0 / tempo, room)
+    if not extras:
+        return content
+    base = max((int(window.get("i") or 0) for window in content), default=-1) + 1
+    template = _pad_template(spec, kind, still)
+    pads = []
+    for index, t0 in enumerate(extras):
+        shot = {**template, "key": f"fill{index}", "pad": True, "t0": t0}
+        pads.append({**shot, "i": base + index, "t0": round(float(t0), 3), "t1": round(float(t0) + 4, 3)})
+    return _sorted_windows(content + pads)
 
 
-def _line_times(bpm: int, count: int) -> list[tuple[float, float]]:
-    """(t0, t1) for each lyric line. The acceptance test uses this same grid."""
-    bar = 240.0 / bpm
-    return [(bar * (index + 1), bar * (index + 1) + bar * 0.8) for index in range(count)]
+def _pad_template(spec: dict, kind: str, still: str | None) -> dict:
+    fill = spec.get("fill")
+    if isinstance(fill, list) and fill and isinstance(fill[0], dict):
+        template = dict(fill[0])
+        if template.get("kind") in ("h3", "still", "clip", "screen"):
+            return template
+    shot: dict[str, Any] = {"kind": kind}
+    _paint(shot, kind, still)
+    return shot
+
+
+def _sorted_windows(windows: list[dict]) -> list[dict]:
+    return sorted(windows, key=lambda window: (float(window["t0"]), int(window.get("i") or 0)))
 
 
 def _sections(lyrics: str) -> list[dict]:
@@ -223,17 +251,6 @@ def _next(numbers: dict, prefix: str) -> str:
     return key
 
 
-def _with_fills(shots: list[dict], lines: list[tuple[float, float]], duration: float, bpm: int, kind: str, still: str | None) -> list[dict]:
-    if duration <= 0:
-        return shots
-    starts = [_window(shot, lines)[0] for shot in shots]
-    room = max(0, 60 - len(shots))
-    fills = [_fill_shot(index, kind, still, t0) for index, t0 in enumerate(_extra_starts(starts, duration, 240.0 / bpm, room))]
-    if not fills:
-        return shots
-    return _merge(shots, fills, lines)
-
-
 def _extra_starts(starts: list[float], duration: float, bar: float, room: int) -> list[float]:
     points = sorted({round(point, 3) for point in (0.0, *starts, duration)})
     limit = 2 * bar
@@ -247,37 +264,3 @@ def _extra_starts(starts: list[float], duration: float, bar: float, room: int) -
                 break
             extra.append(cursor)
     return extra
-
-
-def _fill_shot(index: int, kind: str, still: str | None, t0: float) -> dict:
-    shot: dict[str, Any] = {"key": f"fill{index}", "kind": kind, "t0": t0}
-    _paint(shot, kind, still)
-    return shot
-
-
-def _merge(shots: list[dict], fills: list[dict], lines: list[tuple[float, float]]) -> list[dict]:
-    tagged = [(_window(shot, lines)[0], index, shot) for index, shot in enumerate(shots)]
-    tagged.extend((_window(shot, lines)[0], len(shots) + index, shot) for index, shot in enumerate(fills))
-    tagged.sort(key=lambda item: (item[0], item[1]))
-    return [shot for _, _, shot in tagged]
-
-
-def _window(shot: dict, lines: list[tuple[float, float]]) -> tuple[float, float]:
-    """Same t0/t1 rules as ``music_production.shot_windows``, before rounding."""
-    index = shot.get("line")
-    line = lines[index] if isinstance(index, int) and 0 <= index < len(lines) else None
-    if "t0" in shot:
-        t0 = float(shot["t0"])
-    elif line:
-        t0 = line[0] - 0.25
-    elif isinstance(shot.get("after"), int) and 0 <= shot["after"] < len(lines):
-        t0 = lines[shot["after"]][1] + 0.3
-    else:
-        t0 = 0.0
-    if line:
-        span = shot.get("span", 1)
-        span = span if isinstance(span, int) else 1
-        t1 = lines[min(len(lines) - 1, index + span - 1)][1] + 0.2
-    else:
-        t1 = t0 + 4
-    return round(max(0.0, t0), 3), round(t1, 3)
