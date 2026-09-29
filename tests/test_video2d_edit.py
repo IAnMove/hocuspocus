@@ -132,6 +132,23 @@ def test_update_text_after_shorter_duration_keeps_unrelated_patches():
     assert error.value.code == "timing_exceeds_duration"
 
 
+def test_update_text_can_remove_default_outline_and_shadow():
+    operations = [
+        {"op": "add_title", "template": "social-caption", "fields": {"caption": "Open the gates"}, "start": 0, "duration": 8},
+        {"op": "update_text", "id": "social", "patch": {
+            "stroke": {"color": "#162820", "width": 0},
+            "shadow": {"color": "#162820", "blur": 0, "x": 0, "y": 0},
+        }},
+    ]
+    cue = _result(operations)["document"]["texts"][0]
+    assert cue["stroke"] == {"color": "#162820", "width": 0}
+    assert cue["shadow"] == {"color": "#162820", "blur": 0, "x": 0, "y": 0}
+    operations[1]["patch"]["stroke"]["width"] = 0.4
+    with pytest.raises(Video2dEditError) as error:
+        _edit(operations)
+    assert error.value.code == "invalid_input"
+
+
 def test_set_finish_preset():
     finish = _result([{"op": "set_finish", "preset": "warmCinema"}])["document"]["finish"]
     assert finish["letterbox"] == {"ratio": 2.39, "color": "#000000"}
