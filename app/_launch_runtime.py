@@ -37078,6 +37078,8 @@ def run_server():
 
     # Confirm the polling filter immediately before Uvicorn configures logging.
     install_quiet_access_filter()
+    from services.production_resume import resume_on_startup
+    resume_on_startup(_list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token)
 
     try:
         from services.server_lifecycle import run_until_stopped

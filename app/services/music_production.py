@@ -7,7 +7,7 @@ montages.save/export) through the app's own MCP endpoint, plus the local audio.a
 qa.lipsync functions. Decisions a model used to make by looking are made here by numbers:
 the song with the best lyric recall and no cut ending wins, clips that fail lip-sync are
 retaken with a new seed (max_takes), long instrumental stretches are filled on bar lines.
-State lives in <workspace>/<id>.production.json, so a restart resumes where it stopped.
+State lives in <workspace>/<id>.production.json. A running file younger than 24h resumes on startup when MCP is on.
 """
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ from typing import Any, Callable
 import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
+from services.production_resume import open_mcp
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
@@ -628,7 +629,10 @@ class Production:
             self.clips(spec, windows, retake)
             self.scenes(spec, windows)
             self.montage(spec)
-            self.state["status"] = "completed" if self.state.get("final") else "failed"
+            if self.state.get("final"):
+                self.state.update(status="completed", error=None)
+            else:
+                self.state["status"] = "failed"
         except Exception as error:  # the run is resumable; keep the reason
             self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
         finally:
@@ -678,12 +682,12 @@ def command_catalog() -> list[dict[str, Any]]:
     ]
 
 
-def loopback_mcp(app_url: Callable[[], str], token: Callable[[], str]) -> Callable[[str, dict], dict]:
+def loopback_mcp(app_url: Callable[[], str], token: Callable[[], str], sleep: Callable[[float], None] = time.sleep) -> Callable[[str, dict], dict]:
     def call(tool: str, arguments: dict) -> dict:
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": arguments}}).encode()
         request = urllib.request.Request(app_url().rstrip("/") + "/api/v1/mcp", data=body, method="POST", headers={
             "Authorization": f"Bearer {token()}", "Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
-        with urllib.request.urlopen(request, timeout=600) as response:
+        with open_mcp(request, timeout=600, sleep=sleep) as response:
             result = json.loads(response.read()).get("result") or {}
         if isinstance(result.get("structuredContent"), dict):
             return result["structuredContent"]
