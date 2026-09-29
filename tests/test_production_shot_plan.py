@@ -112,6 +112,30 @@ def test_analyzed_lyric_times_keep_the_last_chorus_and_outro():
     assert all(b > a for _, a, b in segs)
 
 
+def test_outro_stays_on_the_timeline_when_the_last_lyric_ends_the_song():
+    """Auto outro is `after` the last line. last.t1 + 0.3 past duration used to drop the end card."""
+    raw = _spec()
+    planned = validate_spec(raw)
+    texts = lyric_lines(raw["song"]["lyrics"])
+    duration = float(raw["song"]["duration"])
+    slot = duration / len(texts)
+    lines = [{"i": i, "text": text, "t0": i * slot, "t1": min(duration, (i + 1) * slot)}
+             for i, text in enumerate(texts)]
+    assert lines[-1]["t1"] == duration
+    score = {"duration": duration, "bpm": 120, "beat": 0.5, "lines": lines}
+    windows = shot_windows(planned, score)
+    outro = next(window for window in windows if window["key"] == "outro")
+    assert 0 <= outro["t0"] < duration
+    segs = segments(windows, score, lambda key: True, planned.get("fill") or [])
+    keys = [shot["key"] for shot, _, _ in segs]
+    assert "outro" in keys
+    start, end = next((a, b) for shot, a, b in segs if shot["key"] == "outro")
+    assert 0 <= start < end
+    assert start < duration
+    assert abs(end - duration) < 1e-6
+    assert all(b > a for _, a, b in segs)
+
+
 def test_stills_give_still_shots_and_a_theme_gives_the_desktop():
     stills = validate_spec(_spec(stills={"art": "/api/v1/uploads/a.png"}))["shots"]
     assert [shot["kind"] for shot in stills if shot["key"][0] == "s"] == ["still", "still", "still"]
