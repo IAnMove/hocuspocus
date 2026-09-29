@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import FastAPI
+import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers.music_productions import create_music_productions_router
@@ -105,3 +106,51 @@ def test_shot_edits_refuse_while_the_production_thread_is_alive(tmp_path: Path):
         hold.set()
         thread.join(timeout=2)
         music_production._threads.pop("film/show", None)
+
+
+def test_retake_refuses_while_a_shot_edit_holds_the_production(tmp_path: Path):
+    """Use-take writes the same JSON a retake would; last save would drop one of them."""
+    import asyncio
+
+    from services import music_production
+    from services.music_production import RUN, command_handlers
+    from services.production_commands import occupy_edit, release_edit
+
+    root = tmp_path / "film"
+    _write(root)
+    client = _client(root, token="token")
+    key = occupy_edit(music_production, "film", "show")
+    try:
+        retake = client.post("/api/v1/music-productions/show/shots/s0/retake", params={"workspace": "film"})
+        assert retake.status_code == 409
+        assert retake.json()["detail"]["code"] == "already_running"
+        handlers = command_handlers(lambda _name: str(root), lambda: str(root / "uploads"), lambda: "http://127.0.0.1:9", lambda: "token")
+        with pytest.raises(HTTPException) as caught:
+            asyncio.run(handlers[RUN]({"version": 1, "input": {"workspace": "film", "production_id": "show", "retake": ["s0"]}}))
+        assert caught.value.status_code == 409
+        assert caught.value.detail["code"] == "already_running"
+        again = client.post(
+            "/api/v1/music-productions/show/shots/s0/use-take",
+            params={"workspace": "film"},
+            json={"take_file": "take-b.mp4"},
+        )
+        assert again.status_code == 409
+        assert again.json()["detail"]["code"] == "already_running"
+    finally:
+        release_edit(music_production, key)
+        music_production._edits.pop("film/show", None)
+
+
+def test_failed_use_take_releases_the_edit_slot(tmp_path: Path):
+    from services import music_production
+
+    root = tmp_path / "film"
+    _write(root)
+    client = _client(root, token="token")
+    missing = client.post(
+        "/api/v1/music-productions/show/shots/s0/use-take",
+        params={"workspace": "film"},
+        json={"take_file": "take-b.mp4"},
+    )
+    assert missing.status_code == 422
+    assert "film/show" not in music_production._edits

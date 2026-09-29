@@ -112,11 +112,11 @@ def create_music_productions_router(
         from services.music_production import Production, loopback_mcp
         return Production, loopback_mcp(app_url, token)
 
-    def refuse_if_running(workspace: str, production_id: str) -> None:
-        """Same live-thread lock as the MCP shot commands: two Production objects would overwrite the state file."""
+    def hold_edit(workspace: str, production_id: str):
+        """Occupy the production so a retake or another edit cannot overwrite the state file."""
         from services import music_production
-        from services.production_commands import _refuse_if_running
-        _refuse_if_running(music_production, workspace, production_id)
+        from services.production_commands import holding_edit
+        return holding_edit(music_production, workspace, production_id)
 
     @router.get("/api/v1/music-productions")
     def list_music_productions(workspace: str):
@@ -142,14 +142,14 @@ def create_music_productions_router(
     @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/use-take")
     def post_use_take(production_id: str, shot: str, workspace: str, body: dict):
         from services.production_shot_edit import ShotEditError, use_take
-        refuse_if_running(workspace, production_id)
-        production_cls, mcp = studio()
-        _root_path, state = state_of(workspace, production_id)
-        production = production_cls(workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=mcp)
-        try:
-            return use_take(production, _spec(state), shot, str((body or {}).get("take_file") or ""))
-        except ShotEditError as error:
-            raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
+        with hold_edit(workspace, production_id):
+            production_cls, mcp = studio()
+            _root_path, state = state_of(workspace, production_id)
+            production = production_cls(workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=mcp)
+            try:
+                return use_take(production, _spec(state), shot, str((body or {}).get("take_file") or ""))
+            except ShotEditError as error:
+                raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
 
     @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/retake")
     async def post_retake(production_id: str, shot: str, workspace: str):
@@ -162,17 +162,17 @@ def create_music_productions_router(
     @router.post("/api/v1/music-productions/{production_id}/shots/{shot}")
     def post_update(production_id: str, shot: str, workspace: str, body: dict):
         from services.production_shot_edit import ShotEditError, update_shot
-        refuse_if_running(workspace, production_id)
-        production_cls, mcp = studio()
-        _root_path, state = state_of(workspace, production_id)
-        production = production_cls(workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=mcp)
-        payload = body or {}
-        try:
-            return update_shot(
-                production, _spec(state), shot,
-                lyric_style=payload.get("lyric_style"), title=payload.get("title"), camera=payload.get("camera"),
-            )
-        except ShotEditError as error:
-            raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
+        with hold_edit(workspace, production_id):
+            production_cls, mcp = studio()
+            _root_path, state = state_of(workspace, production_id)
+            production = production_cls(workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=mcp)
+            payload = body or {}
+            try:
+                return update_shot(
+                    production, _spec(state), shot,
+                    lyric_style=payload.get("lyric_style"), title=payload.get("title"), camera=payload.get("camera"),
+                )
+            except ShotEditError as error:
+                raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
 
     return router

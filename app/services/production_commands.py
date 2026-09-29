@@ -5,7 +5,9 @@ wrappers so that file does not grow a new hotspot.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+import threading
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator
 
 USE_TAKE = "production.shot.use_take"
 SHOT_UPDATE = "production.shot.update"
@@ -59,13 +61,45 @@ def _ok(operation: str, result: dict) -> dict:
     return {"version": 1, "status": "completed", "operation": operation, "result": result}
 
 
+def _slot_held(module: Any, key: str) -> bool:
+    thread = module._threads.get(key)
+    edit = module._edits.get(key)
+    return bool(thread and thread.is_alive()) or bool(edit and edit.is_alive())
+
+
 def _refuse_if_running(module: Any, workspace: str, production_id: str) -> None:
     from fastapi import HTTPException
     key = f"{workspace}/{production_id}"
     with module._lock:
-        thread = module._threads.get(key)
-    if thread and thread.is_alive():
+        held = _slot_held(module, key)
+    if held:
         raise HTTPException(409, {"code": "already_running", "message": "This production is running", "retryable": True})
+
+
+def occupy_edit(module: Any, workspace: str, production_id: str) -> str:
+    """Register this thread so production.run / another edit cannot overwrite the state file."""
+    from fastapi import HTTPException
+    key = f"{workspace}/{production_id}"
+    with module._lock:
+        if _slot_held(module, key):
+            raise HTTPException(409, {"code": "already_running", "message": "This production is running", "retryable": True})
+        module._edits[key] = threading.current_thread()
+    return key
+
+
+def release_edit(module: Any, key: str) -> None:
+    with module._lock:
+        if module._edits.get(key) is threading.current_thread():
+            module._edits.pop(key, None)
+
+
+@contextmanager
+def holding_edit(module: Any, workspace: str, production_id: str) -> Iterator[None]:
+    key = occupy_edit(module, workspace, production_id)
+    try:
+        yield
+    finally:
+        release_edit(module, key)
 
 
 def _open(module: Any, data: dict, workspace_dir: Callable, uploads_dir: Callable, app_url: Callable, token: Callable):
@@ -105,30 +139,30 @@ def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[]
         from fastapi import HTTPException
         data = _input(arguments)
         runner = module()
-        _refuse_if_running(runner, data["workspace"], data["production_id"])
         shot, take_file = data.get("shot"), data.get("take_file")
         if not isinstance(shot, str) or not isinstance(take_file, str):
             raise HTTPException(422, {"code": "invalid_command", "message": "shot and take_file are required", "retryable": False})
-        production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
-        try:
-            result = use_take(production, _spec(production), shot, take_file)
-        except ShotEditError as error:
-            _edit_error(error)
+        with holding_edit(runner, data["workspace"], data["production_id"]):
+            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
+            try:
+                result = use_take(production, _spec(production), shot, take_file)
+            except ShotEditError as error:
+                _edit_error(error)
         return _ok(USE_TAKE, result)
 
     async def update_command(arguments: Any) -> dict:
         from fastapi import HTTPException
         data = _input(arguments)
         runner = module()
-        _refuse_if_running(runner, data["workspace"], data["production_id"])
         shot = data.get("shot")
         if not isinstance(shot, str):
             raise HTTPException(422, {"code": "invalid_command", "message": "shot is required", "retryable": False})
-        production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
-        try:
-            result = update_shot(production, _spec(production), shot, lyric_style=data.get("lyric_style"), title=data.get("title"), camera=data.get("camera"))
-        except ShotEditError as error:
-            _edit_error(error)
+        with holding_edit(runner, data["workspace"], data["production_id"]):
+            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
+            try:
+                result = update_shot(production, _spec(production), shot, lyric_style=data.get("lyric_style"), title=data.get("title"), camera=data.get("camera"))
+            except ShotEditError as error:
+                _edit_error(error)
         return _ok(SHOT_UPDATE, result)
 
     async def song_command(arguments: Any) -> dict:
@@ -136,15 +170,15 @@ def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[]
         from services.music_production import ProductionError
         data = _input(arguments)
         runner = module()
-        _refuse_if_running(runner, data["workspace"], data["production_id"])
         candidate = data.get("candidate")
         if not isinstance(candidate, str) or not candidate:
             raise HTTPException(422, {"code": "invalid_command", "message": "candidate is required", "retryable": False})
-        production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
-        try:
-            result = use_candidate(production, _spec(production), candidate)
-        except (SongSwitchError, ProductionError) as error:
-            _edit_error(error)
+        with holding_edit(runner, data["workspace"], data["production_id"]):
+            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
+            try:
+                result = use_candidate(production, _spec(production), candidate)
+            except (SongSwitchError, ProductionError) as error:
+                _edit_error(error)
         return _ok(SONG_USE, result)
 
     async def cancel_command(arguments: Any) -> dict:
