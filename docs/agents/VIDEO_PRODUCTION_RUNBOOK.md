@@ -42,6 +42,8 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 
 State is saved in `<workspace>/<production_id>.production.json`: a restart or a new
 `production.run` with the same id continues from the last finished step.
+`production.run` refuses to start when the workspace volume has under 10 GiB free and the error code is `disk_low`.
+When the run reaches `completed` it deletes losing takes and audio slices matching `*-slice-*.wav`, and it keeps the chosen song, the best take of each shot, the scene exports and the final video; a failed run deletes nothing.
 The montage export in the table is internal. The agent does not call `montages.export` after the run.
 
 ## production.review

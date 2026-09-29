@@ -25,6 +25,7 @@ from typing import Any, Callable
 import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
+from services.production_disk import release_completed, require_free_disk
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
@@ -633,6 +634,7 @@ class Production:
             self.state.update(status="failed", error=f"{type(error).__name__}: {error}"[:300])
         finally:
             self.state["finished"] = time.time()
+            release_completed(self.root, self.state)
             self.save()
 
 
@@ -718,6 +720,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             args = (preview,)
         else:
             try:
+                require_free_disk(production.root)
                 spec = validate_spec(data.get("spec") or production.state.get("spec"))
             except ProductionError as error:
                 raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
