@@ -42,6 +42,7 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 
 Lip-sync is measured on the sung span.
 When an H3 clip fails, its scene holds that shot's start frame and `production.status` lists the shot key in `held`.
+A scene whose `scenes.video2d.export.receipt` is failed or cancelled, or whose job disappeared after the queue restarted, is exported again, at most twice in total. If it still fails, the run status is `failed` and the error is `scene_export_failed:` followed by the sorted scene keys separated by commas; `montages.save` is not called when no scene file exists.
 
 State is saved in `<workspace>/<production_id>.production.json`: a restart or a new
 `production.run` with the same id continues from the last finished step.

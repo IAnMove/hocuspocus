@@ -274,6 +274,7 @@
         "tests/test_production_disk.py",
         "tests/test_production_run.py",
         "tests/test_production_held.py",
+        "tests/test_production_scene_retry.py",
         "tests/test_production_style_presets.py",
         "tests/test_productions_router.py",
         "tests/test_project_catalog.py",
@@ -537,6 +538,12 @@
       "prefix": "app/services/clip_align.py",
       "paths": [
         "tests/test_clip_align.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_scene_retry.py",
+      "paths": [
+        "tests/test_production_scene_retry.py"
       ]
     },
     {
