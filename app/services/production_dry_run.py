@@ -159,23 +159,39 @@ def _motion(windows: list[dict], duration: float) -> dict[str, Any]:
 
 def _quality_warnings(spec: dict, shots: list[dict], motion: dict) -> list[dict]:
     """Choices that leave the result thin, reported before any GPU work."""
-    found: list[dict] = []
     profile = profile_of(spec)
+    return [*_static_warnings(motion, profile), *_pace_warnings(spec, shots, profile), *_reused_stills(shots), *_setup_warnings(spec, shots, profile)]
+
+
+def _static_warnings(motion: dict, profile: dict) -> list[dict]:
+    found = []
     if motion.get("static_ratio", 0) > profile["static"]:
         found.append({"code": "too_static", "ratio": motion["static_ratio"], "limit": profile["static"],
                       "hint": "add H3 shots or shorten the still scenes"})
-    minutes = float((spec.get("song") or {}).get("duration") or 0) / 60
-    clips = sum(1 for shot in shots if shot.get("kind") == "h3")
-    if minutes > 0 and clips / minutes < profile["clips_per_minute"]:
-        found.append({"code": "few_clips", "per_minute": round(clips / minutes, 1), "minimum": profile["clips_per_minute"],
-                      "hint": "more H3 shots, or a shorter song, or quality: draft"})
     if motion.get("longest_shot_s", 0) > LONG_SHOT_S:
         found.append({"code": "long_shot", "key": motion.get("longest_shot"), "seconds": motion["longest_shot_s"], "limit": LONG_SHOT_S})
+    return found
+
+
+def _pace_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
+    minutes = float((spec.get("song") or {}).get("duration") or 0) / 60
+    clips = sum(1 for shot in shots if shot.get("kind") == "h3")
+    if minutes <= 0 or clips / minutes >= profile["clips_per_minute"]:
+        return []
+    return [{"code": "few_clips", "per_minute": round(clips / minutes, 1), "minimum": profile["clips_per_minute"],
+             "hint": "more H3 shots, or a shorter song, or quality: draft"}]
+
+
+def _reused_stills(shots: list[dict]) -> list[dict]:
     uses: dict[str, int] = {}
     for shot in shots:
         if shot.get("kind") == "still" and isinstance(shot.get("still"), str):
             uses[shot["still"]] = uses.get(shot["still"], 0) + 1
-    found.extend({"code": "still_reused", "still": name, "shots": count} for name, count in uses.items() if count >= REUSED_STILL)
+    return [{"code": "still_reused", "still": name, "shots": count} for name, count in uses.items() if count >= REUSED_STILL]
+
+
+def _setup_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
+    found = []
     if any(shot.get("kind") == "h3" for shot in shots) and int(spec.get("max_takes") or 3) < min(2, profile["max_takes"]):
         found.append({"code": "single_take", "hint": "max_takes 1 keeps the first clip whatever it looks like"})
     song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
