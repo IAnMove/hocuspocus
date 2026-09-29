@@ -106,39 +106,68 @@ SPEC_SCHEMA: dict[str, Any] = {
 }
 
 
-def validate_spec(spec: Any) -> dict:
-    spec = expand_quality(expand_style_preset(spec))
-    spec = plan_shots(spec)
-    if not isinstance(spec, dict):
-        raise ProductionError("invalid_spec", "spec must be an object")
+def _require_spec_fields(spec: dict) -> None:
     for key in SPEC_SCHEMA["required"]:
         if key not in spec:
             raise ProductionError("invalid_spec", f"spec.{key} is required")
     song = spec["song"]
     if not isinstance(song, dict) or not all(k in song for k in ("lyrics", "caption", "duration", "bpm")):
         raise ProductionError("invalid_spec", "spec.song needs lyrics, caption, duration and bpm")
-    style = spec.get("style")
-    if not isinstance(style, dict):
+    if not isinstance(spec.get("style"), dict):
         raise ProductionError("invalid_spec", "spec.style must be an object")
-    for model in [style.get("image_model"), *(c.get("image_model") for c in spec.get("cast", []) if isinstance(c, dict)),
-                  *(s.get("image_model") for s in spec["shots"] if isinstance(s, dict))]:
+
+
+def _image_models(spec: dict) -> list:
+    style = spec["style"]
+    cast = spec.get("cast", [])
+    return [
+        style.get("image_model"),
+        *(c.get("image_model") for c in cast if isinstance(c, dict)),
+        *(s.get("image_model") for s in spec["shots"] if isinstance(s, dict)),
+    ]
+
+
+def _require_image_models(spec: dict) -> None:
+    for model in _image_models(spec):
         if model is not None and (not isinstance(model, str) or not 1 <= len(model) <= 120):
             raise ProductionError("invalid_spec", "image_model must be a model selector")
-    keys = set()
+
+
+def _require_shot(shot: Any, keys: set) -> None:
+    if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip", "screen", "scene3d"):
+        raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip|screen|scene3d")
+    if shot["key"] in keys:
+        raise ProductionError("invalid_spec", f"duplicate shot key {shot['key']}")
+    keys.add(shot["key"])
+    if shot["kind"] == "h3" and not (shot.get("frame") and shot.get("action")):
+        raise ProductionError("invalid_spec", f"h3 shot {shot['key']} needs frame and action")
+
+
+def _require_scene3d(shot: Any) -> None:
+    if not isinstance(shot, dict) or shot.get("kind") != "scene3d":
+        return
+    try:
+        validate_scene3d_shot(shot)
+    except ValueError as error:
+        raise ProductionError("invalid_spec", str(error)) from error
+
+
+def _require_shots(spec: dict) -> None:
+    keys: set = set()
     for shot in spec["shots"]:
-        if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip", "screen", "scene3d"):
-            raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip|screen|scene3d")
-        if shot["key"] in keys:
-            raise ProductionError("invalid_spec", f"duplicate shot key {shot['key']}")
-        keys.add(shot["key"])
-        if shot["kind"] == "h3" and not (shot.get("frame") and shot.get("action")):
-            raise ProductionError("invalid_spec", f"h3 shot {shot['key']} needs frame and action")
+        _require_shot(shot, keys)
     for shot in [*spec["shots"], *(spec.get("fill") or [])]:
-        if shot.get("kind") == "scene3d":
-            try:
-                validate_scene3d_shot(shot)
-            except ValueError as error:
-                raise ProductionError("invalid_spec", str(error)) from error
+        _require_scene3d(shot)
+
+
+def validate_spec(spec: Any) -> dict:
+    spec = expand_quality(expand_style_preset(spec))
+    spec = plan_shots(spec)
+    if not isinstance(spec, dict):
+        raise ProductionError("invalid_spec", "spec must be an object")
+    _require_spec_fields(spec)
+    _require_image_models(spec)
+    _require_shots(spec)
     return spec
 
 
