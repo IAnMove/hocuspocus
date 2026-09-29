@@ -300,3 +300,31 @@ nearest texture sampling; linear fog starts at 4 m and closes at 28 m in the
 background color. Camera motion, model motion and GLB geometry stay fully 3D.
 The flag survives scene save/load and applies to both preview and server export.
 Removing it restores authored shading, texture filters and atmosphere fog.
+
+### Publish a completed production locally
+
+`production.publish` copies a completed production's MP4, contact sheet and
+song into its own immutable publication directory and writes a dedicated HTML
+page. It never edits `index.html` or overwrites another publication. Optional
+`extras` are artifact basenames in the same workspace (for example GLBs, an
+asset contact sheet or the spec JSON). Paths, symlinks and unsupported file
+types are rejected. Repeated calls reuse unchanged artifacts; a changed final
+creates a new directory.
+
+Configure the **isolated instance** with `HOCUS_PUBLICATION_ROOT` (a dedicated
+public folder) and `HOCUS_PUBLICATION_BASE_URL` (the URL serving that folder).
+For a new app-owned server also set `HOCUS_PUBLICATION_SERVE=1` and
+`HOCUS_PUBLICATION_BIND=0.0.0.0`; the port comes from the base URL, for example
+`http://192.168.1.87:8844`. The default bind is loopback. An occupied external
+port fails without stopping its server. Leave `HOCUS_PUBLICATION_SERVE` unset
+when publishing into an already configured static server's root. Only selected
+published files are served; directory listing and symlink escapes are blocked.
+
+```json
+{"version":1,"input":{"workspace":"movie","production_id":"music-video",
+  "slug":"my-homage","extras":["hero.glb","spec.json"]}}
+```
+
+Call the MCP tool `production.publish` with that body. Its result contains
+`page`, `video`, `files` (download URLs) and `publication_id`. Publication is CPU
+only: it neither re-renders the video nor starts any generation.
