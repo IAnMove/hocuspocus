@@ -85,6 +85,20 @@ def test_failed_export_retries_once_then_raises_without_still_fallback(tmp_path)
     assert not production.state.get("held")
 
 
+def test_resume_after_exhausted_retries_starts_a_fresh_cycle(tmp_path):
+    production = Production(tmp_path, fail=True)
+    with pytest.raises(ValueError, match="scene3d_export_failed"):
+        render(production)
+    first = [args["intent_id"] for op, args in production.calls if op == "scenes.world3d.export"]
+    production.fail = False
+    render(production)
+    second = [args["intent_id"] for op, args in production.calls if op == "scenes.world3d.export"][2:]
+    assert len(second) == 1
+    assert second[0] not in first
+    assert production.state["clips"]["hero"]["file"]
+    assert production.state["world3d_exports"]["hero"]["cycle"] == 1
+
+
 def test_failed_retake_keeps_the_last_native_clip(tmp_path):
     production = Production(tmp_path)
     render(production)
