@@ -330,3 +330,46 @@ def test_desktop_rejects_unknown_theme_or_layout():
         with pytest.raises(Video2dEditError):
             edit({"version": 1, "input": {"document": doc, "operations": [{"op": "add_title", "template": "desktop", "fields": fields, "start": 0, "duration": 2}]}})
     assert validate_spec({"title": "t", "song": {"lyrics": "a", "caption": "b", "duration": 10, "bpm": 100}, "style": {}, "shots": [{"key": "s", "kind": "screen"}]})
+
+
+def test_screen_shot_lyrics_stop_at_the_text_cap(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: edit(arguments))
+    lines = [{"t0": float(i), "t1": i + 0.5, "text": f"line {i}"} for i in range(MAX_TEXTS + 10)]
+    ops = production.scene_ops({"key": "desk", "kind": "screen"}, 0.0, 80.0, 80.0, {"lines": lines}, {}, {}, {})
+    titles = [op for op in ops if op["op"] == "add_title"]
+    assert len(titles) == MAX_TEXTS
+    assert titles[0]["template"] == "desktop"
+    assert any("dropped lyrics" in line for line in production.state.get("log") or [])
+    doc = {"version": 1, "name": "desk", "width": 1920, "height": 1080, "fps": 24, "duration": 80, "layers": [], "texts": []}
+    built = production.edit(doc, ops)
+    assert len(built["texts"]) == MAX_TEXTS
+    assert any(item["id"].startswith("desk") for item in built["texts"])
+
+
+def test_screen_shot_with_footer_stays_at_the_text_cap(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: edit(arguments))
+    lines = [{"t0": float(i), "t1": i + 0.5, "text": f"line {i}"} for i in range(MAX_TEXTS + 10)]
+    ops = production.scene_ops({"key": "desk", "kind": "screen"}, 0.0, 80.0, 80.0, {"lines": lines}, {},
+                               {"footer": "@band"}, {})
+    titles = [op for op in ops if op["op"] == "add_title"]
+    assert len(titles) == MAX_TEXTS
+    doc = {"version": 1, "name": "desk", "width": 1920, "height": 1080, "fps": 24, "duration": 80, "layers": [], "texts": []}
+    built = production.edit(doc, ops)
+    assert len(built["texts"]) == MAX_TEXTS
+    assert any(item["id"].startswith("desk") for item in built["texts"])
+    assert any(item["id"].startswith("footer") for item in built["texts"])
+
+
+def test_screen_shot_ignores_a_leftover_clip(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: edit(arguments))
+    clips = {"verse": {"file": "old.mp4", "url": "/examples/old.mp4"}}
+    ops = production.scene_ops({"key": "verse", "kind": "screen"}, 0.0, 4.0, 4.0, {"lines": []}, clips, {}, {})
+    assert all(op.get("op") != "add_layer" for op in ops)
+    assert any(op.get("template") == "desktop" for op in ops)
+    doc = {"version": 1, "name": "verse", "width": 1920, "height": 1080, "fps": 24, "duration": 4, "layers": [], "texts": []}
+    built = production.edit(doc, ops)
+    assert built["layers"] == []
+    assert any(item["id"].startswith("desk") for item in built["texts"])

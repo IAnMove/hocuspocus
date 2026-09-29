@@ -494,7 +494,14 @@ class Production:
     def scene_ops(self, shot: dict, a: float, b: float, dur: float, score: dict, clips: dict, style: dict, stills: dict) -> list[dict]:
         ops: list[dict] = []
         clip = clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None)
-        if clip:
+        reserved = 0
+        if shot["kind"] == "screen":
+            # a leftover h3 clip for this key must not hide the desktop on resume
+            desktop = {"theme": style.get("theme") or "tokyo-night", "layout": "triple", "apps": "mixed", "focus": "0", "workspace": "1",
+                       "switch": "none", **{k: str(v) for k, v in (shot.get("desktop") or {}).items()}}
+            ops.append({"op": "add_title", "id": "desk", "template": "desktop", "fields": desktop, "start": 0, "duration": dur})
+            reserved = title_cue_count("desktop", desktop, 0.0, dur)
+        elif clip:
             ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-push-in")})
             skip = round(max(0.0, a - shot.get("t0", a)) + ((clip.get("qa") or {}).get("suggested_sync_s") or 0), 3) if shot["kind"] == "h3" else 0
             # the animation duration is also the video span (sceneTimeline.getSceneLayerTiming): a camera preset's
@@ -504,10 +511,6 @@ class Production:
             if skip > 0:
                 anim["trimStart"] = skip
             ops.append({"op": "update_layer", "id": "bg", "patch": {"fill": True, "animation": anim}})
-        elif shot["kind"] == "screen":
-            desktop = {"theme": style.get("theme") or "tokyo-night", "layout": "triple", "apps": "mixed", "focus": "0", "workspace": "1",
-                       "switch": "none", **{k: str(v) for k, v in (shot.get("desktop") or {}).items()}}
-            ops.append({"op": "add_title", "id": "desk", "template": "desktop", "fields": desktop, "start": 0, "duration": dur})
         else:
             zoom = shot.get("zoom") or [1.0, 1.1]
             source = stills.get(shot.get("still"), shot.get("still"))
@@ -518,7 +521,7 @@ class Production:
                         "start": {"x": 50, "y": 50, "scale": zoom[0], "rotation": 0}, "end": {"x": 50, "y": 50, "scale": zoom[1], "rotation": 0}}}}]
         title_ops, used = self._title_ops(shot, dur, style)
         ops.extend(title_ops)
-        ops.extend(self._lyric_ops(shot, a, b, dur, score, style, used))
+        ops.extend(self._lyric_ops(shot, a, b, dur, score, style, used + reserved))
         ops.extend(self._footer_ops(dur, style))
         if style.get("finish"):
             ops.append({"op": "set_finish", **style["finish"]})
