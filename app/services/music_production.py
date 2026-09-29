@@ -25,6 +25,7 @@ from typing import Any, Callable
 import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
+from services.production_shot_plan import plan_shots
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
@@ -73,6 +74,7 @@ SPEC_SCHEMA: dict[str, Any] = {
 
 
 def validate_spec(spec: Any) -> dict:
+    spec = plan_shots(spec)
     if not isinstance(spec, dict):
         raise ProductionError("invalid_spec", "spec must be an object")
     for key in SPEC_SCHEMA["required"]:

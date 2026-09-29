@@ -132,6 +132,8 @@ If vision cannot run, the verdict is `unreliable` and `reason` is `vision_unavai
 }
 ```
 
+The agent may set `shots` to `"auto"` and only write an optional action phrase per section (`section_actions`, keys `verse` and `chorus`). A verse alternates a sung H3 shot with a still or screen, a chorus is one H3 spanning two lines, the intro and outro are end cards, and fill shots cover any gap longer than two bars.
+
 Style fields beyond the example:
 
 - `image_model` (default `flux2_klein_9b`) and `image_params`: model for cast sheets and frames. Flux 2 Klein does not
