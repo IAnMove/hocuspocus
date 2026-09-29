@@ -52,7 +52,7 @@ To fix a shot: open the montage in the Video Editor, press **Open scene** on the
 
 While it runs:
 
-- each clip is judged and saved the moment it lands (a restart mid-round keeps what was already shot), and a better verdict beats a higher lip-sync number (an `unreliable` r never pushes out a take that measured `ok`);
+- each clip is judged and saved the moment it lands (a restart mid-round keeps what was already shot), and a better verdict beats a higher lip-sync number (an `unreliable` result never pushes out a take that measured `ok` or `retake`);
 - after the start frames, `production.status` gives `frames_sheet` (one labelled picture of every frame): look at it before the clips, where a wrong frame is minutes of GPU per clip;
 - a cast entry may be `{"id": "trio", "group": ["hum", "tinker", "zap"]}`: one reference image with their sheets side by side (letterboxed, nothing cropped), for shots with several characters when the image model runs out of memory with three references. `count` defaults to the group's size;
 - a shot with one character gets "Only this character appears; no other characters" in its action (the planner does it; write it yourself in a hand-made spec), because a video model invents company otherwise.

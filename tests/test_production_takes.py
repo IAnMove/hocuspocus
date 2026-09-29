@@ -209,5 +209,26 @@ def test_an_unreliable_take_does_not_push_out_one_that_measured_ok():
     from services.production_takes import better_take
     ok, unreliable, retake = {"verdict": "ok", "best_r": 0.3}, {"verdict": "unreliable", "best_r": 0.9}, {"verdict": "retake", "best_r": 0.1}
     assert not better_take(unreliable, ok) and better_take(ok, unreliable) and better_take(ok, retake)
+    assert not better_take(unreliable, retake) and better_take(retake, unreliable)
     assert better_take({"verdict": "ok", "best_r": 0.4}, ok) and not better_take({"verdict": "ok", "best_r": 0.2}, ok)
     assert better_take({"verdict": "ok"}, {"verdict": "ok"})                       # non-sung shots: the newest ok take wins
+
+
+def test_an_unreliable_followup_keeps_the_measured_retake(tmp_path, monkeypatch):
+    """Take 1 is a measured retake. Take 2 cannot see the face (unreliable, noisy r).
+    The unmeasured clip must not become the kept one; take_settled still stops."""
+    answers = iter([
+        {"verdict": "retake", "best_r": 0.22},
+        {"verdict": "unreliable", "best_r": 0.9},
+        {"verdict": "ok", "best_r": 0.5},
+    ])
+
+    def measure(*_args, **_kwargs):
+        return next(answers)
+
+    production, calls, files = _runner(tmp_path, monkeypatch, ["t1.mp4", "t2.mp4", "t3.mp4"], measure)
+    production.clips({"max_takes": 3}, [WINDOW], pause=0)
+    kept = production.state["clips"]["a"]
+    assert kept["file"] == "t1.mp4" and kept["qa"]["verdict"] == "retake" and kept["qa"]["best_r"] == 0.22
+    assert production.state["discarded"] == ["t2.mp4"]
+    assert len(calls) == 2 and next(files) == "t3.mp4"
