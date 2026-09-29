@@ -120,6 +120,10 @@ module.exports = {
             params: {
               compile: true
             }
+          }, {
+            icon: "fa-solid fa-key",
+            text: "Log in to Hugging Face",
+            href: "hf_login.js",
           }]), ...(coreOnly || (kernel.platform || require("os").platform()) === "darwin" ? [] : [{
             icon: "fa-solid fa-vector-square",
             text: info.exists("app/services/sam/env")

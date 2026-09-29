@@ -81,6 +81,23 @@ function preflight(engine = null) {
   ]
 }
 
+// Optional Hub login for local model downloads. Pinokio's modal closes as soon
+// as the browser opens unless the step waits, and it prints the device code
+// only without a modal, so the code, link and outcome stay in this terminal.
+function hfLogin(when) {
+  const gate = when ? {when} : {}
+  const outcome = "input && input.status === 'success' ? " +
+    "'[HuggingFace] ' + (input.already_logged_in ? 'Already logged in.' : 'Logged in.') : " +
+    "'[HuggingFace] Not logged in (' + String((input && (input.error || input.status)) || 'no response').replace(/\\.$/, '') + '). " +
+    "Optional: public models still download. Retry from Advanced > Log in to Hugging Face.'"
+  return [
+    {...gate, method: 'log', params: {raw: '[HuggingFace] Optional login lifts download rate limits. ' +
+      'The browser opens with the code below; this continues automatically after 3 minutes.'}},
+    {...gate, method: 'hf.login', params: {modal: false, timeout: 180000}},
+    {...gate, method: 'log', params: {raw: `{{${outcome}}}`}},
+  ]
+}
+
 function startGuard() {
   return {when: "{{exists('app/.runtime/wangp.managed')}}", method: 'shell.run', params: {
     path: 'app', venv: 'env', env: {PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONHOME: ''},
@@ -142,7 +159,8 @@ function engineSteps(engine, platform) {
   if (platform === 'win32' && triton) run.push({method: 'shell.run', params: {
     ...shell(engine, platform), message: pip(engine, platform, `install triton-windows==${triton}`),
   }})
-  if (engine === 'core') run.push({method: 'shell.run', params: {
+  // Pinokio's bundle pins FFmpeg in its shared conda base; never replace that copy.
+  if (engine === 'core') run.push({when: "{{!which('ffmpeg')}}", method: 'shell.run', params: {
     message: guarded('conda install -y -c conda-forge ffmpeg'),
   }})
   if (engine === 'wangp') run.push(...call('torch.js', {managed: true}))
@@ -205,4 +223,4 @@ function installEngines(names) {
     }))))
 }
 
-module.exports = {catalog, selected, shell, python, pip, guarded, call, preflight, startGuard, startGuards, vendorSteps, installEngines}
+module.exports = {catalog, selected, shell, python, pip, guarded, call, preflight, hfLogin, startGuard, startGuards, vendorSteps, installEngines}
