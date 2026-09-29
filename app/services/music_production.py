@@ -6,7 +6,8 @@ returns a short summary and can wait until that status changes (``wait_s``, max 
 montages.save/export) through the app's own MCP endpoint, plus the local audio.analyze and
 qa.lipsync functions. Decisions a model used to make by looking are made here by numbers:
 the song with the best lyric recall and no cut ending wins, clips that fail lip-sync are
-retaken with a new seed (max_takes), long instrumental stretches are filled on bar lines.
+retaken until the next measured r does not beat the best r already kept, or 4 takes are recorded.
+Long instrumental stretches are filled on bar lines.
 State lives in <workspace>/<id>.production.json. A running file younger than 24h resumes on startup when MCP is on.
 """
 from __future__ import annotations
@@ -29,6 +30,7 @@ from services.production_disk import release_completed, require_free_disk
 from services.production_resume import open_mcp
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_style_presets import expand_style_preset
+from services.production_takes import another_take, note_seconds, pending_windows, take_settled
 from services.production_wait import MAX_WAIT_S, wait_for_status
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
 from services.video2d_edit_titles import TITLE_BUILDERS
@@ -426,23 +428,25 @@ class Production:
         return job
 
     def clips(self, spec: dict, windows: list[dict], retake: tuple[str, ...] = (), pause: float = 60) -> None:
-        """Up to max_takes per run for each missing clip (or each key in retake). Takes count across runs, so a
-        resumed or retaken clip gets new seeds; the best take by lip-sync r is kept. Failed takes are logged with
-        their reason and, when a whole round failed (a busy GPU), the next round waits instead of burning takes."""
-        clips, tried = self.state.setdefault("clips", {}), self.state.setdefault("clip_takes", {})
+        """Shoot missing clips (or retake keys). Flat lip-sync r, max_takes, or 4 recorded takes stop an automatic
+        shoot; an explicit retake may pass the cap. The best r is kept. A fully failed round waits before the next."""
+        self.state.setdefault("clips", {})
+        tried = self.state.setdefault("clip_takes", {})
         max_takes = int(spec.get("max_takes", 3))
         vocals = self.score().get("vocals_file")
-        pending = [w for w in windows if w["kind"] == "h3" and w["key"] in self.state.get("frames", {}) and (w["key"] not in clips or w["key"] in retake)]
+        pending = pending_windows(windows, self.state, retake)
         for w in pending:          # productions saved before clip_takes existed: count their logged takes
             tried.setdefault(w["key"], sum(1 for line in self.state.get("log") or [] if line.startswith(f"clip {w['key']} take ")))
         budget = {w["key"]: tried[w["key"]] + max_takes for w in pending}
         while pending:
+            started = time.perf_counter()
             names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + tried[w["key"]], tried[w["key"]]) for w in pending})
             retry = []
             for w in pending:
                 tried[w["key"]] += 1
-                if not self.judge_take(w, names.get(w["key"]), tried[w["key"]], vocals) and tried[w["key"]] < budget[w["key"]]:
+                if another_take(self.judge_take(w, names.get(w["key"]), tried[w["key"]], vocals), tried[w["key"]], budget[w["key"]], w["key"] in retake):
                     retry.append(w)
+            note_seconds(self.state, pending, time.perf_counter() - started)
             self.save()
             if retry and not any(names.values()):
                 time.sleep(pause)
@@ -460,9 +464,10 @@ class Production:
         drive = "vocals" if (take - 1) % 2 == 1 and w.get("sing") else "mix"
         self.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
         best = clips.get(key)
-        if not best or (qa.get("best_r") or 0) >= ((best.get("qa") or {}).get("best_r") or 0):
+        previous = (best.get("qa") or {}).get("best_r") if best else None
+        if not best or (qa.get("best_r") or 0) >= (previous or 0):
             clips[key] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
-        return qa["verdict"] != "retake"
+        return take_settled(qa, previous)
 
     def scenes(self, spec: dict, windows: list[dict]) -> None:
         score = self.score()

@@ -277,6 +277,7 @@
         "tests/test_production_held.py",
         "tests/test_production_scene_retry.py",
         "tests/test_production_style_presets.py",
+        "tests/test_production_takes.py",
         "tests/test_productions_router.py",
         "tests/test_project_catalog.py",
         "tests/test_projects_router.py",
@@ -552,6 +553,20 @@
       "prefix": "app/services/production_style_presets.py",
       "paths": [
         "tests/test_production_style_presets.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_takes.py",
+      "paths": [
+        "tests/test_production_takes.py",
+        "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/music_production.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_takes.py"
       ]
     }
   ]
