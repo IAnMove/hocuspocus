@@ -631,3 +631,27 @@ def test_dimension_fix_rejects_unexpected_upstream_changes(tmp_path):
     with pytest.raises(RuntimeError, match="source changed"):
         toolchain.prepare_rasterizer(source, tmp_path / "build")
     assert not (tmp_path / "build").exists()
+
+
+def test_install_summary_names_missing_features_and_why():
+    module_spec = importlib.util.spec_from_file_location("runtime_probe_test", ROOT / "scripts/runtime_probe.py")
+    probe = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(probe)
+
+    def summary(*args):
+        result = profiles.select_profiles(*args)
+        for engine in result["engines"].values():
+            engine.setdefault("installed", False)
+        return probe.summary(result)
+
+    amd = summary("linux", "x64", "amd")
+    assert "editing studio" in amd[0]
+    assert len(amd) == 2 and "NVIDIA" in amd[1] and "(WanGP)" in amd[1] and "(UniRig)" in amd[1]
+    old_driver = summary("win32", "x64", "nvidia", "470.1")
+    # Engines blocked by the same driver floor share one line.
+    assert any("(WanGP)" in line and "(Hunyuan3D)" in line and "528.33" in line for line in old_driver)
+    nvidia = summary("linux", "x64", "nvidia", "580.82.09")
+    assert nvidia[0].startswith("Installs the full studio")
+    assert not any(line.startswith("Not available") for line in nvidia)
+    assert "(SAM 3.1)" in nvidia[-1] and "Advanced" in nvidia[-1]
+    assert summary("darwin", "x64", "apple")[0].startswith("Nothing can be installed")

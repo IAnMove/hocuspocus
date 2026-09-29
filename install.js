@@ -9,7 +9,7 @@ module.exports = {
     ...runtime.call("runtime_setup.js", {update: false}),
     {method: "input", params: {
       title: "Installation completed",
-      description: "Check the runtime report above, then click Start."
+      description: "{{local.runtime.summary.join(' ')}} Click Start."
     }}
   ]
 }
