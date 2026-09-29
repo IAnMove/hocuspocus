@@ -183,7 +183,10 @@
         "tests/test_lipsync_span.py",
         "tests/test_production_disk.py",
         "tests/test_production_resume.py",
-        "tests/test_production_held.py"
+        "tests/test_production_held.py",
+        "tests/test_production_timing.py",
+        "tests/test_production_shot_plan.py",
+        "tests/test_production_dry_run.py"
       ]
     },
     {
@@ -567,7 +570,28 @@
       "prefix": "app/services/music_production.py",
       "paths": [
         "tests/test_music_production.py",
-        "tests/test_production_takes.py"
+        "tests/test_production_takes.py",
+        "tests/test_production_timing.py",
+        "tests/test_production_dry_run.py",
+        "tests/test_production_shot_plan.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_timing.py",
+      "paths": [
+        "tests/test_production_timing.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_plan.py",
+      "paths": [
+        "tests/test_production_shot_plan.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_dry_run.py",
+      "paths": [
+        "tests/test_production_dry_run.py"
       ]
     }
   ]
