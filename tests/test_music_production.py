@@ -5,8 +5,9 @@ import numpy as np
 import pytest
 
 from services import lipsync_qa, song_analysis as audio_analysis
-from services.music_production import (Production, ProductionError, failure_reason, h3_frames_for, lyric_span, pick_song,
-                                       segments, shot_windows, status_summary, title_span, validate_spec)
+from services.music_production import (Production, ProductionError, contact_sheet_filter, failure_reason, h3_frames_for,
+                                       lyric_span, pick_song, scene_fingerprint, segments, shot_windows, status_summary,
+                                       title_span, validate_spec)
 from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS, Video2dEditError, edit
 
 
@@ -267,8 +268,40 @@ def test_a_new_clip_reexports_only_its_scene(tmp_path):
         return {"receipt": {"artifacts": [{"name": "new-scene.mp4"}]}}
     production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=mcp)
     production.edit = lambda doc, ops: doc
-    production.state = {"score": "s.score.json", "clips": {"a": {"file": "new.mp4", "url": "/u/new.mp4"}},
-                        "scenes": {"a": {"dur": 3.0, "file": "old-a.mp4", "clip": "old.mp4"}, "b": {"dur": 3.0, "file": "b.mp4", "clip": None}}}
     windows = [{"key": "a", "kind": "h3", "i": 0, "t0": 0.0, "t1": 3.0}, {"key": "b", "kind": "still", "still": "/k.png", "i": 1, "t0": 3.0, "t1": 7.0}]
+    prior_b = scene_fingerprint(windows[1], {}, {}, {"duration": 6.0, "beat": 0.5, "lines": []})
+    production.state = {"score": "s.score.json", "clips": {"a": {"file": "new.mp4", "url": "/u/new.mp4"}},
+                        "scenes": {"a": {"dur": 3.0, "file": "old-a.mp4", "clip": "old.mp4"},
+                                   "b": {"dur": 3.0, "file": "b.mp4", "clip": None, "fingerprint": prior_b}}}
     production.scenes({"shots": []}, windows)
-    assert exported == ["a"] and production.state["scenes"]["a"] == {"intent": "c1", "dur": 3.0, "clip": "new.mp4", "file": "new-scene.mp4"}
+    assert exported == ["a"]
+    assert production.state["scenes"]["a"]["file"] == "new-scene.mp4"
+    assert production.state["scenes"]["b"]["file"] == "b.mp4"
+
+
+def test_changed_style_reexports_an_existing_scene(tmp_path):
+    score = {"duration": 5.0, "beat": 0.5, "lines": []}
+    (tmp_path / "s.score.json").write_text('{"duration": 5.0, "beat": 0.5, "lines": []}')
+    shot = {"key": "cover", "kind": "still", "still": "/cover.png", "i": 0, "t0": 0.0, "t1": 4.0}
+    exported = []
+
+    def mcp(tool, arguments):
+        if tool == "scenes.video2d.export":
+            exported.append(arguments["input"]["document"]["name"])
+            return {"receipt": {"commandId": "new"}}
+        return {"receipt": {"artifacts": [{"name": "new-cover.mp4"}]}}
+
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=mcp)
+    production.edit = lambda doc, ops: doc
+    production.state = {"score": "s.score.json", "scenes": {"cover": {"dur": 5.0, "file": "old-cover.mp4",
+                        "clip": None, "fingerprint": scene_fingerprint(shot, {"lyric_style": {"y": 78}}, {}, score)}}}
+    production.scenes({"style": {"lyric_style": {"y": 86}}}, [shot])
+    assert exported == ["cover"]
+    assert production.state["scenes"]["cover"]["file"] == "new-cover.mp4"
+
+
+def test_contact_sheet_covers_a_long_song():
+    frame_filter = contact_sheet_filter(76)
+    rate = float(frame_filter.split(",", 1)[0].split("=", 1)[1])
+    assert "tile=6x4" in frame_filter
+    assert 23 / rate > 70  # the last cell reaches the ending of a 76-second video

@@ -11,6 +11,7 @@ State lives in <workspace>/<id>.production.json, so a restart resumes where it s
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -186,6 +187,17 @@ def title_cue_count(template: str, fields: dict, start: float, length: float) ->
         return max(1, len(builder(fields, {"start": start, "duration": length, "width": 1920, "height": 1080})))
     except Exception:
         return 1
+
+
+def scene_fingerprint(shot: dict, style: dict, stills: dict, score: dict) -> str:
+    """Invalidate a rendered scene when its spec or lyric timing changes on resume."""
+    source = {"shot": shot, "style": style, "stills": stills, "lines": score.get("lines") or []}
+    return hashlib.sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def contact_sheet_filter(duration: float) -> str:
+    """Sample the whole song into the 24-cell review sheet, including its final card."""
+    return f"fps={24 / max(duration, 1):.8f},scale=320:-1,tile=6x4"
 
 
 # ---------------------------------------------------------------- run
@@ -427,13 +439,16 @@ class Production:
             dur = round(b - a, 3)
             used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
             prior = done.get(shot["key"], {})
-            if prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used:
+            fingerprint = scene_fingerprint(shot, style, stills, score)
+            if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
+                    and prior.get("fingerprint") == fingerprint):
                 continue
             doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
             doc = self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
             r = self.mcp("scenes.video2d.export", {"version": 1, "intent_id": f"{self.id}-scene-{shot['key']}-{int(time.time())}",
                                                    "input": {"workspace": self.ws, "document": doc}})
-            done[shot["key"]] = {"intent": (r.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used, "file": None}
+            done[shot["key"]] = {"intent": (r.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used,
+                                  "fingerprint": fingerprint, "file": None}
             self.save()
         for key, scene in done.items():
             while scene.get("intent") and not scene.get("file"):
@@ -567,7 +582,7 @@ class Production:
         if self.state["final"]:
             import subprocess
             sheet = f"{self.id}-contact.jpg"
-            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(self.root / self.state["final"]), "-vf", "fps=1/2.5,scale=320:-1,tile=6x4",
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(self.root / self.state["final"]), "-vf", contact_sheet_filter(score["duration"]),
                             "-frames:v", "1", str(self.root / sheet)])
             self.state["contact_sheet"] = sheet
         self.log(f"montage: {status.get('status')}")
