@@ -153,3 +153,11 @@ def test_the_bar_follows_the_quality_profile():
     draft = {item["code"] for item in dry_run({**spec, "quality": "draft"})["warnings"]}
     assert "too_static" not in draft and "few_clips" not in draft          # a draft may be mostly stills
     assert "too_static" in {item["code"] for item in dry_run({**spec, "quality": "max"})["warnings"]}
+
+
+def test_dry_run_plans_with_the_preset_and_profile_the_run_will_use():
+    spec = {"title": "t", "quality": "draft", "song": {"lyrics": "[Verse]\na\nb\n[Chorus]\nc\nd", "caption": "pop", "duration": 24, "bpm": 120},
+            "style": {"preset": "omarchy-desktop"}, "shots": "auto"}
+    report = dry_run(spec)
+    assert {row["kind"] for row in report["windows"] if not row["key"].startswith("fill")} == {"screen"}      # the desktop look: no clips, no singer
+    assert report["h3_frames"] == 0

@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import Any
 
 from services.music_production import h3_frames_for, shot_windows
-from services.production_quality import profile_of
+from services.production_quality import expand_quality, profile_of
+from services.production_style_presets import expand_style_preset
 from services.song_analysis import lyric_lines
 
 TITLE_LIMIT = 12
@@ -70,7 +71,7 @@ def _expand_shots(spec: dict) -> tuple[dict, bool, list[dict]]:
         from services.production_shot_plan import plan_shots
     except ImportError:
         return spec, False, [{"code": "shots_auto_unavailable"}]
-    planned = plan_shots(spec)
+    planned = plan_shots(expand_quality(expand_style_preset(spec)))
     if isinstance(planned, list):
         planned = {**spec, "shots": planned}
     if not isinstance(planned, dict):
