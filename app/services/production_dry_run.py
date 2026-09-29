@@ -176,11 +176,11 @@ def _static_warnings(motion: dict, profile: dict) -> list[dict]:
 
 def _pace_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
     minutes = float((spec.get("song") or {}).get("duration") or 0) / 60
-    clips = sum(1 for shot in shots if shot.get("kind") == "h3")
+    clips = sum(1 for shot in shots if shot.get("kind") in ("h3", "scene3d"))
     if minutes <= 0 or clips / minutes >= profile["clips_per_minute"]:
         return []
     return [{"code": "few_clips", "per_minute": round(clips / minutes, 1), "minimum": profile["clips_per_minute"],
-             "hint": "more H3 shots, or a shorter song, or quality: draft"}]
+             "hint": "more H3 or scene3d shots, or a shorter song, or quality: draft"}]
 
 
 def _reused_stills(shots: list[dict]) -> list[dict]:

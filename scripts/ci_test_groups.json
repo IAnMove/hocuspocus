@@ -282,6 +282,7 @@
         "tests/test_production_run.py",
         "tests/test_production_review_checks.py",
         "tests/test_production_scene_retry.py",
+      "tests/test_production_scene3d.py",
         "tests/test_production_style_presets.py",
         "tests/test_production_takes.py",
         "tests/test_production_package.py",
