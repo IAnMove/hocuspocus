@@ -118,8 +118,8 @@ def measure(clip: str, audio: str, offset: float = 0.0,
     if bounds is not None and bounds[1] - bounds[0] < MIN_SUNG_S:
         return {"verdict": "unreliable", "frames": 0, "reason": "sung_span_short"}
     import cv2
-    import librosa
-    pose, cap, values, box, index = _Pose(), cv2.VideoCapture(clip), [], None, 0
+    cap = cv2.VideoCapture(clip)
+    pose, values, box, index = _Pose(), [], None, 0
     fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
     while True:
         ok, frame = cap.read()
@@ -137,6 +137,7 @@ def measure(clip: str, audio: str, offset: float = 0.0,
     if len(data) == 0:
         return {"verdict": "unreliable", "frames": 0}
     mouth = np.convolve(data[:, 0], np.ones(3) / 3, "same")
+    import librosa
     wave, sr = librosa.load(audio, sr=16000, offset=max(0.0, offset + i0 / fps), duration=len(mouth) / fps + 0.5)
     envelope = np.convolve(librosa.feature.rms(y=wave, frame_length=1024, hop_length=int(sr / fps))[0], np.ones(3) / 3, "same")
     r0, r, lag = best_lag(mouth, envelope, fps)
