@@ -137,6 +137,10 @@ def h3_frames_for(seconds: float) -> int:
 
 def shot_windows(spec: dict, score: dict) -> list[dict]:
     lines = score.get("lines") or []
+    try:
+        duration = float(score.get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = 0.0
     out = []
     for index, shot in enumerate(spec["shots"]):
         if is_auto_pad(shot):
@@ -150,6 +154,10 @@ def shot_windows(spec: dict, score: dict) -> list[dict]:
             t0 = lines[shot["after"]]["t1"] + 0.3
         else:
             t0 = 0.0
+        # an `after` card uses last.t1 + 0.3; when the last lyric ends at the song
+        # end that start is past duration and segments() drops it (b - a <= 0).
+        if duration > 0 and t0 >= duration:
+            t0 = max(0.0, duration - 4.0)
         if line:
             last = lines[min(len(lines) - 1, shot["line"] + shot.get("span", 1) - 1)]
             t1 = last["t1"] + 0.2
@@ -162,7 +170,7 @@ def shot_windows(spec: dict, score: dict) -> list[dict]:
         bpm = 120.0
     shots = spec.get("shots") if isinstance(spec.get("shots"), list) else []
     if spec.get("auto_pads") or any(is_auto_pad(shot) for shot in shots):
-        return place_pads(out, spec, float(score.get("duration") or 0), bpm)
+        return place_pads(out, spec, duration, bpm)
     return out
 
 
