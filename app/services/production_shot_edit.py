@@ -6,6 +6,7 @@ one scene export, and the montage clip replaced under the same ``expected_revisi
 """
 from __future__ import annotations
 
+import copy
 import time
 from pathlib import Path
 from typing import Any
@@ -164,6 +165,43 @@ def rewrite_manifest(production: Any, spec: dict) -> str:
     return name
 
 
+def _checkpoint(production: Any, spec: dict, key: str) -> dict[str, Any]:
+    """Remember the shot so a failed export can put the production JSON back."""
+    clips = production.state.get("clips") if isinstance(production.state.get("clips"), dict) else {}
+    scenes = production.state.get("scenes") if isinstance(production.state.get("scenes"), dict) else {}
+    docs = production.state.get("scene_docs") if isinstance(production.state.get("scene_docs"), dict) else {}
+    shot = next((item for item in spec.get("shots") or [] if isinstance(item, dict) and item.get("key") == key), None)
+    return {
+        "had_clip": key in clips,
+        "clip": copy.deepcopy(clips.get(key)),
+        "had_scene": key in scenes,
+        "scene": copy.deepcopy(scenes.get(key)),
+        "had_doc": key in docs,
+        "doc": copy.deepcopy(docs.get(key)),
+        "had_overrides": bool(shot and "overrides" in shot),
+        "overrides": copy.deepcopy(shot.get("overrides")) if shot else None,
+    }
+
+
+def _put(bucket: dict, key: str, *, had: bool, value: Any) -> None:
+    if had:
+        bucket[key] = value
+    else:
+        bucket.pop(key, None)
+
+
+def _restore(production: Any, spec: dict, key: str, checkpoint: dict[str, Any]) -> None:
+    """Undo a half-applied take swap or override after export or montage fails."""
+    _put(production.state.setdefault("clips", {}), key, had=checkpoint["had_clip"], value=checkpoint["clip"])
+    _put(production.state.setdefault("scenes", {}), key, had=checkpoint["had_scene"], value=checkpoint["scene"])
+    _put(production.state.setdefault("scene_docs", {}), key, had=checkpoint["had_doc"], value=checkpoint["doc"])
+    shot = next((item for item in spec.get("shots") or [] if isinstance(item, dict) and item.get("key") == key), None)
+    if shot is not None:
+        _put(shot, "overrides", had=checkpoint["had_overrides"], value=checkpoint["overrides"])
+    production.state["spec"] = spec
+    production.save()
+
+
 def _publish(production: Any, spec: dict, key: str) -> dict[str, Any]:
     from services.music_production import scene_fingerprint
     shot, start, end, score = _segment(production, spec, key)
@@ -181,6 +219,14 @@ def _publish(production: Any, spec: dict, key: str) -> dict[str, Any]:
     return {"shot": key, "clip": clip_file, "scene": scene, "video": video}
 
 
+def _publish_or_restore(production: Any, spec: dict, key: str, checkpoint: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return _publish(production, spec, key)
+    except Exception:
+        _restore(production, spec, key, checkpoint)
+        raise
+
+
 def adopt_take(production: Any, key: str, take_file: str) -> None:
     take_file = _file_name(take_file, "take_not_found")
     take = _take(production.state, key, take_file)
@@ -193,8 +239,9 @@ def adopt_take(production: Any, key: str, take_file: str) -> None:
 def use_take(production: Any, spec: dict, key: str, take_file: str) -> dict[str, Any]:
     """Use one kept take as the shot clip, then rebuild and re-export only that scene."""
     _shot(spec, key)
+    checkpoint = _checkpoint(production, spec, key)
     adopt_take(production, key, take_file)
-    return _publish(production, spec, key)
+    return _publish_or_restore(production, spec, key, checkpoint)
 
 
 def _assign_override(overrides: dict, name: str, value: Any) -> None:
@@ -212,15 +259,19 @@ def update_shot(production: Any, spec: dict, key: str, *, lyric_style: Any = Non
     changes = {"lyric_style": lyric_style, "title": title, "camera": camera}
     if all(value is None for value in changes.values()):
         raise ShotEditError("empty_update", "pass lyric_style, title or camera")
-    overrides = shot.setdefault("overrides", {})
-    if not isinstance(overrides, dict):
-        overrides = {}
-        shot["overrides"] = overrides
-    for name, value in changes.items():
-        if value is not None:
-            _assign_override(overrides, name, value)
-    production.state["spec"] = spec
-    production.save()
-    result = _publish(production, spec, key)
+    checkpoint = _checkpoint(production, spec, key)
+    try:
+        overrides = shot.setdefault("overrides", {})
+        if not isinstance(overrides, dict):
+            overrides = {}
+            shot["overrides"] = overrides
+        for name, value in changes.items():
+            if value is not None:
+                _assign_override(overrides, name, value)
+        production.state["spec"] = spec
+        result = _publish(production, spec, key)
+    except Exception:
+        _restore(production, spec, key, checkpoint)
+        raise
     result["overrides"] = {name: overrides[name] for name in changes if name in overrides}
     return result
