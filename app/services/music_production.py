@@ -28,6 +28,8 @@ import numpy as np
 from services import lipsync_qa, song_analysis as audio_analysis
 from services.production_disk import discard, release_completed, require_free_disk
 from services.production_resume import open_mcp
+from services.production_shot_plan import plan_shots
+from services.production_timing import StageWatch, timing_summary
 from services.production_review import review_production
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_style_presets import expand_style_preset
@@ -68,13 +70,13 @@ SPEC_SCHEMA: dict[str, Any] = {
         "cast": {"type": "array", "items": {"type": "object", "required": ["id", "sheet_prompt"],
                                          "properties": {"image_model": {"type": "string"}, "image_steps": {"type": "integer"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
-        "shots": {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
+        "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
             "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
             "frame": {"type": "string"}, "action": {"type": "string"}, "still": {"type": "string"}, "clip": {"type": "string"},
             "image_model": {"type": "string"}, "image_steps": {"type": "integer"}, "graphic": {"type": "object"},
             "desktop": {"type": "object", "description": "kind screen: tiling desktop fields (layout, apps, focus, workspace, switch, theme)"},
-            "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"}}}},
+            "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"}}}}]},
         "fill": {"type": "array", "description": "Shots used to fill instrumental stretches longer than a clip"},
         "max_takes": {"type": "integer", "minimum": 1, "maximum": 5}},
 }
@@ -82,6 +84,7 @@ SPEC_SCHEMA: dict[str, Any] = {
 
 def validate_spec(spec: Any) -> dict:
     spec = expand_style_preset(spec)
+    spec = plan_shots(spec)
     if not isinstance(spec, dict):
         raise ProductionError("invalid_spec", "spec must be an object")
     for key in SPEC_SCHEMA["required"]:
@@ -643,18 +646,19 @@ class Production:
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
         self.save()
         try:
-            self.song(spec)
-            self.analyze(spec)
-            self.cast(spec)
+            watch = StageWatch(self)
+            watch.call("song", self.song, spec)
+            watch.call("analyze", self.analyze, spec)
+            watch.call("cast", self.cast, spec)
             windows = shot_windows(spec, self.score())
-            self.frames(spec, windows)
+            watch.call("frames", self.frames, spec, windows)
             if through == "frames":
                 self.state["status"] = "frames_ready"
                 self.log("frames: ready for a clean restart before clips")
                 return
-            self.clips(spec, windows, retake)
-            self.scenes(spec, windows)
-            self.montage(spec)
+            watch.call("clips", self.clips, spec, windows, retake)
+            watch.call("scenes", self.scenes, spec, windows)
+            watch.call("montage", self.montage, spec)
             # A leftover final from a previous completed run is not success: scene
             # export can fail, skip montage, and still leave that filename in state.
             if self.state.get("status") != "failed" and self.state.get("final"):
@@ -680,7 +684,8 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
             "preview_frames": state.get("preview_frames") or None,
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
-            "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:]}
+            "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:],
+            "timing": timing_summary(state)}
     summary.update(review_production(state, root))
     return summary
 
@@ -699,9 +704,11 @@ def command_catalog() -> list[dict[str, Any]]:
                                       "lines, montage and export. Pass spec to start; pass only production_id to resume (missing clips are retried "
                                       "and their scenes re-exported); retake lists clip keys to shoot again, keeping the better take. "
                                       "Returns immediately; "
-                                      "poll production.status. See docs/agents/VIDEO_PRODUCTION_RUNBOOK.md."),
+                                      "poll production.status. dry_run checks the spec before any GPU work. "
+                                      "See docs/agents/VIDEO_PRODUCTION_RUNBOOK.md."),
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
+                                          "dry_run": {"type": "boolean"},
                                           "through": {"enum": ["all", "frames"]},
                                           "preview": {"type": "object", "required": ["prompts"], "properties": {
                                               "prompts": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}},
@@ -709,7 +716,7 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": STATUS, "description": "Short summary of a production: status, per-clip lip-sync verdicts, video and contact-sheet URLs, code review (verdict, failures, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
+        {"name": STATUS, "description": "Short summary of a production: status, stage timings, per-clip lip-sync verdicts, video and contact-sheet URLs, code review (verdict, failures, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
                                              "description": "Seconds to wait until status changes. 0 returns at once. Maximum 300."}},
@@ -744,6 +751,9 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
 
     async def run(arguments: Any) -> dict:
         data = _input(arguments)
+        if data.get("dry_run") is True:
+            from services.production_dry_run import dry_run
+            return {"version": 1, "status": "completed", "operation": RUN, "result": dry_run(data.get("spec"))}
         if not token() or not app_url():
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         production = Production(data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=loopback_mcp(app_url, token))
