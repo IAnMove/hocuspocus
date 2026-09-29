@@ -93,6 +93,7 @@
         "tests/test_minimax_song_writer_prompt.py",
         "tests/test_model3d_external.py",
         "tests/test_model3d_commands.py",
+        "tests/test_model3d_compose.py",
         "tests/test_model_cache_job_guards.py",
         "tests/test_model_selection_persistence.py",
         "tests/test_model_selector_errors.py",
