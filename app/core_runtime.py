@@ -1,4 +1,4 @@
-"""Apple Silicon core/remote server: editors, projects and remote APIs without Torch."""
+"""Core/remote server (Apple Silicon and machines without a local AI recipe): editors, projects and remote APIs without Torch."""
 from __future__ import annotations
 
 import json
@@ -163,7 +163,6 @@ api.include_router(create_canonical_tasks_router(
 BLOCKED = (
     ("POST", "/api/v1/recast", "wangp_local"),
     ("POST", "/api/v1/tools/upscale", "wangp_local"),
-    ("POST", "/api/v1/rig/generate", "unirig_ai"),
     ("POST", "/api/v1/tools/remove-background", "sam_inpaint"),
     ("POST", "/api/v1/tools/revoice", "local_audio_ai"),
     ("POST", "/api/v1/retake", "wangp_local"),
@@ -508,7 +507,56 @@ def wangp_capabilities():
 
 @api.get("/api/v1/rig/capabilities")
 def rig_capabilities():
-    return {"engines": [{"id": "procedural", "label": "Procedural (fast)"}]}
+    from services import rig_service
+    payload = rig_service.capabilities()
+    # The procedural rig is CPU-only; UniRig needs a local NVIDIA engine.
+    payload["engines"] = [engine for engine in payload["engines"] if engine["id"] == "procedural"]
+    return payload
+
+
+@api.post("/api/v1/rig/generate")
+async def generate_rig(request: Request):
+    from services import rig_service
+    body = await request.json()
+    if str(body.get("engine") or "procedural") != "procedural":
+        require_capability_http("unirig_ai")
+    try:
+        workspace = body.get("workspace") or core.active_workspace()
+        folder = core.workspace_dir(workspace)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    source_name = str(body.get("source") or "").strip()
+    if not source_name:
+        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
+    if not source_name.lower().endswith(".glb"):
+        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
+    source_path = core.safe_join(folder, source_name)
+    if not source_path or not os.path.isfile(source_path):
+        raise HTTPException(status_code=400, detail="Source 3D model not found")
+    try:
+        return rig_service.start_job(body=body, source_path=source_path, output_dir=folder, workspace=workspace)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+
+@api.get("/api/v1/rig/status/{job_id}")
+def rig_job_status(job_id: str):
+    from services import rig_service
+    job = rig_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Rig job not found")
+    return job
+
+
+@api.post("/api/v1/rig/jobs/{job_id}/cancel")
+def cancel_rig_job(job_id: str):
+    from services import rig_service
+    job = rig_service.cancel_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Rig job not found")
+    return job
 
 
 @api.post("/api/v1/scenes/recordings")

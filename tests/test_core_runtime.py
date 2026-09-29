@@ -102,12 +102,35 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(denied.json()["detail"]["code"], FEATURE_UNAVAILABLE)
         self.assertEqual(self.client.post("/api/v1/model3d/generate", json={"provider": "local"}).status_code, 409)
         self.assertEqual(self.client.post("/api/v1/director/pipeline/start").status_code, 409)
-        self.assertEqual(self.client.post("/api/v1/rig/generate").status_code, 409)
+        self.assertEqual(self.client.post("/api/v1/rig/generate", json={"engine": "unirig"}).status_code, 409)
         mcp = self.client.post("/api/v1/wangp/mcp", json={"params": {"name": "generate"}})
         self.assertEqual(mcp.status_code, 503)
         self.assertEqual(self.client.post("/api/v1/tools/remove-background").status_code, 409)
         missing = self.client.post("/api/v1/video-editor/probe", json={"source": "missing.mp4"})
         self.assertEqual(missing.status_code, 400)
+
+    def test_procedural_rig_runs_without_the_3d_engine(self):
+        import shutil
+        import time
+        capabilities = self.client.get("/api/v1/rig/capabilities").json()
+        self.assertEqual([engine["id"] for engine in capabilities["engines"]], ["procedural"])
+        self.assertTrue(capabilities["engines"][0]["installed"], capabilities["engines"][0]["install_hint"])
+        self.assertTrue(capabilities["animations"])
+        folder, previous = self._in_temp_workspace()
+        try:
+            fixture = Path(__file__).resolve().parents[1] / "ui" / "tests" / "fixtures" / "tv-head-humanoid.glb"
+            shutil.copy(fixture, core_runtime.core.outputs_root() / "prop.glb")
+            started = self.client.post("/api/v1/rig/generate", json={"source": "prop.glb", "animations": ["idle"]})
+            self.assertEqual(started.status_code, 200, started.text)
+            job = started.json()
+            deadline = time.monotonic() + 60
+            while job["status"] not in {"completed", "failed", "cancelled"} and time.monotonic() < deadline:
+                time.sleep(0.2)
+                job = self.client.get(f"/api/v1/rig/status/{job['job_id']}").json()
+            self.assertEqual(job["status"], "completed", job.get("error"))
+            self.assertTrue(list(core_runtime.core.outputs_root().glob("*_rigged_prop_*.glb")))
+        finally:
+            self._leave_temp_workspace(folder, previous)
 
     def test_diagnostics_snapshot_and_report_on_the_core_profile(self):
         snapshot = self.client.get("/api/v1/diagnostics")
