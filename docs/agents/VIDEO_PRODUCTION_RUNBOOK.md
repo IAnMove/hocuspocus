@@ -278,3 +278,14 @@ resumable production with `resource_disk_low`, without deleting files. The agent
 must propose a cleanup and wait for the user's approval before resuming.
 These opt-in checks leave other instances untouched. They require the named
 local commands when enabled; absent commands fail before admission.
+
+
+### N64-inspired render look
+
+Set `scene3d.renderLook: "n64"` (or `document.renderLook`) to use the native
+whole-frame pixel pass at an effective 240-pixel height, 32 color levels per
+channel and no bloom/dither. All loaded mesh materials use flat shading and
+nearest texture sampling; linear fog starts at 4 m and closes at 28 m in the
+background color. Camera motion, model motion and GLB geometry stay fully 3D.
+The flag survives scene save/load and applies to both preview and server export.
+Removing it restores authored shading, texture filters and atmosphere fog.

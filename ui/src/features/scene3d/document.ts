@@ -103,6 +103,7 @@ function atmosField(raw: unknown): Pick<Scene3DDocument, 'atmos'> {
 export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Partial<Scene3DDocument>
+  if (value.renderLook !== undefined && value.renderLook !== 'n64') return null
   if (value.version !== 1 || value.units !== 'meters' || value.up !== 'y') return null
   if (!Array.isArray(value.slots) || !value.camera || !value.light) return null
   if (!validScene3DShape(value)) return null
