@@ -282,6 +282,8 @@
         "tests/test_production_scene_retry.py",
         "tests/test_production_style_presets.py",
         "tests/test_production_takes.py",
+        "tests/test_production_plan.py",
+        "tests/test_production_usage.py",
         "tests/test_productions_router.py",
         "tests/test_project_catalog.py",
         "tests/test_projects_router.py",
@@ -573,7 +575,21 @@
         "tests/test_production_takes.py",
         "tests/test_production_timing.py",
         "tests/test_production_dry_run.py",
-        "tests/test_production_shot_plan.py"
+        "tests/test_production_shot_plan.py",
+        "tests/test_production_plan.py",
+        "tests/test_production_usage.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_plan.py",
+      "paths": [
+        "tests/test_production_plan.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_usage.py",
+      "paths": [
+        "tests/test_production_usage.py"
       ]
     },
     {

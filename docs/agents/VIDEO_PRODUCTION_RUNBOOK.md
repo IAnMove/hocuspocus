@@ -5,11 +5,13 @@ the studio does the rest and decides by numbers what a model used to decide by w
 One `production.run` calls `audio.analyze`, `generation.music`, `generation.image`,
 `scenes.video2d.edit`, `scenes.video2d.export`, `montages.save` and `montages.export`.
 Export stays inside that run. Do not also call `montages.export`.
-Do not add a planning call before `production.run`: the spec is the plan.
+Call `production.plan` with the eight-field brief when you do not already have a spec. It returns the spec. Then `production.run`.
 
 ## Call order
 
 The agent makes these calls for a finished video:
+
+`production.plan` `{brief}` returns the spec when the agent has a brief and no spec yet. The brief fields are `tema`, `publico`, `duracion`, `musica`, `estilo`, `protagonista`, `cta` and `limites`. Pass `lyrics` to use the caller's words; otherwise the plan writes a short draft. Then start at step 1.
 
 1. `production.run` `{workspace, production_id, spec}` — starts in the background and returns at once (`production_id`, `running: true`). It does not return a job id.
 2. `production.status` `{workspace, production_id, wait_s}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status` with `wait_s` 300 instead of many short polls.
@@ -57,6 +59,7 @@ Lip-sync stops when the next measured `r` does not beat the best `r` already kep
 0.04, then 0.17, then 0.06 keeps 0.17 and does not shoot the next take. A shot with
 4 recorded takes is not shot again unless that key is in `retake`.
 `production.status` includes `timing` in seconds for song, analyze, cast, frames, clips, scenes and montage (0 when that stage did not run), and `timing.shots` lists each clip's `key`, `seconds` and take count.
+`production.status` also includes `usage`: `mcp_calls`, `response_bytes` and `h3_takes`. Tokens are about `response_bytes / 4`.
 The montage export in the table is internal. The agent does not call `montages.export` after the run.
 
 ## production.review

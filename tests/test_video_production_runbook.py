@@ -93,10 +93,11 @@ def test_spec_example_keeps_title_song_style_shots():
     assert specs
 
 
-def test_runbook_names_review_and_does_not_call_production_plan():
+def test_runbook_names_review_and_production_plan():
     text = _text()
     assert PENDING in text
-    assert "production.plan" not in text
+    assert "production.plan" in text
+    assert "production.plan" in _known_commands()
 
 
 def test_named_commands_exist_except_pending_review():
