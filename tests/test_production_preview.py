@@ -10,8 +10,9 @@ import pytest
 from services.music_production import Production, ProductionError, command_catalog, command_handlers, status_summary, validate_spec
 from services.production_dry_run import dry_run
 from services.production_preview import (
-    animatic_report, caption_failure, claim_animatic_video, hold_after_clip, measure_caption,
-    restore_cut_artifacts, snapshot_cut_artifacts, uncover_titles,
+    animatic_report, caption_failure, claim_animatic_video, completed_cut_final, hold_after_clip,
+    keep_completed_cut, measure_caption, remember_completed_cut, restore_cut_artifacts,
+    snapshot_cut_artifacts, uncover_titles,
 )
 from services.production_resume import load_running
 from services.production_shot_plan import plan_shots
@@ -315,6 +316,86 @@ def test_animatic_exception_on_a_completed_run_restores_final(tmp_path):
     assert production.state["status"] == "completed"
     assert production.state.get("error") is None
     assert any("animatic failed" in line for line in production.state["log"])
+
+
+def _stub_pre_clip(production):
+    for name in ("song", "analyze", "cast", "frames"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.score = lambda: {"duration": 8, "beat": 0.5, "lines": []}
+    production.scenes = lambda *args, **kwargs: None
+
+
+def test_remember_completed_cut_only_on_a_finished_animatic(tmp_path):
+    state = {"final": "done.mp4", "montage_file": "show.montage.json", "contact_sheet": "p-contact.jpg"}
+    remember_completed_cut(state, "completed", "all")
+    assert "completed_cut" not in state
+    remember_completed_cut(state, "running", "animatic")
+    assert "completed_cut" not in state
+    remember_completed_cut(state, "completed", "animatic")
+    assert state["completed_cut"] == {"final": "done.mp4", "montage_file": "show.montage.json",
+                                     "contact_sheet": "p-contact.jpg"}
+    assert completed_cut_final({"final": "anim.mp4", "completed_cut": {"final": "done.mp4"}}) == "done.mp4"
+    assert keep_completed_cut({"final": "done.mp4"}, "completed")
+    assert keep_completed_cut({"final": "anim.mp4", "completed_cut": {"final": "done.mp4"}}, "running")
+    assert not keep_completed_cut({"final": "anim.mp4"}, "running")
+
+
+def test_resumed_animatic_on_a_completed_cut_stays_completed(tmp_path):
+    """Crash mid-animatic leaves status=running; resume must not demote the cut."""
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    _stub_pre_clip(production)
+    production.montage = lambda spec: production.state.__setitem__("final", "anim.mp4")
+    production.state.update(status="running", through="animatic", final="done.mp4",
+                            completed_cut={"final": "done.mp4"})
+    production.run(_spec(), through="animatic")
+    assert production.state["status"] == "completed"
+    assert production.state["final"] == "done.mp4"
+    assert production.state["animatic_video"] == "anim.mp4"
+    assert production.state.get("error") is None
+
+
+def test_resumed_animatic_restores_final_after_a_crash_overwrote_it(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    _stub_pre_clip(production)
+    production.montage = lambda spec: production.state.__setitem__("final", "anim2.mp4")
+    production.state.update(status="running", through="animatic", final="anim.mp4",
+                            completed_cut={"final": "done.mp4"})
+    production.run(_spec(), through="animatic")
+    assert production.state["status"] == "completed"
+    assert production.state["final"] == "done.mp4"
+    assert production.state["animatic_video"] == "anim2.mp4"
+
+
+def test_resumed_animatic_failure_on_a_completed_cut_stays_completed(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    _stub_pre_clip(production)
+    production.montage = lambda spec: (_ for _ in ()).throw(ProductionError("montage_failed", "export job lost"))
+    production.state.update(status="running", through="animatic", final="done.mp4",
+                            completed_cut={"final": "done.mp4"})
+    production.run(_spec(), through="animatic")
+    assert production.state["status"] == "completed"
+    assert production.state["final"] == "done.mp4"
+    assert production.state.get("error") is None
+    assert any("animatic failed" in line for line in production.state["log"])
+
+
+def test_first_animatic_persists_the_cut_before_status_becomes_running(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    _stub_pre_clip(production)
+    seen = {}
+
+    def montage(_spec):
+        saved = json.loads(production.path.read_text(encoding="utf-8"))
+        seen["status"] = saved.get("status")
+        seen["completed_cut"] = saved.get("completed_cut")
+        production.state["final"] = "anim.mp4"
+
+    production.montage = montage
+    production.state.update(status="completed", final="done.mp4")
+    production.run(_spec(), through="animatic")
+    assert seen == {"status": "running", "completed_cut": {"final": "done.mp4"}}
+    assert production.state["status"] == "completed"
+    assert production.state["final"] == "done.mp4"
 
 
 def test_animatic_exception_on_a_new_run_still_fails(tmp_path):

@@ -493,3 +493,38 @@ def claim_animatic_video(state: dict, previous: str | None) -> None:
         state["final"] = previous
     else:
         state.pop("final", None)
+
+
+_CUT_KEYS = ("final", "montage_file", "contact_sheet")
+
+
+def remember_completed_cut(state: dict, prior_status: object, through: object = "animatic") -> None:
+    """Persist the finished-cut names before ``status`` becomes ``running``.
+
+    A crash mid-animatic leaves the file ``running``. Resume then sees
+    ``prior_status != completed`` and would fail or demote the production
+    unless this snapshot is already on disk.
+    """
+    if through != "animatic" or prior_status != "completed":
+        return
+    final = state.get("final")
+    if not isinstance(final, str) or not final:
+        return
+    state["completed_cut"] = {key: state[key] for key in _CUT_KEYS
+                              if isinstance(state.get(key), str) and state[key]}
+
+
+def completed_cut_final(state: dict) -> str | None:
+    """Finished-cut filename: the persisted snapshot, else the current ``final``."""
+    cut = state.get("completed_cut")
+    if isinstance(cut, dict) and isinstance(cut.get("final"), str) and cut["final"]:
+        return cut["final"]
+    final = state.get("final")
+    return final if isinstance(final, str) and final else None
+
+
+def keep_completed_cut(state: dict, prior_status: object) -> bool:
+    """True when this animatic must not fail or demote a finished production."""
+    if prior_status == "completed" and isinstance(state.get("final"), str) and state["final"]:
+        return True
+    return completed_cut_final(state) is not None and isinstance(state.get("completed_cut"), dict)
