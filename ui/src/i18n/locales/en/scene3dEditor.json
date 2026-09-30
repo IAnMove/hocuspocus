@@ -1531,18 +1531,27 @@
     "atmos-moon-low": {
       "title": "Moon · low",
       "description": "The same surface from the dust, looking up at a large Earth in a black sky."
+    },
+    "atmos-snow-wide": {
+      "title": "Snow forest · wide",
+      "description": "A procedural snow forest. The character spot stays on open snow, in front of the pines."
+    },
+    "atmos-snow-low": {
+      "title": "Snow forest · low",
+      "description": "The same forest from the snow, looking toward a blue-hour sky and a warm cabin light."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "blue": "Blue hour" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "frost": "Frost", "twilight": "Twilight" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
     "flow": "Flow",
-    "prints": "Prints"
+    "prints": "Prints",
+    "flakes": "Flakes"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",

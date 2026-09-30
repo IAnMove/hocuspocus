@@ -3,9 +3,10 @@ import type { AtmosQuality, AtmosSettings, ResolvedAtmos } from './params.ts'
 import type { AtmosSetDefinition, AtmosVec3 } from './definition.ts'
 import { clearingSet } from './sets/clearing.ts'
 import { moonSet } from './sets/moon.ts'
+import { snowSet } from './sets/snow.ts'
 import { waterfallSet } from './sets/waterfall.ts'
 
-export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet]
+export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet, snowSet]
 
 const extra: AtmosSetDefinition[] = []
 
