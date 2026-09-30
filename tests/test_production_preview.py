@@ -271,9 +271,62 @@ def test_animatic_on_a_completed_run_keeps_the_finished_cut(tmp_path):
     assert production.state["final"] == "done.mp4"
     assert production.state["animatic_video"] == "anim.mp4"
     assert production.state["status"] == "completed"
+    assert production.state["through"] == "animatic"
     summary = status_summary(production.state, "ws")
     assert summary["video"] == "/api/v1/file/done.mp4?workspace=ws"
     assert summary["animatic"] == "/api/v1/file/anim.mp4?workspace=ws"
+
+
+def test_animatic_failure_on_a_completed_run_keeps_completed_and_final(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    for name in ("song", "analyze", "cast", "frames"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.score = lambda: {"duration": 8, "beat": 0.5, "lines": []}
+
+    def scenes(*_args, **_kwargs):
+        production.state.update(status="failed", error="scene_export_failed: s0")
+
+    production.scenes = scenes
+    production.montage = lambda spec: production.state.__setitem__("final", "anim.mp4")
+    production.state.update(status="completed", final="done.mp4")
+    production.run(_spec(), through="animatic")
+    assert production.state["final"] == "done.mp4"
+    assert production.state["status"] == "completed"
+    assert production.state.get("error") is None
+
+
+def test_animatic_exception_on_a_completed_run_restores_final(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    for name in ("song", "analyze", "cast", "frames"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.score = lambda: {"duration": 8, "beat": 0.5, "lines": []}
+    production.scenes = lambda *args, **kwargs: None
+
+    def montage(_spec):
+        production.state["final"] = "anim.mp4"
+        raise ProductionError("montage_failed", "export job lost")
+
+    production.montage = montage
+    production.state.update(status="completed", final="done.mp4")
+    production.run(_spec(), through="animatic")
+    assert production.state["final"] == "done.mp4"
+    assert production.state["animatic_video"] == "anim.mp4"
+    assert production.state["status"] == "completed"
+    assert production.state.get("error") is None
+    assert any("animatic failed" in line for line in production.state["log"])
+
+
+def test_animatic_exception_on_a_new_run_still_fails(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    for name in ("song", "analyze", "cast", "frames"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.score = lambda: {"duration": 8, "beat": 0.5, "lines": []}
+    production.scenes = lambda *args, **kwargs: None
+    production.montage = lambda spec: (_ for _ in ()).throw(ProductionError("montage_failed", "export job lost"))
+    production.run(_spec(), through="animatic")
+    assert production.state["status"] == "failed"
+    assert "export job lost" in (production.state.get("error") or "")
+    assert production.state.get("final") is None
 
 
 def test_resume_after_animatic_reuses_frames_and_reaches_clips(tmp_path):

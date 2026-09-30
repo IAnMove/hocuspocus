@@ -922,12 +922,12 @@ class Production:
             self.montage(spec)
         finally:
             self.state.pop("caption_gate", None)
-        claim_animatic_video(self.state, previous if isinstance(previous, str) else None)
+            claim_animatic_video(self.state, previous if isinstance(previous, str) else None)
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
         self._cancel = arm(self.ws, self.id)
         prior_status = self.state.get("status")
-        self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
+        self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time(), through=through)
         self.save()
         try:
             checkpoint(self._cancel)
@@ -944,13 +944,17 @@ class Production:
                 self.log("frames: ready for a clean restart before clips")
                 return
             if through == "animatic":
-                self.animatic(spec, windows)
-                if self.state.get("status") != "failed":
-                    if prior_status == "completed" and self.state.get("final"):
-                        self.state.update(status="completed", error=None)
-                    else:
-                        self.state["status"] = "animatic_ready"
-                        self.log("animatic: ready; a resume continues with clips")
+                try:
+                    self.animatic(spec, windows)
+                except Exception as error:
+                    if isinstance(error, Cancelled) or not (prior_status == "completed" and self.state.get("final")):
+                        raise
+                    self.log(f"animatic failed: {type(error).__name__}: {error}"[:200])
+                if prior_status == "completed" and self.state.get("final"):
+                    self.state.update(status="completed", error=None)
+                elif self.state.get("status") != "failed":
+                    self.state["status"] = "animatic_ready"
+                    self.log("animatic: ready; a resume continues with clips")
                 return
             watch.call("clips", self.clips, spec, windows, retake)
             if any(s.get("kind") == "scene3d" for s in [*spec["shots"], *(spec.get("fill") or [])]):

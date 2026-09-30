@@ -13,7 +13,7 @@ import pytest
 
 import services.music_production as music_production
 from services.music_production import Production, command_handlers, loopback_mcp, status_summary
-from services.production_resume import resume_on_startup
+from services.production_resume import resume_on_startup, resume_through
 
 RUN = "production.run"
 
@@ -364,6 +364,27 @@ def test_resume_skips_stale_finished_live_and_inactive_mcp(tmp_path, monkeypatch
         hold.set()
         thread.join(timeout=2)
         _forget(key, "fresh/keep")
+
+
+def test_resume_repeats_a_crashed_animatic_not_a_full_gpu_run(tmp_path, monkeypatch):
+    seen = {}
+
+    def run(self, spec, retake=(), through="all"):
+        seen["through"] = through
+
+    monkeypatch.setattr(Production, "run", run)
+    workspace = tmp_path / "preview"
+    _running(workspace, "show", auto_resume=True, through="animatic")
+    listed = [{"name": "preview", "path": str(workspace)}]
+    try:
+        assert _startup(tmp_path, listed) == ["preview/show"]
+        music_production._threads["preview/show"].join(timeout=2)
+    finally:
+        _forget("preview/show")
+    assert seen["through"] == "animatic"
+    assert resume_through({"through": "frames"}) == "frames"
+    assert resume_through({"through": "clips"}) == "all"
+    assert resume_through({}) == "all"
 
 
 def test_a_running_production_that_did_not_ask_to_resume_stays_stopped(tmp_path, monkeypatch):

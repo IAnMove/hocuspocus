@@ -3,9 +3,10 @@
 A ``*.production.json`` left ``running`` is continued in-process when MCP is on,
 the file was written within 24 hours and the production asked for it
 (``production.run`` with ``auto_resume: true``, kept in the state file) or the
-server was started with ``HOCUS_PRODUCTION_AUTORESUME=1``. Nothing restarts GPU
-work on its own otherwise: stopping a server on purpose stays stopped. The resume
-is not an agent call.
+server was started with ``HOCUS_PRODUCTION_AUTORESUME=1``. The saved ``through``
+stage is repeated: a crashed animatic or frames stop does not become a full GPU
+run. Nothing restarts GPU work on its own otherwise: stopping a server on purpose
+stays stopped. The resume is not an agent call.
 """
 from __future__ import annotations
 
@@ -86,11 +87,18 @@ def thread_alive(threads: dict[str, threading.Thread], key: str) -> bool:
     return bool(thread and thread.is_alive())
 
 
+def resume_through(state: dict | None) -> str:
+    """Repeat the stage that was running. A crashed animatic must not become a full GPU run."""
+    through = state.get("through") if isinstance(state, dict) else None
+    return through if through in {"all", "frames", "animatic"} else "all"
+
+
 def start_production(production: Any, spec: dict, key: str, threads: dict[str, threading.Thread], lock: threading.Lock) -> bool:
     with lock:
         if thread_alive(threads, key):
             return False
-        thread = threading.Thread(target=production.run, args=(spec,), name=f"production-{production.id}", daemon=True)
+        through = resume_through(getattr(production, "state", None))
+        thread = threading.Thread(target=production.run, args=(spec, (), through), name=f"production-{production.id}", daemon=True)
         threads[key] = thread
         thread.start()
         return True
