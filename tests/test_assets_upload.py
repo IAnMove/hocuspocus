@@ -133,6 +133,58 @@ def test_existing_workspace_file_round_trips_without_a_copy(tmp_path):
     assert sorted(path.name for path in workspace.glob("*.png")) == ["already.png"]
 
 
+def test_glb_bytes_import_into_workspace_with_exact_model3d_ref_and_replay(tmp_path):
+    from services.procedural_3d.compose import compose_glb
+    from services.procedural_3d.glb_inspector import inspect_glb
+    from services.world3d_export import _ref_from_url
+    from services.media_paths import MediaPathNotAllowed, resolve_permitted_media_path
+
+    handlers, workspace, uploads = _layout(tmp_path)
+    glb = compose_glb([{"type": "box", "color": "#F08030"}], "Imported model")
+    payload = {"workspace": "clip", "filename": "model.glb", "data_base64": base64.b64encode(glb).decode()}
+    result = _call(handlers, "intent-model", payload)["result"]
+    assert _call(handlers, "intent-model", payload)["result"] == result
+    files = list(workspace.glob("*.glb"))
+    assert len(files) == 1 and files[0].read_bytes() == glb
+    assert inspect_glb(files[0]).status == "valid"
+    ref = _ref_from_url({"id": "hero", "media": "model3d"}, result["url"], "clip")
+    assert ref['filename'] == files[0].name and ref['workspace'] == 'clip'
+    with pytest.raises(MediaPathNotAllowed):
+        resolve_permitted_media_path(result['url'], uploads_root=str(uploads), workspace_root=str(workspace),
+                                    workspace_name='clip', kinds=('image',))
+
+
+def test_explicit_source_copy_preserves_upload_and_replays_one_workspace_import(tmp_path):
+    handlers, workspace, uploads = _layout(tmp_path)
+    source = uploads / 'accepted.wav'
+    source.write_bytes(b'accepted original song bytes')
+    payload = {"workspace": "clip", "source": str(source), "copy_to_workspace": True}
+    result = _call(handlers, "copy-song", payload)['result']
+    assert _call(handlers, "copy-song", payload)['result'] == result
+    assert result['url'].startswith('/api/v1/file/') and result['url'].endswith('?workspace=clip')
+    copies = list(workspace.glob('*.wav'))
+    assert len(copies) == 1 and copies[0].read_bytes() == source.read_bytes()
+    assert source.is_file()
+    original = _call(handlers, "reference-song", {"workspace": "clip", "source": str(source)})['result']
+    assert original['url'].startswith('/api/v1/uploads/')
+
+
+def test_source_copy_rejects_escaped_path_and_oversized_file(tmp_path, monkeypatch):
+    import services.assets_upload as module
+
+    handlers, workspace, uploads = _layout(tmp_path)
+    outside = tmp_path / 'outside.wav'; outside.write_bytes(b'original')
+    with pytest.raises(HTTPException) as caught:
+        _call(handlers, 'escape-copy', {"workspace": "clip", "source": str(outside), "copy_to_workspace": True})
+    assert caught.value.detail['code'] == 'path_not_allowed'
+    source = uploads / 'large.wav'; source.write_bytes(b'larger than the test limit')
+    monkeypatch.setattr(module, 'MAX_UPLOAD_BYTES', 3)
+    with pytest.raises(HTTPException) as caught:
+        _call(handlers, 'large-copy', {"workspace": "clip", "source": str(source), "copy_to_workspace": True})
+    assert caught.value.status_code == 413 and source.is_file()
+    assert not list(workspace.glob('*.wav')) and not list(workspace.glob('*.tmp'))
+
+
 def test_oversized_payload_is_rejected_with_a_stable_code(tmp_path):
     handlers, workspace, _uploads = _layout(tmp_path)
     payload = base64.b64encode(b"\x00" * (MAX_ASSETS_UPLOAD_BYTES + 1)).decode("ascii")
