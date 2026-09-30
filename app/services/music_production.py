@@ -925,6 +925,7 @@ class Production:
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
         self._cancel = arm(self.ws, self.id)
+        prior_status = self.state.get("status")
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
         self.save()
         try:
@@ -944,8 +945,11 @@ class Production:
             if through == "animatic":
                 self.animatic(spec, windows)
                 if self.state.get("status") != "failed":
-                    self.state["status"] = "animatic_ready"
-                    self.log("animatic: ready; a resume continues with clips")
+                    if prior_status == "completed" and self.state.get("final"):
+                        self.state.update(status="completed", error=None)
+                    else:
+                        self.state["status"] = "animatic_ready"
+                        self.log("animatic: ready; a resume continues with clips")
                 return
             watch.call("clips", self.clips, spec, windows, retake)
             if any(s.get("kind") == "scene3d" for s in [*spec["shots"], *(spec.get("fill") or [])]):
