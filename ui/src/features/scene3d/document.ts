@@ -6,6 +6,7 @@ import { parseSoundtrack } from './speech/track'
 import { validScene3DShape } from './documentValidation.ts'
 import { scene3dPlaybackSpeed } from './clock.ts'
 import { reviewClipNumber } from './performance.ts'
+import { parseRhythm } from './rhythm'
 import { normalizeScene3DSlot, parseDressing } from './documentSlot.ts'
 import { parsePixelWorld } from './pixel/pixelWorld'
 import { parseAtmosSettings } from './atmos/params.ts'
@@ -109,12 +110,14 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   if (!validScene3DShape(value)) return null
   let slots: Scene3DSlot[]
   let soundtrack: Scene3DDocument['soundtrack']
-  try { slots = value.slots.map(normalizeScene3DSlot); soundtrack = parseSoundtrack(value.soundtrack) } catch { return null }
+  let rhythm: Scene3DDocument['rhythm']
+  try { slots = value.slots.map(normalizeScene3DSlot); soundtrack = parseSoundtrack(value.soundtrack); rhythm = parseRhythm(value.rhythm) } catch { return null }
   if (!validProduction(value.production)) return null
   const templateId = knownTemplateId(value.templateId)
   const dressing = parseDressing(value.dressing)
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
   const { pixelWorld, atmos: rawAtmos, ...fields } = value
+  fields.rhythm = rhythm
   return { ...fields, ...pixelWorldField(pixelWorld), ...atmosField(rawAtmos, dressing), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }

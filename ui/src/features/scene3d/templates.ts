@@ -506,7 +506,7 @@ const DRESSING_BY_TEMPLATE: Partial<Record<Scene3DTemplateId, Scene3DDocument['d
 export function patchScene3DSlot(
   document: Scene3DDocument,
   slotId: string,
-  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook'>>,
+  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook' | 'rhythm'>>,
 ): Scene3DDocument {
   return {
     ...document,
@@ -557,6 +557,7 @@ export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefi
     sourceRef: old.sourceRef,
     clip: old.clip,
     clipPlayback: old.clipPlayback,
+    rhythm: old.rhythm ? structuredClone(old.rhythm) : undefined,
     speech: old.speech ? structuredClone(old.speech) : undefined,
     screen,
   }
@@ -569,6 +570,7 @@ export function remountScene3DTemplate(id: Scene3DTemplateId, previous: Scene3DD
   next.clipNumber = previous.clipNumber
   next.production = previous.production ? structuredClone(previous.production) : undefined
   next.soundtrack = previous.soundtrack ? structuredClone(previous.soundtrack) : undefined
+  next.rhythm = previous.rhythm ? structuredClone(previous.rhythm) : undefined
   if (previous.production) next.duration = previous.duration
   next.texts = previous.texts ? structuredClone(previous.texts) : undefined
   if (!SCENE3D_TEMPLATES.find(template => template.id === id)?.frameFormat) {

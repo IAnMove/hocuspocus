@@ -633,14 +633,15 @@ class Production:
             pending = retry
 
     def judge_take(self, w: dict, name: str | None, take: int, vocals: str | None) -> bool:
-        """Record one take; True when the clip needs no more takes. The best take by lip-sync r is kept."""
+        """Record one take; True when the clip needs no more takes. Sung shots keep the best lip-sync r; other shots keep the best visual score."""
         key, failed, clips = w["key"], self.state.setdefault("clip_failures", {}), self.state.setdefault("clips", {})
         if not name:
             failed[key] = self.failures.get(key, "no output")
             self.log(f"clip {key} take {take}: failed ({failed[key]})")
             return False
         failed.pop(key, None)
-        qa = lipsync_qa.measure(str(self.root / name), str(self.root / vocals), w["t0"], [w["t0"], w["t1"]]) if w.get("sing") and vocals else {"verdict": "ok"}
+        from services.production_clip_qa import clip_qa
+        qa = clip_qa(str(self.root / name), bool(w.get("sing")), str(self.root / vocals) if vocals else None, w["t0"], w["t1"])
         drive = "vocals" if (take - 1) % 2 == 1 and w.get("sing") else "mix"
         self.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
         self.state.setdefault("takes", {}).setdefault(key, []).append(
@@ -925,6 +926,7 @@ class Production:
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
         self._cancel = arm(self.ws, self.id)
+        prior_status = self.state.get("status")
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
         self.save()
         try:
@@ -944,8 +946,11 @@ class Production:
             if through == "animatic":
                 self.animatic(spec, windows)
                 if self.state.get("status") != "failed":
-                    self.state["status"] = "animatic_ready"
-                    self.log("animatic: ready; a resume continues with clips")
+                    if prior_status == "completed" and self.state.get("final"):
+                        self.state.update(status="completed", error=None)
+                    else:
+                        self.state["status"] = "animatic_ready"
+                        self.log("animatic: ready; a resume continues with clips")
                 return
             watch.call("clips", self.clips, spec, windows, retake)
             if any(s.get("kind") == "scene3d" for s in [*spec["shots"], *(spec.get("fill") or [])]):

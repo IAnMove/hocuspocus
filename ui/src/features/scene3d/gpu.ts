@@ -41,6 +41,7 @@ import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import { atmosEye, isAtmosDressing, prepareAtmosShadows, releaseAtmosShadows, resolveAtmos } from './atmos/index.ts'
 import { cameraEyeAtTime, cameraLookAtTime } from './camera.ts'
 import { performanceClipTime, slotPoseAtTime } from './performance.ts'
+import { rhythmicCameraEye, rhythmicLightIntensity, rhythmicSlotPose } from './rhythm'
 import { cylinderUvOffset, isCylinderBackdrop, slotMountKey } from './backdrop.ts'
 import { scene3dSlotColor } from './document.ts'
 import { paintDrive } from './driveMotion.ts'
@@ -444,7 +445,8 @@ function paintPixelLight(world: GpuWorld, document: Scene3DDocument, slots: read
 
 export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
   document = withN64Look(document)
-  const posedSlots = document.slots.map(slot => ({ ...slot, ...slotPoseAtTime(slot, sceneSeconds, document.duration) }))
+  if (world.dir) applyLight(world.dir, document.light)
+  const posedSlots = document.slots.map(slot => ({ ...slot, ...rhythmicSlotPose(slot, slotPoseAtTime(slot, sceneSeconds, document.duration), sceneSeconds, document.rhythm) }))
   applyLoopOffset(world, sceneSeconds)
   paintCitadel(world.dressing, sceneSeconds)
   paintWorkshop(world.dressing, sceneSeconds, document.workshopScreen)
@@ -458,8 +460,8 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const root = target && world.slots.get(target.id)?.root
   const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor), target, sceneSeconds, document.duration) : null
   const rawEye = shot?.eye ?? cameraEyeAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
-  const eye = poseAtmos(world, document, sceneSeconds, rawEye)
   const look = shot?.look ?? cameraLookAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
+  const eye = poseAtmos(world, document, sceneSeconds, rhythmicCameraEye(rawEye, look, sceneSeconds, document.rhythm))
   world.camera.fov = document.camera.fov
   world.camera.position.set(...eye)
   world.camera.lookAt(...look)
@@ -479,9 +481,11 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment') || isAtmosDressing(document.dressing)) {
     world.cinema ??= new CinematicRuntime(world)
     world.cinema.sync(document, sceneSeconds)
+    if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, document.renderLook === 'n64')
     world.cinema.render(document)
   } else {
+    if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, false)
     world.renderer.render(world.scene, world.camera)
   }

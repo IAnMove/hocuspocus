@@ -24,9 +24,12 @@ const SOFTWARE_ARGS = ['--disable-gpu', '--use-angle=swiftshader', '--enable-uns
 
 function usage() {
   return `Usage: npm run atmos:capture -- <template-id> [more ids] [--export] [--out DIR] [--port N]
+         [--palette NAME] [--time NAME] [--subject FILE]
 
 Builds the UI and opens Video 3D on 127.0.0.1 with software WebGL.
 Writes a 1920x1080 PNG per template. --export also writes a 6s MP4.
+--palette and --time pick the set controls after the shot loads.
+--subject routes FILE as the character GLB in the open spot.
 Output stays outside the repository (ATMOS_CAPTURE_DIR or the system temp dir).
 `
 }
@@ -116,8 +119,42 @@ async function openTemplate(page, template) {
   await library.waitFor({ state: 'detached' })
 }
 
-async function shootTemplate(page, template, outDir) {
+async function applyLook(page, look) {
+  if (!look.palette && !look.time) return
+  const applied = await page.evaluate(({ palette, time }) => {
+    const raw = window.__world3dDocument
+    const apply = window.__world3dApplyDocument
+    if (!raw?.atmos || typeof apply !== 'function') return false
+    const atmos = { ...raw.atmos }
+    if (palette) atmos.palette = palette
+    if (time) atmos.timeOfDay = time
+    return apply({ ...raw, atmos }) === true
+  }, { palette: look.palette, time: look.time })
+  if (!applied) throw new Error('The studio did not accept the atmosphere look.')
+}
+
+async function applySubject(page, file) {
+  if (!file) return
+  await page.context().route('**/fixtures/tv-head-humanoid.glb', route => route.fulfill({
+    path: path.resolve(file),
+    contentType: 'model/gltf-binary',
+  }))
+  const applied = await page.evaluate(modelUrl => {
+    const raw = window.__world3dDocument
+    const apply = window.__world3dApplyDocument
+    if (!raw?.slots?.[0] || typeof apply !== 'function') return false
+    const slots = raw.slots.map((item, index) => (
+      index === 0 ? { ...item, sourceUrl: modelUrl, media: 'model3d' } : item
+    ))
+    return apply({ ...raw, slots }) === true
+  }, '/fixtures/tv-head-humanoid.glb')
+  if (!applied) throw new Error('The studio did not accept the subject model.')
+}
+
+async function shootTemplate(page, template, outDir, look) {
   await openTemplate(page, template)
+  await applyLook(page, look)
+  await applySubject(page, look.subject)
   await page.waitForTimeout(3_000)
   const expand = page.getByRole('button', { name: 'Expand video', exact: true })
   if (await expand.isVisible()) await expand.click()
@@ -186,6 +223,7 @@ async function exportTemplate(context, origin, template, outDir) {
 
 async function captureAll(options) {
   const templates = options.ids.map(knownTemplate)
+  if (options.subject) await fs.access(options.subject)
   const outDir = assertOutsideRepo(options.out || defaultCaptureDir(), repoRoot)
   await fs.mkdir(outDir, { recursive: true })
   await buildUi()
@@ -200,7 +238,7 @@ async function captureAll(options) {
     console.log(`software renderer: ${renderer}`)
     for (const template of templates) {
       const started = Date.now()
-      const png = await shootTemplate(page, template, outDir)
+      const png = await shootTemplate(page, template, outDir, options)
       console.log(`${template.id} png ${png} ${Date.now() - started}ms`)
       if (!options.exportClip) continue
       const startedExport = Date.now()

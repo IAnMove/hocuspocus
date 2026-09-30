@@ -64,6 +64,22 @@ The script builds the UI, serves it on `127.0.0.1` (port `HOCUSPOCUS_E2E_PORT`, 
 
 A software export of `atmos-clearing-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 263915 ms. That is the editor document's size and frame rate. It is slower than the 60 s budget later sets are asked to meet at 1280×720 and 24 fps.
 
+`--palette` and `--time` write those fields onto the open shot. `--subject FILE` places that GLB in the open character spot. The review stills for `atmos-waterfall` use this.
+
+## Set 2 — `atmos-waterfall`
+
+Templates: `atmos-waterfall-wide`, `atmos-waterfall-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on the near bank. The sheet, pool, mist and dew stay behind that circle.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `morning`, `golden` | `golden` |
+| `palette` | `moss`, `amber` | `moss` |
+| `variant` (`atmos.flow`) | 20–100 | 60 |
+
+`golden` shows the rainbow. `morning` hides it. There is no grass field and no shaft, depth-of-field, or grade pass. Ferns use the grass count (18 preview, 36 export) and dew uses the mote count (48 / 96). Without WebGL2 the set is a flat bank. The library setting is `canyon`.
+
+A software export of `atmos-waterfall-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 39869 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:

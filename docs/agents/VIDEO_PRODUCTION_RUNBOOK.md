@@ -77,7 +77,7 @@ While it runs:
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
 | cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member |
 | frames | `generation.image` with the cast sheets as references | one start frame per `h3` shot |
-| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots; retake with a new seed until ok, the best `r` stops rising, `max_takes`, or 4 recorded takes. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
+| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots. A shot that is not sung is judged on the picture instead (frozen, blinking, color drift, or a center that no longer matches the first frame) and retakes with a new seed on the same rule: until ok, the score stops rising, `max_takes`, or 4 recorded takes. For those shots `r` is that visual score, not a lip-sync correlation. A file that cannot be opened is unreliable and does not spend another take. The thresholds are provisional until they are measured on the Gremlins v2 clips. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 
@@ -258,11 +258,25 @@ factory and document parser; it does not build a separate renderer.
 ```
 
 Overrides include `camera`, `atmos`, `environment`, `light`, `dressing`,
-`pixelWorld`, `width`, `height` and `fps`. `subject` also accepts `clip` (an authored
+`pixelWorld`, `rhythm`, `width`, `height` and `fps`. `subject` also accepts `clip` (an authored
 GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
 `grounded`. Explicit `slots` use the native Video 3D slot fields. A rigid GLB can
 turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
+
+For a musical performance, set the document's `rhythm` to
+`{"bpm":120,"offset":24,"cameraPulse":0.025,"lightPulse":0.3}` and add
+`"rhythm":{"beats":1,"phase":0,"bounce":0.12,"sway":0.06,"yaw":0.12,"pulse":0.025}`
+to each explicit model slot that should perform. `offset` adds seconds to the
+local scene clock: use the shot's song start time minus the detected beat phase
+to keep successive cuts on the same grid. `beats` is beats per cycle; `phase`
+is a cycle offset. Bounce/sway are meters, yaw is radians and pulse is a scale
+fraction. Actors can use different phases and speeds while sharing the song.
+The camera makes a small dolly pulse and light brightens at each downbeat;
+neither replaces the authored camera/travel. Everything is sampled from time,
+so preview, export and backward seeking agree without an audio model or rig.
+This is rigid performance, not skeletal dancing or lip-sync. Invalid rhythm
+values fail native document import rather than entering the renderer.
 
 Each export covers its actual cut duration, defaults to 1280×720 at 24 fps, and
 uses `scenes.world3d.export` followed by `scenes.world3d.export.receipt`. Durable
