@@ -56,7 +56,7 @@ export function renderScene3DSoftware(document: Scene3DDocument, sceneSeconds: n
   for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255
   const frame = { width, height, pixels }
   const cylinder = document.slots.find(isCylinderBackdrop)
-  const fallback = isAtmosDressing(document.dressing) ? atmosFallbackLook(document.atmos) : null
+  const fallback = isAtmosDressing(document.dressing) ? atmosFallbackLook(document.atmos, document.dressing) : null
   if (cylinder?.loop) fillScrollingWorld(frame, sceneSeconds, cylinder.loop)
   else if (fallback) {
     fillRect(frame, 0, 0, width, height, fallback.sky)

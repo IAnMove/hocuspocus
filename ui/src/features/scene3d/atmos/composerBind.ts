@@ -1,7 +1,7 @@
 import { DepthTexture, type WebGLRenderTarget } from 'three'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import type { Pass } from 'three/addons/postprocessing/Pass.js'
-import type { AtmosHandle } from './clearing.ts'
+import type { AtmosHandle } from './sets/clearing.ts'
 
 type Probed = Pass & { atmosProbed?: boolean }
 

@@ -154,7 +154,7 @@ function poseAtmos(world: GpuWorld, document: Scene3DDocument, seconds: number, 
     return eye
   }
   const high = world.renderer.shadowMap.enabled && world.dir.shadow.mapSize.x >= 2048
-  const resolved = resolveAtmos(document.atmos, high ? 'high' : 'low')
+  const resolved = resolveAtmos(document.atmos, high ? 'high' : 'low', document.dressing)
   applyLight(world.dir, { kind: 'directional', direction: resolved.sun, intensity: document.light.intensity, color: resolved.sunColor })
   prepareAtmosShadows(world)
   hideEmptyAtmosSlots(world, document)

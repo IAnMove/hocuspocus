@@ -51,10 +51,15 @@ The per-pass timers around shafts, depth of field, and grade read 0 or 0.1 ms. T
 
 ## Adding a set
 
-1. Add the dressing id to the union in `types.ts` and to `DRESSINGS` in `documentSlot.ts`.
-2. Mount the geometry from `dressing.ts`. Reuse `atmos/passes.ts` and `bindAtmosPasses`. Do not create a second composer.
-3. Register the template id in `atmos/templateIds.ts` and `atmos/templates.ts`.
-4. Give `softwareRender.ts` a flat fallback that does not throw.
-5. Add the same keys to the English and Spanish `scene3dEditor` catalogs.
+A shipped set is one module plus the typed catalog:
+
+1. Add `ui/src/features/scene3d/atmos/sets/<name>.ts`. Export an `AtmosSetDefinition`: palettes, times of day, defaults, subject, templates, `build`, and `fallback`.
+2. Add the set id to `ATMOS_SET_IDS` and each template id to `ATMOS_TEMPLATE_IDS` in `atmos/registryIds.ts`. Those two lists are the typed catalog. `types.ts` cannot import the builder, because the builder imports three.js.
+3. Add the set object to `ATMOS_SETS` in `atmos/registry.ts`. That one line is the runtime registry.
+4. Add the title, and any new `atmos.day.*` or `atmos.swatch.*` labels, to the English and Spanish `scene3dEditor` catalogs.
+
+Dressing mount, template documents, software fallback, and the gallery setting then follow the registry. Reuse `atmos/passes.ts`. Do not create a second composer. Depth of field stays off inside the clearing `sync`.
+
+A unit test can call `installAtmosSet` with a small probe. That probe is recognized by dressing parse and template lookup, and it does not edit `registryIds.ts` or `ATMOS_SETS`. Remove it when the test ends. A probe is not a shipped set.
 
 Leave pixel, action, and citadel dressings on their current path.

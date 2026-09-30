@@ -1,6 +1,6 @@
 import { Mesh, PCFSoftShadowMap } from 'three'
 import type { GpuWorld } from '../gpu.ts'
-import type { AtmosHandle } from './clearing.ts'
+import type { AtmosHandle } from './sets/clearing.ts'
 
 const SKIP = new Set(['atmos-grass', 'atmos-mote', 'atmos-leaf', 'atmos-sky'])
 

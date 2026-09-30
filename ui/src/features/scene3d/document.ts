@@ -95,8 +95,8 @@ function pixelWorldField(raw: unknown): Pick<Scene3DDocument, 'pixelWorld'> {
   return pixelWorld ? { pixelWorld } : {}
 }
 
-function atmosField(raw: unknown): Pick<Scene3DDocument, 'atmos'> {
-  const atmos = parseAtmosSettings(raw)
+function atmosField(raw: unknown, dressing?: string): Pick<Scene3DDocument, 'atmos'> {
+  const atmos = parseAtmosSettings(raw, dressing)
   return atmos ? { atmos } : {}
 }
 
@@ -116,5 +116,5 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
   const { pixelWorld, atmos: rawAtmos, ...fields } = value
-  return { ...fields, ...pixelWorldField(pixelWorld), ...atmosField(rawAtmos), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
+  return { ...fields, ...pixelWorldField(pixelWorld), ...atmosField(rawAtmos, dressing), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }
