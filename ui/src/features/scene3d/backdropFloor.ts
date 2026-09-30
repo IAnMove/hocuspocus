@@ -5,6 +5,7 @@ import { framingAnchor } from './framingAnchor'
 import { applyPsxImageMaterial } from './imageLook'
 import type { GpuWorld } from './gpu'
 import type { Scene3DDocument } from './types'
+import { stabilizeGroundDepth } from './depthStability'
 
 /** Project the plate onto a real floor from a fixed reference viewpoint.
  * The contact plane gains parallax without a flat-colored seam in the artwork. */
@@ -22,6 +23,7 @@ export class BackdropFloor {
     this.world.floor.material = this.original
     ;(this.original as MeshStandardMaterial).color.set(doc.environment?.floorColor ?? '#1c222c')
     this.world.floor.visible = !doc.environment?.reflectiveFloor && doc.environment?.floorStyle !== 'none'
+    stabilizeGroundDepth(this.world.floor)
   }
 
   sync(doc: Scene3DDocument) {
@@ -41,6 +43,7 @@ export class BackdropFloor {
     u.hpGroundInverse.value.copy(root.matrixWorld).invert()
     u.hpGroundSize.value.set(planeSize.width, planeSize.height)
     this.world.floor.material = this.material!
+    stabilizeGroundDepth(this.world.floor)
   }
 
   private sourcePlane(doc: Scene3DDocument) {

@@ -240,6 +240,15 @@ verdict says so, using `retake_keys` unchanged. Poll `production.status` with `w
 
 ## Native Video 3D shots
 
+Video 3D automatically separates its fallback ground from authored surfaces
+by 2 mm and applies a depth bias, including when the projected-floor material
+changes. Floor/wall image surfaces receive a stable depth priority in document
+order. Preview and export share this protection; it is independent of the N64
+look and requires no per-shot adjustment. For a GLB set with its own floor,
+`environment.floorStyle: "none"` also removes the redundant fallback ground.
+Thickness alone does not fix coplanar top faces. Intersecting or duplicated
+faces inside an imported GLB still require correcting that asset's geometry.
+
 Use explicit `shots` with `kind: "scene3d"`. `scene3d` takes exactly one native
 `template` id or a complete Video 3D `document`. A template also needs `subject`
 (a workspace GLB URL) or explicit `slots`. The runner uses the existing UI template
