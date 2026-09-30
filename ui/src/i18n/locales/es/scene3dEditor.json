@@ -1555,13 +1555,21 @@
     "atmos-desert-low": {
       "title": "Desierto con oasis · cámara baja",
       "description": "Las mismas dunas desde la arena, mirando las palmeras y el agua."
+    },
+    "atmos-beach-wide": {
+      "title": "Playa al atardecer · plano abierto",
+      "description": "Playa procedural a la hora dorada. Las olas y la espuma entran y salen, y el hueco del personaje queda en la arena seca."
+    },
+    "atmos-beach-low": {
+      "title": "Playa al atardecer · cámara baja",
+      "description": "La misma orilla desde la arena, mirando una barca varada y el agua."
     }
   },
   "atmos": {
     "time": "Hora",
     "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
@@ -1569,7 +1577,8 @@
     "prints": "Huellas",
     "devils": "Torbellinos",
     "flakes": "Copos",
-    "ripples": "Ondas"
+    "ripples": "Ondas",
+    "tide": "Marea"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",
