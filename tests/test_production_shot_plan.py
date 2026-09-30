@@ -86,7 +86,11 @@ def test_section_actions_replace_the_fixed_phrase():
 def test_listed_shots_stay_the_same_object():
     spec = {"title": "t", "song": {"lyrics": "a", "caption": "b", "duration": 30, "bpm": 120},
             "style": {}, "shots": [{"key": "s", "kind": "screen"}]}
-    assert validate_spec(spec) is spec
+    validated = validate_spec(spec)
+    assert validated["shots"] is spec["shots"]
+    assert validated["song"] is spec["song"]
+    assert validated["style"]["image_model"] == "qwen_image_21"
+    assert spec["style"] == {}
 
 
 def test_analyzed_lyric_times_keep_the_last_chorus_and_outro():

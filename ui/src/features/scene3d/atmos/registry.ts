@@ -1,6 +1,7 @@
 import { bindAtmosExtra } from './registryIds.ts'
 import type { AtmosQuality, AtmosSettings, ResolvedAtmos } from './params.ts'
 import type { AtmosSetDefinition, AtmosVec3 } from './definition.ts'
+import { beachSet } from './sets/beach.ts'
 import { clearingSet } from './sets/clearing.ts'
 import { desertSet } from './sets/desert.ts'
 import { marsSet } from './sets/mars.ts'
@@ -8,7 +9,7 @@ import { moonSet } from './sets/moon.ts'
 import { snowSet } from './sets/snow.ts'
 import { waterfallSet } from './sets/waterfall.ts'
 
-export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet, marsSet, snowSet, desertSet]
+export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet, marsSet, snowSet, desertSet, beachSet]
 
 const extra: AtmosSetDefinition[] = []
 

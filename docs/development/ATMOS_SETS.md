@@ -148,6 +148,20 @@ Wind ripples travel across the sand in one shader. The circle and the lane stay 
 
 A software export of `atmos-desert-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 46529 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 7 — `atmos-beach`
+
+Templates: `atmos-beach-wide`, `atmos-beach-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Palms, rocks, the boat and the gulls stay outside that circle and outside the lane to the camera. The water starts beyond the circle, on the far side of a wet-sand band.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `golden`, `dusk` | `golden` |
+| `palette` | `amber`, `coral` | `amber` |
+| `variant` (`atmos.tide`) | 0–8 | 5 |
+
+Waves and foam travel in one shader. The sun sits low, and a bright streak runs from it across the water onto the wet sand. `dusk` drops the sun. There is no grass field and no shaft, depth-of-field, or grade pass. Palms use the grass count (4 preview, 6 export). Without WebGL2 the set is a flat sand field. The library setting is `sea`.
+
+A software export of `atmos-beach-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 24922 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
