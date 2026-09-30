@@ -47,13 +47,22 @@ def require_direction(spec: dict) -> dict:
 def beat_plan(duration: float, bpm: float) -> list[dict]:
     """The five beats as [start, end) in seconds; inner boundaries snap to a bar so a cut lands on the music."""
     bar = 240.0 / (bpm if bpm and bpm > 0 else 120.0)
+    duration = float(duration)
+    n = len(TRAILER_BEATS)
+    # A full bar between beats only when the song can hold one bar per beat. A 16 s
+    # trailer at 60 BPM is 4 bars: forcing +bar / duration-bar then clamps reveal to 0.
+    step = bar if duration + 1e-9 >= n * bar else max(0.05, duration / (2 * n))
     edges = [0.0]
     cursor = 0.0
+    remaining = n - 1
     for name in TRAILER_BEATS[:-1]:
+        remaining -= 1
         cursor += duration * BEAT_SHARE[name]
-        snapped = round(cursor / bar) * bar if bar < duration / 10 else cursor
-        edges.append(round(min(max(snapped, edges[-1] + bar), duration - bar), 3))
-    edges.append(round(float(duration), 3))
+        snapped = round(cursor / bar) * bar if 0 < bar < duration / 10 else cursor
+        low = edges[-1] + step
+        high = duration - remaining * step
+        edges.append(round(min(max(snapped, low), max(low, high)), 3))
+    edges.append(round(duration, 3))
     return [{"beat": name, "start": edges[i], "end": edges[i + 1]} for i, name in enumerate(TRAILER_BEATS)]
 
 
