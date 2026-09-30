@@ -119,15 +119,15 @@ def test_frozen_synthetic_clip_retakes_and_a_moving_one_is_ok(tmp_path):
     moving = review_production(
         _state(), str(tmp_path), people=None, sample=_sample({"hero.mp4": _moving()}),
     )
-    assert frozen["review"]["verdict"] == "retake"
+    assert frozen["review"]["technical"]["verdict"] == "fail"
     assert frozen["retake_keys"] == ["hero"]
-    assert frozen["review"]["failures"] == [{"key": "hero", "question": "frozen_shot"}]
-    assert moving["review"]["verdict"] == "ok"
+    assert frozen["review"]["technical"]["failures"] == [{"key": "hero", "question": "frozen_shot"}]
+    assert moving["review"]["technical"]["verdict"] == "ok"
     assert moving["retake_keys"] == []
-    assert moving["review"]["failures"] == []
-    assert moving["review"]["unknown"] == ["appearance_changed"]
-    assert "yes" not in json.dumps(moving["review"]["unknown"])
-    assert "no" not in json.dumps(moving["review"]["failures"])
+    assert moving["review"]["technical"]["failures"] == []
+    assert moving["review"]["technical"]["unknown"] == ["appearance_changed"]
+    assert "yes" not in json.dumps(moving["review"]["technical"]["unknown"])
+    assert "no" not in json.dumps(moving["review"]["technical"]["failures"])
 
 
 def test_black_bars_on_a_scene_are_a_retake_key(tmp_path):
@@ -135,9 +135,9 @@ def test_black_bars_on_a_scene_are_a_retake_key(tmp_path):
     result = review_production(
         _state(), str(tmp_path), people=None, sample=_sample({"hero.mp4": _moving(_letterbox())}),
     )
-    assert result["review"]["verdict"] == "retake"
+    assert result["review"]["technical"]["verdict"] == "fail"
     assert result["retake_keys"] == ["hero"]
-    assert {"key": "hero", "question": "black_bars"} in result["review"]["failures"]
+    assert {"key": "hero", "question": "black_bars"} in result["review"]["technical"]["failures"]
 
 
 def test_held_h3_still_retakes_even_when_the_pixels_move(tmp_path):
@@ -146,7 +146,7 @@ def test_held_h3_still_retakes_even_when_the_pixels_move(tmp_path):
     result = review_production(
         _state(), str(tmp_path), people=None, sample=_sample({"hero.mp4": _moving()}),
     )
-    assert result["review"]["failures"] == [{"key": "hero", "question": "frozen_shot"}]
+    assert result["review"]["technical"]["failures"] == [{"key": "hero", "question": "frozen_shot"}]
     assert result["retake_keys"] == ["hero"]
 
 
@@ -158,9 +158,9 @@ def test_title_outside_the_frame_retakes_without_a_detector(tmp_path):
     result = review_production(
         _state(), str(tmp_path), people=None, sample=_sample({"hero.mp4": _moving()}),
     )
-    assert result["review"]["verdict"] == "retake"
-    assert {"key": "hero", "question": "title_cut_off"} in result["review"]["failures"]
-    assert all(item["question"] != "text_covers_face" for item in result["review"]["failures"])
+    assert result["review"]["technical"]["verdict"] == "fail"
+    assert {"key": "hero", "question": "title_cut_off"} in result["review"]["technical"]["failures"]
+    assert all(item["question"] != "text_covers_face" for item in result["review"]["technical"]["failures"])
 
 
 def test_title_over_a_face_retakes_and_a_short_box_does_not(tmp_path):
@@ -176,10 +176,10 @@ def test_title_over_a_face_retakes_and_a_short_box_does_not(tmp_path):
     ignored = review_production(
         _state(cast=["hero"]), str(tmp_path), people=short, sample=_sample({"hero.mp4": _moving()}),
     )
-    assert {"key": "hero", "question": "text_covers_face"} in covered["review"]["failures"]
+    assert {"key": "hero", "question": "text_covers_face"} in covered["review"]["technical"]["failures"]
     assert covered["retake_keys"] == ["hero"]
-    assert ignored["review"]["failures"] == []
-    assert ignored["review"]["verdict"] == "ok"
+    assert ignored["review"]["technical"]["failures"] == []
+    assert ignored["review"]["technical"]["verdict"] == "ok"
 
 
 def test_more_people_than_the_cast_retakes(tmp_path):
@@ -190,7 +190,7 @@ def test_more_people_than_the_cast_retakes(tmp_path):
     result = review_production(
         _state(cast=["hero"]), str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
     )
-    assert result["review"]["failures"] == [{"key": "hero", "question": "duplicate_people"}]
+    assert result["review"]["technical"]["failures"] == [{"key": "hero", "question": "duplicate_people"}]
     assert result["retake_keys"] == ["hero"]
 
 
@@ -209,8 +209,8 @@ def test_cast_count_is_how_many_people_the_shot_may_show(tmp_path):
     allowed = review_production(
         state, str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
     )
-    assert allowed["review"]["failures"] == []
-    assert allowed["review"]["verdict"] == "ok"
+    assert allowed["review"]["technical"]["failures"] == []
+    assert allowed["review"]["technical"]["verdict"] == "ok"
     assert allowed["retake_keys"] == []
 
     # The documented group form omits count; production.run still asks for
@@ -220,15 +220,15 @@ def test_cast_count_is_how_many_people_the_shot_may_show(tmp_path):
     grouped = review_production(
         state, str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
     )
-    assert grouped["review"]["failures"] == []
-    assert grouped["review"]["verdict"] == "ok"
+    assert grouped["review"]["technical"]["failures"] == []
+    assert grouped["review"]["technical"]["verdict"] == "ok"
     assert grouped["retake_keys"] == []
 
     state["spec"]["cast"] = [{"id": "band", "sheet_prompt": "one singer", "count": 1}]
     denied = review_production(
         state, str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
     )
-    assert denied["review"]["failures"] == [{"key": "hero", "question": "duplicate_people"}]
+    assert denied["review"]["technical"]["failures"] == [{"key": "hero", "question": "duplicate_people"}]
     assert denied["retake_keys"] == ["hero"]
 
     state = _state(cast=["singer", "band"])
@@ -242,7 +242,7 @@ def test_cast_count_is_how_many_people_the_shot_may_show(tmp_path):
     summed = review_production(
         state, str(tmp_path), people=four, sample=_sample({"hero.mp4": _moving()}),
     )
-    assert summed["review"]["failures"] == []
+    assert summed["review"]["technical"]["failures"] == []
     assert summed["retake_keys"] == []
 
 
@@ -253,25 +253,25 @@ def test_identity_stays_unknown_unless_an_embedding_backend_is_injected(tmp_path
     same = review_production(_state(), str(tmp_path), people=None, embed=lambda _samples: "no", sample=sample)
     changed = review_production(_state(), str(tmp_path), people=None, embed=lambda _samples: "yes", sample=sample)
     junk = review_production(_state(), str(tmp_path), people=None, embed=lambda _samples: "maybe", sample=sample)
-    assert unknown["review"]["verdict"] == "ok"
-    assert unknown["review"]["unknown"] == ["appearance_changed"]
+    assert unknown["review"]["technical"]["verdict"] == "ok"
+    assert unknown["review"]["technical"]["unknown"] == ["appearance_changed"]
     assert unknown["retake_keys"] == []
-    assert same["review"]["unknown"] == []
-    assert same["review"]["verdict"] == "ok"
-    assert changed["review"]["verdict"] == "retake"
+    assert same["review"]["technical"]["unknown"] == []
+    assert same["review"]["technical"]["verdict"] == "ok"
+    assert changed["review"]["technical"]["verdict"] == "fail"
     assert changed["retake_keys"] == ["hero"]
-    assert {"key": "hero", "question": "appearance_changed"} in changed["review"]["failures"]
-    assert changed["review"]["unknown"] == []
-    assert junk["review"]["verdict"] == "ok"
-    assert junk["review"]["unknown"] == ["appearance_changed"]
+    assert {"key": "hero", "question": "appearance_changed"} in changed["review"]["technical"]["failures"]
+    assert changed["review"]["technical"]["unknown"] == []
+    assert junk["review"]["technical"]["verdict"] == "ok"
+    assert junk["review"]["technical"]["unknown"] == ["appearance_changed"]
     assert junk["retake_keys"] == []
 
 
 def test_status_summary_retake_keys_are_passable_and_small(tmp_path):
     summary = status_summary({**_state(held=True), "status": "completed"}, "ws", str(tmp_path))
-    assert summary["review"]["verdict"] == "retake"
+    assert summary["review"]["technical"]["verdict"] == "fail"
     assert summary["retake_keys"] == ["hero"]
-    assert summary["review"]["failures"] == [{"key": "hero", "question": "frozen_shot"}]
+    assert summary["review"]["technical"]["failures"] == [{"key": "hero", "question": "frozen_shot"}]
     assert all(isinstance(key, str) for key in summary["retake_keys"])
     raw = json.dumps(summary)
     assert len(raw) < 4000
@@ -280,10 +280,10 @@ def test_status_summary_retake_keys_are_passable_and_small(tmp_path):
 
 def test_missing_media_is_unreliable_and_does_not_invent_a_retake():
     result = review_production({"status": "running"}, None, people=None)
-    assert result["review"]["verdict"] == "unreliable"
-    assert result["review"]["failures"] == []
+    assert result["review"]["technical"]["verdict"] == "unreliable"
+    assert result["review"]["technical"]["failures"] == []
     assert result["retake_keys"] == []
-    assert result["review"]["unknown"] == ["appearance_changed"]
+    assert result["review"]["technical"]["unknown"] == ["appearance_changed"]
 
 
 def _people_detector():
@@ -349,16 +349,66 @@ def test_omarchy_v1_retakes_the_held_chorus_and_v2_is_ok():
     people = _people_detector()
     first = review_production(earlier, str(OMARCHY), people=people)
     second = review_production(saved, str(OMARCHY), people=people)
-    print("OMARCHY_V1", json.dumps({"verdict": first["review"]["verdict"], "failures": first["review"]["failures"], "retake_keys": first["retake_keys"], "unknown": first["review"]["unknown"]}))
-    print("OMARCHY_V2", json.dumps({"verdict": second["review"]["verdict"], "failures": second["review"]["failures"], "retake_keys": second["retake_keys"], "unknown": second["review"]["unknown"], "people": people is not None}))
-    assert first["review"]["verdict"] == "retake", first
+    print("OMARCHY_V1", json.dumps({"verdict": first["review"]["technical"]["verdict"], "failures": first["review"]["technical"]["failures"], "retake_keys": first["retake_keys"], "unknown": first["review"]["technical"]["unknown"]}))
+    print("OMARCHY_V2", json.dumps({"verdict": second["review"]["technical"]["verdict"], "failures": second["review"]["technical"]["failures"], "retake_keys": second["retake_keys"], "unknown": second["review"]["technical"]["unknown"], "people": people is not None}))
+    assert first["review"]["technical"]["verdict"] == "fail", first
     assert "chorus_one" in first["retake_keys"]
-    assert second["review"]["verdict"] == "ok", second
+    assert second["review"]["technical"]["verdict"] == "ok", second
     assert second["retake_keys"] == []
     summary = status_summary(saved, "omarchy-anthem-20260928", str(OMARCHY))
-    assert summary["review"]["verdict"] == "ok"
+    assert summary["review"]["technical"]["verdict"] == "ok"
     assert summary["retake_keys"] == []
     assert len(json.dumps(summary["review"])) < 4000
+
+
+def test_layers_keep_artistic_pending_and_excuse_a_deliberate_shot(tmp_path):
+    _touch(tmp_path, "hero.mp4", _video_scene())
+    state = _state(final="hero.mp4")
+    state["contact_sheet"] = "sheet.jpg"
+    state["animatic_video"] = "anim.mp4"
+    state["frames"] = {"hero": "hero.png"}
+    opened = review_production(state, str(tmp_path), people=None, sample=_sample({"hero.mp4": _moving()}))
+    assert opened["review"]["execution"]["verdict"] == "ok"
+    assert opened["review"]["technical"]["verdict"] == "ok"
+    assert opened["review"]["artistic"]["verdict"] == "pending"
+    assert opened["review"]["artistic"]["evidence"]["contact_sheet"] == "sheet.jpg"
+    assert opened["review"]["artistic"]["evidence"]["animatic"] == "anim.mp4"
+    assert opened["review"]["artistic"]["evidence"]["frames"] == [{"key": "hero", "file": "hero.png"}]
+
+    missing = _state(final="gone.mp4")
+    assert review_production(missing, str(tmp_path), people=None, sample=_sample({"hero.mp4": _moving()}))["review"]["execution"]["verdict"] == "fail"
+    assert review_production(_state(), str(tmp_path), people=None, sample=_sample({"hero.mp4": _moving()}))["review"]["execution"]["verdict"] == "unreliable"
+
+    still = _state()
+    still["spec"]["shots"][0]["allow"] = ["still"]
+    frozen = review_production(still, str(tmp_path), people=None, sample=_sample({"hero.mp4": _still_frames()}))
+    assert frozen["review"]["technical"]["verdict"] == "ok"
+    assert frozen["retake_keys"] == []
+
+    dark = _state()
+    dark["spec"]["shots"][0]["allow"] = ["dark"]
+    bars = review_production(dark, str(tmp_path), people=None, sample=_sample({"hero.mp4": _moving(_letterbox())}))
+    assert bars["review"]["technical"]["failures"] == []
+
+    def people(_image):
+        return [[0, 0, 40, 160], [80, 0, 120, 160], [160, 0, 200, 160]]
+
+    secondary = _state(cast=["hero"])
+    secondary["spec"]["shots"][0]["allow"] = ["secondary"]
+    extra = review_production(secondary, str(tmp_path), people=people, embed=lambda _samples: "yes", sample=_sample({"hero.mp4": _moving()}))
+    assert extra["review"]["technical"]["failures"] == []
+    assert extra["retake_keys"] == []
+
+    held = _state()
+    held["smoothness"] = {
+        "final": {"verdict": "fail", "marks": [{"t": 1.0, "kind": "duplicate", "seconds": 0.5}]},
+        "blame": [{"stage": "final", "key": "", "t": 1.0, "kind": "duplicate", "source": "export", "seconds": 0.5}],
+    }
+    timed = review_production(held, str(tmp_path), people=None, sample=_sample({"hero.mp4": _moving()}))
+    assert timed["review"]["technical"]["verdict"] == "fail"
+    assert timed["retake_keys"] == []
+    assert timed["review"]["technical"]["smoothness"]["stages"]["final"] == "fail"
+    assert timed["review"]["artistic"]["verdict"] == "pending"
 
 
 def test_status_reviews_only_finished_runs_and_remembers_the_answer(tmp_path, monkeypatch):
@@ -369,7 +419,10 @@ def test_status_reviews_only_finished_runs_and_remembers_the_answer(tmp_path, mo
     monkeypatch.setattr(production_review, "review_production", lambda state, root=None, **kw: calls.append(root) or real(state, root, people=None))
     production_review._CACHE.clear()
     running = {**_state(held=True), "status": "running"}
-    assert status_summary(running, "ws", str(tmp_path))["review"]["verdict"] == "unreliable"
+    running_review = status_summary(running, "ws", str(tmp_path))["review"]
+    assert running_review["execution"]["verdict"] == "unreliable"
+    assert running_review["technical"]["verdict"] == "unreliable"
+    assert running_review["artistic"]["verdict"] == "pending"
     assert calls == []                                            # nothing was opened while the run is going
     done = {**_state(held=True), "status": "completed", "finished": 123.0}
     first = status_summary(done, "ws", str(tmp_path))

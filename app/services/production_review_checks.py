@@ -47,19 +47,20 @@ def run_review(
         failures.extend(scene_failures(job, clip, people))
     saw_final, final_keys = final_bars(state, root)
     evaluated = evaluated or saw_final
-    failures.extend(_fail(key, "black_bars") for key in final_keys)
+    failures.extend(_final_bar_failures(jobs, final_keys))
     identity = identity_value(embed, _samples(jobs, clips))
     if identity in {"yes", "no"}:
         evaluated = True
     failures.extend(identity_failures(identity, jobs))
-    return pack(failures, jobs, identity, evaluated)
+    from services.production_review_layers import apply
+
+    return apply(pack(failures, jobs, identity, evaluated), state, _execution(state, root, reader))
 
 
 def empty_review() -> dict[str, Any]:
-    return {
-        "review": {"verdict": "unreliable", "failures": [], "unknown": ["appearance_changed"]},
-        "retake_keys": [],
-    }
+    from services.production_review_layers import pending_review
+
+    return pending_review()
 
 
 def collect_jobs(state: Any, root: str | None) -> list[dict[str, Any]] | None:
@@ -76,14 +77,14 @@ def collect_jobs(state: Any, root: str | None) -> list[dict[str, Any]] | None:
 def scene_failures(job: dict, clip: Any, people: Callable[..., Any] | None) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
     key = job["key"]
-    if job.get("held") or frozen_clip(clip):
+    if (job.get("held") or frozen_clip(clip)) and _report(job, "frozen_shot"):
         found.append(_fail(key, "frozen_shot"))
-    if isinstance(clip, dict) and has_bar(clip.get("full_gray")):
+    if isinstance(clip, dict) and has_bar(clip.get("full_gray")) and _report(job, "black_bars"):
         found.append(_fail(key, "black_bars"))
     boxes = detect_boxes(clip, people)
     found.extend(title_failures(key, job.get("document"), boxes))
     found.extend(duplicate_failures(key, job.get("expected"), boxes))
-    return found
+    return [item for item in found if _report(job, item["question"])]
 
 
 def title_failures(key: str, document: Any, boxes: list | None) -> list[dict[str, str]]:
@@ -118,7 +119,9 @@ def identity_value(embed: Callable[..., Any] | None, samples: list) -> str:
 def identity_failures(identity: str, jobs: list[dict]) -> list[dict[str, str]]:
     if identity != "yes" or not jobs:
         return []
-    keys = [job["key"] for job in jobs if job.get("kind") == "h3"] or [jobs[0]["key"]]
+    keys = [job["key"] for job in jobs if job.get("kind") == "h3" and _report(job, "appearance_changed")]
+    if not keys and _report(jobs[0], "appearance_changed"):
+        keys = [jobs[0]["key"]]
     return [_fail(key, "appearance_changed") for key in keys]
 
 
@@ -454,9 +457,44 @@ def _job(base: Path, key: str, row: dict, shot: dict | None, counts: dict[str, i
         "kind": kind,
         "held": _marked(row, shot) or _image_hold(document, kind),
         "expected": _expected(shot, counts),
+        "allow": _allow(shot),
         "path": None if path is None else str(path),
         "document": document,
     }
+
+
+def _final_bar_failures(jobs: list[dict], keys: list[str]) -> list[dict[str, str]]:
+    dark = {job["key"] for job in jobs if "dark" in (job.get("allow") or ())}
+    return [_fail(key, "black_bars") for key in keys if key not in dark]
+
+
+def _allow(shot: dict | None) -> tuple[str, ...]:
+    if not isinstance(shot, dict) or not isinstance(shot.get("allow"), list):
+        return ()
+    return tuple(item for item in shot["allow"] if item in {"still", "dark", "secondary"})
+
+
+def _report(job: dict, question: str) -> bool:
+    """A deliberate still, dark frame, or secondary figure is not that failure."""
+    allow = job.get("allow") or ()
+    if question == "frozen_shot":
+        return "still" not in allow
+    if question == "black_bars":
+        return "dark" not in allow
+    if question in {"duplicate_people", "appearance_changed"}:
+        return "secondary" not in allow
+    return True
+
+
+def _execution(state: Any, root: str | None, reader: Callable[[str], Any]) -> str:
+    """ok when the named final opens, fail when that name is missing or unreadable, unreliable when no final was claimed."""
+    name = state.get("final") if isinstance(state, dict) else None
+    if not isinstance(name, str) or not name or not isinstance(root, str) or not root:
+        return "unreliable"
+    path = _contained(Path(root), name)
+    if path is None:
+        return "fail"
+    return "ok" if _safe_sample(reader, str(path)) is not None else "fail"
 
 
 def _marked(row: dict, shot: dict | None) -> bool:
