@@ -35,7 +35,7 @@ REUSED_STILL = 3
 MIN_SONG_SEEDS = 3
 
 
-def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
+def dry_run(spec: Any, mcp: Any = None, workspace: str | None = None) -> dict[str, Any]:
     """Report the spec. ``mcp`` is accepted so tests can pass a spy and is never called."""
     _ = mcp
     spec = spec if isinstance(spec, dict) else {}
@@ -54,7 +54,7 @@ def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
     motion = _motion(windows, float(score["duration"]))
     titles = _spec_title(spec) + _field_hits(usable, _TITLE_FIELDS, TITLE_LIMIT)
     captions = _song_caption(spec) + _field_hits(usable, _CAPTION_FIELDS, CAPTION_LIMIT) + _lyric_captions(texts)
-    return {
+    report = {
         "dry_run": True,
         "running": False,
         "expanded": expanded,
@@ -69,6 +69,8 @@ def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
         "motion": motion,
         "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra + treatment_warnings(spec, usable),
     }
+    from services.production_estimate import apply_estimate
+    return apply_estimate(spec, report, workspace)
 
 
 def _expand_shots(spec: dict) -> tuple[dict, bool, list[dict]]:

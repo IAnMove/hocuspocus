@@ -74,6 +74,7 @@ class StageWatch:
     def start(self, name: str) -> None:
         self._name = name
         self._t0 = self._clock()
+        self.production.state["stage"] = name
 
     def stop(self) -> None:
         name = self._name
