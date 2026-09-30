@@ -476,13 +476,13 @@ def _image_hold(document: dict | None, kind: str) -> bool:
 
 
 def _cast_counts(state: dict) -> dict[str, int]:
-    """How many distinct subjects each cast id stands for (``count``, default 1)."""
+    """How many distinct subjects each cast id stands for (``count``, or the size of ``group``, else 1)."""
     spec = state.get("spec") if isinstance(state.get("spec"), dict) else {}
     counts: dict[str, int] = {}
     for item in spec.get("cast") or []:
         if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
             continue
-        raw = item.get("count", 1)
+        raw = item.get("count", len(item.get("group") or []) or 1)
         try:
             number = int(raw)
         except (TypeError, ValueError):
