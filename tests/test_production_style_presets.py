@@ -71,7 +71,7 @@ def test_each_preset_validates_and_fills_the_look():
         "anime": {"image": "Cinematic anime key frame", "lyric_template": "social-caption"},
         "riso-zine": {"image_model": "qwen_image_21", "lyric_template": "dymo"},
         "omarchy-desktop": {"theme": "tokyo-night", "lyric_template": "social-caption"},
-        "neo-noir-realista": {"image_model": "flux2_klein_9b", "lyric_template": "social-caption"},
+        "neo-noir-realista": {"image_model": "qwen_image_21", "lyric_template": "social-caption"},
     }
     for preset, fields in expect.items():
         style = validate_spec(_spec({"preset": preset}))["style"]
@@ -97,8 +97,66 @@ def test_unknown_preset_is_a_stable_production_error():
     assert caught.value.code == "unknown_style_preset"
 
 
-def test_style_without_a_preset_is_unchanged():
-    assert validate_spec(_spec({}))["style"] == {}
+def test_style_without_a_preset_uses_qwen_with_its_own_step_count():
+    assert validate_spec(_spec({}))["style"] == {"image_model": "qwen_image_21", "image_steps": 40}
+
+
+def test_default_does_not_mutate_input_or_explicit_choices():
+    spec = _spec({"image": "painted background", "image_steps": 28})
+    expanded = validate_spec(spec)
+    assert "image_model" not in spec["style"]
+    assert expanded["style"]["image_model"] == "qwen_image_21"
+    assert expanded["style"]["image_steps"] == 28
+    explicit = {"image_model": "flux2_klein_9b", "image_steps": 4}
+    assert validate_spec(_spec(explicit))["style"] == explicit
+
+
+@pytest.mark.parametrize("memory,model", [(24564, "qwen_image_21"), (16384, "qwen_image_21"),
+    (12288, "qwen_image_21_gguf_q4_k"), (10240, "qwen_image_21_gguf_q4_k"),
+    (8192, "qwen_image_21"), (None, "qwen_image_21")])
+def test_image_default_uses_capacity_without_claiming_unmeasured_quality(memory, model):
+    from services.production_image_defaults import image_model_for_memory
+    assert image_model_for_memory(memory) == model
+
+
+def test_hardware_probe_failure_keeps_qwen_and_explicit_model_avoids_probe(monkeypatch):
+    from services import production_image_defaults as defaults
+    def unavailable(*args, **kwargs):
+        raise OSError("nvidia-smi unavailable")
+    monkeypatch.setattr(defaults.subprocess, "run", unavailable)
+    defaults.default_image_model.cache_clear()
+    assert defaults.default_image_model() == "qwen_image_21"
+    defaults.default_image_model.cache_clear()
+    monkeypatch.setattr(defaults, "default_image_model", lambda: pytest.fail("explicit choice probed hardware"))
+    assert defaults.image_style_defaults({"image_model": "custom"}, {"image_model": "custom"}) == {"image_model": "custom"}
+
+
+@pytest.mark.parametrize("output,model", [("12288\n", "qwen_image_21_gguf_q4_k"),
+    ("24564\n", "qwen_image_21"), ("8192\n24564\n", "qwen_image_21")])
+def test_capacity_probe_is_cached_and_does_not_guess_a_multi_gpu_target(monkeypatch, output, model):
+    from services import production_image_defaults as defaults
+    import subprocess
+    calls = []
+    def probe(command, **kwargs):
+        calls.append(command)
+        assert kwargs["timeout"] == 2
+        return subprocess.CompletedProcess(command, 0, output, "")
+    monkeypatch.setattr(defaults.subprocess, "run", probe)
+    defaults.default_image_model.cache_clear()
+    try:
+        assert defaults.default_image_model() == model
+        assert defaults.default_image_model() == model
+        assert len(calls) == 1
+    finally:
+        defaults.default_image_model.cache_clear()
+
+
+def test_low_memory_default_reaches_the_validated_production_spec(monkeypatch):
+    from services import production_image_defaults as defaults
+    monkeypatch.setattr(defaults, "default_image_model", lambda: "qwen_image_21_gguf_q4_k")
+    spec = validate_spec(_spec({"preset": "neo-noir-realista"}))
+    assert spec["style"]["image_model"] == "qwen_image_21_gguf_q4_k"
+    assert spec["style"]["image_steps"] == 40
 
 
 def test_no_preset_carries_a_person_or_project_name():
