@@ -235,7 +235,10 @@ def create_music_productions_router(
         from services.production_shot_request import request_from_input
         from services.production_shot_review import ReviewError
         payload = body or {}
-        data = {"shot": shot, "instruction": payload.get("instruction"), "apply": payload.get("apply", False)}
+        data = {
+            "shot": shot, "instruction": payload.get("instruction"), "apply": payload.get("apply", False),
+            "plan": payload.get("plan"),
+        }
         try:
             if data["apply"] is True:
                 with hold_edit(workspace, production_id):

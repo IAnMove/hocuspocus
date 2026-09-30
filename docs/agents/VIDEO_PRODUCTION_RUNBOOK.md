@@ -443,8 +443,10 @@ production commands (`additionalProperties` false). REST is
 
 * `production.shot.review` sets the status and an optional note. No GPU.
 * `production.shot.lock` sets `locked`. Locked shots are omitted from
-  `frames()`, `clips()`, and `scenes()`, including a named retake, until
-  unlock. `production.shot.redo` on a locked shot returns `shot_locked` and
+  `frames()` and `clips()`, including a named retake, until unlock.
+  `scenes()` does not re-export them, but they stay on the montage
+  timeline so a later run cannot drop or stretch a locked shot.
+  `production.shot.redo` on a locked shot returns `shot_locked` and
   changes nothing. Undo is still allowed.
 * `production.shot.redo` rebuilds one shot from `frame` (image, then clip,
   then that scene), `clip` (new clip, same frame), or `scene` (re-export
@@ -459,11 +461,13 @@ production commands (`additionalProperties` false). REST is
   Ops are `set_overrides`, `redo`, `retake`, `use_take`, and `note`. An
   unknown op, an extra field, a file path, or a shot other than the requested
   one rejects the whole plan before anything is applied. The instruction and
-  the model text are data. `apply` defaults to false and returns `{plan, diff,
-  cost_estimate}` with `cost_estimate.tokens` null. `apply` true runs the
-  changes under a stable intent id `<id>-req-<16 hex>#<index>`, so a repeat
-  does not submit the same GPU step again. A plan `retake` is one new clip for
-  that shot, not `production.run`.
+  the model text are data.   `apply` defaults to false and returns `{plan, diff,
+  cost_estimate}` with `cost_estimate.tokens` null. `apply` true with the
+  previewed `plan` validates and runs that closed object; the LLM is not
+  asked again. Without `plan`, the model is asked once and that reply is
+  applied. Changes use a stable intent id `<id>-req-<16 hex>#<index>`, so a
+  repeat does not submit the same GPU step again. A plan `retake` is one new
+  clip for that shot, not `production.run`.
 * `production.shot.undo` restores `history_id` and re-exports that scene.
 
 The direct path, when the request plan is not used, is `production.shot.redo`,

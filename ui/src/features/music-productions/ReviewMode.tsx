@@ -45,7 +45,7 @@ export function ReviewMode({
   onClose: () => void
   onApprove: (shot: string) => void
   onRequest: (shot: string, instruction: string) => ReviewPlan | void | Promise<ReviewPlan | void>
-  onApply: (shot: string, instruction: string) => void
+  onApply: (shot: string, instruction: string, plan: ReviewPlan) => void
   onOpenScene: (sceneName: string) => void
   onUseTake: (shot: string, takeFile: string) => void
   onUndo: (shot: string) => void
@@ -95,7 +95,7 @@ export function ReviewMode({
       onInstruction={value => { setInstruction(value); setPlan(null) }}
       onApprove={() => onApprove(shot.key)}
       onAsk={ask}
-      onApply={() => { onApply(shot.key, instruction.trim()); setPlan(null) }}
+      onApply={() => { if (plan) { onApply(shot.key, instruction.trim(), plan); setPlan(null) } }}
       onOpenScene={onOpenScene}
       onUseTake={onUseTake}
       onUndo={() => onUndo(shot.key)}

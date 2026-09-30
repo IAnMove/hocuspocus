@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers.music_productions import create_music_productions_router
-from services.music_production import Production
+from services.music_production import Production, shot_windows
 from services.production_commands import extra_catalog, extra_handlers
 from services.production_publication import publication_catalog, publication_handlers
 from services.production_shot_redo import redo_shot, undo_shot
@@ -213,8 +213,26 @@ def test_locked_shots_drop_out_of_the_runner(tmp_path: Path, monkeypatch):
     windows = [{"key": "s0", "kind": "h3"}, {"key": "s1", "kind": "h3"}]
     production.frames(spec, windows)
     production.clips(spec, windows)
-    production.scenes(spec, windows)
-    assert seen == [windows and ["s0", "s1"]] * 3
+    assert seen == [windows and ["s0", "s1"]] * 2
+
+
+def test_locked_shot_stays_on_the_timeline_when_scenes_run(tmp_path: Path):
+    production, spec, root, _saved, calls, _intents = _build(tmp_path)
+    (root / "old-s0.mp4").write_bytes(b"old-s0")
+    (root / "old-s1.mp4").write_bytes(b"old-s1")
+    production.state["scenes"]["s0"] = {
+        "file": "old-s0.mp4", "intent": "export-s0", "dur": 10.0,
+        "clip": "take-a.mp4", "fingerprint": "keep-s0",
+    }
+    spec["style"]["lyric_style"] = {"color": "#ff0000"}
+    set_lock(root, "show", spec, "s0", True)
+    production.scenes(spec, shot_windows(spec, production.score()))
+    keys = [row[0] for row in production.state["segments"]]
+    assert keys[0] == "s0"
+    assert "s1" in keys
+    assert production.state["scenes"]["s0"]["file"] == "old-s0.mp4"
+    assert production.state["scenes"]["s0"]["fingerprint"] == "keep-s0"
+    assert calls.count("scenes.video2d.export") == 1
 
 
 def _plan(changes: list, summary: str = "plan") -> str:
@@ -286,6 +304,34 @@ def test_request_previews_then_applies_a_note_and_reuses_a_clip_redo(tmp_path: P
     assert second["intent_id"] == first["intent_id"]
     history = json.loads((root / "show.review.json").read_text(encoding="utf-8"))["shots"]["s0"]["history"]
     assert any(str(item.get("intent_id", "")).endswith("#0") for item in history)
+
+
+def test_apply_uses_the_previewed_plan_without_asking_again(tmp_path: Path):
+    production, spec, root, _saved, calls, _intents = _build(tmp_path)
+    asked: list[str] = []
+
+    def note(**_kwargs):
+        asked.append("preview")
+        return _plan([{"op": "note", "text": "keep the take"}], summary="note only")
+
+    preview = request_shot(production, spec, "s0", "keep it", apply=False, generate=note)
+    assert preview["plan"]["changes"][0]["op"] == "note"
+
+    def hostile(**_kwargs):
+        asked.append("apply")
+        return _plan([{"op": "redo", "from": "frame", "frame_prompt": "wipe the face"}])
+
+    applied = request_shot(
+        production, spec, "s0", "keep it", apply=True, generate=hostile, plan=preview["plan"],
+    )
+    assert applied["applied"] is True
+    assert asked == ["preview"]
+    assert spec["shots"][0]["frame"] == "a face"
+    assert production.state["frames"]["s0"] == "old-frame.png"
+    notes = json.loads((root / "show.review.json").read_text(encoding="utf-8"))["shots"]["s0"]["notes"]
+    assert notes[0]["text"] == "keep the take"
+    assert "generation.image" not in calls
+    assert "clip_job" not in calls
 
 
 def test_publish_blocks_listed_shots_until_they_are_approved(tmp_path: Path, monkeypatch):

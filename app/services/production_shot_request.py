@@ -392,14 +392,25 @@ def _apply_flag(value: Any) -> bool:
     raise ReviewError("invalid_command", "apply must be boolean")
 
 
-def request_shot(production: Any, spec: dict, key: str, instruction: str, *, apply: bool = False, generate: Callable | None = None) -> dict:
+def _closed_plan(value: Any, shot: str) -> dict:
+    if isinstance(value, dict):
+        return parse_plan(json.dumps(value, ensure_ascii=False), shot)
+    if isinstance(value, str):
+        return parse_plan(value, shot)
+    raise ReviewError("plan_invalid", "plan must be the ShotChangePlan object")
+
+
+def request_shot(production: Any, spec: dict, key: str, instruction: str, *, apply: bool = False, generate: Callable | None = None, plan: Any = None) -> dict:
     """Return ``{plan, diff, cost_estimate}``. ``apply`` defaults to false and does not change the shot."""
     require_key(key)
     if not isinstance(instruction, str) or not instruction.strip():
         raise ReviewError("invalid_command", "instruction is required")
     instruction = instruction.strip()
     context = shot_context(production, spec, key)
-    plan = parse_plan(_ask(production, context, instruction, generate), key)
+    if apply is True and plan is not None:
+        plan = _closed_plan(plan, key)
+    else:
+        plan = parse_plan(_ask(production, context, instruction, generate), key)
     result = {"plan": plan, "diff": build_diff(context, plan), "cost_estimate": cost_estimate(plan), "applied": False}
     if apply is not True:
         return result
@@ -419,4 +430,7 @@ def request_from_input(production: Any, spec: dict, data: dict, generate: Callab
     instruction = data.get("instruction")
     if not isinstance(instruction, str):
         raise ReviewError("invalid_command", "instruction is required")
-    return request_shot(production, spec, key, instruction, apply=_apply_flag(data.get("apply", False)), generate=generate)
+    return request_shot(
+        production, spec, key, instruction, apply=_apply_flag(data.get("apply", False)),
+        generate=generate, plan=data.get("plan"),
+    )
