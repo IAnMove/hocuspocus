@@ -217,8 +217,13 @@ def shot_windows(spec: dict, score: dict) -> list[dict]:
         if line:
             last = lines[min(len(lines) - 1, shot["line"] + shot.get("span", 1) - 1)]
             t1 = last["t1"] + 0.2
+        elif "t1" in shot:
+            try:
+                t1 = float(shot["t1"])
+            except (TypeError, ValueError):
+                t1 = t0 + 4
         else:
-            t1 = t0 + 4
+            t1 = t0 + 4                       # untitled cards; a trailer bakes t1 so a held beat is not 4 s
         out.append({**shot, "i": index, "t0": round(max(0.0, t0), 3), "t1": round(t1, 3)})
     try:
         bpm = float(score.get("bpm") or 120) or 120.0

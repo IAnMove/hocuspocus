@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from services.music_production import Production, ProductionError, validate_spec
+from services.music_production import Production, ProductionError, h3_frames_for, segments, shot_windows, validate_spec
 from services.production_dry_run import dry_run
 from services.production_plan import plan_brief
 from services.production_shot_plan import plan_shots
@@ -61,6 +61,25 @@ def test_generated_shots_of_a_trailer_are_long_enough_to_be_worth_a_clip():
         if by_key[key]["kind"] == "h3":
             end = by_key[order[index + 1]]["t0"] if order[index + 1] else 60.0
             assert end - by_key[key]["t0"] >= MIN_H3_S - 1e-6, key
+            assert abs(by_key[key]["t1"] - end) < 1e-6, key
+
+
+def test_a_held_trailer_beat_is_generated_for_its_full_span_not_four_seconds():
+    """shot_windows used to default t1 = t0 + 4, so H3 made a 5 s clip and segments filled the rest."""
+    planned = plan_shots(_spec())
+    held = [shot for shot in planned["shots"] if shot["kind"] == "h3"]
+    assert held and all(shot["t1"] - shot["t0"] >= MIN_H3_S - 1e-6 for shot in held)
+    for left, right in zip(planned["shots"], planned["shots"][1:]):
+        assert abs(left["t1"] - right["t0"]) < 1e-6
+    score = {"duration": 60.0, "bpm": 120, "beat": 0.5, "lines": []}
+    windows = shot_windows(planned, score)
+    by_key = {window["key"]: window for window in windows}
+    for shot in held:
+        window = by_key[shot["key"]]
+        assert abs(window["t0"] - shot["t0"]) < 1e-6 and abs(window["t1"] - shot["t1"]) < 1e-6
+        assert h3_frames_for(window["t1"] - window["t0"]) / 24 + 0.3 >= shot["t1"] - shot["t0"]
+    segs = segments(windows, score, lambda key: True, planned.get("fill") or [])
+    assert not any("_fill" in shot["key"] for shot, _, _ in segs)
 
 
 def test_a_trailer_in_other_looks_reframes_with_its_own_kind():
@@ -112,6 +131,7 @@ def test_the_commands_name_the_silence_the_delay_and_the_fades(tmp_path):
     song = soundtrack_command(Path("s.wav"), Path("o.wav"), [[18.0, 20.0]], 3.0)
     graph = song[song.index("-af") + 1]
     assert "between(t,18.000,20.000)" in graph and "adelay=3000|3000" in graph and "/0.02" in graph
+    assert graph.index("adelay") < graph.index("volume")          # mute after the delay, on the picture clock
     assert "anull" in soundtrack_command(Path("s.wav"), Path("o.wav"), [], 0)
     assert "aevalsrc" in " ".join(riser_command(Path("r.wav"), 4.0)) and "d=1.6" in " ".join(impact_command(Path("i.wav")))
 
