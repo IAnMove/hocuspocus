@@ -2,7 +2,7 @@ import { Mesh, PCFSoftShadowMap } from 'three'
 import type { GpuWorld } from '../gpu.ts'
 import type { AtmosHandle } from './sets/clearing.ts'
 
-const SKIP = new Set(['atmos-grass', 'atmos-mote', 'atmos-leaf', 'atmos-sky'])
+const SKIP = new Set(['atmos-grass', 'atmos-mote', 'atmos-leaf', 'atmos-sky', 'atmos-rain', 'atmos-steam'])
 
 function shadeSlots(world: GpuWorld) {
   for (const gpu of world.slots.values()) {

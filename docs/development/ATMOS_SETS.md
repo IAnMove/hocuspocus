@@ -176,6 +176,118 @@ Floor crystals point up and ceiling crystals point down from a stone roof. Their
 
 A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 9 — `atmos-volcano`
+
+Templates: `atmos-volcano-wide`, `atmos-volcano-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Cones, rocks and ash stay outside that circle and outside the lane to the camera. There is no sun. The figure stands on open rock, not in a lava river.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `erupt`, `calm` | `erupt` |
+| `palette` | `magma`, `ash` | `magma` |
+| `variant` (`atmos.heat`) | 0–8 | 5 |
+
+Emissive lava rivers flow across the rock, and ash falls on the same clock. The heat control brightens the rivers. `calm` slows the ash and cools the sky. There is no grass field and no shaft, depth-of-field, or grade pass. Rocks use the grass count (7 preview, 11 export) and ash uses the mote count (28 preview, 44 export). Without WebGL2 the set is a flat rock field. The library setting is `volcano`.
+
+A software export of `atmos-volcano-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 34551 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 10 — `atmos-temple`
+
+Templates: `atmos-temple-wide`, `atmos-temple-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Columns, ruins, vines, butterflies and light shafts stay outside that circle and outside the lane to the camera.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `mist`, `sun` | `mist` |
+| `palette` | `jade`, `vine` | `jade` |
+| `variant` (`atmos.growth`) | 0–8 | 5 |
+
+Light shafts stand between the vines over mossy ruins, and butterflies move on the same clock. The growth control lengthens the vines. `sun` clears the mist and warms the shafts. There is no grass field and no shaft, depth-of-field, or grade pass. Vine count uses the grass budget (6 preview, 8 export) and butterflies use the mote count. Without WebGL2 the set is a flat stone floor. The library setting is `jungle`.
+
+A software export of `atmos-temple-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 29636 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 11 — `atmos-reef`
+
+Templates: `atmos-reef-wide`, `atmos-reef-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on open sand. Fish and rocks stay outside that circle and outside the lane to the camera. Caustic light is a shader on the ground, not a composer pass.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `shallows`, `trench` | `shallows` |
+| `palette` | `lagoon`, `abyss` | `lagoon` |
+| `variant` (`atmos.current`) | 0–8 | 4 |
+
+`shallows` lays bright caustic light across the sand. `trench` dims that light and the water above. Schools of fish drift with the current, and bubbles rise on the same clock. There is no grass field and no shaft, depth-of-field, or grade pass. Fish use the grass count (10 preview, 16 export) and bubbles use the mote count. Without WebGL2 the set is a flat sand floor. The library setting is `sea`, shared with the beach.
+
+A software export of `atmos-reef-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 30534 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 12 — `atmos-neon-rain`
+
+Templates: `atmos-neon-rain-wide`, `atmos-neon-rain-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Signs, puddles and steam stay outside that circle and outside the lane to the camera. There is no sun.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `night`, `storm` | `night` |
+| `palette` | `magenta`, `violet` | `magenta` |
+| `variant` (`atmos.rain`) | 0–8 | 5 |
+
+Wet pavement reflects the neon signs in the ground shader. Rain streaks fall and steam rises on the same clock. `storm` cools the sky. There is no grass field and no shaft, depth-of-field, or grade pass. Rain uses the mote count (42 preview, 72 export). Without WebGL2 the set is a flat pavement. The library setting is `street`.
+
+A software export of `atmos-neon-rain-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 29976 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 13 — `atmos-sky-islands`
+
+Templates: `atmos-sky-islands-wide`, `atmos-sky-islands-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, and that circle plus the lane to the camera sit on the main island's checker top. Coins and clouds stay outside that circle and outside the lane. There is no sun.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `clear`, `pink` | `clear` |
+| `palette` | `peach`, `mint` | `peach` |
+| `variant` (`atmos.spin`) | 0–8 | 5 |
+
+`clear` is a peach or mint horizon under a deep sky. `pink` turns that sky rose. Coins spin on their own vertical axis; zero holds them. There is no grass field and no shaft, depth-of-field, or grade pass. Coins use the grass count (8 preview, 12 export) and stars use the mote count. Without WebGL2 the set is a flat pad. The library setting is `islands`.
+
+A software export of `atmos-sky-islands-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 26003 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 14 — `atmos-rooftop-night`
+
+Templates: `atmos-rooftop-night-wide`, `atmos-rooftop-night-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, standing on the roof slab. Vents, aerials and the parapet stay outside that circle and outside the lane to the camera.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `night`, `late` | `night` |
+| `palette` | `sodium`, `indigo` | `sodium` |
+| `variant` (`atmos.skyline`) | 0–8 | 5 |
+
+`night` keeps a warm horizon. `late` cools the zenith. The skyline control lights more distant windows and makes the lit ones brighter. Windows are emissive unlit meshes. There is no grass field and no shaft, depth-of-field, or grade pass. Tower count uses the grass budget (6 preview, 8 export) and window columns use the mote count (4 / 6). Without WebGL2 the set is a flat roof. The library setting is `rooftop`.
+
+A software export of `atmos-rooftop-night-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 34213 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 15 — `atmos-retro-room`
+
+Templates: `atmos-retro-room-wide`, `atmos-retro-room-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. The CRT, the console, the controller and the other furniture stay outside that circle and outside the lane to the camera. Interior walls are double-sided so the room is visible from inside.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `dim`, `on` | `dim` |
+| `palette` | `cream`, `mauve` | `cream` |
+| `variant` (`atmos.static`) | 0–8 | 3 |
+
+`dim` leaves the practical lamp dark. `on` lights that lamp and lifts the walls. The static control brightens the CRT phosphor, the scan lines and the snow on the screen. There is no grass field and no shaft, depth-of-field, or grade pass. Snow specks use the grass count (24 preview, 36 export) and scan lines use the mote count (8 / 10). Without WebGL2 the set is a flat carpet. The library setting is `room`.
+
+A software export of `atmos-retro-room-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 26000 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 16 — `atmos-space-ring`
+
+Templates: `atmos-space-ring-wide`, `atmos-space-ring-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on a small pad so the figure stands instead of floating. Asteroids stay outside that circle and outside the lane to the camera. The ringed planet sits far back, large enough to read.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `cruise`, `eclipse` | `cruise` |
+| `palette` | `ice`, `copper` | `ice` |
+| `variant` (`atmos.orbit`) | 0–8 | 4 |
+
+`cruise` lights the facing side of the planet. `eclipse` leaves that side dark and keeps a bright rim. Orbit tilts the rings and sets how fast the asteroids drift outward. There is no grass field and no shaft, depth-of-field, or grade pass. Asteroids use the grass count (14 preview, 22 export) and stars use the mote count. Fog stays thin so the sky stays black. Without WebGL2 the set is a flat pad. The library setting is `space`.
+
+A software export of `atmos-space-ring-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 31396 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
