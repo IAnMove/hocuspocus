@@ -45,7 +45,8 @@ def test_three_briefs_pass_dry_run_unedited():
     assert musical["style"]["image"].startswith("Cinematic anime")
     assert zine["style"]["lyric_template"] == "dymo"
     assert desktop["style"]["theme"] == "tokyo-night"
-    assert noir["style"]["image_model"] == "flux2_klein_9b"
+    assert noir["style"]["image_model"] == "qwen_image_21"
+    assert noir["style"]["image_steps"] == 40
 
 
 def test_sample_rate_in_musica_is_not_the_song_bpm():
