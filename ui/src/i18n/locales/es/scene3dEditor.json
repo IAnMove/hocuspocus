@@ -1572,13 +1572,21 @@
     "atmos-crystal-cave-low": {
       "title": "Cueva de cristales · cámara baja",
       "description": "La misma cueva desde el suelo, mirando un grupo que brilla y los cristales del techo."
+    },
+    "atmos-rooftop-night-wide": {
+      "title": "Azotea de noche · plano abierto",
+      "description": "Azotea procedural de noche con la ciudad al fondo. El perfil brilla detrás, y el hueco del personaje queda en la azotea abierta."
+    },
+    "atmos-rooftop-night-low": {
+      "title": "Azotea de noche · cámara baja",
+      "description": "La misma azotea desde la losa, mirando el parapeto y la ciudad."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo" },
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo", "night": "Noche", "late": "Madrugada" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua", "sodium": "Sodio", "indigo": "Índigo" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
@@ -1588,7 +1596,8 @@
     "flakes": "Copos",
     "ripples": "Ondas",
     "tide": "Marea",
-    "glow": "Brillo"
+    "glow": "Brillo",
+    "skyline": "Perfil"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

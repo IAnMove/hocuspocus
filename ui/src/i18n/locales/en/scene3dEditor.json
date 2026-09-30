@@ -1572,13 +1572,21 @@
     "atmos-crystal-cave-low": {
       "title": "Crystal cave · low",
       "description": "The same cave from the floor, looking toward a glowing cluster and the hanging crystals."
+    },
+    "atmos-rooftop-night-wide": {
+      "title": "Rooftop at night · wide",
+      "description": "A procedural rooftop at night. The city skyline glows behind it, and the character spot stays on the open roof."
+    },
+    "atmos-rooftop-night-low": {
+      "title": "Rooftop at night · low",
+      "description": "The same roof from the slab, looking toward the parapet and the city."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow", "night": "Night", "late": "Late" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua", "sodium": "Sodium", "indigo": "Indigo" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
@@ -1588,7 +1596,8 @@
     "flakes": "Flakes",
     "ripples": "Ripples",
     "tide": "Tide",
-    "glow": "Glow"
+    "glow": "Glow",
+    "skyline": "Skyline"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",

@@ -176,6 +176,20 @@ Floor crystals point up and ceiling crystals point down from a stone roof. Their
 
 A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 9 — `atmos-rooftop-night`
+
+Templates: `atmos-rooftop-night-wide`, `atmos-rooftop-night-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, standing on the roof slab. Vents, aerials and the parapet stay outside that circle and outside the lane to the camera.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `night`, `late` | `night` |
+| `palette` | `sodium`, `indigo` | `sodium` |
+| `variant` (`atmos.skyline`) | 0–8 | 5 |
+
+`night` keeps a warm horizon. `late` cools the zenith. The skyline control lights more distant windows and makes the lit ones brighter. Windows are emissive unlit meshes. There is no grass field and no shaft, depth-of-field, or grade pass. Tower count uses the grass budget (6 preview, 8 export) and window columns use the mote count (4 / 6). Without WebGL2 the set is a flat roof. The library setting is `rooftop`.
+
+A software export of `atmos-rooftop-night-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 34213 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
