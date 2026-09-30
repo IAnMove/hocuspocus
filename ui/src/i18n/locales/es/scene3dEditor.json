@@ -1523,17 +1523,26 @@
     "atmos-waterfall-low": {
       "title": "Cascada · cámara baja",
       "description": "La misma cascada desde el agua, con la cámara baja mirando la cortina."
+    },
+    "atmos-mars-wide": {
+      "title": "Marte · plano abierto",
+      "description": "Desierto marciano procedural. El hueco del personaje queda en el polvo, delante del rover."
+    },
+    "atmos-mars-low": {
+      "title": "Marte · cámara baja",
+      "description": "El mismo desierto desde el polvo, mirando un cielo caramelo y dos lunas pequeñas."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada" },
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "noon": "Mediodía", "dusk": "Atardecer" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "rust": "Óxido", "dusk": "Ocaso" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
-    "flow": "Caudal"
+    "flow": "Caudal",
+    "devils": "Torbellinos"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

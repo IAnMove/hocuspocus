@@ -1,9 +1,10 @@
 /** Typed ids. `types.ts` imports this file and must not import the set builders. */
-export const ATMOS_SET_IDS = ['atmos-clearing', 'atmos-waterfall'] as const
+export const ATMOS_SET_IDS = ['atmos-clearing', 'atmos-waterfall', 'atmos-mars'] as const
 export type AtmosSetId = (typeof ATMOS_SET_IDS)[number]
 export const ATMOS_TEMPLATE_IDS = [
   'atmos-clearing-wide', 'atmos-clearing-backlight',
   'atmos-waterfall-wide', 'atmos-waterfall-low',
+  'atmos-mars-wide', 'atmos-mars-low',
 ] as const
 export type AtmosTemplateId = (typeof ATMOS_TEMPLATE_IDS)[number]
 

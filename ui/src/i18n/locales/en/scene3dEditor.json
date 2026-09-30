@@ -1523,17 +1523,26 @@
     "atmos-waterfall-low": {
       "title": "Waterfall · low",
       "description": "The same waterfall from the water, with a low camera looking up the sheet."
+    },
+    "atmos-mars-wide": {
+      "title": "Mars · wide",
+      "description": "A procedural Martian desert. The character spot stays on open dust, in front of the rover."
+    },
+    "atmos-mars-low": {
+      "title": "Mars · low",
+      "description": "The same desert from the dust, looking toward a caramel sky and two small moons."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "noon": "Noon", "dusk": "Dusk" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "rust": "Rust", "dusk": "Dusk" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
-    "flow": "Flow"
+    "flow": "Flow",
+    "devils": "Devils"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
