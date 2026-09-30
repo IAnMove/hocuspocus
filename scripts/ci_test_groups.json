@@ -615,6 +615,8 @@
         "tests/test_production_phase.py",
         "tests/test_production_wait.py",
         "tests/test_production_publication.py",
+        "tests/test_production_disk.py",
+        "tests/test_production_review_checks.py",
         "tests/test_video_production_runbook.py"
       ]
     },
@@ -809,13 +811,15 @@
       "prefix": "app/services/production_estimate.py",
       "paths": [
         "tests/test_production_phase.py",
-        "tests/test_production_dry_run.py"
+        "tests/test_production_dry_run.py",
+        "tests/test_production_disk.py"
       ]
     },
     {
       "prefix": "app/services/production_close.py",
       "paths": [
-        "tests/test_production_phase.py"
+        "tests/test_production_phase.py",
+        "tests/test_production_disk.py"
       ]
     },
     {
