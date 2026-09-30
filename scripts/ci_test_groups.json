@@ -296,6 +296,8 @@
         "tests/test_production_takes.py",
         "tests/test_production_package.py",
         "tests/test_production_sheets.py",
+        "tests/test_production_structure.py",
+        "tests/test_production_treatment.py",
         "tests/test_production_plan.py",
         "tests/test_production_usage.py",
         "tests/test_productions_router.py",
@@ -646,6 +648,24 @@
       "prefix": "app/services/production_sheets.py",
       "paths": [
         "tests/test_production_sheets.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_treatment.py",
+      "paths": [
+        "tests/test_production_treatment.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_structure.py",
+      "paths": [
+        "tests/test_production_structure.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_trailer_audio.py",
+      "paths": [
+        "tests/test_production_structure.py"
       ]
     },
     {

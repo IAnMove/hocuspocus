@@ -17,6 +17,7 @@ from typing import Any
 from services.music_production import h3_frames_for, shot_windows
 from services.production_preview import preview_extras
 from services.production_quality import expand_quality, profile_of
+from services.production_treatment import treatment_warnings
 from services.production_style_presets import expand_style_preset
 from services.song_analysis import lyric_lines
 
@@ -66,7 +67,7 @@ def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
         "long_captions": captions,
         "minutes": _minutes(spec, sum(1 for row in rows if row.get("kind") == "h3")),
         "motion": motion,
-        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra,
+        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra + treatment_warnings(spec, usable),
     }
 
 
@@ -184,8 +185,8 @@ def _static_warnings(motion: dict, profile: dict) -> list[dict]:
 def _pace_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
     minutes = float((spec.get("song") or {}).get("duration") or 0) / 60
     clips = sum(1 for shot in shots if shot.get("kind") in ("h3", "scene3d"))
-    if minutes <= 0 or clips / minutes >= profile["clips_per_minute"]:
-        return []
+    if minutes <= 0 or not clips or clips / minutes >= profile["clips_per_minute"]:
+        return []                       # no generated clips at all is a native look (desktop, 3D, stills): too_static covers the stills
     return [{"code": "few_clips", "per_minute": round(clips / minutes, 1), "minimum": profile["clips_per_minute"],
              "hint": "more H3 or scene3d shots, or a shorter song, or quality: draft"}]
 

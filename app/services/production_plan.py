@@ -28,7 +28,8 @@ class PlanError(ValueError):
 def plan_brief(brief: Any, lyricist: Callable[[dict], str] | None = None) -> dict:
     """Return a spec with shots expanded. Every required brief field is a non-empty string."""
     fields = _fields(brief)
-    lyrics = _lyrics_text(fields, lyricist)
+    trailer = fields.get("structure") == "trailer"
+    lyrics = "" if trailer and not fields.get("lyrics") else _lyrics_text(fields, lyricist)     # a trailer may be instrumental
     duration = _duration(fields["duracion"])
     bpm = _bpm(fields["musica"])
     spec = {
@@ -39,6 +40,8 @@ def plan_brief(brief: Any, lyricist: Callable[[dict], str] | None = None) -> dic
         "shots": "auto",
         "cta": _clip(fields["cta"], 32),
         "quality": fields.get("quality") if fields.get("quality") in ("draft", "standard", "max") else "standard",
+        **({"structure": "trailer"} if trailer else {}),
+        **({"treatment": fields["treatment"]} if fields.get("treatment") else {}),
         "section_actions": {"verse": _clip(fields["tema"], 32), "chorus": _clip(fields["cta"], 32)},
     }
     from services.music_production import ProductionError
@@ -49,7 +52,7 @@ def plan_brief(brief: Any, lyricist: Callable[[dict], str] | None = None) -> dic
     return plan_shots(expanded)
 
 
-def _fields(brief: Any) -> dict[str, str]:
+def _fields(brief: Any) -> dict[str, Any]:
     if not isinstance(brief, dict):
         raise PlanError("invalid_brief", "brief must be an object")
     found = {}
@@ -61,10 +64,14 @@ def _fields(brief: Any) -> dict[str, str]:
         found[label] = value
     if missing:
         raise PlanError("invalid_brief", "brief needs " + ", ".join(missing))
-    for optional, names in (("lyrics", ("lyrics", "letra")), ("footer", ("footer", "aviso")), ("quality", ("quality", "calidad"))):
+    for optional, names in (("lyrics", ("lyrics", "letra")), ("footer", ("footer", "aviso")), ("quality", ("quality", "calidad")),
+                               ("structure", ("structure", "estructura"))):
         value = next((brief[name].strip() for name in names if isinstance(brief.get(name), str) and brief[name].strip()), "")
         if value:
             found[optional] = value
+    treatment = brief.get("treatment", brief.get("tratamiento"))
+    if isinstance(treatment, dict) and treatment:
+        found["treatment"] = treatment              # validated by validate_spec: the plan only carries it
     return found
 
 
