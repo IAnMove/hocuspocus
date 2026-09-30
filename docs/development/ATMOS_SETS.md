@@ -162,6 +162,20 @@ Waves and foam travel in one shader. The sun sits low, and a bright streak runs 
 
 A software export of `atmos-beach-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 24922 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 8 — `atmos-crystal-cave`
+
+Templates: `atmos-crystal-cave-wide`, `atmos-crystal-cave-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Crystals, rocks, drips and motes stay outside that circle and outside the lane to the camera. There is no sun.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `deep`, `glow` | `deep` |
+| `palette` | `amethyst`, `aqua` | `amethyst` |
+| `variant` (`atmos.glow`) | 0–8 | 5 |
+
+Floor crystals point up and ceiling crystals point down from a stone roof. Their color brightens with the glow control, and drips fall on the same clock. `glow` lifts the sky behind that roof. There is no grass field and no shaft, depth-of-field, or grade pass. Crystal count uses the grass budget (8 preview, 12 export) and drips use the mote count. Without WebGL2 the set is a flat stone floor. The library setting is `cave`.
+
+A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:

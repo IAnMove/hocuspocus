@@ -353,7 +353,8 @@
     "studio": "Estudio",
     "street": "Calle",
     "stage": "Escenario",
-    "canyon": "Cañón"
+    "canyon": "Cañón",
+    "cave": "Cueva"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1563,13 +1564,21 @@
     "atmos-beach-low": {
       "title": "Playa al atardecer · cámara baja",
       "description": "La misma orilla desde la arena, mirando una barca varada y el agua."
+    },
+    "atmos-crystal-cave-wide": {
+      "title": "Cueva de cristales · plano abierto",
+      "description": "Cueva procedural sin sol. Los cristales de colores iluminan el suelo, y el hueco del personaje queda en la piedra."
+    },
+    "atmos-crystal-cave-low": {
+      "title": "Cueva de cristales · cámara baja",
+      "description": "La misma cueva desde el suelo, mirando un grupo que brilla y los cristales del techo."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul" },
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
@@ -1578,7 +1587,8 @@
     "devils": "Torbellinos",
     "flakes": "Copos",
     "ripples": "Ondas",
-    "tide": "Marea"
+    "tide": "Marea",
+    "glow": "Brillo"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",
