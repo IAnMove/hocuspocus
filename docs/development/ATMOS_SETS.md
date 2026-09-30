@@ -176,6 +176,20 @@ Floor crystals point up and ceiling crystals point down from a stone roof. Their
 
 A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 9 — `atmos-neon-rain`
+
+Templates: `atmos-neon-rain-wide`, `atmos-neon-rain-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Signs, puddles and steam stay outside that circle and outside the lane to the camera. There is no sun.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `night`, `storm` | `night` |
+| `palette` | `magenta`, `violet` | `magenta` |
+| `variant` (`atmos.rain`) | 0–8 | 5 |
+
+Wet pavement reflects the neon signs in the ground shader. Rain streaks fall and steam rises on the same clock. `storm` cools the sky. There is no grass field and no shaft, depth-of-field, or grade pass. Rain uses the mote count (42 preview, 72 export). Without WebGL2 the set is a flat pavement. The library setting is `street`.
+
+A software export of `atmos-neon-rain-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 29976 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
