@@ -87,10 +87,19 @@
     "blocked": [],
     "availability": {
       "model": "derived",
-      "statuses": ["executable", "needs_data", "blocked", "requires_navigation"],
+      "statuses": [
+        "executable",
+        "needs_data",
+        "blocked",
+        "requires_navigation"
+      ],
       "note": "available includes executable and requires_navigation so other Labs stay visible. blocked includes blocked and needs_data with reasons."
     },
-    "note": "Availability is derived from the capability registry, current tab, labs snapshot and pending questions."
+    "note": "Availability is derived from the capability registry, current tab, labs snapshot and pending questions.",
+    "lips_creator": [
+      "lips_creator",
+      "generate_lips"
+    ]
   },
   "known_gaps": [
     {
@@ -3224,6 +3233,58 @@
       "presentation": "videoclips.mountAlternativeSong",
       "test": "ui/tests/agentRegistryCoverage.test.mjs",
       "notes": "Outside Story/Series Labs; frozen so every Wizard action has an identified function.",
+      "prompt_fixture": "",
+      "blocking_defect": ""
+    },
+    {
+      "id": "characters.lips_creator",
+      "lab": "lips_creator",
+      "surface": "manage",
+      "user_operation": "Manage mouth collections and apply them to characters",
+      "control": "Ask to the Wizard → Lips Creator",
+      "ui_handler": "lipsCreator.command",
+      "domain_function": "manageLipsCollection",
+      "domain_module": "ui/src/features/characters/lipsActions.ts",
+      "adapter": "lipsCreator.command",
+      "api": "POST /api/v1/character-kits/lips-creator/commands",
+      "wizard_capability": "lips_creator",
+      "wizard_schema": "lipsCreatorCapabilities.lips_creator.inputSchema",
+      "in_wizard_context": true,
+      "wizard_status": "registrada",
+      "wizard_available": true,
+      "classification": "operativa",
+      "phase": "out_of_scope",
+      "preconditions": "Exact workspace and IDs; revisions for edits; reviewed mouths before apply",
+      "persistence": "Workspace Lips Creator library with compare-and-swap revisions and mutation receipts",
+      "presentation": "lips_creator",
+      "test": "ui/tests/lipsCreatorWizard.test.ts",
+      "notes": "MCP uses the same collection commands. Generation runs sequentially through the native image queue and keeps candidates pending.",
+      "prompt_fixture": "",
+      "blocking_defect": ""
+    },
+    {
+      "id": "characters.generate_lips",
+      "lab": "lips_creator",
+      "surface": "generate",
+      "user_operation": "Generate missing or selected mouth candidates",
+      "control": "Ask to the Wizard → Lips Creator",
+      "ui_handler": "lipsCreator.generate",
+      "domain_function": "generateLipsCollection",
+      "domain_module": "ui/src/features/characters/lipsActions.ts",
+      "adapter": "lipsCreator.generate",
+      "api": "POST /api/v1/character-kits/lips-creator/commands",
+      "wizard_capability": "generate_lips",
+      "wizard_schema": "lipsCreatorCapabilities.generate_lips.inputSchema",
+      "in_wizard_context": true,
+      "wizard_status": "registrada",
+      "wizard_available": true,
+      "classification": "operativa",
+      "phase": "out_of_scope",
+      "preconditions": "Exact saved pack ID; installed compatible image model and explicit generation intent",
+      "persistence": "Workspace Lips Creator library with compare-and-swap revisions and mutation receipts",
+      "presentation": "lips_creator",
+      "test": "ui/tests/lipsCreatorWizard.test.ts",
+      "notes": "MCP uses the same collection commands. Generation runs sequentially through the native image queue and keeps candidates pending.",
       "prompt_fixture": "",
       "blocking_defect": ""
     }

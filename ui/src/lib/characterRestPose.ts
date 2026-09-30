@@ -1,12 +1,14 @@
 import type { CharacterKit, CharacterKitAsset } from './characterKit'
 import { isFacePatchCompatible } from './characterFacePatch'
+import { mouthStateForSound } from './characterMouthStates'
 
 export function characterRestPoseKey(kit: CharacterKit): string | undefined {
-  const base = kit.base, mouth = kit.mouth.closed, anchors = kit.anchors.base
+  const rest = mouthStateForSound('rest', kit.mouthMapping)
+  const base = kit.base, mouth = kit.mouth[rest], anchors = kit.anchors.base
   if (!base?.source || !mouth?.source || !anchors || base.reviewState === 'rejected' || mouth.reviewState === 'rejected'
     || !isFacePatchCompatible(mouth, 'base', base.source)) return undefined
   return JSON.stringify([1, base.id, base.source, base.reviewState, mouth.id, mouth.source, mouth.reviewState,
-    mouth.facePatch, anchors.mouthStates?.closed ?? anchors.mouth])
+    mouth.facePatch, anchors.mouthStates?.[rest] ?? anchors.mouth])
 }
 
 export function characterRestPoseSource(kit: CharacterKit): string | undefined {
@@ -28,7 +30,8 @@ export async function prepareCharacterRestPose(kit: CharacterKit, workspace: str
   }
   const base = await read(kit.base!)
   try {
-    const mouth = await read(kit.mouth.closed!)
+    const rest = mouthStateForSound('rest', kit.mouthMapping)
+    const mouth = await read(kit.mouth[rest]!)
     try {
       const blob = await composeCharacterRestPose(base, mouth, kit)
       const result = await upload(new File([blob], `${kit.id}-rest.png`, { type: 'image/png' }))
@@ -36,7 +39,7 @@ export async function prepareCharacterRestPose(kit: CharacterKit, workspace: str
       if (!source) throw new Error('The resting face was not saved.')
       return { ...kit, restPose: { fingerprint, asset: { ...kit.base!, id: `${kit.id.slice(0, 100)}-rest`,
         name: `${kit.name.slice(0, 230)} · rest`, source, workspace,
-        reviewState: kit.base!.reviewState === 'approved' && kit.mouth.closed!.reviewState === 'approved' ? 'approved' : 'pending' } } }
+        reviewState: kit.base!.reviewState === 'approved' && kit.mouth[rest]!.reviewState === 'approved' ? 'approved' : 'pending' } } }
     } finally { mouth.close() }
   } finally { base.close() }
 }
@@ -48,7 +51,8 @@ export async function composeCharacterRestPose(base: ImageBitmap, mouth: ImageBi
   const context = canvas.getContext('2d')
   if (!context) throw new Error('The resting face could not be composed.')
   context.drawImage(base, 0, 0)
-  const group = kit.anchors.base!, anchor = group.mouthStates?.closed ?? group.mouth
+  const rest = mouthStateForSound('rest', kit.mouthMapping)
+  const group = kit.anchors.base!, anchor = group.mouthStates?.[rest] ?? group.mouth
   const edge = Math.max(base.width, base.height), size = edge * anchor.scale
   const fit = Math.min(size / mouth.width, size / mouth.height)
   context.translate(base.width / 2 + edge * anchor.offsetX / 100, base.height / 2 + edge * anchor.offsetY / 100)
