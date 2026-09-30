@@ -435,6 +435,48 @@ def test_status_reviews_only_finished_runs_and_remembers_the_answer(tmp_path, mo
     assert status_summary(done, "ws", str(tmp_path))["retake_keys"] == ["hero"]   # callers cannot corrupt the cache
 
 
+def test_artistic_pending_means_pending_judgement_until_review_says_otherwise(tmp_path):
+    _touch(tmp_path, "hero.mp4", _video_scene())
+    sample = _sample({"hero.mp4": _moving()})
+    state = _state(final="hero.mp4")
+    assert review_production(state, str(tmp_path), people=None, sample=sample)["review"]["artistic"]["verdict"] == "pending"
+
+    state["review_shots"] = {"hero": {"status": "approved"}, "other": {"status": "pending"}}
+    assert review_production(state, str(tmp_path), people=None, sample=sample)["review"]["artistic"]["verdict"] == "pending"
+    state["review_shots"] = {"hero": {"status": "approved"}, "other": {"status": "changes_requested"}}
+    assert review_production(state, str(tmp_path), people=None, sample=sample)["review"]["artistic"]["verdict"] == "changes_requested"
+    state["review_shots"] = {"hero": {"status": "approved"}, "other": {"status": "approved"}}
+    approved = review_production(state, str(tmp_path), people=None, sample=sample)
+    assert approved["review"]["artistic"]["verdict"] == "approved_by_review"
+    assert approved["review"]["technical"]["verdict"] == "ok"
+    assert approved["review"]["artistic"]["verdict"] != "ok"
+
+    bare = {"review_shots": {"hero": {"status": "ok"}}}
+    assert review_production(bare, None, people=None)["review"]["artistic"]["verdict"] == "pending"
+    early = {"review_shots": {"hero": {"status": "approved"}}}
+    opened = review_production(early, None, people=None)
+    assert opened["review"]["artistic"]["verdict"] == "approved_by_review"
+    assert opened["review"]["execution"]["verdict"] == "unreliable"
+
+    del state["review_shots"]
+    state["production_id"] = "voices"
+    (tmp_path / "voices.review.json").write_text('{"shots": {"hero": {"status": "approved"}, "b": {"status": "changes_requested"}}}', encoding="utf-8")
+    assert review_production(state, str(tmp_path), people=None, sample=sample)["review"]["artistic"]["verdict"] == "changes_requested"
+    (tmp_path / "voices.review.json").write_text('{"version": 1, "shots": {"hero": {"status": "approved"}}}', encoding="utf-8")
+    assert review_production(state, str(tmp_path), people=None, sample=sample)["review"]["artistic"]["verdict"] == "approved_by_review"
+    state["review_shots"] = {"hero": {"status": "pending"}}
+    assert review_production(state, str(tmp_path), people=None, sample=sample)["review"]["artistic"]["verdict"] == "pending"
+    del state["review_shots"]
+    del state["production_id"]
+    (tmp_path / "other.production.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "voices.production.json").write_text("{}", encoding="utf-8")
+    assert review_production(state, str(tmp_path), people=None, sample=sample)["review"]["artistic"]["verdict"] == "pending"
+    (tmp_path / "other.production.json").unlink()
+    assert review_production(state, str(tmp_path), people=None, sample=sample)["review"]["artistic"]["verdict"] == "approved_by_review"
+    (tmp_path / "voices.review.json").write_text("{", encoding="utf-8")
+    assert review_production(state, str(tmp_path), people=None, sample=sample)["review"]["artistic"]["verdict"] == "pending"
+
+
 def test_status_is_computed_off_the_event_loop(tmp_path, monkeypatch):
     import asyncio
     import threading

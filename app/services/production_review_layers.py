@@ -7,7 +7,12 @@ and the start frames, and stays pending for a person.
 """
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
 from typing import Any
+
+_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 
 
 def pending_review() -> dict[str, Any]:
@@ -22,7 +27,7 @@ def pending_review() -> dict[str, Any]:
     }
 
 
-def apply(packed: dict, state: Any, execution: str) -> dict:
+def apply(packed: dict, state: Any, execution: str, root: str | None = None) -> dict:
     """Wrap the code-check pack. A smoothness failure does not add retake keys."""
     flat = packed.get("review") if isinstance(packed.get("review"), dict) else {}
     smooth = _smooth(state)
@@ -36,7 +41,7 @@ def apply(packed: dict, state: Any, execution: str) -> dict:
     packed["review"] = {
         "execution": {"verdict": execution},
         "technical": technical,
-        "artistic": {"verdict": "pending", "evidence": evidence(state)},
+        "artistic": {"verdict": artistic_verdict(state, root), "evidence": evidence(state)},
     }
     return packed
 
@@ -99,3 +104,70 @@ def _file_name(value: Any) -> str | None:
 
 def _empty_evidence() -> dict[str, Any]:
     return {"contact_sheet": None, "animatic": None, "frames": []}
+
+
+def artistic_verdict(state: Any, root: str | None = None) -> str:
+    """pending until a review says otherwise. Never an automatic ok."""
+    shots = _shot_map(state, root)
+    if not isinstance(shots, dict) or not shots:
+        return "pending"
+    statuses = [_status(item) for item in shots.values()]
+    if "changes_requested" in statuses:
+        return "changes_requested"
+    if all(item == "approved" for item in statuses):
+        return "approved_by_review"
+    return "pending"
+
+
+def cache_token(state: Any, root: str | None = None) -> tuple:
+    """Shot statuses, so a new review.json is not served from the old pending cache."""
+    shots = _shot_map(state, root) or {}
+    if not isinstance(shots, dict):
+        return ()
+    pairs = ((str(key), _status(value)) for key, value in shots.items() if isinstance(key, str))
+    return tuple(sorted(pairs))
+
+
+def _shot_map(state: Any, root: str | None) -> dict | None:
+    if isinstance(state, dict) and isinstance(state.get("review_shots"), dict):
+        return state["review_shots"]
+    path = _review_file(state, root)
+    if path is None:
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    shots = data.get("shots") if isinstance(data, dict) else None
+    return shots if isinstance(shots, dict) else None
+
+
+def _review_file(state: Any, root: str | None) -> Path | None:
+    if not isinstance(root, str) or not root:
+        return None
+    base = Path(root)
+    pid = _production_id(state)
+    if pid:
+        path = base / f"{pid}.review.json"
+        return path if path.is_file() else None
+    found = [item for item in base.glob("*.production.json") if item.is_file()]
+    if len(found) != 1:
+        return None
+    sibling = base / f"{found[0].name.removesuffix('.production.json')}.review.json"
+    return sibling if sibling.is_file() else None
+
+
+def _production_id(state: Any) -> str | None:
+    if not isinstance(state, dict):
+        return None
+    for key in ("production_id", "id"):
+        value = state.get(key)
+        if isinstance(value, str) and _ID.fullmatch(value):
+            return value
+    return None
+
+
+def _status(item: Any) -> str:
+    if isinstance(item, dict) and isinstance(item.get("status"), str):
+        return item["status"]
+    return ""
