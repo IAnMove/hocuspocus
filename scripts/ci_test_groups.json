@@ -385,7 +385,8 @@
         "tests/test_clip_align.py",
         "tests/test_production_cancel.py",
         "tests/test_music_productions_router.py",
-        "tests/test_production_clip_qa.py"
+        "tests/test_production_clip_qa.py",
+        "tests/test_production_subject_count.py"
       ]
     }
   ],
@@ -601,7 +602,8 @@
         "tests/test_music_productions_router.py",
         "tests/test_production_preview.py",
         "tests/test_production_scene_retry.py",
-        "tests/test_production_clip_qa.py"
+        "tests/test_production_clip_qa.py",
+        "tests/test_production_subject_count.py"
       ]
     },
     {
@@ -697,6 +699,22 @@
         "tests/test_production_takes.py",
         "tests/test_lipsync_span.py",
         "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_subject_count.py",
+      "paths": [
+        "tests/test_production_subject_count.py",
+        "tests/test_music_production.py",
+        "tests/test_qa_people.py",
+        "tests/test_production_timing.py"
+      ]
+    },
+    {
+      "prefix": "app/services/qa_people.py",
+      "paths": [
+        "tests/test_qa_people.py",
+        "tests/test_production_subject_count.py"
       ]
     }
   ]

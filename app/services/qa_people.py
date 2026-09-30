@@ -57,7 +57,8 @@ def command_catalog() -> list[dict]:
             "Count people on up to 8 sampled frames with the YOLOX weights in ckpts, "
             "on CPU only. Verdict ok, retake, or unreliable. retake when the count "
             "jumps by 2 or more between samples (one dancer becoming three) or when "
-            "max_people is above expected. expected=1 with that jump is retake. "
+            "max_people is above or below expected (a group of 4 counted as 1). "
+            "expected=1 with that jump is retake. "
             "unreliable when the detector cannot run; max_people and duplicate_jump "
             "are null and no count is invented. The per-frame list is a workspace "
             "JSON. The reply is frames_file, file, url, and sha256, not the list. "
@@ -123,9 +124,9 @@ def verdict_for(counts: list[int] | None, expected: int | None) -> dict:
         }
     jump = count_jumped(counts)
     maximum = max(counts)
-    over = expected is not None and maximum > expected
+    off = expected is not None and maximum != expected
     return {
-        "verdict": "retake" if jump or over else "ok",
+        "verdict": "retake" if jump or off else "ok",
         "max_people": maximum,
         "expected": expected,
         "duplicate_jump": jump,
