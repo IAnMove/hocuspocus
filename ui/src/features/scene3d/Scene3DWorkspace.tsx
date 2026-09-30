@@ -170,6 +170,17 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     return () => { if (host.__world3dDocument === sceneDoc) delete host.__world3dDocument }
   }, [sceneDoc])
 
+  useEffect(() => {
+    const host = window as Window & { __world3dApplyDocument?: (raw: unknown) => boolean }
+    host.__world3dApplyDocument = raw => {
+      const next = parseScene3DDocument(raw)
+      if (!next) return false
+      applyScene(next)
+      return true
+    }
+    return () => { delete host.__world3dApplyDocument }
+  }, [applyScene])
+
   const setExportingFlag = (value: boolean) => {
     exportingRef.current = value
     setExporting(value)

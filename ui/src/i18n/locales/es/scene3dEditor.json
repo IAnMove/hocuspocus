@@ -352,7 +352,8 @@
     "casino": "Casino",
     "studio": "Estudio",
     "street": "Calle",
-    "stage": "Escenario"
+    "stage": "Escenario",
+    "canyon": "Cañón"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1514,16 +1515,25 @@
     "atmos-clearing-backlight": {
       "title": "Claro de bosque · contraluz",
       "description": "El mismo claro con el sol detrás de los troncos."
+    },
+    "atmos-waterfall-wide": {
+      "title": "Cascada · plano abierto",
+      "description": "Un cañón procedural. El hueco del personaje queda en la orilla, delante de la poza."
+    },
+    "atmos-waterfall-low": {
+      "title": "Cascada · cámara baja",
+      "description": "La misma cascada desde el agua, con la cámara baja mirando la cortina."
     }
   },
   "atmos": {
     "time": "Hora",
     "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar" },
     "fogDensity": "Niebla",
     "wind": "Viento",
-    "motes": "Motas"
+    "motes": "Motas",
+    "flow": "Caudal"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

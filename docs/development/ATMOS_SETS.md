@@ -49,6 +49,37 @@ RTX 4090, headless Chromium, ANGLE, NVIDIA. 2026-09-29.
 
 The per-pass timers around shafts, depth of field, and grade read 0 or 0.1 ms. That is the resolution of `performance.now` here, not a pass budget. After `composer.render`, `renderer.info` only describes the last pass (one call, one triangle). Scene draw calls and a separate GPU-memory figure were not measured.
 
+## Capture
+
+Review stills and clips stay outside the repository.
+
+```
+cd ui && npm run atmos:capture -- atmos-clearing-wide
+cd ui && npm run atmos:capture -- atmos-clearing-wide --export --out /tmp/atmos-capture
+```
+
+The script builds the UI, serves it on `127.0.0.1` (port `HOCUSPOCUS_E2E_PORT`, default 4199), and opens Video 3D with the simulated API. It picks the template from the library, uses the shot, expands the video, and writes a 1920×1080 PNG. Chromium is launched with SwiftShader. If the WebGL renderer names NVIDIA, GeForce, Radeon, or AMD, the script stops.
+
+`--export` records 6 seconds, or the template duration when that is shorter, at the document frame rate through the same `world3d-render.html` frame bridge the export service uses. Frames are muxed with ffmpeg into an MP4 in the output directory. The output directory defaults to `ATMOS_CAPTURE_DIR` or the system temporary directory, and it cannot sit inside the repo. This path does not call a running Lab, so it does not take the machine GPU.
+
+A software export of `atmos-clearing-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 263915 ms. That is the editor document's size and frame rate. It is slower than the 60 s budget later sets are asked to meet at 1280×720 and 24 fps.
+
+`--palette` and `--time` write those fields onto the open shot. `--subject FILE` places that GLB in the open character spot. The review stills for `atmos-waterfall` use this.
+
+## Set 2 — `atmos-waterfall`
+
+Templates: `atmos-waterfall-wide`, `atmos-waterfall-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on the near bank. The sheet, pool, mist and dew stay behind that circle.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `morning`, `golden` | `golden` |
+| `palette` | `moss`, `amber` | `moss` |
+| `variant` (`atmos.flow`) | 20–100 | 60 |
+
+`golden` shows the rainbow. `morning` hides it. There is no grass field and no shaft, depth-of-field, or grade pass. Ferns use the grass count (18 preview, 36 export) and dew uses the mote count (48 / 96). Without WebGL2 the set is a flat bank. The library setting is `canyon`.
+
+A software export of `atmos-waterfall-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 39869 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
