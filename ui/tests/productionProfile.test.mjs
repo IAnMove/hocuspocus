@@ -20,6 +20,13 @@ const options = {
   supports_auto_aspect: false,
 }
 
+test('new production profiles prefer local Qwen Image 2.1', () => {
+  assert.deepEqual(DEFAULT_PRODUCTION_PROFILE.image, { provider: 'local', model: 'qwen_image_21' })
+  const fields = seriesProviderFieldsFromProfile(DEFAULT_PRODUCTION_PROFILE)
+  assert.equal(fields.imageProvider, 'maestro')
+  assert.equal(fields.imageModel, 'qwen_image_21')
+})
+
 test('keeps an exact H3 Legacy tier and portrait orientation', () => {
   assert.deepEqual(resolveSupportedVideoFormat(options, '768p', '9:16'), {
     resolution: '768p',
