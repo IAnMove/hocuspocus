@@ -176,6 +176,20 @@ Floor crystals point up and ceiling crystals point down from a stone roof. Their
 
 A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 9 — `atmos-reef`
+
+Templates: `atmos-reef-wide`, `atmos-reef-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on open sand. Fish and rocks stay outside that circle and outside the lane to the camera. Caustic light is a shader on the ground, not a composer pass.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `shallows`, `trench` | `shallows` |
+| `palette` | `lagoon`, `abyss` | `lagoon` |
+| `variant` (`atmos.current`) | 0–8 | 4 |
+
+`shallows` lays bright caustic light across the sand. `trench` dims that light and the water above. Schools of fish drift with the current, and bubbles rise on the same clock. There is no grass field and no shaft, depth-of-field, or grade pass. Fish use the grass count (10 preview, 16 export) and bubbles use the mote count. Without WebGL2 the set is a flat sand floor. The library setting is `sea`, shared with the beach.
+
+A software export of `atmos-reef-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 30534 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:

@@ -1572,13 +1572,21 @@
     "atmos-crystal-cave-low": {
       "title": "Crystal cave · low",
       "description": "The same cave from the floor, looking toward a glowing cluster and the hanging crystals."
+    },
+    "atmos-reef-wide": {
+      "title": "Seafloor · wide",
+      "description": "A procedural reef. Caustic light crosses open sand, and the character spot stays clear of the fish and rocks."
+    },
+    "atmos-reef-low": {
+      "title": "Seafloor · low",
+      "description": "The same reef from the sand, looking toward a school of fish and rising bubbles."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow", "shallows": "Shallows", "trench": "Trench" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua", "lagoon": "Lagoon", "abyss": "Abyss" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
@@ -1588,7 +1596,8 @@
     "flakes": "Flakes",
     "ripples": "Ripples",
     "tide": "Tide",
-    "glow": "Glow"
+    "glow": "Glow",
+    "current": "Current"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
