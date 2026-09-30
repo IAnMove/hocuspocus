@@ -552,3 +552,24 @@ def test_the_frames_sheet_is_made_and_reported(tmp_path, monkeypatch):
     production.frames({"style": {}, "cast": []}, [{"key": "a", "kind": "h3", "frame": "wide"}])
     assert made == [({"a": "f.png"}, "p-frames.jpg")] and production.state["frames_sheet"] == "p-frames.jpg"
     assert status_summary(production.state, "ws")["frames_sheet"] == "/api/v1/file/p-frames.jpg?workspace=ws"
+
+
+def test_a_line_that_runs_across_a_cut_keeps_one_caption():
+    from services.music_production import Production, seam_look
+    line = {"text": "One more round", "t0": 22.0, "t1": 26.0}
+    none = {"preset": "none", "duration": 0.05}
+    assert seam_look(line, 20.0, 24.0) == {"exit": none}            # starts here, goes on after the cut
+    assert seam_look(line, 24.0, 28.0) == {"enter": none}           # began before this scene
+    assert seam_look(line, 21.0, 30.0) == {}                        # fully inside
+    assert seam_look(line, 23.0, 25.0) == {"enter": none, "exit": none}
+    production = Production.__new__(Production)
+    production.log = lambda text: None
+    score = {"lines": [line]}
+    ops = production._lyric_ops({"key": "s"}, 24.0, 28.0, 4.0, score, {"lyric_template": "social-caption"}, 0)
+    patches = [op["patch"] for op in ops if op["op"] == "update_text"]
+    assert patches and all(p.get("enter") == none for p in patches)
+    assert not any("exit" in p for p in patches)
+    from services.video2d_edit import edit          # the real editor must accept what the runner sends
+    doc = {"version": 1, "name": "t", "width": 1920, "height": 1080, "fps": 24, "duration": 4, "layers": [], "texts": []}
+    cue = edit({"version": 1, "input": {"document": doc, "operations": ops, "full": True}})["result"]["document"]["texts"][0]
+    assert cue["enter"]["preset"] == "none"
