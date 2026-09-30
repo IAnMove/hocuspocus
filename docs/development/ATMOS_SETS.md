@@ -176,6 +176,20 @@ Floor crystals point up and ceiling crystals point down from a stone roof. Their
 
 A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 9 — `atmos-meadow`
+
+Templates: `atmos-meadow-wide`, `atmos-meadow-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Grass stays outside that circle and outside the lane to the camera. Low clouds drift above the figure. There is no sun.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `spring`, `overcast` | `spring` |
+| `palette` | `clover`, `hay` | `clover` |
+| `variant` (`atmos.breeze`) | 0–8 | 4 |
+
+Wind leans the grass in the blade shader, and the same breeze slides the low clouds. Grass stays outside the open circle and the lane, and that circle is only a lighter patch so a figure is not buried. `overcast` greys the sky. There is no shaft, depth-of-field, or grade pass. Grass tufts use the grass count (100 preview, 140 export) and clouds use the mote count (8 / 12). Materials are unlit. Without WebGL2 the set is a flat green floor. The library setting is `forest`, shared with the clearing.
+
+A software export of `atmos-meadow-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27814 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:

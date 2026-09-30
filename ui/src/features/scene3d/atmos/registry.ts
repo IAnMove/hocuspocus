@@ -6,11 +6,12 @@ import { clearingSet } from './sets/clearing.ts'
 import { crystalCaveSet } from './sets/crystalCave.ts'
 import { desertSet } from './sets/desert.ts'
 import { marsSet } from './sets/mars.ts'
+import { meadowSet } from './sets/meadow.ts'
 import { moonSet } from './sets/moon.ts'
 import { snowSet } from './sets/snow.ts'
 import { waterfallSet } from './sets/waterfall.ts'
 
-export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet, marsSet, snowSet, desertSet, beachSet, crystalCaveSet]
+export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet, marsSet, snowSet, desertSet, beachSet, crystalCaveSet, meadowSet]
 
 const extra: AtmosSetDefinition[] = []
 
