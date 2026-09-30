@@ -353,7 +353,8 @@
     "studio": "Studio",
     "street": "Street",
     "stage": "Stage",
-    "canyon": "Canyon"
+    "canyon": "Canyon",
+    "cave": "Cave"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1563,13 +1564,21 @@
     "atmos-beach-low": {
       "title": "Sunset beach · low",
       "description": "The same shore from the sand, looking toward a beached boat and the water."
+    },
+    "atmos-crystal-cave-wide": {
+      "title": "Crystal cave · wide",
+      "description": "A procedural cave with no sun. Colored crystals light the floor, and the character spot stays on open stone."
+    },
+    "atmos-crystal-cave-low": {
+      "title": "Crystal cave · low",
+      "description": "The same cave from the floor, looking toward a glowing cluster and the hanging crystals."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
@@ -1578,7 +1587,8 @@
     "devils": "Devils",
     "flakes": "Flakes",
     "ripples": "Ripples",
-    "tide": "Tide"
+    "tide": "Tide",
+    "glow": "Glow"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
