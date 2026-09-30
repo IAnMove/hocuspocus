@@ -122,6 +122,8 @@ def _shoot_round(production: Any, spec: dict, pending: list, tried: dict, budget
 def clips(production: Any, spec: dict, windows: list[dict], retake: tuple[str, ...] = (), pause: float = 60) -> None:
     """Shoot missing clips (or retake keys). Flat lip-sync r, max_takes, or 4 recorded takes stop an automatic
     shoot; an explicit retake may pass the cap. The best r is kept. A fully failed round waits before the next."""
+    from services.production_shot_review import without_locked
+    windows = without_locked(production, windows)
     production.state.setdefault("clips", {})
     tried = production.state.setdefault("clip_takes", {})
     max_takes = int(spec.get("max_takes", 3))

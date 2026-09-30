@@ -3,8 +3,9 @@ import { useUiTranslation } from '../../i18n'
 import { openSceneOutput } from '../../lib/sceneOutput'
 import { sceneOutput } from '../video-editor/shotBoardModel'
 import { useStore } from '../../stores/useStore'
-import { applyMusicProductionTake, getMusicProduction, listMusicProductions, retakeMusicProductionShot } from './api'
+import { applyMusicProductionTake, getMusicProduction, listMusicProductions, lockMusicProductionShot, requestMusicProductionShot, retakeMusicProductionShot, reviewMusicProductionShot, undoMusicProductionShot } from './api'
 import { MusicProductionGrid } from './MusicProductionGrid'
+import { ReviewMode } from './ReviewMode'
 import type { MusicProductionCard, MusicProductionShot } from './types'
 import { requestOpenMontage } from './useOpenProductionMontage'
 
@@ -21,6 +22,7 @@ function MusicProductionsBody({ workspace, onClose }: { workspace: string; onClo
   const [montage, setMontage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -56,6 +58,12 @@ function MusicProductionsBody({ workspace, onClose }: { workspace: string; onClo
     }).finally(() => setBusy(false))
   }
 
+  const refresh = async () => {
+    if (!selected) return
+    const body = await getMusicProduction(workspace, selected)
+    setShots(body.shots || [])
+  }
+
   return <div className="flex h-full min-h-0 flex-col">
     <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
       <h2 className="text-sm font-medium text-text-primary">{t('musicProductions.title')}</h2>
@@ -66,9 +74,14 @@ function MusicProductionsBody({ workspace, onClose }: { workspace: string; onClo
     <div className="min-h-0 flex-1 overflow-auto p-4">
       {error ? <p className="mb-3 text-xs text-red-400">{error}</p> : null}
       {selected ? <div className="flex flex-col gap-3">
-        <button type="button" className="self-start rounded border border-border px-2 py-1 text-[11px] hover:bg-bg-hover" onClick={() => setSelected(null)}>
-          {t('musicProductions.back')}
-        </button>
+        <div className="flex gap-2">
+          <button type="button" className="self-start rounded border border-border px-2 py-1 text-[11px] hover:bg-bg-hover" onClick={() => { setSelected(null); setReviewing(false) }}>
+            {t('musicProductions.back')}
+          </button>
+          <button type="button" className="self-start rounded border border-border px-2 py-1 text-[11px] hover:bg-bg-hover" onClick={() => setReviewing(true)}>
+            {t('musicProductions.review')}
+          </button>
+        </div>
         <MusicProductionGrid
           workspace={workspace}
           shots={shots}
@@ -84,6 +97,23 @@ function MusicProductionsBody({ workspace, onClose }: { workspace: string; onClo
         />
       </div> : <ProductionList cards={cards} onOpen={open} />}
     </div>
+    {reviewing && selected ? <ReviewMode
+      workspace={workspace}
+      shots={shots}
+      busy={busy}
+      onClose={() => setReviewing(false)}
+      onApprove={shot => run(async () => { await reviewMusicProductionShot(workspace, selected, shot, 'approved'); await refresh() })}
+      onRequest={(shot, instruction) => requestMusicProductionShot(workspace, selected, shot, instruction, false)}
+      onApply={(shot, instruction) => run(async () => { await requestMusicProductionShot(workspace, selected, shot, instruction, true); await refresh() })}
+      onOpenScene={sceneName => { void openSceneOutput(sceneOutput(workspace, sceneName)) }}
+      onUseTake={(shot, takeFile) => run(async () => { await applyMusicProductionTake(workspace, selected, shot, takeFile); await refresh() })}
+      onUndo={shot => {
+        const historyId = shots.find(item => item.key === shot)?.review?.history_id
+        if (!historyId) return
+        run(async () => { await undoMusicProductionShot(workspace, selected, shot, historyId); await refresh() })
+      }}
+      onLock={(shot, locked) => run(async () => { await lockMusicProductionShot(workspace, selected, shot, locked); await refresh() })}
+    /> : null}
   </div>
 }
 

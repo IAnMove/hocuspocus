@@ -294,6 +294,8 @@ class Production:
         return _judge_take(self, w, name, take, vocals)
 
     def scenes(self, spec: dict, windows: list[dict]) -> None:
+        from services.production_shot_review import without_locked
+        windows = without_locked(self, windows)
         score = self.score()
         from services.production_preview import ensure_caption_contrast
         ensure_caption_contrast(self, spec, windows, score)

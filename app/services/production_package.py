@@ -111,6 +111,8 @@ def manifest_rows(state: dict, spec: dict, segs: list[tuple[dict, float, float]]
 
 
 def write_manifest(root: Path, production_id: str, title: str, rows: list[dict], montage_file: str | None) -> str:
+    from services.production_shot_review import with_review_fields
+    rows = with_review_fields(root, production_id, rows)
     name = production_id + MANIFEST_SUFFIX
     body = {"version": 1, "production_id": production_id, "title": title, "montage": montage_file, "shots": rows}
     target, temporary = root / name, root / (name + ".tmp")

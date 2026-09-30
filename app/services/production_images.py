@@ -126,6 +126,8 @@ def _land_frames(production: Any, jobs: dict, frames: dict, failures: dict) -> N
 def frames(production: Any, spec: dict, windows: list[dict]) -> None:
     """One start frame per H3 shot. A missing frame is asked for again (new job; a smaller picture after an
     out-of-memory) up to FRAME_ATTEMPTS times; what still fails is reported in ``frame_failures``."""
+    from services.production_shot_review import without_locked
+    windows = without_locked(production, windows)
     frames_state = production.state.setdefault("frames", {})
     failures = production.state.setdefault("frame_failures", {})
     for _round in range(_host().FRAME_ATTEMPTS):

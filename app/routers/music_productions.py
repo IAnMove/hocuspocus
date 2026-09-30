@@ -118,6 +118,26 @@ def create_music_productions_router(
         from services.production_commands import holding_edit
         return holding_edit(music_production, workspace, production_id)
 
+    def review_http(error: Exception) -> None:
+        code = getattr(error, "code", None) or "shot_review_failed"
+        status = 404 if code == "production_not_found" else 422
+        raise HTTPException(status_code=status, detail={"code": code, "message": str(error), "retryable": False}) from error
+
+    def open_production(workspace: str, production_id: str):
+        production_cls, mcp = studio()
+        _root_path, state = state_of(workspace, production_id)
+        production = production_cls(workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=mcp)
+        return production, _spec(state)
+
+    def preview_production(workspace: str, production_id: str):
+        from services.music_production import Production
+        _root_path, state = state_of(workspace, production_id)
+        production = Production(
+            workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir or (lambda: ""),
+            mcp=lambda *_args, **_kwargs: {},
+        )
+        return production, _spec(state)
+
     @router.get("/api/v1/music-productions")
     def list_music_productions(workspace: str):
         root = _root(workspace_dir, workspace)
@@ -174,5 +194,68 @@ def create_music_productions_router(
                 )
             except ShotEditError as error:
                 raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/review")
+    def post_review(production_id: str, shot: str, workspace: str, body: dict):
+        from services.production_shot_review import ReviewError, review_from_input
+        root, _state = state_of(workspace, production_id)
+        payload = body or {}
+        try:
+            return review_from_input(root, {
+                "production_id": production_id, "shot": shot, "status": payload.get("status"), "note": payload.get("note"),
+            })
+        except ReviewError as error:
+            review_http(error)
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/lock")
+    def post_lock(production_id: str, shot: str, workspace: str, body: dict):
+        from services.production_shot_review import ReviewError, lock_from_input
+        root, _state = state_of(workspace, production_id)
+        try:
+            return lock_from_input(root, {"production_id": production_id, "shot": shot, "locked": (body or {}).get("locked")})
+        except ReviewError as error:
+            review_http(error)
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/redo")
+    def post_redo(production_id: str, shot: str, workspace: str, body: dict):
+        from services.production_shot_edit import ShotEditError
+        from services.production_shot_redo import redo_from_input
+        from services.production_shot_review import ReviewError
+        payload = {"shot": shot, **(body or {})}
+        with hold_edit(workspace, production_id):
+            production, spec = open_production(workspace, production_id)
+            try:
+                return redo_from_input(production, spec, payload)
+            except (ReviewError, ShotEditError) as error:
+                review_http(error)
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/request")
+    def post_request(production_id: str, shot: str, workspace: str, body: dict):
+        from services.production_shot_edit import ShotEditError
+        from services.production_shot_request import request_from_input
+        from services.production_shot_review import ReviewError
+        payload = body or {}
+        data = {"shot": shot, "instruction": payload.get("instruction"), "apply": payload.get("apply", False)}
+        try:
+            if data["apply"] is True:
+                with hold_edit(workspace, production_id):
+                    production, spec = open_production(workspace, production_id)
+                    return request_from_input(production, spec, data)
+            production, spec = preview_production(workspace, production_id)
+            return request_from_input(production, spec, data)
+        except (ReviewError, ShotEditError) as error:
+            review_http(error)
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/undo")
+    def post_undo(production_id: str, shot: str, workspace: str, body: dict):
+        from services.production_shot_edit import ShotEditError
+        from services.production_shot_redo import undo_from_input
+        from services.production_shot_review import ReviewError
+        with hold_edit(workspace, production_id):
+            production, spec = open_production(workspace, production_id)
+            try:
+                return undo_from_input(production, spec, {"shot": shot, "history_id": (body or {}).get("history_id")})
+            except (ReviewError, ShotEditError) as error:
+                review_http(error)
 
     return router
