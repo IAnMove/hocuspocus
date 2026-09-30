@@ -49,10 +49,17 @@ def beat_plan(duration: float, bpm: float) -> list[dict]:
     bar = 240.0 / (bpm if bpm and bpm > 0 else 120.0)
     edges = [0.0]
     cursor = 0.0
+    # A full bar reserved for close erases the reveal when close's 12 % is shorter than a bar
+    # (16 s at 60 BPM is four bars: presentation/tension/escalation/close each took one, reveal got 0).
+    close_room = min(bar, duration * BEAT_SHARE[TRAILER_BEATS[-1]])
     for name in TRAILER_BEATS[:-1]:
         cursor += duration * BEAT_SHARE[name]
         snapped = round(cursor / bar) * bar if bar < duration / 10 else cursor
-        edges.append(round(min(max(snapped, edges[-1] + bar), duration - bar), 3))
+        step = min(bar, duration * BEAT_SHARE[name])
+        lo, hi = edges[-1] + step, duration - close_room
+        if lo > hi:
+            lo = edges[-1]
+        edges.append(round(min(max(snapped, lo), hi), 3))
     edges.append(round(float(duration), 3))
     return [{"beat": name, "start": edges[i], "end": edges[i + 1]} for i, name in enumerate(TRAILER_BEATS)]
 

@@ -33,6 +33,19 @@ def test_the_beats_share_the_duration_and_land_on_bars():
     assert beat_plan(8, 0)[-1]["end"] == 8                                      # degenerate input still covers the song
 
 
+def test_a_short_slow_trailer_keeps_every_beat_including_the_reveal():
+    """16 s at 60 BPM is the brief minimum with a cinematic tempo: four 4 s bars.
+    Reserving a full bar for close used to pin reveal start to close start."""
+    for duration, bpm in ((16, 60), (10, 60), (16, 120), (30, 50), (8, 120)):
+        beats = beat_plan(duration, bpm)
+        assert [b["beat"] for b in beats] == list(BEAT_SHARE)
+        assert beats[0]["start"] == 0 and beats[-1]["end"] == duration
+        assert all(left["end"] == right["start"] for left, right in zip(beats, beats[1:]))
+        assert all(b["end"] - b["start"] > 0.05 for b in beats), (duration, bpm, beats)
+    reveal = next(b for b in beat_plan(16, 60) if b["beat"] == "reveal")
+    assert reveal["end"] - reveal["start"] >= 16 * BEAT_SHARE["reveal"] - 0.05
+
+
 def test_quick_cuts_accelerate_and_add_up():
     cuts = cut_lengths(18.0, 7)
     assert abs(sum(cuts) - 18.0) < 0.01 and cuts == sorted(cuts, reverse=True) and cuts[0] > 2 * cuts[-1] * 0.9
@@ -62,6 +75,16 @@ def test_generated_shots_of_a_trailer_are_long_enough_to_be_worth_a_clip():
             end = by_key[order[index + 1]]["t0"] if order[index + 1] else 60.0
             assert end - by_key[key]["t0"] >= MIN_H3_S - 1e-6, key
             assert abs(by_key[key]["t1"] - end) < 1e-6, key
+
+
+def test_a_short_slow_trailer_does_not_drop_the_reveal_from_the_cut():
+    planned = plan_shots(_spec(song={"lyrics": "", "caption": "score", "duration": 16, "bpm": 60}))
+    reveal = next(shot for shot in planned["shots"] if shot.get("beat") == "reveal")
+    assert reveal["t1"] - reveal["t0"] > 0.05
+    score = {"duration": 16.0, "bpm": 60, "beat": 1.0, "lines": []}
+    windows = shot_windows(planned, score)
+    segs = segments(windows, score, lambda key: True, planned.get("fill") or [])
+    assert any(shot.get("key") == "reveal" and end - start > 0.05 for shot, start, end in segs)
 
 
 def test_a_held_trailer_beat_is_generated_for_its_full_span_not_four_seconds():
