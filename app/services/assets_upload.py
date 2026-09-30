@@ -12,13 +12,14 @@ import hashlib
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from fastapi import HTTPException
 
 from services.asset_catalog import _stable_unmanaged_id
-from services.core_upload import extract_upload, save_upload
+from services.core_upload import MAX_UPLOAD_BYTES, extract_upload, save_upload, unique_upload_name
 from services.media_paths import MediaPathNotAllowed, _KIND_EXTENSIONS, resolve_permitted_media_path
 from services.wangp_submission import wangp_media_url
 
@@ -57,6 +58,7 @@ def command_catalog() -> list[dict]:
         "properties": {
             "workspace": {"type": "string", "minLength": 1, "maxLength": 120},
             "source": {"type": "string", "minLength": 1, "maxLength": 2000},
+            "copy_to_workspace": {"type": "boolean", "const": True},
         },
         "required": ["workspace", "source"],
     }
@@ -67,9 +69,10 @@ def command_catalog() -> list[dict]:
         "domain": "assets",
         "mutation": True,
         "description": (
-            "Store one image, audio, or video asset and return its asset id plus canonical URL. "
+            "Store one image, audio, video or GLB model and return its asset id plus canonical URL. "
             f"Send filename and data_base64 (at most {MAX_ASSETS_UPLOAD_BYTES} decoded bytes) "
             "or source, a file already inside this workspace or the uploads root. "
+            "For source, optional copy_to_workspace:true imports a copy (at most 500 MB) into the selected workspace. "
             "The URL is accepted directly by image_refs, image_start, image_end, and audio_guide. "
             "Reuse intent_id on transport retries. Does not call POST /api/v1/upload and does not use the GPU."
         ),
@@ -104,12 +107,12 @@ def _kind(extension: str) -> str:
     for kind, extensions in _KIND_EXTENSIONS.items():
         if extension in extensions:
             return kind
-    raise AssetsUploadError("unsupported_media", "Use an image, audio, or video file", 422)
+    raise AssetsUploadError("unsupported_media", "Use an image, audio, video or GLB file", 422)
 
 
 def _media_error(error: MediaPathNotAllowed) -> AssetsUploadError:
     if str(error) == "Media type is not allowed":
-        return AssetsUploadError("unsupported_media", "Use an image, audio, or video file", 422)
+        return AssetsUploadError("unsupported_media", "Use an image, audio, video or GLB file", 422)
     return AssetsUploadError("path_not_allowed", "Media path is not allowed", 422)
 
 
@@ -219,7 +222,9 @@ def _payload_mode(payload: dict) -> str:
     keys = set(payload)
     if keys == _DATA_KEYS:
         return "data"
-    if keys == _SOURCE_KEYS:
+    if keys == _SOURCE_KEYS or keys == _SOURCE_KEYS | {"copy_to_workspace"}:
+        if "copy_to_workspace" in payload and payload["copy_to_workspace"] is not True:
+            raise AssetsUploadError("invalid_command", "copy_to_workspace must be true or omitted", 422)
         return "source"
     raise AssetsUploadError(
         "invalid_command",
@@ -282,6 +287,21 @@ def _remember(folder: str, intent_id: str, digest: str, result: dict) -> None:
     os.replace(temporary, path)
 
 
+def _copy_into_workspace(source: str, folder: str) -> str:
+    if os.path.getsize(source) > MAX_UPLOAD_BYTES:
+        raise AssetsUploadError("payload_too_large", "File too large (max 500 MB)", 413)
+    target = Path(folder) / unique_upload_name(Path(source).name)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    try:
+        shutil.copyfile(source, temporary)
+        if temporary.stat().st_size > MAX_UPLOAD_BYTES:
+            raise AssetsUploadError("payload_too_large", "File too large (max 500 MB)", 413)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return str(target)
+
+
 def upload_asset(arguments, *, workspace_dir, uploads_dir) -> dict:
     intent_id, payload = _invocation(arguments)
     mode = _payload_mode(payload)
@@ -297,6 +317,8 @@ def upload_asset(arguments, *, workspace_dir, uploads_dir) -> dict:
         path = _store_upload(folder, _decode_base64(payload["data_base64"]), _original_name(payload["filename"]))
     else:
         path = _existing_file(payload["source"], workspace, uploads_root, folder)
+        if payload.get("copy_to_workspace"):
+            path = _copy_into_workspace(path, folder)
     result = _canonical(path, workspace, uploads_root, folder)
     _remember(folder, intent_id, _digest(payload), result)
     return result

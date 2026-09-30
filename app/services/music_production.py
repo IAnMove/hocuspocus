@@ -535,6 +535,8 @@ class Production:
             self.save()
         self.log(f"frames: {len(frames)}")
         self.state["frames_sheet"] = make_frames_sheet(self.root, frames, f"{self.id}-frames.jpg")
+        from services.production_subject_count import note_media
+        note_media(self, spec, windows, "frame")
         absent = [w["key"] for w in windows if w["kind"] == "h3" and w["key"] not in frames]
         if absent:
             raise ProductionError("frames_incomplete", "no start frame for " + ", ".join(f"{key} ({failures.get(key, 'no output')})" for key in absent[:6]))
@@ -635,6 +637,8 @@ class Production:
             if retry and not any(names.values()):
                 sleep_until(getattr(self, "_cancel", None), pause, time.sleep)
             pending = retry
+        from services.production_subject_count import note_media
+        note_media(self, spec, windows, "clip")
 
     def judge_take(self, w: dict, name: str | None, take: int, vocals: str | None) -> bool:
         """Record one take; True when the clip needs no more takes. Sung shots keep the best lip-sync r; other shots keep the best visual score."""
@@ -998,6 +1002,10 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
             "animatic_warnings": state.get("animatic_warnings") or None,
             "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:],
             "timing": timing_summary(state), "usage": usage_summary(state), "editable": editable_summary(state)}
+    from services.production_subject_count import mismatches
+    counted = mismatches(state)
+    if counted:
+        summary["subject_counts"] = counted
     summary.update(review_for_status(state, root))
     return summary
 

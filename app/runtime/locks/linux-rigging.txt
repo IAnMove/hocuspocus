@@ -9,7 +9,7 @@ antlr4-python3-runtime==4.9.3
 asttokens==3.0.2
 attrs==26.1.0
 blinker==1.9.0
-bpy==4.2.0
+bpy==4.2.22
 certifi==2026.7.22
 charset-normalizer==3.5.1
 click==8.5.0

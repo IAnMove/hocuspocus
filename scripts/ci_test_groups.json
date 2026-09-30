@@ -93,6 +93,7 @@
         "tests/test_minimax_song_writer_prompt.py",
         "tests/test_model3d_external.py",
         "tests/test_model3d_commands.py",
+        "tests/test_model3d_rig_commands.py",
         "tests/test_model3d_compose.py",
         "tests/test_model_cache_job_guards.py",
         "tests/test_model_selection_persistence.py",
@@ -114,6 +115,7 @@
         "tests/test_qa_provenance.py",
         "tests/test_quick_video_batches.py",
         "tests/test_rembg_adapter.py",
+        "tests/test_runtime_bpy_metadata.py",
         "tests/test_runtime_profiles.py",
         "tests/test_scail2_dedicated_model.py",
         "tests/test_scene3d_profiles.py",
@@ -242,6 +244,7 @@
         "tests/test_h3_window_planner.py",
         "tests/test_hunyuan_dit_cache.py",
         "tests/test_hunyuan3d_windows_patch.py",
+        "tests/test_humanoid_animation.py",
         "tests/test_image_command_restart_boundaries.py",
         "tests/test_image_generation_spec.py",
         "tests/test_krea2_features.py",
@@ -286,8 +289,8 @@
         "tests/test_production_run.py",
         "tests/test_production_review_checks.py",
         "tests/test_production_scene_retry.py",
-      "tests/test_production_scene3d.py",
-      "tests/test_production_resource_gate.py",
+        "tests/test_production_scene3d.py",
+        "tests/test_production_resource_gate.py",
         "tests/test_production_style_presets.py",
         "tests/test_production_takes.py",
         "tests/test_production_package.py",
@@ -383,7 +386,8 @@
         "tests/test_production_cancel.py",
         "tests/test_music_productions_router.py",
         "tests/test_production_clip_qa.py",
-        "tests/test_production_cast_portrait.py"
+        "tests/test_production_cast_portrait.py",
+        "tests/test_production_subject_count.py"
       ]
     }
   ],
@@ -600,7 +604,8 @@
         "tests/test_production_preview.py",
         "tests/test_production_scene_retry.py",
         "tests/test_production_clip_qa.py",
-        "tests/test_production_cast_portrait.py"
+        "tests/test_production_cast_portrait.py",
+        "tests/test_production_subject_count.py"
       ]
     },
     {
@@ -703,6 +708,22 @@
       "paths": [
         "tests/test_production_cast_portrait.py",
         "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_subject_count.py",
+      "paths": [
+        "tests/test_production_subject_count.py",
+        "tests/test_music_production.py",
+        "tests/test_qa_people.py",
+        "tests/test_production_timing.py"
+      ]
+    },
+    {
+      "prefix": "app/services/qa_people.py",
+      "paths": [
+        "tests/test_qa_people.py",
+        "tests/test_production_subject_count.py"
       ]
     }
   ]

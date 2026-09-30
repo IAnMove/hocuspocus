@@ -81,7 +81,7 @@ While it runs:
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 
-A start frame that does not arrive is asked for again (a new job, and a smaller picture after an out-of-memory) twice per run; if it still fails the run stops as `failed` with `frames_incomplete` and `production.status` lists `frame_failures`. A cast entry may set `count` (how many distinct subjects that reference image shows, default 1); the frame prompt then says "Exactly N distinct subjects, no duplicated characters", because a sheet with several views makes the model draw the character several times. Each cast member also gets a second portrait, one full-body subject on a plain background (`single_prompt`, or that phrase derived from `sheet_prompt`). Start frames use the portrait instead of the sheet. A group reference is composed from those portraits, not from the sheets. The six-seed check that a one-person frame no longer duplicates the character still needs a GPU pass. A group reference (several characters in one image) is the way to keep three references under the image model's memory limit.
+A start frame that does not arrive is asked for again (a new job, and a smaller picture after an out-of-memory) twice per run; if it still fails the run stops as `failed` with `frames_incomplete` and `production.status` lists `frame_failures`. A cast entry may set `count` (how many distinct subjects that reference image shows, default 1); the frame prompt then says "Exactly N distinct subjects, no duplicated characters", because a sheet with several views makes the model draw the character several times. Each cast member also gets a second portrait, one full-body subject on a plain background (`single_prompt`, or that phrase derived from `sheet_prompt`). Start frames use the portrait instead of the sheet. A group reference is composed from those portraits, not from the sheets. The six-seed check that a one-person frame no longer duplicates the character still needs a GPU pass. After the frames and again after the clips, that declared count is compared with the people in the picture. A group of 4 that comes out as 1 is `subject_count` on `production.status` (`subject_counts`, with the shot, the stage, the expected count and the detected count). The comparison uses the same CPU weights as `qa.people` (`pose/yolox_l.onnx`). When those weights are absent no count is invented. `qa.people` itself returns retake when `max_people` is above or below `expected`. A group reference (several characters in one image) is the way to keep three references under the image model's memory limit.
 
 Lip-sync is measured on the sung span.
 When an H3 clip fails, its scene holds that shot's start frame and `production.status` lists the shot key in `held`.
@@ -240,6 +240,15 @@ verdict says so, using `retake_keys` unchanged. Poll `production.status` with `w
 
 ## Native Video 3D shots
 
+Video 3D automatically separates its fallback ground from authored surfaces
+by 2 mm and applies a depth bias, including when the projected-floor material
+changes. Floor/wall image surfaces receive a stable depth priority in document
+order. Preview and export share this protection; it is independent of the N64
+look and requires no per-shot adjustment. For a GLB set with its own floor,
+`environment.floorStyle: "none"` also removes the redundant fallback ground.
+Thickness alone does not fix coplanar top faces. Intersecting or duplicated
+faces inside an imported GLB still require correcting that asset's geometry.
+
 Use explicit `shots` with `kind: "scene3d"`. `scene3d` takes exactly one native
 `template` id or a complete Video 3D `document`. A template also needs `subject`
 (a workspace GLB URL) or explicit `slots`. The runner uses the existing UI template
@@ -305,6 +314,38 @@ must propose a cleanup and wait for the user's approval before resuming.
 These opt-in checks leave other instances untouched. They require the named
 local commands when enabled; absent commands fail before admission.
 
+
+### Rig an existing model through MCP
+
+Import accepted GLBs with `assets.upload` using `filename` and `data_base64`
+(up to 8 MB), just like other workspace assets. For larger media already in
+the app's uploads root, use `input: {workspace, source, copy_to_workspace: true}`
+to import a copy up to 500 MB; the original remains intact. The returned
+workspace URL can be used directly by Video 3D. Omitting the copy flag retains
+the existing reference-only behavior; image/audio tools still reject GLB refs.
+
+Use `model3d.rig` with `{version: 1, intent_id, input: {workspace,
+source: "hero.glb", engine: "unirig", rig_profile: "humanoid",
+animations: ["idle", "walk"], seed: 64}}`. Poll `model3d.rig.status` with
+`{version: 1, input: {workspace, job_id}}`. These commands wrap the native
+`/api/v1/rig/generate` and `/api/v1/rig/status/{job_id}` contracts; they reuse
+the scheduler, short-lived workers and workspace publication. A retry with
+the same intent/body replays the original admission; a changed body conflicts.
+The source stays intact and the result is a new GLB with exact clip names.
+
+Install UniRig from HocusPocus's Advanced menu using `rigging_install.js`.
+`GET /api/v1/rig/capabilities` reports installation before any generation.
+UniRig predicts joints and skin weights. With `rig_profile: "humanoid"`, the
+`idle`, `walk` and `wobble` clips resolve recognizable upright Y-up pelvis,
+torso and limb branches and rotate both arms and legs around their bind pose.
+They preserve source geometry, skin weights and textures, without scale or
+whole-body bounce channels. Optional `animation_bpm` (60–180, default 120)
+sets the walk/dance loop tempo. Inspect an exported pilot: generated skinning
+can still deform poorly and these loops do not provide foot-contact IK.
+Results expose `animation_mode`, `humanoid_joints`, `articulated_clips` and
+`animation_warnings`. Unrecognized topology and other clip IDs explicitly
+report body-chain fallback. `engine: "procedural"` remains CPU-only and
+constructs an approximate single chain rather than an anatomical rig.
 
 ### N64-inspired render look
 
