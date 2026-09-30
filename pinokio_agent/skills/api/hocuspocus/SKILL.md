@@ -9,6 +9,21 @@ description: Generate Qwen background plates and export editable Video 3D shots 
 
 `clients/native.py` provides JSON HTTP requests and a fixed-camera backplate document.
 Pass the discovered base URL, workspace, durable image URL and animated GLB URL at runtime.
+`backplate_shot(key, image_url, actor_url, t0=..., duration=..., clip=..., start=..., end=...)`
+wraps the document as an authored `kind:"scene3d"` production shot. Choose the clip index
+and name from the actual GLB; Walking/Idle defaults describe the sample asset only.
+
+## PS1 style
+
+Use `style:{preset:"ps1-backplates"}` and explicit authored shots. Generate each empty
+background once with Qwen Image 2.1, inspect it, and reuse it across actor movements.
+The LLM chooses places, palette, camera perspective per image, actors, GLB clips,
+paths, light, durations and cuts. Keep the camera fixed within a shot.
+The production validator rejects H3, lip-sync, automatic shot planning, moving cameras and rendered sets
+with `invalid_backplate_shot` before work starts; stills may be used for an animatic.
+An existing workspace song can be supplied as `song.file` to avoid music generation.
+Use a complete authored spec with `production.run`; the brief-only `production.plan`
+helper and internal chat have no dedicated PS1 action. This skill is for tool-capable external agents.
 
 ## Operations
 

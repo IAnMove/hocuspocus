@@ -142,6 +142,35 @@
           }
         }
       }
+    },
+    "ps1-backplates": {
+      "image": "Empty uninhabited pre-rendered environment plate for a late-1990s console adventure game. Fixed elevated three-quarter camera, wide 16:9 composition, clear walkable foreground, chunky beveled architecture, painted low-resolution textures, baked shadows and subtle dithering. No characters, people, silhouettes, text or logos. Match the authored actor camera perspective and light direction.",
+      "video": "A fixed Qwen background image with animated 3D GLB characters moving through the painted environment. Keep the environment still and the camera fixed within each shot; cut to a new authored plate for another view. No on-screen singing or lip-sync. Use native scene3d documents; no H3 generation or rendered 3D set.",
+      "image_model": "qwen_image_21",
+      "image_steps": 40,
+      "singer": false,
+      "lyric_template": "social-caption",
+      "lyric_style": {
+        "font": "mono",
+        "size": 3.4,
+        "y": 88,
+        "maxWidth": 84,
+        "color": "#F4EEE2",
+        "box": {
+          "kind": "solid",
+          "color": "#111927",
+          "opacity": 0.94,
+          "padding": 0.35
+        }
+      },
+      "finish": {
+        "finish": {
+          "grade": {
+            "contrast": 0.02,
+            "saturation": -0.02
+          }
+        }
+      }
     }
   }
 }
