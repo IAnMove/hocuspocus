@@ -258,11 +258,25 @@ factory and document parser; it does not build a separate renderer.
 ```
 
 Overrides include `camera`, `atmos`, `environment`, `light`, `dressing`,
-`pixelWorld`, `width`, `height` and `fps`. `subject` also accepts `clip` (an authored
+`pixelWorld`, `rhythm`, `width`, `height` and `fps`. `subject` also accepts `clip` (an authored
 GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
 `grounded`. Explicit `slots` use the native Video 3D slot fields. A rigid GLB can
 turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
+
+For a musical performance, set the document's `rhythm` to
+`{"bpm":120,"offset":24,"cameraPulse":0.025,"lightPulse":0.3}` and add
+`"rhythm":{"beats":1,"phase":0,"bounce":0.12,"sway":0.06,"yaw":0.12,"pulse":0.025}`
+to each explicit model slot that should perform. `offset` adds seconds to the
+local scene clock: use the shot's song start time minus the detected beat phase
+to keep successive cuts on the same grid. `beats` is beats per cycle; `phase`
+is a cycle offset. Bounce/sway are meters, yaw is radians and pulse is a scale
+fraction. Actors can use different phases and speeds while sharing the song.
+The camera makes a small dolly pulse and light brightens at each downbeat;
+neither replaces the authored camera/travel. Everything is sampled from time,
+so preview, export and backward seeking agree without an audio model or rig.
+This is rigid performance, not skeletal dancing or lip-sync. Invalid rhythm
+values fail native document import rather than entering the renderer.
 
 Each export covers its actual cut duration, defaults to 1280×720 at 24 fps, and
 uses `scenes.world3d.export` followed by `scenes.world3d.export.receipt`. Durable

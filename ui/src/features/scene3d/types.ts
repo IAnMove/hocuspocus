@@ -166,6 +166,7 @@ export type Scene3DSourceRef = {
 }
 
 export type Scene3DSlot = {
+  rhythm?: import('./rhythm').Scene3DSlotRhythm
   character?: { id: string; name: string; kitRef?: import('../../lib/characterVoice').CharacterKitRef;
     libraryRevision?: number; voice?: import('../../lib/characterVoice').CharacterVoice }
   id: string
@@ -226,6 +227,7 @@ export type Scene3DLight = {
 }
 
 export type Scene3DDocument = {
+  rhythm?: import('./rhythm').Scene3DRhythm
   /** Whole-frame low-resolution, flat-shaded, close-fog look for authored models. */
   renderLook?: 'n64'
   soundtrack?: Scene3DSoundtrack[]
