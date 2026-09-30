@@ -1,3 +1,5 @@
+REPARTO Y ESTADO ACTUAL: ver docs/development/PRODUCTION_WORK_BOARD.md (tablero con dueños, ramas y archivos exclusivos; manda sobre esta cabecera).
+
 ESTADO A 2026-09-30 (comprobado contra origin/development; el resto del documento es el plan original)
 Hecho y mezclado: P0 1-5 completo (#624: panel Music productions, production.shot.use_take, production.shot.update,
 production.song.use, production.cancel); 24 en su primera versión (#620/#622/#626: kind scene3d exportado con el worker de
