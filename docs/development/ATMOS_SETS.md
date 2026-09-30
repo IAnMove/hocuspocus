@@ -80,6 +80,20 @@ Templates: `atmos-waterfall-wide`, `atmos-waterfall-low`. Both last 6 seconds at
 
 A software export of `atmos-waterfall-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 39869 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 3 — `atmos-snow`
+
+Templates: `atmos-snow-wide`, `atmos-snow-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Pines, footprints and the cabin stay outside that circle and outside the lane to the camera.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `day`, `blue` | `blue` |
+| `palette` | `frost`, `twilight` | `frost` |
+| `variant` (`atmos.flakes`) | 0–80 | 36 |
+
+`blue` shows the aurora and two falling flake layers. `day` hides the aurora. There is no grass field and no shaft, depth-of-field, or grade pass. Pines use the grass count (8 preview, 14 export) and the far flake layer is twice the near count. Without WebGL2 the set is a flat snowfield. The library setting is `snow`.
+
+A software export of `atmos-snow-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 26927 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:

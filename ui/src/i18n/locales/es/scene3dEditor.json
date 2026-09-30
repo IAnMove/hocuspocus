@@ -1523,17 +1523,26 @@
     "atmos-waterfall-low": {
       "title": "Cascada · cámara baja",
       "description": "La misma cascada desde el agua, con la cámara baja mirando la cortina."
+    },
+    "atmos-snow-wide": {
+      "title": "Bosque nevado · plano abierto",
+      "description": "Bosque nevado procedural. El hueco del personaje queda en la nieve, delante de los pinos."
+    },
+    "atmos-snow-low": {
+      "title": "Bosque nevado · cámara baja",
+      "description": "El mismo bosque desde la nieve, mirando un cielo de hora azul y la luz cálida de una cabaña."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada" },
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "blue": "Hora azul" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "frost": "Escarcha", "twilight": "Crepúsculo" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
-    "flow": "Caudal"
+    "flow": "Caudal",
+    "flakes": "Copos"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

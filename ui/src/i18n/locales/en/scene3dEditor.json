@@ -1523,17 +1523,26 @@
     "atmos-waterfall-low": {
       "title": "Waterfall · low",
       "description": "The same waterfall from the water, with a low camera looking up the sheet."
+    },
+    "atmos-snow-wide": {
+      "title": "Snow forest · wide",
+      "description": "A procedural snow forest. The character spot stays on open snow, in front of the pines."
+    },
+    "atmos-snow-low": {
+      "title": "Snow forest · low",
+      "description": "The same forest from the snow, looking toward a blue-hour sky and a warm cabin light."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "blue": "Blue hour" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "frost": "Frost", "twilight": "Twilight" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
-    "flow": "Flow"
+    "flow": "Flow",
+    "flakes": "Flakes"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
