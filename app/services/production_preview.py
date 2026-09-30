@@ -7,6 +7,7 @@ finished cut. Caption contrast is measured with Pillow against one real frame.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from services.music_production import Production, ProductionError, h3_frames_for
@@ -441,6 +442,42 @@ def animatic_report(spec: Any, windows: list, score: Any, state: Any) -> list[di
         *image_repeated(windows, state.get("frames") or {}),
         *dead_time_warnings(windows, _duration(score.get("duration")), spec.get("fill") or []),
     ]
+
+
+def _workspace_file(root, name: object) -> Path | None:
+    if not isinstance(name, str) or not name or Path(name).name != name:
+        return None
+    path = Path(root) / name
+    return path if path.is_file() else None
+
+
+def snapshot_cut_artifacts(root, state: dict) -> dict[str, dict[str, bytes | str]]:
+    """Bytes of the finished montage and contact sheet, keyed by state field."""
+    kept: dict[str, dict[str, bytes | str]] = {}
+    for key in ("montage_file", "contact_sheet"):
+        path = _workspace_file(root, state.get(key))
+        if path is None:
+            continue
+        kept[key] = {"name": path.name, "data": path.read_bytes()}
+    return kept
+
+
+def restore_cut_artifacts(root, state: dict, kept: dict[str, dict[str, bytes | str]]) -> None:
+    """Put the finished montage and contact sheet back after a preview export.
+
+    ``montage()`` rebuilds the timeline in place (same ``montage_file``, same
+    ``{id}-contact.jpg``). A later ``through: animatic`` on a completed cut
+    must not keep those preview bytes as the published / editable artifacts.
+    """
+    for key, item in kept.items():
+        name = item.get("name")
+        data = item.get("data")
+        if not isinstance(name, str) or not isinstance(data, (bytes, bytearray)):
+            continue
+        if Path(name).name != name:
+            continue
+        (Path(root) / name).write_bytes(data)
+        state[key] = name
 
 
 def claim_animatic_video(state: dict, previous: str | None) -> None:
