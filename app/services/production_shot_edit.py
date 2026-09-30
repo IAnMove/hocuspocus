@@ -129,7 +129,7 @@ def export_scene(production: Any, key: str, document: dict, dur: float, clip_fil
     return video
 
 
-def replace_montage_clip(production: Any, key: str, video_file: str) -> None:
+def replace_montage_clip(production: Any, key: str, video_file: str, expected_revision: int | None = None) -> None:
     """Replace one clip source. Origins already on the montage are not rewritten."""
     montage_file = production.state.get("montage_file")
     if not montage_file:
@@ -144,6 +144,8 @@ def replace_montage_clip(production: Any, key: str, video_file: str) -> None:
     if not found:
         raise ShotEditError("montage_clip_missing", f"the montage has no clip {key}")
     revision = current.get("revision") or montage.get("revision")
+    if expected_revision is not None:
+        revision = expected_revision
     saved = production.mcp("montages.save", {
         "version": 1, "intent_id": f"{production.id}-clip-{key}-{int(time.time())}",
         "input": {"workspace": production.ws, "montage": montage, "file": montage_file, "expected_revision": revision},
@@ -202,7 +204,7 @@ def _restore(production: Any, spec: dict, key: str, checkpoint: dict[str, Any]) 
     production.save()
 
 
-def _publish(production: Any, spec: dict, key: str) -> dict[str, Any]:
+def _publish(production: Any, spec: dict, key: str, expected_revision: int | None = None) -> dict[str, Any]:
     from services.music_production import scene_fingerprint
     shot, start, end, score = _segment(production, spec, key)
     style, stills = spec.get("style") or {}, spec.get("stills") or {}
@@ -213,10 +215,23 @@ def _publish(production: Any, spec: dict, key: str) -> dict[str, Any]:
     lyric = lyric_for(score.get("lines") or [], start, end)
     scene = save_scene_revision(production, key, document, lyric, _note(shot))
     video = export_scene(production, key, document, dur, clip_file, fingerprint)
-    replace_montage_clip(production, key, video)
+    replace_montage_clip(production, key, video, expected_revision)
     rewrite_manifest(production, spec)
     production.save()
     return {"shot": key, "clip": clip_file, "scene": scene, "video": video}
+
+
+def remount_shot(production: Any, spec: dict, key: str, *, expected_revision: int | None = None) -> dict[str, Any]:
+    """Re-export one scene and replace its montage clip. Redo and undo share this with use_take."""
+    return _publish(production, spec, key, expected_revision)
+
+
+def shot_checkpoint(production: Any, spec: dict, key: str) -> dict[str, Any]:
+    return _checkpoint(production, spec, key)
+
+
+def restore_shot(production: Any, spec: dict, key: str, checkpoint: dict[str, Any]) -> None:
+    _restore(production, spec, key, checkpoint)
 
 
 def _publish_or_restore(production: Any, spec: dict, key: str, checkpoint: dict[str, Any]) -> dict[str, Any]:

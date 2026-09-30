@@ -25,6 +25,14 @@ export type ShotReviewAction = 'approved' | 'changes_requested' | 'lock' | 'unlo
 export interface MusicProductionShotReview {
   status?: MusicProductionReviewStatus
   locked?: boolean
+  history_id?: string
+}
+
+export interface ReviewPlan {
+  plan?: { summary?: string; changes?: { op: string }[] }
+  diff?: { op: string; shot?: string; text?: string; from?: string }[]
+  cost_estimate?: { image_jobs?: number; clip_jobs?: number; scene_exports?: number; tokens?: number | null }
+  applied?: boolean
 }
 
 export interface MusicProductionShot {
