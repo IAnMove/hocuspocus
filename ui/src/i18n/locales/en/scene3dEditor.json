@@ -1547,20 +1547,29 @@
     "atmos-snow-low": {
       "title": "Snow forest · low",
       "description": "The same forest from the snow, looking toward a blue-hour sky and a warm cabin light."
+    },
+    "atmos-desert-wide": {
+      "title": "Desert oasis · wide",
+      "description": "Procedural dunes and a small oasis. The character spot stays on open sand, clear of the pool."
+    },
+    "atmos-desert-low": {
+      "title": "Desert oasis · low",
+      "description": "The same dunes from the sand, looking toward the palms and the water."
     }
   },
   "atmos": {
     "time": "Time of day",
     "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
     "flow": "Flow",
     "prints": "Prints",
     "devils": "Devils",
-    "flakes": "Flakes"
+    "flakes": "Flakes",
+    "ripples": "Ripples"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
