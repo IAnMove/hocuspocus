@@ -417,3 +417,17 @@ published files are served; directory listing and symlink escapes are blocked.
 Call the MCP tool `production.publish` with that body. Its result contains
 `page`, `video`, `files` (download URLs) and `publication_id`. Publication is CPU
 only: it neither re-renders the video nor starts any generation.
+
+## appearance_changed and face_consistent
+
+These two names are not synonyms, and their yes/no polarity is not the same. Do not rename either string.
+
+`appearance_changed` is a code question on the `review` object returned by `production.status`. It asks whether the protagonist's appearance changed between shots. It stays `unknown` unless a face-embedding model is already loaded and injected. Unknown does not by itself retake the video, and the review must not invent yes or no.
+
+`face_consistent` is one of the four questions the vision model answers for `production.review`: `yes`, `no`, or `unknown`. The failing value is `no`, which means the face did not stay the same. `yes` means the face stayed consistent. A recorded `face_consistent` of `no` is the case where the appearance changed. It is not a report that the face was left alone.
+
+## A style preset from a finished production
+
+When a finished production's look should be reusable, copy its style fields into `app/shared/style_presets.json` as a new id under `entries`. Copy the look: `image`, `video`, `finish`, `lyric_template`, `theme`, `image_model`, `image_steps`, `title_style`, `lyric_style`, and `footer_style`. Leave out footer text, character names, and any person or project name. A footer, a name, or a lip-sync rule that belongs to one production stays on that spec.
+
+`production.run` expands `style.preset` before it checks the spec. A key written next to `preset` replaces the copied field. An unknown id fails with `unknown_style_preset`.

@@ -195,7 +195,8 @@
         "tests/test_production_song_switch.py",
         "tests/test_production_publication.py",
         "tests/test_production_preview.py",
-        "tests/test_production_smoothness.py"
+        "tests/test_production_smoothness.py",
+        "tests/test_production_state.py"
       ]
     },
     {
@@ -609,7 +610,56 @@
         "tests/test_production_clip_qa.py",
         "tests/test_production_cast_portrait.py",
         "tests/test_production_subject_count.py",
-        "tests/test_production_smoothness.py"
+        "tests/test_production_smoothness.py",
+        "tests/test_production_state.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_state.py",
+      "paths": [
+        "tests/test_production_state.py",
+        "tests/test_production_usage.py",
+        "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_song.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_song_switch.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_images.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_cast_portrait.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_clips.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_takes.py",
+        "tests/test_production_clip_qa.py",
+        "tests/test_lipsync_span.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_scene_ops.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_shot_plan.py",
+        "tests/test_production_structure.py",
+        "tests/test_production_dry_run.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_montage.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_package.py"
       ]
     },
     {
