@@ -354,7 +354,8 @@
     "street": "Street",
     "stage": "Stage",
     "canyon": "Canyon",
-    "cave": "Cave"
+    "cave": "Cave",
+    "room": "Room"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1572,13 +1573,21 @@
     "atmos-crystal-cave-low": {
       "title": "Crystal cave · low",
       "description": "The same cave from the floor, looking toward a glowing cluster and the hanging crystals."
+    },
+    "atmos-retro-room-wide": {
+      "title": "Retro room · wide",
+      "description": "A procedural 1990s room. A CRT, a console, and a controller sit clear of the open floor."
+    },
+    "atmos-retro-room-low": {
+      "title": "Retro room · low",
+      "description": "The same room from the carpet, looking toward the CRT, the console, and the controller."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow", "dim": "Dim", "on": "On" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua", "cream": "Cream", "mauve": "Mauve" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
@@ -1588,7 +1597,8 @@
     "flakes": "Flakes",
     "ripples": "Ripples",
     "tide": "Tide",
-    "glow": "Glow"
+    "glow": "Glow",
+    "static": "Static"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",

@@ -354,7 +354,8 @@
     "street": "Calle",
     "stage": "Escenario",
     "canyon": "Cañón",
-    "cave": "Cueva"
+    "cave": "Cueva",
+    "room": "Habitación"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1572,13 +1573,21 @@
     "atmos-crystal-cave-low": {
       "title": "Cueva de cristales · cámara baja",
       "description": "La misma cueva desde el suelo, mirando un grupo que brilla y los cristales del techo."
+    },
+    "atmos-retro-room-wide": {
+      "title": "Habitación años 90 · plano abierto",
+      "description": "Habitación procedural de los años 90. El CRT, la consola y el mando quedan fuera del suelo libre."
+    },
+    "atmos-retro-room-low": {
+      "title": "Habitación años 90 · cámara baja",
+      "description": "La misma habitación desde la moqueta, mirando el CRT, la consola y el mando."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo" },
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo", "dim": "Tenue", "on": "Encendida" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua", "cream": "Crema", "mauve": "Malva" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
@@ -1588,7 +1597,8 @@
     "flakes": "Copos",
     "ripples": "Ondas",
     "tide": "Marea",
-    "glow": "Brillo"
+    "glow": "Brillo",
+    "static": "Nieve"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

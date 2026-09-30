@@ -176,6 +176,20 @@ Floor crystals point up and ceiling crystals point down from a stone roof. Their
 
 A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 9 — `atmos-retro-room`
+
+Templates: `atmos-retro-room-wide`, `atmos-retro-room-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. The CRT, the console, the controller and the other furniture stay outside that circle and outside the lane to the camera. Interior walls are double-sided so the room is visible from inside.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `dim`, `on` | `dim` |
+| `palette` | `cream`, `mauve` | `cream` |
+| `variant` (`atmos.static`) | 0–8 | 3 |
+
+`dim` leaves the practical lamp dark. `on` lights that lamp and lifts the walls. The static control brightens the CRT phosphor, the scan lines and the snow on the screen. There is no grass field and no shaft, depth-of-field, or grade pass. Snow specks use the grass count (24 preview, 36 export) and scan lines use the mote count (8 / 10). Without WebGL2 the set is a flat carpet. The library setting is `room`.
+
+A software export of `atmos-retro-room-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 26000 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
