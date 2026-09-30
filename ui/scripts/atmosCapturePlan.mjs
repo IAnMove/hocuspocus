@@ -44,14 +44,32 @@ export function defaultCaptureDir() {
   return process.env.ATMOS_CAPTURE_DIR || path.join(os.tmpdir(), 'atmos-capture')
 }
 
+const LOOK_FLAG = { '--palette': 'palette', '--time': 'time', '--subject': 'subject' }
+
+function blankLook() {
+  return { palette: '', time: '', subject: '' }
+}
+
+function captureOptions(help, ids, exportClip, out, port, look) {
+  return { help, ids, exportClip, out, port, palette: look.palette, time: look.time, subject: look.subject }
+}
+
+function takeLook(argv, index, look) {
+  const key = LOOK_FLAG[argv[index]]
+  if (!key) return false
+  look[key] = readOption(argv, index, argv[index])
+  return true
+}
+
 export function parseCaptureArgs(argv, env = process.env) {
   const ids = []
+  const look = blankLook()
   let exportClip = false
   let out = env.ATMOS_CAPTURE_DIR || ''
   let port = Number(env.HOCUSPOCUS_E2E_PORT || 4199)
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
-    if (argument === '--help' || argument === '-h') return { help: true, ids, exportClip, out, port }
+    if (argument === '--help' || argument === '-h') return captureOptions(true, ids, exportClip, out, port, look)
     if (argument === '--export') { exportClip = true; continue }
     if (argument === '--out' || argument === '--port') {
       const value = readOption(argv, index, argument)
@@ -60,12 +78,13 @@ export function parseCaptureArgs(argv, env = process.env) {
       else port = Number(value)
       continue
     }
+    if (takeLook(argv, index, look)) { index += 1; continue }
     if (argument.startsWith('--')) throw new Error(`Unknown option ${argument}.`)
     ids.push(argument)
   }
   if (!ids.length) throw new Error('Pass at least one template id.')
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Port must be an integer from 1 to 65535.')
-  return { help: false, ids, exportClip, out, port }
+  return captureOptions(false, ids, exportClip, out, port, look)
 }
 
 function readOption(argv, index, name) {

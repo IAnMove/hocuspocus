@@ -25,6 +25,14 @@ test('capture args reject a missing id, a bad port, and an output inside the rep
   assert.equal(assertOutsideRepo(path.join(os.tmpdir(), 'atmos-out'), root), path.join(os.tmpdir(), 'atmos-out'))
 })
 
+test('capture args accept a palette, a time of day and a subject file', () => {
+  const parsed = parseCaptureArgs(['atmos-waterfall-wide', '--palette', 'amber', '--time', 'morning', '--subject', 'hero.glb'], {})
+  assert.equal(parsed.palette, 'amber')
+  assert.equal(parsed.time, 'morning')
+  assert.equal(parsed.subject, 'hero.glb')
+  assert.throws(() => parseCaptureArgs(['atmos-waterfall-wide', '--palette'], {}), /--palette needs a value/)
+})
+
 test('capture refuses a hardware renderer and names the Cinema library button', () => {
   assert.throws(() => assertSoftwareRenderer('ANGLE (NVIDIA, NVIDIA GeForce RTX 4090'), /hardware/)
   assert.match(assertSoftwareRenderer('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)'), /SwiftShader/)

@@ -352,7 +352,8 @@
     "casino": "Casino",
     "studio": "Studio",
     "street": "Street",
-    "stage": "Stage"
+    "stage": "Stage",
+    "canyon": "Canyon"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1514,16 +1515,25 @@
     "atmos-clearing-backlight": {
       "title": "Forest clearing · backlight",
       "description": "The same clearing with the sun behind the trunks."
+    },
+    "atmos-waterfall-wide": {
+      "title": "Waterfall · wide",
+      "description": "A procedural moss canyon. The character spot stays on the near bank, in front of the pool."
+    },
+    "atmos-waterfall-low": {
+      "title": "Waterfall · low",
+      "description": "The same waterfall from the water, with a low camera looking up the sheet."
     }
   },
   "atmos": {
     "time": "Time of day",
     "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber" },
     "fogDensity": "Fog",
     "wind": "Wind",
-    "motes": "Motes"
+    "motes": "Motes",
+    "flow": "Flow"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
