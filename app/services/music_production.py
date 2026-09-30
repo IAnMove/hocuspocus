@@ -922,9 +922,10 @@ class Production:
     def animatic(self, spec: dict, windows: list[dict]) -> None:
         """CPU preview from the start frames. A new export is stored apart from ``final``."""
         from services.production_preview import (
-            animatic_report, claim_animatic_video, restore_cut_artifacts, snapshot_cut_artifacts,
+            animatic_report, claim_animatic_video, completed_cut_final,
+            restore_cut_artifacts, snapshot_cut_artifacts,
         )
-        previous = self.state.get("final")
+        previous = completed_cut_final(self.state)
         kept = snapshot_cut_artifacts(self.root, self.state)
         self.state["animatic_warnings"] = animatic_report(spec, windows, self.score(), self.state)
         self.state["caption_gate"] = "warn"
@@ -939,6 +940,8 @@ class Production:
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
         self._cancel = arm(self.ws, self.id)
         prior_status = self.state.get("status")
+        from services.production_preview import keep_completed_cut, remember_completed_cut
+        remember_completed_cut(self.state, prior_status, through)
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time(), through=through)
         self.save()
         try:
@@ -959,10 +962,10 @@ class Production:
                 try:
                     self.animatic(spec, windows)
                 except Exception as error:
-                    if isinstance(error, Cancelled) or not (prior_status == "completed" and self.state.get("final")):
+                    if isinstance(error, Cancelled) or not keep_completed_cut(self.state, prior_status):
                         raise
                     self.log(f"animatic failed: {type(error).__name__}: {error}"[:200])
-                if prior_status == "completed" and self.state.get("final"):
+                if keep_completed_cut(self.state, prior_status):
                     self.state.update(status="completed", error=None)
                 elif self.state.get("status") != "failed":
                     self.state["status"] = "animatic_ready"
