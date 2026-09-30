@@ -354,7 +354,10 @@
     "street": "Street",
     "stage": "Stage",
     "canyon": "Canyon",
-    "cave": "Cave"
+    "cave": "Cave",
+    "volcano": "Volcano",
+    "islands": "Islands",
+    "room": "Room"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1572,13 +1575,148 @@
     "atmos-crystal-cave-low": {
       "title": "Crystal cave · low",
       "description": "The same cave from the floor, looking toward a glowing cluster and the hanging crystals."
+    },
+    "atmos-volcano-wide": {
+      "title": "Volcanic field · wide",
+      "description": "A procedural volcanic field under a red sky. Lava rivers glow, ash falls, and the character spot stays on open rock."
+    },
+    "atmos-volcano-low": {
+      "title": "Volcanic field · low",
+      "description": "The same field from the rock, looking along a lava river."
+    },
+    "atmos-temple-wide": {
+      "title": "Jungle temple · wide",
+      "description": "A procedural jungle temple. Light shafts fall between the vines, and the character spot stays on open stone."
+    },
+    "atmos-temple-low": {
+      "title": "Jungle temple · low",
+      "description": "The same temple from the stone, looking toward mossy ruins and the butterflies."
+    },
+    "atmos-reef-wide": {
+      "title": "Seafloor · wide",
+      "description": "A procedural reef. Caustic light crosses open sand, and the character spot stays clear of the fish and rocks."
+    },
+    "atmos-reef-low": {
+      "title": "Seafloor · low",
+      "description": "The same reef from the sand, looking toward a school of fish and rising bubbles."
+    },
+    "atmos-neon-rain-wide": {
+      "title": "Neon rain alley · wide",
+      "description": "A procedural neon alley at night. Wet pavement reflects the signs, rain falls, and steam rises. The character spot stays on open pavement."
+    },
+    "atmos-neon-rain-low": {
+      "title": "Neon rain alley · low",
+      "description": "The same alley from the wet street, looking toward a cluster of signs and their reflections."
+    },
+    "atmos-sky-islands-wide": {
+      "title": "Sky islands · wide",
+      "description": "Procedural floating islands in an N64 style. A colored checker covers the main island, and the character spot stays on that top."
+    },
+    "atmos-sky-islands-low": {
+      "title": "Sky islands · low",
+      "description": "The same islands from the checker, looking toward polygon clouds and spinning coins."
+    },
+    "atmos-rooftop-night-wide": {
+      "title": "Rooftop at night · wide",
+      "description": "A procedural rooftop at night. The city skyline glows behind it, and the character spot stays on the open roof."
+    },
+    "atmos-rooftop-night-low": {
+      "title": "Rooftop at night · low",
+      "description": "The same roof from the slab, looking toward the parapet and the city."
+    },
+    "atmos-retro-room-wide": {
+      "title": "Retro room · wide",
+      "description": "A procedural 1990s room. A CRT, a console, and a controller sit clear of the open floor."
+    },
+    "atmos-retro-room-low": {
+      "title": "Retro room · low",
+      "description": "The same room from the carpet, looking toward the CRT, the console, and the controller."
+    },
+    "atmos-space-ring-wide": {
+      "title": "Ringed planet · wide",
+      "description": "A procedural ringed planet and an asteroid field. The character spot stays on a pad in front of the planet."
+    },
+    "atmos-space-ring-low": {
+      "title": "Ringed planet · low",
+      "description": "The same orbit from the pad, looking up toward the rings and the near asteroids."
+    },
+    "atmos-meadow-wide": {
+      "title": "Meadow · wide",
+      "description": "A procedural meadow under low clouds. Wind moves the grass, and the character spot stays on open ground."
+    },
+    "atmos-meadow-low": {
+      "title": "Meadow · low",
+      "description": "The same meadow from the grass, looking across the field and the low clouds."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow" },
+    "day": {
+      "dawn": "Dawn",
+      "morning": "Morning",
+      "golden": "Golden hour",
+      "day": "Day",
+      "earthrise": "Earthrise",
+      "noon": "Noon",
+      "dusk": "Dusk",
+      "blue": "Blue hour",
+      "deep": "Deep",
+      "glow": "Glow",
+      "erupt": "Eruption",
+      "calm": "Calm",
+      "mist": "Mist",
+      "sun": "Sun",
+      "shallows": "Shallows",
+      "trench": "Trench",
+      "night": "Night",
+      "storm": "Storm",
+      "clear": "Clear",
+      "pink": "Pink",
+      "late": "Late",
+      "dim": "Dim",
+      "on": "On",
+      "cruise": "Cruise",
+      "eclipse": "Eclipse",
+      "spring": "Spring",
+      "overcast": "Overcast"
+    },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua" },
+    "swatch": {
+      "green": "Green",
+      "autumn": "Autumn",
+      "blue": "Blue",
+      "moss": "Moss",
+      "amber": "Amber",
+      "regolith": "Regolith",
+      "basalt": "Basalt",
+      "rust": "Rust",
+      "dusk": "Dusk",
+      "frost": "Frost",
+      "twilight": "Twilight",
+      "sand": "Sand",
+      "gold": "Gold",
+      "coral": "Coral",
+      "amethyst": "Amethyst",
+      "aqua": "Aqua",
+      "magma": "Magma",
+      "ash": "Ash",
+      "jade": "Jade",
+      "vine": "Vine",
+      "lagoon": "Lagoon",
+      "abyss": "Abyss",
+      "magenta": "Magenta",
+      "violet": "Violet",
+      "peach": "Peach",
+      "mint": "Mint",
+      "sodium": "Sodium",
+      "indigo": "Indigo",
+      "cream": "Cream",
+      "mauve": "Mauve",
+      "ice": "Ice",
+      "copper": "Copper",
+      "clover": "Clover",
+      "hay": "Hay"
+    },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
@@ -1588,7 +1726,16 @@
     "flakes": "Flakes",
     "ripples": "Ripples",
     "tide": "Tide",
-    "glow": "Glow"
+    "glow": "Glow",
+    "heat": "Heat",
+    "growth": "Growth",
+    "current": "Current",
+    "rain": "Rain",
+    "spin": "Spin",
+    "skyline": "Skyline",
+    "static": "Static",
+    "orbit": "Orbit",
+    "breeze": "Breeze"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
