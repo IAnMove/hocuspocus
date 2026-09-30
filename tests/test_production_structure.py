@@ -33,6 +33,22 @@ def test_the_beats_share_the_duration_and_land_on_bars():
     assert beat_plan(8, 0)[-1]["end"] == 8                                      # degenerate input still covers the song
 
 
+def test_a_short_slow_trailer_keeps_every_beat():
+    """plan_brief clamps duration to 16 s; 60 BPM is a valid cinematic score. Five bars do not fit."""
+    beats = beat_plan(16, 60)
+    assert [b["beat"] for b in beats] == list(BEAT_SHARE)
+    assert beats[0]["start"] == 0 and beats[-1]["end"] == 16
+    assert all(left["end"] == right["start"] for left, right in zip(beats, beats[1:]))
+    assert all(b["end"] - b["start"] > 1.0 for b in beats), [(b["beat"], b["start"], b["end"]) for b in beats]
+    planned = plan_shots(_spec(song={"lyrics": "", "caption": "dark score", "duration": 16, "bpm": 60}))
+    assert {s["beat"] for s in planned["shots"]} == set(BEAT_SHARE)
+    score = {"duration": 16.0, "bpm": 60, "beat": 1.0, "lines": []}
+    windows = shot_windows(planned, score)
+    segs = segments(windows, score, lambda key: True, planned.get("fill") or [])
+    assert {shot.get("beat") for shot, _, _ in segs} == set(BEAT_SHARE)
+    assert all(b - a > 1.0 for _, a, b in segs)
+
+
 def test_quick_cuts_accelerate_and_add_up():
     cuts = cut_lengths(18.0, 7)
     assert abs(sum(cuts) - 18.0) < 0.01 and cuts == sorted(cuts, reverse=True) and cuts[0] > 2 * cuts[-1] * 0.9
