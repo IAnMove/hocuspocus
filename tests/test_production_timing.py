@@ -112,7 +112,8 @@ def test_status_without_a_run_is_zeros_and_a_normal_one_stays_small():
              "timing": {"song": 120, "analyze": 3, "cast": 40, "frames": 80, "clips": 700, "scenes": 90, "montage": 25, "shots": shots}}
     status = status_summary(state, "ws")
     encoded = json.dumps(status)
-    assert len(encoded.encode()) < 1500
+    # execution, technical, and artistic are always on the reply. Prompts stay out.
+    assert len(encoded.encode()) < 1700
     assert status["timing"]["shots"][0] == {"key": "s0", "seconds": 80, "takes": 1}
     assert "frame.png" not in json.dumps(status["timing"]) and "prompt" not in json.dumps(status["timing"])
     assert timing_summary({"timing": {"song": -3, "shots": [{"key": "", "seconds": 1}]}})["song"] == 0

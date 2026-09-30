@@ -752,6 +752,7 @@
       "prefix": "app/services/production_review_checks.py",
       "paths": [
         "tests/test_production_review_checks.py",
+        "tests/test_production_timing.py",
         "tests/test_video_production_runbook.py"
       ]
     },
@@ -759,6 +760,7 @@
       "prefix": "app/services/production_review_layers.py",
       "paths": [
         "tests/test_production_review_checks.py",
+        "tests/test_production_timing.py",
         "tests/test_video_production_runbook.py"
       ]
     },
