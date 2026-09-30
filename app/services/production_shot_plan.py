@@ -38,6 +38,7 @@ def plan_shots(spec: Any) -> dict:
     actions = spec.get("section_actions") if isinstance(spec.get("section_actions"), dict) else {}
     look = _look(spec, actions)
     shots = _ordered_shots(spec, sections, _cast_ids(spec), look, actions)
+    shots = _uncover_image_titles(shots)
     planned = dict(spec)
     planned["shots"] = shots
     planned["auto_pads"] = True
@@ -151,6 +152,11 @@ def _action(actions: dict, role: str) -> str:
     if isinstance(phrase, str) and phrase.strip():
         return phrase.strip()
     return _ACTIONS.get(role, _ACTIONS["verse"])
+
+
+def _uncover_image_titles(shots: list[dict]) -> list[dict]:
+    from services.production_preview import uncover_titles
+    return uncover_titles(shots)
 
 
 def _ordered_shots(spec: dict, sections: list[dict], cast: list[str], look: dict, actions: dict) -> list[dict]:
