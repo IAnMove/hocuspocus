@@ -106,6 +106,20 @@ Templates: `atmos-moon-wide`, `atmos-moon-low`. Both last 6 seconds at 24 fps. T
 
 A software export of `atmos-moon-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 25340 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 4 — `atmos-mars`
+
+Templates: `atmos-mars-wide`, `atmos-mars-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Rocks, dunes, the rover and the dust devils stay outside that circle and outside the lane to the camera.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `noon`, `dusk` | `noon` |
+| `palette` | `rust`, `dusk` | `rust` |
+| `variant` (`atmos.devils`) | 0–8 | 3 |
+
+`noon` holds the two moons high. `dusk` lowers them and stretches the painted rover shadow. There is no grass field and no shaft, depth-of-field, or grade pass. Rocks use the grass count (8 preview, 14 export) and suspended dust uses the mote count (36 / 72). Without WebGL2 the set is a flat plain. The library setting is `desert`.
+
+A software export of `atmos-mars-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 26733 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:

@@ -1531,18 +1531,27 @@
     "atmos-moon-low": {
       "title": "Moon · low",
       "description": "The same surface from the dust, looking up at a large Earth in a black sky."
+    },
+    "atmos-mars-wide": {
+      "title": "Mars · wide",
+      "description": "A procedural Martian desert. The character spot stays on open dust, in front of the rover."
+    },
+    "atmos-mars-low": {
+      "title": "Mars · low",
+      "description": "The same desert from the dust, looking toward a caramel sky and two small moons."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
     "flow": "Flow",
-    "prints": "Prints"
+    "prints": "Prints",
+    "devils": "Devils"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
