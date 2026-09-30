@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from app.services.hunyuan3d.humanoid_animation import (
-    animation_tempo, bake_humanoid_clips, humanoid_tracks, resolve_humanoid,
+    animation_tempo, bake_humanoid_clips, humanoid_tracks, resolve_humanoid, rig_seed,
 )
 
 
@@ -83,6 +83,15 @@ def test_groove_follows_requested_tempo():
     rig = resolve_humanoid(joints, children, matrices)
     times, _ = humanoid_tracks('wobble', rig, matrices, {j: [0, 0, 0, 1] for j in joints}, 128)
     assert times[-1] == 240 / 128
+
+
+def test_zero_seed_is_preserved_and_default_is_reproducible():
+    assert rig_seed(0) == 0
+    assert rig_seed() == 12345
+    with pytest.raises(ValueError, match='seed'):
+        rig_seed(True)
+    with pytest.raises(ValueError, match='seed'):
+        rig_seed(-1)
 
 
 def test_single_body_chain_is_not_silently_labelled_a_humanoid():

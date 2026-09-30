@@ -99,7 +99,7 @@ def main() -> None:
     if not VENDOR_DIR.is_dir():
         raise RuntimeError("UniRig is not installed; run 'Install AI Rigging (UniRig)' from the HocusPocus Lab menu")
     clip_ids = list(request.get("animations") or list(procedural_rig.CLIPS))
-    seed = int(request.get("seed") or 12345)
+    seed = int(request.get("seed", 12345))
 
     with tempfile.TemporaryDirectory(prefix="maestro_unirig_") as temp_name:
         temp_dir = Path(temp_name)

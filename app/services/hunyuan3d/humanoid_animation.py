@@ -11,6 +11,12 @@ import numpy as np
 SUPPORTED_CLIPS = frozenset({"idle", "walk", "wobble"})
 
 
+def rig_seed(value: object = 12345) -> int:
+    if type(value) is not int or not 0 <= value <= 2147483647:
+        raise ValueError("Rig seed must be an integer between 0 and 2147483647")
+    return value
+
+
 def animation_tempo(value: object = 120) -> float:
     try:
         bpm = float(value)

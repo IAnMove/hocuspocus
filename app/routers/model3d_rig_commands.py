@@ -14,7 +14,7 @@ def command_catalog() -> list[dict]:
     payload.update(properties={"workspace": workspace, "source": {"type": "string", "minLength": 1},
                               "engine": {"enum": ["unirig", "procedural"]},
                               "animations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
-                              "rig_profile": {"type": "string"}, "seed": {"type": "integer"},
+                              "rig_profile": {"type": "string"}, "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
                               "animation_bpm": {"type": "number", "minimum": 60, "maximum": 180}},
                    required=["workspace", "source"], description="The existing /api/v1/rig/generate request body.")
     status.update(name="model3d.rig.status", description="Read a rig job only in its exact workspace, including its GLB and clip names.")

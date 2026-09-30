@@ -424,13 +424,14 @@ def start_job(
     except (TypeError, ValueError):
         weight_falloff = default_weight_falloff
 
-    from services.hunyuan3d.humanoid_animation import animation_tempo
+    from services.hunyuan3d.humanoid_animation import animation_tempo, rig_seed
     request_data = {
         "engine": engine,
         "workspace": str(workspace or "default"),
         "source": os.path.abspath(source_path),
         "rig_profile": rig_profile,
         "animation_bpm": animation_tempo(body.get("animation_bpm", 120)),
+        "seed": rig_seed(body.get("seed", 12345)),
         "animations": [str(item) for item in animations],
         "spine_joints": spine_joints,
         "axis_mode": axis_mode,
