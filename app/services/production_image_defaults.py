@@ -36,6 +36,8 @@ def default_image_model() -> str:
 def image_style_defaults(style: dict, explicit: dict) -> dict:
     """Set only omitted choices, including inherited preset model/step defaults."""
     if "image_model" in explicit:
+        if explicit["image_model"] in (DEFAULT_IMAGE_MODEL, "qwen_image_21_gguf_q4_k") and "image_steps" not in explicit:
+            return {**style, "image_steps": 40}
         return style
     return {**style, "image_model": default_image_model(),
             "image_steps": explicit.get("image_steps", 40)}

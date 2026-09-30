@@ -159,6 +159,13 @@ def test_low_memory_default_reaches_the_validated_production_spec(monkeypatch):
     assert spec["style"]["image_steps"] == 40
 
 
+@pytest.mark.parametrize("model", ["qwen_image_21", "qwen_image_21_gguf_q4_k"])
+def test_explicit_qwen_does_not_inherit_flux_four_step_preset(model):
+    style = {"preset": "neo-noir-realista", "image_model": model}
+    assert validate_spec(_spec(style))["style"]["image_steps"] == 40
+    assert validate_spec(_spec({**style, "image_steps": 28}))["style"]["image_steps"] == 28
+
+
 def test_no_preset_carries_a_person_or_project_name():
     from services.production_style_presets import PRESETS
     text = json.dumps(PRESETS).lower()
