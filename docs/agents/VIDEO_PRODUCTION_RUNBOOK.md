@@ -328,10 +328,17 @@ The source stays intact and the result is a new GLB with exact clip names.
 
 Install UniRig from HocusPocus's Advanced menu using `rigging_install.js`.
 `GET /api/v1/rig/capabilities` reports installation before any generation.
-UniRig predicts joints and skin weights. The current clip library animates a
-body chain, not independently identified humanoid limbs: inspect an exported
-pilot before claiming a walk/dance is suitable. `engine: "procedural"` is
-CPU-only and constructs an approximate single chain rather than an anatomical rig.
+UniRig predicts joints and skin weights. With `rig_profile: "humanoid"`, the
+`idle`, `walk` and `wobble` clips resolve recognizable upright Y-up pelvis,
+torso and limb branches and rotate both arms and legs around their bind pose.
+They preserve source geometry, skin weights and textures, without scale or
+whole-body bounce channels. Optional `animation_bpm` (60–180, default 120)
+sets the walk/dance loop tempo. Inspect an exported pilot: generated skinning
+can still deform poorly and these loops do not provide foot-contact IK.
+Results expose `animation_mode`, `humanoid_joints`, `articulated_clips` and
+`animation_warnings`. Unrecognized topology and other clip IDs explicitly
+report body-chain fallback. `engine: "procedural"` remains CPU-only and
+constructs an approximate single chain rather than an anatomical rig.
 
 ### N64-inspired render look
 
