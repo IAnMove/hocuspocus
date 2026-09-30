@@ -1,5 +1,6 @@
 import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
+import { atmosSet, isAtmosDressing } from './atmos/registry.ts'
 import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES, type Scene3DTemplate, type Scene3DTemplateFilter, type Scene3DTemplateId } from './templates'
 import type { Scene3DDressing } from './types.ts'
 
@@ -18,12 +19,18 @@ export function settingFromDressing(dressing: Scene3DDressing | undefined): Temp
   if (dressing === 'train') return 'train'
   if (dressing === 'space-lane' || dressing === 'space') return 'space'
   if (dressing === 'jungle') return 'jungle'
-  if (dressing === 'atmos-clearing') return 'forest'
+  if (isAtmosDressing(dressing)) return atmosTemplateSetting(dressing)
   if (dressing === 'snow') return 'snow'
   if (dressing === 'casino') return 'casino'
   if (dressing === 'chase-street' || dressing === 'street' || dressing === 'drive-city' || dressing === 'drive-coast' || dressing === 'drive-tunnel') return 'city'
   if (dressing === 'cafe') return 'street'
   if (dressing === 'treadmill') return 'stage'
+  return 'studio'
+}
+
+function atmosTemplateSetting(dressing: string | undefined): TemplateSetting {
+  const setting = atmosSet(dressing)?.setting
+  if (setting && (TEMPLATE_SETTINGS as readonly string[]).includes(setting)) return setting as TemplateSetting
   return 'studio'
 }
 

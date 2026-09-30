@@ -26,14 +26,15 @@ import {
   type DirectionalLight,
 } from 'three'
 import type { Pass } from 'three/addons/postprocessing/Pass.js'
-import { hash2 } from './noise.ts'
-import { fbm2 } from './noise.ts'
-import { windAt } from './wind.ts'
-import { clearingTrunks, CLEARING_SUBJECT } from './layout.ts'
-import { barkTexture, floorTexture, leafCookie, leafSprite } from './textures.ts'
-import { addCanopies, addTrunks, addUnderstory, type Kept } from './forest.ts'
-import { bindShaftLight, createDofPass, createGradePass, createShaftPass, projectSun } from './passes.ts'
-import type { AtmosQuality, AtmosSettings, ResolvedAtmos } from './params.ts'
+import { hash2 } from '../noise.ts'
+import { fbm2 } from '../noise.ts'
+import { windAt } from '../wind.ts'
+import { clearingTrunks, CLEARING_SUBJECT, CLEARING_EYE, CLEARING_LOOK, BACKLIGHT_EYE, BACKLIGHT_LOOK } from '../layout.ts'
+import { barkTexture, floorTexture, leafCookie, leafSprite } from '../textures.ts'
+import { addCanopies, addTrunks, addUnderstory, type Kept } from '../forest.ts'
+import { bindShaftLight, createDofPass, createGradePass, createShaftPass, projectSun } from '../passes.ts'
+import type { AtmosSetDefinition } from '../definition.ts'
+import type { AtmosQuality, AtmosSettings, ResolvedAtmos } from '../params.ts'
 
 export type AtmosHandle = {
   sync: (seconds: number, camera: Camera, light: DirectionalLight, quality: AtmosQuality, focus: number, live?: AtmosSettings) => void
@@ -509,4 +510,50 @@ function disposeKept(root: Group, kept: Kept) {
   for (const texture of kept.textures) texture.dispose()
   for (const light of kept.lights) light.dispose()
   kept.geometries.length = 0
+}
+
+const CLEARING_PALETTES = {
+  green: { fog: '#d5e6c6', ground: '#b7bba6', accent: '#7cbc46', sky: ['#d5e6c6', '#e7f0dc'] },
+  autumn: { fog: '#ead4b2', ground: '#c6b49c', accent: '#c4a04a', sky: ['#ead4b2', '#f0e2c8'] },
+  blue: { fog: '#d4e4f0', ground: '#b7c2c8', accent: '#6aadc4', sky: ['#d4e4f0', '#e4eef6'] },
+} as const
+
+const CLEARING_TIMES = {
+  dawn: { sun: [0.7, -0.28, 0.22], sunColor: '#ffb4c0' },
+  morning: { sun: [0.4, -0.82, 0.16], sunColor: '#fff4dc' },
+  golden: { sun: [0.82, -0.55, 0.16], sunColor: '#ffd39a' },
+} as const
+
+const FALLBACK_GROUND: Record<string, string> = {
+  green: '#6d7d58',
+  autumn: '#8a7a58',
+  blue: '#7d8c86',
+}
+
+function hexColor(color: string): [number, number, number] {
+  const n = Number.parseInt(color.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+export const clearingSet: AtmosSetDefinition = {
+  id: 'atmos-clearing',
+  titleKey: 'template.atmos-clearing-wide.title',
+  setting: 'forest',
+  seed: 17041,
+  subject: CLEARING_SUBJECT,
+  subjectYaw: 0.15,
+  palettes: CLEARING_PALETTES,
+  times: CLEARING_TIMES,
+  defaults: { timeOfDay: 'golden', fogDensity: 0.58, wind: 0.46, motes: 0.72, palette: 'green' },
+  low: { shaftSteps: 8, grassBlades: 12000, moteCount: 220 },
+  high: { shaftSteps: 24, grassBlades: 60000, moteCount: 700 },
+  templates: [
+    { id: 'atmos-clearing-wide', camera: 'establishment', eye: CLEARING_EYE, look: CLEARING_LOOK, fov: 42, duration: 10 },
+    { id: 'atmos-clearing-backlight', camera: 'establishment', eye: BACKLIGHT_EYE, look: BACKLIGHT_LOOK, fov: 40, duration: 10 },
+  ],
+  build: buildClearing,
+  fallback(resolved) {
+    const sky = CLEARING_PALETTES[resolved.palette as keyof typeof CLEARING_PALETTES]?.fog ?? CLEARING_PALETTES.green.fog
+    return { sky: hexColor(sky), ground: hexColor(FALLBACK_GROUND[resolved.palette] ?? FALLBACK_GROUND.green) }
+  },
 }

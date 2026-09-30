@@ -14,7 +14,7 @@ import { cafeGroup, type CafeMaps } from './cafeSet.ts'
 import { citadelGroup } from './citadelSet.ts'
 import { driveGroup, isDriveDressing, type DriveMaps } from './driveSet.ts'
 import { actionGroup, applyActionAtmosphere, isActionDressing } from './actionSets.ts'
-import { applyAtmosAtmosphere, buildClearing, hasWebGL2, isAtmosDressing, resolveAtmos, type AtmosSettings } from './atmos/index.ts'
+import { applyAtmosAtmosphere, atmosSet, hasWebGL2, isAtmosDressing, resolveAtmos, type AtmosSettings } from './atmos/index.ts'
 import { clearDrive } from './driveMotion.ts'
 import type { GpuWorld } from './gpu.ts'
 import type { Scene3DDressing } from './types.ts'
@@ -84,9 +84,12 @@ function releaseAtmos(world: GpuWorld): boolean {
   return true
 }
 
-function mountAtmos(world: GpuWorld, settings?: AtmosSettings) {
+function mountAtmos(world: GpuWorld, kind: string | undefined, settings?: AtmosSettings) {
+  const set = atmosSet(kind)
+  if (!set) return
   const high = world.renderer.shadowMap.enabled && world.dir.shadow.mapSize.x >= 2048
-  const built = buildClearing(resolveAtmos(settings, high ? 'high' : 'low'), hasWebGL2(world.renderer.getContext()))
+  const built = set.build(resolveAtmos(settings, high ? 'high' : 'low', kind), hasWebGL2(world.renderer.getContext()))
+  built.root.userData.atmos = built.handle
   world.dressing = built.root
 }
 
@@ -109,7 +112,7 @@ export function syncDressing(
   if (kind === 'citadel') world.dressing = citadelGroup()
   if (kind === 'space') world.dressing = spaceGroup()
   if (isPixelDressing(kind)) world.dressing = pixelWorldGroup(kind)
-  if (isAtmosDressing(kind)) mountAtmos(world, settings)
+  if (isAtmosDressing(kind)) mountAtmos(world, kind, settings)
   if (isActionDressing(kind)) world.dressing = actionGroup(kind)
   if (kind === 'cafe') world.dressing = cafeGroup(maps?.cafe ?? { facade: null, floor: null, back: null })
   if (isDriveDressing(kind)) {
