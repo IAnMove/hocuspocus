@@ -69,6 +69,31 @@ While it runs:
 - a cast entry may be `{"id": "trio", "group": ["hum", "tinker", "zap"]}`: one reference image with their portraits side by side (letterboxed, nothing cropped), for shots with several characters when the image model runs out of memory with three references. `count` defaults to the group's size;
 - a shot with one character gets "Only this character appears; no other characters" in its action (the planner does it; write it yourself in a hand-made spec), because a video model invents company otherwise.
 
+## Direction: what happens, and two ways to compile it
+
+An image prompt says how a shot looks; it does not say what happens in the video. `spec.treatment` is the short account the
+model writes before any shot: `arc` (what changes from the first image to the last), `want` and `obstacle` (what the
+protagonist wants and what stands in the way), `moments` (`[{at, event, id?}]`, the few memorable moments and where they land)
+and `motifs` (what comes back). `at` is a section (`chorus`, `chorus2`, `bridge`, `pre-chorus`), `line:N` or, in a trailer, a
+beat (`tension`, `reveal`). HocusPocus does not judge the idea; it checks the plan carries it, in `dry_run`:
+`moment_without_shot` (a moment lands where no shot is), `moment_unresolved` (the section does not exist),
+`chorus_repeats_identical` (a chorus comes back with the same shots: repeating an image is fine, repeating it unchanged is what makes
+a clip feel like slides), `treatment_invalid`, and at `quality: "max"` `treatment_missing`. With `shots: "auto"` each moment's event is
+written into the action of the shot that covers it, a returning chorus is varied (wider, closer, a consequence, bigger; another
+desktop layout or zoom for the native looks) and the automatic pads rotate their camera. A `Pre-Chorus` is now planned as a build
+(verse-style shots), not as a second chorus. A `brief` may carry `treatment`/`tratamiento`.
+
+`structure` is `"clip"` (default, unchanged) or `"trailer"`. A trailer is planned on time, not on lyric lines: five beats that share
+the duration (presentation 14 %, tension 28 %, escalation 30 %, reveal 16 %, close 12 %), snapped to bars. The quiet beats
+hold generated shots of at least 4 s; the escalation is quick cuts that accelerate, made by re-framing clips that already exist
+(`kind: "clip"`, a different camera each), so a trailer is a handful of generated shots, not thirty; the reveal is one big shot; the
+close carries the end card. No singer. The sound is designed on the CPU (ffmpeg, no model): the song is muted in the bar before the
+reveal, a riser climbs through it and ends on the hit, the reveal lands on an impact, and a smaller impact marks the close. The cues go
+to the montage as `audioCues` and the soundtrack is the processed file (`<id>-trailer-soundtrack.wav`); anchors are the planned shots'
+`t0`. A trailer may be instrumental (`song.lyrics: ""`: the music model gets `[Instrumental]`, nothing is transcribed), and then
+`song.late_entry` (seconds) delays the music; a song with lyrics is never shifted because its captions are timed to it.
+Use `treatment.moments[].at` with a beat name to say what the reveal or the tension is.
+
 ## What the run does
 
 | Step | Tool it uses | Decision made by code |

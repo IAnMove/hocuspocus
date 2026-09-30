@@ -34,6 +34,8 @@ from services.production_resource_gate import guard_mcp
 from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
 from services.production_timing import StageWatch, timing_summary
 from services.production_usage import attach_usage, usage_summary
+from services.production_structure import require_direction
+from services.production_trailer_audio import attach as attach_trailer_audio
 from services.production_quality import expand_quality
 from services.production_review import review_for_status
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
@@ -112,6 +114,8 @@ SPEC_SCHEMA: dict[str, Any] = {
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"}}}}]},
         "fill": {"type": "array", "description": "Shots used to fill instrumental stretches longer than a clip"},
         "max_takes": {"type": "integer", "minimum": 1, "maximum": 5},
+        "structure": {"enum": ["clip", "trailer"], "description": "clip (default): verse/chorus shots on the song's lines; trailer: five beats on time (presentation, tension, escalation, reveal, close) with designed silence, risers and hits"},
+        "treatment": {"type": "object", "description": "what happens: arc (what changes first image to last), want, obstacle, moments [{at, event}] (at: chorus2, bridge, line:N), motifs. dry_run checks the plan carries it"},
         "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: fills song seeds and max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"}},
 }
 
@@ -178,7 +182,7 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
-    return spec
+    return require_direction(spec)
 
 
 # ---------------------------------------------------------------- pure planning helpers (tested)
@@ -443,7 +447,7 @@ class Production:
             return self.log(f"song: using {sp['file']}")
         jobs = {}
         for seed in sp.get("seeds") or [11, 22, 33]:
-            params = {"prompt": sp["lyrics"], "alt_prompt": sp["caption"], "model_type": sp.get("model", "ace_step_v1_5_xl_sft_lm_4b"), "seed": seed,
+            params = {"prompt": sp["lyrics"] or "[Instrumental]", "alt_prompt": sp["caption"], "model_type": sp.get("model", "ace_step_v1_5_xl_sft_lm_4b"), "seed": seed,
                       "generation_mode": "audio", "_audio_sub_mode": "music", "image_mode": 0, "video_length": 0, "lyrics_language": "en",
                       "duration_seconds": sp["duration"], "custom_settings": {"bpm": int(sp["bpm"]), "keyscale": sp.get("key", "A minor"), "timesignature": 4, "language": "en"}}
             r = self.mcp("generation.music", {"version": 2, "intent_id": f"{self.id}-song-{seed}", "input": {"workspace": self.ws, "params": params}})
@@ -900,6 +904,7 @@ class Production:
         montage = {"version": 1, "name": spec["title"], "width": 1920, "height": 1080, "fps": 24, "clips": clips, "audioCues": [], "overlays": [],
                    "soundtrack": {"source": f"/api/v1/file/{self.state['song']['file']}?workspace={self.ws}", "trimStart": 0, "trimEnd": score["duration"], "volume": 1.0, "loop": False}}
         attach_origins(montage, self.state.get("scene_docs") or {}, self.id)
+        montage = attach_trailer_audio(self, spec, montage)
         body: dict[str, Any] = {"workspace": self.ws, "montage": montage}
         if self.state.get("montage_file"):
             current = (self.mcp("montages.get", {"version": 1, "input": {"workspace": self.ws, "file": self.state["montage_file"]}}).get("result") or {})

@@ -17,6 +17,7 @@ from typing import Any
 from services.music_production import h3_frames_for, shot_windows
 from services.production_preview import preview_extras
 from services.production_quality import expand_quality, profile_of
+from services.production_treatment import treatment_warnings
 from services.production_style_presets import expand_style_preset
 from services.song_analysis import lyric_lines
 
@@ -66,7 +67,7 @@ def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
         "long_captions": captions,
         "minutes": _minutes(spec, sum(1 for row in rows if row.get("kind") == "h3")),
         "motion": motion,
-        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra,
+        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra + treatment_warnings(spec, usable),
     }
 
 

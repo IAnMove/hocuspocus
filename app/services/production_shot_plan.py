@@ -18,6 +18,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from services.production_treatment import VARIATIONS, annotate_moments
+
 _FRAME = "Medium close-up of the singer from the cast sheet, facing the camera, lips parted"
 _BROLL_FRAME = "Wide cinematic shot of the protagonist from the reference sheet in the scene: {phrase}"
 _BROLL_ACTION = "The protagonist acts out the scene: {phrase}. Clear movement, slow camera."
@@ -25,6 +27,7 @@ _ACTIONS = {
     "verse": "(S1) The singer sings the verse to the camera, swaying gently.",
     "chorus": "(S1) The singer sings the chorus to the camera with a bigger gesture.",
 }
+_PAD_CAMERAS = ("camera-push-in", "camera-pan-right", "camera-pull-out", "camera-pan-left")
 _HEADER = re.compile(r"^\s*\[([^\]]+)\]\s*$")
 _PAD_KEY = re.compile(r"^fill\d+$")
 
@@ -37,11 +40,15 @@ def plan_shots(spec: Any) -> dict:
     sections = _sections(str(song.get("lyrics") or ""))
     actions = spec.get("section_actions") if isinstance(spec.get("section_actions"), dict) else {}
     look = _look(spec, actions)
-    shots = _ordered_shots(spec, sections, _cast_ids(spec), look, actions)
-    shots = _uncover_image_titles(shots)
+    trailer = spec.get("structure") == "trailer"
+    if trailer:
+        from services.production_structure import plan_trailer
+        shots = _uncover_image_titles(plan_trailer(spec, look, str(spec.get("title") or "Untitled")))
+    else:
+        shots = annotate_moments(spec, _uncover_image_titles(_ordered_shots(spec, sections, _cast_ids(spec), look, actions)))
     planned = dict(spec)
     planned["shots"] = shots
-    planned["auto_pads"] = True
+    planned["auto_pads"] = not trailer          # a trailer's long held shots are deliberate: no pad cuts inside them
     if not planned.get("fill"):
         planned["fill"] = [_fill_template(look, shots)]
     return planned
@@ -77,6 +84,8 @@ def place_pads(windows: list[dict], spec: dict, duration: float, bpm: float) -> 
     pads = []
     for index, t0 in enumerate(extras):
         shot = {**template, "key": f"fill{index}", "pad": True, "t0": t0}
+        if shot.get("kind") in ("clip", "still"):
+            shot.setdefault("camera", _PAD_CAMERAS[index % len(_PAD_CAMERAS)])       # the same pad twice is not the same picture
         pads.append({**shot, "i": base + index, "t0": round(float(t0), 3), "t1": round(float(t0) + 4, 3)})
     return _sorted_windows(content + pads)
 
@@ -98,16 +107,20 @@ def _sections(lyrics: str) -> list[dict]:
     sections: list[dict] = []
     current = None
     index = 0
+    seen: dict[str, int] = {}
     for raw in lyrics.splitlines():
         header = _HEADER.match(raw)
         if header:
-            current = {"role": _role(header.group(1)), "start": index, "count": 0}
+            role = _role(header.group(1))
+            seen[role] = seen.get(role, 0) + 1
+            current = {"role": role, "nth": seen[role], "start": index, "count": 0}
             sections.append(current)
             continue
         if not re.sub(r"\[[^\]]*\]", "", raw).strip():
             continue
         if current is None:
-            current = {"role": "verse", "start": index, "count": 0}
+            seen["verse"] = seen.get("verse", 0) + 1
+            current = {"role": "verse", "nth": seen["verse"], "start": index, "count": 0}
             sections.append(current)
         current["count"] += 1
         index += 1
@@ -121,6 +134,8 @@ def _role(name: str) -> str:
         return "intro"
     if head.startswith("outro") or head in {"end", "ending"}:
         return "outro"
+    if "pre" in words and any(word.startswith("chorus") for word in words):
+        return "pre-chorus"               # a build into the chorus is a verse to shoot, not a second chorus
     if any(word.startswith("chorus") or word in {"hook", "refrain"} for word in words):
         return "chorus"
     return "verse"
@@ -187,7 +202,7 @@ def _one_section(section: dict, title: str, cast: list[str], look: dict, actions
         return [_outro_card(title, look, start, count)]
     action = _action(actions, role)
     if role == "chorus":
-        return _chorus_shots(start, count, cast, action, look, numbers)
+        return _chorus_shots(start, count, cast, action, look, numbers, section.get("nth", 1))
     return _verse_shots(start, count, cast, action, look, numbers)
 
 
@@ -221,19 +236,37 @@ def _verse_shots(start: int, count: int, cast: list[str], action: str, look: dic
     return shots
 
 
-def _chorus_shots(start: int, count: int, cast: list[str], action: str, look: dict, numbers: dict) -> list[dict]:
+def _chorus_shots(start: int, count: int, cast: list[str], action: str, look: dict, numbers: dict, nth: int = 1) -> list[dict]:
     shots = []
     offset = 0
     while offset < count:
         span = 2 if offset + 1 < count else 1
         if look["sings"]:
-            shots.append(_sung(_next(numbers, "c"), start + offset, span, cast, action))
+            shot = _sung(_next(numbers, "c"), start + offset, span, cast, action)
         else:
             shot = _content(_next(numbers, "c"), start + offset, look)
             shot["span"] = span
-            shots.append(shot)
+        shots.append(_vary(shot, look, nth, len(shots)))
         offset += span
     return shots
+
+
+_LAYOUTS = ("triple", "quad", "master", "split")
+_ZOOMS = ([1.0, 1.08], [1.15, 1.3], [1.3, 1.15])
+
+
+def _vary(shot: dict, look: dict, nth: int, index: int) -> dict:
+    """A chorus that comes back is not the first one again: other framing, a consequence, more of the scene."""
+    if nth < 2:
+        return shot
+    turn = nth - 2 + index
+    if shot["kind"] in ("h3", "scene3d") and shot.get("action"):
+        shot["action"] = shot["action"].replace(ALONE, "") + " " + VARIATIONS[turn % len(VARIATIONS)] + (ALONE if ALONE in shot["action"] else "")
+    elif shot["kind"] == "screen":
+        shot["desktop"] = {**shot["desktop"], "layout": _LAYOUTS[turn % len(_LAYOUTS)], "workspace": min(9, nth), "switch": "right"}
+    elif shot["kind"] == "still":
+        shot["zoom"] = list(_ZOOMS[turn % len(_ZOOMS)])
+    return shot
 
 
 ALONE = " Only this character appears; no other characters, creatures or animals."
