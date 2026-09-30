@@ -1,0 +1,66 @@
+HIERARCHY
+ROOT Hips
+{
+    OFFSET 0.0 0.9 0.0
+    CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation
+    JOINT Spine
+    {
+        OFFSET 0.0 0.2 0.0
+        CHANNELS 3 Zrotation Xrotation Yrotation
+        End Site
+        {
+            OFFSET 0.0 0.3 0.0
+        }
+    }
+    JOINT LeftArm
+    {
+        OFFSET 0.2 0.25 0.0
+        CHANNELS 1 Zrotation
+        End Site
+        {
+            OFFSET 0.3 0.0 0.0
+        }
+    }
+    JOINT RightArm
+    {
+        OFFSET -0.2 0.25 0.0
+        CHANNELS 3 Zrotation Xrotation Yrotation
+        End Site
+        {
+            OFFSET -0.3 0.0 0.0
+        }
+    }
+    JOINT LeftUpLeg
+    {
+        OFFSET 0.1 0.0 0.0
+        CHANNELS 3 Zrotation Xrotation Yrotation
+        End Site
+        {
+            OFFSET 0.0 -0.8 0.0
+        }
+    }
+    JOINT RightUpLeg
+    {
+        OFFSET -0.1 0.0 0.0
+        CHANNELS 3 Zrotation Xrotation Yrotation
+        End Site
+        {
+            OFFSET 0.0 -0.8 0.0
+        }
+    }
+    JOINT ExtraProp
+    {
+        OFFSET 0.0 0.1 0.4
+        CHANNELS 3 Zrotation Xrotation Yrotation
+        End Site
+        {
+            OFFSET 0.0 0.0 0.2
+        }
+    }
+}
+MOTION
+Frames: 3
+Frame Time: 0.5
+0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+0.0 0.1 0.0 0.0 0.0 0.0 0.0 0.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+0.0 0.2 0.0 0.0 0.0 0.0 10.0 0.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
