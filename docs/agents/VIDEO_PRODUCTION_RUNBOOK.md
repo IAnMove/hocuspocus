@@ -131,7 +131,9 @@ The montage export in the table is internal. The agent does not call `montages.e
 
 The four checks are code. They are not a language model looking at the contact sheet. `production.status` runs them once the run is over (`completed` or `failed`) and remembers the answer, because they open the video files; while a run is going `review` is `unreliable` and empty. The reply stays small: no image bytes.
 
-`review` is `{verdict, failures, unknown}`. `verdict` is `ok`, `retake`, or `unreliable`. `failures` is `[{key, question}]`. `retake_keys` is the shot keys from those failures, in scene order, and is passed unchanged as `production.run` `retake`.
+`review` is `{execution, technical, artistic}`. `execution` is `ok` when the named final file opens, `fail` when that name is missing or unreadable, and `unreliable` when the run never claimed a final. `technical` is `ok`, `watch`, `fail`, or `unreliable`. Its `failures` are `[{key, question}]`. A smoothness `watch` or `fail` is on `technical` and does not by itself fill `retake_keys`. `artistic` is always `pending`: it lists the contact sheet, the animatic, and up to eight start frames, and it is never an automatic `ok`. `retake_keys` is the shot keys from the technical failures, in scene order, and is passed unchanged as `production.run` `retake`.
+
+A shot may set `allow` to `still`, `dark`, or `secondary`. `still` is not `frozen_shot`. `dark` is not `black_bars`. `secondary` is not `duplicate_people` or `appearance_changed`.
 
 The four code questions:
 
@@ -145,15 +147,19 @@ The four code questions:
 ```json
 {
   "review": {
-    "verdict": "retake",
-    "failures": [{"key": "chorus_one", "question": "frozen_shot"}],
-    "unknown": ["appearance_changed"]
+    "execution": {"verdict": "ok"},
+    "technical": {
+      "verdict": "fail",
+      "failures": [{"key": "chorus_one", "question": "frozen_shot"}],
+      "unknown": ["appearance_changed"]
+    },
+    "artistic": {"verdict": "pending", "evidence": {"contact_sheet": "sheet.jpg", "animatic": null, "frames": []}}
   },
   "retake_keys": ["chorus_one"]
 }
 ```
 
-`ok` means keep the video (`retake_keys` is empty). `retake` means call `production.run` again with those keys and the same id:
+`technical` `ok` means keep the video (`retake_keys` is empty). `fail` means call `production.run` again with those keys and the same id:
 
 ```json
 {

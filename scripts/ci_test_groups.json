@@ -749,6 +749,20 @@
       ]
     },
     {
+      "prefix": "app/services/production_review_checks.py",
+      "paths": [
+        "tests/test_production_review_checks.py",
+        "tests/test_video_production_runbook.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_review_layers.py",
+      "paths": [
+        "tests/test_production_review_checks.py",
+        "tests/test_video_production_runbook.py"
+      ]
+    },
+    {
       "prefix": "app/services/qa_people.py",
       "paths": [
         "tests/test_qa_people.py",
