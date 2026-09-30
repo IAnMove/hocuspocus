@@ -1523,17 +1523,26 @@
     "atmos-waterfall-low": {
       "title": "Cascada · cámara baja",
       "description": "La misma cascada desde el agua, con la cámara baja mirando la cortina."
+    },
+    "atmos-moon-wide": {
+      "title": "Luna · plano abierto",
+      "description": "Superficie lunar procedural. El hueco del personaje queda en el regolito, delante del módulo."
+    },
+    "atmos-moon-low": {
+      "title": "Luna · cámara baja",
+      "description": "La misma superficie desde el polvo, mirando una Tierra grande en el cielo negro."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada" },
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
-    "flow": "Caudal"
+    "flow": "Caudal",
+    "prints": "Huellas"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

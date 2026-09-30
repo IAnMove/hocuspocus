@@ -80,6 +80,20 @@ Templates: `atmos-waterfall-wide`, `atmos-waterfall-low`. Both last 6 seconds at
 
 A software export of `atmos-waterfall-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 39869 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 3 — `atmos-moon`
+
+Templates: `atmos-moon-wide`, `atmos-moon-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Craters, rocks, the lander and the footprints stay outside that circle and outside the lane to the camera.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `day`, `earthrise` | `day` |
+| `palette` | `regolith`, `basalt` | `regolith` |
+| `variant` (`atmos.prints`) | 8–40 | 18 |
+
+`day` puts the Earth high and stretches the painted shadows. `earthrise` lowers the Earth toward the horizon and shortens the shadows. There is no grass field and no shaft, depth-of-field, or grade pass. Rocks use the grass count (10 preview, 18 export) and stars use the mote count (48 / 96). Fog stays near zero so the sky stays black. Without WebGL2 the set is a flat plain. The library setting is `moon`.
+
+A software export of `atmos-moon-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 25340 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
