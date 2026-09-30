@@ -14,7 +14,7 @@ import {
   type Texture,
 } from 'three'
 import { hash2 } from './noise.ts'
-import { scatter, type Trunk } from './layout.ts'
+import { scatter, type Area, type Trunk } from './layout.ts'
 import type { ResolvedAtmos } from './params.ts'
 
 export type Kept = { geometries: BufferGeometry[]; materials: Material[]; textures: Texture[]; lights: import('three').SpotLight[] }
@@ -70,8 +70,8 @@ export function addTrunks(root: Group, trunks: readonly Trunk[], bark: Texture |
   })
 }
 
-function leafShades(resolved: ResolvedAtmos, seed: number, count: number, low: number, high: number): Color[] {
-  const base = new Color(resolved.grass)
+function leafShades(resolved: ResolvedAtmos, seed: number, count: number, low: number, high: number, tone?: string): Color[] {
+  const base = new Color(tone ?? resolved.grass)
   return Array.from({ length: count }, (_, i) => {
     const color = base.clone().multiplyScalar(low + (high - low) * hash2(i, 61, seed))
     color.offsetHSL((hash2(i, 62, seed) - 0.5) * 0.05, 0, 0)
@@ -132,11 +132,14 @@ function jitter(geo: IcosahedronGeometry, seed: number, amount: number) {
   geo.computeVertexNormals()
 }
 
-function addBushes(root: Group, trunks: readonly Trunk[], resolved: ResolvedAtmos, kept: Kept) {
+/** Area, count and leaf colour default to the clearing's; other sets pass their own. */
+export type PlantOptions = { area?: Area; count?: number; tone?: string; salt?: number }
+
+export function addBushes(root: Group, trunks: readonly Trunk[], resolved: ResolvedAtmos, kept: Kept, options: PlantOptions = {}) {
   const geo = new IcosahedronGeometry(0.5, 1)
   jitter(geo, resolved.seed, 0.22)
   const mat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, flatShading: true, emissive: 0x1c3a12, emissiveIntensity: 0.5 })
-  const spots = scatter(46, resolved.seed, 71, trunks, { x0: -10, x1: 10, z0: 3, z1: -15 }, 0.4)
+  const spots = scatter(options.count ?? 46, resolved.seed, options.salt ?? 71, trunks, options.area ?? { x0: -10, x1: 10, z0: 3, z1: -15 }, 0.4)
   const entries = spots.map(([x, z], i) => {
     const size = 0.55 + hash2(i, 72, resolved.seed) * 0.9
     return { x, y: size * 0.16, z, sx: size, sy: size * 0.62, sz: size * (0.8 + hash2(i, 73, resolved.seed) * 0.5) }
@@ -145,7 +148,7 @@ function addBushes(root: Group, trunks: readonly Trunk[], resolved: ResolvedAtmo
   mesh.name = 'atmos-bushes'
   mesh.castShadow = true
   mesh.receiveShadow = true
-  blobs(mesh, entries, leafShades(resolved, resolved.seed + 5, 16, 0.55, 0.95))
+  blobs(mesh, entries, leafShades(resolved, resolved.seed + 5, 16, 0.55, 0.95, options.tone))
   root.add(mesh)
   kept.geometries.push(geo)
   kept.materials.push(mat)
@@ -153,8 +156,8 @@ function addBushes(root: Group, trunks: readonly Trunk[], resolved: ResolvedAtmo
 
 const PETALS = [0xfff4e0, 0xffd84a, 0xff9ec2, 0xb9a0ff]
 
-function addFlowers(root: Group, trunks: readonly Trunk[], resolved: ResolvedAtmos, kept: Kept) {
-  const centers = scatter(16, resolved.seed, 81, trunks, { x0: -8, x1: 8, z0: 2.5, z1: -11 }, 0.6)
+export function addFlowers(root: Group, trunks: readonly Trunk[], resolved: ResolvedAtmos, kept: Kept, options: PlantOptions = {}) {
+  const centers = scatter(options.count ?? 16, resolved.seed, options.salt ?? 81, trunks, options.area ?? { x0: -8, x1: 8, z0: 2.5, z1: -11 }, 0.6)
   const spots: Array<[number, number]> = []
   centers.forEach(([cx, cz], c) => {
     for (let k = 0; k < 9; k += 1) {

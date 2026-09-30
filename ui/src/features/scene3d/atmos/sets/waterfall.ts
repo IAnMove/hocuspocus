@@ -1,72 +1,68 @@
 import {
   BackSide,
-  BoxGeometry,
   BufferGeometry,
   Color,
-  ConeGeometry,
-  CylinderGeometry,
   DoubleSide,
   Float32BufferAttribute,
   FogExp2,
   Group,
   InstancedMesh,
   Mesh,
-  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
   Points,
   ShaderMaterial,
-  RingGeometry,
   SphereGeometry,
   type BufferAttribute,
-  type Material,
 } from 'three'
 import type { AtmosHandle } from './clearing.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
 import { hash2 } from '../noise.ts'
-import { CLEARING_SUBJECT, scatter, type Area } from '../layout.ts'
+import { CLEARING_SUBJECT } from '../layout.ts'
+import type { Kept } from '../forest.ts'
+import { FALLS_X, SHEET_Z, WATER } from './waterfallLayout.ts'
+import { addBankPlants, addGround, addPines, addPool, addRainbow, addRockWalls } from './waterfallScenery.ts'
 
-type Kept = { geometries: BufferGeometry[]; materials: Material[] }
 type MistCard = { x: number; y: number; z: number; yaw: number; sx: number; sy: number }
 
-const WATER_VERTEX = `
+const SHEET_VERTEX = `
   varying vec2 vUv;
   void main() {
     vUv = uv;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `
-const WATER_FRAGMENT = `
+const SHEET_FRAGMENT = `
   uniform float uTime;
   uniform float uFlow;
   uniform float uSplash;
+  uniform float uTopFade;
   uniform vec3 uDeep;
   uniform vec3 uFoam;
   varying vec2 vUv;
-  void main() {
-    float lane = abs(fract(vUv.x * 9.0) - 0.5);
-    float thread = smoothstep(0.48, 0.16, lane);
-    float rush = 0.62 + 0.38 * sin(vUv.y * 34.0 - uTime * uFlow * 4.0 + vUv.x * 11.0);
-    float splash = smoothstep(0.2, 0.0, vUv.y) * uSplash;
-    vec3 color = mix(uDeep, uFoam, thread * rush * 0.72 + splash);
-    float side = smoothstep(0.0, 0.05, vUv.x) * smoothstep(1.0, 0.95, vUv.x);
-    gl_FragColor = vec4(color, mix(0.55, 0.94, max(thread, splash)) * side);
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
   }
-`
-const RAINBOW_VERTEX = `
-  varying float vT;
   void main() {
-    vT = uv.x;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`
-const RAINBOW_FRAGMENT = `
-  varying float vT;
-  void main() {
-    vec3 color = 0.55 + 0.45 * cos(6.28318 * (vec3(vT) + vec3(0.0, 0.33, 0.67)));
-    gl_FragColor = vec4(color, 0.62);
+    float lane = floor(vUv.x * 22.0);
+    float pace = 0.75 + 0.5 * hash(vec2(lane, 3.0));
+    float streak = noise(vec2(vUv.x * 26.0, vUv.y * 2.2 + uTime * uFlow * pace * 1.6));
+    float fine = noise(vec2(vUv.x * 70.0, vUv.y * 9.0 + uTime * uFlow * 2.6));
+    float body = smoothstep(0.32, 0.82, streak * 0.7 + fine * 0.4);
+    float lip = smoothstep(0.9, 1.0, vUv.y) * 0.7;
+    float base = smoothstep(0.22, 0.0, vUv.y) * uSplash;
+    float foam = clamp(body * 0.85 + lip + base, 0.0, 1.0);
+    vec3 color = mix(uDeep, uFoam, foam);
+    float ragged = 0.06 + 0.04 * hash(vec2(floor(vUv.y * 14.0), 1.0));
+    float edge = smoothstep(0.0, ragged, vUv.x) * smoothstep(1.0, 1.0 - ragged, vUv.x);
+    float top = mix(1.0, smoothstep(1.0, 0.78, vUv.y), uTopFade);
+    gl_FragColor = vec4(color, (0.72 + 0.26 * foam) * edge * top);
   }
 `
 const SKY_VERTEX = `
@@ -85,8 +81,7 @@ const SKY_FRAGMENT = `
   }
 `
 
-const LEFT_BANK: Area = { x0: -6.2, x1: -1.25, z0: -2.15, z1: 2.4 }
-const RIGHT_BANK: Area = { x0: 1.85, x1: 6.2, z0: -2.15, z1: 2.4 }
+
 const FOAM: Record<string, string> = { moss: '#e7f6f1', amber: '#f8e7cf' }
 const ZENITH: Record<string, string> = { moss: '#e7f3ee', amber: '#f6ead6' }
 const FALLBACK_GROUND: Record<string, string> = { moss: '#4e6254', amber: '#7a6248' }
@@ -107,7 +102,7 @@ const LOW_EYE = [1.35, 0.46, 1.85] as const
 const LOW_LOOK = [0.15, 1.7, -2.6] as const
 
 function emptyKept(): Kept {
-  return { geometries: [], materials: [] }
+  return { geometries: [], materials: [], textures: [], lights: [] }
 }
 
 function hexColor(color: string): [number, number, number] {
@@ -137,6 +132,7 @@ function disposeKept(root: Group, kept: Kept) {
   root.removeFromParent()
   for (const geometry of kept.geometries) geometry.dispose()
   for (const material of kept.materials) material.dispose()
+  for (const texture of kept.textures) texture.dispose()
 }
 
 function idleHandle(root: Group, kept: Kept): AtmosHandle {
@@ -166,64 +162,7 @@ function addMesh(root: Group, kept: Kept, mesh: Mesh | InstancedMesh | Points) {
   kept.geometries.push(mesh.geometry)
 }
 
-function addGround(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new PlaneGeometry(26, 26, 10, 10)
-  geo.rotateX(-Math.PI / 2)
-  const pos = geo.attributes.position as BufferAttribute
-  for (let i = 0; i < pos.count; i += 1) {
-    const z = pos.getZ(i)
-    pos.setY(i, z < -1.5 ? (-1.5 - z) * 0.08 : 0)
-  }
-  geo.computeVertexNormals()
-  const mat = new MeshStandardMaterial({
-    color: resolved.stone, roughness: 0.94, flatShading: true,
-    emissive: resolved.stone, emissiveIntensity: 0.14,
-  })
-  const mesh = new Mesh(geo, mat)
-  mesh.name = 'atmos-ground'
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
-}
-
-function cliffPose(index: number, seed: number) {
-  const side = index < 8 ? -1 : 1
-  const n = index % 8
-  const col = n % 4
-  const row = Math.floor(n / 4)
-  const height = 1.6 + row * 1.7 + hash2(index, 5, seed) * 0.55
-  return {
-    x: side * (1.95 + col * 1.12) + (hash2(index, 9, seed) - 0.5) * 0.22,
-    y: height / 2,
-    z: -3.05 - row * 1.4 + (hash2(index, 10, seed) - 0.5) * 0.18,
-    sy: height,
-    yaw: (hash2(index, 6, seed) - 0.5) * 0.22,
-  }
-}
-
-function addCliffs(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new BoxGeometry(1, 1, 1)
-  const mat = new MeshStandardMaterial({
-    color: 0xffffff, roughness: 0.96, flatShading: true,
-    emissive: resolved.stone, emissiveIntensity: 0.06,
-  })
-  const mesh = new InstancedMesh(geo, mat, 16)
-  mesh.name = 'atmos-cliff'
-  const dummy = new Object3D()
-  for (let i = 0; i < 16; i += 1) {
-    const pose = cliffPose(i, resolved.seed)
-    dummy.position.set(pose.x, pose.y, pose.z)
-    dummy.scale.set(1.05, pose.sy, 1.2)
-    dummy.rotation.y = pose.yaw
-    dummy.updateMatrix()
-    mesh.setMatrixAt(i, dummy.matrix)
-    mesh.setColorAt(i, new Color(resolved.stone).multiplyScalar(0.46 + hash2(i, 8, resolved.seed) * 0.28))
-  }
-  mesh.instanceMatrix.needsUpdate = true
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
-}
-
-function waterMaterial(resolved: ResolvedAtmos, splash: number): ShaderMaterial {
+function sheetMaterial(resolved: ResolvedAtmos, splash: number): ShaderMaterial {
   return new ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -231,41 +170,45 @@ function waterMaterial(resolved: ResolvedAtmos, splash: number): ShaderMaterial 
       uTime: { value: 0 },
       uFlow: { value: flowSpeed(resolved.variant) },
       uSplash: { value: splash },
-      uDeep: { value: new Color(resolved.grass).multiplyScalar(0.55) },
+      uTopFade: { value: splash < 0.9 ? 1 : 0 },
+      uDeep: { value: new Color(WATER[resolved.palette] ?? WATER.moss).multiplyScalar(0.8) },
       uFoam: { value: new Color(foamOf(resolved.palette)) },
     },
-    vertexShader: WATER_VERTEX,
-    fragmentShader: WATER_FRAGMENT,
+    vertexShader: SHEET_VERTEX,
+    fragmentShader: SHEET_FRAGMENT,
   })
 }
 
-function addSheet(root: Group, material: ShaderMaterial, kept: Kept) {
-  const geo = new PlaneGeometry(2.2, 5.1)
-  const mesh = new Mesh(geo, material)
-  mesh.name = 'atmos-sheet'
-  mesh.position.set(0.12, 2.55, -2.55)
-  addMesh(root, kept, mesh)
-  kept.materials.push(material)
-}
-
-function addRiver(root: Group, material: ShaderMaterial, kept: Kept) {
-  const geo = new PlaneGeometry(3.1, 1.5)
-  geo.rotateX(-Math.PI / 2)
-  const mesh = new Mesh(geo, material)
-  mesh.name = 'atmos-river'
-  mesh.position.set(0.12, 0.05, -2.85)
-  addMesh(root, kept, mesh)
-  kept.materials.push(material)
+function addSheets(root: Group, resolved: ResolvedAtmos, kept: Kept) {
+  const layers: Array<{ width: number; height: number; y: number; z: number; splash: number }> = [
+    { width: 2.2, height: 5.1, y: 2.55, z: SHEET_Z, splash: 1 },
+    { width: 1.5, height: 4.1, y: 2.1, z: SHEET_Z + 0.09, splash: 0.4 },
+  ]
+  for (const layer of layers) {
+    const geo = new PlaneGeometry(layer.width, layer.height)
+    const mat = sheetMaterial(resolved, layer.splash)
+    const mesh = new Mesh(geo, mat)
+    mesh.name = 'atmos-sheet'
+    mesh.position.set(FALLS_X, layer.y, layer.z)
+    addMesh(root, kept, mesh)
+    kept.materials.push(mat)
+  }
 }
 
 function addMist(root: Group, kept: Kept) {
   const geo = new PlaneGeometry(1, 1)
-  const mat = new MeshBasicMaterial({
-    color: 0xd7efe8, transparent: true, opacity: 0.16, depthWrite: false, side: DoubleSide,
+  const mat = new ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: DoubleSide,
+    uniforms: { uColor: { value: new Color(0xd7efe8) } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform vec3 uColor; varying vec2 vUv; void main() { float d = length(vUv - 0.5) * 2.0; gl_FragColor = vec4(uColor, 0.34 * smoothstep(1.0, 0.0, d) * smoothstep(1.0, 0.55, d)); }',
   })
   const cards: MistCard[] = [
-    { x: 0.12, y: 0.32, z: -2.15, yaw: 0, sx: 3.1, sy: 0.55 },
-    { x: 0.12, y: 0.62, z: -2.22, yaw: 0.04, sx: 2.2, sy: 0.38 },
+    { x: FALLS_X, y: 0.32, z: -2.2, yaw: 0, sx: 3.4, sy: 0.6 },
+    { x: FALLS_X, y: 0.7, z: -2.3, yaw: 0.04, sx: 2.6, sy: 0.5 },
+    { x: FALLS_X, y: 1.15, z: -2.45, yaw: -0.03, sx: 2.0, sy: 0.45 },
   ]
   const mesh = new InstancedMesh(geo, mat, cards.length)
   mesh.name = 'atmos-mist'
@@ -286,9 +229,9 @@ function addMist(root: Group, kept: Kept) {
 
 function dewPosition(index: number, seed: number): [number, number, number] {
   return [
-    (hash2(index, 11, seed) - 0.5) * 2.0,
+    (hash2(index, 11, seed) - 0.5) * 2.4,
     0.4 + hash2(index, 12, seed) * 2.3,
-    -2.6 + hash2(index, 13, seed) * 0.4,
+    -2.5 + hash2(index, 13, seed) * 0.5,
   ]
 }
 
@@ -330,90 +273,6 @@ function addDew(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   kept.materials.push(mat)
 }
 
-function addRainbow(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new RingGeometry(1.2, 1.48, 40, 1, 0, Math.PI)
-  const mat = new ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    side: DoubleSide,
-    vertexShader: RAINBOW_VERTEX,
-    fragmentShader: RAINBOW_FRAGMENT,
-  })
-  const mesh = new Mesh(geo, mat)
-  mesh.name = 'atmos-rainbow'
-  mesh.position.set(0.05, 2.15, -2.2)
-  mesh.visible = resolved.timeOfDay === 'golden'
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
-}
-
-function seatInstances(mesh: InstancedMesh, spots: Array<[number, number]>, seed: number, salt: number, y: number) {
-  const dummy = new Object3D()
-  for (let i = 0; i < spots.length; i += 1) {
-    const [x, z] = spots[i]
-    dummy.position.set(x, y, z)
-    dummy.rotation.y = hash2(i, salt, seed) * Math.PI
-    const scale = 0.75 + hash2(i, salt + 2, seed) * 0.7
-    dummy.scale.setScalar(scale)
-    dummy.updateMatrix()
-    mesh.setMatrixAt(i, dummy.matrix)
-  }
-  mesh.instanceMatrix.needsUpdate = true
-}
-
-function bankSpots(count: number, seed: number, salt: number): Array<[number, number]> {
-  const half = Math.ceil(count / 2)
-  return [
-    ...scatter(half, seed, salt, [], LEFT_BANK, 0.4),
-    ...scatter(count - half, seed, salt + 5, [], RIGHT_BANK, 0.4),
-  ]
-}
-
-function addFerns(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const spots = bankSpots(resolved.grassBlades, resolved.seed, 41)
-  if (!spots.length) return
-  const geo = new ConeGeometry(0.16, 0.55, 5)
-  geo.translate(0, 0.28, 0)
-  const mat = new MeshStandardMaterial({
-    color: new Color(resolved.grass).multiplyScalar(0.72),
-    roughness: 0.85, flatShading: true,
-    emissive: resolved.grass, emissiveIntensity: 0.1,
-  })
-  const mesh = new InstancedMesh(geo, mat, spots.length)
-  mesh.name = 'atmos-fern'
-  seatInstances(mesh, spots, resolved.seed, 43, 0)
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
-}
-
-function addStones(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const spots = bankSpots(8, resolved.seed, 71)
-  if (!spots.length) return
-  const geo = new BoxGeometry(0.38, 0.22, 0.3)
-  const mat = new MeshStandardMaterial({
-    color: new Color(resolved.stone).multiplyScalar(0.78),
-    roughness: 0.95, flatShading: true,
-  })
-  const mesh = new InstancedMesh(geo, mat, spots.length)
-  mesh.name = 'atmos-stone'
-  seatInstances(mesh, spots, resolved.seed, 73, 0.11)
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
-}
-
-function addLogs(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const spots = bankSpots(4, resolved.seed, 91)
-  if (!spots.length) return
-  const geo = new CylinderGeometry(0.08, 0.1, 1.1, 6)
-  geo.rotateZ(Math.PI / 2)
-  const mat = new MeshStandardMaterial({ color: 0x6a5344, roughness: 0.9, flatShading: true })
-  const mesh = new InstancedMesh(geo, mat, spots.length)
-  mesh.name = 'atmos-log'
-  seatInstances(mesh, spots, resolved.seed, 93, 0.12)
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
-}
-
 function addSky(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const geo = new SphereGeometry(22, 16, 10)
   const zenith = new Color(ZENITH[resolved.palette] ?? ZENITH.moss)
@@ -436,13 +295,12 @@ function addSky(root: Group, resolved: ResolvedAtmos, kept: Kept) {
 }
 
 function paintWater(root: Group, seconds: number, flow: number) {
-  for (const name of ['atmos-sheet', 'atmos-river']) {
-    const mesh = root.getObjectByName(name) as Mesh | undefined
-    const material = mesh?.material
-    if (!(material instanceof ShaderMaterial)) continue
+  root.traverse(child => {
+    const material = (child as Mesh).material
+    if (!(material instanceof ShaderMaterial) || !('uFlow' in material.uniforms)) return
     material.uniforms.uTime.value = seconds
     material.uniforms.uFlow.value = flow
-  }
+  })
 }
 
 function riseMist(root: Group, seconds: number) {
@@ -511,15 +369,14 @@ export function buildWaterfall(resolved: ResolvedAtmos, webgl2: boolean): { root
   root.name = 'atmos-waterfall'
   const kept = emptyKept()
   addGround(root, resolved, kept)
-  addCliffs(root, resolved, kept)
-  addSheet(root, waterMaterial(resolved, 1), kept)
-  addRiver(root, waterMaterial(resolved, 0), kept)
+  addRockWalls(root, resolved, kept)
+  addPool(root, resolved, kept, flowSpeed(resolved.variant))
+  addSheets(root, resolved, kept)
   addMist(root, kept)
   addDew(root, resolved, kept)
   addRainbow(root, resolved, kept)
-  addFerns(root, resolved, kept)
-  addStones(root, resolved, kept)
-  addLogs(root, resolved, kept)
+  addPines(root, resolved, kept)
+  addBankPlants(root, resolved, kept)
   addSky(root, resolved, kept)
   const handle = liveHandle(root, kept, resolved)
   root.userData.atmos = handle
