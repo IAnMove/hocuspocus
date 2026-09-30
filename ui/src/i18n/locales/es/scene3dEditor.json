@@ -1572,13 +1572,21 @@
     "atmos-crystal-cave-low": {
       "title": "Cueva de cristales · cámara baja",
       "description": "La misma cueva desde el suelo, mirando un grupo que brilla y los cristales del techo."
+    },
+    "atmos-temple-wide": {
+      "title": "Templo en la jungla · plano abierto",
+      "description": "Templo procedural entre la jungla. Los haces de luz caen entre las lianas, y el hueco del personaje queda en la piedra."
+    },
+    "atmos-temple-low": {
+      "title": "Templo en la jungla · cámara baja",
+      "description": "El mismo templo desde el suelo, mirando las ruinas con musgo y las mariposas."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo" },
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo", "mist": "Niebla", "sun": "Sol" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua", "jade": "Jade", "vine": "Liana" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
@@ -1588,7 +1596,8 @@
     "flakes": "Copos",
     "ripples": "Ondas",
     "tide": "Marea",
-    "glow": "Brillo"
+    "glow": "Brillo",
+    "growth": "Crecimiento"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

@@ -176,6 +176,20 @@ Floor crystals point up and ceiling crystals point down from a stone roof. Their
 
 A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 9 — `atmos-temple`
+
+Templates: `atmos-temple-wide`, `atmos-temple-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Columns, ruins, vines, butterflies and light shafts stay outside that circle and outside the lane to the camera.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `mist`, `sun` | `mist` |
+| `palette` | `jade`, `vine` | `jade` |
+| `variant` (`atmos.growth`) | 0–8 | 5 |
+
+Light shafts stand between the vines over mossy ruins, and butterflies move on the same clock. The growth control lengthens the vines. `sun` clears the mist and warms the shafts. There is no grass field and no shaft, depth-of-field, or grade pass. Vine count uses the grass budget (6 preview, 8 export) and butterflies use the mote count. Without WebGL2 the set is a flat stone floor. The library setting is `jungle`.
+
+A software export of `atmos-temple-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 29636 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
