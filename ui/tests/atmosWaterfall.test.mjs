@@ -58,13 +58,13 @@ test('waterfall templates keep moss, golden hour and a six second shot', () => {
 test('waterfall props stay off the bank and the sheet faces the camera', () => {
   const first = buildWaterfall(resolved(), true)
   const again = buildWaterfall(resolved(), true)
-  const ferns = places(first.root.getObjectByName('atmos-fern'))
-  assert.deepEqual(ferns, places(again.root.getObjectByName('atmos-fern')))
-  assert.ok(ferns.length >= 12)
-  for (const [x, , z] of ferns) assert.equal(outsideLane(x, z), true)
+  const bushes = places(first.root.getObjectByName('atmos-bushes'))
+  assert.deepEqual(bushes, places(again.root.getObjectByName('atmos-bushes')))
+  assert.ok(bushes.length >= 8)
+  for (const [x, , z] of bushes) assert.equal(outsideLane(x, z), true)
   for (const [x, , z] of places(first.root.getObjectByName('atmos-stone'))) assert.equal(outsideLane(x, z), true)
   for (const [x, , z] of places(first.root.getObjectByName('atmos-cliff'))) {
-    assert.ok(z <= -1.8)
+    assert.ok(z <= -0.7)
     assert.equal(outsideLane(x, z), true)
   }
   const dew = first.root.getObjectByName('atmos-dew').geometry.getAttribute('position')
@@ -79,7 +79,7 @@ test('waterfall props stay off the bank and the sheet faces the camera', () => {
   assert.ok(river.getY(0) > 0.9)
   let draws = 0
   first.root.traverse(obj => { if (obj.isMesh || obj.isPoints) draws += 1 })
-  assert.ok(draws < 20)
+  assert.ok(draws < 32)
   assert.deepEqual(first.handle.passes(), [])
   first.handle.dispose()
   again.handle.dispose()

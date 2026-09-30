@@ -78,9 +78,19 @@ Templates: `atmos-waterfall-wide`, `atmos-waterfall-low`. Both last 6 seconds at
 | `palette` | `moss`, `amber` | `moss` |
 | `variant` (`atmos.flow`) | 20–100 | 60 |
 
-`golden` shows the rainbow. `morning` hides it. There is no grass field and no shaft, depth-of-field, or grade pass. Ferns use the grass count (18 preview, 36 export) and dew uses the mote count (48 / 96). Without WebGL2 the set is a flat bank. The library setting is `canyon`.
+`golden` shows the rainbow. `morning` hides it. There is no grass field and no shaft, depth-of-field, or grade pass. Without WebGL2 the set is a flat bank. The library setting is `canyon`.
 
-A software export of `atmos-waterfall-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 39869 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+Look (same flat-shaded, low-poly style as the clearing; the pieces live in `sets/waterfallScenery.ts`, the placement in `sets/waterfallLayout.ts`):
+
+- Rock: about 550 jittered boulders in one instanced draw call, stacked in columns along a wide ellipse. A cleft of 1.3 m either side of the falls is capped at the lip height; columns next to it sit further back so no rock crosses the water sheet. Colours come from strata bands, darker near the water, with moss on the tops.
+- Water: the sheet is two layers of noise streaks with foam at the lip and at the base. The pool is an ellipse with ripples spreading from the fall point, churned foam, a foam rim and glints. Water stays blue-green in both palettes (`WATER` in the layout file).
+- Ground: the painterly floor from the clearing over a 72 × 72 mesh, darker and bluer near the pool. The front edge of the pool stays 0.7 m short of the character spot; pool rocks skip the camera side.
+- Plants: bushes and flower tufts on the banks (`addBushes` and `addFlowers` from `forest.ts`, given the bank areas), pines on the rim and the far banks. Ferns use the grass count as the number of bushes (18 preview, 36 export); dew uses the mote count (48 / 96).
+- Rainbow: an additive arc in front of the falls at 20 % strength.
+
+`waterfallLayout.ts` is pure, and `tests/atmosWaterfallLayout.test.mjs` checks it is deterministic, that no boulder crosses the sheet, and that the pool and pines stay clear of the character spot.
+
+A software export of `atmos-waterfall-wide` (palette `amber`, time `morning`, 1280×720, 6 s) took 100 s on this machine, over the 60 s budget of the scenario plan. The earlier, simpler set took about 40 s. Most of the cost is fragment shading of the rock wall under SwiftShader.
 
 ## Set 3 — `atmos-moon`
 
