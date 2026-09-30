@@ -21,6 +21,25 @@ def animation_tempo(value: object = 120) -> float:
     return bpm
 
 
+def _limb_roles(kind, candidates, chain, positions, hip):
+    ordered = sorted(candidates, key=lambda j: positions[chain(j)[-1]][0])
+    if not positions[chain(ordered[0])[-1]][0] < positions[hip][0] < positions[chain(ordered[1])[-1]][0]:
+        raise ValueError("Expected left and right limb branches")
+    result = {}
+    for side, branch in zip(("right", "left"), ordered):
+        limb = chain(branch)
+        if len(limb) < 3:
+            raise ValueError("Each limb needs separately articulated upper, lower and end joints")
+        if kind == "leg":
+            if positions[limb[2]][1] >= positions[hip][1]:
+                raise ValueError("Leg joints must descend below the pelvis")
+            roles, indices = ("thigh", "knee", "ankle"), limb[:3]
+        else:
+            roles, indices = ("upper_arm", "elbow", "wrist"), limb[-3:]
+        result.update({f"{side}_{role}": index for role, index in zip(roles, indices)})
+    return result
+
+
 def resolve_humanoid(joints: list[int], children: dict[int, list[int]], matrices: dict[int, np.ndarray]) -> dict[str, int]:
     joint_set = set(joints)
     parents = {child: parent for parent, kids in children.items() for child in kids if child in joint_set}
@@ -59,20 +78,7 @@ def resolve_humanoid(joints: list[int], children: dict[int, list[int]], matrices
     rig = {"hips": hip, "spine": torso[0], "chest": chest, "head": head}
     for kind, candidates in (("leg", [j for j in branches if j not in upward]),
                              ("arm", [j for j in upper if j != neck])):
-        ordered = sorted(candidates, key=lambda j: positions[chain(j)[-1]][0])
-        if not positions[chain(ordered[0])[-1]][0] < positions[hip][0] < positions[chain(ordered[1])[-1]][0]:
-            raise ValueError("Expected left and right limb branches")
-        for side, branch in zip(("right", "left"), ordered):
-            limb = chain(branch)
-            if len(limb) < 3:
-                raise ValueError("Each limb needs separately articulated upper, lower and end joints")
-            if kind == "leg":
-                if positions[limb[2]][1] >= positions[hip][1]:
-                    raise ValueError("Leg joints must descend below the pelvis")
-                roles, indices = ("thigh", "knee", "ankle"), limb[:3]
-            else:
-                roles, indices = ("upper_arm", "elbow", "wrist"), limb[-3:]
-            rig.update({f"{side}_{role}": index for role, index in zip(roles, indices)})
+        rig.update(_limb_roles(kind, candidates, chain, positions, hip))
     return rig
 
 
