@@ -192,6 +192,7 @@
         "tests/test_production_shot_plan.py",
         "tests/test_production_dry_run.py",
         "tests/test_production_shot_edit.py",
+        "tests/test_production_shot_review.py",
         "tests/test_production_song_switch.py",
         "tests/test_production_publication.py",
         "tests/test_production_preview.py",
@@ -601,6 +602,7 @@
         "tests/test_production_package.py",
         "tests/test_production_usage.py",
         "tests/test_production_shot_edit.py",
+        "tests/test_production_shot_review.py",
         "tests/test_production_song_switch.py",
         "tests/test_production_cancel.py",
         "tests/test_music_productions_router.py",
@@ -615,7 +617,33 @@
     {
       "prefix": "app/services/production_shot_edit.py",
       "paths": [
-        "tests/test_production_shot_edit.py"
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_shot_review.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_review.py",
+      "paths": [
+        "tests/test_production_shot_review.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_redo.py",
+      "paths": [
+        "tests/test_production_shot_review.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_request.py",
+      "paths": [
+        "tests/test_production_shot_review.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_publication.py",
+      "paths": [
+        "tests/test_production_publication.py",
+        "tests/test_production_shot_review.py"
       ]
     },
     {
@@ -635,13 +663,15 @@
       "paths": [
         "tests/test_production_cancel.py",
         "tests/test_production_shot_edit.py",
+        "tests/test_production_shot_review.py",
         "tests/test_production_song_switch.py"
       ]
     },
     {
       "prefix": "app/routers/music_productions.py",
       "paths": [
-        "tests/test_music_productions_router.py"
+        "tests/test_music_productions_router.py",
+        "tests/test_production_shot_review.py"
       ]
     },
     {

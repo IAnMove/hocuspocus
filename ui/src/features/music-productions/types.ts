@@ -36,6 +36,13 @@ export interface MusicProductionShot {
   scene_doc?: string | null
   scene_video?: string | null
   warnings?: unknown[]
+  review?: { status?: 'pending' | 'approved' | 'changes_requested'; locked?: boolean; history_id?: string }
+}
+
+export interface ReviewPlan {
+  plan: { summary: string; changes: { op: string }[] }
+  diff: { op: string; shot?: string; text?: string; from?: string }[]
+  cost_estimate: { image_jobs: number; clip_jobs: number; scene_exports: number; tokens: number | null }
 }
 
 export interface MusicProductionDetail {

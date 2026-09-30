@@ -417,3 +417,61 @@ published files are served; directory listing and symlink escapes are blocked.
 Call the MCP tool `production.publish` with that body. Its result contains
 `page`, `video`, `files` (download URLs) and `publication_id`. Publication is CPU
 only: it neither re-renders the video nor starts any generation.
+
+### Review one shot at a time
+
+Review state lives in `<id>.review.json` (schema version 1), written with a
+temporary file and `os.replace`. It is not stored in `production.json`. Each
+shot has `status` (`pending`, `approved`, or `changes_requested`), `locked`,
+`notes`, and `history`. A history entry keeps before/after snapshots of
+`frame`, `clip`, `frame_prompt`, `action`, and `overrides`. Undo restores the
+before snapshot and re-exports that scene only. It does not delete media files
+or takes.
+
+`shots.json` gains one additive field, `review` (`status`, `locked`, and
+`history_id` when a history entry exists). Other manifest fields stay as they
+are.
+
+`production.publish` rejects with `review_incomplete` when `shots.json` lists
+shots and any of them is not `approved`, unless `accept_unreviewed` is true.
+A missing review file counts as pending for those shots. A production with no
+shot manifest is an older publish and is not blocked.
+
+Commands use the same `{version: 1, input: {...}}` envelope as the other
+production commands (`additionalProperties` false). REST is
+`POST /api/v1/music-productions/{id}/shots/{shot}/review|lock|redo|request|undo`.
+
+* `production.shot.review` sets the status and an optional note. No GPU.
+* `production.shot.lock` sets `locked`. Locked shots are omitted from
+  `frames()`, `clips()`, and `scenes()`, including a named retake, until
+  unlock. `production.shot.redo` on a locked shot returns `shot_locked` and
+  changes nothing. Undo is still allowed.
+* `production.shot.redo` rebuilds one shot from `frame` (image, then clip,
+  then that scene), `clip` (new clip, same frame), or `scene` (re-export
+  only). It records history before the change and remounts that one montage
+  clip through `production_shot_edit` (`expected_revision`). GPU calls go
+  through `Production.image` and `Production.clip_job`, which already use
+  `guard_mcp`. Old takes stay on disk.
+* `production.shot.request` builds a data-only context from the shot row
+  (no file paths) and calls the configured app LLM (`llm_service.generate`).
+  No configured model returns `llm_unavailable` and does not invent a plan.
+  The reply must be a closed `ShotChangePlan`: `{summary, changes:[{op}]}`.
+  Ops are `set_overrides`, `redo`, `retake`, `use_take`, and `note`. An
+  unknown op, an extra field, a file path, or a shot other than the requested
+  one rejects the whole plan before anything is applied. The instruction and
+  the model text are data. `apply` defaults to false and returns `{plan, diff,
+  cost_estimate}` with `cost_estimate.tokens` null. `apply` true runs the
+  changes under a stable intent id `<id>-req-<16 hex>#<index>`, so a repeat
+  does not submit the same GPU step again. A plan `retake` is one new clip for
+  that shot, not `production.run`.
+* `production.shot.undo` restores `history_id` and re-exports that scene.
+
+The direct path, when the request plan is not used, is `production.shot.redo`,
+`production.shot.update`, `production.shot.use_take`, or `production.run` with
+`retake: [shot]`. The Review mode in Music productions approves with Enter,
+asks for a change (the text goes to `production.shot.request`, the diff is
+shown, then Apply), opens the scene, picks another kept take, and undoes.
+Arrow keys and J/K move between exported scenes. The wizard executor is not a
+tool-calling agent, so these commands are not registered there. Saving a
+scene from Video 2D does not lock the shot by itself. The voices-v2 GPU redo
+was not run with this change.

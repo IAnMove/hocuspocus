@@ -531,6 +531,8 @@ class Production:
     def frames(self, spec: dict, windows: list[dict]) -> None:
         """One start frame per H3 shot. A missing frame is asked for again (new job; a smaller picture after an
         out-of-memory) up to FRAME_ATTEMPTS times; what still fails is reported in ``frame_failures``."""
+        from services.production_shot_review import without_locked
+        windows = without_locked(self, windows)
         frames = self.state.setdefault("frames", {})
         failures = self.state.setdefault("frame_failures", {})
         settings = spec.get("style") or {}
@@ -610,6 +612,8 @@ class Production:
     def clips(self, spec: dict, windows: list[dict], retake: tuple[str, ...] = (), pause: float = 60) -> None:
         """Shoot missing clips (or retake keys). Flat lip-sync r, max_takes, or 4 recorded takes stop an automatic
         shoot; an explicit retake may pass the cap. The best r is kept. A fully failed round waits before the next."""
+        from services.production_shot_review import without_locked
+        windows = without_locked(self, windows)
         self.state.setdefault("clips", {})
         tried = self.state.setdefault("clip_takes", {})
         max_takes = int(spec.get("max_takes", 3))
@@ -691,6 +695,8 @@ class Production:
         return take_settled(qa, previous)
 
     def scenes(self, spec: dict, windows: list[dict]) -> None:
+        from services.production_shot_review import without_locked
+        windows = without_locked(self, windows)
         score = self.score()
         from services.production_preview import ensure_caption_contrast
         ensure_caption_contrast(self, spec, windows, score)
