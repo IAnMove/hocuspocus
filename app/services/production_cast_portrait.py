@@ -13,25 +13,6 @@ PHRASE = "single full-body view, plain neutral background, exactly one subject"
 PORTRAIT_SIZE = "1024x1536"
 
 
-def subject_count(entry: dict) -> int:
-    """How many distinct people this cast entry stands for. Default 1, or the size of its group."""
-    raw = entry.get("count", len(entry.get("group") or []) or 1)
-    try:
-        number = int(raw)
-    except (TypeError, ValueError):
-        return 1
-    return number if number > 0 else 1
-
-
-def cast_counts(spec: dict) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for item in spec.get("cast") or []:
-        if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
-            continue
-        counts[item["id"]] = subject_count(item)
-    return counts
-
-
 def single_prompt(entry: dict, style: str = "") -> str:
     """The portrait prompt: an explicit single_prompt, or the sheet prompt plus the plain-background phrase."""
     own = entry.get("single_prompt")
@@ -45,14 +26,10 @@ def single_prompt(entry: dict, style: str = "") -> str:
     return text
 
 
-def frame_references(window: dict, cast: dict, singles: dict, spec: dict | None = None) -> list[str]:
-    """Image refs for a start frame. A one-subject portrait replaces its sheet; a multi-subject sheet stays."""
-    counts = cast_counts(spec or {})
+def frame_references(window: dict, cast: dict, singles: dict) -> list[str]:
+    """Image refs for a start frame. A portrait replaces its sheet when one exists."""
     ids = [item for item in window.get("cast") or [] if isinstance(item, str) and item in cast]
-    return [
-        (singles.get(item) if counts.get(item, 1) == 1 else None) or cast[item]
-        for item in ids
-    ]
+    return [singles.get(item) or cast[item] for item in ids]
 
 
 def group_sources(production: Any, members: list) -> list[Path]:
@@ -95,7 +72,7 @@ def _portrait_jobs(production: Any, spec: dict) -> dict:
     steps = settings.get("image_steps")
     jobs = {}
     for entry in spec.get("cast") or []:
-        if not isinstance(entry, dict) or entry.get("group") or subject_count(entry) != 1:
+        if not isinstance(entry, dict) or entry.get("group"):
             continue
         cid = entry.get("id")
         if not isinstance(cid, str) or not cid or cid in singles or cid not in cast:

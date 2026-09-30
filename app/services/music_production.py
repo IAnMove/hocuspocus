@@ -522,7 +522,7 @@ class Production:
             for w in missing:
                 attempt = self._attempt("frame_attempts", w["key"])
                 res = FRAME_RESOLUTIONS[min(attempt, len(FRAME_RESOLUTIONS) - 1)] if "memory" in failures.get(w["key"], "") else FRAME_RESOLUTIONS[0]
-                refs = frame_references(w, self.state.get("cast") or {}, self.state.get("cast_single") or {}, spec)
+                refs = frame_references(w, self.state.get("cast") or {}, self.state.get("cast_single") or {})
                 jobs[w["key"]] = self.image("frame-" + w["key"], self.frame_prompt(spec, w), refs or None, res, w.get("seed", 3) + (attempt or 0),
                                             w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")), attempt)
             for key, name in self.wait(jobs).items():
