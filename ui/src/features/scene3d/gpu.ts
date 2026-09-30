@@ -42,6 +42,7 @@ import { atmosEye, isAtmosDressing, prepareAtmosShadows, releaseAtmosShadows, re
 import { cameraEyeAtTime, cameraLookAtTime } from './camera.ts'
 import { performanceClipTime, slotPoseAtTime } from './performance.ts'
 import { rhythmicCameraEye, rhythmicLightIntensity, rhythmicSlotPose } from './rhythm'
+import { stabilizeGroundDepth, stabilizeSceneSurfaces } from './depthStability'
 import { cylinderUvOffset, isCylinderBackdrop, slotMountKey } from './backdrop.ts'
 import { scene3dSlotColor } from './document.ts'
 import { paintDrive } from './driveMotion.ts'
@@ -454,6 +455,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds)
+  stabilizeSceneSurfaces(document.slots, world.slots)
   paintPixelLight(world, document, posedSlots, sceneSeconds)
   const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing
   const target = posedSlots.find(slot => slot.id === framing?.targetSlot)
@@ -587,6 +589,7 @@ export function createWorld(host: HTMLDivElement, light: Scene3DLight, fov: numb
   )
   floor.rotation.x = -Math.PI / 2
   floor.name = 'world-floor'
+  stabilizeGroundDepth(floor)
   scene.add(floor)
   return {
     renderer, scene, camera, dir, floor, dressing: null, dressingReady: true,
