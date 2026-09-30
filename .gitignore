@@ -75,6 +75,8 @@ app/loras_i2v/
 app/loras_metadata/
 app/outputs/
 app/outputs2/
+# Completed-run timing medians written beside a workspace.
+.production-timings.json
 app/gradio_outputs/
 app/storage/
 app/samples/

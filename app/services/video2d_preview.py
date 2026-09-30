@@ -28,7 +28,7 @@ from fastapi import HTTPException
 
 from services import resource_scheduler
 from services.resource_scheduler import ResourceAcquireCancelled
-from services.scene2d_export import _durable, _sequence_urls, validated_document
+from services.scene2d_export import _durable, _sequence_urls, scene_export_lane, validated_document
 from services.world3d_export import _blocked_url, even_dim, playwright_module
 
 OPERATION = "scenes.video2d.preview"
@@ -315,7 +315,7 @@ def _paint_on_lane(document: dict, times: list[float], size: tuple[int, int, int
 
     try:
         with resource_scheduler.coordinator.acquire(
-            resource_scheduler.cpu_lane("scene2d-render"),
+            scene_export_lane(),
             task_id=f"video2d-preview-{uuid.uuid4().hex}",
             description="Video 2D contact sheet",
             cancelled=cancelled,

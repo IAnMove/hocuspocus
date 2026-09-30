@@ -1,7 +1,7 @@
 """Music-video production from one spec: the only creative input an agent writes.
 
 ``production.run`` starts (or resumes) a background run in the workspace; ``production.status``
-returns a short summary and can wait until that status changes (``wait_s``, max 300 s). The run drives the same public MCP tools an agent would call
+returns a short summary and can wait until that status changes (``wait_s``, max 1200 s). The run drives the same public MCP tools an agent would call
 (generation.music/image, generate with H3 driving audio, scenes.video2d.edit/export,
 montages.save/export) through the app's own MCP endpoint, plus the local audio.analyze and
 qa.lipsync functions. Decisions a model used to make by looking are made here by numbers:
@@ -31,6 +31,7 @@ from services.production_resume import open_mcp
 from services.production_resource_gate import guard_mcp
 from services.production_shot_plan import plan_shots
 from services.production_timing import StageWatch, timing_summary
+from services.production_progress import progress_summary
 from services.production_usage import attach_usage, usage_summary
 from services.production_structure import require_direction
 from services.production_quality import expand_quality
@@ -500,6 +501,8 @@ class Production:
         finally:
             disarm(self.ws, self.id)
             self.state["finished"] = time.time()
+            from services.production_usage import note_run
+            note_run(self.state, retake, self.root)
             release_completed(self.root, self.state, self.id)
             self.save()
 
@@ -530,6 +533,7 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
     if smooth:
         summary["smoothness"] = smooth
     summary.update(review_for_status(state, root))
+    summary["progress"] = progress_summary(state, root)
     return summary
 
 
@@ -568,7 +572,7 @@ def command_catalog() -> list[dict[str, Any]]:
         {"name": STATUS, "description": "Short summary of a production: status, stage timings, usage (mcp_calls, response_bytes, h3_takes), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
-                                             "description": "Seconds to wait until status changes. 0 returns at once. Maximum 300."}},
+                                             "description": f"Seconds to wait until status changes. 0 returns at once. Maximum {MAX_WAIT_S}."}},
                                  ["workspace", "production_id"])},
         *extra_catalog(),
     ]

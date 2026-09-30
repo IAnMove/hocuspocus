@@ -95,7 +95,7 @@ def test_completed_run_keeps_only_chosen_files_and_failed_run_keeps_all(tmp_path
 
     done = build("done", fail=False)
     assert done.state["status"] == "completed"
-    assert _names(done) == set(KEEP) | set(FOREIGN) | {done.path.name}
+    assert _names(done) == set(KEEP) | set(FOREIGN) | {done.path.name, ".production-timings.json"}
     failed = build("fail", fail=True)
     assert failed.state["status"] == "failed"
     assert _names(failed) == set(KEEP) | set(LOSE) | set(FOREIGN) | set(_slices("fail")) | {failed.path.name}
