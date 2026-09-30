@@ -75,6 +75,8 @@ def dependency_fingerprint(engine: str, platform: str) -> str:
         paths.append("app/services/hunyuan3d/patch_windows_sources.py")
         if platform == "win32":
             paths.append("scripts/windows_toolchain.py")
+    if engine == "rigging":
+        paths.append("scripts/runtime_bpy_metadata.py")
     if "/vendor/" not in spec["requirements"]:
         paths.append(spec["requirements"])
     digest = hashlib.sha256(f"{engine}:{platform}:{FINGERPRINT_SCHEME}".encode())

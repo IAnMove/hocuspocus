@@ -217,7 +217,7 @@
     },
     "rigging": {
       "label": "UniRig",
-      "installStepsVersion": 1,
+      "installStepsVersion": 2,
       "env": "app/services/rigging/env",
       "environment": "conda",
       "python": "3.11",
@@ -233,8 +233,10 @@
       "constraints": {
         "numpy": "1.26.4",
         "transformers": "4.51.3",
-        "flash-attn": "2.7.4.post1"
+        "flash-attn": "2.7.4.post1",
+        "bpy": "4.2.22"
       },
+      "verificationImports": ["bpy", "flash_attn", "torch_scatter", "torch_cluster", "spconv.pytorch"],
       "vendors": [
         "unirig"
       ],
