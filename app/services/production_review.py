@@ -397,7 +397,9 @@ def review_for_status(state: Any, root: str | None = None) -> dict:
 
     if not isinstance(state, dict) or state.get("status") not in _DONE:
         return empty_review()
-    key = (root, state.get("final"), state.get("finished"), len(state.get("scenes") or {}))
+    from services.production_review_layers import cache_token
+
+    key = (root, state.get("final"), state.get("finished"), len(state.get("scenes") or {}), cache_token(state, root))
     if key in _CACHE:
         _CACHE.move_to_end(key)
         return copy.deepcopy(_CACHE[key])
