@@ -444,8 +444,15 @@ def animatic_report(spec: Any, windows: list, score: Any, state: Any) -> list[di
 
 
 def claim_animatic_video(state: dict, previous: str | None) -> None:
-    """Keep the preview off ``final`` so the run is not marked completed."""
+    """Keep the preview off ``final`` so the run is not marked completed.
+
+    A later animatic still writes a new montage filename into ``final``. That
+    name is the preview; a prior completed cut must stay in ``final``.
+    """
     video = state.get("final")
     if video and video != previous:
         state["animatic_video"] = video
+    if previous:
+        state["final"] = previous
+    else:
         state.pop("final", None)

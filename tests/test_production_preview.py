@@ -253,6 +253,27 @@ def test_animatic_keeps_a_new_export_off_final_and_leaves_an_old_one(tmp_path):
     production.animatic({"title": "t", "shots": [], "fill": []}, [])
     assert production.state["final"] == "done.mp4"
     assert production.state["animatic_video"] == "anim.mp4"
+    production.montage = lambda spec: production.state.__setitem__("final", "anim2.mp4")
+    production.animatic({"title": "t", "shots": [], "fill": []}, [])
+    assert production.state["final"] == "done.mp4"
+    assert production.state["animatic_video"] == "anim2.mp4"
+
+
+def test_animatic_on_a_completed_run_keeps_the_finished_cut(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    for name in ("song", "analyze", "cast", "frames"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.score = lambda: {"duration": 8, "beat": 0.5, "lines": []}
+    production.scenes = lambda *args, **kwargs: None
+    production.montage = lambda spec: production.state.__setitem__("final", "anim.mp4")
+    production.state.update(status="completed", final="done.mp4")
+    production.run(_spec(), through="animatic")
+    assert production.state["final"] == "done.mp4"
+    assert production.state["animatic_video"] == "anim.mp4"
+    assert production.state["status"] == "completed"
+    summary = status_summary(production.state, "ws")
+    assert summary["video"] == "/api/v1/file/done.mp4?workspace=ws"
+    assert summary["animatic"] == "/api/v1/file/anim.mp4?workspace=ws"
 
 
 def test_resume_after_animatic_reuses_frames_and_reaches_clips(tmp_path):
@@ -336,3 +357,6 @@ def test_through_animatic_is_a_stage_and_anything_else_is_rejected(tmp_path, mon
     assert state == {"final": "old.mp4"}
     claim_animatic_video(state, None)
     assert state["animatic_video"] == "old.mp4" and "final" not in state
+    replaced = {"final": "anim.mp4"}
+    claim_animatic_video(replaced, "done.mp4")
+    assert replaced == {"final": "done.mp4", "animatic_video": "anim.mp4"}
