@@ -3,10 +3,17 @@ import { useUiTranslation } from '../../i18n'
 import { openSceneOutput } from '../../lib/sceneOutput'
 import { sceneOutput } from '../video-editor/shotBoardModel'
 import { useStore } from '../../stores/useStore'
-import { applyMusicProductionTake, getMusicProduction, listMusicProductions, retakeMusicProductionShot } from './api'
+import { applyMusicProductionTake, getMusicProduction, listMusicProductions, lockMusicProductionShot, retakeMusicProductionShot, reviewMusicProductionShot } from './api'
 import { MusicProductionGrid } from './MusicProductionGrid'
-import type { MusicProductionCard, MusicProductionShot } from './types'
+import type { MusicProductionCard, MusicProductionShot, ShotReviewAction } from './types'
 import { requestOpenMontage } from './useOpenProductionMontage'
+
+function applyReview(workspace: string, productionId: string, shot: string, action: ShotReviewAction): Promise<unknown> {
+  if (action === 'lock' || action === 'unlock') {
+    return lockMusicProductionShot(workspace, productionId, shot, action === 'lock')
+  }
+  return reviewMusicProductionShot(workspace, productionId, shot, action)
+}
 
 export function MusicProductionsPanel({ onClose }: { onClose: () => void }) {
   const workspace = useStore(state => state.activeWorkspace) || 'default'
@@ -81,6 +88,11 @@ function MusicProductionsBody({ workspace, onClose }: { workspace: string; onClo
             setShots(body.shots || [])
           })}
           onOpenMontage={() => { if (montage) requestOpenMontage(workspace, montage) }}
+          onReview={(shot, action) => run(async () => {
+            await applyReview(workspace, selected, shot, action)
+            const body = await getMusicProduction(workspace, selected)
+            setShots(body.shots || [])
+          })}
         />
       </div> : <ProductionList cards={cards} onOpen={open} />}
     </div>

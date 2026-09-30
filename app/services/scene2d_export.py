@@ -239,7 +239,8 @@ class Scene2DExportService(World3DExportService):
         return freeze_export_command(command)
 
     def resource_lane(self):
-        return resource_scheduler.cpu_lane("scene2d-render")
+        from services.scene_export_lane import scene2d_render_lane
+        return scene2d_render_lane()
 
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
         workspace_root = Path(self.workspace_dir(workspace))

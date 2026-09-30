@@ -191,6 +191,13 @@
     "openMontage": "Abrir montaje",
     "clip": "Clip",
     "scene": "Escena",
-    "failed": "No se pudo completar"
+    "failed": "No se pudo completar",
+    "reviewPending": "Revisión pendiente",
+    "reviewApproved": "Plano aprobado",
+    "reviewChanges": "Cambios pedidos",
+    "approveShot": "Aprobar plano",
+    "requestChanges": "Pedir cambios",
+    "lockShot": "Bloquear plano",
+    "unlockShot": "Desbloquear plano"
   }
 }

@@ -91,9 +91,10 @@ def local_gpu_lane(gpu_index: int = 0) -> ResourceLane:
     return ResourceLane(f"local_gpu:{index}", f"Local GPU {index}", "local")
 
 
-def cpu_lane(name: str = "llm") -> ResourceLane:
+def cpu_lane(name: str = "llm", capacity: int = 1) -> ResourceLane:
     safe_name = str(name or "task").strip().lower().replace(" ", "_")
-    return ResourceLane(f"local_cpu:{safe_name}", f"Local CPU · {safe_name}", "local")
+    slots = capacity if isinstance(capacity, int) and not isinstance(capacity, bool) and capacity >= 1 else 1
+    return ResourceLane(f"local_cpu:{safe_name}", f"Local CPU · {safe_name}", "local", slots)
 
 
 def remote_lane(provider: str, base_url: str = "") -> ResourceLane:

@@ -1,4 +1,4 @@
-import type { MusicProductionCard, MusicProductionDetail } from './types'
+import type { MusicProductionCard, MusicProductionDetail, MusicProductionReviewStatus } from './types'
 
 async function read(response: Response): Promise<unknown> {
   const body: unknown = await response.json().catch(() => ({}))
@@ -30,5 +30,19 @@ export async function retakeMusicProductionShot(workspace: string, productionId:
   return read(await fetch(
     `/api/v1/music-productions/${encodeURIComponent(productionId)}/shots/${encodeURIComponent(shot)}/retake?workspace=${encodeURIComponent(workspace)}`,
     { method: 'POST' },
+  ))
+}
+
+export async function reviewMusicProductionShot(workspace: string, productionId: string, shot: string, status: MusicProductionReviewStatus): Promise<unknown> {
+  return read(await fetch(
+    `/api/v1/music-productions/${encodeURIComponent(productionId)}/shots/${encodeURIComponent(shot)}/review?workspace=${encodeURIComponent(workspace)}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) },
+  ))
+}
+
+export async function lockMusicProductionShot(workspace: string, productionId: string, shot: string, locked: boolean): Promise<unknown> {
+  return read(await fetch(
+    `/api/v1/music-productions/${encodeURIComponent(productionId)}/shots/${encodeURIComponent(shot)}/lock?workspace=${encodeURIComponent(workspace)}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locked }) },
   ))
 }

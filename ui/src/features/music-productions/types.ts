@@ -18,6 +18,15 @@ export interface MusicProductionTake {
   drive?: string
 }
 
+export type MusicProductionReviewStatus = 'pending' | 'approved' | 'changes_requested'
+
+export type ShotReviewAction = 'approved' | 'changes_requested' | 'lock' | 'unlock'
+
+export interface MusicProductionShotReview {
+  status?: MusicProductionReviewStatus
+  locked?: boolean
+}
+
 export interface MusicProductionShot {
   key: string
   kind?: string
@@ -36,6 +45,7 @@ export interface MusicProductionShot {
   scene_doc?: string | null
   scene_video?: string | null
   warnings?: unknown[]
+  review?: MusicProductionShotReview
 }
 
 export interface MusicProductionDetail {

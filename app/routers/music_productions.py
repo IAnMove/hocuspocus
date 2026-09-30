@@ -78,7 +78,8 @@ def shots_of(root: Path, production_id: str) -> list[dict]:
     shots = body.get("shots") if isinstance(body, dict) else None
     if not isinstance(shots, list):
         return []
-    return [row for row in shots if isinstance(row, dict)]
+    from services.production_shot_review import annotate_rows
+    return annotate_rows([row for row in shots if isinstance(row, dict)], root, production_id)
 
 
 def _spec(state: dict) -> dict:
@@ -135,7 +136,7 @@ def create_music_productions_router(
         root, state = state_of(workspace, production_id)
         return {
             "production": production_card(workspace, production_id, state),
-            "status": status_summary(state, workspace, str(root)),
+            "status": status_summary(state, workspace, str(root), production_id),
             "shots": shots_of(root, production_id),
         }
 
@@ -174,5 +175,64 @@ def create_music_productions_router(
                 )
             except ShotEditError as error:
                 raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
+
+    def _decision(production_id: str, shot: str, workspace: str, **fields):
+        from services.production_shot_review import ReviewError, record_decision
+        root, _state = state_of(workspace, production_id)
+        try:
+            return record_decision(root, production_id, shot, **fields)
+        except ReviewError as error:
+            raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/review")
+    def post_review(production_id: str, shot: str, workspace: str, body: dict):
+        payload = body or {}
+        return _decision(production_id, shot, workspace, status=payload.get("status"), notes=payload.get("notes"))
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/lock")
+    def post_lock(production_id: str, shot: str, workspace: str, body: dict):
+        return _decision(production_id, shot, workspace, locked=bool((body or {}).get("locked")))
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/redo")
+    def post_redo(production_id: str, shot: str, workspace: str, body: dict):
+        from services.music_production import ProductionError
+        from services.production_shot_commands import _export_scene, _shoot_clip, _shoot_frame
+        from services.production_shot_edit import ShotEditError
+        from services.production_shot_redo import redo
+        payload = body or {}
+        with hold_edit(workspace, production_id):
+            production_cls, mcp = studio()
+            _root_path, state = state_of(workspace, production_id)
+            production = production_cls(workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=mcp)
+            try:
+                return redo(production, _spec(state), shot, payload.get("from"), frame_prompt=payload.get("frame_prompt"), action=payload.get("action"), shoot_frame=_shoot_frame, shoot_clip=_shoot_clip, export_scene=_export_scene)
+            except (ProductionError, ShotEditError) as error:
+                raise HTTPException(status_code=422, detail={"code": getattr(error, "code", "shot_edit_failed"), "message": str(error)}) from error
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/request")
+    def post_request(production_id: str, shot: str, workspace: str, body: dict):
+        from services.production_shot_request import RequestError, resolve_plan
+        payload = body or {}
+        try:
+            plan = resolve_plan(payload)
+        except RequestError as error:
+            raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
+        return {"plan": plan, "applied": False}
+
+    @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/undo")
+    def post_undo(production_id: str, shot: str, workspace: str, body: dict):
+        from services.music_production import ProductionError
+        from services.production_shot_commands import _export_scene
+        from services.production_shot_edit import ShotEditError
+        from services.production_shot_redo import undo
+        history_id = str((body or {}).get("history_id") or "")
+        with hold_edit(workspace, production_id):
+            production_cls, mcp = studio()
+            _root_path, state = state_of(workspace, production_id)
+            production = production_cls(workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=mcp)
+            try:
+                return undo(production, _spec(state), shot, history_id, export_scene=_export_scene)
+            except (ProductionError, ShotEditError) as error:
+                raise HTTPException(status_code=422, detail={"code": getattr(error, "code", "shot_edit_failed"), "message": str(error)}) from error
 
     return router

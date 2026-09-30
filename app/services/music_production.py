@@ -1,7 +1,7 @@
 """Music-video production from one spec: the only creative input an agent writes.
 
 ``production.run`` starts (or resumes) a background run in the workspace; ``production.status``
-returns a short summary and can wait until that status changes (``wait_s``, max 300 s). The run drives the same public MCP tools an agent would call
+returns a short summary and can wait until that status changes (``wait_s``, max 1200 s). The run drives the same public MCP tools an agent would call
 (generation.music/image, generate with H3 driving audio, scenes.video2d.edit/export,
 montages.save/export) through the app's own MCP endpoint, plus the local audio.analyze and
 qa.lipsync functions. Decisions a model used to make by looking are made here by numbers:
@@ -46,11 +46,10 @@ from services.production_control import Cancelled, arm, checkpoint, disarm, slee
 from services.production_package import (attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, editable_summary,
                                          lyric_for, manifest_rows, write_manifest)
 from services.production_shot_edit import render_shot
-from services.production_song_switch import remember_candidates
 from services.production_sheets import compose_group, make_frames_sheet
 from services.production_takes import another_take, better_take, note_seconds, obsolete_clip, pending_windows, take_settled
 from services.production_wait import MAX_WAIT_S, wait_for_status
-from services.video2d_edit import MAX_OPERATIONS, MAX_TEXTS
+from services.video2d_edit import MAX_OPERATIONS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
 RUN, STATUS, PLAN = "production.run", "production.status", "production.plan"
@@ -118,7 +117,13 @@ SPEC_SCHEMA: dict[str, Any] = {
         "max_takes": {"type": "integer", "minimum": 1, "maximum": 5},
         "structure": {"enum": ["clip", "trailer"], "description": "clip (default): verse/chorus shots on the song's lines; trailer: five beats on time (presentation, tension, escalation, reveal, close) with designed silence, risers and hits"},
         "treatment": {"type": "object", "description": "what happens: arc (what changes first image to last), want, obstacle, moments [{at, event}] (at: chorus2, bridge, line:N), motifs. dry_run checks the plan carries it"},
-        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: fills song seeds and max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"}},
+        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: fills song seeds and max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"},
+        "resolution": {"type": "object", "properties": {
+            "frames": {"enum": ["1280x704", "1152x640", "1024x576", "1536x1024", "1024x1536"]},
+            "clips": {"enum": ["1280x704", "1152x640", "1024x576"]}}},
+        "enhance": {"type": "object", "properties": {
+            "method": {"enum": ["flashvsr", "rife"]},
+            "scale": {"enum": [2, 4]}}}},
 }
 
 
@@ -184,7 +189,8 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
-    return require_direction(spec)
+    from services.production_resolution import check_resolution
+    return require_direction(check_resolution(spec))
 
 
 # ---------------------------------------------------------------- pure planning helpers (tested)
@@ -377,9 +383,16 @@ class Production:
 
     # state
     def save(self) -> None:
+        from services.production_state import allow_save
+        if not allow_save(self.path, self.state):
+            return
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.state, ensure_ascii=False))
         tmp.replace(self.path)
+
+    def _unlocked(self, windows: list[dict], retake: tuple[str, ...] = ()) -> list[dict]:
+        from services.production_shot_review import unlocked_windows
+        return unlocked_windows(self, windows, retake)
 
     def log(self, line: str) -> None:
         self.state.setdefault("log", []).append(line[:200])
@@ -418,6 +431,8 @@ class Production:
                 s = self.mcp("status", {"job_id": job})
                 if s.get("status") == "completed":
                     done[key] = (s.get("output_files") or [None])[0]
+                    from services.production_perf import remember_performance
+                    remember_performance(getattr(self, "state", None), key, s)
                 elif s.get("status") is None:            # a status hiccup is not a lost job yet
                     unknown[key] = unknown.get(key, 0) + 1
                     if unknown[key] >= 5:
@@ -445,43 +460,12 @@ class Production:
 
     # steps
     def song(self, spec: dict) -> None:
-        if self.state.get("song"):
-            return
-        sp = spec["song"]
-        if sp.get("file"):
-            self.state["song"] = {"file": sp["file"]}
-            remember_candidates(self.state, {"file": {"file": sp["file"]}})
-            return self.log(f"song: using {sp['file']}")
-        jobs = {}
-        for seed in sp.get("seeds") or [11, 22, 33]:
-            params = {"prompt": sp["lyrics"] or "[Instrumental]", "alt_prompt": sp["caption"], "model_type": sp.get("model", "ace_step_v1_5_xl_sft_lm_4b"), "seed": seed,
-                      "generation_mode": "audio", "_audio_sub_mode": "music", "image_mode": 0, "video_length": 0, "lyrics_language": "en",
-                      "duration_seconds": sp["duration"], "custom_settings": {"bpm": int(sp["bpm"]), "keyscale": sp.get("key", "A minor"), "timesignature": 4, "language": "en"}}
-            r = self.mcp("generation.music", {"version": 2, "intent_id": f"{self.id}-song-{seed}", "input": {"workspace": self.ws, "params": params}})
-            jobs[str(seed)] = ((r.get("receipt") or {}).get("result") or {}).get("job_id")
-        candidates = {}
-        for seed, name in self.wait(jobs).items():
-            if not name:
-                continue
-            score = audio_analysis.analyze(str(self.root / name), sp["lyrics"], out_dir=str(self.root))
-            candidates[seed] = {"file": name, "recall": score["recall"], "tail_rms": score["tail_rms"], "score_file": score["score_file"]}
-            self.log(f"song seed {seed}: recall {score['recall']} tail {score['tail_rms']}")
-        if not candidates:
-            raise ProductionError("song_failed", "No song candidate finished")
-        remember_candidates(self.state, candidates)
-        best = pick_song(candidates)
-        self.state["song"] = candidates[best]
-        self.log(f"song: picked seed {best}")
+        from services.production_song import generate_song
+        generate_song(self, spec)
 
     def analyze(self, spec: dict) -> None:
-        if self.state.get("score"):
-            return
-        song = self.state["song"]
-        if not song.get("score_file"):
-            song["score_file"] = audio_analysis.analyze(str(self.root / song["file"]), spec["song"]["lyrics"], out_dir=str(self.root))["score_file"]
-        self.state["score"] = song["score_file"]
-        score = self.score()
-        self.log(f"analyze: {score['bpm']} BPM, {len(score['lines'])} lines, recall {score['recall']}")
+        from services.production_song import analyze_song
+        analyze_song(self, spec)
 
     def score(self) -> dict:
         return json.loads((self.root / self.state["score"]).read_text())
@@ -531,6 +515,7 @@ class Production:
     def frames(self, spec: dict, windows: list[dict]) -> None:
         """One start frame per H3 shot. A missing frame is asked for again (new job; a smaller picture after an
         out-of-memory) up to FRAME_ATTEMPTS times; what still fails is reported in ``frame_failures``."""
+        windows = self._unlocked(windows)
         frames = self.state.setdefault("frames", {})
         failures = self.state.setdefault("frame_failures", {})
         settings = spec.get("style") or {}
@@ -539,10 +524,11 @@ class Production:
             if not missing:
                 break
             from services.production_cast_portrait import frame_references
+            from services.production_resolution import frame_resolution
             jobs = {}
             for w in missing:
                 attempt = self._attempt("frame_attempts", w["key"])
-                res = FRAME_RESOLUTIONS[min(attempt, len(FRAME_RESOLUTIONS) - 1)] if "memory" in failures.get(w["key"], "") else FRAME_RESOLUTIONS[0]
+                res = frame_resolution(spec, attempt, failures.get(w["key"], ""))
                 refs = frame_references(w, self.state.get("cast") or {}, self.state.get("cast_single") or {})
                 jobs[w["key"]] = self.image("frame-" + w["key"], self.frame_prompt(spec, w), refs or None, res, w.get("seed", 3) + (attempt or 0),
                                             w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")), attempt)
@@ -596,7 +582,8 @@ class Production:
         sing = " (S1) sings the lead vocal of the mapped driving audio, lips, jaw and breath in precise sync with every syllable." if w.get("sing") else ""
         prompt = (f"integrated_multimodal_description: [Shot 1] {(spec.get('style') or {}).get('video', '')} {w['action']}{sing}\n"
                   "overall_soundscape: The mapped driving audio: the song.\nnon_diegetic_music: N/A")
-        params = {"prompt": prompt, "model_type": "minimax_h3_fused_turbo", "resolution": "1280x704", "seed": seed, "generation_mode": "video",
+        from services.production_resolution import clip_resolution
+        params = {"prompt": prompt, "model_type": "minimax_h3_fused_turbo", "resolution": clip_resolution(spec), "seed": seed, "generation_mode": "video",
                   "workspace": self.ws, "image_prompt_type": "S", "image_start": self.upload(self.state["frames"][w["key"]])[0],
                   "video_length": frames, "sliding_window_size": frames, "num_inference_steps": 4, "guidance_scale": 1, "image_mode": 0,
                   "input_video_strength": 1.0, "audio_prompt_type": "A", "audio_guide": self.upload(slice_name)[0]}
@@ -610,6 +597,7 @@ class Production:
     def clips(self, spec: dict, windows: list[dict], retake: tuple[str, ...] = (), pause: float = 60) -> None:
         """Shoot missing clips (or retake keys). Flat lip-sync r, max_takes, or 4 recorded takes stop an automatic
         shoot; an explicit retake may pass the cap. The best r is kept. A fully failed round waits before the next."""
+        windows = self._unlocked(windows, retake)
         self.state.setdefault("clips", {})
         tried = self.state.setdefault("clip_takes", {})
         max_takes = int(spec.get("max_takes", 3))
@@ -700,7 +688,10 @@ class Production:
         done = self.state.setdefault("scenes", {})
         style, stills = spec.get("style") or {}, spec.get("stills") or {}
         docs: dict[str, dict] = {}
+        from services.production_shot_review import is_locked
         for shot, a, b in segs:
+            if is_locked(self, shot["key"]):
+                continue
             dur = round(b - a, 3)
             used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
             prior = done.get(shot["key"], {})
@@ -848,59 +839,17 @@ class Production:
 
     @staticmethod
     def _title_ops(shot: dict, dur: float, style: dict) -> tuple[list[dict], int]:
-        span = title_span(dur)
-        if not shot.get("title") or not span:
-            return [], 0
-        template = shot["title"].get("template", "lower-third-date")
-        fields = shot["title"]["fields"]
-        ops = [{"op": "add_title", "id": "tt", "template": template, "fields": fields,
-                "start": span[0], "duration": span[1]}]
-        cues = TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080})
-        for index, cue in enumerate(cues):
-            patch = {**(style.get("title_style") or {}), **(shot["title"].get("style") or {}),
-                     **((shot["title"].get("cues") or {}).get(cue["id"]) or {})}
-            if shot.get("graphic") and index == 0:
-                patch["graphic"] = shot["graphic"]
-            if patch:
-                ops.append({"op": "update_text", "id": f"tt-{cue['id']}", "patch": patch})
-        if template == "lower-third-date":   # section label on top; lyrics own the bottom
-            ops += [{"op": "update_text", "id": "tt-date", "patch": {"y": 12}},
-                    {"op": "update_text", "id": "tt-caption", "patch": {"y": 20}}]
-        return ops, title_cue_count(template, fields, *span)
+        from services.production_scene_ops import title_ops
+        return title_ops(shot, dur, style)
 
     def _lyric_ops(self, shot: dict, a: float, b: float, dur: float, score: dict, style: dict, used: int) -> list[dict]:
-        ops: list[dict] = []
-        template = style.get("lyric_template", "social-caption")
-        limit = MAX_TEXTS - bool(style.get("footer"))
-        for index, line in enumerate(score.get("lines") or []):
-            span = lyric_span(line, a, b, dur)
-            if span is None:
-                continue
-            fields = {"line": line["text"]} if template in ("ransom", "dymo") else {"caption": line["text"]}
-            cues = title_cue_count(template, fields, *span)
-            if used + cues > limit:
-                self.log(f"scene {shot.get('key')}: dropped lyrics after {used} text cues")
-                break
-            used += cues
-            ops.append({"op": "add_title", "id": f"ly{index}", "template": template, "fields": fields,
-                        "start": span[0], "duration": span[1]})
-            own = style.get("lyric_style") or {}
-            look = {**theme_lyric_style(style.get("theme")), **(DYMO_READABLE if template == "dymo" and "box" not in own else {}), **own, **seam_look(line, a, b)}
-            if look:
-                for cue in TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080}):
-                    ops.append({"op": "update_text", "id": f"ly{index}-{cue['id']}", "patch": look})
-        return ops
+        from services.production_scene_ops import lyric_ops
+        return lyric_ops(self.log, shot, a, b, dur, score, style, used)
 
     @staticmethod
     def _footer_ops(dur: float, style: dict) -> list[dict]:
-        if not style.get("footer"):
-            return []
-        return [{"op": "add_title", "id": "footer", "template": "social-caption", "fields": {"caption": str(style["footer"])},
-                 "start": 0, "duration": dur},
-                {"op": "update_text", "id": "footer-social", "patch": {"y": 96, "size": 2, "font": "mono", "maxWidth": 96,
-                 "color": "#EFE6D2", "box": {"kind": "solid", "color": "#1B1718", "opacity": 0.85, "padding": 0.25},
-                 **({"color": colours["fg"], "box": {"kind": "solid", "color": colours["surface"], "opacity": 0.92, "padding": 0.25}} if (colours := theme_colours(style.get("theme"))) else {}),
-                 **(style.get("footer_style") or {})}}]
+        from services.production_scene_ops import footer_ops
+        return footer_ops(dur, style)
 
     def montage(self, spec: dict) -> None:
         if skip_montage(self.state):
@@ -971,6 +920,8 @@ class Production:
         from services.production_preview import keep_completed_cut, remember_completed_cut
         remember_completed_cut(self.state, prior_status, through)
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time(), through=through)
+        from services.production_close import note_resume
+        note_resume(self)
         self.save()
         try:
             checkpoint(self._cancel)
@@ -1002,6 +953,8 @@ class Production:
             watch.call("clips", self.clips, spec, windows, retake)
             if any(s.get("kind") == "scene3d" for s in [*spec["shots"], *(spec.get("fill") or [])]):
                 watch.call("clips", export_scene3d_clips, self, spec, windows, retake)
+            from services.production_enhance import enhance_clips
+            enhance_clips(self, spec)
             watch.call("scenes", self.scenes, spec, windows)
             try:
                 self.package(spec, windows)
@@ -1020,11 +973,13 @@ class Production:
         finally:
             disarm(self.ws, self.id)
             self.state["finished"] = time.time()
+            from services.production_close import close_run
+            close_run(self, retake)
             release_completed(self.root, self.state, self.id)
             self.save()
 
 
-def status_summary(state: dict, workspace: str, root: str | None = None) -> dict[str, Any]:
+def status_summary(state: dict, workspace: str, root: str | None = None, production_id: str | None = None) -> dict[str, Any]:
     url = lambda name: f"/api/v1/file/{name}?workspace={workspace}" if name else None
     clips = state.get("clips") or {}
     summary = {"status": state.get("status", "unknown"), "error": state.get("error"),
@@ -1050,11 +1005,16 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
     if smooth:
         summary["smoothness"] = smooth
     summary.update(review_for_status(state, root))
+    from services.production_progress import progress_summary
+    summary["progress"] = progress_summary(state, root)
+    from services.production_shot_review import apply_artistic
+    apply_artistic(summary, root, production_id)
     return summary
 
 
 # ---------------------------------------------------------------- MCP
 def command_catalog() -> list[dict[str, Any]]:
+    from services.production_shot_commands import review_catalog
     envelope = lambda props, required: {"type": "object", "additionalProperties": False, "required": ["version", "input"], "properties": {
         "version": {"type": "integer", "const": 1},
         "input": {"type": "object", "additionalProperties": False, "required": required, "properties": props}}}
@@ -1085,12 +1045,15 @@ def command_catalog() -> list[dict[str, Any]]:
                                          ["workspace", "production_id"])},
         {"name": PLAN, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them) and an optional footer (small print on every scene).",
          "inputSchema": envelope({"brief": {"type": "object"}}, ["brief"])},
-        {"name": STATUS, "description": "Short summary of a production: status, stage timings, usage (mcp_calls, response_bytes, h3_takes), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), last log lines. wait_s blocks until that status value changes or the wait elapses.",
+        {"name": STATUS, "description": "Short summary of a production: status, progress, stage timings, usage (mcp_calls, response_bytes, h3_takes, gpu_seconds, cpu_seconds, retry_seconds, reused_seconds), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), last log lines. wait_s blocks until the chosen until condition or the wait elapses. A client may still poll at 300 s; the server accepts up to 1200 s.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
-                                             "description": "Seconds to wait until status changes. 0 returns at once. Maximum 300."}},
+                                             "description": "Seconds to wait. 0 returns at once. Maximum 1200. 300 remains a safe client poll."},
+                                  "until": {"enum": ["change", "stage", "done"], "default": "change",
+                                            "description": "change: status value changes. stage: status or stage name changes. done: completed, failed, or cancelled."}},
                                  ["workspace", "production_id"])},
         *extra_catalog(),
+        *review_catalog(),
     ]
 
 
@@ -1123,7 +1086,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         data = _input(arguments)
         if data.get("dry_run") is True:
             from services.production_dry_run import dry_run
-            return {"version": 1, "status": "completed", "operation": RUN, "result": dry_run(data.get("spec"))}
+            return {"version": 1, "status": "completed", "operation": RUN, "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]))}
         if not token() or not app_url():
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         key = f"{data['workspace']}/{data['production_id']}"
@@ -1171,8 +1134,11 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         path = Path(workspace_dir(data["workspace"])) / f"{data['production_id']}.production.json"
         if not path.exists():
             raise HTTPException(404, {"code": "production_not_found", "message": "No production with this id in the workspace", "retryable": False})
-        state = await wait_for_status(path, data.get("wait_s", 0))
-        summary = await asyncio.to_thread(status_summary, state, data["workspace"], str(path.parent))    # the review opens video files
+        state = await wait_for_status(path, data.get("wait_s", 0), until=data.get("until"))
+        waited = state.pop("waited_s", None) if isinstance(state, dict) else None
+        summary = await asyncio.to_thread(status_summary, state, data["workspace"], str(path.parent), data["production_id"])    # the review opens video files
+        if isinstance(waited, int):
+            summary["waited_s"] = waited
         return {"version": 1, "status": "completed", "operation": STATUS, "result": summary}
 
     async def plan(arguments: Any) -> dict:
@@ -1186,4 +1152,5 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
         return {"version": 1, "status": "completed", "operation": PLAN, "result": {"spec": spec}}
 
-    return {RUN: run, STATUS: status, PLAN: plan, **extra_handlers(workspace_dir, uploads_dir, app_url, token), **publication_handlers(workspace_dir)}
+    from services.production_shot_commands import review_handlers
+    return {RUN: run, STATUS: status, PLAN: plan, **extra_handlers(workspace_dir, uploads_dir, app_url, token), **publication_handlers(workspace_dir), **review_handlers(workspace_dir, uploads_dir, app_url, token)}

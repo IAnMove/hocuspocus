@@ -191,6 +191,13 @@
     "openMontage": "Open montage",
     "clip": "Clip",
     "scene": "Scene",
-    "failed": "Could not complete that"
+    "failed": "Could not complete that",
+    "reviewPending": "Review pending",
+    "reviewApproved": "Shot approved",
+    "reviewChanges": "Changes requested",
+    "approveShot": "Approve shot",
+    "requestChanges": "Request changes",
+    "lockShot": "Lock shot",
+    "unlockShot": "Unlock shot"
   }
 }

@@ -1,0 +1,55 @@
+"""Song generation and analysis for one production. The runner keeps the thin methods."""
+from __future__ import annotations
+
+from typing import Any
+
+from services import song_analysis as audio_analysis
+from services.music_production import ProductionError, pick_song
+from services.production_song_switch import remember_candidates
+
+
+def generate_song(production: Any, spec: dict) -> None:
+    if production.state.get("song"):
+        return
+    song = spec["song"]
+    if song.get("file"):
+        production.state["song"] = {"file": song["file"]}
+        remember_candidates(production.state, {"file": {"file": song["file"]}})
+        production.log(f"song: using {song['file']}")
+        return
+    jobs = {}
+    for seed in song.get("seeds") or [11, 22, 33]:
+        params = {"prompt": song["lyrics"] or "[Instrumental]", "alt_prompt": song["caption"],
+                  "model_type": song.get("model", "ace_step_v1_5_xl_sft_lm_4b"), "seed": seed,
+                  "generation_mode": "audio", "_audio_sub_mode": "music", "image_mode": 0, "video_length": 0,
+                  "lyrics_language": "en", "duration_seconds": song["duration"],
+                  "custom_settings": {"bpm": int(song["bpm"]), "keyscale": song.get("key", "A minor"),
+                                      "timesignature": 4, "language": "en"}}
+        reply = production.mcp("generation.music", {"version": 2, "intent_id": f"{production.id}-song-{seed}",
+                                                    "input": {"workspace": production.ws, "params": params}})
+        jobs[str(seed)] = ((reply.get("receipt") or {}).get("result") or {}).get("job_id")
+    candidates = {}
+    for seed, name in production.wait(jobs).items():
+        if not name:
+            continue
+        score = audio_analysis.analyze(str(production.root / name), song["lyrics"], out_dir=str(production.root))
+        candidates[seed] = {"file": name, "recall": score["recall"], "tail_rms": score["tail_rms"], "score_file": score["score_file"]}
+        production.log(f"song seed {seed}: recall {score['recall']} tail {score['tail_rms']}")
+    if not candidates:
+        raise ProductionError("song_failed", "No song candidate finished")
+    remember_candidates(production.state, candidates)
+    best = pick_song(candidates)
+    production.state["song"] = candidates[best]
+    production.log(f"song: picked seed {best}")
+
+
+def analyze_song(production: Any, spec: dict) -> None:
+    if production.state.get("score"):
+        return
+    song = production.state["song"]
+    if not song.get("score_file"):
+        song["score_file"] = audio_analysis.analyze(
+            str(production.root / song["file"]), spec["song"]["lyrics"], out_dir=str(production.root))["score_file"]
+    production.state["score"] = song["score_file"]
+    score = production.score()
+    production.log(f"analyze: {score['bpm']} BPM, {len(score['lines'])} lines, recall {score['recall']}")

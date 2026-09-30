@@ -1,5 +1,9 @@
 # Producción de videoclips: tablero de trabajo (2026-09-30)
 
+## Cierre 2026-09-30
+
+Quedó en `development` antes de este cierre: fluidez #661, tratamiento y tráiler #668, revisión en tres capas #672, atmósfera crystal cave #673 (`4aedc6aa`). La rama `feat/production-phase-close` cierra lo que seguía abierto: espera hasta 1200 s con `until`, progreso y ETA, estimación con historial, segundos de uso, debounce del guardado, resolución y enhance planificado, fases H3 cuando el job las trae, revisión humana por plano, bloqueo, rehacer/deshacer, y la puerta de publicación. `music_production.py` sigue por encima de 700 líneas. No hay medida de la tabla de 17 fotogramas Qwen→H3, ni del tiempo de 21 escenas, ni de SSIM, ni de los seis retratos, ni del antes/después de gremlins. `artistic` no pasa a ok por código.
+
 Repartir lo que falta del plan `GROK_PRODUCTION_NEXT_2026-09-29.md` (el detalle por bloque, en `GROK_PRODUCTION_BLOCKS_2026-09-30.md`) (los números son los de ese documento) para que dos
 agentes no abran lo mismo. GitHub tiene los issues desactivados: **este archivo es el tablero**. Cada PR que cierre o
 avance un bloque actualiza aquí su estado en el mismo PR. Estado comprobado el 2026-09-30 contra `origin/development` 40df83ec

@@ -18,10 +18,15 @@ def note_call(state: dict, result: Any) -> None:
 
 def usage_summary(state: dict) -> dict[str, int]:
     raw = state.get("usage") if isinstance(state.get("usage"), dict) else {}
+    timing = state.get("timing") if isinstance(state.get("timing"), dict) else {}
     return {
         "mcp_calls": _count(raw.get("mcp_calls")),
         "response_bytes": _count(raw.get("response_bytes")),
         "h3_takes": _takes(state.get("clip_takes")),
+        "gpu_seconds": _seconds(timing.get("song")) + _seconds(timing.get("frames")) + _seconds(timing.get("clips")),
+        "cpu_seconds": _seconds(timing.get("scenes")) + _seconds(timing.get("montage")) + _seconds(timing.get("package")),
+        "retry_seconds": _retry_seconds(state),
+        "reused_seconds": _reused_seconds(state),
     }
 
 
@@ -58,6 +63,39 @@ def _count(value: Any) -> int:
     except (TypeError, ValueError):
         return 0
     return number if number > 0 else 0
+
+
+def _seconds(value: Any) -> int:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0
+    if number < 0 or number != number:
+        return 0
+    return int(round(number))
+
+
+def _retry_seconds(state: dict) -> int:
+    """Share of clip_seconds that belongs to takes after the first. No second clock."""
+    seconds = state.get("clip_seconds") if isinstance(state.get("clip_seconds"), dict) else {}
+    takes = state.get("clip_takes") if isinstance(state.get("clip_takes"), dict) else {}
+    total = 0.0
+    for key, value in seconds.items():
+        count = _count(takes.get(key))
+        if count > 1 and isinstance(value, (int, float)):
+            total += float(value) * (count - 1) / count
+    return int(round(total))
+
+
+def _reused_seconds(state: dict) -> int:
+    """Clip seconds kept from before this run, except keys named in the latest retake."""
+    kept = {item for item in state.get("kept_clips") or [] if isinstance(item, str)}
+    runs = state.get("runs") if isinstance(state.get("runs"), list) else []
+    latest = runs[-1] if runs and isinstance(runs[-1], dict) else {}
+    retake = {item for item in latest.get("retake") or [] if isinstance(item, str)}
+    seconds = state.get("clip_seconds") if isinstance(state.get("clip_seconds"), dict) else {}
+    total = sum(float(seconds[key]) for key in kept - retake if isinstance(seconds.get(key), (int, float)))
+    return int(round(total))
 
 
 def _takes(value: Any) -> int:
