@@ -35,6 +35,14 @@ converted from the input sRGB hex values, and a matte white material. It
 has no textures, external buffers, skeleton or animation. Animate rigid
 models through Video 3D slot motion and the scene camera.
 
+Pieces that share a face plane (a screen laid flush on a cabinet, a cushion on a seat)
+would flicker against each other as the camera moves. When two differently coloured
+surfaces lie in the same plane, face the same way and overlap, the one with less area
+is lifted 4 mm along its normal, and a third one 8 mm. Faces that only touch back to
+back are left alone. Nothing else changes, so a model with no shared planes is byte
+for byte what it was. Models composed before this fix keep their old geometry; compose
+them again from the piece recipe in their manifest to get the separated faces.
+
 The reply is `{version:1, operation:"model3d.compose", status:"completed",
 result:{file,name,workspace,url,sha256,pieces,bytes}}`. The URL includes the
 workspace and works as a Video 3D slot `sourceUrl`. A canonical asset manifest

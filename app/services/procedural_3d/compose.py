@@ -10,6 +10,8 @@ import math
 import re
 import struct
 
+from services.procedural_3d.coplanar import separate_coplanar
+
 KINDS = ("box", "sphere", "cylinder", "cone")
 MAX_PIECES = 128
 SEGMENTS = 8
@@ -116,7 +118,7 @@ def compose_glb(pieces, name="Composed model") -> bytes:
             vertices.extend(points)
             normals.extend([normal] * 3)
             colors.extend([piece["color"]] * 3)
-    return _pack(name, vertices, normals, colors)
+    return _pack(name, separate_coplanar(vertices, normals, colors), normals, colors)
 
 
 def _pack(name, vertices, normals, colors):
