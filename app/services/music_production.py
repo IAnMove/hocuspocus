@@ -660,6 +660,8 @@ class Production:
 
     def scenes(self, spec: dict, windows: list[dict]) -> None:
         score = self.score()
+        from services.production_preview import ensure_caption_contrast
+        ensure_caption_contrast(self, spec, windows, score)
         clips = self.state.get("clips", {})
         segs = segments(windows, score, lambda k: k in clips, spec.get("fill") or [])
         self.state["segments"] = [[s["key"], a, b] for s, a, b in segs]
@@ -908,12 +910,27 @@ class Production:
             self.state["contact_sheet"] = sheet
         self.log(f"montage: {status.get('status')}")
 
+    def animatic(self, spec: dict, windows: list[dict]) -> None:
+        """CPU preview from the start frames. A new export is stored apart from ``final``."""
+        from services.production_preview import animatic_report, claim_animatic_video
+        previous = self.state.get("final")
+        self.state["animatic_warnings"] = animatic_report(spec, windows, self.score(), self.state)
+        self.state["caption_gate"] = "warn"
+        try:
+            self.scenes(spec, windows)
+            self.montage(spec)
+        finally:
+            self.state.pop("caption_gate", None)
+        claim_animatic_video(self.state, previous if isinstance(previous, str) else None)
+
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
         self._cancel = arm(self.ws, self.id)
         self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time())
         self.save()
         try:
             checkpoint(self._cancel)
+            from services.production_preview import log_title_cards
+            log_title_cards(self, spec)
             watch = StageWatch(self)
             watch.call("song", self.song, spec)
             watch.call("analyze", self.analyze, spec)
@@ -923,6 +940,12 @@ class Production:
             if through == "frames":
                 self.state["status"] = "frames_ready"
                 self.log("frames: ready for a clean restart before clips")
+                return
+            if through == "animatic":
+                self.animatic(spec, windows)
+                if self.state.get("status") != "failed":
+                    self.state["status"] = "animatic_ready"
+                    self.log("animatic: ready; a resume continues with clips")
                 return
             watch.call("clips", self.clips, spec, windows, retake)
             if any(s.get("kind") == "scene3d" for s in [*spec["shots"], *(spec.get("fill") or [])]):
@@ -962,7 +985,9 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
             "preview_frames": state.get("preview_frames") or None,
             "frames_ready": len(state.get("frames") or {}),
             "scenes": sum(1 for s in (state.get("scenes") or {}).values() if s.get("file")),
-            "video": url(state.get("final")), "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:],
+            "video": url(state.get("final")), "animatic": url(state.get("animatic_video")),
+            "animatic_warnings": state.get("animatic_warnings") or None,
+            "contact_sheet": url(state.get("contact_sheet")), "log": (state.get("log") or [])[-8:],
             "timing": timing_summary(state), "usage": usage_summary(state), "editable": editable_summary(state)}
     summary.update(review_for_status(state, root))
     return summary
@@ -983,13 +1008,15 @@ def command_catalog() -> list[dict[str, Any]]:
                                       "and their scenes re-exported); retake lists clip keys to shoot again, keeping the better take. "
                                       "Returns immediately; "
                                       "poll production.status. dry_run checks the spec before any GPU work. "
+                                      "through frames stops after the start frames (frames_ready); through animatic builds a CPU preview "
+                                      "from those frames (animatic_ready) and a later run continues at the clips. "
                                       "See docs/agents/VIDEO_PRODUCTION_RUNBOOK.md."),
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
                                           "dry_run": {"type": "boolean"},
                                           "package": {"type": "boolean", "description": "true: make a finished production editable shot by shot (scene documents, manifest, montage origins) without any GPU or export"},
                                           "auto_resume": {"type": "boolean", "description": "true: after a server restart this production continues by itself (for 24 h). Off unless asked (or HOCUS_PRODUCTION_AUTORESUME=1)."},
-                                          "through": {"enum": ["all", "frames"]},
+                                          "through": {"enum": ["all", "frames", "animatic"]},
                                           "preview": {"type": "object", "required": ["prompts"], "properties": {
                                               "prompts": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}},
                                               "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
@@ -1062,8 +1089,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             except ProductionError as error:
                 raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
             through = data.get("through", "all")
-            if through not in ("all", "frames"):
-                raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all or frames", "retryable": False})
+            if through not in ("all", "frames", "animatic"):
+                raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all, frames or animatic", "retryable": False})
             if data.get("package") is True:
                 if production.state.get("status") not in ("completed", "failed"):
                     raise HTTPException(422, {"code": "not_finished", "message": "package needs a finished production", "retryable": False})

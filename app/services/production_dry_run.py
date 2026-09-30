@@ -4,7 +4,10 @@
 instrumental gaps with no fill, titles over 12 characters, captions over 32,
 an estimated minute count, and ``motion`` (seconds and share of the runtime on still
 images, the longest hold) with warnings for a static video, a long hold, a still used
-three times, ``max_takes`` 1 and fewer than three song seeds. It never calls the client passed as ``mcp``.
+three times, ``max_takes`` 1 and fewer than three song seeds. Each window carries
+``hold_after_clip``. A title-card on an h3 or still shot warns ``title_card_on_image``.
+Scene documents are compiled in-process so a bad style is ``scene_invalid`` here.
+It never calls the client passed as ``mcp``.
 ``shots: "auto"`` expands through ``services.production_shot_plan.plan_shots``.
 """
 from __future__ import annotations
@@ -12,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.music_production import h3_frames_for, shot_windows
+from services.production_preview import preview_extras
 from services.production_quality import expand_quality, profile_of
 from services.production_style_presets import expand_style_preset
 from services.song_analysis import lyric_lines
@@ -40,6 +44,9 @@ def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
     score = _score(spec)
     windows = shot_windows({**spec, "shots": usable}, score) if expanded else []
     rows = _rows(windows)
+    holds, extra = preview_extras({**spec, "shots": usable}, score, windows, usable)
+    for row, hold in zip(rows, holds):
+        row["hold_after_clip"] = hold
     texts = [line["text"] for line in score["lines"]]
     missing = _uncovered(texts, usable)
     gaps = _gaps(windows, float(score["duration"]), spec.get("fill") or [])
@@ -59,7 +66,7 @@ def dry_run(spec: Any, mcp: Any = None) -> dict[str, Any]:
         "long_captions": captions,
         "minutes": _minutes(spec, sum(1 for row in rows if row.get("kind") == "h3")),
         "motion": motion,
-        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion),
+        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra,
     }
 
 
