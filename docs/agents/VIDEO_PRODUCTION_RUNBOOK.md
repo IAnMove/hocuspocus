@@ -443,8 +443,10 @@ production commands (`additionalProperties` false). REST is
 
 * `production.shot.review` sets the status and an optional note. No GPU.
 * `production.shot.lock` sets `locked`. Locked shots are omitted from
-  `frames()`, `clips()`, and `scenes()`, including a named retake, until
-  unlock. `production.shot.redo` on a locked shot returns `shot_locked` and
+  `frames()` and `clips()`, including a named retake, until unlock.
+  `scenes()` keeps them in the cut and skips only their export, so a retake
+  of another shot does not drop or stretch the locked one.
+  `production.shot.redo` on a locked shot returns `shot_locked` and
   changes nothing. Undo is still allowed.
 * `production.shot.redo` rebuilds one shot from `frame` (image, then clip,
   then that scene), `clip` (new clip, same frame), or `scene` (re-export

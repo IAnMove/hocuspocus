@@ -695,8 +695,8 @@ class Production:
         return take_settled(qa, previous)
 
     def scenes(self, spec: dict, windows: list[dict]) -> None:
-        from services.production_shot_review import without_locked
-        windows = without_locked(self, windows)
+        from services.production_shot_review import locked_keys
+        locked = locked_keys(self)
         score = self.score()
         from services.production_preview import ensure_caption_contrast
         ensure_caption_contrast(self, spec, windows, score)
@@ -707,6 +707,8 @@ class Production:
         style, stills = spec.get("style") or {}, spec.get("stills") or {}
         docs: dict[str, dict] = {}
         for shot, a, b in segs:
+            if shot["key"] in locked:
+                continue
             dur = round(b - a, 3)
             used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
             prior = done.get(shot["key"], {})

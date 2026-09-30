@@ -278,7 +278,7 @@ def locked_keys(production: Any) -> set[str]:
 
 
 def without_locked(production: Any, windows: list) -> list:
-    """Drop locked shots from a frame, clip or scene pass. The lock check stays here so the caller adds one call."""
+    """Drop locked shots from a frame or clip pass. ``scenes()`` keeps them in the cut and skips only the export."""
     locked = locked_keys(production)
     if not locked:
         return windows

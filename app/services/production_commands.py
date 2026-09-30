@@ -57,7 +57,7 @@ def extra_catalog() -> list[dict[str, Any]]:
                                      "note": {"type": "string", "maxLength": 500}},
                                     ["workspace", "production_id", "shot", "status"])},
         {"name": LOCK, "description": (
-            "Lock or unlock one shot. Locked shots are skipped by frames, clips and scenes until unlocked."
+            "Lock or unlock one shot. Locked shots skip frames and clips; scenes keep them in the cut and skip only their export."
         ), "inputSchema": _envelope({**base, "shot": shot, "locked": {"type": "boolean"}},
                                     ["workspace", "production_id", "shot", "locked"])},
         {"name": REDO, "description": (

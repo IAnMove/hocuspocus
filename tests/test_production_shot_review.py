@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers.music_productions import create_music_productions_router
-from services.music_production import Production
+from services.music_production import Production, segments
 from services.production_commands import extra_catalog, extra_handlers
 from services.production_publication import publication_catalog, publication_handlers
 from services.production_shot_redo import redo_shot, undo_shot
@@ -213,8 +213,29 @@ def test_locked_shots_drop_out_of_the_runner(tmp_path: Path, monkeypatch):
     windows = [{"key": "s0", "kind": "h3"}, {"key": "s1", "kind": "h3"}]
     production.frames(spec, windows)
     production.clips(spec, windows)
+    assert seen == [windows and ["s0", "s1"]] * 2
+
+
+def test_scenes_keep_a_locked_shot_in_the_cut(tmp_path: Path):
+    production, spec, root, _saved, calls, _intents = _build(tmp_path)
+    set_lock(root, "show", spec, "s0", True)
+    windows = [
+        {**spec["shots"][0], "kind": "h3", "t0": 0.0, "t1": 4.0},
+        {**spec["shots"][1], "kind": "h3", "t0": 10.0, "t1": 12.0},
+    ]
+    production.state.setdefault("scenes", {})["s0"] = {
+        "file": "keep-s0.mp4", "dur": 1.0, "clip": "other.mp4", "fingerprint": "stale",
+    }
+    expected = [
+        [shot["key"], start, end]
+        for shot, start, end in segments(windows, production.score(), lambda key: key in production.state["clips"], [])
+    ]
     production.scenes(spec, windows)
-    assert seen == [windows and ["s0", "s1"]] * 3
+    assert production.state["segments"] == expected
+    assert [row[0] for row in production.state["segments"]] == ["s0", "s1"]
+    assert production.state["scenes"]["s0"]["file"] == "keep-s0.mp4"
+    assert production.state["scenes"]["s0"]["fingerprint"] == "stale"
+    assert calls.count("scenes.video2d.export") == 1
 
 
 def _plan(changes: list, summary: str = "plan") -> str:
