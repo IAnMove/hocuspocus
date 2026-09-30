@@ -1555,13 +1555,21 @@
     "atmos-desert-low": {
       "title": "Desert oasis · low",
       "description": "The same dunes from the sand, looking toward the palms and the water."
+    },
+    "atmos-beach-wide": {
+      "title": "Sunset beach · wide",
+      "description": "A procedural beach at golden hour. Waves and foam roll in, and the character spot stays on dry sand."
+    },
+    "atmos-beach-low": {
+      "title": "Sunset beach · low",
+      "description": "The same shore from the sand, looking toward a beached boat and the water."
     }
   },
   "atmos": {
     "time": "Time of day",
     "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
@@ -1569,7 +1577,8 @@
     "prints": "Prints",
     "devils": "Devils",
     "flakes": "Flakes",
-    "ripples": "Ripples"
+    "ripples": "Ripples",
+    "tide": "Tide"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
