@@ -176,6 +176,20 @@ Floor crystals point up and ceiling crystals point down from a stone roof. Their
 
 A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 9 — `atmos-volcano`
+
+Templates: `atmos-volcano-wide`, `atmos-volcano-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Cones, rocks and ash stay outside that circle and outside the lane to the camera. There is no sun. The figure stands on open rock, not in a lava river.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `erupt`, `calm` | `erupt` |
+| `palette` | `magma`, `ash` | `magma` |
+| `variant` (`atmos.heat`) | 0–8 | 5 |
+
+Emissive lava rivers flow across the rock, and ash falls on the same clock. The heat control brightens the rivers. `calm` slows the ash and cools the sky. There is no grass field and no shaft, depth-of-field, or grade pass. Rocks use the grass count (7 preview, 11 export) and ash uses the mote count (28 preview, 44 export). Without WebGL2 the set is a flat rock field. The library setting is `volcano`.
+
+A software export of `atmos-volcano-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 34551 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
