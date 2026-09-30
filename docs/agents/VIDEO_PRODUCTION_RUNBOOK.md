@@ -66,7 +66,7 @@ While it runs:
 
 - each clip is judged and saved the moment it lands (a restart mid-round keeps what was already shot), and a better verdict beats a higher lip-sync number (an `unreliable` result never pushes out a take that measured `ok` or `retake`);
 - after the start frames, `production.status` gives `frames_sheet` (one labelled picture of every frame): look at it before the clips, where a wrong frame is minutes of GPU per clip;
-- a cast entry may be `{"id": "trio", "group": ["hum", "tinker", "zap"]}`: one reference image with their sheets side by side (letterboxed, nothing cropped), for shots with several characters when the image model runs out of memory with three references. `count` defaults to the group's size;
+- a cast entry may be `{"id": "trio", "group": ["hum", "tinker", "zap"]}`: one reference image with their portraits side by side (letterboxed, nothing cropped), for shots with several characters when the image model runs out of memory with three references. `count` defaults to the group's size;
 - a shot with one character gets "Only this character appears; no other characters" in its action (the planner does it; write it yourself in a hand-made spec), because a video model invents company otherwise.
 
 ## What the run does
@@ -75,13 +75,13 @@ While it runs:
 |---|---|---|
 | song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL) | keeps the candidate with the best lyric recall whose last 2 s are not cut; every candidate stays in `song_candidates` |
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
-| cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member |
-| frames | `generation.image` with the cast sheets as references | one start frame per `h3` shot |
+| cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member, then a plain full-body portrait of that one person |
+| frames | `generation.image` with that portrait as the reference (the sheet if the portrait failed) | one start frame per `h3` shot |
 | clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots. A shot that is not sung is judged on the picture instead (frozen, blinking, color drift, or a center that no longer matches the first frame) and retakes with a new seed on the same rule: until ok, the score stops rising, `max_takes`, or 4 recorded takes. For those shots `r` is that visual score, not a lip-sync correlation. A file that cannot be opened is unreliable and does not spend another take. The thresholds are provisional until they are measured on the Gremlins v2 clips. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 
-A start frame that does not arrive is asked for again (a new job, and a smaller picture after an out-of-memory) twice per run; if it still fails the run stops as `failed` with `frames_incomplete` and `production.status` lists `frame_failures`. A cast entry may set `count` (how many distinct subjects that reference image shows, default 1); the frame prompt then says "Exactly N distinct subjects, no duplicated characters", because a sheet with several views makes the model draw the character several times. A group reference (several characters in one image) is the way to keep three references under the image model's memory limit.
+A start frame that does not arrive is asked for again (a new job, and a smaller picture after an out-of-memory) twice per run; if it still fails the run stops as `failed` with `frames_incomplete` and `production.status` lists `frame_failures`. A cast entry may set `count` (how many distinct subjects that reference image shows, default 1); the frame prompt then says "Exactly N distinct subjects, no duplicated characters", because a sheet with several views makes the model draw the character several times. Each cast member also gets a second portrait, one full-body subject on a plain background (`single_prompt`, or that phrase derived from `sheet_prompt`). Start frames use the portrait instead of the sheet. A group reference is composed from those portraits, not from the sheets. The six-seed check that a one-person frame no longer duplicates the character still needs a GPU pass. A group reference (several characters in one image) is the way to keep three references under the image model's memory limit.
 
 Lip-sync is measured on the sung span.
 When an H3 clip fails, its scene holds that shot's start frame and `production.status` lists the shot key in `held`.
