@@ -354,7 +354,8 @@
     "street": "Street",
     "stage": "Stage",
     "canyon": "Canyon",
-    "cave": "Cave"
+    "cave": "Cave",
+    "islands": "Islands"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1572,13 +1573,21 @@
     "atmos-crystal-cave-low": {
       "title": "Crystal cave · low",
       "description": "The same cave from the floor, looking toward a glowing cluster and the hanging crystals."
+    },
+    "atmos-sky-islands-wide": {
+      "title": "Sky islands · wide",
+      "description": "Procedural floating islands in an N64 style. A colored checker covers the main island, and the character spot stays on that top."
+    },
+    "atmos-sky-islands-low": {
+      "title": "Sky islands · low",
+      "description": "The same islands from the checker, looking toward polygon clouds and spinning coins."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour", "deep": "Deep", "glow": "Glow", "clear": "Clear", "pink": "Pink" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight", "sand": "Sand", "gold": "Gold", "coral": "Coral", "amethyst": "Amethyst", "aqua": "Aqua", "peach": "Peach", "mint": "Mint" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
@@ -1588,7 +1597,8 @@
     "flakes": "Flakes",
     "ripples": "Ripples",
     "tide": "Tide",
-    "glow": "Glow"
+    "glow": "Glow",
+    "spin": "Spin"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",

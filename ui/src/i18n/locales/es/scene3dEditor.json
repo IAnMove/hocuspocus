@@ -354,7 +354,8 @@
     "street": "Calle",
     "stage": "Escenario",
     "canyon": "Cañón",
-    "cave": "Cueva"
+    "cave": "Cueva",
+    "islands": "Islas"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1572,13 +1573,21 @@
     "atmos-crystal-cave-low": {
       "title": "Cueva de cristales · cámara baja",
       "description": "La misma cueva desde el suelo, mirando un grupo que brilla y los cristales del techo."
+    },
+    "atmos-sky-islands-wide": {
+      "title": "Islas flotantes · plano abierto",
+      "description": "Islas flotantes procedurales al estilo N64. Un damero de colores cubre la isla principal, y el hueco del personaje queda en esa cima."
+    },
+    "atmos-sky-islands-low": {
+      "title": "Islas flotantes · cámara baja",
+      "description": "Las mismas islas desde el damero, mirando nubes poligonales y monedas que giran."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo" },
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo", "clear": "Despejado", "pink": "Rosa" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua", "peach": "Melocotón", "mint": "Menta" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
@@ -1588,7 +1597,8 @@
     "flakes": "Copos",
     "ripples": "Ondas",
     "tide": "Marea",
-    "glow": "Brillo"
+    "glow": "Brillo",
+    "spin": "Giro"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

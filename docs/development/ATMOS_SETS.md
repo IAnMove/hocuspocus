@@ -176,6 +176,20 @@ Floor crystals point up and ceiling crystals point down from a stone roof. Their
 
 A software export of `atmos-crystal-cave-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27732 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 9 — `atmos-sky-islands`
+
+Templates: `atmos-sky-islands-wide`, `atmos-sky-islands-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, and that circle plus the lane to the camera sit on the main island's checker top. Coins and clouds stay outside that circle and outside the lane. There is no sun.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `clear`, `pink` | `clear` |
+| `palette` | `peach`, `mint` | `peach` |
+| `variant` (`atmos.spin`) | 0–8 | 5 |
+
+`clear` is a peach or mint horizon under a deep sky. `pink` turns that sky rose. Coins spin on their own vertical axis; zero holds them. There is no grass field and no shaft, depth-of-field, or grade pass. Coins use the grass count (8 preview, 12 export) and stars use the mote count. Without WebGL2 the set is a flat pad. The library setting is `islands`.
+
+A software export of `atmos-sky-islands-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 26003 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:

@@ -6,7 +6,7 @@ import type { Scene3DDressing } from './types.ts'
 
 export const TEMPLATE_SETTINGS = [
   'sea', 'city', 'rooftop', 'hangar', 'desert', 'train', 'moon', 'space',
-  'jungle', 'forest', 'snow', 'casino', 'studio', 'street', 'stage', 'canyon', 'cave',
+  'jungle', 'forest', 'snow', 'casino', 'studio', 'street', 'stage', 'canyon', 'cave', 'islands',
 ] as const
 export type TemplateSetting = typeof TEMPLATE_SETTINGS[number]
 
