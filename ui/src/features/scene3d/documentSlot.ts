@@ -1,6 +1,7 @@
 import { parseAppearance } from './cinematicSettings'
 import { parseImageLook } from './imageLook'
 import { parseClipPlayback, parseMotion } from './performance.ts'
+import { parseSlotRhythm } from './rhythm'
 import { parseSpeech } from './speech/track'
 import { parseCharacterKitRef, parseCharacterVoice } from '../../lib/characterVoice'
 import { parseMediaScreen } from './mediaScreen.ts'
@@ -59,5 +60,6 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     surface: parseSurface(slot.surface),
     grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat),
     performance: parsePerformance(slot.performance),
+    rhythm: parseSlotRhythm(slot.rhythm),
   }
 }

@@ -123,7 +123,7 @@ def test_does_not_claim_rigid_models_sing():
 
 @pytest.mark.skipif(not (Path(__file__).resolve().parents[1] / "ui/node_modules/tsx/dist/loader.mjs").is_file(), reason="UI dependencies not installed in Python-only CI")
 def test_real_native_template_compiler_keeps_model_camera_atmosphere_and_motion():
-    doc = compile_document(shot(renderLook="n64", motion={"to": [3, 0, 0], "turnTo": 6.283}, atmos={"timeOfDay": "dawn"},
+    doc = compile_document(shot(renderLook="n64", rhythm={"bpm": 120, "offset": 24, "lightPulse": .3}, motion={"to": [3, 0, 0], "turnTo": 6.283}, atmos={"timeOfDay": "dawn"},
                                 camera={"family": "orbit", "orbitRadius": 5}), 6)
     assert doc["renderLook"] == "n64"
     assert doc["templateId"] == "product-orbit"
@@ -133,6 +133,7 @@ def test_real_native_template_compiler_keeps_model_camera_atmosphere_and_motion(
     assert doc["slots"][0]["motion"]["turnTo"] == 6.283
     assert doc["camera"]["orbitRadius"] == 5
     assert doc["atmos"]["timeOfDay"] == "dawn"
+    assert doc["rhythm"]["bpm"] == 120 and doc["rhythm"]["offset"] == 24
 
 
 def test_uncertain_admission_resumes_with_the_exact_same_intent(tmp_path):
