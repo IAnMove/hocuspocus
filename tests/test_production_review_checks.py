@@ -213,6 +213,17 @@ def test_cast_count_is_how_many_people_the_shot_may_show(tmp_path):
     assert allowed["review"]["verdict"] == "ok"
     assert allowed["retake_keys"] == []
 
+    # The documented group form omits count; production.run still asks for
+    # Exactly N subjects. Review used default 1, so a correct trio was
+    # duplicate_people and the runbook loop kept retaking it.
+    state["spec"]["cast"] = [{"id": "band", "group": ["hum", "tinker", "zap"]}]
+    grouped = review_production(
+        state, str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
+    )
+    assert grouped["review"]["failures"] == []
+    assert grouped["review"]["verdict"] == "ok"
+    assert grouped["retake_keys"] == []
+
     state["spec"]["cast"] = [{"id": "band", "sheet_prompt": "one singer", "count": 1}]
     denied = review_production(
         state, str(tmp_path), people=people, sample=_sample({"hero.mp4": _moving()}),
