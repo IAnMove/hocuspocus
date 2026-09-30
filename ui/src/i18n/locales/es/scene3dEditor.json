@@ -1539,19 +1539,28 @@
     "atmos-mars-low": {
       "title": "Marte · cámara baja",
       "description": "El mismo desierto desde el polvo, mirando un cielo caramelo y dos lunas pequeñas."
+    },
+    "atmos-snow-wide": {
+      "title": "Bosque nevado · plano abierto",
+      "description": "Bosque nevado procedural. El hueco del personaje queda en la nieve, delante de los pinos."
+    },
+    "atmos-snow-low": {
+      "title": "Bosque nevado · cámara baja",
+      "description": "El mismo bosque desde la nieve, mirando un cielo de hora azul y la luz cálida de una cabaña."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer" },
+    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul" },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso" },
+    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo" },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
     "flow": "Caudal",
     "prints": "Huellas",
-    "devils": "Torbellinos"
+    "devils": "Torbellinos",
+    "flakes": "Copos"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

@@ -1539,19 +1539,28 @@
     "atmos-mars-low": {
       "title": "Mars · low",
       "description": "The same desert from the dust, looking toward a caramel sky and two small moons."
+    },
+    "atmos-snow-wide": {
+      "title": "Snow forest · wide",
+      "description": "A procedural snow forest. The character spot stays on open snow, in front of the pines."
+    },
+    "atmos-snow-low": {
+      "title": "Snow forest · low",
+      "description": "The same forest from the snow, looking toward a blue-hour sky and a warm cabin light."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise", "noon": "Noon", "dusk": "Dusk", "blue": "Blue hour" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt", "rust": "Rust", "dusk": "Dusk", "frost": "Frost", "twilight": "Twilight" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
     "flow": "Flow",
     "prints": "Prints",
-    "devils": "Devils"
+    "devils": "Devils",
+    "flakes": "Flakes"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
