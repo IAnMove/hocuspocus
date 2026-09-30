@@ -98,8 +98,9 @@ SPEC_SCHEMA: dict[str, Any] = {
         "cast": {"type": "array", "items": {"type": "object", "required": ["id", "sheet_prompt"],
                                          "properties": {"image_model": {"type": "string"}, "image_steps": {"type": "integer"},
                                                         "count": {"type": "integer", "minimum": 1, "maximum": 6, "description": "how many distinct subjects this reference stands for (a group image); default 1, or the size of its group"},
+                                                        "single_prompt": {"type": "string", "description": "plain one-subject portrait. Default: the sheet prompt plus a full-body view on a neutral background"},
                                                         "group": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4,
-                                                                  "description": "ids of other cast entries: one reference image with their sheets side by side (no sheet_prompt needed)"}}}},
+                                                                  "description": "ids of other cast entries: one reference image with their portraits side by side (no sheet_prompt needed)"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
             "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
@@ -475,11 +476,13 @@ class Production:
         for cid, name in self.wait(jobs).items():
             if name:
                 cast[cid] = self.upload(name)[1]
-        for c in spec.get("cast") or []:      # a group reference: the members' sheets side by side in one picture
+        from services.production_cast_portrait import ensure_portraits, group_sources
+        ensure_portraits(self, spec)
+        for c in spec.get("cast") or []:      # a group reference: the members' portraits side by side in one picture
             members = c.get("group") or []
             if members and c["id"] not in cast and all(member in cast for member in members):
                 out = f"{self.id}-group-{c['id']}.png"
-                if compose_group([self.uploads / Path(cast[member]).name for member in members], self.root / out):
+                if compose_group(group_sources(self, members), self.root / out):
                     cast[c["id"]] = self.upload(out)[1]
         self.log(f"cast: {len(cast)}")
         absent = [c["id"] for c in spec.get("cast") or [] if c["id"] not in cast]
@@ -514,11 +517,12 @@ class Production:
             missing = [w for w in windows if w["kind"] == "h3" and w["key"] not in frames]
             if not missing:
                 break
+            from services.production_cast_portrait import frame_references
             jobs = {}
             for w in missing:
                 attempt = self._attempt("frame_attempts", w["key"])
                 res = FRAME_RESOLUTIONS[min(attempt, len(FRAME_RESOLUTIONS) - 1)] if "memory" in failures.get(w["key"], "") else FRAME_RESOLUTIONS[0]
-                refs = [self.state["cast"][c] for c in w.get("cast", []) if c in self.state.get("cast", {})]
+                refs = frame_references(w, self.state.get("cast") or {}, self.state.get("cast_single") or {})
                 jobs[w["key"]] = self.image("frame-" + w["key"], self.frame_prompt(spec, w), refs or None, res, w.get("seed", 3) + (attempt or 0),
                                             w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")), attempt)
             for key, name in self.wait(jobs).items():

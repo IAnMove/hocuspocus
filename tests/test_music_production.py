@@ -110,9 +110,10 @@ def test_image_model_is_selected_for_cast_and_frames(tmp_path):
                  cast=[{"id": "dhh", "sheet_prompt": "David caricature", "seed": 8}])
     production.cast(spec)
     production.frames(spec, [{"key": "s0", "kind": "h3", "frame": "at a keyboard", "cast": ["dhh"], "seed": 9}])
-    assert requested[0][5:7] == ("qwen_image_21", 40)
-    assert requested[1][5:7] == ("qwen_image_21", 40)
-    assert requested[1][2] == ["/u/test.png"]
+    assert requested[0][0] == "cast-dhh" and requested[0][5:7] == ("qwen_image_21", 40)
+    assert requested[1][0] == "cast-single-dhh" and "exactly one subject" in requested[1][1] and requested[1][2] is None
+    assert requested[2][5:7] == ("qwen_image_21", 40)
+    assert requested[2][2] == [production.state["cast_single"]["dhh"]]
 
 
 def test_qwen_image_request_keeps_model_and_reference(tmp_path):
@@ -529,8 +530,8 @@ def test_dymo_lyrics_default_to_dark_letters_on_cream_tape(tmp_path):
         assert next(cue for cue in doc["texts"] if cue["id"].startswith("ly"))["box"]["color"].upper() == expected
 
 
-def test_a_group_reference_is_composed_from_the_members_sheets(tmp_path, monkeypatch):
-    production, calls = _image_production(tmp_path, [("a.png", None), ("b.png", None)])
+def test_a_group_reference_is_composed_from_the_members_portraits(tmp_path, monkeypatch):
+    production, calls = _image_production(tmp_path, [("a.png", None), ("b.png", None), ("a-single.png", None), ("b-single.png", None)])
     (tmp_path / "uploads").mkdir()
     production.uploads = tmp_path / "uploads"
     production.state["cast"] = {}
@@ -539,8 +540,8 @@ def test_a_group_reference_is_composed_from_the_members_sheets(tmp_path, monkeyp
     monkeypatch.setattr("services.music_production.compose_group", lambda paths, out: composed.append(([p.name for p in paths], out.name)) or True)
     spec = {"style": {}, "cast": [{"id": "a", "sheet_prompt": "x"}, {"id": "b", "sheet_prompt": "y"}, {"id": "duo", "group": ["a", "b"]}]}
     production.cast(spec)
-    assert len(calls) == 2                                          # the group has no sheet of its own
-    assert composed == [(["a.png", "b.png"], "p-group-duo.png")] and production.state["cast"]["duo"].endswith("p-group-duo.png")
+    assert len(calls) == 4                                          # two sheets, two portraits; the group has no picture of its own
+    assert composed == [(["a-single.png", "b-single.png"], "p-group-duo.png")] and production.state["cast"]["duo"].endswith("p-group-duo.png")
     assert "Exactly 2 distinct subjects" in production.frame_prompt(spec, {"frame": "x", "cast": ["duo"]})
 
 
