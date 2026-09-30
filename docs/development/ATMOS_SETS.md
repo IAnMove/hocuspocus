@@ -134,6 +134,20 @@ Templates: `atmos-snow-wide`, `atmos-snow-low`. Both last 6 seconds at 24 fps. T
 
 A software export of `atmos-snow-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 26927 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 6 — `atmos-desert`
+
+Templates: `atmos-desert-wide`, `atmos-desert-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Dunes, palms, the pool and the ruins stay outside that circle and outside the lane to the camera.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `noon`, `dusk` | `noon` |
+| `palette` | `sand`, `gold` | `sand` |
+| `variant` (`atmos.ripples`) | 0–8 | 5 |
+
+Wind ripples travel across the sand in one shader. The circle and the lane stay flat. `dusk` warms the sky. There is no grass field and no shaft, depth-of-field, or grade pass. Palms use the grass count (6 preview, 10 export). Without WebGL2 the set is a flat sand field. The library setting is `desert`, shared with the Martian set.
+
+A software export of `atmos-desert-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 46529 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
