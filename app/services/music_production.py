@@ -913,8 +913,11 @@ class Production:
 
     def animatic(self, spec: dict, windows: list[dict]) -> None:
         """CPU preview from the start frames. A new export is stored apart from ``final``."""
-        from services.production_preview import animatic_report, claim_animatic_video
+        from services.production_preview import (
+            animatic_report, claim_animatic_video, restore_cut_artifacts, snapshot_cut_artifacts,
+        )
         previous = self.state.get("final")
+        kept = snapshot_cut_artifacts(self.root, self.state)
         self.state["animatic_warnings"] = animatic_report(spec, windows, self.score(), self.state)
         self.state["caption_gate"] = "warn"
         try:
@@ -922,6 +925,7 @@ class Production:
             self.montage(spec)
         finally:
             self.state.pop("caption_gate", None)
+            restore_cut_artifacts(self.root, self.state, kept)
         claim_animatic_video(self.state, previous if isinstance(previous, str) else None)
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:

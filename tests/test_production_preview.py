@@ -10,7 +10,8 @@ import pytest
 from services.music_production import Production, ProductionError, command_catalog, command_handlers, status_summary, validate_spec
 from services.production_dry_run import dry_run
 from services.production_preview import (
-    animatic_report, caption_failure, claim_animatic_video, hold_after_clip, measure_caption, uncover_titles,
+    animatic_report, caption_failure, claim_animatic_video, hold_after_clip, measure_caption,
+    restore_cut_artifacts, snapshot_cut_artifacts, uncover_titles,
 )
 from services.production_resume import load_running
 from services.production_shot_plan import plan_shots
@@ -274,6 +275,62 @@ def test_animatic_on_a_completed_run_keeps_the_finished_cut(tmp_path):
     summary = status_summary(production.state, "ws")
     assert summary["video"] == "/api/v1/file/done.mp4?workspace=ws"
     assert summary["animatic"] == "/api/v1/file/anim.mp4?workspace=ws"
+
+
+def _overwrite_cut(production, *, fail=False):
+    production.state["final"] = "anim.mp4"
+    production.state["montage_file"] = "show.montage.json"
+    production.state["contact_sheet"] = "p-contact.jpg"
+    (production.root / "show.montage.json").write_text('{"clips":[],"overlays":[]}', encoding="utf-8")
+    (production.root / "p-contact.jpg").write_bytes(b"preview-sheet")
+    if fail:
+        raise ProductionError("montage_failed", "export job lost")
+
+
+def test_animatic_on_a_completed_run_keeps_the_editable_montage_and_contact_sheet(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    (tmp_path / "show.montage.json").write_text('{"clips":[{"id":"s0"}],"overlays":[{"id":"hand"}]}', encoding="utf-8")
+    (tmp_path / "p-contact.jpg").write_bytes(b"finished-sheet")
+    production.score = lambda: {"duration": 8, "beat": 0.5, "lines": []}
+    production.scenes = lambda *args, **kwargs: None
+    production.montage = lambda spec: _overwrite_cut(production)
+    production.state.update(status="completed", final="done.mp4",
+                            montage_file="show.montage.json", contact_sheet="p-contact.jpg")
+    production.animatic({"title": "t", "shots": [], "fill": []}, [])
+    assert production.state["final"] == "done.mp4"
+    assert production.state["animatic_video"] == "anim.mp4"
+    assert production.state["montage_file"] == "show.montage.json"
+    assert production.state["contact_sheet"] == "p-contact.jpg"
+    assert (tmp_path / "show.montage.json").read_text(encoding="utf-8") == '{"clips":[{"id":"s0"}],"overlays":[{"id":"hand"}]}'
+    assert (tmp_path / "p-contact.jpg").read_bytes() == b"finished-sheet"
+
+
+def test_a_failed_animatic_does_not_keep_preview_bytes_on_a_finished_cut(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    (tmp_path / "show.montage.json").write_text('{"overlays":[{"id":"hand"}]}', encoding="utf-8")
+    (tmp_path / "p-contact.jpg").write_bytes(b"finished-sheet")
+    production.score = lambda: {"duration": 8, "beat": 0.5, "lines": []}
+    production.scenes = lambda *args, **kwargs: None
+    production.montage = lambda spec: _overwrite_cut(production, fail=True)
+    production.state.update(final="done.mp4", montage_file="show.montage.json", contact_sheet="p-contact.jpg")
+    with pytest.raises(ProductionError, match="export job lost"):
+        production.animatic({"title": "t", "shots": [], "fill": []}, [])
+    assert production.state["montage_file"] == "show.montage.json"
+    assert production.state["contact_sheet"] == "p-contact.jpg"
+    assert (tmp_path / "show.montage.json").read_text(encoding="utf-8") == '{"overlays":[{"id":"hand"}]}'
+    assert (tmp_path / "p-contact.jpg").read_bytes() == b"finished-sheet"
+
+
+def test_snapshot_skips_missing_cut_files_so_a_first_animatic_keeps_its_sheet(tmp_path):
+    state = {"montage_file": "missing.montage.json", "contact_sheet": "sheet.jpg"}
+    assert snapshot_cut_artifacts(tmp_path, state) == {}
+    (tmp_path / "sheet.jpg").write_bytes(b"preview")
+    state["contact_sheet"] = "sheet.jpg"
+    kept = snapshot_cut_artifacts(tmp_path, state)
+    state["contact_sheet"] = "other.jpg"
+    restore_cut_artifacts(tmp_path, state, kept)
+    assert state["contact_sheet"] == "sheet.jpg"
+    assert (tmp_path / "sheet.jpg").read_bytes() == b"preview"
 
 
 def test_resume_after_animatic_reuses_frames_and_reaches_clips(tmp_path):
