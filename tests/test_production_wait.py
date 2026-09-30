@@ -25,11 +25,12 @@ def _status_at(moment: float) -> str:
     return "running"
 
 
-def test_wait_s_is_an_integer_from_zero_to_300():
+def test_wait_s_is_an_integer_from_zero_to_1200():
     assert normalize_wait_s(None) == 0
     assert normalize_wait_s(0) == 0
-    assert normalize_wait_s(MAX_WAIT_S) == 300
-    for bad in (True, False, 1.2, "30", -1, 301):
+    assert normalize_wait_s(301) == 301
+    assert normalize_wait_s(MAX_WAIT_S) == 1200
+    for bad in (True, False, 1.2, "30", -1, 1201):
         with pytest.raises(HTTPException) as caught:
             normalize_wait_s(bad)
         assert caught.value.status_code == 422
@@ -42,8 +43,11 @@ def test_status_schema_accepts_wait_s():
     required = operation["inputSchema"]["properties"]["input"]["required"]
     assert field["type"] == "integer"
     assert field["minimum"] == 0
-    assert field["maximum"] == 300
+    assert field["maximum"] == 1200
     assert field["default"] == 0
+    until = operation["inputSchema"]["properties"]["input"]["properties"]["until"]
+    assert until["enum"] == ["change", "stage", "done"]
+    assert until["default"] == "change"
     assert "wait_s" not in required
 
 
@@ -126,6 +130,6 @@ def test_status_handler_forwards_wait_s_and_does_not_wait_when_missing(tmp_path,
 
     monkeypatch.undo()
     with pytest.raises(HTTPException) as rejected:
-        asyncio.run(handlers[STATUS]({"version": 1, "input": {"workspace": "ws", "production_id": "clip", "wait_s": 301}}))
+        asyncio.run(handlers[STATUS]({"version": 1, "input": {"workspace": "ws", "production_id": "clip", "wait_s": 1201}}))
     assert rejected.value.status_code == 422
     assert rejected.value.detail["code"] == "invalid_command"

@@ -236,6 +236,13 @@ def adopt_take(production: Any, key: str, take_file: str) -> None:
     production.state.setdefault("clips", {})[key] = {"file": take_file, "qa": _qa(take), "url": url}
 
 
+def reexport_shot(production: Any, spec: dict, key: str) -> dict[str, Any]:
+    """Re-export one scene with the revision check ``update_shot`` already uses."""
+    _shot(spec, key)
+    checkpoint = _checkpoint(production, spec, key)
+    return _publish_or_restore(production, spec, key, checkpoint)
+
+
 def use_take(production: Any, spec: dict, key: str, take_file: str) -> dict[str, Any]:
     """Use one kept take as the shot clip, then rebuild and re-export only that scene."""
     _shot(spec, key)

@@ -24,7 +24,10 @@ def test_each_mcp_reply_is_counted_and_saves_are_debounced(tmp_path):
 
 
 def test_a_run_with_no_calls_reports_zeros():
-    assert status_summary({"status": "running"}, "ws")["usage"] == {"mcp_calls": 0, "response_bytes": 0, "h3_takes": 0}
+    assert status_summary({"status": "running"}, "ws")["usage"] == {
+        "mcp_calls": 0, "response_bytes": 0, "h3_takes": 0,
+        "gpu_seconds": 0, "cpu_seconds": 0, "retry_seconds": 0, "reused_seconds": 0,
+    }
 
 
 def test_polling_does_not_rewrite_the_state_file_on_every_call():

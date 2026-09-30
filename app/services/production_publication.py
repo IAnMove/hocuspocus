@@ -109,6 +109,8 @@ def publish_production(data: dict, workspace_dir) -> dict:
     state = json.loads(state_path.read_text(encoding="utf-8"))
     if state.get("status") != "completed":
         raise ValueError("Only a completed production can be published")
+    from services.production_shot_review import assert_publishable
+    assert_publishable(root, data["production_id"], state)
     files = _sources(root, state, data["extras"])
     hashes = {name: _digest(path) for name, path in files.items()}
     title = str((state.get("spec") or {}).get("title") or data["production_id"])
@@ -158,7 +160,8 @@ def publication_handlers(workspace_dir) -> dict:
         try:
             result = await asyncio.to_thread(publish_production, _input(arguments), workspace_dir)
         except (ValueError, OSError, json.JSONDecodeError) as error:
-            raise HTTPException(422, {"code": "publication_failed", "message": str(error), "retryable": False}) from error
+            code = "review_incomplete" if str(error).startswith("review_required") else "publication_failed"
+            raise HTTPException(422, {"code": code, "message": str(error), "retryable": False}) from error
         return {"version": 1, "operation": OPERATION, "status": "completed", "result": result}
 
     return {OPERATION: publish}

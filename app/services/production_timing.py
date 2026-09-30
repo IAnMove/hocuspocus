@@ -39,7 +39,11 @@ def timing_summary(state: dict) -> dict[str, Any]:
     for item in rows:
         if not isinstance(item, dict) or not isinstance(item.get("key"), str) or not item["key"]:
             continue
-        shots.append({"key": item["key"][:80], "seconds": _seconds(item.get("seconds")), "takes": _takes(item.get("takes"))})
+        row = {"key": item["key"][:80], "seconds": _seconds(item.get("seconds")), "takes": _takes(item.get("takes"))}
+        from services.production_perf import shot_fields
+        perf = state.get("clip_perf") if isinstance(state.get("clip_perf"), dict) else {}
+        row.update(shot_fields(perf.get(item["key"])))
+        shots.append(row)
         if len(shots) >= 60:
             break
     timing["shots"] = shots
@@ -74,6 +78,7 @@ class StageWatch:
     def start(self, name: str) -> None:
         self._name = name
         self._t0 = self._clock()
+        self.production.state["stage"] = name
 
     def stop(self) -> None:
         name = self._name

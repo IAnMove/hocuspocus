@@ -417,3 +417,31 @@ published files are served; directory listing and symlink escapes are blocked.
 Call the MCP tool `production.publish` with that body. Its result contains
 `page`, `video`, `files` (download URLs) and `publication_id`. Publication is CPU
 only: it neither re-renders the video nor starts any generation.
+
+## Phase close 2026-09-30
+
+`production.status` accepts `wait_s` up to 1200 and `until` of `change` (default), `stage`, or `done`. `done` returns immediately when the production is already `completed`, `failed`, or `cancelled`. A client poll of `wait_s` 300 is still a safe interval. The reply includes `waited_s` and `progress`: `stage`, clips `landed`/`total`/`eta_s`, and scenes `done`/`total`/`eta_s`. `eta_s` is 0 when nothing remains, a median of this run or of `<workspace>/.production-timings.json` when that file has samples, and null when it does not. It is not a guessed number.
+
+`production.plan` dry-run `estimate_source` is `history(n)` or `defaults`. When `spec.enhance.method` is `flashvsr` or `rife` and history exists, the source is `history(n)+default_enhance`. The extra minute per clip is a labeled default, not a measurement. The no-history formula stays seeds × 2 + H3 clips × 5 + 1.
+
+`usage` also reports `gpu_seconds` (song, frames, clips), `cpu_seconds` (scenes, montage, package), `retry_seconds` (the share of clip seconds that belongs to takes after the first), and `reused_seconds` (clip seconds kept from before this run, except keys in the latest retake). These are still not LLM tokens.
+
+`spec.resolution.frames` may be `1280x704`, `1152x640`, `1024x576`, `1536x1024`, or `1024x1536`. `spec.resolution.clips` may be `1280x704`, `1152x640`, or `1024x576`. Unset stays `1280x704`. Scene export is 1920×1080 with fit fill. The dry-run `resolution.crop` is `none`, `horizontal`, or `vertical`. `spec.enhance` is method `flashvsr` or `rife` and scale 2 or 4. Without an injected upscaler the run logs `enhance planned, not run`. RIFE is only a recommendation (`rife_recommended`) when packet-time smoothness already failed. It does not run. SSIM and GPU minutes for enhance were not measured.
+
+`timing.shots` adds `s_per_step`, `degraded`, and `model` only when the H3 job returned a performance object. Missing fields are null. A job without that object adds nothing.
+
+`production.shot.review` records `pending`, `approved`, or `changes_requested` in `<id>.review.json`, not in the production file. `production.shot.lock` keeps a later run from reshooting or re-exporting that shot. An explicit retake of a locked shot is `shot_locked`. `production.shot.redo` and `production.shot.undo` redo or restore one shot. Undo does not delete files. `production.shot.request` validates a closed plan. With no plan and no configured language model it is `llm_unavailable` and does not invent a plan. `apply` runs the plan. The REST request route validates and returns `applied: false`.
+
+`production.publish` refuses a completed production whose spec lists shot keys until each key is `approved` in the review file (`review_incomplete`). A spec with no shot list is unchanged. Artistic review stays `pending` without a human file. A human file may set `approved` or `changes_requested`. It is never the string ok.
+
+`face_consistent` is the human sheet question on `production.review`. No vision model means that answer stays unreliable, and the sheet must not invent yes or no. `appearance_changed` is the separate code check. It stays unknown unless an embedding backend was injected. The field `face_consistent` stays.
+
+Scene export and the contact-sheet painter share `HOCUS_SCENE_EXPORT_CONCURRENCY`. Unset or blank is 2. A value outside 1–4 is 1. Painters bind `127.0.0.1:0`. This change does not claim a measured speedup for 21 scenes.
+
+Qwen is already unloaded before the next model by `generation_memory.py`. The live 17-frame Qwen-to-H3 seconds-per-step table was not measured. Do not add a second unloader.
+
+How to add a style preset: add an entry to `app/shared/style_presets.json`. Do not put a person or project name in it. Set `style.preset` to that id. Add the id to `PRESET_IDS` in `app/services/production_style_presets.py` only when that preset needs a check beyond filling the style fields.
+
+`music_production.py` is still above 700 lines. Lettering and song generation moved out. The file was not gutted in this change.
+
+Six portrait seeds and the gremlins-devday-v2 before/after were not measured.

@@ -63,5 +63,25 @@ test('music production grid renders a shots.json row and its actions', () => {
   assert.deepEqual(used, ['take-b.mp4'])
   fireEvent.click(screen.getByRole('button', { name: 'Open montage' }))
   assert.equal(montage, 1)
+  assert.equal(screen.queryByRole('button', { name: 'Approve shot' }), null)
+  cleanup()
+})
+
+test('review buttons appear only when a review callback is provided', () => {
+  const actions: string[] = []
+  render(<MusicProductionGrid
+    workspace="film"
+    shots={[{ ...manifest.shots[0], review: { status: 'pending', locked: false } }]}
+    onOpenScene={() => undefined}
+    onRetake={() => undefined}
+    onUseTake={() => undefined}
+    onOpenMontage={() => undefined}
+    onReview={(shot, action) => actions.push(`${shot}:${action}`)}
+  />)
+  assert.equal(screen.getByText('Review pending').textContent, 'Review pending')
+  fireEvent.click(screen.getByRole('button', { name: 'Approve shot' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Request changes' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Lock shot' }))
+  assert.deepEqual(actions, ['s0:approved', 's0:changes_requested', 's0:lock'])
   cleanup()
 })

@@ -314,8 +314,9 @@ def _paint_on_lane(document: dict, times: list[float], size: tuple[int, int, int
         return time.monotonic() >= deadline
 
     try:
+        from services.scene_export_lane import scene2d_render_lane
         with resource_scheduler.coordinator.acquire(
-            resource_scheduler.cpu_lane("scene2d-render"),
+            scene2d_render_lane(),
             task_id=f"video2d-preview-{uuid.uuid4().hex}",
             description="Video 2D contact sheet",
             cancelled=cancelled,
