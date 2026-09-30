@@ -16,6 +16,7 @@ import {
   type RigProfile,
   type RigProfileId,
 } from '../../api/client'
+import { clipIsRecommended, clipsForEngine, humanoidClipSelection, recommendedClipIds, rigFooterKey, rigHelpKey, rigJobBody } from './humanoidRig'
 
 type RigSource = { name: string; thumbnail_url?: string | null }
 
@@ -61,6 +62,22 @@ function RigProfilePreview({ profile, selected, onSelect }: { profile: RigProfil
   )
 }
 
+function HumanoidPose({ engineId, pose, onChange }: { engineId: string; pose: 't' | 'a'; onChange: (pose: 't' | 'a') => void }) {
+  const { t } = useUiTranslation('scene3d')
+  if (engineId !== 'humanoid') return null
+  return (
+    <div className="rounded-lg border border-border bg-bg-tertiary p-2.5">
+      <label className="block text-[10px] text-text-muted uppercase tracking-wider">{t('rig.pose')}
+        <select value={pose} onChange={event => onChange(event.target.value === 'a' ? 'a' : 't')} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs">
+          <option value="t">{t('rig.poseT')}</option>
+          <option value="a">{t('rig.poseA')}</option>
+        </select>
+      </label>
+      <p className="mt-1 text-[9px] text-text-muted">{t('rig.poseHelp')}</p>
+    </div>
+  )
+}
+
 function RigAnimationPreview({ animation, selected, recommended, onSelect }: { animation: RigAnimation; selected: boolean; recommended: boolean; onSelect: () => void }) {
   const { t } = useUiTranslation('scene3d')
   return (
@@ -96,6 +113,7 @@ export function RigAnimatePanel() {
   const [spineJoints, setSpineJoints] = useState(5)
   const [axisMode, setAxisMode] = useState<'auto' | 'x' | 'y' | 'z'>('auto')
   const [weightFalloff, setWeightFalloff] = useState(2)
+  const [pose, setPose] = useState<'t' | 'a'>('t')
   const [job, setJob] = useState<RigJob | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -149,8 +167,8 @@ export function RigAnimatePanel() {
   const installedEngines = capabilities?.engines.filter(item => item.installed) ?? []
   const selectedEngine = capabilities?.engines.find(item => item.id === engineId)
   const selectedProfile = capabilities?.rig_profiles?.find(item => item.id === rigProfileId)
-  const profileAnimations = capabilities?.animations.filter(animation => !selectedProfile || selectedProfile.allowed_animations.includes(animation.id)) ?? []
-  const recommendedAnimationIds = selectedProfile?.recommended_animations ?? profileAnimations.map(animation => animation.id)
+  const profileAnimations = clipsForEngine(engineId, capabilities, selectedProfile)
+  const recommendedAnimationIds = recommendedClipIds(engineId, capabilities, selectedProfile, profileAnimations)
   const isRunning = job?.status === 'queued' || job?.status === 'running'
   const activeJobId = isRunning ? job?.job_id ?? null : null
   const canRun = !!selectedEngine?.installed && !!source && selectedClips.size > 0 && !isRunning
@@ -204,8 +222,21 @@ export function RigAnimatePanel() {
     setSpineJoints(profile.default_spine_joints)
     setAxisMode(profile.default_axis_mode)
     setWeightFalloff(profile.default_weight_falloff)
-    setSelectedClips(new Set(profile.recommended_animations))
+    if (engineId !== 'humanoid') setSelectedClips(new Set(profile.recommended_animations))
     setError(null)
+  }
+
+  const chooseEngine = (id: string) => {
+    setEngineId(id)
+    setPose('t')
+    setError(null)
+    if (id === 'humanoid') {
+      const ids = (capabilities?.humanoid_animations ?? []).map(item => item.id)
+      setSelectedClips(new Set(humanoidClipSelection(ids)))
+      return
+    }
+    const profile = capabilities?.rig_profiles?.find(item => item.id === rigProfileId)
+    if (profile) setSelectedClips(new Set(profile.recommended_animations))
   }
 
   const run = async () => {
@@ -214,15 +245,16 @@ export function RigAnimatePanel() {
     setExportError(null)
     setExportStatus(null)
     try {
-      setJob(await startRigJob({
+      setJob(await startRigJob(rigJobBody({
         source,
-        engine: engineId,
-        rig_profile: rigProfileId,
-        animations: Array.from(selectedClips),
-        spine_joints: spineJoints,
-        axis_mode: axisMode,
-        weight_falloff: weightFalloff,
-      }))
+        engineId,
+        rigProfileId,
+        clips: Array.from(selectedClips),
+        pose,
+        spineJoints,
+        axisMode,
+        weightFalloff,
+      })))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('rig.startFailed'))
     }
@@ -342,7 +374,7 @@ export function RigAnimatePanel() {
             {selectedProfile && (
               <div className="mt-1.5 rounded-lg border border-border bg-bg-tertiary p-2.5">
                 <p className="text-[9px] leading-relaxed text-text-muted">{selectedProfile.description}</p>
-                <p className="mt-1 text-[9px] text-text-muted/80">{engineId === 'procedural' ? t('rig.proceduralHelp') : t('rig.unirigHelp')}</p>
+                <p className="mt-1 text-[9px] text-text-muted/80">{t(rigHelpKey(engineId))}</p>
               </div>
             )}
           </div>
@@ -352,7 +384,7 @@ export function RigAnimatePanel() {
             <div className="space-y-1">
               {capabilities.engines.map(item => (
                 <label key={item.id} className={`flex items-start gap-2 rounded-lg border px-2.5 py-1.5 ${item.installed ? 'border-border bg-bg-tertiary cursor-pointer hover:border-border-light' : 'border-border/60 bg-bg-tertiary/50 cursor-not-allowed opacity-70'}`}>
-                  <input type="radio" name="rig-engine" checked={engineId === item.id} disabled={!item.installed} onChange={() => setEngineId(item.id)} className="mt-0.5" />
+                  <input type="radio" name="rig-engine" checked={engineId === item.id} disabled={!item.installed} onChange={() => chooseEngine(item.id)} className="mt-0.5" />
                   <span>
                     <span className="block text-[11px] text-text-primary">{item.label}</span>
                     <span className="block text-[9px] text-text-muted">{item.description}</span>
@@ -363,6 +395,8 @@ export function RigAnimatePanel() {
             </div>
           </div>
 
+          <HumanoidPose engineId={engineId} pose={pose} onChange={setPose} />
+
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <label className="text-[10px] text-text-muted uppercase tracking-wider">{selectedProfile?.label ? t('rig.animations', { name: selectedProfile.label }) : t('rig.animationsDefault')}</label>
@@ -371,7 +405,7 @@ export function RigAnimatePanel() {
                 <button type="button" onClick={() => setSelectedClips(new Set(profileAnimations.map(animation => animation.id)))} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">{t('rig.all')}</button>
               </div>
             </div>
-            <div className="grid max-h-[620px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{profileAnimations.map(animation => <RigAnimationPreview key={animation.id} animation={animation} selected={selectedClips.has(animation.id)} recommended={Boolean(selectedProfile?.recommended_animations.includes(animation.id))} onSelect={() => toggleClip(animation.id)} />)}</div>
+            <div className="grid max-h-[620px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{profileAnimations.map(animation => <RigAnimationPreview key={animation.id} animation={animation} selected={selectedClips.has(animation.id)} recommended={clipIsRecommended(engineId, animation.id, selectedProfile, recommendedAnimationIds)} onSelect={() => toggleClip(animation.id)} />)}</div>
             <p className="mt-1.5 text-[8px] leading-relaxed text-text-muted">{t('rig.previewsHelp')}</p>
           </div>
 
@@ -430,7 +464,7 @@ export function RigAnimatePanel() {
           ) : (
             <button disabled={!canRun} onClick={() => void run()} className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${canRun ? 'bg-cta hover:brightness-110 shadow-accent-glow text-white' : 'bg-bg-tertiary border border-border text-text-muted cursor-not-allowed'}`}><Play size={13} fill={canRun ? 'currentColor' : 'none'} /> {t('rig.run')}</button>
           )}
-          <p className="text-[9px] text-text-muted text-center">{engineId === 'unirig' ? t('rig.unirigFooter') : t('rig.proceduralFooter')}</p>
+          <p className="text-[9px] text-text-muted text-center">{t(rigFooterKey(engineId))}</p>
         </>
       )}
     </div>

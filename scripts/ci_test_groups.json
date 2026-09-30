@@ -196,7 +196,13 @@
         "tests/test_production_publication.py",
         "tests/test_production_phase.py",
         "tests/test_production_preview.py",
-        "tests/test_production_smoothness.py"
+        "tests/test_production_smoothness.py",
+        "tests/test_humanoid_animate.py",
+        "tests/test_humanoid_clips.py",
+        "tests/test_humanoid_glb.py",
+        "tests/test_humanoid_landmarks.py",
+        "tests/test_humanoid_retarget.py",
+        "tests/test_humanoid_rig_api.py"
       ]
     },
     {
@@ -391,7 +397,11 @@
         "tests/test_music_productions_router.py",
         "tests/test_production_clip_qa.py",
         "tests/test_production_cast_portrait.py",
-        "tests/test_production_subject_count.py"
+        "tests/test_production_subject_count.py",
+        "tests/test_humanoid_rig_fixtures.py",
+        "tests/test_humanoid_skeleton.py",
+        "tests/test_humanoid_weights.py",
+        "tests/test_model3d_animate.py"
       ]
     }
   ],
@@ -929,6 +939,36 @@
       "prefix": "docs/development/PRODUCTION_WORK_BOARD.md",
       "paths": [
         "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/humanoid_rig/",
+      "paths": [
+        "tests/test_humanoid_animate.py",
+        "tests/test_humanoid_clips.py",
+        "tests/test_humanoid_glb.py",
+        "tests/test_humanoid_landmarks.py",
+        "tests/test_humanoid_retarget.py",
+        "tests/test_humanoid_rig_api.py",
+        "tests/test_humanoid_rig_fixtures.py",
+        "tests/test_humanoid_skeleton.py",
+        "tests/test_humanoid_weights.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/model3d_animate.py",
+      "paths": [
+        "tests/test_model3d_animate.py",
+        "tests/test_humanoid_animate.py"
+      ]
+    },
+    {
+      "prefix": "app/services/rig_service.py",
+      "paths": [
+        "tests/test_humanoid_rig_api.py",
+        "tests/test_model3d_rig_commands.py",
+        "tests/test_model3d_rig_spawn_cancellation.py",
+        "tests/test_model3d_rig_task_identity.py"
       ]
     }
   ]

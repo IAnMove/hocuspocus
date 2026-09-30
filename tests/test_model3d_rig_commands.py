@@ -81,3 +81,11 @@ def test_rig_is_callable_through_authenticated_mcp_without_discovery(tmp_path):
     assert not result["isError"]
     assert result["structuredContent"]["result"]["job_id"] == "real-rig-job"
     json.dumps(command_catalog())
+
+
+def test_humanoid_engine_is_a_rig_option_with_pose():
+    submit = command_catalog()[0]
+    payload = submit["inputSchema"]["properties"]["input"]["properties"]
+    assert payload["engine"]["enum"] == ["unirig", "procedural", "humanoid"]
+    assert payload["pose"]["enum"] == ["t", "a"]
+    assert "not_humanoid" in submit["description"]

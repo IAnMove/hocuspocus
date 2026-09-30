@@ -37,8 +37,41 @@ native job id. Poll `model3d.status`:
 ```
 
 `result` retains the native progress, phase, error, filename and URL. File
-URLs include the workspace query. Rigid generated meshes have no implied
-skeleton or animation.
+URLs include the workspace query. A generated mesh has no skeleton until
+`model3d.rig` runs.
+
+## Humanoid rig and clips
+
+`model3d.rig` accepts `engine: "humanoid"` on a GLB of one person in a T or A
+pose. Set `pose` to `"t"` or `"a"` and `animations` to ids from
+`humanoid_animations` in `/api/v1/rig/capabilities` (`walk`, `wave`,
+`dance_side`, and the rest of that list). Procedural ids such as `spin` are
+rejected. The job is CPU-only. A mesh that is not a person — hands stuck to
+the torso, or only one leg — finishes with error `not_humanoid` and a reason.
+The published GLB keeps the source mesh and adds a Mixamo-named skeleton.
+
+`model3d.animate` adds clips to a GLB that already has that skeleton:
+
+```json
+{
+  "version": 1,
+  "intent_id": "pet-clips-1",
+  "input": {
+    "workspace": "my-video",
+    "source": "pet-rigged.glb",
+    "clips": ["walk", "wave", "dance_side"],
+    "bpm": 120
+  }
+}
+```
+
+`input.import.file` may name a `.bvh`, `.glb` or `.gltf` already in the same
+workspace. The reply's `result.clips` is `[{index, name, duration}]`. Video 3D
+plays one of those by `clip: {index, name}` on a model slot. A file without
+the 25 standard bones fails with `standard humanoid skeleton not found`.
+Same intent and body replays the published file. How to prompt a T-pose still,
+and the Hunyuan3D settings that kept the arms apart, are in the
+[humanoid rig guide](HUMANOID_RIG.md).
 
 Reuse the exact intent and body on transport retries. The instance-local
 SQLite admission journal replays a submitted job across adapter/server
