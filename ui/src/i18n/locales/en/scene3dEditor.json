@@ -1523,17 +1523,26 @@
     "atmos-waterfall-low": {
       "title": "Waterfall · low",
       "description": "The same waterfall from the water, with a low camera looking up the sheet."
+    },
+    "atmos-moon-wide": {
+      "title": "Moon · wide",
+      "description": "A procedural lunar surface. The character spot stays on the regolith, in front of the lander."
+    },
+    "atmos-moon-low": {
+      "title": "Moon · low",
+      "description": "The same surface from the dust, looking up at a large Earth in a black sky."
     }
   },
   "atmos": {
     "time": "Time of day",
-    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour" },
+    "day": { "dawn": "Dawn", "morning": "Morning", "golden": "Golden hour", "day": "Day", "earthrise": "Earthrise" },
     "palette": "Palette",
-    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber" },
+    "swatch": { "green": "Green", "autumn": "Autumn", "blue": "Blue", "moss": "Moss", "amber": "Amber", "regolith": "Regolith", "basalt": "Basalt" },
     "fogDensity": "Fog",
     "wind": "Wind",
     "motes": "Motes",
-    "flow": "Flow"
+    "flow": "Flow",
+    "prints": "Prints"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",
