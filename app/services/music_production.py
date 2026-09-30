@@ -280,6 +280,16 @@ def lyric_span(line: dict, a: float, b: float, dur: float) -> tuple[float, float
     return start, length
 
 
+def seam_look(line: dict, a: float, b: float) -> dict:
+    """A line that runs across a cut keeps one continuous caption: no entrance in the scene it continues into, no exit before the cut."""
+    look: dict = {}
+    if line["t0"] < a - 0.02:
+        look["enter"] = {"preset": "none", "duration": 0.05}
+    if line["t1"] + 0.15 > b + 0.02:
+        look["exit"] = {"preset": "none", "duration": 0.05}
+    return look
+
+
 def title_cue_count(template: str, fields: dict, start: float, length: float) -> int:
     builder = TITLE_BUILDERS.get(template)
     if builder is None:
@@ -860,7 +870,7 @@ class Production:
             ops.append({"op": "add_title", "id": f"ly{index}", "template": template, "fields": fields,
                         "start": span[0], "duration": span[1]})
             own = style.get("lyric_style") or {}
-            look = {**theme_lyric_style(style.get("theme")), **(DYMO_READABLE if template == "dymo" and "box" not in own else {}), **own}
+            look = {**theme_lyric_style(style.get("theme")), **(DYMO_READABLE if template == "dymo" and "box" not in own else {}), **own, **seam_look(line, a, b)}
             if look:
                 for cue in TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080}):
                     ops.append({"op": "update_text", "id": f"ly{index}-{cue['id']}", "patch": look})
