@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import runpy
 
 import pytest
 
@@ -56,8 +58,8 @@ def _spec(style: dict) -> dict:
     }
 
 
-def test_preset_ids_are_the_four_rendered_looks():
-    assert PRESET_IDS == ("anime", "riso-zine", "omarchy-desktop", "neo-noir-realista")
+def test_preset_ids_include_the_native_backplate_look():
+    assert PRESET_IDS == ("anime", "riso-zine", "omarchy-desktop", "neo-noir-realista", "ps1-backplates")
 
 
 def test_riso_zine_expands_to_the_generic_zine_look():
@@ -72,6 +74,7 @@ def test_each_preset_validates_and_fills_the_look():
         "riso-zine": {"image_model": "qwen_image_21", "lyric_template": "dymo"},
         "omarchy-desktop": {"theme": "tokyo-night", "lyric_template": "social-caption"},
         "neo-noir-realista": {"image_model": "qwen_image_21", "lyric_template": "social-caption"},
+        "ps1-backplates": {"image_model": "qwen_image_21", "singer": False},
     }
     for preset, fields in expect.items():
         style = validate_spec(_spec({"preset": preset}))["style"]
@@ -174,7 +177,100 @@ def test_no_preset_carries_a_person_or_project_name():
     assert all("footer" not in style or style["footer"] for style in PRESETS.values())
 
 
-def test_the_desktop_preset_puts_nobody_on_screen_and_the_others_do():
+def test_desktop_and_backplates_have_no_on_screen_singing():
     from services.production_style_presets import PRESETS
     assert PRESETS["omarchy-desktop"]["singer"] is False and PRESETS["omarchy-desktop"]["content"] == "screen"
-    assert all("singer" not in PRESETS[name] for name in PRESETS if name != "omarchy-desktop")
+    assert PRESETS["ps1-backplates"]["singer"] is False
+    assert all("singer" not in PRESETS[name] for name in PRESETS if name not in ("omarchy-desktop", "ps1-backplates"))
+
+
+def _backplate_client():
+    return runpy.run_path(str(Path(__file__).resolve().parents[1] / "pinokio_agent/skills/api/hocuspocus/clients/native.py"))
+
+
+def _ps1_spec():
+    document = _backplate_client()["backplate_document"]("/api/v1/file/plate.png?workspace=demo", "/api/v1/file/actor.glb?workspace=demo")
+    spec = _spec({"preset": "ps1-backplates"})
+    spec["shots"] = [{"key": "walk", "kind": "scene3d", "t0": 0, "scene3d": {"document": document}}]
+    return spec
+
+
+def test_ps1_native_style_validates_and_keeps_authored_shots():
+    raw = _ps1_spec()
+    expanded = validate_spec(raw)
+    assert expanded["style"]["preset"] == "ps1-backplates"
+    assert expanded["style"]["image_model"] == "qwen_image_21"
+    assert expanded["style"]["image_steps"] == 40
+    assert expanded["style"]["singer"] is False
+    assert expanded["shots"] is raw["shots"]
+    assert raw["style"] == {"preset": "ps1-backplates"}
+
+
+@pytest.mark.parametrize("change", ["h3", "sing", "camera", "camera_override", "floor", "dressing",
+                                    "missing_image", "missing_actor", "subject_override", "atmosphere", "pixel_world", "fill_h3", "auto_plan"])
+def test_ps1_rejects_a_wrong_engine_or_set_before_any_gpu_work(change):
+    spec = _ps1_spec()
+    shot = spec["shots"][0]
+    config = shot["scene3d"]
+    doc = config["document"]
+    if change == "h3": shot.update(kind="h3", frame="actor", action="walks")
+    elif change == "sing": shot["sing"] = True
+    elif change == "camera": doc["camera"]["family"] = "orbit"
+    elif change == "camera_override": config["camera"] = {"family": "orbit"}
+    elif change == "floor": config["environment"] = {"floorStyle": "grid"}
+    elif change == "dressing": doc["dressing"] = "studio"
+    elif change == "missing_image": doc["slots"].pop(0)
+    elif change == "missing_actor": doc["slots"].pop(1)
+    elif change == "subject_override": config["subject"] = "actor.glb"
+    elif change == "atmosphere": config["atmos"] = {"id": "city"}
+    elif change == "pixel_world": config["pixelWorld"] = {"version": 1, "objects": []}
+    elif change == "fill_h3": spec["fill"] = [{"kind": "h3", "frame": "actor", "action": "walks"}]
+    elif change == "auto_plan": spec["shots"] = {"verse": "walks", "chorus": "dances"}
+    with pytest.raises(ProductionError) as caught:
+        validate_spec(spec)
+    assert caught.value.code == "invalid_backplate_shot"
+
+
+def test_ps1_saved_expanded_style_keeps_the_guard_on_resume():
+    expanded = validate_spec(_ps1_spec())
+    assert validate_spec(expanded)["style"] == expanded["style"]
+    expanded["shots"][0]["scene3d"]["document"]["camera"]["family"] = "orbit"
+    with pytest.raises(ProductionError) as caught:
+        validate_spec(expanded)
+    assert caught.value.code == "invalid_backplate_shot"
+
+
+def test_ps1_recipe_preserves_authored_clip_and_motion():
+    clip = {"index": 3, "name": "WalkCycle"}
+    shot = _backplate_client()["backplate_shot"]("walk", "plate.png", "actor.glb", t0=8, duration=8,
+        clip=clip, start=(1, 0, 0), end=(-1, 0, -.5), scale=1.2, clip_speed=1.1)
+    clip["index"] = 99
+    spec = _spec({"preset": "ps1-backplates"})
+    spec["shots"] = [shot]
+    assert validate_spec(spec)["shots"][0]["t0"] == 8
+    doc = shot["scene3d"]["document"]
+    actor = next(slot for slot in doc["slots"] if slot["media"] == "model3d")
+    assert actor["clip"]["index"] == 3 and actor["clip"]["name"] == "WalkCycle"
+    assert actor["scale"] == 1.2 and actor["motion"]["to"] == [-1, 0, -.5]
+    assert actor["clipPlayback"]["speed"] == 1.1
+    assert doc["camera"]["family"] == "fixed" and doc["environment"]["floorStyle"] == "none"
+    assert doc["dressing"] == "none"
+    assert any(slot.get("surface") == "environment" and slot["sourceUrl"] == "plate.png" for slot in doc["slots"])
+
+
+@pytest.mark.skipif(not (Path(__file__).resolve().parents[1] / "ui/node_modules/tsx/dist/loader.mjs").is_file(), reason="UI dependencies not installed in Python-only CI")
+def test_ps1_native_compiler_and_normalized_document_keep_the_backplate_contract():
+    from services.production_scene3d import compile_document
+    spec = _ps1_spec()
+    shot = spec["shots"][0]
+    doc = compile_document(shot, 8)  # CPU schema compilation; no renderer or CUDA.
+    assert doc["camera"]["family"] == "fixed"
+    assert doc["environment"]["floorStyle"] == "none" and doc.get("dressing") is None
+    assert len(doc["slots"]) == 2 and doc["slots"][0]["surface"] == "environment"
+    shot["scene3d"]["document"] = doc
+    assert validate_spec(spec)["style"]["preset"] == "ps1-backplates"
+
+
+def test_ps1_dry_run_has_no_h3_frames():
+    from services.production_dry_run import dry_run
+    assert dry_run(validate_spec(_ps1_spec()))["h3_frames"] == 0
