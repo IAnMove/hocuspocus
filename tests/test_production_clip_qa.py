@@ -66,7 +66,8 @@ def test_blink_color_wash_and_center_change_are_named():
     assert "flicker" in blink["reasons"]
     assert "color_drift" in wash["reasons"] and "static" not in wash["reasons"]
     assert "identity" in swapped["reasons"]
-    assert assess(_still(40)[:2])["reasons"] == ["unreadable"] and assess(_still(40)[:2])["best_r"] is None
+    short = assess(_still(40)[:2])
+    assert short["verdict"] == "unreliable" and short["reasons"] == ["unreadable"] and short["best_r"] is None
 
 
 def test_a_sung_shot_still_uses_lip_sync_and_an_unsung_one_uses_the_picture(monkeypatch):

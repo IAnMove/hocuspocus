@@ -36,18 +36,22 @@ def clip_qa(path: str, sung: bool, vocals: str | None, t0: float, t1: float) -> 
 
 
 def measure_clip(path: str) -> dict:
-    """Read a clip and judge it. A file that cannot be read is a retake with no score."""
+    """Read a clip and judge it. A file that cannot be read is not measured, so it does not spend another take."""
     try:
         frames = _read_frames(path)
     except (OSError, ValueError):
-        return {"verdict": "retake", "reasons": ["unreadable"], "best_r": None}
+        return _unreadable()
     return assess(frames)
+
+
+def _unreadable() -> dict:
+    return {"verdict": "unreliable", "reasons": ["unreadable"], "best_r": None}
 
 
 def assess(frames: list) -> dict:
     """Judge frames already in memory. Each frame is HxWx3 uint8."""
     if len(frames) < _MIN_FRAMES:
-        return {"verdict": "retake", "reasons": ["unreadable"], "best_r": None}
+        return _unreadable()
     grays = [_gray(frame) for frame in frames]
     colors = [_mean_color(frame) for frame in frames]
     motion_mean, motion_max = _motion(grays)
