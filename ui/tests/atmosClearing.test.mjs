@@ -5,7 +5,7 @@ import { atmosFallbackLook } from '../src/features/scene3d/atmos/degrade.ts'
 import { clearingTrunks, scatter, subjectIsClear, CLEARING_SUBJECT } from '../src/features/scene3d/atmos/layout.ts'
 import { atmosFingerprint, parseAtmosSettings, resolveAtmos } from '../src/features/scene3d/atmos/params.ts'
 import { windAt } from '../src/features/scene3d/atmos/wind.ts'
-import { buildClearing } from '../src/features/scene3d/atmos/sets/clearing.ts'
+import { buildClearing, lawn } from '../src/features/scene3d/atmos/sets/clearing.ts'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
 import { cameraEyeAtTime } from '../src/features/scene3d/camera.ts'
 import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
@@ -74,5 +74,16 @@ test('understory props stay out of the lane, the subject and every trunk', () =>
     assert.equal(z > -1.15 && z < 3.5 && x > -1.05 && x < 1.7, false)
     assert.ok((x - CLEARING_SUBJECT[0]) ** 2 + (z - CLEARING_SUBJECT[2]) ** 2 >= 1.4 * 1.4)
     for (const trunk of trunks) assert.ok((trunk.x - x) ** 2 + (trunk.z - z) ** 2 >= (trunk.radius + 0.4) ** 2)
+  }
+})
+
+test('grass is trimmed around the subject and grows to full height farther out', () => {
+  assert.ok(Math.abs(lawn(CLEARING_SUBJECT[0], CLEARING_SUBJECT[2]) - 0.36) < 1e-9)
+  assert.equal(lawn(CLEARING_SUBJECT[0] + 5, CLEARING_SUBJECT[2]), 1)
+  let last = 0
+  for (let d = 0; d <= 4; d += 0.25) {
+    const height = lawn(CLEARING_SUBJECT[0] + d, CLEARING_SUBJECT[2])
+    assert.ok(height >= last)
+    last = height
   }
 })

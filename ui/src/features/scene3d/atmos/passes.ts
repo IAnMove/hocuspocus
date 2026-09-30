@@ -88,6 +88,7 @@ const SHAFT = {
       }
       shafts /= steps;
       float march = 0.0;
+      float marchHeight = 0.0;
       if (uMarch > 0.5) {
         float depth = texture2D(tDepth, vUv).x;
         vec4 clip = vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -95,8 +96,11 @@ const SHAFT = {
         view.xyz /= view.w;
         vec4 world = uViewInverse * vec4(view.xyz, 1.0);
         march = marchLit(world.xyz, -normalize(uRay));
+        marchHeight = world.y;
       }
-      vec3 color = base + min(shafts * uStrength, vec3(0.28)) + uFogColor * march * 0.9;
+      // The shadow-map march is scattering in the air. On the ground it only reads as a milky film, so it is capped and fades in with height.
+      float airborne = smoothstep(0.15, 2.2, uMarch > 0.5 ? marchHeight : 0.0);
+      vec3 color = base + min(shafts * uStrength, vec3(0.28)) + uFogColor * min(march * 0.9, 0.14) * airborne;
       gl_FragColor = vec4(color, 1.0);
     }
   `,
