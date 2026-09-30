@@ -62,6 +62,14 @@ needs Visual Studio Build Tools. The installer actually imports Torch and runs
 a small CUDA calculation before accepting each environment. It does not execute
 models as part of this check.
 
+UniRig pins Blender's Python module to `bpy==4.2.22`, within the 4.2 LTS
+API. The 4.2 Linux wheels name CPython 3.11 but their embedded `WHEEL` metadata
+declares CPython 3.9; `uv pip check` rejects that mismatch. For the pinned
+4.2.22 wheel only, installation first imports the actual Blender binary in
+Python 3.11 and checks its version, then corrects that tag and its RECORD hash.
+Other mismatches remain errors. Installation keeps `uv pip check` and imports `bpy`, Flash Attention,
+Torch Scatter/Cluster and SpConv before writing a successful runtime receipt.
+
 ### Windows native toolchain
 
 The Hunyuan recipe uses CUDA Toolkit 12.8 and x64 MSVC 14.2x/14.3x/14.4x.

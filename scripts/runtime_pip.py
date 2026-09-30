@@ -69,6 +69,9 @@ def main() -> None:
             prepare_rasterizer(rasterizer, source)
             arguments = ["install", "--no-build-isolation", str(source)]
         cmd, env = command(args.engine, arguments)
+        if args.engine == "rigging" and arguments == ["check"]:
+            from runtime_bpy_metadata import repair_bpy_metadata
+            repair_bpy_metadata()
         result = subprocess.run(cmd, env=env)
     if result.returncode:
         raise SystemExit("Error: HOCUS_RUNTIME_FAILED. Package operation failed; environment was not verified.")

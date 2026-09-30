@@ -31,14 +31,15 @@ def test_windows_and_linux_choose_distinct_main_abis():
     assert "verificationImports" not in linux["engines"]["wangp"]
 
 
-def test_verification_rejects_accelerator_import_failure(monkeypatch):
+@pytest.mark.parametrize("engine,module", [("wangp", "xformers.ops"), ("rigging", "bpy"), ("rigging", "flash_attn")])
+def test_verification_rejects_accelerator_import_failure(monkeypatch, engine, module):
     from types import SimpleNamespace
 
     module_spec = importlib.util.spec_from_file_location("runtime_verify_test", ROOT / "scripts/runtime_verify.py")
     helper = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(helper)
     monkeypatch.setattr(helper, "recipe", lambda *a: {
-        "cuda": "12.8", "verificationImports": ["xformers.ops"],
+        "cuda": "12.8", "verificationImports": [module],
     })
     monkeypatch.setattr(helper, "sources_current", lambda *a: True)
     monkeypatch.setattr(helper, "inspect_environment", lambda *a: {})
@@ -46,14 +47,14 @@ def test_verification_rejects_accelerator_import_failure(monkeypatch):
 
     def importing(name):
         imported.append(name)
-        if name == "xformers.ops":
+        if name == module:
             raise ImportError("incompatible Flash-Attention")
         return SimpleNamespace(version=SimpleNamespace(cuda="12.8"))
 
     monkeypatch.setattr(helper.importlib, "import_module", importing)
     with pytest.raises(ImportError, match="incompatible Flash-Attention"):
-        helper.verify("wangp", cuda=False)
-    assert imported == ["torch", "xformers.ops"]
+        helper.verify(engine, cuda=False)
+    assert imported == ["torch", module]
 
 
 def test_metadata_inspection_rejects_leftover_incompatible_accelerator(monkeypatch):
