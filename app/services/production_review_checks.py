@@ -36,7 +36,11 @@ def run_review(
 ) -> dict[str, Any]:
     jobs = collect_jobs(state, root)
     if jobs is None:
-        return empty_review()
+        pending = empty_review()
+        from services.production_review_layers import artistic_verdict
+
+        pending["review"]["artistic"]["verdict"] = artistic_verdict(state, root)
+        return pending
     reader = sample_clip if sample is None else sample
     clips = [_safe_sample(reader, job.get("path")) for job in jobs]
     failures: list[dict[str, str]] = []
@@ -54,7 +58,7 @@ def run_review(
     failures.extend(identity_failures(identity, jobs))
     from services.production_review_layers import apply
 
-    return apply(pack(failures, jobs, identity, evaluated), state, _execution(state, root, reader))
+    return apply(pack(failures, jobs, identity, evaluated), state, _execution(state, root, reader), root)
 
 
 def empty_review() -> dict[str, Any]:

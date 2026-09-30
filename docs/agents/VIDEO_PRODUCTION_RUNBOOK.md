@@ -417,3 +417,15 @@ published files are served; directory listing and symlink escapes are blocked.
 Call the MCP tool `production.publish` with that body. Its result contains
 `page`, `video`, `files` (download URLs) and `publication_id`. Publication is CPU
 only: it neither re-renders the video nor starts any generation.
+
+## Resolution, enhance, and clip phases
+
+`spec.resolution` is optional: `{frames, clips}`. Each value is a string. When the object or one side is omitted, that side stays `1280x704`, which is what frames and H3 clips already use. A string is accepted only when `app/defaults/minimax_h3_fused_turbo.json` lists it or it is one of `FRAME_RESOLUTIONS` (`1280x704`, `1152x640`, `1024x576`). Anything else fails `validate_spec` with `invalid_spec`. The runner still asks for `1280x704` until its resolution hook lands.
+
+`spec.enhance` is optional: `{"method": "flashvsr" or "rife", "scale": 2}`. There is no `video_upsampling` field. The integrated check is `validate_selection` (`shared.wangp1272.processors`), the same function `services/wangp_submission.py` calls for `spatial_upsampling` and `temporal_upsampling`. FlashVSR scale 2 is the spatial value `flashvsr2`. RIFE scale 2 is the temporal value `rife2`. Both are already methods of `tools.upscale` (`tools_upscale.run_tool_upscale`). `enhance_clip` validates that string and then calls an injected upscaler. It does not start FlashVSR, RIFE, or a second queue. The upscaler stands in for that GPU worker. `dry_run` adds one `enhance` warning with an unmeasured extra-minute estimate (`measured: false`) and leaves `minutes` unchanged. No enhance means no extra warning and the same numbers. A real 3-clip FlashVSR measure is still waiting on a free GPU; do not treat the estimate as a timing or an SSIM.
+
+`crop_report(width, height, out_w, out_h)` is the fit:fill crop as numbers. It does not open an image. `1280x704` into `1920x1080` is 1.818:1 into 1.778:1, so the sides are cropped. `clip_crop` uses `spec.resolution.clips` (default `1280x704`) against that 1920x1080 export.
+
+`production.status` `timing.shots` keeps `key`, `seconds`, and `takes`. When a completed job's status payload includes `performance`, those values are copied onto `state.clip_perf` and the shot row gains `s_per_step`, `degraded`, and `model`. A performance field that is absent is null. Nothing is guessed, and fields the payload does not carry (model load, compile) are not invented.
+
+`review.artistic.verdict` `pending` means pending judgement. It is never an automatic `ok`. It becomes `approved_by_review` only when every shot in `state.review_shots`, or in the sibling `<production_id>.review.json`, is `approved`, and `changes_requested` when any shot is `changes_requested`. With no review file and no `review_shots`, it stays `pending`.

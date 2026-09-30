@@ -195,7 +195,9 @@
         "tests/test_production_song_switch.py",
         "tests/test_production_publication.py",
         "tests/test_production_preview.py",
-        "tests/test_production_smoothness.py"
+        "tests/test_production_smoothness.py",
+        "tests/test_production_enhance.py",
+        "tests/test_production_clip_perf.py"
       ]
     },
     {
@@ -609,7 +611,9 @@
         "tests/test_production_clip_qa.py",
         "tests/test_production_cast_portrait.py",
         "tests/test_production_subject_count.py",
-        "tests/test_production_smoothness.py"
+        "tests/test_production_smoothness.py",
+        "tests/test_production_enhance.py",
+        "tests/test_production_clip_perf.py"
       ]
     },
     {
@@ -689,7 +693,8 @@
     {
       "prefix": "app/services/production_timing.py",
       "paths": [
-        "tests/test_production_timing.py"
+        "tests/test_production_timing.py",
+        "tests/test_production_clip_perf.py"
       ]
     },
     {
@@ -703,7 +708,16 @@
       "prefix": "app/services/production_dry_run.py",
       "paths": [
         "tests/test_production_dry_run.py",
-        "tests/test_production_preview.py"
+        "tests/test_production_preview.py",
+        "tests/test_production_enhance.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_enhance.py",
+      "paths": [
+        "tests/test_production_enhance.py",
+        "tests/test_production_dry_run.py",
+        "tests/test_music_production.py"
       ]
     },
     {
@@ -762,6 +776,13 @@
         "tests/test_production_review_checks.py",
         "tests/test_production_timing.py",
         "tests/test_video_production_runbook.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_review.py",
+      "paths": [
+        "tests/test_production_review_checks.py",
+        "tests/test_production_review.py"
       ]
     },
     {

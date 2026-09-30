@@ -32,7 +32,7 @@ from services.production_publication import publication_catalog, publication_han
 from services.production_resume import open_mcp
 from services.production_resource_gate import guard_mcp
 from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
-from services.production_timing import StageWatch, timing_summary
+from services.production_timing import StageWatch, note_clip_performance, timing_summary
 from services.production_usage import attach_usage, usage_summary
 from services.production_structure import require_direction
 from services.production_trailer_audio import attach as attach_trailer_audio
@@ -118,7 +118,9 @@ SPEC_SCHEMA: dict[str, Any] = {
         "max_takes": {"type": "integer", "minimum": 1, "maximum": 5},
         "structure": {"enum": ["clip", "trailer"], "description": "clip (default): verse/chorus shots on the song's lines; trailer: five beats on time (presentation, tension, escalation, reveal, close) with designed silence, risers and hits"},
         "treatment": {"type": "object", "description": "what happens: arc (what changes first image to last), want, obstacle, moments [{at, event}] (at: chorus2, bridge, line:N), motifs. dry_run checks the plan carries it"},
-        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: fills song seeds and max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"}},
+        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: fills song seeds and max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"},
+        "resolution": {"type": "object", "properties": {"frames": {"type": "string", "maxLength": 16}, "clips": {"type": "string", "maxLength": 16}}},
+        "enhance": {"type": "object", "properties": {"method": {"enum": ["flashvsr", "rife"]}, "scale": {"type": "integer"}}}},
 }
 
 
@@ -184,6 +186,8 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
+    from services.production_enhance import check_spec
+    check_spec(spec)
     return require_direction(spec)
 
 
@@ -418,6 +422,7 @@ class Production:
                 s = self.mcp("status", {"job_id": job})
                 if s.get("status") == "completed":
                     done[key] = (s.get("output_files") or [None])[0]
+                    note_clip_performance(getattr(self, "state", None), key, s)
                 elif s.get("status") is None:            # a status hiccup is not a lost job yet
                     unknown[key] = unknown.get(key, 0) + 1
                     if unknown[key] >= 5:
@@ -1172,7 +1177,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         if not path.exists():
             raise HTTPException(404, {"code": "production_not_found", "message": "No production with this id in the workspace", "retryable": False})
         state = await wait_for_status(path, data.get("wait_s", 0))
-        summary = await asyncio.to_thread(status_summary, state, data["workspace"], str(path.parent))    # the review opens video files
+        summary = await asyncio.to_thread(status_summary, {**state, "production_id": data["production_id"]}, data["workspace"], str(path.parent))    # the review opens video files
         return {"version": 1, "status": "completed", "operation": STATUS, "result": summary}
 
     async def plan(arguments: Any) -> dict:
