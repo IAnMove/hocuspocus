@@ -121,6 +121,13 @@ function addGround(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   kept.materials.push(mat)
 }
 
+/** Grass is trimmed around the character so knees and feet stay in view, and grows to full height by 2.8 m out. */
+export function lawn(x: number, z: number): number {
+  const distance = Math.hypot(x - CLEARING_SUBJECT[0], z - CLEARING_SUBJECT[2])
+  const t = Math.min(1, Math.max(0, (distance - 1) / 1.8))
+  return 0.36 + 0.64 * t * t * (3 - 2 * t)
+}
+
 /** Blades grow in tufts of 18, denser near the camera, and step out of the subject's spot. */
 function seatBlade(i: number, seed: number): [number, number] {
   const tuft = Math.floor(i / 18)
@@ -161,7 +168,7 @@ function addGrass(root: Group, resolved: ResolvedAtmos, kept: Kept) {
     const [x, z] = seatBlade(i, resolved.seed)
     dummy.position.set(x, 0, z)
     dummy.rotation.y = hash2(i, 3, resolved.seed) * Math.PI * 2
-    dummy.scale.setScalar(0.7 + hash2(i, 5, resolved.seed) * 0.9)
+    dummy.scale.setScalar((0.7 + hash2(i, 5, resolved.seed) * 0.9) * lawn(x, z))
     dummy.updateMatrix()
     mesh.setMatrixAt(i, dummy.matrix)
     phases[i] = hash2(i, 6, resolved.seed) * Math.PI * 2

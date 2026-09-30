@@ -36,6 +36,8 @@ The clearing is built in one flat-shaded, low-poly style so the geometry reads a
 - Understory: bushes, flower tufts, red mushrooms at trunk bases, mossy rocks and a fallen log. `scatter` in `layout.ts` places them and never uses the subject's lane or a trunk's footprint.
 - Grass: tapered blades in tufts of 18, denser toward the camera, each with its own tint. Preview 12,000 blades, export 60,000.
 
+Export tuning (checked on a software export of `atmos-clearing-wide` with the TV-head humanoid in the open spot): the grass is trimmed around the character (`lawn`: 36 % height at the spot, full height from 2.8 m) so knees and feet stay in view, and the shadow-map scattering in the shaft pass is capped at 0.14 and fades in from 0.15 to 2.2 m above the surface. Uncapped, it lay a milky film over the ground and washed out the character.
+
 Materials use a small emissive term as fake bounce light, because the sun is a single spot and the trunks otherwise fall to black.
 
 This clearing is a base. Shafts, dappled cobble shadows, and out-of-focus leaves at the frame edge still need another pass.
