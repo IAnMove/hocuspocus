@@ -360,6 +360,41 @@ def test_redo_uses_injected_shooters_and_undo_restores_without_deleting(tmp_path
     assert caught.value.code == "invalid_redo"
 
 
+def test_redo_of_a_locked_shot_does_not_drop_the_frame(tmp_path):
+    """frames() skips locked keys, so popping before the shoot would save a hole."""
+    calls: list[tuple] = []
+    production = _production(tmp_path)
+    production.state = {
+        "frames": {"s0": "f.png"},
+        "clips": {"s0": {"file": "c.mp4"}},
+        "scenes": {"s0": {"file": "s.mp4"}},
+        "spec": {"shots": [{"key": "s0", "kind": "h3"}]},
+    }
+    record_decision(tmp_path, "p", "s0", locked=True)
+    spec = production.state["spec"]
+
+    def shoot_frame(_production, _spec, key, prompt):
+        calls.append(("frame", key, prompt))
+
+    def shoot_clip(_production, _spec, key, action):
+        calls.append(("clip", key, action))
+
+    def export_scene(_production, _spec, key):
+        calls.append(("scene", key))
+
+    with pytest.raises(ProductionError) as caught:
+        redo(production, spec, "s0", "frame", frame_prompt="closer", shoot_frame=shoot_frame, shoot_clip=shoot_clip, export_scene=export_scene)
+    assert caught.value.code == "shot_locked"
+    assert production.state["frames"]["s0"] == "f.png"
+    assert production.state["clips"]["s0"]["file"] == "c.mp4"
+    assert calls == []
+    with pytest.raises(ProductionError) as clip_caught:
+        redo(production, spec, "s0", "clip", shoot_frame=shoot_frame, shoot_clip=shoot_clip, export_scene=export_scene)
+    assert clip_caught.value.code == "shot_locked"
+    assert production.state["clips"]["s0"]["file"] == "c.mp4"
+    assert calls == []
+
+
 def test_scene_export_lane_defaults_to_two_and_rejects_out_of_range(monkeypatch):
     monkeypatch.delenv(ENV, raising=False)
     assert scene2d_render_lane().capacity == 2

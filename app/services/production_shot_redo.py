@@ -25,7 +25,10 @@ def redo(
     if origin not in _ORIGINS:
         from services.music_production import ProductionError
         raise ProductionError("invalid_redo", "from must be frame, clip, or scene")
-    from services.production_shot_review import record_decision, snapshot
+    from services.production_shot_review import is_locked, record_decision, snapshot
+    if is_locked(production, key):
+        from services.music_production import ProductionError
+        raise ProductionError("shot_locked", "locked: " + key)
     record_decision(production.root, production.id, key, snapshot=snapshot(production, key))
     if origin == "frame":
         _pop(production, "frames", key)
