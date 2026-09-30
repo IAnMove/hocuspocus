@@ -315,6 +315,24 @@ These opt-in checks leave other instances untouched. They require the named
 local commands when enabled; absent commands fail before admission.
 
 
+### Rig an existing model through MCP
+
+Use `model3d.rig` with `{version: 1, intent_id, input: {workspace,
+source: "hero.glb", engine: "unirig", rig_profile: "humanoid",
+animations: ["idle", "walk"], seed: 64}}`. Poll `model3d.rig.status` with
+`{version: 1, input: {workspace, job_id}}`. These commands wrap the native
+`/api/v1/rig/generate` and `/api/v1/rig/status/{job_id}` contracts; they reuse
+the scheduler, short-lived workers and workspace publication. A retry with
+the same intent/body replays the original admission; a changed body conflicts.
+The source stays intact and the result is a new GLB with exact clip names.
+
+Install UniRig from HocusPocus's Advanced menu using `rigging_install.js`.
+`GET /api/v1/rig/capabilities` reports installation before any generation.
+UniRig predicts joints and skin weights. The current clip library animates a
+body chain, not independently identified humanoid limbs: inspect an exported
+pilot before claiming a walk/dance is suitable. `engine: "procedural"` is
+CPU-only and constructs an approximate single chain rather than an anatomical rig.
+
 ### N64-inspired render look
 
 Set `scene3d.renderLook: "n64"` (or `document.renderLook`) to use the native

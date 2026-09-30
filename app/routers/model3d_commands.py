@@ -81,8 +81,9 @@ def _result(operation: str, job: dict) -> dict:
     return {"version": 1, "operation": operation, "status": job.get("status", "accepted"), "result": job}
 
 
-def command_handlers(*, generate, status, journal_path) -> dict:
+def command_handlers(*, generate, status, journal_path, operations=("model3d.generate", "model3d.status")) -> dict:
     journal = RequestJournal(journal_path)
+    submit_operation, status_operation = operations
 
     async def submit(arguments: dict) -> dict:
         payload = _input(arguments, mutation=True)
@@ -90,7 +91,7 @@ def command_handlers(*, generate, status, journal_path) -> dict:
         digest = intent_digest(payload)
         provenance = normalize_submission_provenance(payload.get("provenance"), trusted_tool="external_agent")
         # Scope retries to the workspace without exposing paths in a journal key.
-        identity = hashlib.sha256(f"model3d.generate:{payload['workspace']}:{intent}".encode()).hexdigest()
+        identity = hashlib.sha256(f"{submit_operation}:{payload['workspace']}:{intent}".encode()).hexdigest()
         try:
             stored = journal.reserve(identity, digest)
         except UncertainRequest as error:
@@ -98,17 +99,17 @@ def command_handlers(*, generate, status, journal_path) -> dict:
                                       "retryable": False}) from error
         if stored is not None:
             return stored
-        provenance.update(actor="user", capability="model3d.generate")
+        provenance.update(actor="user", capability=submit_operation)
         provenance["command"]["command_id"] = intent
         payload["provenance"] = provenance
         try:
             job = generate(JsonRequest(payload, trusted_tool="external_agent"))
             job = await job if inspect.isawaitable(job) else job
-            result = _result("model3d.generate", job)
+            result = _result(submit_operation, job)
         except HTTPException as error:
             if error.status_code >= 500:
                 raise  # Admission may have happened; retain uncertainty rather than resubmit.
-            result = {"version": 1, "operation": "model3d.generate", "status": "failed",
+            result = {"version": 1, "operation": submit_operation, "status": "failed",
                       "error": error.detail, "status_code": error.status_code}
         journal.finish(identity, result)
         return result
@@ -122,6 +123,6 @@ def command_handlers(*, generate, status, journal_path) -> dict:
         job = await job if inspect.isawaitable(job) else job
         if job.get("workspace") != payload["workspace"]:
             raise HTTPException(404, "3D generation job not found in this workspace")
-        return _result("model3d.status", job)
+        return _result(status_operation, job)
 
-    return {"model3d.generate": submit, "model3d.status": read}
+    return {submit_operation: submit, status_operation: read}
