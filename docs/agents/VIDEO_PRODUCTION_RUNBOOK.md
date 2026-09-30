@@ -317,6 +317,13 @@ local commands when enabled; absent commands fail before admission.
 
 ### Rig an existing model through MCP
 
+Import accepted GLBs with `assets.upload` using `filename` and `data_base64`
+(up to 8 MB), just like other workspace assets. For larger media already in
+the app's uploads root, use `input: {workspace, source, copy_to_workspace: true}`
+to import a copy up to 500 MB; the original remains intact. The returned
+workspace URL can be used directly by Video 3D. Omitting the copy flag retains
+the existing reference-only behavior; image/audio tools still reject GLB refs.
+
 Use `model3d.rig` with `{version: 1, intent_id, input: {workspace,
 source: "hero.glb", engine: "unirig", rig_profile: "humanoid",
 animations: ["idle", "walk"], seed: 64}}`. Poll `model3d.rig.status` with
