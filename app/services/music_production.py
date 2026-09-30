@@ -649,6 +649,8 @@ class Production:
             pending = retry
         from services.production_subject_count import note_media
         note_media(self, spec, windows, "clip")
+        from services.production_smoothness import note_outputs
+        note_outputs(self, "clip")
 
     def judge_take(self, w: dict, name: str | None, take: int, vocals: str | None) -> bool:
         """Record one take; True when the clip needs no more takes. Sung shots keep the best lip-sync r; other shots keep the best visual score."""
@@ -707,6 +709,8 @@ class Production:
             lambda seconds: sleep_until(getattr(self, "_cancel", None), seconds, time.sleep), self.save, self.log)
         apply_scene_export_failure(self.state, failed)
         self.log(f"scenes: {sum(1 for s in done.values() if s.get('file'))}/{len(segs)}")
+        from services.production_smoothness import note_outputs
+        note_outputs(self, "scene")
 
     def scene_document(self, shot: dict, a: float, b: float, score: dict, clips: dict, style: dict, stills: dict) -> dict:
         shot, style = render_shot(shot, style)
@@ -927,6 +931,8 @@ class Production:
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(self.root / self.state["final"]), "-vf", contact_sheet_filter(score["duration"]),
                             "-frames:v", "1", str(self.root / sheet)])
             self.state["contact_sheet"] = sheet
+        from services.production_smoothness import note_outputs
+        note_outputs(self, "final")
         self.log(f"montage: {status.get('status')}")
 
     def animatic(self, spec: dict, windows: list[dict]) -> None:
@@ -1024,6 +1030,10 @@ def status_summary(state: dict, workspace: str, root: str | None = None) -> dict
     counted = mismatches(state)
     if counted:
         summary["subject_counts"] = counted
+    from services.production_smoothness import for_status
+    smooth = for_status(state)
+    if smooth:
+        summary["smoothness"] = smooth
     summary.update(review_for_status(state, root))
     return summary
 

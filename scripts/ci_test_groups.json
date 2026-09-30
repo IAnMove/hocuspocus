@@ -194,7 +194,8 @@
         "tests/test_production_shot_edit.py",
         "tests/test_production_song_switch.py",
         "tests/test_production_publication.py",
-        "tests/test_production_preview.py"
+        "tests/test_production_preview.py",
+        "tests/test_production_smoothness.py"
       ]
     },
     {
@@ -605,7 +606,8 @@
         "tests/test_production_scene_retry.py",
         "tests/test_production_clip_qa.py",
         "tests/test_production_cast_portrait.py",
-        "tests/test_production_subject_count.py"
+        "tests/test_production_subject_count.py",
+        "tests/test_production_smoothness.py"
       ]
     },
     {
@@ -717,6 +719,13 @@
         "tests/test_music_production.py",
         "tests/test_qa_people.py",
         "tests/test_production_timing.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_smoothness.py",
+      "paths": [
+        "tests/test_production_smoothness.py",
+        "tests/test_music_production.py"
       ]
     },
     {
