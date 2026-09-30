@@ -1639,6 +1639,14 @@
     "atmos-space-ring-low": {
       "title": "Planeta con anillos · cámara baja",
       "description": "La misma órbita desde la plataforma, mirando los anillos y los asteroides cercanos."
+    },
+    "atmos-meadow-wide": {
+      "title": "Prado con nubes bajas · plano abierto",
+      "description": "Prado procedural con nubes bajas y viento. La hierba se mueve, y el hueco del personaje queda en terreno abierto."
+    },
+    "atmos-meadow-low": {
+      "title": "Prado con nubes bajas · cámara baja",
+      "description": "El mismo prado desde la hierba, mirando el campo y las nubes bajas."
     }
   },
   "atmos": {
@@ -1668,7 +1676,9 @@
       "dim": "Tenue",
       "on": "Encendida",
       "cruise": "Crucero",
-      "eclipse": "Eclipse"
+      "eclipse": "Eclipse",
+      "spring": "Primavera",
+      "overcast": "Nublado"
     },
     "palette": "Paleta",
     "swatch": {
@@ -1703,7 +1713,9 @@
       "cream": "Crema",
       "mauve": "Malva",
       "ice": "Hielo",
-      "copper": "Cobre"
+      "copper": "Cobre",
+      "clover": "Trébol",
+      "hay": "Heno"
     },
     "fogDensity": "Niebla",
     "wind": "Viento",
@@ -1722,7 +1734,8 @@
     "spin": "Giro",
     "skyline": "Perfil",
     "static": "Nieve",
-    "orbit": "Órbita"
+    "orbit": "Órbita",
+    "breeze": "Brisa"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

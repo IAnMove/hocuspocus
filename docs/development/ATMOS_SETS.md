@@ -246,7 +246,21 @@ Templates: `atmos-sky-islands-wide`, `atmos-sky-islands-low`. Both last 6 second
 
 A software export of `atmos-sky-islands-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 26003 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
-## Set 14 — `atmos-rooftop-night`
+## Set 14 — `atmos-meadow`
+
+Templates: `atmos-meadow-wide`, `atmos-meadow-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. Grass stays outside that circle and outside the lane to the camera. Low clouds drift above the figure. There is no sun.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `spring`, `overcast` | `spring` |
+| `palette` | `clover`, `hay` | `clover` |
+| `variant` (`atmos.breeze`) | 0–8 | 4 |
+
+Wind leans the grass in the blade shader, and the same breeze slides the low clouds. Grass stays outside the open circle and the lane, and that circle is only a lighter patch so a figure is not buried. `overcast` greys the sky. There is no shaft, depth-of-field, or grade pass. Grass tufts use the grass count (100 preview, 140 export) and clouds use the mote count (8 / 12). Materials are unlit. Without WebGL2 the set is a flat green floor. The library setting is `forest`, shared with the clearing.
+
+A software export of `atmos-meadow-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27814 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 15 — `atmos-rooftop-night`
 
 Templates: `atmos-rooftop-night-wide`, `atmos-rooftop-night-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, standing on the roof slab. Vents, aerials and the parapet stay outside that circle and outside the lane to the camera.
 
@@ -260,7 +274,7 @@ Templates: `atmos-rooftop-night-wide`, `atmos-rooftop-night-low`. Both last 6 se
 
 A software export of `atmos-rooftop-night-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 34213 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
-## Set 15 — `atmos-retro-room`
+## Set 16 — `atmos-retro-room`
 
 Templates: `atmos-retro-room-wide`, `atmos-retro-room-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing. The CRT, the console, the controller and the other furniture stay outside that circle and outside the lane to the camera. Interior walls are double-sided so the room is visible from inside.
 
@@ -274,7 +288,7 @@ Templates: `atmos-retro-room-wide`, `atmos-retro-room-low`. Both last 6 seconds 
 
 A software export of `atmos-retro-room-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 26000 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
-## Set 16 — `atmos-space-ring`
+## Set 17 — `atmos-space-ring`
 
 Templates: `atmos-space-ring-wide`, `atmos-space-ring-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on a small pad so the figure stands instead of floating. Asteroids stay outside that circle and outside the lane to the camera. The ringed planet sits far back, large enough to read.
 

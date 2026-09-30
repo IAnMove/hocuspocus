@@ -1639,6 +1639,14 @@
     "atmos-space-ring-low": {
       "title": "Ringed planet · low",
       "description": "The same orbit from the pad, looking up toward the rings and the near asteroids."
+    },
+    "atmos-meadow-wide": {
+      "title": "Meadow · wide",
+      "description": "A procedural meadow under low clouds. Wind moves the grass, and the character spot stays on open ground."
+    },
+    "atmos-meadow-low": {
+      "title": "Meadow · low",
+      "description": "The same meadow from the grass, looking across the field and the low clouds."
     }
   },
   "atmos": {
@@ -1668,7 +1676,9 @@
       "dim": "Dim",
       "on": "On",
       "cruise": "Cruise",
-      "eclipse": "Eclipse"
+      "eclipse": "Eclipse",
+      "spring": "Spring",
+      "overcast": "Overcast"
     },
     "palette": "Palette",
     "swatch": {
@@ -1703,7 +1713,9 @@
       "cream": "Cream",
       "mauve": "Mauve",
       "ice": "Ice",
-      "copper": "Copper"
+      "copper": "Copper",
+      "clover": "Clover",
+      "hay": "Hay"
     },
     "fogDensity": "Fog",
     "wind": "Wind",
@@ -1722,7 +1734,8 @@
     "spin": "Spin",
     "skyline": "Skyline",
     "static": "Static",
-    "orbit": "Orbit"
+    "orbit": "Orbit",
+    "breeze": "Breeze"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",

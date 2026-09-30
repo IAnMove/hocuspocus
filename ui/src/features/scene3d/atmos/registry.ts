@@ -14,11 +14,12 @@ import { spaceRingSet } from './sets/spaceRing.ts'
 import { templeSet } from './sets/temple.ts'
 import { volcanoSet } from './sets/volcano.ts'
 import { marsSet } from './sets/mars.ts'
+import { meadowSet } from './sets/meadow.ts'
 import { moonSet } from './sets/moon.ts'
 import { snowSet } from './sets/snow.ts'
 import { waterfallSet } from './sets/waterfall.ts'
 
-export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet, marsSet, snowSet, desertSet, beachSet, crystalCaveSet, volcanoSet, templeSet, reefSet, neonRainSet, skyIslandsSet, rooftopNightSet, retroRoomSet, spaceRingSet]
+export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet, marsSet, snowSet, desertSet, beachSet, crystalCaveSet, volcanoSet, templeSet, reefSet, neonRainSet, skyIslandsSet, meadowSet, rooftopNightSet, retroRoomSet, spaceRingSet]
 
 const extra: AtmosSetDefinition[] = []
 
