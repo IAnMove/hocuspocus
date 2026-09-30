@@ -19,7 +19,8 @@ from services.production_resolution import check_resolution, clip_resolution, cr
 from services.production_shot_redo import redo, undo
 from services.production_shot_request import RequestError, resolve_plan, validate_plan
 from services.production_shot_review import (
-    ReviewError, apply_artistic, assert_publishable, is_locked, load_review, record_decision, unlocked_windows,
+    ReviewError, apply_artistic, assert_publishable, assert_retake_unlocked, is_locked, load_review,
+    record_decision, unlocked_windows,
 )
 from services.production_timing import timing_summary
 from services.production_usage import usage_summary
@@ -280,6 +281,22 @@ def test_locked_shots_are_skipped_and_an_explicit_retake_is_refused(tmp_path):
     with pytest.raises(ProductionError) as caught:
         unlocked_windows(production, windows, ("s0",))
     assert caught.value.code == "shot_locked"
+
+
+def test_run_refuses_a_locked_retake_before_changing_status(tmp_path):
+    production = _production(tmp_path)
+    production.state.update(status="completed", spec={"shots": [{"key": "s0"}]}, final="v.mp4")
+    production.save()
+    record_decision(tmp_path, "p", "s0", locked=True)
+    with pytest.raises(ProductionError) as caught:
+        production.run(production.state["spec"], retake=("s0",))
+    assert caught.value.code == "shot_locked"
+    disk = json.loads((tmp_path / "p.production.json").read_text())
+    assert disk["status"] == "completed"
+    assert disk.get("final") == "v.mp4"
+    assert_retake_unlocked(production, ())
+    with pytest.raises(ProductionError):
+        assert_retake_unlocked(production, ("s0",))
 
 
 def test_publish_requires_every_shot_when_the_spec_lists_them(tmp_path):

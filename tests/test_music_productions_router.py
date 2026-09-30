@@ -141,6 +141,23 @@ def test_retake_refuses_while_a_shot_edit_holds_the_production(tmp_path: Path):
         music_production._edits.pop("film/show", None)
 
 
+def test_retake_of_a_locked_shot_keeps_completed_status(tmp_path: Path):
+    from services.production_shot_review import record_decision
+
+    root = tmp_path / "film"
+    _write(root)
+    path = root / "show.production.json"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    body["status"] = "completed"
+    path.write_text(json.dumps(body), encoding="utf-8")
+    record_decision(root, "show", "s0", locked=True)
+    client = _client(root, token="token")
+    retake = client.post("/api/v1/music-productions/show/shots/s0/retake", params={"workspace": "film"})
+    assert retake.status_code == 422
+    assert retake.json()["detail"]["code"] == "shot_locked"
+    assert json.loads(path.read_text(encoding="utf-8"))["status"] == "completed"
+
+
 def test_failed_use_take_releases_the_edit_slot(tmp_path: Path):
     from services import music_production
 

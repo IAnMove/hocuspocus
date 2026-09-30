@@ -85,3 +85,21 @@ test('review buttons appear only when a review callback is provided', () => {
   assert.deepEqual(actions, ['s0:approved', 's0:changes_requested', 's0:lock'])
   cleanup()
 })
+
+test('another take is disabled when the shot is locked', () => {
+  const retakes: string[] = []
+  render(<MusicProductionGrid
+    workspace="film"
+    shots={[{ ...manifest.shots[0], review: { status: 'approved', locked: true } }]}
+    onOpenScene={() => undefined}
+    onRetake={shot => retakes.push(shot)}
+    onUseTake={() => undefined}
+    onOpenMontage={() => undefined}
+    onReview={() => undefined}
+  />)
+  const button = screen.getByRole('button', { name: 'Another take' })
+  assert.equal((button as HTMLButtonElement).disabled, true)
+  fireEvent.click(button)
+  assert.deepEqual(retakes, [])
+  cleanup()
+})

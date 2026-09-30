@@ -47,7 +47,7 @@ To fix a shot: open the montage in the Video Editor, press **Open scene** on the
 
 ## Change a take, a look, the song, or stop the run
 
-People use **Music productions** in the sidebar. It lists each `*.production.json` (status, title, duration, montage contact sheet). Opening one shows the rows of `<id>.shots.json`: start frame, clip, lyric, whether it is sung, every take with its r, and the scene. **Open scene** opens that shot's scene in Video 2D. **Another take** is `production.run` with that shot in `retake`. **Use this take** swaps that take in without a GPU. **Open montage** loads the montage into the Video Editor.
+People use **Music productions** in the sidebar. It lists each `*.production.json` (status, title, duration, montage contact sheet). Opening one shows the rows of `<id>.shots.json`: start frame, clip, lyric, whether it is sung, every take with its r, and the scene. **Open scene** opens that shot's scene in Video 2D. **Another take** is `production.run` with that shot in `retake`; it is disabled while the shot is locked. **Use this take** swaps that take in without a GPU. **Open montage** loads the montage into the Video Editor.
 
 Agents use the same actions as commands:
 
@@ -430,7 +430,7 @@ only: it neither re-renders the video nor starts any generation.
 
 `timing.shots` adds `s_per_step`, `degraded`, and `model` only when the H3 job returned a performance object. Missing fields are null. A job without that object adds nothing.
 
-`production.shot.review` records `pending`, `approved`, or `changes_requested` in `<id>.review.json`, not in the production file. `production.shot.lock` keeps a later run from reshooting or re-exporting that shot. An explicit retake of a locked shot is `shot_locked`. `production.shot.redo` and `production.shot.undo` redo or restore one shot. Undo does not delete files. `production.shot.request` validates a closed plan. With no plan and no configured language model it is `llm_unavailable` and does not invent a plan. `apply` runs the plan. The REST request route validates and returns `applied: false`.
+`production.shot.review` records `pending`, `approved`, or `changes_requested` in `<id>.review.json`, not in the production file. `production.shot.lock` keeps a later run from reshooting or re-exporting that shot. An explicit retake of a locked shot is `shot_locked` before the run sets `status` to `running`, so a completed production stays completed. `production.shot.redo` and `production.shot.undo` redo or restore one shot. Undo does not delete files. `production.shot.request` validates a closed plan. With no plan and no configured language model it is `llm_unavailable` and does not invent a plan. `apply` runs the plan. The REST request route validates and returns `applied: false`.
 
 `production.publish` refuses a completed production whose spec lists shot keys until each key is `approved` in the review file (`review_incomplete`). A spec with no shot list is unchanged. Artistic review stays `pending` without a human file. A human file may set `approved` or `changes_requested`. It is never the string ok.
 
