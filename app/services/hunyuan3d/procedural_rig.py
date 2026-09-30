@@ -28,6 +28,11 @@ from pygltflib import (
     Skin,
 )
 
+if __package__:
+    from .humanoid_animation import bake_humanoid_clips
+else:
+    from humanoid_animation import bake_humanoid_clips
+
 FLOAT = 5126
 UNSIGNED_SHORT = 5123
 ARRAY_BUFFER = 34962
@@ -806,12 +811,16 @@ def bake_clips_onto_existing_rig(
     destination: str,
     clip_ids: list[str],
     progress: ProgressFn | None = None,
+    rig_profile: str = "prop",
+    animation_bpm: float = 120,
 ) -> dict[str, Any]:
     """Add Maestro's clip library to a GLB that already has a skin.
 
     Used after UniRig merges its predicted skeleton+weights: the root joint
     receives the whole-object clips and the longest root→leaf joint chain
-    plays the sway-style clips. Channel values compose with each joint's
+    plays legacy sway clips. Explicit humanoid profiles resolve limbs for
+    idle, walk and wobble; unsupported topology reports a fallback warning.
+    Channel values compose with each joint's
     bind TRS so the predicted pose is preserved.
     """
     emit = progress or (lambda phase, value, message: None)
@@ -865,8 +874,18 @@ def bake_clips_onto_existing_rig(
         "chain_rotations": [list(gltf.nodes[j].rotation or [0.0, 0.0, 0.0, 1.0]) for j in chain],
         "height": height,
     }
+    original_animations = len(gltf.animations)
+    baked, animation_summary = bake_humanoid_clips(
+        gltf, blob, clip_ids, globals_by_node, _add_sampler, CLIPS, rig_profile, animation_bpm,
+    )
     for clip_id in clip_ids:
-        _build_clip(gltf, blob, clip_id, target)
+        if clip_id not in baked:
+            _build_clip(gltf, blob, clip_id, target)
+    # Keep requested clip indices stable even when anatomical and legacy clips mix.
+    requested_names = [CLIPS[c] for c in clip_ids]
+    gltf.animations[original_animations:] = sorted(
+        gltf.animations[original_animations:], key=lambda clip: requested_names.index(clip.name),
+    )
 
     emit("export", 0.95, "Writing animated GLB")
     gltf.set_binary_blob(bytes(blob))
@@ -876,4 +895,5 @@ def bake_clips_onto_existing_rig(
         "animations": [CLIPS[clip_id] for clip_id in clip_ids],
         "joints": len(joints),
         "chain_length": len(chain),
+        **animation_summary,
     }

@@ -100,7 +100,7 @@ RIG_PROFILES: list[dict[str, Any]] = [
     {
         "id": "humanoid",
         "label": "Humanoid",
-        "description": "Upright characters. Uses a denser Y-up body chain; it is a procedural approximation, not semantic limb retargeting.",
+        "description": "Upright characters. UniRig maps recognizable Y-up limbs for idle, walk and wobble; other clips and the procedural engine use body-chain approximations.",
         "default_spine_joints": 7,
         "default_axis_mode": "y",
         "default_weight_falloff": 2.4,
@@ -424,11 +424,13 @@ def start_job(
     except (TypeError, ValueError):
         weight_falloff = default_weight_falloff
 
+    from services.hunyuan3d.humanoid_animation import animation_tempo
     request_data = {
         "engine": engine,
         "workspace": str(workspace or "default"),
         "source": os.path.abspath(source_path),
         "rig_profile": rig_profile,
+        "animation_bpm": animation_tempo(body.get("animation_bpm", 120)),
         "animations": [str(item) for item in animations],
         "spine_joints": spine_joints,
         "axis_mode": axis_mode,
@@ -740,6 +742,9 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             {
                 "joint_count": result_summary.get("joint_count", 0),
                 "animation_chain_joints": result_summary.get("animation_chain_joints", 0),
+                **{key: result_summary[key] for key in (
+                    "animation_mode", "articulated_clips", "humanoid_joints", "animation_warnings", "animation_bpm",
+                ) if key in result_summary},
             }
             if engine == "unirig"
             else {"spine_joints": result_summary.get("joints", request_data["spine_joints"])}

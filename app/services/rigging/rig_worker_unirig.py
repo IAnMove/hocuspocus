@@ -127,7 +127,10 @@ def main() -> None:
         run_unirig("merge.sh", ["--source", str(skin_fbx), "--target", str(source), "--output", str(merged_glb)])
         require_rigged_glb(merged_glb, "merged rig")
 
-        summary = procedural_rig.bake_clips_onto_existing_rig(str(merged_glb), str(output_path), clip_ids, progress=event)
+        summary = procedural_rig.bake_clips_onto_existing_rig(
+            str(merged_glb), str(output_path), clip_ids, progress=event,
+            rig_profile=request.get("rig_profile", "prop"), animation_bpm=request.get("animation_bpm", 120),
+        )
 
     require_rigged_glb(output_path, "animated output", [procedural_rig.CLIPS[clip_id] for clip_id in clip_ids])
     summary["joint_count"] = summary.pop("joints", 0)
