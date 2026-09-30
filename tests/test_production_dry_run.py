@@ -161,3 +161,9 @@ def test_dry_run_plans_with_the_preset_and_profile_the_run_will_use():
     report = dry_run(spec)
     assert {row["kind"] for row in report["windows"] if not row["key"].startswith("fill")} == {"screen"}      # the desktop look: no clips, no singer
     assert report["h3_frames"] == 0
+
+
+def test_a_native_look_with_no_generated_clips_is_not_told_it_has_too_few():
+    shots = [{"key": f"s{i}", "kind": "screen", "line": i, "desktop": {"layout": "single", "apps": "mixed"}} for i in range(8)]
+    codes = {item["code"] for item in dry_run(_quality_spec(shots=shots, quality="max"))["warnings"]}
+    assert "few_clips" not in codes and "too_static" not in codes

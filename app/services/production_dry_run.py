@@ -185,8 +185,8 @@ def _static_warnings(motion: dict, profile: dict) -> list[dict]:
 def _pace_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
     minutes = float((spec.get("song") or {}).get("duration") or 0) / 60
     clips = sum(1 for shot in shots if shot.get("kind") in ("h3", "scene3d"))
-    if minutes <= 0 or clips / minutes >= profile["clips_per_minute"]:
-        return []
+    if minutes <= 0 or not clips or clips / minutes >= profile["clips_per_minute"]:
+        return []                       # no generated clips at all is a native look (desktop, 3D, stills): too_static covers the stills
     return [{"code": "few_clips", "per_minute": round(clips / minutes, 1), "minimum": profile["clips_per_minute"],
              "hint": "more H3 or scene3d shots, or a shorter song, or quality: draft"}]
 
