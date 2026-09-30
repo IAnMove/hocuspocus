@@ -130,15 +130,17 @@ def humanoid_tracks(clip: str, rig: dict[str, int], matrices: dict[int, np.ndarr
     groove = clip == "wobble"
     turn("hips", [0, 1, 0], (.06 if groove else .025) * wave)
     turn("chest", [0, 1, 0], (-.035 if groove else -.015) * wave)
+    if groove:
+        turn("head", [0, 1, 0], .08 * wave)
     for side, sign in (("left", 1), ("right", -1)):
         leg_wave = sign * wave
         flex = np.maximum(0, leg_wave)
-        turn(f"{side}_thigh", [1, 0, 0], (.06 if groove else .24) * leg_wave)
-        turn(f"{side}_knee", [1, 0, 0], (.12 if groove else .32) * flex)
-        turn(f"{side}_ankle", [1, 0, 0], -(.08 if groove else .20) * flex)
+        turn(f"{side}_thigh", [1, 0, 0], (.10 if groove else .24) * leg_wave)
+        turn(f"{side}_knee", [1, 0, 0], (.18 if groove else .32) * flex)
+        turn(f"{side}_ankle", [1, 0, 0], -(.12 if groove else .20) * flex)
         turn(f"{side}_upper_arm", [0, 0, 1] if groove else [1, 0, 0],
-             sign * (.10 + .14 * leg_wave) if groove else -.18 * leg_wave)
-        turn(f"{side}_elbow", [1, 0, 0], .08 * leg_wave)
+             sign * (.25 + .40 * leg_wave) if groove else -.18 * leg_wave)
+        turn(f"{side}_elbow", [1, 0, 0], (.18 if groove else .08) * leg_wave)
         if groove:
             turn(f"{side}_wrist", [0, 1, 0], .12 * leg_wave)
     return times, tracks
