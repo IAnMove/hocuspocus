@@ -78,10 +78,14 @@ def impact_command(out: Path) -> list[str]:
 
 def soundtrack_command(song: Path, out: Path, silences: list[list[float]], late_entry: float = 0.0) -> list[str]:
     """The song with each silence muted (short fades) and, when asked, delayed."""
-    filters = [f"volume='if(between(t,{a:.3f},{b:.3f}),1-min(1,min(t-{a:.3f},{b:.3f}-t)/{FADE_S}),1)':eval=frame" for a, b in silences]
+    filters = []
     if late_entry > 0:
         milliseconds = int(round(late_entry * 1000))
-        filters.append(f"adelay={milliseconds}|{milliseconds}")
+        filters.append(f"adelay={milliseconds}|{milliseconds}")   # delay first: silence times are on the picture timeline
+    filters.extend(
+        f"volume='if(between(t,{a:.3f},{b:.3f}),1-min(1,min(t-{a:.3f},{b:.3f}-t)/{FADE_S}),1)':eval=frame"
+        for a, b in silences
+    )
     return ["ffmpeg", "-v", "error", "-y", "-i", str(song), "-af", ",".join(filters) or "anull", "-ar", str(RATE), "-ac", "2", str(out)]
 
 

@@ -81,7 +81,7 @@ def _phrases(spec: dict) -> tuple[dict[str, str], dict[str, str]]:
 
 
 def plan_trailer(spec: dict, look: dict, title: str) -> list[dict]:
-    """The shots of a trailer, each with a baked ``t0`` and its ``beat``. ``look`` is production_shot_plan's look."""
+    """The shots of a trailer, each with baked ``t0``/``t1`` and its ``beat``. ``look`` is production_shot_plan's look."""
     from services import production_shot_plan as plan
 
     song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
@@ -109,7 +109,8 @@ def _beat_shots(entry: dict, look: dict, title: str, spec: dict, event: str | No
     cursor = start
     for index, span in enumerate(lengths):
         key = {"presentation": "open", "tension": f"t{index + 1}", "reveal": "reveal", "close": "close"}[beat]
-        shot: dict[str, Any] = {"key": key, "kind": look["kind"], "t0": round(cursor, 3), "sing": False}
+        shot: dict[str, Any] = {"key": key, "kind": look["kind"], "t0": round(cursor, 3),
+                                "t1": round(cursor + span, 3), "sing": False}
         plan._paint(shot, look)
         if shot["kind"] == "h3":
             shot["action"] = _ACTIONS[beat].format(phrase=phrase) + plan._alone(look["cast"])
@@ -135,7 +136,7 @@ def _cuts(start: float, length: float, look: dict, big: list[str], plan: Any) ->
             shot = {"key": key, "kind": look["kind"]}
             plan._paint(shot, look)
             plan._vary(shot, look, 2, index)           # the same picture re-framed: layout, workspace or zoom
-        shot.update(t0=round(cursor, 3), sing=False)
+        shot.update(t0=round(cursor, 3), t1=round(cursor + span, 3), sing=False)
         shots.append(shot)
         cursor += span
     return shots
