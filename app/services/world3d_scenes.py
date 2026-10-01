@@ -19,6 +19,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 _EDITS = "world3d-edits"
 _COMPILED: dict[str, dict] = {}
 _SLOT_FIELDS = {"sourceUrl", "sourceRef", "clip", "position", "rotationY", "scale", "motion", "grounded", "media"}
+_SCREEN_SOURCE_FIELDS = {"sourceUrl", "sourceRef"}
 _CAMERA_FIELDS = {"family", "fov", "eye", "look", "orbitRadius", "orbitHeight", "orbitTurns", "framing", "eyeOffset", "targetOffset", "frameFormat"}
 
 
@@ -155,7 +156,25 @@ def _bind(document: dict, binding: dict) -> list[str]:
             slot[key] = deepcopy(binding[key])
         elif snake in binding:
             slot[key] = deepcopy(binding[snake])
+    _bind_screen(slot, binding)
     return warnings
+
+
+def _bind_screen(slot: dict, binding: dict) -> None:
+    """Screens render `screen.sourceUrl`, not the slot-root URL the API accepts."""
+    if slot.get("media") != "screen":
+        return
+    updates = {}
+    for key in _SCREEN_SOURCE_FIELDS:
+        if key in binding or _snake(key) in binding:
+            updates[key] = deepcopy(slot.get(key))
+    if not updates:
+        return
+    screen = slot.get("screen")
+    if not isinstance(screen, dict):
+        screen = {}
+        slot["screen"] = screen
+    screen.update(updates)
 
 
 def _clip_warning(slot: dict, binding: dict) -> list[str]:
