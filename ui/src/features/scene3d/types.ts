@@ -6,6 +6,7 @@ import type { Scene3DSpeech, Scene3DSoundtrack } from './speech/types'
 import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
 import { PIXEL_TEMPLATE_IDS } from './pixel/pixelTemplateIds'
 import { ATMOS_TEMPLATE_IDS } from './atmos/registryIds.ts'
+import { TECHNIQUE_TEMPLATE_IDS } from './techniqueTemplateIds'
 import type { AtmosSetId } from './atmos/registryIds.ts'
 import type { AtmosSettings } from './atmos/params.ts'
 
@@ -126,6 +127,7 @@ export const SCENE3D_TEMPLATE_IDS = [
   'sea-talk',
   'voxel-talk',
   ...ATMOS_TEMPLATE_IDS,
+  ...TECHNIQUE_TEMPLATE_IDS,
 ] as const
 
 export type Scene3DTemplateId = (typeof SCENE3D_TEMPLATE_IDS)[number]
@@ -216,6 +218,9 @@ export type Scene3DFraming = {
   orbitTurns?: number
   rollFrom?: number
   rollTo?: number
+  /** Lens size at the start and end of the move. Omitted values keep `camera.fov`. */
+  fovFrom?: number
+  fovTo?: number
   relativeToFacing?: boolean
 }
 

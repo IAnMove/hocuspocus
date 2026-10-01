@@ -9,6 +9,7 @@ import { campaignTemplateDocument, CAMPAIGN_TEMPLATES, CAMPAIGN_CATEGORIES } fro
 import { adaptAuthoredCameraToFrame } from './frameFormat.ts'
 import { actionTemplateDocument, ACTION_TEMPLATES, ACTION_CATEGORIES } from './actionTemplates'
 import { atmosTemplateDocument, ATMOS_TEMPLATES, ATMOS_CATEGORIES } from './atmos/templates.ts'
+import { techniqueDocument, TECHNIQUE_TEMPLATES, TECHNIQUE_CATEGORIES } from './techniqueTemplates'
 import { createDefaultScene3DDocument, parseScene3DDocument } from './document.ts'
 import topdownCliffScene from './topdownCliffScene.json' with { type: 'json' }
 import topdownDragonPortalsScene from './topdownDragonPortalsScene.json' with { type: 'json' }
@@ -40,6 +41,7 @@ export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCateg
   ...CAMPAIGN_CATEGORIES,
   ...ACTION_CATEGORIES,
   ...ATMOS_CATEGORIES,
+  ...TECHNIQUE_CATEGORIES,
   'reflective-stage': 'cinema',
   'character-materialization': 'cinema',
   'blast-stage': 'cinema',
@@ -184,6 +186,7 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   ...CAMPAIGN_TEMPLATES,
   ...ACTION_TEMPLATES,
   ...ATMOS_TEMPLATES,
+  ...TECHNIQUE_TEMPLATES,
 ]
 
 const LAYOUTS: Partial<Record<Scene3DTemplateId, Partial<Record<Scene3DSlotId, Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale'>>>>> = {
@@ -404,6 +407,8 @@ export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
   if (cinematic) return cinematic
   const atmos = atmosTemplateDocument(id)
   if (atmos) return atmos
+  const technique = techniqueDocument(id)
+  if (technique) return technique
   const template = SCENE3D_TEMPLATES.find(item => item.id === id) ?? SCENE3D_TEMPLATES[0]
   const layout = LAYOUTS[template.id] ?? {}
   const document = createDefaultScene3DDocument()

@@ -2,7 +2,7 @@ import { applyN64Look, withN64Look } from './n64Look'
 import { imageCutoutMesh, poseImageCutout } from './imageCutout'
 import { CinematicRuntime } from './cinematicRuntime'
 import { MaterializationRuntime } from './materialization'
-import { framingPose } from './framing'
+import { framingFov, framingPose } from './framing'
 import { SpeechFaceRuntime } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
 import { screenGeometry } from './screenGeometry'
@@ -464,7 +464,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const rawEye = shot?.eye ?? cameraEyeAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const look = shot?.look ?? cameraLookAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const eye = poseAtmos(world, document, sceneSeconds, rhythmicCameraEye(rawEye, look, sceneSeconds, document.rhythm))
-  world.camera.fov = document.camera.fov
+  world.camera.fov = framingFov(framing, document.camera.fov, sceneSeconds, document.duration)
   world.camera.position.set(...eye)
   world.camera.lookAt(...look)
   if (shot) world.camera.rotateZ(shot.roll)

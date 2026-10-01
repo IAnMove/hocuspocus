@@ -310,6 +310,11 @@ The first sets of the library used unlit flat colours, cones for mountains and b
 - `boulders`: faceted rocks in one instanced draw call, tinted from a short palette.
 - `ridge`: layered low-poly mountain silhouettes behind the scene. Far layers fade toward a haze colour, so depth reads without a depth-of-field pass. `backdropRidge` colours it from the set's resolved ground and fog; keep its radius times 1.22 for each extra layer inside the sky sphere (26–28 m in most sets).
 
+- `composeGeometry`: many coloured primitives (box, sphere, cylinder, cone) merged into ONE geometry with vertex colours, so a room's furniture or a roof's clutter costs one draw call. Pair it with `MeshStandardMaterial({ vertexColors: true, flatShading: true })`.
+- `skylineLayers`: rings of night towers whose lit windows come from `facadeTexture`; unlit, so far layers fade with the fog.
+
+Interiors got there with lit surfaces (`plankTexture`, `wallpaperTexture`) and a couple of point lights instead of unlit colours. The test mesh budget (`draws < 20`) is why props are merged.
+
 A set that uses `retainTexture` or `paintedTerrain` must dispose `kept.textures` with its geometries and materials.
 
 Upgraded with it so far:
@@ -322,6 +327,9 @@ Upgraded with it so far:
 | `atmos-desert`, `atmos-snow`, `atmos-temple` | Nothing behind the middle ground | `backdropRidge`: dune ranges, snowy mountains and jungle hills fading into the fog |
 | `atmos-reef` | Opaque white bubbles as big as the fish, flat rocks, single-cone coral | Small translucent bubbles, lit faceted rocks, branching coral, a far reef wall |
 | `atmos-space-ring` | Regular flat-white solids as asteroids | Lumpy lit asteroids |
+| `atmos-retro-room` | Flat beige box with a few tiny props | Lit plank floor and striped wallpaper, a shelf of cartridges, bean bag, plant, curtains, framed pictures, a floor lamp, a warm lamp light and a phosphor light that flickers with the picture |
+| `atmos-neon-rain` | Solid dark walls, solid colour signs, rain as thick white bars, grey blobs of steam | Facades with brick and lit windows, signs with dark lettering bars and tube outlines, thin translucent rain, soft steam |
+| `atmos-rooftop-night` | Flat slab and one row of towers | Three layers of far towers with lit windows fading into haze, parapet, AC units, water tank on legs, vents and a mast |
 
 ## Set 18 — `atmos-silicon-grid`
 
@@ -336,6 +344,34 @@ Templates: `atmos-silicon-grid-wide`, `atmos-silicon-grid-low`. Both last 6 seco
 `dusk` holds the striped sun high in a magenta sky. `night` drops the sun onto the horizon, adds stars, and brightens the grid. The grid control sets line density and scroll speed. There is no grass field and no shaft, depth-of-field, or grade pass. Mountains use the grass count (8 preview, 14 export) and stars use the mote count (36 / 72). Without WebGL2 the set is a flat pad. The library setting is `grid`.
 
 A software export of `atmos-silicon-grid-wide` on 2026-10-01 produced 180 frames, 1280×720, 30 fps, 6.00 s, in 31103 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 19 — `atmos-silicon-circuit`
+
+Templates: `atmos-silicon-circuit-wide`, `atmos-silicon-circuit-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on a dark pad. Package towers, capacitor columns, resistor bridges, and the heatsink ridge stay outside that circle and outside the lane to the camera. Traces are painted on a canvas and a pulse sweeps them in the shader. The floor mesh stays put.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `idle`, `compute` | `idle` |
+| `palette` | `phosphor`, `outrun` | `phosphor` |
+| `variant` (`atmos.active`) | 0–8 | 4 |
+
+`idle` sweeps the board slowly. `compute` locks that sweep to 120 BPM (2 Hz) and brightens the traces and the overhead beam. The active control decides how many package lamps may light. It does not change the tempo. There is no grass field and no shaft, depth-of-field, or grade pass. Packages use the grass count (8 preview, 14 export) and dust motes use the mote count (16 / 32). Without WebGL2 the set is a flat pad. The library setting is `circuit`. The upper sky leans toward dark copper on every palette.
+
+A software export of `atmos-silicon-circuit-wide` on 2026-10-01 produced 180 frames, 1280×720, 30 fps, 6.00 s, in 29641 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 20 — `atmos-silicon-mainframe`
+
+Templates: `atmos-silicon-mainframe-wide`, `atmos-silicon-mainframe-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on the tiled aisle. Cabinet rows, tape reels, disk drives, and the ceiling cables stay outside that circle and outside the lane to the camera. The three phosphor screens are scan-line planes at the far end of the hall. They carry no readable text.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `idle`, `burst` | `idle` |
+| `palette` | `phosphor`, `chrome` | `phosphor` |
+| `variant` (`atmos.lit`) | 0–8 | 4 |
+
+`idle` blinks cabinet lamps on their own seeds. `burst` runs one coordinated lamp sweep at 120 BPM (2 Hz) and brightens the screens. The lit control decides how many cabinets may join that sweep. It does not change the tempo. There is no grass field and no shaft, depth-of-field, or grade pass. Cabinets use the grass count (8 preview, 14 export) and the dust in the zenith beam uses the mote count (24 / 48). Fog thickens with height inside the hall. Without WebGL2 the set is a flat floor. The library setting is `mainframe`.
+
+A software export of `atmos-silicon-mainframe-wide` on 2026-10-01 produced 180 frames, 1280×720, 30 fps, 6.00 s, in 30008 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
 ## Adding a set
 

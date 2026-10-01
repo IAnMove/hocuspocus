@@ -15,14 +15,18 @@ import {
   Vector3,
   Vector4,
   type Material,
+  MeshStandardMaterial,
+  type Texture,
 } from 'three'
 import type { AtmosHandle } from './clearing.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
 import { hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT } from '../layout.ts'
+import { composeGeometry, type Piece } from './kit.ts'
+import { facadeTexture } from '../textures.ts'
 
-type Kept = { geometries: BufferGeometry[]; materials: Material[] }
+type Kept = { geometries: BufferGeometry[]; materials: Material[]; textures: Texture[] }
 type Lamp = { x: number; y: number; z: number; sx: number; sy: number; sz: number; swatch: number }
 type Puff = { x: number; z: number; layer: number }
 type Cam = { position?: { x: number; y: number; z: number } }
@@ -180,7 +184,7 @@ const LOW_LOOK = [-3.8, 1.55, -4.2] as const
 const REFLECT = 6
 
 function emptyKept(): Kept {
-  return { geometries: [], materials: [] }
+  return { geometries: [], materials: [], textures: [] }
 }
 
 function hexColor(color: string): [number, number, number] {
@@ -235,6 +239,7 @@ function disposeKept(root: Group, kept: Kept) {
   root.removeFromParent()
   for (const geometry of kept.geometries) geometry.dispose()
   for (const material of kept.materials) material.dispose()
+  for (const texture of kept.textures) texture.dispose()
 }
 
 function idleHandle(root: Group, kept: Kept): AtmosHandle {
@@ -338,6 +343,46 @@ function paintLamps(mesh: InstancedMesh, palette: string) {
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
 }
 
+/** Dark lettering bars inside each sign and a tube outline around it, in one unlit mesh. */
+function signDetail(): Piece[] {
+  const pieces: Piece[] = []
+  LAMPS.forEach((lamp, index) => {
+    const facing = lamp.sz <= 0.12 ? 'front' : lamp.sx <= 0.16 && lamp.sz < 3 ? 'side' : null
+    if (!facing) return
+    const wide = facing === 'front' ? lamp.sx : lamp.sz
+    const rows = Math.max(2, Math.round(lamp.sy / 0.38))
+    const lift = (facing === 'front' ? lamp.sz : lamp.sx) / 2 + 0.02
+    const dir = facing === 'side' && lamp.x > 0 ? -1 : 1
+    for (let r = 0; r < rows; r += 1) {
+      const y = lamp.y + lamp.sy / 2 - (r + 0.5) * (lamp.sy / rows)
+      const w = wide * (0.45 + hash2(index, r, 5) * 0.4)
+      const at = facing === 'front' ? [lamp.x, y, lamp.z + lift] as const : [lamp.x + dir * lift, y, lamp.z] as const
+      const size = facing === 'front' ? [w, lamp.sy / rows * 0.34, 0.03] as const : [0.03, lamp.sy / rows * 0.34, w] as const
+      pieces.push({ type: 'box', at, size, color: '#1b1230' })
+    }
+    const tube = '#fff0fa'
+    const t = 0.05
+    if (facing === 'front') {
+      for (const sy of [-1, 1]) pieces.push({ type: 'box', at: [lamp.x, lamp.y + sy * lamp.sy / 2, lamp.z + lift], size: [lamp.sx + t, t, 0.04], color: tube })
+      for (const sx of [-1, 1]) pieces.push({ type: 'box', at: [lamp.x + sx * lamp.sx / 2, lamp.y, lamp.z + lift], size: [t, lamp.sy, 0.04], color: tube })
+    } else {
+      for (const sy of [-1, 1]) pieces.push({ type: 'box', at: [lamp.x + dir * lift, lamp.y + sy * lamp.sy / 2, lamp.z], size: [0.04, t, lamp.sz + t], color: tube })
+      for (const sz of [-1, 1]) pieces.push({ type: 'box', at: [lamp.x + dir * lift, lamp.y, lamp.z + sz * lamp.sz / 2], size: [0.04, lamp.sy, t], color: tube })
+    }
+  })
+  return pieces
+}
+
+function addSignDetail(root: Group, kept: Kept) {
+  const geo = composeGeometry(signDetail())
+  const mat = new MeshBasicMaterial({ vertexColors: true })
+  const mesh = new Mesh(geo, mat)
+  mesh.name = 'atmos-sign-detail'
+  mesh.frustumCulled = false
+  addMesh(root, kept, mesh)
+  kept.materials.push(mat)
+}
+
 function addLamps(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const geo = new BoxGeometry(1, 1, 1)
   const mat = new MeshBasicMaterial()
@@ -368,7 +413,7 @@ function placeRain(mesh: InstancedMesh, spots: Array<[number, number]>, seconds:
     const phase = (seconds * speed + index * 0.37) % 7.2
     dummy.position.set(x, 6.5 - phase, z)
     dummy.rotation.set(0, 0, 0)
-    dummy.scale.set(0.045, length, 0.045)
+    dummy.scale.set(0.014, length, 0.014)
     dummy.updateMatrix()
     mesh.setMatrixAt(index, dummy.matrix)
   })
@@ -379,7 +424,7 @@ function addRain(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const spots = rainSpots(resolved.moteCount, resolved.seed)
   if (spots.length < 1) return
   const geo = new BoxGeometry(1, 1, 1)
-  const mat = new MeshBasicMaterial({ color: '#e7f6ff' })
+  const mat = new MeshBasicMaterial({ color: '#e7f6ff', transparent: true, opacity: 0.55, depthWrite: false })
   const mesh = new InstancedMesh(geo, mat, spots.length)
   mesh.name = 'atmos-rain'
   mesh.frustumCulled = false
@@ -393,7 +438,7 @@ function placeSteam(mesh: InstancedMesh, seconds: number, amount: number) {
   const dummy = new Object3D()
   STEAM.forEach((puff, index) => {
     const phase = (seconds * 0.48 + index * 0.23 + puff.layer * 0.72) % 2.25
-    const size = (0.14 + phase * 0.1) * (0.65 + amount * 0.04)
+    const size = (0.2 + phase * 0.16) * (0.65 + amount * 0.04)
     const drift = Math.sin(seconds * 0.7 + index) * 0.1
     dummy.position.set(puff.x + drift, 0.16 + phase * 0.95, puff.z)
     dummy.rotation.set(0, 0, 0)
@@ -405,11 +450,11 @@ function placeSteam(mesh: InstancedMesh, seconds: number, amount: number) {
 }
 
 function addSteam(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new SphereGeometry(1, 6, 4)
+  const geo = new SphereGeometry(1, 10, 8)
   const mat = new MeshBasicMaterial({
     color: swatch(STEAM_COLOR, resolved.palette),
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.2,
     depthWrite: false,
   })
   const mesh = new InstancedMesh(geo, mat, STEAM.length)
@@ -434,7 +479,14 @@ function placeWalls(mesh: InstancedMesh) {
 
 function addWalls(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const geo = new BoxGeometry(1, 1, 1)
-  const mat = new MeshBasicMaterial({ color: swatch(WALL, resolved.palette) })
+  const albedo = facadeTexture(resolved.seed, false)
+  const windows = facadeTexture(resolved.seed, true)
+  for (const texture of [albedo, windows]) {
+    if (!texture) continue
+    texture.repeat.set(5, 2)
+    kept.textures.push(texture)
+  }
+  const mat = new MeshStandardMaterial({ color: swatch(WALL, resolved.palette), map: albedo, emissiveMap: windows, emissive: 0xffffff, emissiveIntensity: 0.85, roughness: 1 })
   const mesh = new InstancedMesh(geo, mat, WALLS.length)
   mesh.name = 'atmos-wall'
   mesh.frustumCulled = false
@@ -550,6 +602,7 @@ export function buildNeonRain(resolved: ResolvedAtmos, webgl2: boolean): { root:
   addGround(root, resolved, kept)
   addWalls(root, resolved, kept)
   addLamps(root, resolved, kept)
+  addSignDetail(root, kept)
   addRain(root, resolved, kept)
   addSteam(root, resolved, kept)
   addSky(root, resolved, kept)

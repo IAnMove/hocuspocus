@@ -119,6 +119,89 @@ export function terrainTexture(paint: TerrainPaint): Texture | null {
   return texture
 }
 
+/** Neutral wood planks (about 1 m across, 8 boards). Multiply with a palette colour on the material. */
+export function plankTexture(seed: number): Texture | null {
+  return canvasTexture(256, (ctx, size) => {
+    const plank = size / 8
+    for (let i = 0; i < 8; i += 1) {
+      const tone = 205 + Math.floor(hash2(i, 1, seed) * 50)
+      ctx.fillStyle = `rgb(${tone},${tone - 6},${tone - 14})`
+      ctx.fillRect(i * plank, 0, plank, size)
+      for (let g = 0; g < 14; g += 1) {
+        ctx.fillStyle = `rgba(60,38,20,${0.05 + hash2(i, 10 + g, seed) * 0.1})`
+        ctx.fillRect(i * plank + hash2(i, 30 + g, seed) * plank, hash2(i, 50 + g, seed) * size, 1 + (g % 2), 18 + hash2(i, 70 + g, seed) * 70)
+      }
+      ctx.fillStyle = 'rgba(40,24,12,0.55)'
+      ctx.fillRect(i * plank, 0, 1.5, size)
+      ctx.fillRect(i * plank, hash2(i, 5, seed) * size, plank, 1.5)
+    }
+  }, true)
+}
+
+/** Neutral striped wallpaper with a small repeating diamond. */
+export function wallpaperTexture(seed: number): Texture | null {
+  return canvasTexture(256, (ctx, size) => {
+    ctx.fillStyle = '#f4f1ea'
+    ctx.fillRect(0, 0, size, size)
+    for (let x = 0; x < size; x += 32) {
+      ctx.fillStyle = 'rgba(120,100,80,0.14)'
+      ctx.fillRect(x, 0, 16, size)
+    }
+    ctx.fillStyle = 'rgba(90,60,50,0.22)'
+    for (let y = 16; y < size; y += 64) {
+      for (let x = 8; x < size; x += 32) {
+        ctx.beginPath()
+        ctx.moveTo(x, y - 5)
+        ctx.lineTo(x + 5, y)
+        ctx.lineTo(x, y + 5)
+        ctx.lineTo(x - 5, y)
+        ctx.fill()
+      }
+    }
+    for (let i = 0; i < 90; i += 1) {
+      ctx.fillStyle = `rgba(70,50,40,${0.03 + hash2(i, 1, seed) * 0.05})`
+      ctx.fillRect(hash2(i, 2, seed) * size, hash2(i, 3, seed) * size, 2, 2)
+    }
+  }, true)
+}
+
+/** City facade: brick courses and a grid of windows. `lit: true` returns only the lit windows, black elsewhere, for an emissive map. */
+export function facadeTexture(seed: number, lit: boolean): Texture | null {
+  const GLOW = ['#ffd37a', '#ff7ad9', '#7ae7ff', '#ffb36a']
+  return canvasTexture(256, (ctx, size) => {
+    ctx.fillStyle = lit ? '#000000' : '#8e8c98'
+    ctx.fillRect(0, 0, size, size)
+    if (!lit) {
+      for (let row = 0; row < size / 16; row += 1) {
+        for (let col = 0; col < 9; col += 1) {
+          const tone = 120 + Math.floor(hash2(col, row, seed) * 60)
+          ctx.fillStyle = `rgb(${tone},${tone - 6},${tone + 4})`
+          ctx.fillRect((col * 32 + (row % 2) * 16) % size, row * 16 + 1, 30, 14)
+        }
+      }
+    }
+    for (let r = 0; r < 4; r += 1) {
+      for (let c = 0; c < 4; c += 1) {
+        const x = c * 64 + 12
+        const y = r * 64 + 14
+        const on = hash2(c, r, seed + 7) > 0.42
+        if (lit) {
+          if (!on) continue
+          ctx.fillStyle = GLOW[Math.floor(hash2(c, r, seed + 9) * GLOW.length)]
+          ctx.fillRect(x, y, 40, 34)
+        } else {
+          ctx.fillStyle = '#25242e'
+          ctx.fillRect(x - 3, y - 3, 46, 40)
+          ctx.fillStyle = on ? '#d9d6e8' : '#3a3948'
+          ctx.fillRect(x, y, 40, 34)
+          ctx.fillStyle = '#25242e'
+          ctx.fillRect(x + 19, y, 2, 34)
+        }
+      }
+    }
+  }, true)
+}
+
 /** Vertical bark ridges with dark crevices, lichen flecks and a few knots. Tiles around the trunk. */
 export function barkTexture(seed: number): Texture | null {
   const texture = canvasTexture(256, (ctx, size) => {
