@@ -538,6 +538,7 @@ def _validate_director_models(
         "music_video": "Music Video",
         "short_film_audio": "audio-driven Short Film",
         "short_film_story": "story-driven Short Film",
+        "comic_movie": "Comic Film",
     }
     if not capability["compatible"]:
         raise DirectorModelCompatibilityError(

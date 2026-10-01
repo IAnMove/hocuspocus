@@ -242,6 +242,7 @@
         "tests/test_director_i2v_preparation.py",
         "tests/test_director_minimax_h3.py",
         "tests/test_director_model_compat.py",
+        "tests/test_director_silent_audio_plan.py",
         "tests/test_director_pipeline_state.py",
         "tests/test_director_pipeline_status.py",
         "tests/test_director_resume_endpoint.py",

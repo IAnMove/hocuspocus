@@ -1862,9 +1862,11 @@ def validate_h3_prompt_contract(
                 errors.append(
                     "silent generation uses an unsupported audio_plan.mode"
                 )
+            # "balanced" is the planner's "no anchor" default and a silent shot has no audio to anchor on;
+            # only an explicit audio anchor contradicts silent generation.
             if (
                 audio_mode in {"", "ambient_only"}
-                and timing_anchor not in {"", "video"}
+                and timing_anchor not in {"", "video", "balanced"}
             ):
                 errors.append(
                     "silent generation requires audio_plan.timing_anchor=video"
