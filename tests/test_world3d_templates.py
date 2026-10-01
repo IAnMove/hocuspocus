@@ -16,6 +16,7 @@ from routers.wangp_mcp import create_wangp_mcp_router
 from routers.world3d_templates import create_world3d_templates_router
 from services.production_plan import PlanError, plan_brief
 from services.production_scene3d import validate_scene3d_shot
+from services.world3d_scenes import inspect_scene, patch_scene
 from services.world3d_template_catalog import World3DTemplateError, builtin_cards, search_templates
 from services.world3d_template_commands import command_catalog, command_handlers, execute_command
 
@@ -287,6 +288,78 @@ def test_one_prop_bind_leaves_the_other_prop_and_a_two_shot_keeps_both_holes(tmp
     other = next(item for item in patched["objects"] if item["role"] == "subject_2")
     assert other["sourceUrl"] == "" and other["marker"] is True
     assert next(item for item in patched["objects"] if item["id"] == hero["id"])["sourceUrl"] == ROBOT
+
+
+def test_screen_binding_writes_nested_source_url(tmp_path):
+    workspace_dir = lambda workspace: str(tmp_path / workspace)
+    scene_id = "w3d-ab12cd34ef56"
+    demo = "/examples/dark-stillness/still-sea.mp4"
+    document = {
+        "templateId": "dark-still-salt-sea",
+        "slots": [{
+            "id": "exterior-video", "slot": "prop", "media": "screen", "sourceUrl": "",
+            "clip": None, "position": [0, 0, 0], "rotationY": 0, "scale": 1,
+            "screen": {"sourceUrl": demo, "media": "video", "mode": "mesh", "targetMesh": "SCREEN_CONTENT"},
+        }],
+        "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]},
+    }
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    (folder / f"{scene_id}.json").write_text(json.dumps({
+        "revision": 1, "templateId": "dark-still-salt-sea", "document": document, "warnings": [],
+    }), encoding="utf-8")
+    viewed = patch_scene("studio", scene_id, workspace_dir, {
+        "bindings": [{"object_id": "exterior-video", "source_url": ROOM, "source_ref": {"name": "room.png"}}],
+    }, 1)
+    slot = viewed["document"]["slots"][0]
+    assert slot["screen"]["sourceUrl"] == ROOM
+    assert slot["screen"]["sourceRef"] == {"name": "room.png"}
+    assert slot["sourceUrl"] == ROOM
+    assert viewed["objects"][0]["finished"] is True
+    moved = patch_scene("studio", scene_id, workspace_dir, {
+        "bindings": [{"objectId": "exterior-video", "position": [1, 0, 0]}],
+    }, viewed["revision"])
+    assert moved["document"]["slots"][0]["screen"]["sourceUrl"] == ROOM
+    assert moved["document"]["slots"][0]["position"] == [1, 0, 0]
+    stored = inspect_scene("studio", scene_id, workspace_dir)
+    assert stored["document"]["slots"][0]["screen"]["sourceUrl"] == ROOM
+
+
+def test_screen_binding_creates_screen_when_missing(tmp_path):
+    workspace_dir = lambda workspace: str(tmp_path / workspace)
+    scene_id = "w3d-ffffffffffff"
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    (folder / f"{scene_id}.json").write_text(json.dumps({
+        "revision": 1, "templateId": "bare-screen", "warnings": [],
+        "document": {
+            "templateId": "bare-screen",
+            "slots": [{"id": "billboard", "slot": "prop", "media": "screen", "sourceUrl": ""}],
+            "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]},
+        },
+    }), encoding="utf-8")
+    viewed = patch_scene("studio", scene_id, workspace_dir, {
+        "bindings": [{"objectId": "billboard", "sourceUrl": ROOM}],
+    }, 1)
+    assert viewed["document"]["slots"][0]["screen"]["sourceUrl"] == ROOM
+
+
+@needs_ui
+def test_screen_slot_patch_replaces_the_texture_url(tmp_path):
+    client, _root = client_for(tmp_path)
+    sea = call(client, "world3d.scene.instantiate", {"template_id": "dark-still-salt-sea"}, "sea-screen")["result"]["scene"]
+    before = next(slot for slot in sea["document"]["slots"] if slot["id"] == "exterior-video")
+    assert before["media"] == "screen"
+    assert before["sourceUrl"] == ""
+    assert before["screen"]["sourceUrl"] == "/examples/dark-stillness/still-sea.mp4"
+    bound = call(client, "world3d.scene.patch", {
+        "scene_id": sea["sceneId"], "base_revision": sea["revision"],
+        "bindings": [{"objectId": "exterior-video", "sourceUrl": ROOM}],
+    }, "sea-screen-bind")["result"]["scene"]
+    after = next(slot for slot in bound["document"]["slots"] if slot["id"] == "exterior-video")
+    assert after["screen"]["sourceUrl"] == ROOM
+    assert after["sourceUrl"] == ROOM
+    assert next(item for item in bound["objects"] if item["id"] == "exterior-video")["sourceUrl"] == ROOM
 
 
 @needs_ui
