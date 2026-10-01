@@ -40,7 +40,7 @@ def redo(
 
 
 def undo(production: Any, spec: dict, key: str, history_id: str, *, export_scene: Callable[..., Any]) -> dict:
-    from services.production_shot_review import history_entry, is_locked, restore_snapshot
+    from services.production_shot_review import ReviewError, history_entry, is_locked, is_runner_snapshot, restore_snapshot
     if is_locked(production, key):
         from services.music_production import ProductionError
         raise ProductionError("shot_locked", "locked: " + key)
@@ -48,7 +48,14 @@ def undo(production: Any, spec: dict, key: str, history_id: str, *, export_scene
     if not isinstance(entry, dict) or not isinstance(entry.get("snapshot"), dict):
         from services.music_production import ProductionError
         raise ProductionError("history_not_found", f"no history {history_id} for {key}")
-    restore_snapshot(production, key, entry["snapshot"])
+    if not is_runner_snapshot(entry["snapshot"]):
+        from services.music_production import ProductionError
+        raise ProductionError("history_incompatible", "this history belongs to the shot catalog")
+    try:
+        restore_snapshot(production, key, entry["snapshot"])
+    except ReviewError as error:
+        from services.music_production import ProductionError
+        raise ProductionError(error.code, str(error)) from error
     export_scene(production, spec, key)
     return {"key": key, "history_id": history_id}
 

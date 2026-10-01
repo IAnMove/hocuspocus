@@ -414,6 +414,31 @@ def test_redo_of_a_locked_shot_does_not_drop_the_frame(tmp_path):
     assert calls == []
 
 
+def test_undo_refuses_a_catalog_history_snapshot(tmp_path):
+    """Runner undo must not delete frames or stringify clips from a catalog select."""
+    production = _production(tmp_path)
+    production.state = {
+        "frames": {"s0": "f.png"},
+        "clips": {"s0": {"file": "c.mp4"}},
+        "scenes": {"s0": {"file": "s.mp4"}},
+        "spec": {"shots": [{"key": "s0", "camera": "wide"}]},
+    }
+    record_decision(tmp_path, "p", "s0", snapshot={"clip": "take-a.mp4", "video_stale": False})
+    history = load_review(tmp_path, "p")["shots"]["s0"]["history"]
+    calls: list[str] = []
+
+    def export_scene(_production, _spec, _key):
+        calls.append("export")
+
+    with pytest.raises(ProductionError) as caught:
+        undo(production, production.state["spec"], "s0", history[0]["id"], export_scene=export_scene)
+    assert caught.value.code == "history_incompatible"
+    assert production.state["frames"]["s0"] == "f.png"
+    assert production.state["clips"]["s0"] == {"file": "c.mp4"}
+    assert production.state["scenes"]["s0"] == {"file": "s.mp4"}
+    assert calls == []
+
+
 def test_undo_of_a_locked_shot_does_not_restore(tmp_path):
     """Review Mode still showed Undo after lock; restoring would replace the approved cut."""
     production = _production(tmp_path)

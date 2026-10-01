@@ -13,7 +13,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from services.production_shot_review import history_entry, load_review, record_decision
+from services.production_shot_review import history_entry, is_runner_snapshot, load_review, record_decision
 from services.production_work_catalog import find_work
 
 
@@ -225,6 +225,8 @@ def _undo(workspace_dir: str, production_id: str, shot_id: str, kind: str, docum
     snap = entry.get("snapshot") if isinstance(entry, dict) else None
     if not isinstance(snap, dict):
         raise ActionError("history_not_found", history_id)
+    if is_runner_snapshot(snap):
+        raise ActionError("history_incompatible", "this history belongs to the production runner")
     if kind == "music":
         _restore_music(workspace_dir, document, shot_id, snap)
     elif kind == "director":
@@ -239,7 +241,10 @@ def _undo(workspace_dir: str, production_id: str, shot_id: str, kind: str, docum
 def _restore_music(workspace_dir: str, document: dict, shot_id: str, snap: dict) -> None:
     shot = _row(document.get("shots"), "key", shot_id)
     if "clip" in snap:
-        shot["clip"] = snap.get("clip")
+        clip = snap.get("clip")
+        if clip is not None and not isinstance(clip, str):
+            raise ActionError("history_incompatible", "this history belongs to the production runner")
+        shot["clip"] = clip
     _put_bool(shot, "video_stale", snap.get("video_stale"))
     if "montage_source" in snap:
         _restore_montage(workspace_dir, document.get("montage"), shot_id, snap)
