@@ -337,6 +337,34 @@ Templates: `atmos-silicon-grid-wide`, `atmos-silicon-grid-low`. Both last 6 seco
 
 A software export of `atmos-silicon-grid-wide` on 2026-10-01 produced 180 frames, 1280×720, 30 fps, 6.00 s, in 31103 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 19 — `atmos-silicon-circuit`
+
+Templates: `atmos-silicon-circuit-wide`, `atmos-silicon-circuit-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on a dark pad. Package towers, capacitor columns, resistor bridges, and the heatsink ridge stay outside that circle and outside the lane to the camera. Traces are painted on a canvas and a pulse sweeps them in the shader. The floor mesh stays put.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `idle`, `compute` | `idle` |
+| `palette` | `phosphor`, `outrun` | `phosphor` |
+| `variant` (`atmos.active`) | 0–8 | 4 |
+
+`idle` sweeps the board slowly. `compute` locks that sweep to 120 BPM (2 Hz) and brightens the traces and the overhead beam. The active control decides how many package lamps may light. It does not change the tempo. There is no grass field and no shaft, depth-of-field, or grade pass. Packages use the grass count (8 preview, 14 export) and dust motes use the mote count (16 / 32). Without WebGL2 the set is a flat pad. The library setting is `circuit`. The upper sky leans toward dark copper on every palette.
+
+A software export of `atmos-silicon-circuit-wide` on 2026-10-01 produced 180 frames, 1280×720, 30 fps, 6.00 s, in 29641 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+## Set 20 — `atmos-silicon-mainframe`
+
+Templates: `atmos-silicon-mainframe-wide`, `atmos-silicon-mainframe-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on the tiled aisle. Cabinet rows, tape reels, disk drives, and the ceiling cables stay outside that circle and outside the lane to the camera. The three phosphor screens are scan-line planes at the far end of the hall. They carry no readable text.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `idle`, `burst` | `idle` |
+| `palette` | `phosphor`, `chrome` | `phosphor` |
+| `variant` (`atmos.lit`) | 0–8 | 4 |
+
+`idle` blinks cabinet lamps on their own seeds. `burst` runs one coordinated lamp sweep at 120 BPM (2 Hz) and brightens the screens. The lit control decides how many cabinets may join that sweep. It does not change the tempo. There is no grass field and no shaft, depth-of-field, or grade pass. Cabinets use the grass count (8 preview, 14 export) and the dust in the zenith beam uses the mote count (24 / 48). Fog thickens with height inside the hall. Without WebGL2 the set is a flat floor. The library setting is `mainframe`.
+
+A software export of `atmos-silicon-mainframe-wide` on 2026-10-01 produced 180 frames, 1280×720, 30 fps, 6.00 s, in 30008 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:

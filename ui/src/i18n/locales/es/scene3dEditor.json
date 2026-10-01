@@ -358,7 +358,9 @@
     "volcano": "Volcán",
     "islands": "Islas",
     "room": "Habitación",
-    "grid": "Rejilla"
+    "grid": "Rejilla",
+    "circuit": "Circuito",
+    "mainframe": "Unidad central"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1645,6 +1647,22 @@
       "title": "Rejilla de silicio · bajo",
       "description": "La misma rejilla desde el disco, mirando las líneas hacia el sol y las montañas de alambre."
     },
+    "atmos-silicon-circuit-wide": {
+      "title": "Circuito de silicio · amplio",
+      "description": "Una ciudad procedural de placa. Los encapsulados, los condensadores y el disipador quedan fuera del disco libre."
+    },
+    "atmos-silicon-circuit-low": {
+      "title": "Circuito de silicio · bajo",
+      "description": "La misma placa desde el disco, mirando las pistas hacia los encapsulados y la cresta."
+    },
+    "atmos-silicon-mainframe-wide": {
+      "title": "Unidad central de silicio · amplio",
+      "description": "Una sala procedural de ordenador central. Los armarios, las bobinas y los discos quedan fuera del pasillo."
+    },
+    "atmos-silicon-mainframe-low": {
+      "title": "Unidad central de silicio · bajo",
+      "description": "La misma sala desde el pasillo, mirando las pantallas de fósforo y las filas de armarios."
+    },
     "atmos-space-ring-low": {
       "title": "Planeta con anillos · cámara baja",
       "description": "La misma órbita desde la plataforma, mirando los anillos y los asteroides cercanos."
@@ -1687,7 +1705,10 @@
       "cruise": "Crucero",
       "eclipse": "Eclipse",
       "spring": "Primavera",
-      "overcast": "Nublado"
+      "overcast": "Nublado",
+      "idle": "En reposo",
+      "compute": "Cálculo",
+      "burst": "Ráfaga"
     },
     "palette": "Paleta",
     "swatch": {
@@ -1726,7 +1747,8 @@
       "clover": "Trébol",
       "hay": "Heno",
       "outrun": "Outrun",
-      "chrome": "Cromo"
+      "chrome": "Cromo",
+      "phosphor": "Fósforo"
     },
     "fogDensity": "Niebla",
     "wind": "Viento",
@@ -1747,7 +1769,9 @@
     "static": "Nieve",
     "orbit": "Órbita",
     "breeze": "Brisa",
-    "grid": "Rejilla"
+    "grid": "Rejilla",
+    "active": "Activos",
+    "lit": "Encendidos"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

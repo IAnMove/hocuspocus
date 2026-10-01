@@ -358,7 +358,9 @@
     "volcano": "Volcano",
     "islands": "Islands",
     "room": "Room",
-    "grid": "Grid"
+    "grid": "Grid",
+    "circuit": "Circuit",
+    "mainframe": "Mainframe"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1649,6 +1651,22 @@
       "title": "Silicon grid · low",
       "description": "The same grid from the pad, looking across the lines toward the sun and the wire mountains."
     },
+    "atmos-silicon-circuit-wide": {
+      "title": "Silicon circuit · wide",
+      "description": "A procedural circuit-board city. Packages, capacitors, and a heatsink stay clear of the open pad."
+    },
+    "atmos-silicon-circuit-low": {
+      "title": "Silicon circuit · low",
+      "description": "The same board from the pad, looking across the traces toward the packages and the ridge."
+    },
+    "atmos-silicon-mainframe-wide": {
+      "title": "Silicon mainframe · wide",
+      "description": "A procedural mainframe hall. Cabinets, reels, and drives stay clear of the open aisle."
+    },
+    "atmos-silicon-mainframe-low": {
+      "title": "Silicon mainframe · low",
+      "description": "The same hall from the aisle, looking toward the phosphor screens and the cabinet rows."
+    },
     "atmos-meadow-wide": {
       "title": "Meadow · wide",
       "description": "A procedural meadow under low clouds. Wind moves the grass, and the character spot stays on open ground."
@@ -1687,7 +1705,10 @@
       "cruise": "Cruise",
       "eclipse": "Eclipse",
       "spring": "Spring",
-      "overcast": "Overcast"
+      "overcast": "Overcast",
+      "idle": "Idle",
+      "compute": "Compute",
+      "burst": "Burst"
     },
     "palette": "Palette",
     "swatch": {
@@ -1726,7 +1747,8 @@
       "clover": "Clover",
       "hay": "Hay",
       "outrun": "Outrun",
-      "chrome": "Chrome"
+      "chrome": "Chrome",
+      "phosphor": "Phosphor"
     },
     "fogDensity": "Fog",
     "wind": "Wind",
@@ -1747,7 +1769,9 @@
     "static": "Static",
     "orbit": "Orbit",
     "breeze": "Breeze",
-    "grid": "Grid"
+    "grid": "Grid",
+    "active": "Active",
+    "lit": "Lit"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",

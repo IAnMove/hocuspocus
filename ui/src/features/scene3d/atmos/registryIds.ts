@@ -1,5 +1,5 @@
 /** Typed ids. `types.ts` imports this file and must not import the set builders. */
-export const ATMOS_SET_IDS = ['atmos-clearing', 'atmos-waterfall', 'atmos-moon', 'atmos-mars', 'atmos-snow', 'atmos-desert', 'atmos-beach', 'atmos-crystal-cave', 'atmos-volcano', 'atmos-temple', 'atmos-reef', 'atmos-neon-rain', 'atmos-sky-islands', 'atmos-meadow', 'atmos-rooftop-night', 'atmos-retro-room', 'atmos-space-ring', 'atmos-silicon-grid'] as const
+export const ATMOS_SET_IDS = ['atmos-clearing', 'atmos-waterfall', 'atmos-moon', 'atmos-mars', 'atmos-snow', 'atmos-desert', 'atmos-beach', 'atmos-crystal-cave', 'atmos-volcano', 'atmos-temple', 'atmos-reef', 'atmos-neon-rain', 'atmos-sky-islands', 'atmos-meadow', 'atmos-rooftop-night', 'atmos-retro-room', 'atmos-space-ring', 'atmos-silicon-grid', 'atmos-silicon-circuit', 'atmos-silicon-mainframe'] as const
 export type AtmosSetId = (typeof ATMOS_SET_IDS)[number]
 export const ATMOS_TEMPLATE_IDS = [
   'atmos-clearing-wide', 'atmos-clearing-backlight',
@@ -20,6 +20,8 @@ export const ATMOS_TEMPLATE_IDS = [
   'atmos-retro-room-wide', 'atmos-retro-room-low',
   'atmos-space-ring-wide', 'atmos-space-ring-low',
   'atmos-silicon-grid-wide', 'atmos-silicon-grid-low',
+  'atmos-silicon-circuit-wide', 'atmos-silicon-circuit-low',
+  'atmos-silicon-mainframe-wide', 'atmos-silicon-mainframe-low',
 ] as const
 export type AtmosTemplateId = (typeof ATMOS_TEMPLATE_IDS)[number]
 
