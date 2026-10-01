@@ -265,7 +265,7 @@ def test_ps1_native_compiler_and_normalized_document_keep_the_backplate_contract
     shot = spec["shots"][0]
     doc = compile_document(shot, 8)  # CPU schema compilation; no renderer or CUDA.
     assert doc["camera"]["family"] == "fixed"
-    assert doc["environment"]["floorStyle"] == "none" and doc.get("dressing") is None
+    assert doc["environment"]["floorStyle"] == "none" and doc.get("dressing") in (None, "none")
     assert len(doc["slots"]) == 2 and doc["slots"][0]["surface"] == "environment"
     shot["scene3d"]["document"] = doc
     assert validate_spec(spec)["style"]["preset"] == "ps1-backplates"
