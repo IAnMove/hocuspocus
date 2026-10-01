@@ -44,6 +44,7 @@ import type { AgentCreateVideoEditorProjectAction, AgentOpenVideoEditorProjectAc
 import type { AgentAttachVideoclipAlternativeSongAction, AgentMountVideoclipAlternativeSongAction } from './alternativeSongActions'
 import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
 import { registerLipsCreatorCapabilities } from './lipsCreatorCapabilities'
+import { registerProductionWorkCapabilities } from './productionWorkCapabilities'
 import { registerWorld3DTemplateCapabilities } from './world3dTemplateCapabilities'
 import { registerStudioCapabilities } from './studioCapabilities'
 export { restoreAuthoredMusicFields, authoredSfxPackInput } from './audioActionParser'
@@ -1201,6 +1202,7 @@ defineSceneControlCapability<AgentExport3dSceneAction>('export_3d_scene', 'Expor
 
 registerLipsCreatorCapabilities(defineCapability)
 registerWorld3DTemplateCapabilities(defineCapability)
+registerProductionWorkCapabilities(defineCapability)
 registerStudioCapabilities(defineCapability)
 registerNavigationQueueCapabilities(defineCapability)
 registerEditorAuxCapabilities(defineCapability)

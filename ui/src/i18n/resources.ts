@@ -25,6 +25,7 @@ import comicsEn from './locales/en/comics.json'
 import studioEn from './locales/en/studio.json'
 import helpEn from './locales/en/help.json'
 import productionShotsEn from './locales/en/productionShots.json'
+import productionCatalogEn from './locales/en/productionCatalog.json'
 import commonEs from './locales/es/common.json'
 import navigationEs from './locales/es/navigation.json'
 import settingsEs from './locales/es/settings.json'
@@ -46,8 +47,9 @@ import comicsEs from './locales/es/comics.json'
 import studioEs from './locales/es/studio.json'
 import helpEs from './locales/es/help.json'
 import productionShotsEs from './locales/es/productionShots.json'
+import productionCatalogEs from './locales/es/productionCatalog.json'
 
-export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots'] as const
+export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots', 'productionCatalog'] as const
 export type I18nNamespace = (typeof NAMESPACES)[number]
 
 export const resources = {
@@ -76,6 +78,7 @@ export const resources = {
     studio: studioEn,
     help: helpEn,
     productionShots: productionShotsEn,
+    productionCatalog: productionCatalogEn,
   },
   es: {
     sceneFx: sceneFxEs,
@@ -102,6 +105,7 @@ export const resources = {
     studio: studioEs,
     help: helpEs,
     productionShots: productionShotsEs,
+    productionCatalog: productionCatalogEs,
   },
 } as const
 

@@ -46,6 +46,7 @@ import type {
 } from './characterKitActions'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
+import { executeProductionWorks } from './productionWorkCapabilities'
 import { shouldMountWorld3DScene, world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
@@ -185,6 +186,7 @@ export interface WizardApplicationAdapters {
   characterKit: CharacterKitAdapter
   lipsCreator: { command(action: AgentLipsCreatorAction, workspace?: string): Promise<AdapterOutcome>; generate(action: AgentGenerateLipsAction, workspace?: string, context?: { onStep?: (message: string) => void; generationContext?: GenerationSubmissionContext }): Promise<AdapterOutcome> }
   world3dTemplates: { command(action: import('./world3dTemplateCapabilities').AgentWorld3DTemplatesAction, workspace?: string): Promise<AdapterOutcome> }
+  productionWorks: { command(action: import('./productionWorkCapabilities').AgentProductionWorksAction, workspace?: string): Promise<AdapterOutcome> }
   queue: QueueAdapter
   workspace: WorkspaceAdapter
   videoclips: VideoclipAdapter
@@ -734,6 +736,11 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       }
       const message = world3dTemplateMessage(body)
       return { message, metadata: body as Record<string, unknown>, sceneId: scene?.sceneId, target: { kind: 'video_3d_scene', id: scene?.sceneId || 'world3d', title: scene?.templateId || action.operation } }
+    },
+  }
+  adapters.productionWorks = {
+    async command(action, workspace) {
+      return executeProductionWorks(action, workspace)
     },
   }
   adapters.lipsCreator = {

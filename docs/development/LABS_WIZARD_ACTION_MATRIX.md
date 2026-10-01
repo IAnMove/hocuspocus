@@ -1336,3 +1336,12 @@ id through `world3dTemplates.command`, registered by
 `ui/src/features/agent/world3dTemplateCapabilities.ts`. The same cards serve MCP
 and the production planner. A tied or unknown query does not create a scene.
 Coverage is in `ui/tests/world3dTemplatesWizard.test.ts`.
+
+## Productions
+
+`production.works.review` lists works in one workspace, opens one production, or
+links a light Story through `productionWorks.command`, registered by
+`registerProductionWorkCapabilities` in
+`ui/src/features/agent/productionWorkCapabilities.ts`. List and open do not
+start a generator. The same intent reuses the production. `production.review`
+stays the vision QA tool. Coverage is in `ui/tests/productionWorksWizard.test.ts`.

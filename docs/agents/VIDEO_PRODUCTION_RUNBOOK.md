@@ -488,3 +488,13 @@ returns `shot_locked` and does not write. A stale `expected_revision` returns
 and then it runs only the `plan` object you send. `regenerate` returns
 `regenerate_needs_runner` and does not start a model. This path does not
 delete take files.
+
+## List works and open the shared view
+
+`POST /api/v1/production-projects/commands` with `version` 1 and
+`input.workspace`. `production.works.list` returns `applied: false` and one
+row per production id in that workspace. `production.works.open` returns the
+same review event the UI listens for: `hocuspocus:production-shots-open`.
+`production.works.resolve` is the existing link call. A repeated `intent_id`
+sets `reused: true` and does not create another Story. An episode project
+does not create a Story. Do not describe `applied: false` as a new cut.

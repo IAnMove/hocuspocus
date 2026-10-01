@@ -276,6 +276,14 @@ export function TabFilter() {
       state.setDashboardOpen(false)
       window.dispatchEvent(new Event('hocuspocus:music-productions-open'))
     } },
+    { label: t('tabs.works'), description: t('descriptions.works'), icon: <Clapperboard size={15} />, action: () => {
+      setActiveCategory('production')
+      setExpandedCategory('production')
+      const state = useStore.getState()
+      state.setSettingsOpen(false)
+      state.setDashboardOpen(false)
+      window.dispatchEvent(new Event('hocuspocus:production-catalog-open'))
+    } },
   ]
   const mediaItems: MenuItem[] = [
     { value: 'projects', label: t('tabs.projects'), description: t('descriptions.projects'), icon: <FolderKanban size={15} />, action: () => openFilter('projects') },

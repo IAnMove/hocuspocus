@@ -1,4 +1,6 @@
+import { ReviewShotsButton } from '../production-catalog/ReviewShotsButton'
 import { useUiTranslation } from '../../i18n'
+import { useStore } from '../../stores/useStore'
 import { button, panel } from './storyLabChrome'
 import { StoryProductionTimeline } from './StoryProductionTimeline'
 import type { StoryProject } from './types'
@@ -11,6 +13,7 @@ export function StoryAssemblyTab({
   restoreProductionSource: (id: string) => void
 }) {
   const { t } = useUiTranslation('storyLab')
+  const workspace = useStore(state => state.activeWorkspace) || 'default'
   const productions = [...project.productions].reverse()
   return (
     <div className={panel}>
@@ -34,6 +37,7 @@ export function StoryAssemblyTab({
               )}
             </div>
             <div className="flex gap-2">
+              <ReviewShotsButton className={button} workspace={workspace} productionId={item.id} label={t('assembly.reviewShots')} />
               <button className={button} onClick={() => reopenProduction(item.id)}>{t('assembly.reopen')}</button>
               {item.sourceSnapshot && (
                 <button className={button} onClick={() => restoreProductionSource(item.id)}>{t('assembly.restore')}</button>

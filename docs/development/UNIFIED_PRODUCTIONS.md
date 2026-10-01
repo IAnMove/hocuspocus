@@ -79,11 +79,11 @@ contacto ya es un nombre de fichero del workspace.
 |---|---|---|---|---|---|
 | `production.run` | no tenía Story | `{id}.production.json` | `{id}.shots.json`, `takes`, review | se enlaza antes de generar; la vista lee el manifiesto y `review.json` | el run no llama a resolve; la vista no elige tomas |
 | Director | `provenance.project_id` opcional | `_director_pipeline_*.json` | `clips[]`, `video_attempts` | el catálogo indexa el snapshot; la vista lee los clips | el arranque del pipeline no llama a resolve |
-| Story Lab | la biblioteca | `projects[].productions[]` | el pipeline o el batch que dispare | Story mínima y fila `productions[]` | Resultados aún no abre la vista común |
+| Story Lab | la biblioteca | `projects[].productions[]` | el pipeline o el batch que dispare | Story mínima, fila `productions[]` y **Revisar planos** en Resultados | el run no llama a resolve |
 | Series | el episodio | `productionIds[]` no se reescribe | `shots[]`, `attempts[]` | un episodio explícito se reutiliza; la vista lee sus planos | no se añade el id al episodio |
 | Montaje | no | `{nombre}.montage.json` | clips y tomas del editor | la vista lee el montaje nombrado o el que cita `productionId` | el catálogo de obras aún no indexa el montaje |
 | MCP `generation.video` | no | un job de Studio | no es una obra | no se convierte en proyecto | sigue en la galería hasta que alguien lo vincule |
-| Wizard | la Story que la acción envíe | handoff a Director o Series | los del destino | el mismo resolve HTTP | el registro de capacidades lo ocupa el PR de plantillas World3D |
+| Wizard | la Story que la acción envíe | handoff a Director o Series | los del destino | `production.works.list`, `open` y `resolve` | `production.run`, el arranque del Director y el render de serie siguen sin llamar a resolve |
 
 ## Coordinación
 
@@ -147,6 +147,22 @@ clip siguen en el runner de la producción. Series no se reescribe; la
 revisión cae en el sidecar. Abrir la escena no muta (`applied: false`) y la
 UI emite `hocuspocus:production-shot-scene`.
 
+## Catálogo y accesos
+
+`POST /api/v1/production-projects/commands` con `version: 1` y `input.workspace`.
+
+| Operación | Qué hace |
+|---|---|
+| `production.works.list` | Filtra por `format` y `status` dentro de ese workspace. `applied` es false. |
+| `production.works.open` | Una obra y su evento de revisión. No escribe el plano. |
+| `production.works.resolve` | El mismo resolve de siempre. `applied` es true. `reused` es true si ese `intent_id` ya existía. |
+
+Cada fila trae `review.event` = `hocuspocus:production-shots-open`, `workspace` y `production_id`. Un episodio añade `series_id` cuando la biblioteca de series ya tiene ese capítulo. No se crea una Story para el episodio.
+
+La UI abre **Producciones** desde **Obras** (`hocuspocus:production-catalog-open`). El botón **Producciones** del Director no cambia. **Revisar planos** conserva el workspace. **Abrir proyecto** abre la Story o el episodio que ya existen; si no están en el workspace, no crea otro. Story Lab → Montaje y Series → Resultados usan el mismo evento. Crear una obra ofrece videoclip, tráiler o vídeo rápido, el formato ligero de Story Lab, y reutiliza el `intent_id` del formulario.
+
+El asistente registra `production_works` con una línea en `capabilityRegistry.ts` y llama a `productionWorks.command`. Ese método es una adición en `applicationAdapters.ts`; no reescribe el registro de plantillas World3D ni `wangp_mcp.py`. No arranca un modelo. `applied: false` no se resume como obra nueva.
+
 ## Límites conocidos en este corte
 
 - Quien llama a `production.run` o al arranque del Director tiene que pedir
@@ -154,6 +170,8 @@ UI emite `hocuspocus:production-shot-scene`.
 - El estado del enlace se alinea con el fichero al listar o al `POST` de estado.
   No hay gancho dentro del hilo de `production.run`.
 - Los montajes y los jobs sueltos de `generation.video` no son proyectos.
+- **Vincular a proyecto** para una obra antigua sin relación fiable es el paso 6.
+- El recorrido con navegador no está hecho en este corte: no hay herramienta de navegador y no se arrancan los puertos 42003, 42010, 42017 ni 42022.
 - Los tokens de LLM de este cambio no están disponibles: el cliente no los midió.
   No se estiman a partir de bytes.
 - `production.run`, el arranque del Director y el render de serie siguen sin

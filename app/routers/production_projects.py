@@ -11,6 +11,7 @@ from services.production_project_link import LinkError, note_production_status, 
 from services.production_shot_actions import ActionError, perform
 from services.production_shot_view import shot_view
 from services.production_work_catalog import find_work, list_works
+from services.production_work_commands import WorkCommandError, run_command
 
 
 _STATUS = {
@@ -91,6 +92,22 @@ def create_production_projects_router(*, workspace_dir: Callable[[str], str]) ->
             offset=offset,
         )
         return listed
+
+    @router.post("/api/v1/production-projects/commands")
+    def commands_route(body: dict):
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=422, detail={"code": "invalid_request", "message": "JSON object required"})
+        raw_input = body.get("input")
+        workspace = str(raw_input.get("workspace") or "") if isinstance(raw_input, dict) else ""
+        try:
+            return run_command(root(workspace), body)
+        except LinkError as error:
+            raise fail(error) from error
+        except WorkCommandError as error:
+            status = 404 if error.code == "not_found" else 422
+            raise HTTPException(status_code=status, detail={
+                "code": error.code, "message": str(error), "retryable": False,
+            }) from error
 
     @router.get("/api/v1/production-projects/{production_id}")
     def get_route(production_id: str, workspace: str = Query(default="", max_length=160)):
