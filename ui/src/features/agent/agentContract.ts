@@ -50,6 +50,7 @@ const EXPENSIVE_ACTIONS = new Set([
   'queue_sfx_pack',
   'generate_comic',
   'generate_comic_panel',
+  'generate_lips',
   'start_director_production',
   'generate_story_visuals',
   'generate_story_song',

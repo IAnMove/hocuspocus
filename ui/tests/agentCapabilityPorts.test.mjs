@@ -201,7 +201,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 80) // Adds standalone Tools upscale on the durable command handoff.
+  assert.equal(registered.length, 82) // Adds standalone Tools upscale on the durable command handoff.
   assert.equal(legacy.length, 0)
 })
 

@@ -41,6 +41,7 @@ import { useStore } from '../../stores/useStore'
 import i18n, { useUiTranslation } from '../../i18n'
 import { mouthWipeBox, resizeMouthWipeBox } from './mouthWipeBox'
 import { MouthPackChoices } from './MouthPackChoices'
+import { LipsPackChoices } from './LipsPackChoices'
 import { FaceRigSamplePreview } from './FaceRigSamplePreview'
 import { FaceRigStatePicker } from './FaceRigStatePicker'
 
@@ -657,6 +658,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
     <div className="space-y-3">
     <h3 className="text-sm font-semibold">{t('faceRig.stepChoose')}</h3>
     <p className="text-xs text-text-secondary">{t('faceRig.restHint')}</p>
+    <LipsPackChoices workspace={workspace} kit={kit} poseId={poseId} disabled={disabled || Boolean(busyState)} onApply={next => { onChange(next); onStatus?.(t('lips.collectionApplied')) }} />
     <MouthPackChoices packs={presetPacks} selected={presetId} disabled={disabled || Boolean(busyState)} onSelect={setPresetId} onApply={applyPreset} />
     <FaceRigStatePicker kit={kit} selected={selectedState} disabled={disabled || Boolean(busyState)} onSelect={setSelectedState} />
     {selectedRequest && <details className="rounded border border-border/70 bg-black/10 px-1.5 py-1"><summary className="cursor-pointer text-xs text-text-muted">{t('faceRig.promptUsed', { name: stateLabel(selectedState) })}</summary><p className="mt-1 select-text text-xs leading-relaxed text-text-secondary">{selectedRequest.prompt}</p></details>}

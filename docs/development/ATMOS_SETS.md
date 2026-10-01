@@ -302,6 +302,27 @@ Templates: `atmos-space-ring-wide`, `atmos-space-ring-low`. Both last 6 seconds 
 
 A software export of `atmos-space-ring-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 31396 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Shared scenery kit (`sets/kit.ts`)
+
+The first sets of the library used unlit flat colours, cones for mountains and boxes for rocks. The clearing and the waterfall showed a better way, and `sets/kit.ts` turns it into three pieces any set can call:
+
+- `paintedTerrain`: lit ground with real relief. A height function carves dunes, craters or mounds; a tint function breaks up the texture; a flat disc keeps the character's spot level. The texture comes from `terrainTexture` (two soils in soft patches, fine flecks, dark pockets, tileable).
+- `boulders`: faceted rocks in one instanced draw call, tinted from a short palette.
+- `ridge`: layered low-poly mountain silhouettes behind the scene. Far layers fade toward a haze colour, so depth reads without a depth-of-field pass. `backdropRidge` colours it from the set's resolved ground and fog; keep its radius times 1.22 for each extra layer inside the sky sphere (26–28 m in most sets).
+
+A set that uses `retainTexture` or `paintedTerrain` must dispose `kept.textures` with its geometries and materials.
+
+Upgraded with it so far:
+
+| Set | Before | Now |
+| --- | --- | --- |
+| `atmos-moon` | Flat grey plane, flat rings for craters, tinted cones for rocks | Cratered regolith with carved bowls and lips, faceted boulders, crater-wall ridge. The flat crater decals stay in the scene, hidden, as placement markers |
+| `atmos-mars` | Flat plane, box rocks, six cones for mountains | Rippled soil with dunes, faceted rust and sandstone boulders, two layers of mesas. The sand ovals stay hidden |
+| `atmos-meadow` | Flat unlit 220 × 420 plane | Painted sod over rolling ground that fades into the fog, three layers of hills, faceted clouds. A palette change repaints the texture |
+| `atmos-desert`, `atmos-snow`, `atmos-temple` | Nothing behind the middle ground | `backdropRidge`: dune ranges, snowy mountains and jungle hills fading into the fog |
+| `atmos-reef` | Opaque white bubbles as big as the fish, flat rocks, single-cone coral | Small translucent bubbles, lit faceted rocks, branching coral, a far reef wall |
+| `atmos-space-ring` | Regular flat-white solids as asteroids | Lumpy lit asteroids |
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:

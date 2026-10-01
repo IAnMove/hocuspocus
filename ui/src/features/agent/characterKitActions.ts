@@ -1,3 +1,4 @@
+import type { LipsCollectionCommand, GenerateLipsCommand } from '../characters/lipsCommands'
 import type { CharacterKitStyle } from '../../lib/characterKit'
 
 export {
@@ -56,3 +57,6 @@ export interface AgentTrackCharacterKitJobAction {
   type: 'track_character_kit_job'
   kitName: string
 }
+
+export interface AgentLipsCreatorAction extends LipsCollectionCommand { type: 'lips_creator' }
+export interface AgentGenerateLipsAction extends GenerateLipsCommand { type: 'generate_lips'; confirm: true }

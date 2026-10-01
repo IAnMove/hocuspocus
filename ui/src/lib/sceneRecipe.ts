@@ -5,7 +5,7 @@ import { FX_CATALOG, sceneFxFields, SCENE_FX_SCHEMA } from '../features/sceneFx/
 import { FINISH_PRESETS } from './scene2d/finish'
 import { kineticTextFields, KINETIC_TEXT_SCHEMA, lyricFields, TEXT_TEMPLATES, textTemplatesFromRecipe, type KineticText, type SceneLyrics } from './kineticText'
 import type { Scene, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../types'
-import { applyCutoutDialogue, findCutoutMouthLayers, normalizeFaceBinding, planCutoutDialogue } from './cutoutDialogue'
+import { applyCutoutDialogue, findCutoutMouthLayers, mapCutoutDialoguePlan, normalizeFaceBinding, planCutoutDialogue } from './cutoutDialogue'
 import { resolveSceneGrade } from './sceneGrade'
 import type { SceneGradeIntensity, SceneGradeMood, SceneGradePalette } from './sceneGrade'
 import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES } from './sceneNarrative'
@@ -14,7 +14,7 @@ import { parseSceneGenerationPolicy, sceneGenerationPolicyFields, SCENE_GENERATI
 import type { SceneGenerationPolicy } from './sceneGenerationPolicy'
 import { canonicalSceneFps } from './sceneFps.ts'
 import { parseCutoutLipSync, CUTOUT_LIP_SYNC_SCHEMA, planPhoneticCutoutDialogue } from './cutoutPhonetic'
-import { CHARACTER_MOUTH_STATES } from './characterMouthStates'
+import { CHARACTER_MOUTH_STATES, MOUTH_MAPPING_SCHEMA } from './characterMouthStates'
 
 const GRADE_MOODS: readonly SceneGradeMood[] = ['calm', 'tense', 'dreamy', 'heroic']
 const GRADE_PALETTES: readonly SceneGradePalette[] = ['natural', 'cool', 'warm', 'neon']
@@ -398,8 +398,9 @@ const recipeLayerSchema = {
       type: 'object',
       properties: {
         poseLayerId: { type: 'string', minLength: 1, maxLength: 80 },
-        role: { enum: ['mouth', 'blink'] },
+        role: { enum: ['mouth', 'blink', 'eyes'] },
         state: { enum: [...CHARACTER_MOUTH_STATES, 'blink', 'open'] },
+        mouthMapping: MOUTH_MAPPING_SCHEMA,
       },
       required: ['poseLayerId', 'role'],
       additionalProperties: false,
@@ -1539,7 +1540,8 @@ function compileRecipeDialogue(
     const start = Math.max(0, Math.min(duration, beat.start))
     const end = Math.max(start + 1 / Math.max(1, fps), Math.min(duration, beat.end))
     if (start >= duration) continue
-    const plan = planPhoneticCutoutDialogue(beat, duration) ?? planCutoutDialogue(beat.text, start, Math.min(duration, end), fps)
+    const mapping = targets.find(layer => layer.faceBinding?.mouthMapping)?.faceBinding?.mouthMapping
+    const plan = planPhoneticCutoutDialogue(beat, duration, mapping) ?? mapCutoutDialoguePlan(planCutoutDialogue(beat.text, start, Math.min(duration, end), fps), mapping)
     const generated = applyCutoutDialogue(mouthLayers, plan)
     appendRecipeMouthFrames(framesByLayer, generated, plan.start)
     appliedBeats.push({ ...beat, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(generated) })

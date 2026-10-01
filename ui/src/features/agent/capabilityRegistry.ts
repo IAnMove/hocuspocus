@@ -43,6 +43,7 @@ import { inferStoryProjectTypeFromText } from '../stories/musicVideoLook'
 import type { AgentCreateVideoEditorProjectAction, AgentOpenVideoEditorProjectAction } from './videoEditorActions'
 import type { AgentAttachVideoclipAlternativeSongAction, AgentMountVideoclipAlternativeSongAction } from './alternativeSongActions'
 import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
+import { registerLipsCreatorCapabilities } from './lipsCreatorCapabilities'
 import { registerStudioCapabilities } from './studioCapabilities'
 export { restoreAuthoredMusicFields, authoredSfxPackInput } from './audioActionParser'
 import { registerNavigationQueueCapabilities } from './navigationQueueCapabilities'
@@ -76,7 +77,7 @@ export const currentAgentInterfaceLanguage = detectUiLanguage
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
   'story_lab', 'series_lab', 'comics', 'video_editor', 'video_3d', 'animate_3d',
-  'character_creator', 'character_kit', 'workspaces', 'settings',
+  'character_creator', 'character_kit', 'lips_creator', 'workspaces', 'settings',
 ] as const
 
 export type AgentTab = typeof AGENT_TABS[number]
@@ -1197,6 +1198,7 @@ defineSceneControlCapability<AgentOpen3dSceneAction>('open_3d_scene', 'Open a sa
 defineSceneControlCapability<AgentSave3dSceneAction>('save_3d_scene', 'Save the editable 3D scene', 'edit')
 defineSceneControlCapability<AgentExport3dSceneAction>('export_3d_scene', 'Export the 3D scene MP4', 'compute')
 
+registerLipsCreatorCapabilities(defineCapability)
 registerStudioCapabilities(defineCapability)
 registerNavigationQueueCapabilities(defineCapability)
 registerEditorAuxCapabilities(defineCapability)

@@ -80,7 +80,8 @@
     "directAudio": "Create speech, music, effects or a mix.",
     "direct3d": "Generate a standalone 3D asset.",
     "directEdit": "Edit, restyle, inpaint or recast an existing result.",
-    "directTools": "Run post-processing tools on an existing asset."
+    "directTools": "Run post-processing tools on an existing asset.",
+    "lips": "Create mouths and link them to sounds."
   },
   "search": {
     "placeholder": "Search...",
@@ -117,7 +118,8 @@
     "edits": "Edits",
     "multiclip": "Multi-clip",
     "auditDev": "Internal dev audit",
-    "favorites": "Favorites"
+    "favorites": "Favorites",
+    "lips": "Lips Creator"
   },
   "short": {
     "all": "All",
@@ -144,7 +146,8 @@
     "animate3d": "Anim",
     "edits": "Edit",
     "multiclip": "MC",
-    "auditDev": "Audit"
+    "auditDev": "Audit",
+    "lips": "Lips"
   },
   "filters": {
     "allWorkspaces": "All Workspaces"
@@ -163,7 +166,8 @@
     "scene3d": "Video 2.5D editor",
     "world3d": "Video 3D editor",
     "animate3d": "Rig & Animate",
-    "auditDev": "Internal audit"
+    "auditDev": "Internal audit",
+    "lips": "Lips Creator"
   },
   "outputFolder": {
     "option": "Output",

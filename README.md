@@ -50,6 +50,118 @@ The initial installation does not include example media. **Video 3D → Shot lib
 
 See [example distribution](docs/development/OPTIONAL_EXAMPLES.md) for the pinned source, integrity checks and lightweight installation options.
 
+### Create reusable mouth collections
+
+Open **Studios → Lips Creator**, next to **Character Creator**. The first card,
+**New**, creates a collection. Existing cards preview their mouths; hovering or
+focusing a card animates its images without generating a video. You can also
+import the mouths of an existing character.
+
+**Description only** starts without a character or image: describe the lips and
+style, and use an installed text-to-image model such as Qwen Image 2.1.
+**With a reference** lets you choose a character, upload an image, or pick one
+from the library; Qwen Image Edit is available in this mode.
+Choose a mouth to upload an image or generate a replacement. Compare
+the candidate with the current mouth, remove its background if needed, then
+accept it. Saved candidates remain available after a page reload, alongside the
+approved mouth. Other mouths stay intact. **Sounds and vowels** starts with the nine
+standard assignments; each can point to a different mouth, and several sounds
+can share a drawing. Save the collection and explicitly apply it to a character.
+Audio-driven previews and saved 2D scenes use the same assignments.
+
+You can also select a collection directly in **Character Creator → Prepare 2D
+speech → Use my Lips Creator mouths** (or in a character's Face Rig). Apply it,
+place the overlay, **Apply placement to all mouths**, then **Save speech character**. The
+character keeps its identity, voice and existing placement; collection anchors
+transfer only when the reference is the exact same pose image. Review each
+assigned mouth first. Saved assignments also drive resting poses, Series 2D
+dialogue and video export; editing assignments invalidates outdated lip-sync takes.
+
+**Create missing mouths** runs the whole remaining collection sequentially: one
+image finishes and is saved before the next starts. Progress shows the current
+mouth and count. Switching studio tabs keeps the sequence running. Each completed
+mouth is saved as a pending candidate, preserving approved drawings. Confirmed
+model failures are reported per mouth and the sequence continues; pressing the
+button again retries only the missing drawings. A failed save or lost job
+connection pauses the sequence and keeps completed results.
+
+The built-in English and Spanish recordings work offline. **Try another phrase
+or audio** uses local TTS and Rhubarb, or analyzes an uploaded clip up to 90
+seconds. Collections are stored separately from characters in each workspace,
+using revision checks to protect edits made in other tabs.
+
+In **Speech preview**, **Deform between mouths · experimental** enables an optional
+contour-mesh preview with an adjustable 40–240 ms transition. Both mouth images
+warp toward the same intermediate outline; their interior colors blend. Short
+phonemes shorten the transition, and interrupted transitions continue from the
+currently displayed shape without changing the audio timing. **Compare two mouths
+without audio** selects a pair and scrubs through the intermediate shapes.
+The mode starts off and applies only inside Lips Creator: saved PNGs, linked
+characters and rendered scenes keep their existing behavior. Transparent isolated
+mouths work best; opaque or unreadable images fall back to direct display.
+Automatic contours do not identify teeth or tongue, so inspect those transitions
+for artifacts before choosing this approach for production.
+
+To create the character itself, open **Studios → Character Creator** and use
+**Create a character from a description** at the top. Enter its name and
+appearance, generate an image, then **Save character**. The saved character is
+available in Lips Creator's reference and linking selectors. **Use for 360 views**
+also puts the generated image into the existing turnaround workflow.
+
+API: `GET /api/v1/character-kits/lips-creator/library?workspace=NAME` returns
+`{version, revision, activeId, kits}`. `PATCH /api/v1/character-kits/lips-creator/packs/ID`
+accepts `{workspace, baseRevision, kit}`; the kit follows the Character Kit schema,
+with optional `mouthMapping`, `mouthPrompts` and `mouthGenerationMode`
+(`description` or `reference`). `DELETE` at the same path accepts
+`{workspace, baseRevision}`. Conflicting revisions return HTTP 409. Example reads:
+
+```javascript
+const collection = await fetch('/api/v1/character-kits/lips-creator/library?workspace=default').then(r => r.json())
+```
+
+```python
+collection = requests.get(f'{base_url}/api/v1/character-kits/lips-creator/library', params={'workspace': 'default'}).json()
+```
+
+```bash
+curl "$HOCUSPOCUS_URL/api/v1/character-kits/lips-creator/library?workspace=default"
+```
+
+**Ask to the Wizard** can open `lips_creator` and use the `lips_creator` action
+to list, create, edit, capture, approve or apply collections. `generate_lips`
+generates missing mouths; an explicit `states: ["bite"]` regenerates only F/V.
+It uses the same native image path as the editor, saves each candidate before
+starting the next job, and never approves generated drawings automatically.
+For example: “Create a collection of burgundy cartoon lips from a description
+and generate its mouths”, then “Redo only the F mouth in that collection”.
+If another client changes the collection, reload before saving; the header's
+reload button discards unfinished edits in the open collection.
+
+**MCP** exposes `lips.list`, `lips.create`, `lips.update`,
+`lips.generation.plan`, `lips.capture`, `lips.accept`, `lips.apply`,
+`lips.delete` and `lips.receipt`. These operations are also available through
+`GET/POST /api/v1/character-kits/lips-creator/commands`. The POST envelope is
+`{version: 1, operation, input: {workspace, ...}, intent_id}`; MCP uses the same
+arguments without `operation`. Mutations require a stable `intent_id`: reuse
+it for transport retries and recover its result using `lips.receipt` with
+`input: {workspace, operation, intent_id}`. Edits require `base_revision` from
+`lips.list`; applying a collection requires the **character** library revision.
+
+For MCP image generation, call `lips.generation.plan` with an exact `pack_id`
+and optional `states`. Select an installed model, submit each prompt through
+`generation.image`, wait for its canonical terminal status, and use
+`lips.capture` with the completed persistent image asset and latest revision.
+Reference plans use `generation.image` version 2 with `image_refs`. A plan
+does not start GPU work. Stop if a job's status is uncertain and recover its
+generation receipt before submitting another job. Review transparency and
+drawings, then explicitly call `lips.accept` before `lips.apply`.
+
+```bash
+curl "$HOCUSPOCUS_URL/api/v1/character-kits/lips-creator/commands" \
+  -H 'Content-Type: application/json' \
+  -d '{"version":1,"operation":"lips.create","intent_id":"ruby-create-1","input":{"workspace":"default","pack_id":"ruby-lips","name":"Ruby lips","description":"Burgundy cartoon lips"}}'
+```
+
 ### Build a world once, reuse it everywhere
 
 **Story Lab** is the production bible: premise, world rules, locations, cast, relationships, beats. Approve fields, then hand the canon to Comics, Director, trailers or videoclips. Export a `.storypack` when you want to move the project. **Add reference** opens a dialog with **From my computer** and **From HocusPocus** choices, so it stays accessible from long character and location cards. Closing the dialog cancels pending attachment; existing references remain.

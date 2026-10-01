@@ -301,3 +301,21 @@ test('approved episodes show a visible regeneration action and a persisted recei
   assert.equal(shot.approvedAttemptId, 'old')
   assert.equal(kit.base!.reviewState, 'pending')
 })
+
+test('Lips Creator assignments control resting layers, dialogue and take freshness with a reduced pack', async () => {
+  const { scene, series, shot, library, character, kit } = await fixture()
+  const previous = seriesLipSyncFingerprint('default', series, shot, library)
+  kit.mouthMapping = { rest: 'pressed', M: 'pressed', A: 'tongue', E: 'tongue', I: 'tongue', O: 'tongue', U: 'tongue', F: 'tongue', L: 'tongue' }
+  assert.notEqual(seriesLipSyncFingerprint('default', series, shot, library), previous)
+  kit.mouth = { pressed: kit.mouth.pressed, tongue: kit.mouth.tongue }
+  const result = applySeriesLipSync(scene, 'default', series, shot, library)
+  const mouths = result.layers.filter(layer => layer.faceBinding?.poseLayerId === character.id)
+  assert.equal(mouths.length, 2)
+  const rest = mouths.find(layer => layer.faceBinding?.state === 'pressed')!
+  const speech = mouths.find(layer => layer.faceBinding?.state === 'tongue')!
+  assert.equal(evaluateSceneLayer(rest, 0).opacity, 1)
+  assert.equal(evaluateSceneLayer(rest, 3).opacity, 1)
+  assert.equal(evaluateSceneLayer(speech, 3).opacity, 0)
+  assert.ok(Array.from({ length: 50 }, (_, index) => .5 + index * .04).some(time => evaluateSceneLayer(speech, time).opacity === 1))
+  assert.deepEqual(speech.faceBinding?.mouthMapping, kit.mouthMapping)
+})

@@ -19,6 +19,7 @@ import {
   SphereGeometry,
   Vector3,
   type Material,
+  MeshStandardMaterial,
 } from 'three'
 import type { AtmosHandle } from './clearing.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
@@ -263,11 +264,22 @@ function placeAsteroids(mesh: InstancedMesh, spots: Rock[], seconds: number, spe
   mesh.instanceMatrix.needsUpdate = true
 }
 
+/** Irregular, lumpy asteroids instead of a regular solid. */
+function jitterRock(geo: IcosahedronGeometry, seed: number) {
+  const pos = geo.getAttribute('position')
+  for (let i = 0; i < pos.count; i += 1) {
+    const k = 1 + (hash2(Math.round(pos.getX(i) * 40), Math.round(pos.getZ(i) * 40) + Math.round(pos.getY(i) * 13), seed) - 0.5) * 0.5
+    pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * k, pos.getZ(i) * k)
+  }
+  geo.computeVertexNormals()
+}
+
 function addAsteroids(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const spots = fieldRocks(resolved.grassBlades, resolved.seed)
   if (spots.length < 1) return
-  const geo = new IcosahedronGeometry(1, 0)
-  const mat = new MeshBasicMaterial()
+  const geo = new IcosahedronGeometry(1, 1)
+  jitterRock(geo, resolved.seed)
+  const mat = new MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1, emissive: 0x30343c, emissiveIntensity: 0.6 })
   const mesh = new InstancedMesh(geo, mat, spots.length)
   mesh.name = 'atmos-asteroid'
   mesh.frustumCulled = false
