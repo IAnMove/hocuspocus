@@ -22,6 +22,10 @@ from services.world3d_template_commands import command_catalog, command_handlers
 ROOT = Path(__file__).resolve().parents[1]
 ROBOT = "/api/v1/file/robot.glb?workspace=studio"
 ROOM = "/api/v1/file/room.png?workspace=studio"
+needs_ui = pytest.mark.skipif(
+    not (ROOT / "ui/node_modules/tsx/dist/loader.mjs").is_file(),
+    reason="UI dependencies not installed in Python-only CI",
+)
 
 
 def client_for(tmp_path):
@@ -68,6 +72,7 @@ def _scene_files(root):
     return list(folder.glob("w3d-*.json")) if folder.is_dir() else []
 
 
+@needs_ui
 def test_catalog_matches_the_editor_library_and_keeps_scenarios():
     node = shutil.which("node")
     loader = ROOT / "ui/node_modules/tsx/dist/loader.mjs"
@@ -127,6 +132,7 @@ def test_list_and_catalog_match_over_http_and_mcp(tmp_path):
     assert [card["id"] for card in mcp["result"]["templates"]] == [card["id"] for card in http["result"]["templates"]]
 
 
+@needs_ui
 def test_robot_request_discovers_applies_adapts_and_stays_editable(tmp_path):
     client, root = client_for(tmp_path)
     http = call(client, "world3d.scene.apply_query", {"query": "dolly zoom"}, "robot-http")
@@ -234,6 +240,7 @@ def test_ambiguous_query_creates_nothing_and_a_retry_stays_empty(tmp_path):
     assert _scene_files(root) == []
 
 
+@needs_ui
 def test_transport_retry_does_not_duplicate_the_scene(tmp_path):
     _client, root = client_for(tmp_path)
     args = {"version": 1, "intent_id": "same", "input": {"workspace": "studio", "query": "dolly zoom"}}
@@ -247,6 +254,7 @@ def test_transport_retry_does_not_duplicate_the_scene(tmp_path):
     assert conflict.value.status_code == 409
 
 
+@needs_ui
 def test_one_prop_bind_leaves_the_other_prop_and_a_two_shot_keeps_both_holes(tmp_path):
     client, _root = client_for(tmp_path)
     sea = call(client, "world3d.scene.instantiate", {"template_id": "dark-still-salt-sea"}, "sea")["result"]["scene"]
@@ -273,6 +281,7 @@ def test_one_prop_bind_leaves_the_other_prop_and_a_two_shot_keeps_both_holes(tmp
     assert next(item for item in patched["objects"] if item["id"] == hero["id"])["sourceUrl"] == ROBOT
 
 
+@needs_ui
 def test_personal_template_is_distinct_and_does_not_replace_a_builtin(tmp_path):
     client, root = client_for(tmp_path)
     document = call(client, "world3d.templates.get", {"template_id": "product-orbit"})["result"]["document"]
