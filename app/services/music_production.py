@@ -653,6 +653,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             else:
                 target = production.run
                 args = (spec, retake, through)
+        from services.production_producer_link import link_production_run
+        link_production_run(workspace_dir(data["workspace"]), data)
         with _lock:
             if _slot_busy(key):
                 raise HTTPException(409, {"code": "already_running", "message": "This production is running", "retryable": True})

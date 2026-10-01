@@ -30174,6 +30174,8 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         episode = series.get("episodesById", {}).get(episode_id)
         if not isinstance(episode, dict):
             raise HTTPException(status_code=404, detail="Series episode not found")
+        from services.production_producer_link import link_series_render
+        link_series_render(_workspace_dir(workspace), workspace, episode_id)
         active_job = _active_series_render_for_episode(workspace, series_id, episode_id)
         if active_job:
             raise HTTPException(

@@ -515,3 +515,18 @@ not match a title. A second call with the same pair returns `reused: true`.
 The production file and its takes stay where they are. A missing sidecar still
 lists the file as unlinked. An unreadable production file is a warning, not a
 new project.
+
+## Producers link before the worker
+
+`production.run` binds the given `production_id` before it starts the thread.
+The same id returns the same Story. Pass `project: {kind, id}` only when that
+Story or episode already exists; an unknown id is HTTP 422 and the thread does
+not start. `dry_run` does not create a project.
+
+Director `start_pipeline` binds the pipeline id before the worker. A second
+start of that id does not create another Story. `provenance.project_id` is not
+read as a Story id.
+
+Series episode render binds that episode before it changes the episode. It
+does not create a Story and it does not rewrite the series library. Tokens for
+this link are not available from the client.

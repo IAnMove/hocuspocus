@@ -5375,6 +5375,9 @@ def start_pipeline(params: dict) -> str:
         "llm_streaming": False,
     }
 
+    from services.production_producer_link import link_director_start
+    link_director_start(out_dir, workspace, pid, params)
+
     with _pipeline_lock:
         _pipelines[pid] = pipeline
 
