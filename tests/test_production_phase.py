@@ -355,9 +355,11 @@ def test_redo_uses_injected_shooters_and_undo_restores_without_deleting(tmp_path
 
     def shoot_frame(_production, _spec, key, prompt):
         calls.append(("frame", key, prompt))
+        _production.state.setdefault("frames", {})[key] = "new.png"
 
     def shoot_clip(_production, _spec, key, action):
         calls.append(("clip", key, action))
+        _production.state.setdefault("clips", {})[key] = {"file": "new.mp4"}
 
     def export_scene(_production, _spec, key):
         calls.append(("scene", key))
@@ -365,7 +367,7 @@ def test_redo_uses_injected_shooters_and_undo_restores_without_deleting(tmp_path
     redo(production, spec, "s0", "frame", frame_prompt="closer", shoot_frame=shoot_frame, shoot_clip=shoot_clip, export_scene=export_scene)
     assert ("frame", "s0", "closer") in calls
     assert ("attempt", "frame_attempts", "s0") in calls
-    assert "s0" not in production.state["frames"]
+    assert production.state["frames"]["s0"] == "new.png"
     history = load_review(tmp_path, "p")["shots"]["s0"]["history"]
     assert history[0]["snapshot"]["frame"] == "f.png"
     undo(production, spec, "s0", history[0]["id"], export_scene=export_scene)
@@ -410,6 +412,48 @@ def test_redo_of_a_locked_shot_does_not_drop_the_frame(tmp_path):
     assert clip_caught.value.code == "shot_locked"
     assert production.state["clips"]["s0"]["file"] == "c.mp4"
     assert calls == []
+
+
+def test_failed_clip_redo_keeps_the_previous_take(tmp_path):
+    """clips() can finish without a file. The next scenes() would then hold the start frame."""
+    production = _production(tmp_path)
+    production.state = {
+        "frames": {"s0": "f.png"},
+        "clips": {"s0": {"file": "keep.mp4", "qa": {"verdict": "ok", "best_r": 0.4}}},
+        "scenes": {"s0": {"file": "s.mp4", "clip": "keep.mp4"}},
+        "spec": {"shots": [{"key": "s0", "kind": "h3"}]},
+    }
+    spec = production.state["spec"]
+
+    def shoot_clip(_production, _spec, key, _action):
+        assert key not in _production.state.get("clips", {})
+
+    with pytest.raises(ProductionError) as caught:
+        redo(production, spec, "s0", "clip", shoot_frame=lambda *_args: None, shoot_clip=shoot_clip, export_scene=lambda *_args: None)
+    assert caught.value.code == "redo_failed"
+    assert production.state["clips"]["s0"]["file"] == "keep.mp4"
+    assert production.state["scenes"]["s0"]["file"] == "s.mp4"
+
+
+def test_raising_frame_redo_keeps_the_previous_frame(tmp_path):
+    production = _production(tmp_path)
+    production.state = {
+        "frames": {"s0": "f.png"},
+        "clips": {"s0": {"file": "c.mp4"}},
+        "scenes": {"s0": {"file": "s.mp4"}},
+        "spec": {"shots": [{"key": "s0", "kind": "h3"}]},
+    }
+    production._attempt = lambda bucket, key: None
+    spec = production.state["spec"]
+
+    def shoot_frame(_production, _spec, _key, _prompt):
+        raise ProductionError("frames_incomplete", "no start frame for s0")
+
+    with pytest.raises(ProductionError) as caught:
+        redo(production, spec, "s0", "frame", frame_prompt="closer", shoot_frame=shoot_frame, shoot_clip=lambda *_args: None, export_scene=lambda *_args: None)
+    assert caught.value.code == "frames_incomplete"
+    assert production.state["frames"]["s0"] == "f.png"
+    assert production.state["clips"]["s0"]["file"] == "c.mp4"
 
 
 def test_apply_uses_the_previewed_plan_without_asking_again(tmp_path):

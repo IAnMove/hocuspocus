@@ -25,21 +25,17 @@ def redo(
     if origin not in _ORIGINS:
         from services.music_production import ProductionError
         raise ProductionError("invalid_redo", "from must be frame, clip, or scene")
-    from services.production_shot_review import is_locked, record_decision, snapshot
+    from services.production_shot_review import is_locked, record_decision, restore_snapshot, snapshot
     if is_locked(production, key):
         from services.music_production import ProductionError
         raise ProductionError("shot_locked", "locked: " + key)
-    record_decision(production.root, production.id, key, snapshot=snapshot(production, key))
-    if origin == "frame":
-        _pop(production, "frames", key)
-        _pop(production, "frame_failures", key)
-        production._attempt("frame_attempts", key)
-        shoot_frame(production, spec, key, frame_prompt)
-    elif origin == "clip":
-        _pop(production, "clips", key)
-        shoot_clip(production, spec, key, action)
-    else:
-        export_scene(production, spec, key)
+    snap = snapshot(production, key)
+    record_decision(production.root, production.id, key, snapshot=snap)
+    try:
+        _apply(production, spec, key, origin, frame_prompt, action, shoot_frame, shoot_clip, export_scene)
+    except Exception:
+        restore_snapshot(production, key, snap)
+        raise
     return {"key": key, "from": origin}
 
 
@@ -52,6 +48,44 @@ def undo(production: Any, spec: dict, key: str, history_id: str, *, export_scene
     restore_snapshot(production, key, entry["snapshot"])
     export_scene(production, spec, key)
     return {"key": key, "history_id": history_id}
+
+
+def _apply(
+    production: Any,
+    spec: dict,
+    key: str,
+    origin: str,
+    frame_prompt: str | None,
+    action: str | None,
+    shoot_frame: Callable[..., Any],
+    shoot_clip: Callable[..., Any],
+    export_scene: Callable[..., Any],
+) -> None:
+    if origin == "frame":
+        _pop(production, "frames", key)
+        _pop(production, "frame_failures", key)
+        production._attempt("frame_attempts", key)
+        shoot_frame(production, spec, key, frame_prompt)
+        _require_media(production, "frames", key)
+        return
+    if origin == "clip":
+        _pop(production, "clips", key)
+        shoot_clip(production, spec, key, action)
+        _require_media(production, "clips", key)
+        return
+    export_scene(production, spec, key)
+
+
+def _require_media(production: Any, field: str, key: str) -> None:
+    """A shooter that returns without media is not success: the previous take must come back."""
+    bucket = production.state.get(field)
+    row = bucket.get(key) if isinstance(bucket, dict) else None
+    if field == "frames" and isinstance(row, str) and row:
+        return
+    if field == "clips" and isinstance(row, dict) and row.get("file"):
+        return
+    from services.music_production import ProductionError
+    raise ProductionError("redo_failed", f"{field} missing after redo: {key}")
 
 
 def _pop(production: Any, field: str, key: str) -> None:
