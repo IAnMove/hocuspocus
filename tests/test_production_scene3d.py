@@ -61,6 +61,24 @@ def test_export_is_a_native_clip_covers_the_cut_and_resumes_without_work(tmp_pat
     assert len(production.calls) == 2
 
 
+def test_locked_shot_without_a_clip_is_still_exported(tmp_path):
+    """Lock means do not regenerate. The first world3d clip must still land.
+
+    scenes() now exports a locked shot that has no scene file. If this
+    stage skips a locked scene3d key that never got a clip, scene_ops
+    raises and production.run fails.
+    """
+    from services.production_shot_review import record_decision
+
+    production = Production(tmp_path)
+    record_decision(tmp_path, "movie", "hero", locked=True)
+    render(production)
+    clip = production.state["clips"]["hero"]
+    assert clip["file"]
+    assert (tmp_path / clip["file"]).is_file()
+    assert any(operation == "scenes.world3d.export" for operation, _ in production.calls)
+
+
 def test_locked_shot_survives_a_fingerprint_change_and_refuses_an_explicit_retake(tmp_path):
     from services.music_production import ProductionError
     from services.production_shot_review import record_decision

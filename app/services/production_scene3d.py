@@ -111,7 +111,11 @@ def export_scene3d_clips(production, spec, windows, retake=(), *, compiler=compi
         if is_locked(production, key):
             if key in retake:
                 raise ProductionError("shot_locked", "locked: " + key)
-            continue
+            # Stay on the cut. Skip only when a clip file already exists;
+            # a lock before the first export (or after a failed one) must
+            # still produce that file or scenes() raises and the run fails.
+            if (clips.get(key) or {}).get("file"):
+                continue
         revisions = production.state.setdefault("scene3d_revisions", {})
         if key in retake:
             revisions[key] = revisions.get(key, 0) + 1
