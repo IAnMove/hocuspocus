@@ -23,7 +23,10 @@ def test_that_default_passes_the_h3_silent_generation_check():
     assert not [error for error in errors if "audio_plan" in error], errors
 
 
-def test_an_explicit_balanced_anchor_is_still_rejected_for_silent_generation():
-    errors = validate_h3_prompt_contract("integrated_multimodal_description: a quiet shot", [],
-                                         audio_plan={"mode": "ambient_only", "timing_anchor": "balanced", "lip_sync_critical": False})
-    assert any("timing_anchor=video" in error for error in errors)
+def test_balanced_means_no_anchor_but_an_audio_anchor_still_contradicts_silent_generation():
+    ok = validate_h3_prompt_contract("integrated_multimodal_description: a quiet shot", [],
+                                     audio_plan={"mode": "ambient_only", "timing_anchor": "balanced", "lip_sync_critical": False})
+    assert not [error for error in ok if "audio_plan" in error], ok
+    bad = validate_h3_prompt_contract("integrated_multimodal_description: a quiet shot", [],
+                                      audio_plan={"mode": "ambient_only", "timing_anchor": "audio", "lip_sync_critical": False})
+    assert any("timing_anchor=video" in error for error in bad)
