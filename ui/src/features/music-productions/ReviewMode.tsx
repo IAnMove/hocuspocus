@@ -142,7 +142,7 @@ function ReviewShot({
       <button type="button" className={buttonClass} disabled={busy || !shot.scene_doc} onClick={() => shot.scene_doc && onOpenScene(shot.scene_doc)}>
         {t('musicProductions.openScene')}
       </button>
-      <button type="button" className={buttonClass} disabled={busy || !shot.review?.history_id} onClick={onUndo}>{t('musicProductions.undo')}</button>
+      <button type="button" className={buttonClass} disabled={busy || locked || !shot.review?.history_id} onClick={onUndo}>{t('musicProductions.undo')}</button>
       <button type="button" className={buttonClass} disabled={busy} onClick={() => onLock(shot.key, !locked)}>
         {locked ? t('musicProductions.unlock') : t('musicProductions.lock')}
       </button>

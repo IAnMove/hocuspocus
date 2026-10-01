@@ -916,6 +916,7 @@
     "title": "Montaje de producciones",
     "description": "Cada trabajo conserva su secuencia completa. El último se abre automáticamente; al acabar una regeneración, su clip vuelve a aparecer en la misma posición.",
     "empty": "Aún no se ha preparado ninguna adaptación.",
+    "reviewShots": "Revisar planos",
     "reopen": "Reabrir destino",
     "restore": "Restaurar origen como copia",
     "sourceChanged": "el origen cambió desde la preparación",

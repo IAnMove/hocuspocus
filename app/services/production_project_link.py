@@ -18,6 +18,7 @@ import fcntl
 
 
 LINK_FILENAME = ".production-project-links-v1.json"
+REVIEW_EVENT = "hocuspocus:production-shots-open"
 FORMATS = frozenset({"music_video", "trailer", "quick_video", "full_story"})
 ORIGINS = frozenset({"mcp", "wizard", "ui"})
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
@@ -165,28 +166,40 @@ def _reconcile(workspace_dir: str, record: dict[str, Any]) -> None:
 
 
 def _attach_productions(workspace_dir: str, project_id: str, record: dict[str, Any]) -> None:
-    from services.story_library import read_story_library
+    from services.story_library import StoryLibraryRevisionConflict, patch_story_project, read_story_library
 
-    library = read_story_library(workspace_dir)
-    project = library["projects"].get(project_id)
-    if not isinstance(project, dict):
-        return
-    present = {
-        str(item.get("id"))
-        for item in project.get("productions") or []
-        if isinstance(item, dict) and item.get("id")
-    }
-    missing = [item for item in record.get("production_ids") or [] if item not in present]
-    if not missing:
-        return
-    entries = list(project.get("productions") or [])
-    title = str(record.get("title") or project_id)
-    for production_id in missing:
-        entries.append(_production_entry(production_id, title, record.get("format"), project_id, record["workspace_id"]))
-    updated = dict(project)
-    updated["productions"] = entries
-    updated["updatedAt"] = _now()
-    _upsert_story(workspace_dir, project_id, updated)
+    for _attempt in range(4):
+        library = read_story_library(workspace_dir)
+        project = library["projects"].get(project_id)
+        if not isinstance(project, dict):
+            return
+        present = {
+            str(item.get("id"))
+            for item in project.get("productions") or []
+            if isinstance(item, dict) and item.get("id")
+        }
+        missing = [item for item in record.get("production_ids") or [] if item not in present]
+        if not missing:
+            return
+        entries = list(project.get("productions") or [])
+        title = str(record.get("title") or project_id)
+        for production_id in missing:
+            entries.append(_production_entry(production_id, title, record.get("format"), project_id, record["workspace_id"]))
+        updated = dict(project)
+        updated["productions"] = entries
+        updated["updatedAt"] = _now()
+        try:
+            patch_story_project(
+                workspace_dir,
+                project_id,
+                updated,
+                base_revision=int(library["revision"]),
+                make_active=False,
+            )
+            return
+        except StoryLibraryRevisionConflict:
+            continue
+    raise LinkError("revision_conflict", "Story library changed while linking")
 
 
 def _ensure_stub(workspace_dir: str, record: dict[str, Any]) -> None:
@@ -195,18 +208,48 @@ def _ensure_stub(workspace_dir: str, record: dict[str, Any]) -> None:
     current = _read_json(path)
     if current is None and os.path.exists(path):
         raise LinkError("invalid_production", "Production file is not a JSON object")
-    state = dict(current or {})
-    state.setdefault("status", "pending")
-    state.setdefault("project", dict(record["project"]))
-    state.setdefault("intent_id", record["intent_id"])
-    state.setdefault("origin", record["origin"])
+    if current is None:
+        _replace_json(path, _stub_body(record))
+        return
+    latest = _read_json(path) or current
+    if _stamp_identity(latest, record):
+        _replace_json(path, latest)
+
+
+def _stub_body(record: dict[str, Any]) -> dict[str, Any]:
+    spec = {"title": record["title"]} if record.get("title") else {}
+    state: dict[str, Any] = {
+        "status": "pending",
+        "project": dict(record["project"]),
+        "intent_id": record["intent_id"],
+        "origin": record["origin"],
+        "spec": spec,
+    }
     if record.get("format"):
-        state.setdefault("format", record["format"])
+        state["format"] = record["format"]
+    return state
+
+
+def _stamp_identity(state: dict[str, Any], record: dict[str, Any]) -> bool:
+    """Copy missing identity keys onto a live producer file. Do not rewrite when they are already present."""
+    changed = False
+    if "project" not in state:
+        state["project"] = dict(record["project"])
+        changed = True
+    if "intent_id" not in state:
+        state["intent_id"] = record["intent_id"]
+        changed = True
+    if "origin" not in state:
+        state["origin"] = record["origin"]
+        changed = True
+    if record.get("format") and "format" not in state:
+        state["format"] = record["format"]
+        changed = True
     spec = state.get("spec") if isinstance(state.get("spec"), dict) else {}
     if record.get("title") and "title" not in spec:
-        spec = {**spec, "title": record["title"]}
-    state["spec"] = spec
-    _replace_json(path, state)
+        state["spec"] = {**spec, "title": record["title"]}
+        changed = True
+    return changed
 
 
 def _record(
@@ -438,6 +481,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         "created_at": record.get("created_at"),
         "updated_at": record.get("updated_at"),
         "review": {
+            "event": REVIEW_EVENT,
+            "workspace": record["workspace_id"],
             "workspace_id": record["workspace_id"],
             "production_id": record["production_id"],
             "project": dict(record["project"]),
@@ -549,7 +594,7 @@ MappingRequest = dict[str, Any]
 
 
 __all__ = [
-    "FORMATS", "LINK_FILENAME", "LinkError", "ORIGINS",
+    "FORMATS", "LINK_FILENAME", "LinkError", "ORIGINS", "REVIEW_EVENT",
     "created_story_id", "note_production_status", "production_id_for",
     "read_link_store", "refresh_link_status", "resolve_production_project",
 ]

@@ -199,6 +199,9 @@
         "tests/test_production_phase.py",
         "tests/test_production_preview.py",
         "tests/test_production_project_link.py",
+        "tests/test_production_work_commands.py",
+        "tests/test_production_shot_actions.py",
+        "tests/test_production_shot_view.py",
         "tests/test_production_smoothness.py",
         "tests/test_humanoid_animate.py",
         "tests/test_humanoid_clips.py",
@@ -396,6 +399,7 @@
         "tests/test_montage_shots.py",
         "tests/test_template_library.py",
         "tests/test_media_options.py",
+        "tests/test_template_search.py",
         "tests/test_qa_people.py",
         "tests/test_clip_align.py",
         "tests/test_production_cancel.py",
@@ -415,7 +419,11 @@
   "path_rules": [
     {
       "prefix": "app/services/production_project_link.py",
-      "paths": ["tests/test_production_project_link.py"]
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py"]
+    },
+    {
+      "prefix": "app/services/production_work_commands.py",
+      "paths": ["tests/test_production_work_commands.py"]
     },
     {
       "prefix": "app/services/production_work_catalog.py",
@@ -423,7 +431,15 @@
     },
     {
       "prefix": "app/routers/production_projects.py",
-      "paths": ["tests/test_production_project_link.py"]
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py", "tests/test_production_shot_view.py", "tests/test_production_shot_actions.py"]
+    },
+    {
+      "prefix": "app/services/production_shot_view.py",
+      "paths": ["tests/test_production_shot_view.py"]
+    },
+    {
+      "prefix": "app/services/production_shot_actions.py",
+      "paths": ["tests/test_production_shot_actions.py", "tests/test_production_shot_view.py"]
     },
     {
       "prefix": "app/services/world3d_template_catalog.py",
@@ -618,6 +634,13 @@
     {
       "prefix": "app/services/template_format.py",
       "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_search.py",
+      "paths": [
+        "tests/test_template_search.py",
         "tests/test_template_library.py"
       ]
     },

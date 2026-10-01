@@ -1,0 +1,52 @@
+{
+  "title": "Producciones",
+  "close": "Cerrar",
+  "workspace": "Workspace {{workspace}}",
+  "loading": "Cargando…",
+  "loadFailed": "No se pudo leer el catálogo.",
+  "empty": "No hay obras en este workspace.",
+  "reviewShots": "Revisar planos",
+  "openProject": "Abrir proyecto",
+  "unlinked": "Sin proyecto vinculado",
+  "projectUnavailable": "El proyecto no está en este workspace.",
+  "updated": "Actualizada {{when}}",
+  "updatedUnknown": "Sin hora de actualización",
+  "previewAlt": "Vista previa",
+  "projectStory": "Story {{id}}",
+  "projectEpisode": "Episodio {{id}}",
+  "warning": "{{source}}: {{error}}",
+  "filters": {
+    "format": "Tipo",
+    "status": "Estado",
+    "all": "Todos"
+  },
+  "formats": {
+    "music_video": "Videoclip",
+    "trailer": "Tráiler",
+    "quick_video": "Vídeo rápido",
+    "full_story": "Historia completa"
+  },
+  "statuses": {
+    "pending": "Pendiente",
+    "running": "En curso",
+    "completed": "Terminada",
+    "failed": "Fallida",
+    "unknown": "Desconocido"
+  },
+  "origins": {
+    "mcp": "MCP",
+    "wizard": "Wizard",
+    "ui": "Estudio",
+    "file": "Fichero",
+    "link": "Enlace",
+    "story": "Story",
+    "director": "Director"
+  },
+  "create": {
+    "title": "Story ligera",
+    "hint": "Un videoclip, un tráiler o un vídeo rápido se puede revisar sin escribir la narrativa completa.",
+    "name": "Título",
+    "untitled": "Sin título",
+    "submit": "Crear obra"
+  }
+}

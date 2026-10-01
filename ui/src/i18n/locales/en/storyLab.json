@@ -916,6 +916,7 @@
     "title": "Production assembly",
     "description": "Each job keeps its complete sequence. The latest opens automatically; after a regeneration, its clip returns to the same position.",
     "empty": "No adaptation has been staged yet.",
+    "reviewShots": "Review shots",
     "reopen": "Reopen target",
     "restore": "Restore source as copy",
     "sourceChanged": "source changed since staging",

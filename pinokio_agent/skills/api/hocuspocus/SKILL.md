@@ -20,7 +20,11 @@ The definition includes Qwen Image 2.1 defaults and a complete background prompt
 
 ## Library template
 
-Import `hocuspocus/ps1-backplates` once, then discover it with `templates.list/get`.
+The human name is **Escena estilo PS1** (PS1-style scene). Find it by meaning, not by exact words:
+call `templates.list` with a few words from the request (matching ignores case, accents and plurals,
+and a whole sentence works) or without `query` to browse, read the titles and descriptions, inspect the
+best fit with `templates.get` and apply the returned id. The stable id is
+`hocuspocus/ps1-backplates`; import its package once before discovery.
 `templates.apply` fills `background` (image) and `actor` (GLB) in the chosen workspace;
 its manifest declares duration, start/end coordinates, actor scale, clip index/name,
 clip speed, fixed-camera perspective and light controls. A short Qwen prompt is in

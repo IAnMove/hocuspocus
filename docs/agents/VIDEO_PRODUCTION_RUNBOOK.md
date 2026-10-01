@@ -438,7 +438,7 @@ only: it neither re-renders the video nor starts any generation.
 
 `timing.shots` adds `s_per_step`, `degraded`, and `model` only when the H3 job returned a performance object. Missing fields are null. A job without that object adds nothing.
 
-`production.shot.review` records `pending`, `approved`, or `changes_requested` in `<id>.review.json`, not in the production file. `production.shot.lock` sets `locked`. Locked shots are omitted from `frames()` and `clips()`, including a named retake, until unlock. `scenes()` keeps them in the cut and skips re-export only when that scene file already exists, so a lock before the first export, or after a failed one, still writes the file. A retake of another shot does not drop or stretch the locked one. An explicit retake of a locked shot is `shot_locked` before the run sets `status` to `running`, so a completed production stays completed. `production.shot.redo` on a locked shot returns `shot_locked` and changes nothing. `production.shot.undo` restores one shot. Undo does not delete files. `production.shot.request` validates a closed plan. With no plan and no configured language model it is `llm_unavailable` and does not invent a plan. `apply` true with the previewed plan validates and runs that closed object; the LLM is not asked again. The REST request route validates and returns `applied: false` when apply is not true.
+`production.shot.review` records `pending`, `approved`, or `changes_requested` in `<id>.review.json`, not in the production file. `production.shot.lock` sets `locked`. Locked shots are omitted from `frames()` and `clips()`, including a named retake, until unlock. `scenes()` keeps them in the cut and skips re-export only when that scene file already exists, so a lock before the first export, or after a failed one, still writes the file. A retake of another shot does not drop or stretch the locked one. An explicit retake of a locked shot is `shot_locked` before the run sets `status` to `running`, so a completed production stays completed. `production.shot.redo` on a locked shot returns `shot_locked` and changes nothing. `production.shot.undo` restores one shot. A locked shot is `shot_locked` and the cut stays. Undo does not delete files. `production.shot.request` validates a closed plan. With no plan and no configured language model it is `llm_unavailable` and does not invent a plan. `apply` true with the previewed plan validates and runs that closed object; the LLM is not asked again. The REST request route validates and returns `applied: false` when apply is not true.
 
 `production.publish` refuses a completed production whose spec lists shot keys until each key is `approved` in the review file (`review_incomplete`). A spec with no shot list is unchanged. Artistic review stays `pending` without a human file. A human file may set `approved` or `changes_requested`. It is never the string ok.
 
@@ -469,3 +469,32 @@ nothing. `new_execution: true` starts another production on the same project.
 The contract and the coverage matrix are in
 `docs/development/UNIFIED_PRODUCTIONS.md`. LLM token counts for this link are
 not available from the client.
+
+## Read the shots
+
+`GET /api/v1/production-projects/{production_id}/shots?workspace=` returns the
+shots already stored for that production. It does not render, retake, or mark
+an export stale. A missing manifest returns an empty shot list and
+`no_shots`. The UI listens for `hocuspocus:production-shots-open`. Choosing a
+take and publishing stay on the existing review commands.
+
+## Update one shot from the shared view
+
+`POST /api/v1/production-projects/{production_id}/shots/{shot_id}` with
+`action` `select`, `review`, `lock`, `undo`, or `reexport`. Send
+`expected_revision` from the GET for select, undo, and reexport. A locked shot
+returns `shot_locked` and does not write. A stale `expected_revision` returns
+`stale_revision`. `request` returns `applied: false` until `apply` is true,
+and then it runs only the `plan` object you send. `regenerate` returns
+`regenerate_needs_runner` and does not start a model. This path does not
+delete take files.
+
+## List works and open the shared view
+
+`POST /api/v1/production-projects/commands` with `version` 1 and
+`input.workspace`. `production.works.list` returns `applied: false` and one
+row per production id in that workspace. `production.works.open` returns the
+same review event the UI listens for: `hocuspocus:production-shots-open`.
+`production.works.resolve` is the existing link call. A repeated `intent_id`
+sets `reused: true` and does not create another Story. An episode project
+does not create a Story. Do not describe `applied: false` as a new cut.

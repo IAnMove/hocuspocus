@@ -127,6 +127,61 @@ def test_stale_story_save_is_restored_for_the_same_intent(tmp_path: Path):
     assert _story_count(root) == 1
 
 
+def test_link_keeps_a_newer_story_save_and_still_attaches(tmp_path: Path, monkeypatch):
+    """A Story Lab save during resolve must not be overwritten by the stale snapshot."""
+    root = tmp_path / "film"
+    root.mkdir()
+    project = {
+        "version": 1,
+        "id": "story-open",
+        "title": "Open",
+        "projectType": "full_story",
+        "language": "Español",
+        "beats": [{"id": "beat-1", "title": "Opening"}],
+    }
+    patch_story_project(str(root), "story-open", project, base_revision=0, make_active=True)
+
+    import services.story_library as story_library
+
+    original = story_library.patch_story_project
+
+    def collide(workspace_dir, project_id, body, *, base_revision, make_active=False):
+        collide.calls += 1
+        if collide.calls == 1:
+            current = read_story_library(workspace_dir)
+            newer = dict(current["projects"]["story-open"])
+            newer["title"] = "Open — edited"
+            newer["beats"] = [
+                {"id": "beat-1", "title": "Opening"},
+                {"id": "beat-2", "title": "The user just wrote this"},
+            ]
+            write_story_library(
+                workspace_dir,
+                {**current, "projects": {**current["projects"], "story-open": newer}},
+                base_revision=current["revision"],
+            )
+            raise story_library.StoryLibraryRevisionConflict(base_revision, current["revision"] + 1)
+        return original(
+            workspace_dir, project_id, body, base_revision=base_revision, make_active=make_active,
+        )
+
+    collide.calls = 0
+    monkeypatch.setattr(story_library, "patch_story_project", collide)
+
+    linked = resolve_production_project(str(root), {
+        "workspace": "film",
+        "origin": "ui",
+        "intent_id": "clip1",
+        "format": "music_video",
+        "title": "Night bus",
+        "project": {"kind": "story", "id": "story-open"},
+    })
+    saved = read_story_library(str(root))["projects"]["story-open"]
+    assert saved["title"] == "Open — edited"
+    assert {item["id"] for item in saved["beats"]} == {"beat-1", "beat-2"}
+    assert linked["production_id"] in {item["id"] for item in saved["productions"]}
+
+
 def test_new_execution_adds_a_production_on_the_same_project(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()
@@ -194,6 +249,68 @@ def test_status_and_catalog_keep_one_row_for_one_work(tmp_path: Path):
     assert listed["total"] == 2
     assert "poster.jpg" not in json.dumps(listed)
     assert "/" not in json.dumps(by_id[linked["production_id"]]["preview"])
+
+
+def test_resolve_retry_does_not_clobber_a_live_production_file(tmp_path: Path):
+    root = tmp_path / "film"
+    root.mkdir()
+    first = _resolve(root)
+    path = root / f"{first['production_id']}.production.json"
+    live = json.loads(path.read_text(encoding="utf-8"))
+    live.update(
+        status="running",
+        clips={"verse1": {"file": "verse1.mp4", "qa": {"best_r": 0.41}}},
+        frames={"verse1": "verse1.png"},
+        scenes={"verse1": {"file": "verse1-scene.mp4", "dur": 4.0}},
+    )
+    path.write_text(json.dumps(live), encoding="utf-8")
+
+    import services.production_project_link as link_module
+
+    original_read = link_module._read_json
+    first_read = {"done": False}
+
+    def race(target):
+        body = original_read(target)
+        if target == str(path) and not first_read["done"] and isinstance(body, dict) and body.get("status") == "running":
+            first_read["done"] = True
+            newer = dict(body)
+            newer["clips"] = {**body["clips"], "chorus": {"file": "chorus.mp4"}}
+            path.write_text(json.dumps(newer), encoding="utf-8")
+        return body
+
+    link_module._read_json = race
+    try:
+        again = _resolve(root)
+    finally:
+        link_module._read_json = original_read
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert again["production_id"] == first["production_id"]
+    assert after["status"] == "running"
+    assert after["clips"]["verse1"]["file"] == "verse1.mp4"
+    assert after["clips"]["chorus"]["file"] == "chorus.mp4"
+    assert after["scenes"]["verse1"]["file"] == "verse1-scene.mp4"
+
+
+def test_resolve_copies_project_onto_a_legacy_file_without_dropping_clips(tmp_path: Path):
+    root = tmp_path / "film"
+    root.mkdir()
+    first = _resolve(root)
+    path = root / f"{first['production_id']}.production.json"
+    path.write_text(json.dumps({
+        "status": "running",
+        "spec": {"title": "Night bus", "song": {"lyrics": "x"}},
+        "clips": {"verse1": {"file": "verse1.mp4"}},
+    }), encoding="utf-8")
+    again = _resolve(root)
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert again["production_id"] == first["production_id"]
+    assert after["status"] == "running"
+    assert after["clips"] == {"verse1": {"file": "verse1.mp4"}}
+    assert after["project"] == first["project"]
+    assert after["intent_id"] == first["intent_id"]
+    assert after["spec"]["song"] == {"lyrics": "x"}
 
 
 def test_http_resolve_retry_and_unknown_workspace(tmp_path: Path):

@@ -45,6 +45,8 @@ const AGENT_ACTIONS_IMPORTS = [
   './capabilityRunner',
   './characterKitActions',
   './commandContract',
+  // Action type only. Execution stays on the productionWorks adapter.
+  './productionWorkCapabilities',
   './sfxPack',
   // Pure request filtering; no new UI/API/store-writing port is authorized.
   './storyVisualRequest',
@@ -203,7 +205,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 83) // Video 3D shot search shares the editor catalog.
+  assert.equal(registered.length, 84) // production_works is its own entry. Video 3D shot search still shares the editor catalog.
   assert.equal(legacy.length, 0)
 })
 

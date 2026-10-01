@@ -414,6 +414,37 @@ def test_redo_of_a_locked_shot_does_not_drop_the_frame(tmp_path):
     assert calls == []
 
 
+def test_undo_of_a_locked_shot_does_not_restore(tmp_path):
+    """Review Mode still showed Undo after lock; restoring would replace the approved cut."""
+    production = _production(tmp_path)
+    production.state = {
+        "frames": {"s0": "new.png"},
+        "clips": {"s0": {"file": "new.mp4"}},
+        "scenes": {"s0": {"file": "new-s.mp4"}},
+        "spec": {"shots": [{"key": "s0", "camera": "wide"}]},
+    }
+    record_decision(tmp_path, "p", "s0", locked=True, snapshot={
+        "frame": "old.png",
+        "clip": {"file": "old.mp4"},
+        "scene": {"file": "old-s.mp4"},
+        "shot": {"key": "s0", "camera": "close"},
+    })
+    history = load_review(tmp_path, "p")["shots"]["s0"]["history"]
+    calls: list[str] = []
+
+    def export_scene(_production, _spec, _key):
+        calls.append("export")
+
+    with pytest.raises(ProductionError) as caught:
+        undo(production, production.state["spec"], "s0", history[0]["id"], export_scene=export_scene)
+    assert caught.value.code == "shot_locked"
+    assert production.state["frames"]["s0"] == "new.png"
+    assert production.state["clips"]["s0"]["file"] == "new.mp4"
+    assert production.state["scenes"]["s0"]["file"] == "new-s.mp4"
+    assert production.state["spec"]["shots"][0]["camera"] == "wide"
+    assert calls == []
+
+
 def test_failed_clip_redo_keeps_the_previous_take(tmp_path):
     """clips() can finish without a file. The next scenes() would then hold the start frame."""
     production = _production(tmp_path)

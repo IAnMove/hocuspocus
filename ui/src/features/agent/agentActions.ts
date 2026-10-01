@@ -23,6 +23,7 @@ import {
   bindStoryWorkflowAction,
   type ConfiguredStorySongIdentity,
 } from './storyWorkflowIdentity'
+import type { AgentProductionWorksAction } from './productionWorkCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
 import type {
   AgentLipsCreatorAction,
@@ -627,6 +628,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentLipsCreatorAction
   | AgentGenerateLipsAction
   | AgentWorld3DTemplatesAction
+  | AgentProductionWorksAction
   | AgentPrepareProgrammaticVideoAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction

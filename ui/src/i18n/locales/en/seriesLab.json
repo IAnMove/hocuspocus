@@ -24,6 +24,8 @@
     "loadPreview": "Load video preview",
     "savedMetadata": "Saved generation request and result metadata",
     "reject": "Reject",
+    "sharedShots": "Review shots",
+    "sharedShotsMissing": "This episode has no linked production",
     "seedMeta": "seed {{seed}} · {{seconds}}s · {{model}}",
     "durableQueue": "Durable render queue",
     "durableQueueHint": "Completed shots survive cancellation and restart. Approved shots are never included in bulk missing/failed runs.",
