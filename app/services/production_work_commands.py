@@ -26,6 +26,10 @@ _OPERATIONS = frozenset({
 })
 
 
+def command_catalog() -> list[dict[str, str]]:
+    return [{"name": name} for name in sorted(_OPERATIONS)]
+
+
 def run_command(workspace_dir: str, body: dict[str, Any]) -> dict[str, Any]:
     operation, data = _envelope(body)
     workspace_id = _workspace(data)

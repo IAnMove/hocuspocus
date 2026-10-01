@@ -52,6 +52,7 @@ def _catalog_groups() -> list:
     from routers.studio_music_commands import music_command_catalog
     from services.montage_commands import command_catalog as montages
     from services.music_production import command_catalog as production
+    from services.production_work_commands import command_catalog as works
     from services.scene2d_export import command_catalog as scene_export
     from services.world3d_export import command_catalog as world_export
     from services.song_analysis import command_catalog as audio
@@ -59,6 +60,7 @@ def _catalog_groups() -> list:
 
     groups = [
         production(),
+        works(),
         audio(),
         montages(),
         scene_edit(),
