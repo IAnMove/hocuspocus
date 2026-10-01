@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from services.production_shot_review import history_entry, load_review, record_decision
@@ -72,7 +73,7 @@ def perform(workspace_dir: str, workspace_id: str, production_id: str, shot_id: 
         return _review(workspace_dir, production_id, shot_id, body)
     if action == "lock":
         return _lock(workspace_dir, production_id, shot_id, body)
-    return _mutate(workspace_dir, production_id, shot_id, action, body)
+    return _mutate(workspace_dir, workspace_id, production_id, shot_id, action, body)
 
 
 def _request(workspace_dir: str, workspace_id: str, production_id: str, shot_id: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -88,18 +89,43 @@ def _request(workspace_dir: str, workspace_id: str, production_id: str, shot_id:
     return {"plan": plan, "applied": True, "result": result}
 
 
-def _mutate(workspace_dir: str, production_id: str, shot_id: str, action: str, body: dict[str, Any]) -> dict[str, Any]:
-    kind, document, path = _require_document(workspace_dir, production_id)
-    if kind not in _WRITABLE or not isinstance(document, dict) or path is None:
-        raise ActionError("origin_unsupported", "This origin has no shared edit")
-    _expect(document, body.get("expected_revision"))
-    if _locked(workspace_dir, production_id, shot_id):
-        raise ActionError("shot_locked", "locked: " + shot_id)
-    if action == "select":
-        return _select(workspace_dir, production_id, shot_id, kind, document, path, body)
-    if action == "undo":
-        return _undo(workspace_dir, production_id, shot_id, kind, document, path, body)
-    return _reexport(workspace_dir, production_id, shot_id, kind, document, path)
+def _mutate(workspace_dir: str, workspace_id: str, production_id: str, shot_id: str, action: str, body: dict[str, Any]) -> dict[str, Any]:
+    with _hold_edit(workspace_id, production_id):
+        kind, document, path = _require_document(workspace_dir, production_id)
+        if kind not in _WRITABLE or not isinstance(document, dict) or path is None:
+            raise ActionError("origin_unsupported", "This origin has no shared edit")
+        _expect(document, body.get("expected_revision"))
+        if _locked(workspace_dir, production_id, shot_id):
+            raise ActionError("shot_locked", "locked: " + shot_id)
+        if action == "select":
+            return _select(workspace_dir, production_id, shot_id, kind, document, path, body)
+        if action == "undo":
+            return _undo(workspace_dir, production_id, shot_id, kind, document, path, body)
+        return _reexport(workspace_dir, production_id, shot_id, kind, document, path)
+
+
+@contextmanager
+def _hold_edit(workspace_id: str, production_id: str) -> Iterator[None]:
+    """Occupy the same slot production.run and music shot edits use.
+
+    Catalog select/undo/reexport rewrite ``<id>.shots.json``. The runner's
+    ``write_manifest`` replaces that file from live state, so a concurrent
+    write would drop the catalog take or the new clip.
+    """
+    from fastapi import HTTPException
+
+    from services import music_production
+    from services.production_commands import holding_edit
+
+    try:
+        with holding_edit(music_production, workspace_id, production_id):
+            yield
+    except HTTPException as error:
+        detail = error.detail if isinstance(error.detail, dict) else {}
+        raise ActionError(
+            str(detail.get("code") or "already_running"),
+            str(detail.get("message") or "This production is running"),
+        ) from error
 
 
 def _select(workspace_dir: str, production_id: str, shot_id: str, kind: str, document: dict, path: str, body: dict[str, Any]) -> dict[str, Any]:
