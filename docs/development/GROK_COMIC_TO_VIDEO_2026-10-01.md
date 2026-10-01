@@ -255,3 +255,59 @@ nada como hecho si solo pasa en tests simulados: separa «probado en simulado» 
 - Tests que lean `_launch_runtime.py` (ver regla 4) o que simulen justo lo que el fallo esquivaba (E4 existe por eso).
 - Cambiar el defecto de imagen/vídeo a un modelo que no esté instalado.
 - Mezclar sin CI verde, o reescribir un bloque ajeno.
+
+---
+
+## 6. Adenda (noche del 2026-10-01): la ruta A se completó a mano y apareció más
+
+Claude llevó la película hasta el final en su instancia (cómic con plan por viñeta bloqueado, motor «H3 First / Last — Pruned»,
+objetivo 30 planos): PRE de 30 planos, aprobado, 6 planos de prueba, aceptados tras revisarlos, película final de **30 planos,
+159 s, 960×544, 24 fps** (generación de vídeo: 1234,8 s en 8 planos I2V + 22 deterministas). Para llegar tuvo que arreglar **cuatro**
+fallos del backend en el PR #741 (todos con test) y quedaron estos otros, sin arreglar, que se suman a E1–E6:
+
+### E7. Con un motor H3 el Director se salta los paneles — ARREGLADO en #741 (falta solo revisión)
+`start_pipeline` resolvía la política de imágenes del modelo H3 a `prompt_only` y el etapa de imágenes se saltaba
+(`Shot images skipped by saved policy 'prompt_only'`): el PRE quedaba con `clip_images` vacíos y un plano determinista recibía la
+carpeta del workspace como entrada (`Error opening input file …/x-song/.`). Ahora un `comic_movie` exige siempre sus paneles.
+Comprueba que no hay otro camino (p. ej. `resume`) que reintroduzca `prompt_only` para cómics.
+
+### E8. Las «tomas nativas» de H3 fusionan planos y luego no cuadran las imágenes
+**Problema (medido):** con H3 el Director agrupa los planos en tomas de al menos ~124 fotogramas (~5,2 s; log: «Pre-segmented 30 audio
+timeline item(s) into 15 hardware-safe native shot(s)»). 30 viñetas de 3,5–4 s pasan a 15 planos, y después falla con
+`Comic movie received 30 panel images for 15 planned shots` porque las rutas de imagen no se realinean tras esa segunda fusión
+(`_prepare_provided_clip_images`, `expected_count`). Solo se evitó poniendo todos los planos a 5,3 s y pidiendo 30 planos.
+**Hacer:** realinear imágenes y planos tras `adapt_bounded_timeline`, o no fusionar paneles bloqueados por el usuario, o avisar en el
+PRE antes de preparar. **Archivos:** `app/services/director_pipeline.py` (~7853, ~8819–8928), `director_video_strategy.py`.
+**Aceptación:** un cómic con planos de 3,5 s y motor H3 llega a PRE con todas sus viñetas.
+
+### E9. LTX2 no aparece en el selector de motores de la película
+El selector filtra por `model.is_i2v` y `ltx2_22B_distilled_1_1` figura con `is_i2v: false`, aunque `director.video.comic_movie`
+lo declara compatible. Filtrar por esa capacidad, no por `is_i2v` (ver E3).
+
+### E10. La lista de ficheros de un trabajo de vídeo llega como diccionario — ARREGLADO en #741 (revisar otros consumidores)
+Un trabajo multiclip guarda `clip_output_files` como lista mientras renderiza y como diccionario `{"0": fichero}` al registrar sus
+salidas; el Director lo recorría como lista y guardaba las claves `"0"`, `"1"` como ficheros (`Comic shot 1 has no completed video
+checkpoint`). Hay `_positional_clip_outputs`; busca otros sitios que iteren `clip_output_files` sin normalizar.
+
+### E11. Tras reiniciar el servidor el PRE se pierde
+`GET /api/v1/director/pipeline/{id}` de un PRE que estaba `preview_ready` devuelve `failed` («no longer has a live worker») y pierde
+`preview_approved`, aunque la lista de pipelines lo sigue dando `preview_ready`; la interfaz entonces no lo reabre. Un PRE guardado en
+disco debe recuperarse tal cual (estado y aprobación).
+
+### E12. Los errores de ffmpeg esconden la causa
+El mensaje de un render determinista fallido era el principio del stderr (el banner de configuración de ffmpeg) y la causa
+(`Is a directory`) quedaba cortada. Muestra la **cola** del stderr y guarda el completo.
+
+### E13. La resolución de salida no es la que ofrece la interfaz
+La interfaz propone «≈720p · 1280×704 · recomendado» y la película salió a 960×544 (el tamaño de entrada del PRE). Averigua si el
+ajuste de resolución llega al pipeline; si no, es un fallo.
+
+### E14. Quién acepta una prueba
+La casilla de cada plano de prueba dice «I reviewed this exact generated clip and accept its visual quality»: es una atestación de
+quien la marca. Claude la marcó por orden explícita del usuario tras ver las seis pruebas. E5 debe registrar `accepted_via`, quien
+lo pidió y la nota, igual que `approved_via`.
+
+**Datos de esta pasada** (para la tabla de H1): PRE de 30 planos ≈ 3 min (LLM MiniMax-M3 en la nube), 6 pruebas ≈ 10 min,
+generación final ≈ 20,6 min de vídeo (8 planos I2V de ~4–5 min cada uno incluidos los 2 de la prueba reutilizados). Proyecto
+usado: `/home/ina/claude-pop-data/elon-film/elon_film2.comic.json` (script `make_film_project2.py`), película en
+`/home/ina/claude-pop-data/final/elon_musk_pelicula_comic_americano.mp4`.
