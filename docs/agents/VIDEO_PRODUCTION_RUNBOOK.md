@@ -5,6 +5,13 @@ the studio does the rest and decides by numbers what a model used to decide by w
 One `production.run` calls `audio.analyze`, `generation.music`, `generation.image`,
 `scenes.world3d.export` for `scene3d` shots, `scenes.video2d.edit`, `scenes.video2d.export`, `montages.save` and `montages.export`.
 Export stays inside that run. Do not also call `montages.export`.
+For a 3D singer, put the calibrated `slot.speech` and phonetic cues in the native
+`scene3d.document`. Set each voice/intervention's `audible: false`; the montage
+owns the song. Mouth cues use `scene time - speech.start + speech.offset`, so set
+the offset to the shot's position in the analyzed vocal track. This paints the
+built-in 2D mouth on the animated GLB; it does not use H3. Headless exports accept
+muted speech and cue-only faces; audible speech still requires the editor's audio
+export path. Leave the H3-only `sing` flag unset on these scene3d shots.
 Call `production.plan` with the eight-field brief when you do not already have a spec. It returns the spec. Then `production.run`.
 
 ## Call order
