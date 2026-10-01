@@ -92,7 +92,7 @@ def _face_placement(face):
 def _face_style(value):
     if "atlas" in value:
         source_ref(value["atlas"])
-    for key in ("clean", "blink", "eyes"):
+    for key in ("clean", "blink", "eyes", "morph"):
         if key in value and type(value[key]) is not bool:
             raise ValueError("Invalid face switch.")
     if "strength" in value and (type(value["strength"]) not in (int, float) or not 0 <= value["strength"] <= 1.5):
@@ -105,7 +105,7 @@ def _face_style(value):
 
 
 def face_settings(value):
-    allowed = {"face", "atlas", "strength", "clean", "style", "lip", "expression", "blink", "eyes"}
+    allowed = {"face", "atlas", "strength", "clean", "morph", "style", "lip", "expression", "blink", "eyes"}
     if not isinstance(value, dict) or not isinstance(value.get("face"), dict) or not set(value).issubset(allowed):
         raise ValueError("Only face settings may be stored.")
     _face_placement(value["face"])

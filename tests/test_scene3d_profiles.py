@@ -52,3 +52,21 @@ def test_bold_cartoon_profile_preserves_other_character_and_legacy_style(tmp_pat
     assert client.put(BASE + DIGEST, json=bold).status_code == 200
     assert client.get(BASE + DIGEST, params={"workspace": "song"}).json()["settings"] == bold["settings"]
     assert client.get(BASE + other_digest, params={"workspace": "song"}).json()["settings"] == legacy["settings"]
+
+
+def test_contour_morph_switch_survives_profiles_without_changing_other_models(tmp_path):
+    client = client_for(tmp_path)
+    other = "b" * 64
+    legacy = {"workspace": "song", "revision": 0, "settings": {"face": FACE}}
+    assert client.put(BASE + other, json=legacy).status_code == 200
+    for morph in (1, "true", None):
+        invalid = {**legacy, "settings": {"face": FACE, "morph": morph}}
+        assert client.put(BASE + DIGEST, json=invalid).status_code == 422
+    selected = {**legacy, "settings": {"face": FACE, "morph": True}}
+    assert client.put(BASE + DIGEST, json=selected).status_code == 200
+    assert client.get(BASE + DIGEST, params={"workspace": "song"}).json()["settings"] == selected["settings"]
+    selected["revision"] = 1
+    selected["settings"]["morph"] = False
+    assert client.put(BASE + DIGEST, json=selected).status_code == 200
+    assert client.get(BASE + DIGEST, params={"workspace": "song"}).json()["settings"]["morph"] is False
+    assert client.get(BASE + other, params={"workspace": "song"}).json()["settings"] == legacy["settings"]

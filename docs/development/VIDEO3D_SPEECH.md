@@ -67,6 +67,23 @@ un plano que comienza en 45,5 s usa 45,6 para probar un adelanto de 100 ms.
 Si la canción ya suena en el montaje, se mantiene `audible: false`; así este
 ajuste mueve únicamente la boca y no duplica ni desplaza el audio.
 
+**Deformar contorno de labios** activa `speech.morph: true` para ese sujeto.
+Reutiliza el adaptador del Lips Creator: ambos dibujos se redimensionan sobre
+un único contorno interpolado antes de mezclar sus colores, evitando que los
+labios se atenúen por superponer dos formas distintas. Funciona con los atlas
+procedurales y atlas importados de nueve columnas con transparencia; una celda
+sin contorno válido se muestra directamente. Se guarda con la calibración del
+modelo y el documento, y conserva el reloj, recorte y adelanto de gestos.
+La vista previa, el seek y la exportación muestrean la misma transición de 45 ms
+por tiempo de escena; no dependen del orden de render ni del reloj del navegador.
+Las escenas existentes conservan la mezcla anterior si no activan esta opción.
+
+Para revisar labios pequeños, omite `renderLook: "n64"` y el `pixelWorld` de
+reducción: el filtro N64 usa una altura efectiva de 240 píxeles. El exportador
+3D admite hasta 1920×1080; `production.run` monta a 1080p y 24 fps. Acercar la
+cámara a plano medio o primer plano conserva detalle de boca que un plano
+general pierde incluso sin filtro. La geometría y texturas del GLB se mantienen.
+
 Audio y atlas usan `Scene3DSourceRef`. Los gestos viven en el reloj del audio:
 `tiempo de escena - inicio + recorte`. Hasta 32 intervenciones por personaje;
 se rechazan solapamientos. Una canción común se conserva en la pista de escena

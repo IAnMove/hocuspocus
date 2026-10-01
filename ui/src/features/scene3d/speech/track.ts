@@ -42,12 +42,14 @@ export function validFace(value: unknown): value is FacePlacement {
     && vector(eyes.size, 2, .00001, 10000) && vector(eyes.skinLeft, 3, 0, 1) && vector(eyes.skinRight, 3, 0, 1)
 }
 function speechAppearance(data: Record<string, unknown>, defaults: Scene3DSpeech) {
+  if (data.morph !== undefined && typeof data.morph !== 'boolean') throw new Error('Invalid mouth morph switch.')
   return { clean: data.clean !== false,
+    ...(data.morph !== undefined ? { morph: data.morph } : {}),
     style: data.style === 'toon' || data.style === 'toon-bold' || data.style === 'pixel' ? data.style : 'soft',
     driver: data.driver === 'rhubarb' || data.driver === 'rhubarb-vocals' || data.driver === 'amplitude' ? data.driver : 'imported',
     lip: typeof data.lip === 'string' && /^#[0-9a-f]{6}$/i.test(data.lip) ? data.lip : defaults.lip,
     expression: EXPRESSIONS.includes(data.expression as typeof EXPRESSIONS[number]) ? data.expression as typeof EXPRESSIONS[number] : 'neutral',
-    blink: data.blink !== false, eyes: data.eyes !== false } as Pick<Scene3DSpeech, 'clean' | 'style' | 'driver' | 'lip' | 'expression' | 'blink' | 'eyes'>
+    blink: data.blink !== false, eyes: data.eyes !== false } as Pick<Scene3DSpeech, 'clean' | 'morph' | 'style' | 'driver' | 'lip' | 'expression' | 'blink' | 'eyes'>
 }
 
 function speechRange(data: Record<string, unknown>) {

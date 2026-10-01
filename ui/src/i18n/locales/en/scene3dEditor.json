@@ -127,6 +127,7 @@
     "mesh": "Face mesh",
     "skin": "Skin color",
     "clean": "Cover original mouth",
+    "morph": "Deform lip contours",
     "strength": "Opening",
     "style": "Mouth art",
     "soft": "Soft",
