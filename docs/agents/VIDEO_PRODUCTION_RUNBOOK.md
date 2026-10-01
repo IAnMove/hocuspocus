@@ -518,16 +518,19 @@ new project.
 
 ## Producers link before the worker
 
-`production.run` binds the given `production_id` before it starts the thread.
-The same id returns the same Story. Pass `project: {kind, id}` only when that
-Story or episode already exists; an unknown id is HTTP 422 and the thread does
-not start. `dry_run` does not create a project.
+`production.run` binds the given `production_id` after the slot is free and
+before it starts the thread. The same id returns the same Story. Pass
+`project: {kind, id}` only when that Story or episode already exists; an
+unknown id is HTTP 422 and the thread does not start. A concurrent shot or
+song edit is HTTP 409 and does not rewrite the production file. `dry_run`
+does not create a project.
 
 Director `start_pipeline` binds the pipeline id before the worker. A second
 start of that id does not create another Story. `provenance.project_id` is not
 read as a Story id.
 
 Series episode render binds that episode after the request is accepted and
-before the worker starts. A refused render does not create a project. The link
-does not create a Story and it does not rewrite the series library. Tokens for
-this link are not available from the client.
+before the episode is marked `rendering` or the queue is persisted. A refused
+render does not create a project. A failed bind does not leave a queued job
+without a worker. The link does not create a Story and it does not rewrite
+the series library. Tokens for this link are not available from the client.
