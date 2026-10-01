@@ -3,6 +3,33 @@ import { speechApp, openSpeech, saveSpeech, seekSpeech } from '../helpers/speech
 import { speechFixture, speechTestGlb } from '../helpers/speechAssets'
 import { closeApp } from '../helpers/gotoApp'
 
+test('contour morph stays with one speaker and renders the same native pixels after seeking backwards', async ({ page }, info) => {
+  const app = await speechApp(page), doc = speechFixture(true)
+  doc.slots[0].speech = { ...doc.slots[0].speech!, clips: undefined, style: 'toon-bold', lip: '#ffe9a3',
+    cues: [{ start: 0, end: .2, viseme: 'M' }, { start: .2, end: 1, viseme: 'A' }] }
+  await openSpeech(page, doc)
+  await page.getByRole('button', { name: 'Edit lips', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'Deform lip contours' }).check()
+  const saved = await saveSpeech(page, info, 'contour-morph')
+  expect(saved.slots[0].speech?.morph).toBe(true)
+  expect(saved.slots[1].speech).toEqual(doc.slots[1].speech)
+  const pixels = await page.evaluate(document => {
+    const stage = (window as unknown as { __world3dStage: { paint: (seconds: number, doc: typeof document) => HTMLCanvasElement } }).__world3dStage
+    const capture = (seconds: number, morph: boolean) => {
+      const value = structuredClone(document); value.slots[0].speech!.morph = morph
+      return stage.paint(seconds, value).toDataURL()
+    }
+    const times = [.1, .21, .2225, .235, .3, .8]
+    return { forward: times.map(time => capture(time, true)), backward: [...times].reverse().map(time => capture(time, true)).reverse(),
+      crossfade: capture(.2225, false) }
+  }, saved)
+  expect(pixels.backward).toEqual(pixels.forward)
+  expect(pixels.forward[0]).not.toEqual(pixels.forward.at(-1))
+  expect(pixels.forward[2]).not.toEqual(pixels.crossfade)
+  await info.attach('contour-morph.png', { body: await page.screenshot(), contentType: 'image/png' })
+  await closeApp(page, app.session)
+})
+
 test('place lips on the selected surface, retry a miss and cancel without changing placement', async ({ page }, info) => {
   test.setTimeout(90_000)
   const app = await speechApp(page), doc = speechFixture()

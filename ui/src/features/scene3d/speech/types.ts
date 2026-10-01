@@ -34,6 +34,8 @@ export type Scene3DSpeech = {
   gain: number
   strength: number
   clean: boolean
+  /** Deform lip contours with the Lips Creator adapter instead of crossfading sprites. */
+  morph?: boolean
   style: 'soft' | 'toon' | 'toon-bold' | 'pixel'
   lip: string
   expression: Expression

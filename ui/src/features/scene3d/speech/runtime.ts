@@ -1,6 +1,7 @@
 import { Mesh, MeshStandardMaterial, SRGBColorSpace, TextureLoader, type BufferGeometry, type Object3D, type Texture } from 'three'
 import { EXPRESSIONS, blinkAt } from './eyes'
 import { createAtlas, faceMaterial } from './mouths'
+import { MouthAtlasMorph } from './mouthMorph'
 import { faceMeshes } from './calibration'
 import { expressionAt, mouthAt } from './track'
 import type { Scene3DSpeech } from './types'
@@ -11,6 +12,7 @@ export class SpeechFaceRuntime {
   private mesh?: Mesh<BufferGeometry, MeshStandardMaterial>
   private original?: MeshStandardMaterial
   private atlas?: Texture
+  private morph?: MouthAtlasMorph
   private revision = 0
   ready = true
   error?: Error
@@ -21,6 +23,7 @@ export class SpeechFaceRuntime {
     this.revision++
     if (this.mesh && this.original) this.mesh.material = this.original
     this.binding?.material.dispose()
+    this.morph?.dispose(); this.morph = undefined
     this.atlas?.dispose()
     this.binding = undefined; this.mesh = undefined; this.original = undefined; this.atlas = undefined
     this.ready = true; this.error = undefined
@@ -48,6 +51,7 @@ export class SpeechFaceRuntime {
               texture.dispose(); this.error = new Error('Mouth atlas must contain 9 square tiles (maximum 512 px each).'); return
             }
             texture.colorSpace = SRGBColorSpace; texture.generateMipmaps = false
+            this.morph?.dispose(); this.morph = undefined
             this.atlas?.dispose(); this.atlas = texture; this.binding!.uniforms.mouthAtlas.value = texture; this.ready = true; this.redraw()
           }, undefined, () => { if (revision === this.revision) this.error = new Error('Mouth atlas could not be loaded.') })
         }
@@ -57,11 +61,22 @@ export class SpeechFaceRuntime {
     const u = this.binding.uniforms, f = speech.face, m = mouthAt(speech, seconds), e = EXPRESSIONS[expressionAt(speech, seconds)]
     u.faceCenter.value.fromArray(f.center); u.faceSize.value.fromArray(f.size); u.skinColor.value.fromArray(f.skin)
     u.cleanSkin.value = speech.clean ? 1 : 0; u.mouthStrength.value = speech.strength
-    u.mouthA.value = m.a; u.mouthB.value = m.b; u.mouthMix.value = m.mix
+    this.sampleMouth(speech, m)
     u.eyeLeft.value.fromArray(f.eyes.left); u.eyeRight.value.fromArray(f.eyes.right); u.eyeSize.value.fromArray(f.eyes.size)
     u.eyeSkinLeft.value.fromArray(f.eyes.skinLeft); u.eyeSkinRight.value.fromArray(f.eyes.skinRight)
     u.eyesEnabled.value = speech.eyes ? 1 : 0; u.eyeExpression.value.fromArray(e.values); u.eyeBrows.value = e.brows
     u.eyeBlink.value = speech.blink ? blinkAt(seconds) : 0
+  }
+  private sampleMouth(speech: Scene3DSpeech, pose: ReturnType<typeof mouthAt>) {
+    const u = this.binding!.uniforms
+    if (speech.morph) {
+      this.morph ??= new MouthAtlasMorph(this.atlas!)
+      this.morph.sample(pose); u.mouthAtlas.value = this.morph.texture
+      u.mouthA.value = 0; u.mouthB.value = 0; u.mouthMix.value = 1
+    } else {
+      u.mouthAtlas.value = this.atlas!
+      u.mouthA.value = pose.a; u.mouthB.value = pose.b; u.mouthMix.value = pose.mix
+    }
   }
   dispose() { this.clear(); this.key = '' }
 }

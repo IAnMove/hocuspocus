@@ -127,6 +127,7 @@
     "mesh": "Malla facial",
     "skin": "Color de piel",
     "clean": "Cubrir boca original",
+    "morph": "Deformar contorno de labios",
     "strength": "Apertura",
     "style": "Dibujo de boca",
     "soft": "Suave",

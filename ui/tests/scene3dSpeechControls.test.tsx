@@ -31,6 +31,12 @@ test('face controls offer thick cartoon lips for the selected character', async 
     assert.equal(changed?.style, 'toon-bold')
     assert.equal(changed?.face, original.face)
     assert.equal(original.style, 'soft')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Deform lip contours' }))
+    assert.equal(changed?.morph, true)
+    assert.equal(changed?.face, original.face)
+    assert.deepEqual(changed?.cues, original.cues)
+    assert.equal(changed?.offset, original.offset)
+    assert.equal(original.morph, undefined)
   } finally { cleanup() }
 })
 
