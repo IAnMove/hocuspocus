@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
 from typing import Any
 
 from services.production_shot_review import history_entry, load_review, record_decision
@@ -240,6 +241,9 @@ def _restore_music(workspace_dir: str, document: dict, shot_id: str, snap: dict)
     if "clip" in snap:
         shot["clip"] = snap.get("clip")
     _put_bool(shot, "video_stale", snap.get("video_stale"))
+    if "montage_source" in snap:
+        _restore_montage(workspace_dir, document.get("montage"), shot_id, snap)
+        return
     if "video_stale" in snap:
         _mark_montage(workspace_dir, document.get("montage"), shot_id, stale=snap.get("video_stale") is True)
 
@@ -373,6 +377,26 @@ def _montage_path(workspace_dir: str, production_id: str) -> str | None:
 
 
 def _mark_montage(workspace_dir: str, name: Any, shot_id: str, *, stale: bool) -> None:
+    def apply(clip: dict) -> None:
+        clip["video_stale"] = stale
+
+    _rewrite_montage(workspace_dir, name, shot_id, apply)
+
+
+def _restore_montage(workspace_dir: str, name: Any, shot_id: str, snap: dict) -> None:
+    def apply(clip: dict) -> None:
+        source = snap.get("montage_source")
+        if source is None:
+            clip.pop("source", None)
+        else:
+            clip["source"] = source
+        if "video_stale" in snap:
+            _put_bool(clip, "video_stale", snap.get("video_stale"))
+
+    _rewrite_montage(workspace_dir, name, shot_id, apply)
+
+
+def _rewrite_montage(workspace_dir: str, name: Any, shot_id: str, apply: Callable[[dict], None]) -> None:
     safe = _safe(name)
     if safe is None or not safe.endswith(".montage.json"):
         return
@@ -386,7 +410,7 @@ def _mark_montage(workspace_dir: str, name: Any, shot_id: str, *, stale: bool) -
         clip = _montage_clip(document, shot_id)
     except ActionError:
         return
-    clip["video_stale"] = stale
+    apply(clip)
     _bump(document)
     _save(path, document)
 
