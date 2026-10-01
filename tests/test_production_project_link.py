@@ -251,6 +251,68 @@ def test_status_and_catalog_keep_one_row_for_one_work(tmp_path: Path):
     assert "/" not in json.dumps(by_id[linked["production_id"]]["preview"])
 
 
+def test_resolve_retry_does_not_clobber_a_live_production_file(tmp_path: Path):
+    root = tmp_path / "film"
+    root.mkdir()
+    first = _resolve(root)
+    path = root / f"{first['production_id']}.production.json"
+    live = json.loads(path.read_text(encoding="utf-8"))
+    live.update(
+        status="running",
+        clips={"verse1": {"file": "verse1.mp4", "qa": {"best_r": 0.41}}},
+        frames={"verse1": "verse1.png"},
+        scenes={"verse1": {"file": "verse1-scene.mp4", "dur": 4.0}},
+    )
+    path.write_text(json.dumps(live), encoding="utf-8")
+
+    import services.production_project_link as link_module
+
+    original_read = link_module._read_json
+    first_read = {"done": False}
+
+    def race(target):
+        body = original_read(target)
+        if target == str(path) and not first_read["done"] and isinstance(body, dict) and body.get("status") == "running":
+            first_read["done"] = True
+            newer = dict(body)
+            newer["clips"] = {**body["clips"], "chorus": {"file": "chorus.mp4"}}
+            path.write_text(json.dumps(newer), encoding="utf-8")
+        return body
+
+    link_module._read_json = race
+    try:
+        again = _resolve(root)
+    finally:
+        link_module._read_json = original_read
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert again["production_id"] == first["production_id"]
+    assert after["status"] == "running"
+    assert after["clips"]["verse1"]["file"] == "verse1.mp4"
+    assert after["clips"]["chorus"]["file"] == "chorus.mp4"
+    assert after["scenes"]["verse1"]["file"] == "verse1-scene.mp4"
+
+
+def test_resolve_copies_project_onto_a_legacy_file_without_dropping_clips(tmp_path: Path):
+    root = tmp_path / "film"
+    root.mkdir()
+    first = _resolve(root)
+    path = root / f"{first['production_id']}.production.json"
+    path.write_text(json.dumps({
+        "status": "running",
+        "spec": {"title": "Night bus", "song": {"lyrics": "x"}},
+        "clips": {"verse1": {"file": "verse1.mp4"}},
+    }), encoding="utf-8")
+    again = _resolve(root)
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert again["production_id"] == first["production_id"]
+    assert after["status"] == "running"
+    assert after["clips"] == {"verse1": {"file": "verse1.mp4"}}
+    assert after["project"] == first["project"]
+    assert after["intent_id"] == first["intent_id"]
+    assert after["spec"]["song"] == {"lyrics": "x"}
+
+
 def test_http_resolve_retry_and_unknown_workspace(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()
