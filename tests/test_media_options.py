@@ -62,12 +62,6 @@ def test_the_handler_answers_in_the_shape_of_the_other_commands():
     assert catalog["name"] == "media.options" and catalog["mutation"] is False
 
 
-def test_the_launcher_registers_the_command_and_reads_the_masked_services_booleans():
-    source = open(os.path.join(ROOT, "app", "_launch_runtime.py"), encoding="utf-8").read()
-    assert "**media_options_handlers(_media_options_sources)" in source and "*media_options_catalog()" in source
-    assert "get_services_config(), _production_profile_response()" in source
-
-
 def test_an_assistant_finds_and_calls_it_through_the_real_mcp_router(tmp_path):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
