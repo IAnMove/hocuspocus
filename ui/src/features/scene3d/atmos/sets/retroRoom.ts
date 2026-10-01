@@ -13,14 +13,19 @@ import {
   PlaneGeometry,
   type Material,
   type Side,
+  MeshStandardMaterial,
+  PointLight,
+  type Texture,
 } from 'three'
 import type { AtmosHandle } from './clearing.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
 import { hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT } from '../layout.ts'
+import { composeGeometry, type Piece } from './kit.ts'
+import { plankTexture, wallpaperTexture } from '../textures.ts'
 
-type Kept = { geometries: BufferGeometry[]; materials: Material[] }
+type Kept = { geometries: BufferGeometry[]; materials: Material[]; textures: Texture[] }
 type Part = {
   at: [number, number, number]
   scale: [number, number, number]
@@ -67,7 +72,7 @@ const LOW_EYE = [0.28, 0.44, 1.72] as const
 const LOW_LOOK = [-0.55, 0.88, -3.55] as const
 
 function emptyKept(): Kept {
-  return { geometries: [], materials: [] }
+  return { geometries: [], materials: [], textures: [] }
 }
 
 function hexColor(color: string): [number, number, number] {
@@ -101,6 +106,7 @@ function disposeKept(root: Group, kept: Kept) {
   root.removeFromParent()
   for (const geometry of kept.geometries) geometry.dispose()
   for (const material of kept.materials) material.dispose()
+  for (const texture of kept.textures) texture.dispose()
 }
 
 function idleHandle(root: Group, kept: Kept): AtmosHandle {
@@ -308,7 +314,7 @@ function paintScreen(root: Group, palette: string, variant: number | undefined) 
 function tintNamed(root: Group, name: string, hex: string, gain: number) {
   const mesh = root.getObjectByName(name) as Mesh | undefined
   const material = mesh?.material
-  if (material instanceof MeshBasicMaterial) material.color.set(hex).multiplyScalar(gain)
+  if (material instanceof MeshBasicMaterial || material instanceof MeshStandardMaterial) material.color.set(hex).multiplyScalar(gain)
 }
 
 function paintRoom(root: Group, palette: string, time: string) {
@@ -333,11 +339,25 @@ function syncFog(root: Group, settings: AtmosSettings) {
   if (parent.background instanceof Color) parent.background.set(hex)
 }
 
+/** Swap a flat unlit surface for a lit, textured one that keeps its colour, side and name. */
+function litSurface(mesh: Mesh | InstancedMesh, kept: Kept, texture: Texture | null, repeat: [number, number]) {
+  const old = mesh.material as MeshBasicMaterial
+  if (texture) {
+    texture.repeat.set(repeat[0], repeat[1])
+    kept.textures.push(texture)
+  }
+  const mat = new MeshStandardMaterial({ color: old.color.clone(), map: texture, roughness: 0.92, side: old.side })
+  mesh.material = mat
+  kept.materials.push(mat)
+}
+
 function addShell(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const floor = addPlane(root, kept, 'atmos-floor', swatch(FLOOR, resolved.palette), 6.7, 9.4, [0, 0, 0.35], -Math.PI / 2)
   floor.frustumCulled = false
+  litSurface(floor, kept, plankTexture(resolved.seed), [6.7, 9.4])
   const walls = addBoxes(root, kept, 'atmos-wall', swatch(WALL, resolved.palette), wallParts(), DoubleSide)
   walls.frustumCulled = false
+  litSurface(walls, kept, wallpaperTexture(resolved.seed), [3.5, 1])
   const ceiling = addPlane(root, kept, 'atmos-ceiling', swatch(CEILING, resolved.palette), 6.7, 9.4, [0, 2.7, 0.35], Math.PI / 2, 0, DoubleSide)
   ceiling.frustumCulled = false
   addBoxes(root, kept, 'atmos-trim', swatch(WOOD, resolved.palette), trimParts())
@@ -363,7 +383,64 @@ function addController(root: Group, kept: Kept) {
   addBoxes(root, kept, 'atmos-controller', '#d7dae2', controllerParts())
 }
 
+const SPINES = ['#d24a3a', '#3a6ad2', '#e6c43a', '#4aa86a', '#8a8f9a', '#7a4ad2']
+
+/** A bookshelf of cartridges, bean bag, plant, curtains, framed pictures and a floor lamp, merged into one mesh. */
+function decorPieces(seed: number): Piece[] {
+  const pieces: Piece[] = [
+    { type: 'box', at: [-3.33, 0.95, -1.2], size: [0.03, 1.9, 1.44], color: '#6b4a2e' },
+    { type: 'box', at: [-3.17, 0.95, -1.9], size: [0.36, 1.9, 0.04], color: '#8a5a34' },
+    { type: 'box', at: [-3.17, 0.95, -0.5], size: [0.36, 1.9, 0.04], color: '#8a5a34' },
+    { type: 'sphere', at: [2.5, 0.3, -1.4], size: [1.0, 0.62, 0.95], color: '#d24a3a' },
+    { type: 'cylinder', at: [2.9, 0.18, -3.95], size: [0.34, 0.36, 0.34], color: '#a8573a' },
+    { type: 'box', at: [3.25, 1.45, -0.78], size: [0.06, 1.45, 0.34], color: '#a8453a' },
+    { type: 'box', at: [3.25, 1.45, 0.38], size: [0.06, 1.45, 0.34], color: '#a8453a' },
+    { type: 'cylinder', at: [3.25, 2.2, -0.2], size: [0.04, 1.4, 0.04], turn: [Math.PI / 2, 0, 0], color: '#3a2a1c' },
+    { type: 'cylinder', at: [-0.6, 0.02, -3.95], size: [0.26, 0.04, 0.26], color: '#2a2a2a' },
+    { type: 'cylinder', at: [-0.6, 0.77, -3.95], size: [0.03, 1.5, 0.03], color: '#2a2a2a' },
+    { type: 'cone', at: [-0.6, 1.62, -3.95], size: [0.42, 0.34, 0.42], color: '#f2d9a0' },
+  ]
+  for (const y of [0.02, 0.5, 0.95, 1.4, 1.88]) pieces.push({ type: 'box', at: [-3.17, y, -1.2], size: [0.36, 0.04, 1.44], color: '#8a5a34' })
+  for (const [row, y] of [0.04, 0.52, 0.97, 1.42].entries()) {
+    for (let i = 0; i < 10; i += 1) {
+      const h = 0.18 + hash2(row * 10 + i, 3, seed) * 0.14
+      pieces.push({ type: 'box', at: [-3.17, y + h / 2 + 0.02, -1.83 + i * 0.14], size: [0.22, h, 0.1], color: SPINES[Math.floor(hash2(row * 10 + i, 4, seed) * SPINES.length)] })
+    }
+  }
+  for (let k = 0; k < 5; k += 1) {
+    const a = k * 1.26
+    pieces.push({ type: 'cone', at: [2.9 + Math.cos(a) * 0.12, 0.62, -3.95 + Math.sin(a) * 0.12], size: [0.22, 0.75, 0.22], turn: [Math.sin(a) * 0.45, 0, -Math.cos(a) * 0.45], color: '#3f8a4a' })
+  }
+  for (const [x, y, inner] of [[-0.9, 1.75, '#e8c25a'], [0.1, 1.55, '#4a8ad2'], [1.1, 1.8, '#d24a3a']] as const) {
+    pieces.push({ type: 'box', at: [x, y, -4.32], size: [0.55, 0.42, 0.03], color: '#2a2018' })
+    pieces.push({ type: 'box', at: [x, y, -4.3], size: [0.45, 0.32, 0.035], color: inner })
+  }
+  return pieces
+}
+
+function addDecor(root: Group, kept: Kept, seed: number) {
+  const geo = composeGeometry(decorPieces(seed))
+  const mat = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 })
+  const mesh = new Mesh(geo, mat)
+  mesh.name = 'atmos-decor'
+  addMesh(root, kept, mesh)
+  kept.materials.push(mat)
+}
+
+/** The lamp warms the room; the TV washes it in phosphor and flickers with the picture. */
+function addLights(root: Group, resolved: ResolvedAtmos) {
+  const lamp = new PointLight(0xffc98a, 6, 9, 2)
+  lamp.name = 'atmos-lamp-light'
+  lamp.position.set(-0.6, 1.2, -3.5)
+  const tube = new PointLight(new Color(swatch(PHOSPHOR, resolved.palette)), 7, 8, 2)
+  tube.name = 'atmos-crt-light'
+  tube.position.set(SCREEN_X, SCREEN_Y, SCREEN_Z + 0.9)
+  root.add(lamp, tube)
+}
+
 function addDressing(root: Group, resolved: ResolvedAtmos, kept: Kept) {
+  addDecor(root, kept, resolved.seed)
+  addLights(root, resolved)
   addPlane(root, kept, 'atmos-poster', swatch(POSTER, resolved.palette), 0.62, 0.86, [-3.28, 1.5, -1.6], 0, Math.PI / 2)
   addPlane(root, kept, 'atmos-window', '#1c2436', 0.9, 0.7, [3.28, 1.55, -0.2], 0, -Math.PI / 2)
   addBoxes(root, kept, 'atmos-lamp', '#2a261c', [{ at: [-0.2, 2.58, -2.2], scale: [0.55, 0.06, 0.28] }])
@@ -371,6 +448,11 @@ function addDressing(root: Group, resolved: ResolvedAtmos, kept: Kept) {
 
 function syncRoom(root: Group, seconds: number, resolved: ResolvedAtmos, live?: AtmosSettings) {
   const settings = live ?? resolved
+  const tube = root.getObjectByName('atmos-crt-light') as PointLight | undefined
+  if (tube) {
+    tube.intensity = 7 * screenGain(settings.variant) * (0.84 + 0.16 * Math.sin(seconds * 31 + Math.sin(seconds * 7)))
+    tube.color.set(swatch(PHOSPHOR, settings.palette))
+  }
   paintScreen(root, settings.palette, settings.variant)
   paintRoom(root, settings.palette, settings.timeOfDay)
   const snow = root.getObjectByName('atmos-static') as InstancedMesh | undefined

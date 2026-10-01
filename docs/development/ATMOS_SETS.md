@@ -310,6 +310,11 @@ The first sets of the library used unlit flat colours, cones for mountains and b
 - `boulders`: faceted rocks in one instanced draw call, tinted from a short palette.
 - `ridge`: layered low-poly mountain silhouettes behind the scene. Far layers fade toward a haze colour, so depth reads without a depth-of-field pass. `backdropRidge` colours it from the set's resolved ground and fog; keep its radius times 1.22 for each extra layer inside the sky sphere (26–28 m in most sets).
 
+- `composeGeometry`: many coloured primitives (box, sphere, cylinder, cone) merged into ONE geometry with vertex colours, so a room's furniture or a roof's clutter costs one draw call. Pair it with `MeshStandardMaterial({ vertexColors: true, flatShading: true })`.
+- `skylineLayers`: rings of night towers whose lit windows come from `facadeTexture`; unlit, so far layers fade with the fog.
+
+Interiors got there with lit surfaces (`plankTexture`, `wallpaperTexture`) and a couple of point lights instead of unlit colours. The test mesh budget (`draws < 20`) is why props are merged.
+
 A set that uses `retainTexture` or `paintedTerrain` must dispose `kept.textures` with its geometries and materials.
 
 Upgraded with it so far:
@@ -322,6 +327,9 @@ Upgraded with it so far:
 | `atmos-desert`, `atmos-snow`, `atmos-temple` | Nothing behind the middle ground | `backdropRidge`: dune ranges, snowy mountains and jungle hills fading into the fog |
 | `atmos-reef` | Opaque white bubbles as big as the fish, flat rocks, single-cone coral | Small translucent bubbles, lit faceted rocks, branching coral, a far reef wall |
 | `atmos-space-ring` | Regular flat-white solids as asteroids | Lumpy lit asteroids |
+| `atmos-retro-room` | Flat beige box with a few tiny props | Lit plank floor and striped wallpaper, a shelf of cartridges, bean bag, plant, curtains, framed pictures, a floor lamp, a warm lamp light and a phosphor light that flickers with the picture |
+| `atmos-neon-rain` | Solid dark walls, solid colour signs, rain as thick white bars, grey blobs of steam | Facades with brick and lit windows, signs with dark lettering bars and tube outlines, thin translucent rain, soft steam |
+| `atmos-rooftop-night` | Flat slab and one row of towers | Three layers of far towers with lit windows fading into haze, parapet, AC units, water tank on legs, vents and a mast |
 
 ## Set 18 — `atmos-silicon-grid`
 

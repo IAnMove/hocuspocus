@@ -1,12 +1,21 @@
 import {
+  BoxGeometry,
   BufferGeometry,
   Color,
+  ConeGeometry,
+  CylinderGeometry,
+  Euler,
+  Matrix4,
+  Quaternion,
+  SphereGeometry,
+  Vector3,
   Float32BufferAttribute,
   Group,
   IcosahedronGeometry,
   InstancedMesh,
   Material,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
@@ -14,7 +23,8 @@ import {
   type Texture,
 } from 'three'
 import { fbm2, hash2 } from '../noise.ts'
-import { terrainTexture, type TerrainPaint } from '../textures.ts'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { facadeTexture, terrainTexture, type TerrainPaint } from '../textures.ts'
 
 /** What every set already tracks for disposal. `textures` is created on first use. */
 export type KitKept = { geometries: BufferGeometry[]; materials: Material[]; textures?: Texture[] }
@@ -179,4 +189,97 @@ export function backdropRidge(root: Group, kept: KitKept, resolved: { stone: str
     seed: resolved.seed, count: options.count ?? 11, radius: options.radius ?? 17, height: options.height, width: options.width,
     color: near, haze: resolved.fogColor, layers: options.layers ?? 2, arc: options.arc,
   })
+}
+
+export type Piece = {
+  type: 'box' | 'sphere' | 'cylinder' | 'cone'
+  at: readonly [number, number, number]
+  size: readonly [number, number, number]
+  turn?: readonly [number, number, number]
+  color: string
+}
+
+function primitive(type: Piece['type']): BufferGeometry {
+  if (type === 'box') return new BoxGeometry(1, 1, 1)
+  if (type === 'sphere') return new SphereGeometry(0.5, 8, 6)
+  if (type === 'cylinder') return new CylinderGeometry(0.5, 0.5, 1, 8)
+  return new ConeGeometry(0.5, 1, 8)
+}
+
+/** Many coloured primitives as ONE geometry (one draw call). Use with `MeshStandardMaterial({ vertexColors: true, flatShading: true })`. */
+export function composeGeometry(pieces: readonly Piece[]): BufferGeometry {
+  const parts = pieces.map(piece => {
+    const geo = primitive(piece.type).toNonIndexed()
+    const turn = piece.turn ?? [0, 0, 0]
+    geo.applyMatrix4(new Matrix4().compose(
+      new Vector3(...piece.at),
+      new Quaternion().setFromEuler(new Euler(turn[0], turn[1], turn[2])),
+      new Vector3(...piece.size),
+    ))
+    const rgb = new Color(piece.color)
+    const count = geo.getAttribute('position').count
+    const colors = new Float32Array(count * 3)
+    for (let i = 0; i < count; i += 1) {
+      colors[i * 3] = rgb.r
+      colors[i * 3 + 1] = rgb.g
+      colors[i * 3 + 2] = rgb.b
+    }
+    geo.setAttribute('color', new Float32BufferAttribute(colors, 3))
+    geo.deleteAttribute('uv')
+    return geo
+  })
+  const merged = mergeGeometries(parts)
+  parts.forEach(part => part.dispose())
+  merged.computeVertexNormals()
+  return merged
+}
+
+export type SkylineOptions = {
+  seed: number
+  count: number
+  radius: number
+  height: readonly [number, number]
+  width: readonly [number, number]
+  layers?: number
+  arc?: number
+  /** Body colour of the nearest layer; far layers fade toward `haze`. Windows glow regardless. */
+  body: string
+  haze: string
+}
+
+/** Rings of night towers whose lit windows come from `facadeTexture`. Unlit, so far layers fade with the scene fog. */
+export function skylineLayers(root: Group, kept: KitKept, options: SkylineOptions): InstancedMesh {
+  const layers = options.layers ?? 3
+  const glow = facadeTexture(options.seed, true)
+  if (glow) {
+    glow.repeat.set(1.5, 4)
+    retainTexture(kept, glow)
+  }
+  const geo = new BoxGeometry(1, 1, 1)
+  const mat = new MeshBasicMaterial({ color: 0xffffff, map: glow })
+  const mesh = new InstancedMesh(geo, mat, options.count * layers)
+  mesh.name = 'atmos-skyline'
+  mesh.frustumCulled = false
+  const dummy = new Object3D()
+  const arc = options.arc ?? 1.1
+  for (let layer = 0; layer < layers; layer += 1) {
+    for (let k = 0; k < options.count; k += 1) {
+      const i = layer * options.count + k
+      const angle = (k / (options.count - 1) - 0.5) * 2 * arc + (hash2(i, 81, options.seed) - 0.5) * 0.08
+      const radius = options.radius + layer * 7 + (hash2(i, 82, options.seed) - 0.5) * 2
+      const h = options.height[0] + hash2(i, 83, options.seed) * (options.height[1] - options.height[0]) * (1 + layer * 0.15)
+      const w = options.width[0] + hash2(i, 84, options.seed) * (options.width[1] - options.width[0])
+      dummy.position.set(Math.sin(angle) * radius, h / 2 - 0.5, -Math.cos(angle) * radius)
+      dummy.scale.set(w, h, w * 0.9)
+      dummy.rotation.set(0, -angle, 0)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+      mesh.setColorAt(i, new Color(options.body).lerp(new Color(options.haze), Math.min(0.8, layer * 0.32)).multiplyScalar(1 + hash2(i, 85, options.seed) * 0.3))
+    }
+  }
+  mesh.instanceMatrix.needsUpdate = true
+  root.add(mesh)
+  kept.geometries.push(geo)
+  kept.materials.push(mat)
+  return mesh
 }
