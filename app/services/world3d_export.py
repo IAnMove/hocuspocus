@@ -315,7 +315,16 @@ def _has_sound(document: dict) -> bool:
         return True
     if document.get("soundtrack"):
         return True
-    return any(isinstance(slot, dict) and slot.get("speech") for slot in document.get("slots") or [])
+    # Match sceneVoiceTracks: painted, muted visemes need no audio encoder.
+    for slot in document.get("slots") or []:
+        speech = slot.get("speech") if isinstance(slot, dict) else None
+        if not isinstance(speech, dict) or not speech.get("enabled"):
+            continue
+        clips = speech.get("clips") if "clips" in speech else [speech]
+        if any(isinstance(clip, dict) and clip.get("audio") and clip.get("audible") is not False
+               for clip in clips or []):
+            return True
+    return False
 
 
 def _blocked_url(value) -> bool:

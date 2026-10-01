@@ -172,6 +172,30 @@ def test_short_voiced_scene_is_rejected_instead_of_silent_mp4():
     assert error.value.detail["code"] == "unsupported_capability"
 
 
+@pytest.mark.parametrize("speech", [
+    {"enabled": True, "cues": [{"start": 0, "end": 1, "viseme": "A"}]},
+    {"enabled": True, "audible": False, "audio": {"url": "/api/v1/file/voice.wav"}},
+    {"enabled": False, "audio": {"url": "/api/v1/file/voice.wav"}},
+    {"enabled": True, "audio": {"url": "/api/v1/file/unused.wav"}, "clips": []},
+    {"enabled": True, "clips": [{"audio": {"url": "/api/v1/file/voice.wav"}, "audible": False}]},
+])
+def test_muted_mouth_animation_is_exportable(speech):
+    document = _document()
+    document["slots"][0]["speech"] = speech
+    assert unsupported_capabilities(document) == []
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["document"]["slots"][0]["speech"] == speech
+
+
+def test_one_audible_intervention_still_blocks_headless_export():
+    document = _document()
+    document["slots"][0]["speech"] = {"enabled": True, "audible": False, "clips": [
+        {"audio": {"url": "/api/v1/file/one.wav"}, "audible": False},
+        {"audio": {"url": "/api/v1/file/two.wav"}},
+    ]}
+    assert "voiced_audio" in unsupported_capabilities(document)
+
+
 def test_publish_refuses_a_voiced_snapshot_even_if_preflight_is_bypassed(tmp_path):
     service = _service(tmp_path, renderer=_paint)
     snapshot = {
