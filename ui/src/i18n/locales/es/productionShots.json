@@ -22,6 +22,26 @@
   "loadFailed": "No se han podido leer los planos",
   "missingTarget": "Hacen falta el workspace y la producción.",
   "order": "Plano {{order}}",
+  "actions": {
+    "select": "Elegir esta toma",
+    "approve": "Aprobar",
+    "changes": "Pedir cambios",
+    "lock": "Bloquear",
+    "unlock": "Desbloquear",
+    "undo": "Deshacer",
+    "reexport": "Actualizar el export",
+    "openScene": "Abrir escena",
+    "regenerate": "Regenerar"
+  },
+  "reasons": {
+    "shot_locked": "Este plano está bloqueado",
+    "origin_unsupported": "Este origen no admite esa acción",
+    "no_take": "No hay tomas",
+    "no_history": "No hay una selección anterior",
+    "no_scene": "No hay escena",
+    "regenerate_needs_runner": "Regenerar sigue en el motor de la producción",
+    "unavailable": "No disponible"
+  },
   "limits": {
     "shots_unreadable": "El manifiesto de planos no se pudo leer.",
     "series_unreadable": "La biblioteca de la serie no se pudo leer.",

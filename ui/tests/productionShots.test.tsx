@@ -102,6 +102,31 @@ test('the same selection is what a second entry renders', async () => {
   assert.match(second, /Proyecto episode ep1/)
 })
 
+test('a locked shot explains why the take cannot change', async () => {
+  await setUiLanguage('en')
+  const locked = view({
+    shots: [{
+      ...view().shots[0],
+      actions: [
+        { action: 'select', enabled: false, reason: 'shot_locked' },
+        { action: 'undo', enabled: false, reason: 'shot_locked' },
+        { action: 'reexport', enabled: false, reason: 'shot_locked' },
+        { action: 'regenerate', enabled: false, reason: 'regenerate_needs_runner' },
+      ],
+    }],
+  })
+  const html = renderToStaticMarkup(<ProductionShotsPanel view={locked} workspace="film" onClose={() => {}} />)
+  assert.match(html, /Use this take/)
+  assert.match(html, /This shot is locked/)
+  assert.match(html, /Regeneration stays on the production runner/)
+  assert.match(html, /disabled[^>]*data-action="select"/)
+
+  await setUiLanguage('es')
+  const spanish = renderToStaticMarkup(<ProductionShotsPanel view={locked} workspace="film" onClose={() => {}} />)
+  assert.match(spanish, /Este plano está bloqueado/)
+  assert.match(spanish, /Elegir esta toma/)
+})
+
 test('the open event needs a workspace and a production id', () => {
   assert.equal(shotTarget(null), null)
   assert.equal(shotTarget({ workspace: 'film' }), null)

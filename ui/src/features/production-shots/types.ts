@@ -8,7 +8,14 @@ export type ShotReview = {
   status: string
   locked: boolean | null
   notes: string | null
+  history_id?: string | null
 } | null
+
+export type ShotAction = {
+  action: string
+  enabled: boolean
+  reason?: string
+}
 
 export type ShotScene = {
   kind: string | null
@@ -34,6 +41,7 @@ export type ProductionShot = {
   scene: ShotScene
   montage: ShotMontage
   provenance: { source: string }
+  actions?: ShotAction[]
 }
 
 export type ShotView = {
@@ -48,4 +56,5 @@ export type ShotView = {
   shots: ProductionShot[]
   shot_count: number
   truncated: boolean
+  revision?: number
 }

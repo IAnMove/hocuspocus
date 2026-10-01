@@ -132,6 +132,21 @@ toma activa: es el campo que el Director ya usa. La UI abre esta misma
 respuesta con el evento `hocuspocus:production-shots-open` y el detalle
 `{workspace, productionId}`. No hay botón de navegación en este corte.
 
+## Acciones de un plano
+
+`POST /api/v1/production-projects/{production_id}/shots/{shot_id}` con
+`action`. `select` cambia solo esa toma, conserva las anteriores y marca
+`video_stale` sin tocar el `source` del montaje. `reexport` copia la toma
+elegida al clip de ese plano. `undo` restaura la instantánea de la revisión y
+no borra ficheros. Un plano `locked` responde `shot_locked` (422) y no
+escribe. `expected_revision` distinto del fichero responde `stale_revision`
+(409). `review` solo acepta `pending`, `approved` o `changes_requested`.
+`request` con `apply` distinto de `true` devuelve `applied: false` y no
+escribe. `regenerate` responde `regenerate_needs_runner`: el fotograma y el
+clip siguen en el runner de la producción. Series no se reescribe; la
+revisión cae en el sidecar. Abrir la escena no muta (`applied: false`) y la
+UI emite `hocuspocus:production-shot-scene`.
+
 ## Límites conocidos en este corte
 
 - Quien llama a `production.run` o al arranque del Director tiene que pedir
@@ -141,6 +156,8 @@ respuesta con el evento `hocuspocus:production-shots-open` y el detalle
 - Los montajes y los jobs sueltos de `generation.video` no son proyectos.
 - Los tokens de LLM de este cambio no están disponibles: el cliente no los midió.
   No se estiman a partir de bytes.
+- `production.run`, el arranque del Director y el render de serie siguen sin
+  llamar a resolve. El conjunto no está cerrado.
 
 ## Pruebas
 

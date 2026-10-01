@@ -74,3 +74,4 @@ Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
 | Bloque D (`production_shot_review.py`, `routers/music_productions.py`, `ReviewMode.tsx`) | revisión de planos | Consumir las operaciones. No duplicarlas. |
 | `scripts/ci_test_groups.json`, `tests/fixtures/route_table.json`, este tablero, el runbook | #716 y #717 | Cambios aditivos. Al rebasar se conservan ambas aportaciones. |
 | `app/services/production_shot_view.py`, `ui/src/features/production-shots/` | vista de planos, rama `feat/unified-productions-shots` | Solo lectura. No edita `ReviewMode`, el bloque D ni `music_production.py`. |
+| `app/services/production_shot_actions.py` | acciones, rama `feat/unified-productions-actions` | Elige toma, revisión, bloqueo, deshacer y export desactualizado sobre el manifiesto, el Director o el montaje. No edita `music_production.py`, `production_shot_redo.py` ni `ReviewMode.tsx` (#723). |

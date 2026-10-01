@@ -14,6 +14,7 @@ from typing import Any
 
 from services.production_project_link import read_link_store
 from services.production_run import adapt_pipeline_record
+from services.production_shot_actions import annotate_actions, stored_revision
 from services.production_shot_review import load_review
 from services.production_work_catalog import find_work
 
@@ -37,7 +38,11 @@ def shot_view(workspace_dir: str, workspace_id: str, production_id: str) -> dict
         limits.append("shot_list_truncated")
     if full == 0:
         limits.append("no_shots")
-    return _envelope(work, _dedupe(sources), _dedupe(limits), shots[:_MAX_SHOTS], full, truncated)
+    shown = shots[:_MAX_SHOTS]
+    annotate_actions(shown)
+    view = _envelope(work, _dedupe(sources), _dedupe(limits), shown, full, truncated)
+    view["revision"] = stored_revision(workspace_dir, production_id)
+    return view
 
 
 def _collect(workspace_dir: str, workspace_id: str, production_id: str, work: dict[str, Any]):
@@ -102,12 +107,14 @@ def _music_shot(item: Any, index: int) -> dict[str, Any] | None:
     start, end = _number(item.get("start")), _number(item.get("end"))
     takes = _file_takes(item.get("takes"), _safe_name(item.get("clip")))
     scene_name = _safe_name(item.get("scene_doc"))
+    stale = _stored_bool(item, "video_stale", "export_stale")
     return _shot(
         item["key"].strip()[:80], index + 1, "music",
         start=start, end=end, duration=_span(start, end),
         text=_text(item.get("lyric")), text_kind="lyric" if _text(item.get("lyric")) else None,
         takes=takes[0], selected_take_id=takes[1],
         scene={"kind": "scene2d", "id": scene_name} if scene_name else None,
+        montage={"stale": stale} if stale is not None else None,
     )
 
 
@@ -301,22 +308,41 @@ def _named_take(name: str):
     return ([{"id": name, "file": name, "selected": True}], name)
 
 
+def _prefer_take(takes: list[dict[str, Any]], fallback: str | None, explicit: str | None):
+    if not explicit:
+        return takes, fallback
+    hit = False
+    for take in takes:
+        take["selected"] = take["id"] == explicit
+        hit = hit or take["selected"]
+    return takes, explicit if hit else fallback
+
+
+def _history_id(record: dict[str, Any]) -> str | None:
+    history = record.get("history")
+    if not isinstance(history, list) or not history or not isinstance(history[-1], dict):
+        return None
+    value = history[-1].get("id")
+    return value if isinstance(value, str) and value else None
+
+
 def _montage_shot(clip: dict[str, Any], index: int, origin: dict[str, Any]) -> dict[str, Any] | None:
     identifier = _clip_id(origin, clip)
     if not identifier:
         return None
     start, end = _number(clip.get("trimStart")), _number(clip.get("trimEnd"))
     selected_name = _safe_name(clip.get("source"))
-    takes = _source_takes(clip.get("takes"), selected_name)
-    if not takes[0] and selected_name:
-        takes = _named_take(selected_name)
+    rows, selected = _source_takes(clip.get("takes"), selected_name)
+    if not rows and selected_name:
+        rows, selected = _named_take(selected_name)
+    rows, selected = _prefer_take(rows, selected, _text(clip.get("selectedTakeId")))
     lyric = _text(clip.get("lyric"))
     stale = _stored_bool(clip, "video_stale", "export_stale")
     return _shot(
         identifier, index + 1, "montage",
         start=start, end=end, duration=_span(start, end),
         text=lyric, text_kind="lyric" if lyric else None,
-        takes=takes[0], selected_take_id=takes[1], scene=_origin_scene(origin),
+        takes=rows, selected_take_id=selected, scene=_origin_scene(origin),
         montage={"stale": stale} if stale is not None else None,
     )
 
@@ -347,6 +373,7 @@ def _attach_review(workspace_dir: str, production_id: str, shots: list[dict[str,
                 "status": record.get("status") or "pending",
                 "locked": bool(record.get("locked")),
                 "notes": notes[:200] if notes else None,
+                "history_id": _history_id(record),
             }
 
 
