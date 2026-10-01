@@ -148,9 +148,10 @@ def test_real_native_template_compiler_keeps_model_camera_atmosphere_and_motion(
     assert doc["renderLook"] == "n64"
     assert doc["templateId"] == "product-orbit"
     assert doc["duration"] == 6
-    assert len(doc["slots"]) == 1 and doc["slots"][0]["media"] == "model3d"
-    assert doc["slots"][0]["clip"] is None
-    assert doc["slots"][0]["motion"]["turnTo"] == 6.283
+    assert [slot["slot"] for slot in doc["slots"]] == ["subject_1", "background"]
+    subject = next(slot for slot in doc["slots"] if slot["slot"] == "subject_1")
+    assert subject["media"] == "model3d" and subject["clip"] is None
+    assert subject["motion"]["turnTo"] == 6.283
     assert doc["camera"]["orbitRadius"] == 5
     assert doc["atmos"]["timeOfDay"] == "dawn"
     assert doc["rhythm"]["bpm"] == 120 and doc["rhythm"]["offset"] == 24

@@ -46,6 +46,7 @@ import type {
 } from './characterKitActions'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
+import { world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
 import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
@@ -183,6 +184,7 @@ export interface WizardApplicationAdapters {
   videoEditor: VideoEditorAdapter
   characterKit: CharacterKitAdapter
   lipsCreator: { command(action: AgentLipsCreatorAction, workspace?: string): Promise<AdapterOutcome>; generate(action: AgentGenerateLipsAction, workspace?: string, context?: { onStep?: (message: string) => void; generationContext?: GenerationSubmissionContext }): Promise<AdapterOutcome> }
+  world3dTemplates: { command(action: import('./world3dTemplateCapabilities').AgentWorld3DTemplatesAction, workspace?: string): Promise<AdapterOutcome> }
   queue: QueueAdapter
   workspace: WorkspaceAdapter
   videoclips: VideoclipAdapter
@@ -710,6 +712,28 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
         outputNames,
       })
       return editorOutcome(result, message, { report, outputNames })
+    },
+  }
+  adapters.world3dTemplates = {
+    async command(action, workspace) {
+      const active = workspace || useStore.getState().activeWorkspace
+      const input = { ...action.input }
+      const intent = typeof input.intent_id === 'string' ? input.intent_id : undefined
+      delete input.intent_id
+      const response = await fetch('/api/v1/world3d/templates/commands', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ operation: action.operation, version: 1, input: { workspace: active, ...input }, ...(intent ? { intent_id: intent } : {}) }),
+      })
+      const body = await response.json() as { status?: string; result?: Record<string, unknown>; detail?: { message?: string } }
+      if (!response.ok) throw new Error(body.detail?.message || 'Video 3D template command failed')
+      const scene = body.result?.scene as { document?: unknown; sceneId?: string; templateId?: string } | undefined
+      if (scene?.document) {
+        const { requestWorld3DDocument } = await import('../scene3d/world3dAgent')
+        await navigate('video_3d')
+        await requestWorld3DDocument({ document: scene.document, sceneId: scene.sceneId || 'world3d' })
+      }
+      const message = world3dTemplateMessage(body)
+      return { message, metadata: body as Record<string, unknown>, sceneId: scene?.sceneId, target: { kind: 'video_3d_scene', id: scene?.sceneId || 'world3d', title: scene?.templateId || action.operation } }
     },
   }
   adapters.lipsCreator = {
