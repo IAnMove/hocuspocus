@@ -159,3 +159,24 @@ export function ridge(root: Group, kept: KitKept, options: RidgeOptions): Instan
   kept.materials.push(mat)
   return mesh
 }
+
+export type BackdropOptions = {
+  height: readonly [number, number]
+  width: readonly [number, number]
+  /** Colour of the nearest layer. Defaults to the set's ground colour, darkened. */
+  near?: string
+  tone?: number
+  radius?: number
+  count?: number
+  layers?: number
+  arc?: number
+}
+
+/** A `ridge` coloured from the resolved set: ground colour up close, fog colour far away. Keep radius × 1.22^(layers-1) inside the sky sphere. */
+export function backdropRidge(root: Group, kept: KitKept, resolved: { stone: string; fogColor: string; seed: number }, options: BackdropOptions): InstancedMesh {
+  const near = options.near ?? `#${new Color(resolved.stone).multiplyScalar(options.tone ?? 0.72).getHexString()}`
+  return ridge(root, kept, {
+    seed: resolved.seed, count: options.count ?? 11, radius: options.radius ?? 17, height: options.height, width: options.width,
+    color: near, haze: resolved.fogColor, layers: options.layers ?? 2, arc: options.arc,
+  })
+}

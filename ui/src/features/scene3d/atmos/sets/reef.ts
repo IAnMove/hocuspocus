@@ -15,12 +15,16 @@ import {
   ShaderMaterial,
   SphereGeometry,
   type Material,
+  IcosahedronGeometry,
+  MeshStandardMaterial,
 } from 'three'
 import type { AtmosHandle } from './clearing.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
 import { hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT } from '../layout.ts'
+import { backdropRidge } from './kit.ts'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
 type Kept = { geometries: BufferGeometry[]; materials: Material[] }
 type Spot = readonly [number, number]
@@ -309,7 +313,7 @@ function placeBubbles(mesh: InstancedMesh, spots: Spot[], seconds: number, curre
     const sway = Math.sin(seconds * 0.7 + index * 1.1) * swayAmp
     dummy.position.set(x + sway, 0.18 + phase, z)
     dummy.rotation.set(0, 0, 0)
-    dummy.scale.setScalar(0.24 + (index % 4) * 0.08)
+    dummy.scale.setScalar(0.09 + (index % 4) * 0.035)
     dummy.updateMatrix()
     mesh.setMatrixAt(index, dummy.matrix)
   })
@@ -320,7 +324,7 @@ function addBubbles(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const spots = bubbleSpots(resolved.moteCount)
   if (spots.length < 1) return
   const geo = new SphereGeometry(1, 7, 5)
-  const mat = new MeshBasicMaterial({ color: swatch(BUBBLE, resolved.palette) })
+  const mat = new MeshBasicMaterial({ color: swatch(BUBBLE, resolved.palette), transparent: true, opacity: 0.42, depthWrite: false })
   const mesh = new InstancedMesh(geo, mat, spots.length)
   mesh.name = 'atmos-bubble'
   mesh.frustumCulled = false
@@ -331,8 +335,8 @@ function addBubbles(root: Group, resolved: ResolvedAtmos, kept: Kept) {
 }
 
 function addRocks(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new SphereGeometry(1, 6, 5)
-  const mat = new MeshBasicMaterial({ color: swatch(ROCK, resolved.palette) })
+  const geo = new IcosahedronGeometry(1, 1)
+  const mat = new MeshStandardMaterial({ color: swatch(ROCK, resolved.palette), flatShading: true, roughness: 1, emissive: swatch(ROCK, resolved.palette), emissiveIntensity: 0.28 })
   const mesh = new InstancedMesh(geo, mat, ROCK_SPOTS.length)
   mesh.name = 'atmos-rock'
   mesh.frustumCulled = false
@@ -351,9 +355,25 @@ function addRocks(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   kept.materials.push(mat)
 }
 
+/** A stem with four tilted branches, as one geometry: reads as coral instead of a single cone. */
+function branchingCoral(): BufferGeometry {
+  const parts: BufferGeometry[] = []
+  const prongs: Array<[number, number, number, number]> = [[0, 0, 1, 1], [0.42, 0.5, 0.6, -0.5], [-0.38, 0.4, 0.55, 0.55], [0.1, 0.78, 0.4, 0.2]]
+  for (const [x, y, height, tilt] of prongs) {
+    const cone = new ConeGeometry(0.62, height, 5)
+    cone.translate(0, height / 2, 0)
+    cone.rotateZ(tilt)
+    cone.translate(x * 0.45, y * 0.5, 0)
+    parts.push(cone)
+  }
+  const merged = mergeGeometries(parts.map(part => part.toNonIndexed()))
+  parts.forEach(part => part.dispose())
+  return merged
+}
+
 function addCoral(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new ConeGeometry(1, 1, 5)
-  const mat = new MeshBasicMaterial()
+  const geo = branchingCoral()
+  const mat = new MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 0.9, emissive: 0x2a2a2a, emissiveIntensity: 0.5 })
   const mesh = new InstancedMesh(geo, mat, CORAL_SPOTS.length)
   mesh.name = 'atmos-coral'
   mesh.frustumCulled = false
@@ -363,7 +383,7 @@ function addCoral(root: Group, resolved: ResolvedAtmos, kept: Kept) {
     const radius = 0.16 + hash2(index, 9, resolved.seed) * 0.12
     dummy.position.set(x, height * 0.5, z)
     dummy.rotation.set(0, hash2(index, 11, resolved.seed), 0)
-    dummy.scale.set(radius, height, radius)
+    dummy.scale.set(radius * 2.4, height, radius * 2.4)
     dummy.updateMatrix()
     mesh.setMatrixAt(index, dummy.matrix)
   })
@@ -441,7 +461,10 @@ function syncColors(root: Group, palette: string) {
   const coral = root.getObjectByName('atmos-coral') as InstancedMesh | undefined
   if (coral) paintInstances(coral, paletteColors(CORAL, palette))
   const rockMat = (root.getObjectByName('atmos-rock') as InstancedMesh | undefined)?.material
-  if (rockMat instanceof MeshBasicMaterial) rockMat.color.set(swatch(ROCK, palette))
+  if (rockMat instanceof MeshStandardMaterial) {
+    rockMat.color.set(swatch(ROCK, palette))
+    rockMat.emissive.set(swatch(ROCK, palette))
+  }
   const bubbleMat = (root.getObjectByName('atmos-bubble') as InstancedMesh | undefined)?.material
   if (bubbleMat instanceof MeshBasicMaterial) bubbleMat.color.set(swatch(BUBBLE, palette))
 }
@@ -486,6 +509,7 @@ export function buildReef(resolved: ResolvedAtmos, webgl2: boolean): { root: Gro
   root.name = 'atmos-reef'
   const kept = emptyKept()
   addGround(root, resolved, kept)
+  backdropRidge(root, kept, resolved, { near: '#2b6f7d', height: [2.4, 5], width: [5, 9], radius: 15 })
   addWater(root, resolved, kept)
   addRocks(root, resolved, kept)
   addCoral(root, resolved, kept)
