@@ -302,6 +302,20 @@ Templates: `atmos-space-ring-wide`, `atmos-space-ring-low`. Both last 6 seconds 
 
 A software export of `atmos-space-ring-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 31396 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
 
+## Set 18 — `atmos-silicon-grid`
+
+Templates: `atmos-silicon-grid-wide`, `atmos-silicon-grid-low`. Both last 6 seconds at 24 fps. The character spot is the same open circle as the clearing, on a dark glass disc with an emissive rim. Wire mountains and the two triangle ships stay outside that circle and outside the lane to the camera. The floor mesh stays put. The emissive grid scrolls in the shader and fades with distance.
+
+| Param | Values | Default |
+| --- | --- | --- |
+| `timeOfDay` | `dusk`, `night` | `dusk` |
+| `palette` | `outrun`, `chrome` | `outrun` |
+| `variant` (`atmos.grid`) | 0–8 | 4 |
+
+`dusk` holds the striped sun high in a magenta sky. `night` drops the sun onto the horizon, adds stars, and brightens the grid. The grid control sets line density and scroll speed. There is no grass field and no shaft, depth-of-field, or grade pass. Mountains use the grass count (8 preview, 14 export) and stars use the mote count (36 / 72). Without WebGL2 the set is a flat pad. The library setting is `grid`.
+
+A software export of `atmos-silicon-grid-wide` on 2026-10-01 produced 180 frames, 1280×720, 30 fps, 6.00 s, in 31103 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
 ## Adding a set
 
 A shipped set is one module plus the typed catalog:
