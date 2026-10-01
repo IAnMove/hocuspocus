@@ -48,5 +48,14 @@
     "name": "Title",
     "untitled": "Untitled",
     "submit": "Create work"
+  },
+  "link": {
+    "action": "Link to a project",
+    "kind": "Kind",
+    "story": "Story",
+    "episode": "Episode",
+    "id": "Project id",
+    "submit": "Link",
+    "failed": "The project id was not found."
   }
 }

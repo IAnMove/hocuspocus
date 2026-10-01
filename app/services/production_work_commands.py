@@ -9,7 +9,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from services.production_project_link import REVIEW_EVENT, read_link_store, resolve_production_project
+from services.production_project_link import (
+    REVIEW_EVENT,
+    link_existing_production,
+    read_link_store,
+    resolve_production_project,
+)
 from services.production_work_catalog import find_work, list_works
 
 
@@ -23,6 +28,7 @@ _OPERATIONS = frozenset({
     "production.works.list",
     "production.works.open",
     "production.works.resolve",
+    "production.works.link",
 })
 
 
@@ -33,6 +39,8 @@ def run_command(workspace_dir: str, body: dict[str, Any]) -> dict[str, Any]:
         return _list(workspace_dir, workspace_id, data)
     if operation == "production.works.open":
         return _open(workspace_dir, workspace_id, data)
+    if operation == "production.works.link":
+        return _link(workspace_dir, workspace_id, data)
     return _resolve(workspace_dir, workspace_id, data)
 
 
@@ -86,6 +94,21 @@ def _resolve(workspace_dir: str, workspace_id: str, data: dict[str, Any]) -> dic
     return {
         "applied": True,
         "reused": existed and data.get("new_execution") is not True,
+        "production_id": record["production_id"],
+        "project": record["project"],
+        "origin": record["origin"],
+        "review": record["review"],
+        "work": work,
+    }
+
+
+def _link(workspace_dir: str, workspace_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    record = link_existing_production(workspace_dir, {**data, "workspace": workspace_id})
+    found = find_work(workspace_dir, workspace_id, str(record["production_id"]))
+    work = _annotate(found, _series_map(workspace_dir, workspace_id)) if found else None
+    return {
+        "applied": True,
+        "reused": record.get("reused") is True,
         "production_id": record["production_id"],
         "project": record["project"],
         "origin": record["origin"],

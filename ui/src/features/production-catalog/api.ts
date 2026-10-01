@@ -25,3 +25,14 @@ export async function resolveWork(workspace: string, input: { intent_id: string,
   })
   if (!response.ok) throw new Error(String(response.status))
 }
+
+export async function linkWork(
+  workspace: string,
+  productionId: string,
+  project: { kind: 'story' | 'episode', id: string },
+): Promise<void> {
+  await postCommand({
+    operation: 'production.works.link',
+    input: { workspace, production_id: productionId, project },
+  })
+}

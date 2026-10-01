@@ -19,6 +19,7 @@ _STATUS = {
     "invalid_project": 422,
     "invalid_production": 422,
     "workspace_not_found": 404,
+    "not_found": 404,
     "revision_conflict": 409,
     "partial_write": 503,
 }

@@ -498,3 +498,12 @@ same review event the UI listens for: `hocuspocus:production-shots-open`.
 `production.works.resolve` is the existing link call. A repeated `intent_id`
 sets `reused: true` and does not create another Story. An episode project
 does not create a Story. Do not describe `applied: false` as a new cut.
+
+## Link an old production
+
+`production.works.link` needs `production_id` and `project` `{kind, id}` for a
+Story or episode that already exists. It does not create a project and it does
+not match a title. A second call with the same pair returns `reused: true`.
+The production file and its takes stay where they are. A missing sidecar still
+lists the file as unlinked. An unreadable production file is a warning, not a
+new project.

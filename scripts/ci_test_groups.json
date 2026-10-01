@@ -199,6 +199,7 @@
         "tests/test_production_preview.py",
         "tests/test_production_project_link.py",
         "tests/test_production_work_commands.py",
+        "tests/test_production_journey.py",
         "tests/test_production_shot_actions.py",
         "tests/test_production_shot_view.py",
         "tests/test_production_smoothness.py",
@@ -416,11 +417,11 @@
   "path_rules": [
     {
       "prefix": "app/services/production_project_link.py",
-      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py"]
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py", "tests/test_production_journey.py"]
     },
     {
       "prefix": "app/services/production_work_commands.py",
-      "paths": ["tests/test_production_work_commands.py"]
+      "paths": ["tests/test_production_work_commands.py", "tests/test_production_journey.py"]
     },
     {
       "prefix": "app/services/production_work_catalog.py",
@@ -436,7 +437,7 @@
     },
     {
       "prefix": "app/services/production_shot_actions.py",
-      "paths": ["tests/test_production_shot_actions.py", "tests/test_production_shot_view.py"]
+      "paths": ["tests/test_production_shot_actions.py", "tests/test_production_shot_view.py", "tests/test_production_journey.py"]
     },
     {
       "prefix": "app/services/world3d_template_catalog.py",

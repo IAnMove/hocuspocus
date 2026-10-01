@@ -1343,5 +1343,7 @@ Coverage is in `ui/tests/world3dTemplatesWizard.test.ts`.
 links a light Story through `productionWorks.command`, registered by
 `registerProductionWorkCapabilities` in
 `ui/src/features/agent/productionWorkCapabilities.ts`. List and open do not
-start a generator. The same intent reuses the production. `production.review`
-stays the vision QA tool. Coverage is in `ui/tests/productionWorksWizard.test.ts`.
+start a generator. The same intent reuses the production. `production.works.link`
+attaches one existing production id to an existing project and does not match
+titles. `production.review` stays the vision QA tool. Coverage is in
+`ui/tests/productionWorksWizard.test.ts` and `tests/test_production_journey.py`.

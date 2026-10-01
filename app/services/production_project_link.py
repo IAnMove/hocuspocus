@@ -48,6 +48,26 @@ def resolve_production_project(workspace_dir: str, request: MappingRequest) -> d
         return _public(_resolve(workspace_dir, spec))
 
 
+def link_existing_production(workspace_dir: str, request: MappingRequest) -> dict[str, Any]:
+    """Attach one recognizable production to a project that already exists.
+
+    The production file, its takes and any series record stay as they were.
+    A repeated call for the same pair does not add another row.
+    """
+    spec = _existing_request(request)
+    from services.production_work_catalog import find_work
+
+    found = find_work(workspace_dir, spec["workspace_id"], spec["production_id"])
+    if found is None:
+        raise LinkError("not_found", "Production not found")
+    with _exclusive(workspace_dir):
+        record, reused = _store_existing_link(workspace_dir, spec, found)
+    public = _public(record)
+    public["reused"] = reused
+    public["applied"] = True
+    return public
+
+
 def note_production_status(workspace_dir: str, production_id: str, status: str) -> dict[str, Any]:
     token = _token(production_id, "invalid_request", "production_id is required")
     if not isinstance(status, str) or not status.strip() or len(status) > 40:
@@ -239,6 +259,73 @@ def _record(
         "story_created": created,
         "story_seed": seed,
         "execution": execution,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+_PRODUCTION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,239}$")
+
+
+def _existing_request(request: MappingRequest) -> dict[str, Any]:
+    if not isinstance(request, dict):
+        raise LinkError("invalid_request", "request must be an object")
+    production_id = str(request.get("production_id") or "").strip()
+    if not _PRODUCTION_ID.fullmatch(production_id) or ".." in production_id:
+        raise LinkError("invalid_request", "production_id is required")
+    project = _project_request(request)
+    if project is None:
+        raise LinkError("invalid_project", "An existing project is required")
+    return {
+        "workspace_id": _workspace_id(request),
+        "production_id": production_id,
+        "project": project,
+    }
+
+
+def _store_existing_link(
+    workspace_dir: str,
+    spec: dict[str, Any],
+    found: dict[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    project = _explicit_project(workspace_dir, spec, spec["project"])
+    current_project = found.get("project") if isinstance(found.get("project"), dict) else None
+    if current_project and {"kind": current_project.get("kind"), "id": current_project.get("id")} != project:
+        raise LinkError("invalid_project", "production is already linked to another project")
+    store = _read(workspace_dir)
+    current = _link_for_production(store, spec["production_id"])
+    if current is not None:
+        _intent, record = current
+        stored = record.get("project") if isinstance(record.get("project"), dict) else {}
+        if {"kind": stored.get("kind"), "id": stored.get("id")} != project:
+            raise LinkError("invalid_project", "production is already linked to another project")
+        if project["kind"] == "story":
+            _attach_productions(workspace_dir, project["id"], record)
+        return record, True
+    record = _existing_record(spec, found, project)
+    store["links"][record["intent_id"]] = record
+    _write(workspace_dir, store)
+    if project["kind"] == "story":
+        _attach_productions(workspace_dir, project["id"], record)
+    return record, False
+
+
+def _existing_record(spec: dict[str, Any], found: dict[str, Any], project: dict[str, str]) -> dict[str, Any]:
+    now = _now()
+    origin = str(found.get("origin") or "file")
+    return {
+        "intent_id": f"link-{_digest(spec['workspace_id'] + ':' + spec['production_id'])}",
+        "workspace_id": spec["workspace_id"],
+        "origin": origin,
+        "format": found.get("format") if isinstance(found.get("format"), str) else None,
+        "title": str(found.get("title") or spec["production_id"]),
+        "project": project,
+        "production_id": spec["production_id"],
+        "production_ids": [spec["production_id"]],
+        "status": str(found.get("status") or "unknown"),
+        "story_created": False,
+        "story_seed": None,
+        "execution": 1,
         "created_at": now,
         "updated_at": now,
     }
@@ -553,6 +640,6 @@ MappingRequest = dict[str, Any]
 
 __all__ = [
     "FORMATS", "LINK_FILENAME", "LinkError", "ORIGINS", "REVIEW_EVENT",
-    "created_story_id", "note_production_status", "production_id_for",
+    "created_story_id", "link_existing_production", "note_production_status", "production_id_for",
     "read_link_store", "refresh_link_status", "resolve_production_project",
 ]

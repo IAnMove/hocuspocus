@@ -48,5 +48,14 @@
     "name": "Título",
     "untitled": "Sin título",
     "submit": "Crear obra"
+  },
+  "link": {
+    "action": "Vincular a proyecto",
+    "kind": "Tipo",
+    "story": "Story",
+    "episode": "Episodio",
+    "id": "Id del proyecto",
+    "submit": "Vincular",
+    "failed": "Ese id de proyecto no existe."
   }
 }
