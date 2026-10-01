@@ -84,6 +84,16 @@ Quedaron fuera de la integración, por no abrirse ese día: #589, #583, #575, #5
 
 ## Producciones unificadas (2026-10-01)
 
+### Cierre de integración automática — Codex
+
+Reclamado en `feat/production-project-generation`: registro antes de iniciar
+`production.run`, Director y Series; regeneración desde la revisión compartida;
+recorrido Chromium sin GPU. Módulos nuevos de integración y ganchos pequeños en
+los puntos de arranque, sin cambios de renderers ni launchers. La fila «Hecho»
+anterior describe las capacidades del catálogo; no implica que los productores
+ya llamen automáticamente al registro. No se tocan los fixes de undo (#737),
+slot de escritura (#739), song switch (#742) ni audio del Director (#741/#743).
+
 Reclamado por Grok en `feat/unified-productions-identity`. Índice y enlace
 Story/episodio antes de generar. No rehace motores ni plantillas World3D.
 Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
