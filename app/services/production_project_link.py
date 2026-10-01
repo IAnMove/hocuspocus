@@ -195,18 +195,48 @@ def _ensure_stub(workspace_dir: str, record: dict[str, Any]) -> None:
     current = _read_json(path)
     if current is None and os.path.exists(path):
         raise LinkError("invalid_production", "Production file is not a JSON object")
-    state = dict(current or {})
-    state.setdefault("status", "pending")
-    state.setdefault("project", dict(record["project"]))
-    state.setdefault("intent_id", record["intent_id"])
-    state.setdefault("origin", record["origin"])
+    if current is None:
+        _replace_json(path, _stub_body(record))
+        return
+    latest = _read_json(path) or current
+    if _stamp_identity(latest, record):
+        _replace_json(path, latest)
+
+
+def _stub_body(record: dict[str, Any]) -> dict[str, Any]:
+    spec = {"title": record["title"]} if record.get("title") else {}
+    state: dict[str, Any] = {
+        "status": "pending",
+        "project": dict(record["project"]),
+        "intent_id": record["intent_id"],
+        "origin": record["origin"],
+        "spec": spec,
+    }
     if record.get("format"):
-        state.setdefault("format", record["format"])
+        state["format"] = record["format"]
+    return state
+
+
+def _stamp_identity(state: dict[str, Any], record: dict[str, Any]) -> bool:
+    """Copy missing identity keys onto a live producer file. Do not rewrite when they are already present."""
+    changed = False
+    if "project" not in state:
+        state["project"] = dict(record["project"])
+        changed = True
+    if "intent_id" not in state:
+        state["intent_id"] = record["intent_id"]
+        changed = True
+    if "origin" not in state:
+        state["origin"] = record["origin"]
+        changed = True
+    if record.get("format") and "format" not in state:
+        state["format"] = record["format"]
+        changed = True
     spec = state.get("spec") if isinstance(state.get("spec"), dict) else {}
     if record.get("title") and "title" not in spec:
-        spec = {**spec, "title": record["title"]}
-    state["spec"] = spec
-    _replace_json(path, state)
+        state["spec"] = {**spec, "title": record["title"]}
+        changed = True
+    return changed
 
 
 def _record(
