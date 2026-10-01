@@ -13,6 +13,14 @@ export const WORLD3D_TEMPLATE_OPERATIONS = [
   'world3d.scene.apply_query',
 ] as const
 
+export const WORLD3D_TEMPLATE_MUTATIONS = [
+  'world3d.templates.user.put',
+  'world3d.scene.instantiate',
+  'world3d.scene.patch',
+  'world3d.scene.publish',
+  'world3d.scene.apply_query',
+] as const
+
 export type World3DTemplateOperation = typeof WORLD3D_TEMPLATE_OPERATIONS[number]
 
 /** Only these replies should replace the open Video 3D editor. Inspect/publish
@@ -25,6 +33,22 @@ const MOUNT_SCENE_OPERATIONS = new Set<string>([
 
 export function shouldMountWorld3DScene(operation: string): boolean {
   return MOUNT_SCENE_OPERATIONS.has(operation)
+}
+
+const INTENT_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/
+const mutations = new Set<string>(WORLD3D_TEMPLATE_MUTATIONS)
+
+export function world3dTemplateCommandIntent(
+  operation: string,
+  input: Record<string, unknown>,
+  fallback?: string,
+): string | undefined {
+  const provided = input.intent_id
+  if (typeof provided === 'string' && INTENT_RE.test(provided)) return provided
+  if (!mutations.has(operation)) return undefined
+  if (typeof fallback === 'string' && INTENT_RE.test(fallback)) return fallback
+  const nonce = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+  return `wizard-world3d-${nonce}`
 }
 
 export interface AgentWorld3DTemplatesAction {
@@ -74,7 +98,11 @@ export function registerWorld3DTemplateCapabilities(register: typeof defineCapab
     },
     validate(action) { return operations.has(action.operation) ? [] : ['Choose a Video 3D template operation.'] },
     async prepare(action) { return action },
-    async execute(action, context) { return context.adapters.world3dTemplates.command(action, context.workspace) },
+    async execute(action, context) {
+      const intent = world3dTemplateCommandIntent(action.operation, action.input, context.generationContext?.commandId)
+      const input = intent ? { ...action.input, intent_id: intent } : { ...action.input }
+      return context.adapters.world3dTemplates.command({ ...action, input }, context.workspace)
+    },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
     report: { targetKind: 'video_3d_scene', successState: 'completed' },

@@ -46,7 +46,7 @@ import type {
 } from './characterKitActions'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
-import { shouldMountWorld3DScene, world3dTemplateMessage } from './world3dTemplateCapabilities'
+import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
 import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
@@ -718,7 +718,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async command(action, workspace) {
       const active = workspace || useStore.getState().activeWorkspace
       const input = { ...action.input }
-      const intent = typeof input.intent_id === 'string' ? input.intent_id : undefined
+      const intent = world3dTemplateCommandIntent(action.operation, input)
       delete input.intent_id
       const response = await fetch('/api/v1/world3d/templates/commands', {
         method: 'POST', headers: { 'content-type': 'application/json' },

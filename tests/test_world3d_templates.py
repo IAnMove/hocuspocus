@@ -108,6 +108,14 @@ def test_search_is_bounded_bilingual_and_rejects_a_bad_limit():
     assert language.value.code == "invalid_language"
 
 
+def test_mutation_without_intent_is_rejected(tmp_path):
+    client, root = client_for(tmp_path)
+    response = post(client, "world3d.scene.apply_query", {"query": "dolly zoom"})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "intent_conflict"
+    assert _scene_files(root) == []
+
+
 def test_unknown_id_is_not_the_first_template(tmp_path):
     client, _root = client_for(tmp_path)
     response = post(client, "world3d.templates.get", {"template_id": "nope"})
