@@ -249,6 +249,29 @@ def test_silicon_circuit_shots_pass_dry_run():
     assert report['h3_frames'] == 0
 
 
+def test_silicon_mainframe_shots_pass_dry_run():
+    from services import music_production as runner
+    from services.production_dry_run import dry_run
+
+    shots = []
+    for index, template in enumerate(('atmos-silicon-mainframe-wide', 'atmos-silicon-mainframe-low')):
+        shots.append({
+            'key': f'mainframe{index}',
+            'kind': 'scene3d',
+            't0': index * 6,
+            'scene3d': {'template': template, 'subject': '/api/v1/file/hero.glb?workspace=test'},
+        })
+    spec = runner.validate_spec({
+        'title': 'Silicon mainframe',
+        'song': {'lyrics': 'hall', 'caption': 'screens', 'duration': 12, 'bpm': 120},
+        'style': {},
+        'shots': shots,
+    })
+    report = dry_run(spec)
+    assert report['dry_run'] is True
+    assert report['h3_frames'] == 0
+
+
 def test_native_fill_covers_an_h3_tail_and_arbitrary_shot_keys_are_safe(tmp_path):
     production = Production(tmp_path)
     production.state['clips'] = {'opening': {'file': 'h3.mp4'}}

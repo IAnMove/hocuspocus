@@ -359,7 +359,8 @@
     "islands": "Islands",
     "room": "Room",
     "grid": "Grid",
-    "circuit": "Circuit"
+    "circuit": "Circuit",
+    "mainframe": "Mainframe"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1658,6 +1659,14 @@
       "title": "Silicon circuit · low",
       "description": "The same board from the pad, looking across the traces toward the packages and the ridge."
     },
+    "atmos-silicon-mainframe-wide": {
+      "title": "Silicon mainframe · wide",
+      "description": "A procedural mainframe hall. Cabinets, reels, and drives stay clear of the open aisle."
+    },
+    "atmos-silicon-mainframe-low": {
+      "title": "Silicon mainframe · low",
+      "description": "The same hall from the aisle, looking toward the phosphor screens and the cabinet rows."
+    },
     "atmos-meadow-wide": {
       "title": "Meadow · wide",
       "description": "A procedural meadow under low clouds. Wind moves the grass, and the character spot stays on open ground."
@@ -1698,7 +1707,8 @@
       "spring": "Spring",
       "overcast": "Overcast",
       "idle": "Idle",
-      "compute": "Compute"
+      "compute": "Compute",
+      "burst": "Burst"
     },
     "palette": "Palette",
     "swatch": {
@@ -1760,7 +1770,8 @@
     "orbit": "Orbit",
     "breeze": "Breeze",
     "grid": "Grid",
-    "active": "Active"
+    "active": "Active",
+    "lit": "Lit"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",

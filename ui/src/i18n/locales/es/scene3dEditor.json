@@ -359,7 +359,8 @@
     "islands": "Islas",
     "room": "Habitación",
     "grid": "Rejilla",
-    "circuit": "Circuito"
+    "circuit": "Circuito",
+    "mainframe": "Unidad central"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1654,6 +1655,14 @@
       "title": "Circuito de silicio · bajo",
       "description": "La misma placa desde el disco, mirando las pistas hacia los encapsulados y la cresta."
     },
+    "atmos-silicon-mainframe-wide": {
+      "title": "Unidad central de silicio · amplio",
+      "description": "Una sala procedural de ordenador central. Los armarios, las bobinas y los discos quedan fuera del pasillo."
+    },
+    "atmos-silicon-mainframe-low": {
+      "title": "Unidad central de silicio · bajo",
+      "description": "La misma sala desde el pasillo, mirando las pantallas de fósforo y las filas de armarios."
+    },
     "atmos-space-ring-low": {
       "title": "Planeta con anillos · cámara baja",
       "description": "La misma órbita desde la plataforma, mirando los anillos y los asteroides cercanos."
@@ -1698,7 +1707,8 @@
       "spring": "Primavera",
       "overcast": "Nublado",
       "idle": "En reposo",
-      "compute": "Cálculo"
+      "compute": "Cálculo",
+      "burst": "Ráfaga"
     },
     "palette": "Paleta",
     "swatch": {
@@ -1760,7 +1770,8 @@
     "orbit": "Órbita",
     "breeze": "Brisa",
     "grid": "Rejilla",
-    "active": "Activos"
+    "active": "Activos",
+    "lit": "Encendidos"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",
