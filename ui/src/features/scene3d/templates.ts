@@ -409,7 +409,8 @@ export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
   if (atmos) return atmos
   const technique = techniqueDocument(id)
   if (technique) return technique
-  const template = SCENE3D_TEMPLATES.find(item => item.id === id) ?? SCENE3D_TEMPLATES[0]
+  const template = SCENE3D_TEMPLATES.find(item => item.id === id)
+  if (!template) throw new Error(`unknown_template:${id}`)
   const layout = LAYOUTS[template.id] ?? {}
   const document = createDefaultScene3DDocument()
   document.templateId = template.id

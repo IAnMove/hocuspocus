@@ -1327,3 +1327,12 @@ allow the sequence to continue; uncertain job status or save failure stops it.
 Approval remains explicit. Coverage is in `ui/tests/lipsCreatorWizard.test.ts`
 and `tests/test_lips_creator_commands.py`; the browser character-linking path is
 covered by `ui/e2e/specs/lips-creator.spec.ts`.
+
+## Video 3D shots
+
+`video3d.templates.apply` searches the editor's shot library and applies an exact
+id through `world3dTemplates.command`, registered by
+`registerWorld3DTemplateCapabilities` in
+`ui/src/features/agent/world3dTemplateCapabilities.ts`. The same cards serve MCP
+and the production planner. A tied or unknown query does not create a scene.
+Coverage is in `ui/tests/world3dTemplatesWizard.test.ts`.

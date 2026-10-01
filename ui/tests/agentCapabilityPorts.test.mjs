@@ -55,6 +55,8 @@ const AGENT_ACTIONS_IMPORTS = [
   './wizardIntent',
   // Pure validation/result formatting; no store, transport or execution port.
   './wizardTurnReport',
+  // Action type only. Execution stays on the world3dTemplates adapter.
+  './world3dTemplateCapabilities',
 ]
 
 const LAB_ACTIONS_IMPORTS = [
@@ -201,7 +203,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 82) // Adds standalone Tools upscale on the durable command handoff.
+  assert.equal(registered.length, 83) // Video 3D shot search shares the editor catalog.
   assert.equal(legacy.length, 0)
 })
 

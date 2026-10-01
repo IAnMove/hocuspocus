@@ -3287,6 +3287,32 @@
       "notes": "MCP uses the same collection commands. Generation runs sequentially through the native image queue and keeps candidates pending.",
       "prompt_fixture": "",
       "blocking_defect": ""
+    },
+    {
+      "id": "video3d.templates.apply",
+      "lab": "video_3d",
+      "surface": "edit",
+      "user_operation": "Search the Video 3D shot library and apply an exact id",
+      "control": "Ask to the Wizard → Video 3D",
+      "ui_handler": "world3dTemplates.command",
+      "domain_function": "registerWorld3DTemplateCapabilities",
+      "domain_module": "ui/src/features/agent/world3dTemplateCapabilities.ts",
+      "adapter": "world3dTemplates.command",
+      "api": "POST /api/v1/world3d/templates/commands",
+      "wizard_capability": "world3d_templates",
+      "wizard_schema": "world3dTemplateCapabilities.world3d_templates.inputSchema",
+      "in_wizard_context": true,
+      "wizard_status": "registrada",
+      "wizard_available": true,
+      "classification": "operativa",
+      "phase": "out_of_scope",
+      "preconditions": "An exact template id, or a query whose top card outranks the next; object ids for binds; base_revision for patches",
+      "persistence": "Workspace world3d-edits working copy and a published .world3d.scene.json",
+      "presentation": "video_3d",
+      "test": "ui/tests/world3dTemplatesWizard.test.ts",
+      "notes": "MCP, the Wizard and the production planner share the editor catalog. A tie or an unknown id does not invent a scene.",
+      "prompt_fixture": "",
+      "blocking_defect": ""
     }
   ],
   "audited_control_groups": [

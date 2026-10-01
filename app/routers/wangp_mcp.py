@@ -283,7 +283,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
                     raise ValueError('Tool call params must be an object')
                 value = await call_tool(params.get('name'), params.get('arguments') or {})
                 result = {
-                    'content': [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}],
+                    'content': _tool_content(value),
                     'isError': _tool_result_is_error(value),
                 }
                 if params.get('name') in operation_names and isinstance(value, dict):
@@ -326,6 +326,20 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         return Response(status_code=405, headers={'Allow': 'POST'})
 
     return router
+
+
+def _tool_content(value):
+    """Keep the JSON summary first. Image blocks follow so a vision client can see the preview."""
+    content = [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}]
+    images = value.get('images') if isinstance(value, dict) else None
+    if not isinstance(images, list):
+        return content
+    for image in images:
+        if not isinstance(image, dict) or not isinstance(image.get('data'), str) or not image['data']:
+            continue
+        mime = image.get('mimeType')
+        content.append({'type': 'image', 'mimeType': mime if isinstance(mime, str) and mime else 'image/png', 'data': image['data']})
+    return content
 
 
 def _tool_result_is_error(value):

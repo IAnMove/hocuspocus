@@ -49,7 +49,51 @@ def plan_brief(brief: Any, lyricist: Callable[[dict], str] | None = None) -> dic
         expanded = expand_style_preset(spec)
     except ProductionError as error:
         raise PlanError(error.code, str(error)) from error
+    query = _world3d_query(brief)
+    if query:
+        return _plan_world3d_shot(expanded, brief, query)
     return plan_shots(expanded)
+
+
+def _world3d_query(brief: Any) -> str:
+    if not isinstance(brief, dict):
+        return ""
+    for name in ("world3d", "toma"):
+        value = brief.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _plan_world3d_shot(spec: dict, brief: dict, query: str) -> dict:
+    """Place one real template id. A tied search is refused instead of inventing a shot."""
+    from services.world3d_template_catalog import search_templates
+    hits = search_templates(query, limit=8)
+    if not hits:
+        raise PlanError("unknown_template", f"No Video 3D template matches {query}")
+    if len(hits) > 1 and hits[0]["score"] == hits[1]["score"]:
+        names = ", ".join(str(item["id"]) for item in hits[:8])
+        raise PlanError("ambiguous_template", f"Several templates match {query}: {names}")
+    chosen = hits[0]
+    speed = float(chosen.get("playbackSpeed") or 1)
+    native = float(chosen.get("duration") or 6) / speed
+    window = min(float(spec["song"]["duration"]), max(1.0, native))
+    scene3d: dict[str, Any] = {"template": chosen["id"]}
+    subject = _optional_text(brief, ("world3d_subject", "sujeto_3d"))
+    if subject:
+        scene3d["subject"] = subject
+    planned = dict(spec)
+    planned["shots"] = [{"key": "world3d", "kind": "scene3d", "t0": 0, "t1": round(window, 3), "scene3d": scene3d}]
+    planned["world3d_template"] = chosen["id"]
+    return planned
+
+
+def _optional_text(brief: dict, names: tuple[str, ...]) -> str:
+    for name in names:
+        value = brief.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def _fields(brief: Any) -> dict[str, Any]:
