@@ -146,13 +146,15 @@ def _series_shot(item: Any, index: int) -> dict[str, Any] | None:
     action = _text(item.get("action"))
     takes, selected, technical, review = _series_takes(item)
     scene_id = _text(item.get("sceneId"))
-    return _shot(
+    result = _shot(
         identifier[:80], _order(item.get("order"), index + 1), "series",
         duration=_number(item.get("durationSeconds")),
         text=dialogue or action, text_kind="dialogue" if dialogue else ("action" if action else None),
         takes=takes, selected_take_id=selected, technical_status=technical, review=review,
         scene={"kind": None, "id": scene_id} if scene_id else None,
     )
+    result["regenerable"] = item.get("productionMethod") in {None, "generated_video", "animation_2d"}
+    return result
 
 
 def _series_takes(item: dict[str, Any]):

@@ -9803,6 +9803,7 @@ async def director_pipeline_start(request: Request):
     except execution_mode.ExecutionModeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
+        body["workspace"] = workspace
         pid = start_pipeline(body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -10188,7 +10189,10 @@ async def rerun_pipeline_clip_video(pid: str, clip_index: int, request: Request)
         rerun_clip_video,
     )
     body = await request.json()
-    base = wgp.server_config.get("save_path", "outputs")
+    base = _workspace_dir(body["workspace"]) if body.get("workspace") else wgp.server_config.get("save_path", "outputs")
+    from services.production_shot_regeneration import guard_shared_regeneration
+    guard_shared_regeneration(base, body.get("workspace") or "default", body,
+                              f"/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-video")
     try:
         result = await asyncio.to_thread(
             rerun_clip_video,
@@ -29760,6 +29764,9 @@ def _series_render_update(job_id: str, **patch) -> dict | None:
         job["updatedAt"] = time.time()
         snapshot = copy.deepcopy(job)
         _series_render_store(str(job["workspace"])).save(snapshot)
+        if snapshot.get("productionId") and "status" in patch:
+            from services.production_project_link import note_production_status
+            note_production_status(_workspace_dir(snapshot["workspace"]), snapshot["productionId"], snapshot["status"])
         publisher = globals().get("_publish_series_task")
         if callable(publisher):
             try:
@@ -30168,6 +30175,10 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
     )
 
     workspace = _series_library_workspace(body.get("workspace"))
+    from services.production_shot_regeneration import guard_shared_regeneration
+    if body.get("shared_review") is not None:
+        guard_shared_regeneration(_workspace_dir(workspace), workspace, body,
+                                  f"/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
     with _series_library_lock:
         library = _read_series_workspace(workspace)
         series = copy.deepcopy(_series_project_or_404(library, series_id))
@@ -30280,6 +30291,8 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
                 "createdAt": time.time(), "updatedAt": time.time(), "error": None,
             })
         now_iso = _series_iso_now()
+        from services.production_generation_link import attach_episode
+        registered = attach_episode(_workspace_dir(workspace), workspace, episode, body)
         episode["status"] = "rendering"
         episode["updatedAt"] = now_iso
         series["episodesById"][episode_id] = episode
@@ -30295,6 +30308,7 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         now = time.time()
         job = {
             "jobId": job_id, "kind": "render", "workspace": workspace,
+            "productionId": registered["production_id"],
             "seriesId": series_id, "episodeId": episode_id, "status": "queued",
             "stage": "queued", "current": 0, "total": len(items), "items": items,
             "activeShotId": None, "message": "Series shot render queued.",

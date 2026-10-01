@@ -201,11 +201,18 @@ def create_music_productions_router(
         from services.production_shot_redo import redo
         payload = body or {}
         with hold_edit(workspace, production_id):
+            from services.production_shot_regeneration import guard_shared_regeneration
+            guard_shared_regeneration(str(_root(workspace_dir, workspace)), workspace, payload,
+                                      f"/api/v1/music-productions/{production_id}/shots/{shot}/redo")
             production_cls, mcp = studio()
             _root_path, state = state_of(workspace, production_id)
             production = production_cls(workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=mcp)
             try:
-                return redo(production, _spec(state), shot, payload.get("from"), frame_prompt=payload.get("frame_prompt"), action=payload.get("action"), shoot_frame=_shoot_frame, shoot_clip=_shoot_clip, export_scene=_export_scene)
+                result = redo(production, _spec(state), shot, payload.get("from"), frame_prompt=payload.get("frame_prompt"), action=payload.get("action"), shoot_frame=_shoot_frame, shoot_clip=_shoot_clip, export_scene=_export_scene)
+                if payload.get("shared_review"):
+                    from services.production_shot_regeneration import publish_music_regeneration
+                    publish_music_regeneration(production, shot, payload.get("from"))
+                return result
             except (ProductionError, ShotEditError) as error:
                 raise HTTPException(status_code=422, detail={"code": getattr(error, "code", "shot_edit_failed"), "message": str(error)}) from error
 

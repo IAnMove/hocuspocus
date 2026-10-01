@@ -1361,6 +1361,8 @@ def _save_pipeline_state_locked(pid: str) -> bool:
     state = {
         "version": PIPELINE_STATE_VERSION,
         "pipeline_id": pid,
+        "production_id": p.get("production_id"),
+        "project": p.get("project"),
         "created_at": p.get("created_at"),
         "updated_at": p.get("updated_at"),
         "phase_started_at": p.get("phase_started_at"),
@@ -5376,8 +5378,14 @@ def start_pipeline(params: dict) -> str:
         "llm_streaming": False,
     }
 
+    from services.production_generation_link import attach_director
+    attach_director(pipeline, params)
     with _pipeline_lock:
         _pipelines[pid] = pipeline
+    if not _save_pipeline_state(pid):
+        with _pipeline_lock:
+            _pipelines.pop(pid, None)
+        raise ValueError("Could not persist the pipeline before generation")
 
     # Publish only after the pipeline is discoverable, but before its worker
     # can advance.  The observer's canonical IDs are stored synchronously so

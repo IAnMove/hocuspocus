@@ -53,6 +53,9 @@ def _iso(value: Any) -> str | None:
 
 
 def _project_ref(value: Mapping[str, Any]) -> dict[str, str] | None:
+    project = value.get("project")
+    if isinstance(project, Mapping) and project.get("kind") and project.get("id"):
+        return {"kind": str(project["kind"]), "id": str(project["id"])}
     candidates = (
         ("project", value.get("project_id")),
         ("story", value.get("story_id")),

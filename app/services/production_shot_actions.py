@@ -39,6 +39,7 @@ def describe_actions(shot: dict[str, Any]) -> list[dict[str, Any]]:
     source = _source(shot)
     locked = _review_flag(shot, "locked")
     writable = source in _WRITABLE
+    regenerable = source in {"music", "director", "series"} and shot.get("regenerable", True)
     return [
         _choice("select", writable and not locked and bool(shot.get("takes")), _write_reason(writable, locked, bool(shot.get("takes")))),
         _choice("review", True, None),
@@ -46,7 +47,8 @@ def describe_actions(shot: dict[str, Any]) -> list[dict[str, Any]]:
         _choice("undo", writable and not locked and bool(_history(shot)), _undo_reason(writable, locked, shot)),
         _choice("reexport", writable and not locked, _write_reason(writable, locked, True)),
         _choice("open_scene", bool(_scene_id(shot)), None if _scene_id(shot) else "no_scene"),
-        _choice("regenerate", False, "regenerate_needs_runner"),
+        _choice("regenerate", regenerable and not locked,
+                "shot_locked" if locked else (None if regenerable else "origin_unsupported")),
     ]
 
 
@@ -66,7 +68,8 @@ def perform(workspace_dir: str, workspace_id: str, production_id: str, shot_id: 
     if action == "request":
         return _request(workspace_dir, workspace_id, production_id, shot_id, body)
     if action == "regenerate":
-        raise ActionError("regenerate_needs_runner", "Regeneration stays on the production runner")
+        from services.production_shot_regeneration import regeneration_target
+        return regeneration_target(workspace_dir, workspace_id, production_id, shot_id, body)
     if action == "open_scene":
         return _open_scene(workspace_dir, workspace_id, production_id, shot_id)
     if action == "review":
