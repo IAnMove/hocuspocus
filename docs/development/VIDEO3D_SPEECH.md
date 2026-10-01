@@ -70,6 +70,16 @@ solo referencia medios: no los empaqueta para otro ordenador.
 
 ## Rhubarb y exportación
 
+Los agentes pueden usar MCP `audio.mouth_cues` con
+`{version:1,input:{workspace,file,start:0,duration:75,dialogue:"",language:""}}`.
+La app decodifica audio del workspace a PCM mono 16 kHz y reutiliza el mismo
+analizador Rhubarb instalado. Cada ventana admite hasta 90 s; la fuente hasta
+600 s / 32 MB. Repite con ventanas contiguas para una canción larga. Los gestos
+devueltos y el JSON publicado usan el reloj de la fuente (incluyen `start`),
+por lo que cada plano conserva `speech.offset` igual al inicio de su recorte.
+Usa la voz aislada de `audio.analyze` para canto. Este análisis es CPU, no genera
+voz y no descarga herramientas. Sin Rhubarb devuelve `speech_unavailable`.
+
 Instala [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) con sus
 recursos y licencia. Configura `RHUBARB_EXECUTABLE` con la ruta absoluta al
 binario, o añádelo a PATH, y reinicia HocusPocus. No hay descargas automáticas.
