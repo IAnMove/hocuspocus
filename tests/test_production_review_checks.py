@@ -485,7 +485,7 @@ def test_status_is_computed_off_the_event_loop(tmp_path, monkeypatch):
 
     (tmp_path / "p.production.json").write_text('{"status": "completed"}')
     seen = []
-    monkeypatch.setattr(mp, "status_summary", lambda state, workspace, root=None: seen.append(threading.current_thread().name) or {"status": "completed"})
+    monkeypatch.setattr(mp, "status_summary", lambda state, workspace, root=None, production_id=None: seen.append(threading.current_thread().name) or {"status": "completed"})
     handlers = mp.command_handlers(lambda _ws: str(tmp_path), lambda: str(tmp_path), lambda: "http://x", lambda: "t")
     asyncio.run(handlers["production.status"]({"version": 1, "input": {"workspace": "w", "production_id": "p"}}))
     assert seen and seen[0] != threading.main_thread().name

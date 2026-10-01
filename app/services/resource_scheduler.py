@@ -93,7 +93,7 @@ def local_gpu_lane(gpu_index: int = 0) -> ResourceLane:
 
 def cpu_lane(name: str = "llm", capacity: int = 1) -> ResourceLane:
     safe_name = str(name or "task").strip().lower().replace(" ", "_")
-    slots = capacity if type(capacity) is int and capacity >= 1 else 1
+    slots = capacity if isinstance(capacity, int) and not isinstance(capacity, bool) and capacity >= 1 else 1
     return ResourceLane(f"local_cpu:{safe_name}", f"Local CPU · {safe_name}", "local", slots)
 
 

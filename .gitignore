@@ -75,8 +75,6 @@ app/loras_i2v/
 app/loras_metadata/
 app/outputs/
 app/outputs2/
-# Completed-run timing medians written beside a workspace.
-.production-timings.json
 app/gradio_outputs/
 app/storage/
 app/samples/
@@ -152,3 +150,6 @@ app/services/rigging/env/
 
 # Example media is fetched on demand; never bundle developer-generated copies.
 /ui/public/examples/
+
+# Per-workspace medians written when a production completes. Not a measurement to commit.
+.production-timings.json

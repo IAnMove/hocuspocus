@@ -515,7 +515,7 @@ def rig_capabilities():
     from services import rig_service
     payload = rig_service.capabilities()
     # The procedural rig is CPU-only; UniRig needs a local NVIDIA engine.
-    payload["engines"] = [engine for engine in payload["engines"] if engine["id"] == "procedural"]
+    payload["engines"] = [engine for engine in payload["engines"] if engine["id"] in {"procedural", "humanoid"}]
     return payload
 
 
@@ -523,7 +523,7 @@ def rig_capabilities():
 async def generate_rig(request: Request):
     from services import rig_service
     body = await request.json()
-    if str(body.get("engine") or "procedural") != "procedural":
+    if str(body.get("engine") or "procedural") not in {"procedural", "humanoid"}:
         require_capability_http("unirig_ai")
     try:
         workspace = body.get("workspace") or core.active_workspace()

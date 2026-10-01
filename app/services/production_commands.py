@@ -13,11 +13,6 @@ USE_TAKE = "production.shot.use_take"
 SHOT_UPDATE = "production.shot.update"
 SONG_USE = "production.song.use"
 CANCEL = "production.cancel"
-REVIEW = "production.shot.review"
-LOCK = "production.shot.lock"
-REDO = "production.shot.redo"
-REQUEST = "production.shot.request"
-UNDO = "production.shot.undo"
 
 
 def _envelope(properties: dict, required: list[str]) -> dict:
@@ -51,32 +46,6 @@ def extra_catalog() -> list[dict[str, Any]]:
         {"name": CANCEL, "description": (
             "Ask a live production.run to stop between rounds. Status becomes cancelled and a later production.run resumes."
         ), "inputSchema": _envelope(base, ["workspace", "production_id"])},
-        {"name": REVIEW, "description": (
-            "Set one shot to pending, approved, or changes_requested, with an optional note. No GPU."
-        ), "inputSchema": _envelope({**base, "shot": shot, "status": {"type": "string", "enum": ["pending", "approved", "changes_requested"]},
-                                     "note": {"type": "string", "maxLength": 500}},
-                                    ["workspace", "production_id", "shot", "status"])},
-        {"name": LOCK, "description": (
-            "Lock or unlock one shot. Locked shots are skipped by frames, clips and scenes until unlocked."
-        ), "inputSchema": _envelope({**base, "shot": shot, "locked": {"type": "boolean"}},
-                                    ["workspace", "production_id", "shot", "locked"])},
-        {"name": REDO, "description": (
-            "Regenerate one shot from its frame, its clip, or its scene export. Refuses a locked shot. Records history first."
-        ), "inputSchema": _envelope({**base, "shot": shot, "from": {"type": "string", "enum": ["frame", "clip", "scene"]},
-                                     "frame_prompt": {"type": "string"}, "action": {"type": "string"}, "seed": {"type": "integer"},
-                                     "image_model": {"type": "string"}, "cast": {"type": "array", "items": {"type": "string"}},
-                                     "expected_revision": {"type": "integer"}},
-                                    ["workspace", "production_id", "shot", "from"])},
-        {"name": REQUEST, "description": (
-            "Ask the configured app LLM for a closed ShotChangePlan for this one shot. apply defaults to false and returns "
-            "plan, diff and cost_estimate. The instruction is data, not a command."
-        ), "inputSchema": _envelope({**base, "shot": shot, "instruction": {"type": "string", "minLength": 1},
-                                     "apply": {"type": "boolean"}},
-                                    ["workspace", "production_id", "shot", "instruction"])},
-        {"name": UNDO, "description": (
-            "Restore one history entry's before snapshot and re-export that scene. Does not delete media files."
-        ), "inputSchema": _envelope({**base, "shot": shot, "history_id": {"type": "string", "minLength": 1, "maxLength": 40}},
-                                    ["workspace", "production_id", "shot", "history_id"])},
     ]
 
 
@@ -157,20 +126,9 @@ def _edit_error(error: Exception) -> None:
     raise HTTPException(422, {"code": code, "message": str(error), "retryable": False}) from error
 
 
-def _review_error(error: Exception) -> None:
-    from fastapi import HTTPException
-    code = getattr(error, "code", None) or "shot_review_failed"
-    status = 404 if code == "production_not_found" else 422
-    raise HTTPException(status, {"code": code, "message": str(error), "retryable": False}) from error
-
-
 def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str], app_url: Callable[[], str], token: Callable[[], str]) -> dict:
-    from pathlib import Path
     from services.production_control import request_cancel
     from services.production_shot_edit import ShotEditError, update_shot, use_take
-    from services.production_shot_redo import redo_from_input, undo_from_input
-    from services.production_shot_request import request_from_input
-    from services.production_shot_review import ReviewError, lock_from_input, review_from_input
     from services.production_song_switch import SongSwitchError, use_candidate
 
     def module():
@@ -231,63 +189,4 @@ def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[]
             raise HTTPException(409, {"code": "not_running", "message": "This production is not running", "retryable": False})
         return _ok(CANCEL, {"cancelling": True})
 
-    def _call(action):
-        try:
-            return action()
-        except (ReviewError, ShotEditError) as error:
-            _review_error(error)
-
-    def _preview(runner, data: dict):
-        return runner.Production(
-            data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir,
-            mcp=lambda *_args, **_kwargs: {},
-        )
-
-    async def review_command(arguments: Any) -> dict:
-        data = _input(arguments)
-        result = _call(lambda: review_from_input(Path(workspace_dir(data["workspace"])), data))
-        return _ok(REVIEW, result)
-
-    async def lock_command(arguments: Any) -> dict:
-        data = _input(arguments)
-        result = _call(lambda: lock_from_input(Path(workspace_dir(data["workspace"])), data))
-        return _ok(LOCK, result)
-
-    async def redo_command(arguments: Any) -> dict:
-        from fastapi import HTTPException
-        data = _input(arguments)
-        if not isinstance(data.get("shot"), str) or not isinstance(data.get("from"), str):
-            raise HTTPException(422, {"code": "invalid_command", "message": "shot and from are required", "retryable": False})
-        runner = module()
-        with holding_edit(runner, data["workspace"], data["production_id"]):
-            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
-            result = _call(lambda: redo_from_input(production, _spec(production), data))
-        return _ok(REDO, result)
-
-    async def undo_command(arguments: Any) -> dict:
-        data = _input(arguments)
-        runner = module()
-        with holding_edit(runner, data["workspace"], data["production_id"]):
-            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
-            result = _call(lambda: undo_from_input(production, _spec(production), data))
-        return _ok(UNDO, result)
-
-    async def request_command(arguments: Any) -> dict:
-        from fastapi import HTTPException
-        data = _input(arguments)
-        if not isinstance(data.get("shot"), str) or not isinstance(data.get("instruction"), str):
-            raise HTTPException(422, {"code": "invalid_command", "message": "shot and instruction are required", "retryable": False})
-        runner = module()
-        if data.get("apply") is True:
-            with holding_edit(runner, data["workspace"], data["production_id"]):
-                production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
-                result = _call(lambda: request_from_input(production, _spec(production), data))
-            return _ok(REQUEST, result)
-        production = _preview(runner, data)
-        result = _call(lambda: request_from_input(production, _spec(production), data))
-        return _ok(REQUEST, result)
-
-    return {
-        USE_TAKE: use_take_command, SHOT_UPDATE: update_command, SONG_USE: song_command, CANCEL: cancel_command,
-        REVIEW: review_command, LOCK: lock_command, REDO: redo_command, REQUEST: request_command, UNDO: undo_command,
-    }
+    return {USE_TAKE: use_take_command, SHOT_UPDATE: update_command, SONG_USE: song_command, CANCEL: cancel_command}

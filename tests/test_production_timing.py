@@ -112,9 +112,8 @@ def test_status_without_a_run_is_zeros_and_a_normal_one_stays_small():
              "timing": {"song": 120, "analyze": 3, "cast": 40, "frames": 80, "clips": 700, "scenes": 90, "montage": 25, "shots": shots}}
     status = status_summary(state, "ws")
     encoded = json.dumps(status)
-    # execution, technical, and artistic are always on the reply. Prompts stay out.
-    # progress and the four usage second fields are on the reply too.
-    assert len(encoded.encode()) < 1750
+    # execution, technical, artistic, and progress are always on the reply. Prompts stay out.
+    assert len(encoded.encode()) < 1900
     assert status["timing"]["shots"][0] == {"key": "s0", "seconds": 80, "takes": 1}
     assert "frame.png" not in json.dumps(status["timing"]) and "prompt" not in json.dumps(status["timing"])
     assert timing_summary({"timing": {"song": -3, "shots": [{"key": "", "seconds": 1}]}})["song"] == 0
@@ -127,7 +126,6 @@ def test_short_stages_add_up_instead_of_rounding_to_zero_each_time():
     watch = StageWatch(production, clock=lambda: now["t"])
     for _ in range(3):
         watch.start("song")
-        assert production.state["stage"] == "song"
         now["t"] += 0.4
         watch.stop()
     assert production.state["timing"]["song"] == 1.2

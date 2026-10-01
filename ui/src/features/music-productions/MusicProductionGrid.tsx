@@ -1,6 +1,6 @@
 import { useUiTranslation } from '../../i18n'
 import { musicProductionFileUrl } from './fileUrl'
-import type { MusicProductionShot, MusicProductionTake } from './types'
+import type { MusicProductionShot, MusicProductionTake, ShotReviewAction } from './types'
 
 const buttonClass = 'inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-bg-hover disabled:opacity-50'
 
@@ -12,6 +12,7 @@ export function MusicProductionGrid({
   onRetake,
   onUseTake,
   onOpenMontage,
+  onReview,
 }: {
   workspace: string
   shots: MusicProductionShot[]
@@ -20,6 +21,7 @@ export function MusicProductionGrid({
   onRetake: (shot: string) => void
   onUseTake: (shot: string, takeFile: string) => void
   onOpenMontage: () => void
+  onReview?: (shot: string, action: ShotReviewAction) => void
 }) {
   const { t } = useUiTranslation('navigation')
   return <div className="flex flex-col gap-3">
@@ -35,13 +37,14 @@ export function MusicProductionGrid({
         onOpenScene={onOpenScene}
         onRetake={onRetake}
         onUseTake={onUseTake}
+        onReview={onReview}
       />)}
     </div>
   </div>
 }
 
 function ShotCard({
-  workspace, shot, busy, onOpenScene, onRetake, onUseTake,
+  workspace, shot, busy, onOpenScene, onRetake, onUseTake, onReview,
 }: {
   workspace: string
   shot: MusicProductionShot
@@ -49,6 +52,7 @@ function ShotCard({
   onOpenScene: (sceneName: string) => void
   onRetake: (shot: string) => void
   onUseTake: (shot: string, takeFile: string) => void
+  onReview?: (shot: string, action: ShotReviewAction) => void
 }) {
   const { t } = useUiTranslation('navigation')
   const frame = musicProductionFileUrl(workspace, shot.start_frame)
@@ -74,8 +78,45 @@ function ShotCard({
       <button type="button" className={buttonClass} disabled={busy} onClick={() => onRetake(shot.key)}>
         {t('musicProductions.anotherTake')}
       </button>
+      <ReviewActions shot={shot} busy={busy} onReview={onReview} />
     </div>
   </article>
+}
+
+function reviewLabel(status: string | undefined, pending: string, approved: string, changes: string): string {
+  if (status === 'approved') return approved
+  if (status === 'changes_requested') return changes
+  return pending
+}
+
+function ReviewActions({
+  shot, busy, onReview,
+}: {
+  shot: MusicProductionShot
+  busy?: boolean
+  onReview?: (shot: string, action: ShotReviewAction) => void
+}) {
+  const { t } = useUiTranslation('navigation')
+  if (!onReview) return null
+  const locked = shot.review?.locked === true
+  const label = reviewLabel(
+    shot.review?.status,
+    t('musicProductions.reviewPending'),
+    t('musicProductions.reviewApproved'),
+    t('musicProductions.reviewChanges'),
+  )
+  return <>
+    <span className="text-[11px] text-text-secondary">{label}</span>
+    <button type="button" className={buttonClass} disabled={busy} onClick={() => onReview(shot.key, 'approved')}>
+      {t('musicProductions.approveShot')}
+    </button>
+    <button type="button" className={buttonClass} disabled={busy} onClick={() => onReview(shot.key, 'changes_requested')}>
+      {t('musicProductions.requestChanges')}
+    </button>
+    <button type="button" className={buttonClass} disabled={busy} onClick={() => onReview(shot.key, locked ? 'unlock' : 'lock')}>
+      {locked ? t('musicProductions.unlockShot') : t('musicProductions.lockShot')}
+    </button>
+  </>
 }
 
 function TakeRow({

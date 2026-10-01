@@ -18,6 +18,23 @@ export interface MusicProductionTake {
   drive?: string
 }
 
+export type MusicProductionReviewStatus = 'pending' | 'approved' | 'changes_requested'
+
+export type ShotReviewAction = 'approved' | 'changes_requested' | 'lock' | 'unlock'
+
+export interface MusicProductionShotReview {
+  status?: MusicProductionReviewStatus
+  locked?: boolean
+  history_id?: string
+}
+
+export interface ReviewPlan {
+  plan?: { summary?: string; changes?: { op: string }[] }
+  diff?: { op: string; shot?: string; text?: string; from?: string }[]
+  cost_estimate?: { image_jobs?: number; clip_jobs?: number; scene_exports?: number; tokens?: number | null }
+  applied?: boolean
+}
+
 export interface MusicProductionShot {
   key: string
   kind?: string
@@ -36,13 +53,7 @@ export interface MusicProductionShot {
   scene_doc?: string | null
   scene_video?: string | null
   warnings?: unknown[]
-  review?: { status?: 'pending' | 'approved' | 'changes_requested'; locked?: boolean; history_id?: string }
-}
-
-export interface ReviewPlan {
-  plan: { summary: string; changes: { op: string }[] }
-  diff: { op: string; shot?: string; text?: string; from?: string }[]
-  cost_estimate: { image_jobs: number; clip_jobs: number; scene_exports: number; tokens: number | null }
+  review?: MusicProductionShotReview
 }
 
 export interface MusicProductionDetail {

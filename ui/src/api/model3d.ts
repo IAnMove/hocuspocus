@@ -159,6 +159,8 @@ export interface RigProfile {
 export interface RigCapabilities {
   engines: RigEngine[]
   animations: RigAnimation[]
+  /** Standard Mixamo-named clips. Present when the humanoid engine is installed. */
+  humanoid_animations?: RigAnimation[]
   /** Optional during rolling upgrades from backends predating rig profiles. */
   rig_profiles?: RigProfile[]
   default_rig_profile?: RigProfileId
@@ -194,6 +196,7 @@ export async function startRigJob(params: {
   engine?: string
   rig_profile?: RigProfileId
   animations?: string[]
+  pose?: 't' | 'a'
   spine_joints?: number
   axis_mode?: 'auto' | 'x' | 'y' | 'z'
   weight_falloff?: number

@@ -13,7 +13,6 @@ import threading
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
-from services.production_shot_review import require_reviews_approved
 from services.publication_server import serve_publication
 
 OPERATION = "production.publish"
@@ -32,7 +31,6 @@ def publication_catalog() -> list[dict]:
                                  "properties": {"workspace": {"type": "string", "pattern": _WORKSPACE.pattern.replace("\\Z", "$")},
                                                 "production_id": {"type": "string", "pattern": _ID.pattern.replace("\\Z", "$")},
                                                 "slug": {"type": "string", "pattern": _ID.pattern.replace("\\Z", "$")},
-                                                "accept_unreviewed": {"type": "boolean"},
                                                 "extras": {"type": "array", "maxItems": 24, "items": {"type": "string"}}}}}}}]
 
 
@@ -40,7 +38,7 @@ def _input(arguments):
     if not isinstance(arguments, dict) or set(arguments) != {"version", "input"} or type(arguments["version"]) is not int or arguments["version"] != 1:
         raise ValueError("Use version 1 with an input object")
     data = arguments["input"]
-    if not isinstance(data, dict) or set(data) - {"workspace", "production_id", "slug", "extras", "accept_unreviewed"}:
+    if not isinstance(data, dict) or set(data) - {"workspace", "production_id", "slug", "extras"}:
         raise ValueError("Unsupported publication fields")
     for name, pattern in (("workspace", _WORKSPACE), ("production_id", _ID), ("slug", _ID)):
         value = data.get(name, data.get("production_id") if name == "slug" else None)
@@ -49,14 +47,7 @@ def _input(arguments):
     extras = data.get("extras", [])
     if not isinstance(extras, list) or len(extras) > 24:
         raise ValueError("extras must contain at most 24 workspace filenames")
-    return {**data, "slug": data.get("slug", data["production_id"]), "extras": extras, "accept_unreviewed": _accept_unreviewed(data)}
-
-
-def _accept_unreviewed(data: dict) -> bool:
-    value = data.get("accept_unreviewed", False)
-    if value is True or value is False:
-        return value
-    raise ValueError("accept_unreviewed must be boolean")
+    return {**data, "slug": data.get("slug", data["production_id"]), "extras": extras}
 
 
 def _source(root: Path, name, extensions=_EXTENSIONS) -> Path:
@@ -118,7 +109,8 @@ def publish_production(data: dict, workspace_dir) -> dict:
     state = json.loads(state_path.read_text(encoding="utf-8"))
     if state.get("status") != "completed":
         raise ValueError("Only a completed production can be published")
-    require_reviews_approved(root, data["production_id"], data.get("accept_unreviewed") is True)
+    from services.production_shot_review import assert_publishable
+    assert_publishable(root, data["production_id"], state)
     files = _sources(root, state, data["extras"])
     hashes = {name: _digest(path) for name, path in files.items()}
     title = str((state.get("spec") or {}).get("title") or data["production_id"])
@@ -165,13 +157,11 @@ def publication_handlers(workspace_dir) -> dict:
     from fastapi import HTTPException
 
     async def publish(arguments):
-        from services.production_shot_review import ReviewError
         try:
             result = await asyncio.to_thread(publish_production, _input(arguments), workspace_dir)
-        except ReviewError as error:
-            raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
         except (ValueError, OSError, json.JSONDecodeError) as error:
-            raise HTTPException(422, {"code": "publication_failed", "message": str(error), "retryable": False}) from error
+            code = "review_incomplete" if str(error).startswith("review_required") else "publication_failed"
+            raise HTTPException(422, {"code": code, "message": str(error), "retryable": False}) from error
         return {"version": 1, "operation": OPERATION, "status": "completed", "result": result}
 
     return {OPERATION: publish}

@@ -354,7 +354,10 @@
     "street": "Calle",
     "stage": "Escenario",
     "canyon": "Cañón",
-    "cave": "Cueva"
+    "cave": "Cueva",
+    "volcano": "Volcán",
+    "islands": "Islas",
+    "room": "Habitación"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1572,13 +1575,148 @@
     "atmos-crystal-cave-low": {
       "title": "Cueva de cristales · cámara baja",
       "description": "La misma cueva desde el suelo, mirando un grupo que brilla y los cristales del techo."
+    },
+    "atmos-volcano-wide": {
+      "title": "Campo volcánico · plano abierto",
+      "description": "Campo volcánico procedural bajo un cielo rojo. Los ríos de lava brillan, cae ceniza, y el hueco del personaje queda en la roca."
+    },
+    "atmos-volcano-low": {
+      "title": "Campo volcánico · cámara baja",
+      "description": "El mismo campo desde la roca, mirando a lo largo de un río de lava."
+    },
+    "atmos-temple-wide": {
+      "title": "Templo en la jungla · plano abierto",
+      "description": "Templo procedural entre la jungla. Los haces de luz caen entre las lianas, y el hueco del personaje queda en la piedra."
+    },
+    "atmos-temple-low": {
+      "title": "Templo en la jungla · cámara baja",
+      "description": "El mismo templo desde el suelo, mirando las ruinas con musgo y las mariposas."
+    },
+    "atmos-reef-wide": {
+      "title": "Fondo marino · plano abierto",
+      "description": "Arrecife procedural. La luz cáustica cruza la arena, y el hueco del personaje queda libre de peces y rocas."
+    },
+    "atmos-reef-low": {
+      "title": "Fondo marino · cámara baja",
+      "description": "El mismo arrecife desde la arena, mirando un banco de peces y burbujas que suben."
+    },
+    "atmos-neon-rain-wide": {
+      "title": "Callejón neón bajo la lluvia · plano abierto",
+      "description": "Callejón procedural de noche. El suelo mojado refleja los letreros, cae la lluvia y sube el vapor. El hueco del personaje queda en el pavimento libre."
+    },
+    "atmos-neon-rain-low": {
+      "title": "Callejón neón bajo la lluvia · cámara baja",
+      "description": "El mismo callejón desde la calle mojada, mirando un grupo de letreros y sus reflejos."
+    },
+    "atmos-sky-islands-wide": {
+      "title": "Islas flotantes · plano abierto",
+      "description": "Islas flotantes procedurales al estilo N64. Un damero de colores cubre la isla principal, y el hueco del personaje queda en esa cima."
+    },
+    "atmos-sky-islands-low": {
+      "title": "Islas flotantes · cámara baja",
+      "description": "Las mismas islas desde el damero, mirando nubes poligonales y monedas que giran."
+    },
+    "atmos-rooftop-night-wide": {
+      "title": "Azotea de noche · plano abierto",
+      "description": "Azotea procedural de noche con la ciudad al fondo. El perfil brilla detrás, y el hueco del personaje queda en la azotea abierta."
+    },
+    "atmos-rooftop-night-low": {
+      "title": "Azotea de noche · cámara baja",
+      "description": "La misma azotea desde la losa, mirando el parapeto y la ciudad."
+    },
+    "atmos-retro-room-wide": {
+      "title": "Habitación años 90 · plano abierto",
+      "description": "Habitación procedural de los años 90. El CRT, la consola y el mando quedan fuera del suelo libre."
+    },
+    "atmos-retro-room-low": {
+      "title": "Habitación años 90 · cámara baja",
+      "description": "La misma habitación desde la moqueta, mirando el CRT, la consola y el mando."
+    },
+    "atmos-space-ring-wide": {
+      "title": "Planeta con anillos · plano abierto",
+      "description": "Planeta con anillos y campo de asteroides, procedural. El hueco del personaje queda en una plataforma frente al planeta."
+    },
+    "atmos-space-ring-low": {
+      "title": "Planeta con anillos · cámara baja",
+      "description": "La misma órbita desde la plataforma, mirando los anillos y los asteroides cercanos."
+    },
+    "atmos-meadow-wide": {
+      "title": "Prado con nubes bajas · plano abierto",
+      "description": "Prado procedural con nubes bajas y viento. La hierba se mueve, y el hueco del personaje queda en terreno abierto."
+    },
+    "atmos-meadow-low": {
+      "title": "Prado con nubes bajas · cámara baja",
+      "description": "El mismo prado desde la hierba, mirando el campo y las nubes bajas."
     }
   },
   "atmos": {
     "time": "Hora",
-    "day": { "dawn": "Amanecer", "morning": "Mañana", "golden": "Hora dorada", "day": "Día", "earthrise": "Salida de la Tierra", "noon": "Mediodía", "dusk": "Atardecer", "blue": "Hora azul", "deep": "Fondo", "glow": "Brillo" },
+    "day": {
+      "dawn": "Amanecer",
+      "morning": "Mañana",
+      "golden": "Hora dorada",
+      "day": "Día",
+      "earthrise": "Salida de la Tierra",
+      "noon": "Mediodía",
+      "dusk": "Atardecer",
+      "blue": "Hora azul",
+      "deep": "Fondo",
+      "glow": "Brillo",
+      "erupt": "Erupción",
+      "calm": "Calma",
+      "mist": "Niebla",
+      "sun": "Sol",
+      "shallows": "Bajíos",
+      "trench": "Fosa",
+      "night": "Noche",
+      "storm": "Tormenta",
+      "clear": "Despejado",
+      "pink": "Rosa",
+      "late": "Madrugada",
+      "dim": "Tenue",
+      "on": "Encendida",
+      "cruise": "Crucero",
+      "eclipse": "Eclipse",
+      "spring": "Primavera",
+      "overcast": "Nublado"
+    },
     "palette": "Paleta",
-    "swatch": { "green": "Verde", "autumn": "Otoño", "blue": "Azul", "moss": "Musgo", "amber": "Ámbar", "regolith": "Regolito", "basalt": "Basalto", "rust": "Óxido", "dusk": "Ocaso", "frost": "Escarcha", "twilight": "Crepúsculo", "sand": "Arena", "gold": "Oro", "coral": "Coral", "amethyst": "Amatista", "aqua": "Agua" },
+    "swatch": {
+      "green": "Verde",
+      "autumn": "Otoño",
+      "blue": "Azul",
+      "moss": "Musgo",
+      "amber": "Ámbar",
+      "regolith": "Regolito",
+      "basalt": "Basalto",
+      "rust": "Óxido",
+      "dusk": "Ocaso",
+      "frost": "Escarcha",
+      "twilight": "Crepúsculo",
+      "sand": "Arena",
+      "gold": "Oro",
+      "coral": "Coral",
+      "amethyst": "Amatista",
+      "aqua": "Agua",
+      "magma": "Magma",
+      "ash": "Ceniza",
+      "jade": "Jade",
+      "vine": "Liana",
+      "lagoon": "Laguna",
+      "abyss": "Abismo",
+      "magenta": "Magenta",
+      "violet": "Violeta",
+      "peach": "Melocotón",
+      "mint": "Menta",
+      "sodium": "Sodio",
+      "indigo": "Índigo",
+      "cream": "Crema",
+      "mauve": "Malva",
+      "ice": "Hielo",
+      "copper": "Cobre",
+      "clover": "Trébol",
+      "hay": "Heno"
+    },
     "fogDensity": "Niebla",
     "wind": "Viento",
     "motes": "Motas",
@@ -1588,7 +1726,16 @@
     "flakes": "Copos",
     "ripples": "Ondas",
     "tide": "Marea",
-    "glow": "Brillo"
+    "glow": "Brillo",
+    "heat": "Calor",
+    "growth": "Crecimiento",
+    "current": "Corriente",
+    "rain": "Lluvia",
+    "spin": "Giro",
+    "skyline": "Perfil",
+    "static": "Nieve",
+    "orbit": "Órbita",
+    "breeze": "Brisa"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

@@ -96,13 +96,13 @@ def test_auto_shots_expand_when_the_planner_is_present(monkeypatch):
     assert "shots_auto_unavailable" not in {item["code"] for item in result["warnings"]}
 
 
-def test_handler_returns_before_the_thread_and_does_not_call_mcp(monkeypatch):
+def test_handler_returns_before_the_thread_and_does_not_call_mcp(monkeypatch, tmp_path):
     def forbid(*_args, **_kwargs):
         raise AssertionError("production.run touched the studio")
 
     monkeypatch.setattr("services.music_production.loopback_mcp", forbid)
     monkeypatch.setattr("services.music_production.threading.Thread", forbid)
-    handlers = command_handlers(forbid, forbid, forbid, forbid)
+    handlers = command_handlers(lambda _name: str(tmp_path), forbid, forbid, forbid)
     started = time.perf_counter()
     result = asyncio.run(handlers[RUN]({
         "version": 1,

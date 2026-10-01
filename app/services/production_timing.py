@@ -30,37 +30,6 @@ def _takes(value: Any) -> int:
     return number if number > 0 else 0
 
 
-PERF_FIELDS = ("s_per_step", "degraded", "model")
-
-
-def note_clip_performance(state: dict, key: str, status_payload: Any) -> None:
-    """Copy performance fields the job status actually returned. Missing keys stay null."""
-    perf = status_payload.get("performance") if isinstance(status_payload, dict) else None
-    source = perf if isinstance(perf, dict) else {}
-    if not isinstance(state, dict) or not isinstance(key, str) or not key:
-        return
-    bucket = state.get("clip_perf")
-    if not isinstance(bucket, dict):
-        bucket = {}
-        state["clip_perf"] = bucket
-    bucket[key] = {name: source[name] if name in source else None for name in PERF_FIELDS}
-
-
-def _phase(state: dict, key: str) -> dict[str, Any] | None:
-    perf = state.get("clip_perf") if isinstance(state, dict) else None
-    record = perf.get(key) if isinstance(perf, dict) else None
-    if not isinstance(record, dict):
-        return None
-    return {name: record[name] if name in record else None for name in PERF_FIELDS}
-
-
-def _with_phase(state: dict, key: str, row: dict) -> dict:
-    phase = _phase(state, key)
-    if not phase:
-        return row
-    return {**row, **phase}
-
-
 def timing_summary(state: dict) -> dict[str, Any]:
     """Seven stage seconds plus {key, seconds, takes}. Missing stages are 0."""
     raw = state.get("timing") if isinstance(state.get("timing"), dict) else {}
@@ -70,7 +39,11 @@ def timing_summary(state: dict) -> dict[str, Any]:
     for item in rows:
         if not isinstance(item, dict) or not isinstance(item.get("key"), str) or not item["key"]:
             continue
-        shots.append(_with_phase(state, item["key"], {"key": item["key"][:80], "seconds": _seconds(item.get("seconds")), "takes": _takes(item.get("takes"))}))
+        row = {"key": item["key"][:80], "seconds": _seconds(item.get("seconds")), "takes": _takes(item.get("takes"))}
+        from services.production_perf import shot_fields
+        perf = state.get("clip_perf") if isinstance(state.get("clip_perf"), dict) else {}
+        row.update(shot_fields(perf.get(item["key"])))
+        shots.append(row)
         if len(shots) >= 60:
             break
     timing["shots"] = shots
@@ -123,6 +96,6 @@ class StageWatch:
         seconds = state.get("clip_seconds") if isinstance(state.get("clip_seconds"), dict) else {}
         takes = state.get("clip_takes") if isinstance(state.get("clip_takes"), dict) else {}
         state.setdefault("timing", {})["shots"] = [
-            _with_phase(state, key, {"key": key, "seconds": round(float(value), 3), "takes": _takes(takes.get(key))})
+            {"key": key, "seconds": round(float(value), 3), "takes": _takes(takes.get(key))}
             for key, value in seconds.items() if isinstance(key, str) and key and isinstance(value, (int, float))
         ][:60]

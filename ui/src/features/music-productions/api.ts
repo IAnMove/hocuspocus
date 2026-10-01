@@ -1,4 +1,4 @@
-import type { MusicProductionCard, MusicProductionDetail, ReviewPlan } from './types'
+import type { MusicProductionCard, MusicProductionDetail, MusicProductionReviewStatus, ReviewPlan } from './types'
 
 async function read(response: Response): Promise<unknown> {
   const body: unknown = await response.json().catch(() => ({}))
@@ -37,9 +37,9 @@ function shotUrl(workspace: string, productionId: string, shot: string, action: 
   return `/api/v1/music-productions/${encodeURIComponent(productionId)}/shots/${encodeURIComponent(shot)}/${action}?workspace=${encodeURIComponent(workspace)}`
 }
 
-export async function reviewMusicProductionShot(workspace: string, productionId: string, shot: string, status: string, note?: string): Promise<unknown> {
+export async function reviewMusicProductionShot(workspace: string, productionId: string, shot: string, status: MusicProductionReviewStatus): Promise<unknown> {
   return read(await fetch(shotUrl(workspace, productionId, shot, 'review'), {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, note }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
   }))
 }
 

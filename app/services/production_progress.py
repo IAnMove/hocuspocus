@@ -1,103 +1,63 @@
-"""Progress and ETA for production.status. ETA is measured or null."""
+"""Stage, landed clips and an ETA from this run or from saved timings.
+
+``eta_s`` is null when there is no measured sample. It is never a guessed number.
+"""
 from __future__ import annotations
 
 from typing import Any
 
-from services.production_estimate import history_clip_median, history_scene_median
-
 
 def progress_summary(state: dict, root: str | None = None) -> dict[str, Any]:
-    """``stage`` plus clip and scene counts. ``eta_s`` is null when nothing was measured."""
-    spec_state = state if isinstance(state, dict) else {}
-    clips_total = _h3_total(spec_state)
-    clips_landed = _landed(spec_state)
-    scenes_total = _scene_total(spec_state)
-    scenes_done = _scenes_done(spec_state)
+    spec = state.get("spec") if isinstance(state.get("spec"), dict) else {}
+    shots = spec.get("shots") if isinstance(spec.get("shots"), list) else []
+    total_clips = sum(1 for shot in shots if isinstance(shot, dict) and shot.get("kind") == "h3")
+    clips = state.get("clips") if isinstance(state.get("clips"), dict) else {}
+    segments = state.get("segments") if isinstance(state.get("segments"), list) else []
+    scenes = state.get("scenes") if isinstance(state.get("scenes"), dict) else {}
+    done = sum(1 for item in scenes.values() if isinstance(item, dict) and item.get("file"))
+    stage = state.get("stage") if isinstance(state.get("stage"), str) else None
     return {
-        "stage": _stage(spec_state),
-        "clips": {"landed": clips_landed, "total": clips_total, "eta_s": _eta(clips_total, clips_landed, _clip_rate(spec_state, root))},
-        "scenes": {"done": scenes_done, "total": scenes_total, "eta_s": _eta(scenes_total, scenes_done, _scene_rate(spec_state, root))},
+        "stage": stage,
+        "clips": _row(len(clips), total_clips, _clip_samples(state), root, "clip_s"),
+        "scenes": _row(done, len(segments), [], root, "scene_s"),
     }
 
 
-def _stage(state: dict) -> str | None:
-    stage = state.get("stage")
-    return stage if isinstance(stage, str) and stage else None
+def _row(done: int, total: int, samples: list[float], root: str | None, kind: str) -> dict[str, Any]:
+    remaining = max(0, total - done)
+    return {"landed" if kind == "clip_s" else "done": done, "total": total, "eta_s": _eta(remaining, samples, root, kind)}
 
 
-def _h3_total(state: dict) -> int:
-    spec = state.get("spec") if isinstance(state.get("spec"), dict) else {}
-    shots = spec.get("shots") if isinstance(spec.get("shots"), list) else []
-    fill = spec.get("fill") if isinstance(spec.get("fill"), list) else []
-    return sum(1 for shot in (*shots, *fill) if isinstance(shot, dict) and shot.get("kind") == "h3")
-
-
-def _landed(state: dict) -> int:
-    clips = state.get("clips")
-    return len(clips) if isinstance(clips, dict) else 0
-
-
-def _scene_total(state: dict) -> int:
-    segments = state.get("segments")
-    return len(segments) if isinstance(segments, list) else 0
-
-
-def _scenes_done(state: dict) -> int:
-    scenes = state.get("scenes")
-    if not isinstance(scenes, dict):
-        return 0
-    return sum(1 for scene in scenes.values() if isinstance(scene, dict) and scene.get("file"))
-
-
-def _eta(total: int, done: int, rate: float | None) -> int | None:
-    remaining = total - done
-    if remaining <= 0:
-        return 0
-    if rate is None or rate <= 0:
-        return None
-    return int(round(remaining * rate))
-
-
-def _clip_rate(state: dict, root: str | None) -> float | None:
-    measured = _median(_clip_values(state))
-    if measured is not None and measured > 0:
-        return measured
-    return history_clip_median(root)
-
-
-def _clip_values(state: dict) -> list:
-    raw = state.get("clip_seconds")
-    if isinstance(raw, dict) and raw:
-        return list(raw.values())
+def _clip_samples(state: dict) -> list[float]:
     timing = state.get("timing") if isinstance(state.get("timing"), dict) else {}
     rows = timing.get("shots") if isinstance(timing.get("shots"), list) else []
-    return [row.get("seconds") for row in rows if isinstance(row, dict)]
+    seconds = state.get("clip_seconds") if isinstance(state.get("clip_seconds"), dict) else {}
+    found = [float(item["seconds"]) for item in rows if isinstance(item, dict) and isinstance(item.get("seconds"), (int, float))]
+    if found:
+        return found
+    return [float(value) for value in seconds.values() if isinstance(value, (int, float)) and value >= 0]
 
 
-def _scene_rate(state: dict, root: str | None) -> float | None:
-    explicit = state.get("scene_seconds")
-    measured = _median(list(explicit.values())) if isinstance(explicit, dict) and explicit else None
-    if measured is not None and measured > 0:
-        return measured
-    timing = state.get("timing") if isinstance(state.get("timing"), dict) else {}
-    done = _scenes_done(state)
-    total = timing.get("scenes")
-    if done > 0 and isinstance(total, (int, float)) and not isinstance(total, bool) and total > 0:
-        return float(total) / done
-    return history_scene_median(root)
-
-
-def _median(values: list) -> float | None:
-    nums = sorted(item for item in values if _finite(item))
-    if not nums:
+def _eta(remaining: int, samples: list[float], root: str | None, kind: str) -> int | None:
+    if remaining <= 0:
+        return 0
+    median = _median(samples)
+    if median is None and root:
+        median = _history(root, kind)
+    if median is None:
         return None
-    mid = len(nums) // 2
-    if len(nums) % 2:
-        return float(nums[mid])
-    return (float(nums[mid - 1]) + float(nums[mid])) / 2
+    return int(round(remaining * median))
 
 
-def _finite(value: Any) -> bool:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return False
-    return value >= 0 and value == value
+def _history(root: str, kind: str) -> float | None:
+    from services.production_estimate import read_timings
+    body = read_timings(root)
+    rows = body.get(kind) if isinstance(body.get(kind), list) else []
+    return _median([float(item) for item in rows if isinstance(item, (int, float))])
+
+
+def _median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return float(ordered[len(ordered) // 2])

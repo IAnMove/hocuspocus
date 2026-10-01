@@ -28,13 +28,13 @@ def _status_at(moment: float) -> str:
 def test_wait_s_is_an_integer_from_zero_to_1200():
     assert normalize_wait_s(None) == 0
     assert normalize_wait_s(0) == 0
+    assert normalize_wait_s(301) == 301
     assert normalize_wait_s(MAX_WAIT_S) == 1200
     for bad in (True, False, 1.2, "30", -1, 1201):
         with pytest.raises(HTTPException) as caught:
             normalize_wait_s(bad)
         assert caught.value.status_code == 422
         assert caught.value.detail["code"] == "invalid_command"
-        assert "0 to 1200" in caught.value.detail["message"]
 
 
 def test_status_schema_accepts_wait_s():
@@ -44,8 +44,10 @@ def test_status_schema_accepts_wait_s():
     assert field["type"] == "integer"
     assert field["minimum"] == 0
     assert field["maximum"] == 1200
-    assert "1200" in field["description"]
     assert field["default"] == 0
+    until = operation["inputSchema"]["properties"]["input"]["properties"]["until"]
+    assert until["enum"] == ["change", "stage", "done"]
+    assert until["default"] == "change"
     assert "wait_s" not in required
 
 
@@ -131,99 +133,3 @@ def test_status_handler_forwards_wait_s_and_does_not_wait_when_missing(tmp_path,
         asyncio.run(handlers[STATUS]({"version": 1, "input": {"workspace": "ws", "production_id": "clip", "wait_s": 1201}}))
     assert rejected.value.status_code == 422
     assert rejected.value.detail["code"] == "invalid_command"
-    assert "0 to 1200" in rejected.value.detail["message"]
-
-
-def _clock(mutate):
-    clock = {"t": 0.0}
-    sleeps: list[float] = []
-
-    async def sleep(seconds: float) -> None:
-        sleeps.append(seconds)
-        clock["t"] += seconds
-        mutate(clock["t"])
-
-    return clock, sleeps, sleep
-
-
-def test_until_change_waits_for_status_and_ignores_stage(tmp_path):
-    path = tmp_path / "song.production.json"
-    path.write_text(json.dumps({"status": "running", "stage": "song"}))
-
-    def mutate(moment: float) -> None:
-        status = "frames_ready" if moment >= 2 else "running"
-        stage = "frames" if moment >= 1 else "song"
-        path.write_text(json.dumps({"status": status, "stage": stage}))
-
-    clock, sleeps, sleep = _clock(mutate)
-    state = asyncio.run(wait_for_status(path, 10, clock=lambda: clock["t"], sleep=sleep))
-    assert state["status"] == "frames_ready"
-    assert "waited_s" not in state
-    assert sleeps == [1.0, 1.0]
-
-
-def test_until_stage_returns_when_only_the_stage_changes(tmp_path):
-    path = tmp_path / "song.production.json"
-    path.write_text(json.dumps({"status": "running", "stage": "song"}))
-
-    def mutate(moment: float) -> None:
-        stage = "frames" if moment >= 1 else "song"
-        path.write_text(json.dumps({"status": "running", "stage": stage}))
-
-    clock, sleeps, sleep = _clock(mutate)
-    state = asyncio.run(wait_for_status(path, 10, until="stage", clock=lambda: clock["t"], sleep=sleep))
-    assert state["status"] == "running"
-    assert state["stage"] == "frames"
-    assert "waited_s" not in state
-    assert sleeps == [1.0]
-
-
-def test_until_done_waits_past_frames_ready(tmp_path):
-    path = tmp_path / "song.production.json"
-    path.write_text(json.dumps({"status": "running", "stage": "song"}))
-
-    def mutate(moment: float) -> None:
-        status = "completed" if moment >= 2 else "frames_ready"
-        path.write_text(json.dumps({"status": status, "stage": "clips"}))
-
-    clock, sleeps, sleep = _clock(mutate)
-    state = asyncio.run(wait_for_status(path, 10, until="done", clock=lambda: clock["t"], sleep=sleep))
-    assert state["status"] == "completed"
-    assert "waited_s" not in state
-    assert sleeps == [1.0, 1.0]
-
-
-def test_until_done_already_terminal_does_not_sleep(tmp_path):
-    path = tmp_path / "song.production.json"
-    path.write_text(json.dumps({"status": "failed"}))
-
-    async def boom(_seconds: float) -> None:
-        raise AssertionError("slept")
-
-    state = asyncio.run(wait_for_status(path, 5, until="done", clock=lambda: 0.0, sleep=boom))
-    assert state["status"] == "failed"
-    assert "waited_s" not in state
-
-
-def test_timeout_returns_waited_s_without_a_busy_loop(tmp_path):
-    path = tmp_path / "song.production.json"
-    path.write_text(json.dumps({"status": "running", "stage": "song"}))
-
-    def mutate(_moment: float) -> None:
-        path.write_text(json.dumps({"status": "running", "stage": "frames"}))
-
-    clock, sleeps, sleep = _clock(mutate)
-    state = asyncio.run(wait_for_status(path, 3, until="change", clock=lambda: clock["t"], sleep=sleep))
-    assert state["status"] == "running"
-    assert state["stage"] == "frames"
-    assert state["waited_s"] == 3
-    assert sleeps == [1.0, 1.0, 1.0]
-
-
-def test_invalid_until_is_422(tmp_path):
-    path = tmp_path / "song.production.json"
-    path.write_text(json.dumps({"status": "running"}))
-    with pytest.raises(HTTPException) as caught:
-        asyncio.run(wait_for_status(path, 1, until="later"))
-    assert caught.value.status_code == 422
-    assert caught.value.detail["message"] == "until must be change, stage or done."

@@ -18,7 +18,6 @@ from services.music_production import h3_frames_for, shot_windows
 from services.production_preview import preview_extras
 from services.production_quality import expand_quality, profile_of
 from services.production_treatment import treatment_warnings
-from services.production_enhance import enhance_cost
 from services.production_style_presets import expand_style_preset
 from services.song_analysis import lyric_lines
 
@@ -26,17 +25,13 @@ TITLE_LIMIT = 12
 CAPTION_LIMIT = 32
 _TITLE_FIELDS = ("title", "date", "line")
 _CAPTION_FIELDS = ("caption", "sub", "cta")
-# Runbook: about 25–35 min for 5 H3 shots. Three song seeds and five shots land near 32.
-_MINUTES_PER_SEED = 2
-_MINUTES_PER_H3 = 5
-_MINUTES_TAIL = 1
 # What made the last long videos look thin: 160-178 s songs with 9-10 clips left 43-56 % of the runtime on stills.
 LONG_SHOT_S = 10.0
 REUSED_STILL = 3
 MIN_SONG_SEEDS = 3
 
 
-def dry_run(spec: Any, mcp: Any = None, workspace: str | None = None) -> dict[str, Any]:
+def dry_run(spec: Any, mcp: Any = None, *, root: Any = None) -> dict[str, Any]:
     """Report the spec. ``mcp`` is accepted so tests can pass a spy and is never called."""
     _ = mcp
     spec = spec if isinstance(spec, dict) else {}
@@ -55,7 +50,8 @@ def dry_run(spec: Any, mcp: Any = None, workspace: str | None = None) -> dict[st
     motion = _motion(windows, float(score["duration"]))
     titles = _spec_title(spec) + _field_hits(usable, _TITLE_FIELDS, TITLE_LIMIT)
     captions = _song_caption(spec) + _field_hits(usable, _CAPTION_FIELDS, CAPTION_LIMIT) + _lyric_captions(texts)
-    report = {
+    minutes, source = _minutes(spec, sum(1 for row in rows if row.get("kind") == "h3"), root)
+    return {
         "dry_run": True,
         "running": False,
         "expanded": expanded,
@@ -66,12 +62,12 @@ def dry_run(spec: Any, mcp: Any = None, workspace: str | None = None) -> dict[st
         "gaps": gaps,
         "long_titles": titles,
         "long_captions": captions,
-        "minutes": _minutes(spec, sum(1 for row in rows if row.get("kind") == "h3")),
+        "minutes": minutes,
+        "estimate_source": source,
+        "resolution": _crop(spec),
         "motion": motion,
-        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra + treatment_warnings(spec, usable) + enhance_cost(spec),
+        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra + treatment_warnings(spec, usable),
     }
-    from services.production_estimate import apply_estimate
-    return apply_estimate(spec, report, workspace)
 
 
 def _expand_shots(spec: dict) -> tuple[dict, bool, list[dict]]:
@@ -262,12 +258,11 @@ def _warnings(missing: list[dict], gaps: list[dict], titles: list[dict], caption
     return found
 
 
-def _minutes(spec: dict, h3_count: int) -> float:
-    song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
-    if song.get("file"):
-        seeds = 0
-    else:
-        raw = song.get("seeds")
-        seeds = len(raw) if isinstance(raw, list) and raw else 3
-    estimate = _MINUTES_PER_SEED * seeds + _MINUTES_PER_H3 * h3_count + _MINUTES_TAIL
-    return float(round(estimate, 1))
+def _minutes(spec: dict, h3_count: int, root: Any = None) -> tuple[float, str]:
+    from services.production_estimate import estimate_minutes
+    return estimate_minutes(spec, h3_count, root)
+
+
+def _crop(spec: dict) -> dict:
+    from services.production_resolution import crop_plan
+    return crop_plan(spec)

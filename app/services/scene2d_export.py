@@ -38,27 +38,6 @@ from services.world3d_export import (
 )
 
 OPERATION = "scenes.video2d.export"
-# Preview paints bind 127.0.0.1:0 and pass the document on stdin. Export staging
-# is one directory per intent id. Those paths do not share a port or a temp dir.
-_CONCURRENCY_ENV = "HOCUS_SCENE_EXPORT_CONCURRENCY"
-
-
-def scene_export_concurrency() -> int:
-    """Lane slots from ``HOCUS_SCENE_EXPORT_CONCURRENCY``: default 2, legal 1..4, else 1."""
-    raw = os.environ.get(_CONCURRENCY_ENV, "").strip()
-    if not raw:
-        return 2
-    try:
-        value = int(raw, 10)
-    except ValueError:
-        return 1
-    if 1 <= value <= 4:
-        return value
-    return 1
-
-
-def scene_export_lane():
-    return resource_scheduler.cpu_lane("scene2d-render", capacity=scene_export_concurrency())
 RECEIPT_OPERATION = "scenes.video2d.export.receipt"
 
 
@@ -260,7 +239,8 @@ class Scene2DExportService(World3DExportService):
         return freeze_export_command(command)
 
     def resource_lane(self):
-        return scene_export_lane()
+        from services.scene_export_lane import scene2d_render_lane
+        return scene2d_render_lane()
 
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
         workspace_root = Path(self.workspace_dir(workspace))

@@ -207,13 +207,10 @@ def test_receipt_follows_the_completed_task_and_lists_the_mp4(tmp_path, monkeypa
     assert running["artifacts"] == []
 
 
-def test_catalog_and_lane_do_not_use_the_gpu():
-    from services.scene2d_export import scene_export_concurrency
+def test_catalog_and_lane_do_not_use_the_gpu(monkeypatch):
+    monkeypatch.delenv("HOCUS_SCENE_EXPORT_CONCURRENCY", raising=False)
     assert [item["name"] for item in command_catalog()] == [OPERATION, OPERATION + ".receipt", OPERATION + ".cancel"]
-    lane = Scene2DExportService.resource_lane(None)
-    assert lane.key == resource_scheduler.cpu_lane("scene2d-render").key
-    assert lane.location == "local"
-    assert lane.capacity == scene_export_concurrency()
+    assert Scene2DExportService.resource_lane(None) == resource_scheduler.cpu_lane("scene2d-render", capacity=2)
 
 
 def test_missing_workspace_media_is_refused_before_admission(tmp_path):

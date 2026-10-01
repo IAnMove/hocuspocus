@@ -418,100 +418,30 @@ Call the MCP tool `production.publish` with that body. Its result contains
 `page`, `video`, `files` (download URLs) and `publication_id`. Publication is CPU
 only: it neither re-renders the video nor starts any generation.
 
-## appearance_changed and face_consistent
+## Phase close 2026-09-30
 
-These two names are not synonyms, and their yes/no polarity is not the same. Do not rename either string.
+`production.status` accepts `wait_s` up to 1200 and `until` of `change` (default), `stage`, or `done`. `done` returns immediately when the production is already `completed`, `failed`, or `cancelled`. A client poll of `wait_s` 300 is still a safe interval. The reply includes `waited_s` and `progress`: `stage`, clips `landed`/`total`/`eta_s`, and scenes `done`/`total`/`eta_s`. `eta_s` is 0 when nothing remains, a median of this run or of `<workspace>/.production-timings.json` when that file has samples, and null when it does not. It is not a guessed number.
 
-`appearance_changed` is a code question on the `review` object returned by `production.status`. It asks whether the protagonist's appearance changed between shots. It stays `unknown` unless a face-embedding model is already loaded and injected. Unknown does not by itself retake the video, and the review must not invent yes or no.
+`production.plan` dry-run `estimate_source` is `history(n)` or `defaults`. When `spec.enhance.method` is `flashvsr` or `rife` and history exists, the source is `history(n)+default_enhance`. The extra minute per clip is a labeled default, not a measurement. The no-history formula stays seeds × 2 + H3 clips × 5 + 1.
 
-`face_consistent` is one of the four questions the vision model answers for `production.review`: `yes`, `no`, or `unknown`. The failing value is `no`, which means the face did not stay the same. `yes` means the face stayed consistent. A recorded `face_consistent` of `no` is the case where the appearance changed. It is not a report that the face was left alone.
+`usage` also reports `gpu_seconds` (song, frames, clips), `cpu_seconds` (scenes, montage, package), `retry_seconds` (the share of clip seconds that belongs to takes after the first), and `reused_seconds` (clip seconds kept from before this run, except keys in the latest retake). These are still not LLM tokens.
 
-## A style preset from a finished production
+`spec.resolution.frames` may be `1280x704`, `1152x640`, `1024x576`, `1536x1024`, or `1024x1536`. `spec.resolution.clips` may be `1280x704`, `1152x640`, or `1024x576`. Unset stays `1280x704`. Scene export is 1920×1080 with fit fill. The dry-run `resolution.crop` is `none`, `horizontal`, or `vertical`. `spec.enhance` is method `flashvsr` or `rife` and scale 2 or 4. Without an injected upscaler the run logs `enhance planned, not run`. RIFE is only a recommendation (`rife_recommended`) when packet-time smoothness already failed. It does not run. SSIM and GPU minutes for enhance were not measured.
 
-When a finished production's look should be reusable, copy its style fields into `app/shared/style_presets.json` as a new id under `entries`. Copy the look: `image`, `video`, `finish`, `lyric_template`, `theme`, `image_model`, `image_steps`, `title_style`, `lyric_style`, and `footer_style`. Leave out footer text, character names, and any person or project name. A footer, a name, or a lip-sync rule that belongs to one production stays on that spec.
+`timing.shots` adds `s_per_step`, `degraded`, and `model` only when the H3 job returned a performance object. Missing fields are null. A job without that object adds nothing.
 
-`production.run` expands `style.preset` before it checks the spec. A key written next to `preset` replaces the copied field. An unknown id fails with `unknown_style_preset`.
+`production.shot.review` records `pending`, `approved`, or `changes_requested` in `<id>.review.json`, not in the production file. `production.shot.lock` keeps a later run from reshooting or re-exporting that shot. An explicit retake of a locked shot is `shot_locked`. `production.shot.redo` and `production.shot.undo` redo or restore one shot. Undo does not delete files. `production.shot.request` validates a closed plan. With no plan and no configured language model it is `llm_unavailable` and does not invent a plan. `apply` runs the plan. The REST request route validates and returns `applied: false`.
 
-## Operations: wait, progress, estimates, usage
+`production.publish` refuses a completed production whose spec lists shot keys until each key is `approved` in the review file (`review_incomplete`). A spec with no shot list is unchanged. Artistic review stays `pending` without a human file. A human file may set `approved` or `changes_requested`. It is never the string ok.
 
-`wait_for_status` accepts `wait_s` from 0 to 1200. Out of range is HTTP 422 and the message says 0 to 1200. `until` is `change` (default: return when `status` changes), `stage` (also when `state["stage"]` changes), or `done` (until status is `completed`, `failed`, or `cancelled`). The loop sleeps about one second. It does not busy-poll. A wait that ends before the `until` condition returns the current state plus `waited_s`. A wait that meets the condition does not add `waited_s`. `production.status` still forwards only `wait_s`, so the MCP call keeps today's change-wait. `status_summary` does not copy `waited_s`. The normal client poll stays `wait_s` 300. 1200 is the upper bound, not the poll to use on every call.
+`face_consistent` is the human sheet question on `production.review`. No vision model means that answer stays unreliable, and the sheet must not invent yes or no. `appearance_changed` is the separate code check. It stays unknown unless an embedding backend was injected. The field `face_consistent` stays.
 
-`StageWatch.start` writes the stage name into `state["stage"]`. `production.status` includes `progress`: `stage`, `clips` (`landed`, `total`, `eta_s`) and `scenes` (`done`, `total`, `eta_s`). Clip totals are H3 shots in `spec` shots and fill. Clip landed is the length of `clips`. Scene totals are `segments`. Scene done is scenes with `file`. `eta_s` is this run's median `clip_seconds` or scene time, else the medians in `.production-timings.json`, else null. A finished count is `eta_s` 0. The summary does not invent a rate.
+Scene export and the contact-sheet painter share `HOCUS_SCENE_EXPORT_CONCURRENCY`. Unset or blank is 2. A value outside 1–4 is 1. Painters bind `127.0.0.1:0`. This change does not claim a measured speedup for 21 scenes.
 
-A completed `Production.run` records medians in `<workspace>/.production-timings.json` (seconds per clip by frame count, per scene, per image by resolution and steps, per song seed). `estimate(spec)` multiplies those medians by the counts and sets `estimate_source` to `history(n)` or `defaults`. With no history file the minutes stay the dry-run constants: 2 per song seed, 5 per H3 shot, plus 1 minute of tail. `dry_run(spec, workspace=directory)` reads that file. The MCP `dry_run: true` handler does not pass a workspace, so that call stays on the constants.
+Qwen is already unloaded before the next model by `generation_memory.py`. The live 17-frame Qwen-to-H3 seconds-per-step table was not measured. Do not add a second unloader.
 
-`HOCUS_SCENE_EXPORT_CONCURRENCY` sets the `scene2d-render` CPU lane. Unset means 2. Values 1 through 4 are kept. Anything else, including a non-integer, means 1. The default is 2 because a preview paint binds `127.0.0.1` port 0 (its own port), the painter reads the document on stdin and writes the sheet on stdout, and export staging is one directory per intent id. Two paints do not share a port or a temp dir. The first acquire in a process fixes the semaphore size, so preview and export both ask for `scene_export_lane()`.
+How to add a style preset: add an entry to `app/shared/style_presets.json`. Do not put a person or project name in it. Set `style.preset` to that id. Add the id to `PRESET_IDS` in `app/services/production_style_presets.py` only when that preset needs a check beyond filling the style fields.
 
-Point 15 read `/mnt/outputs/hocuspocus-worktrees/claude-pop/app/outputs/gremlins-devday-v2-20260929/voices-v2.production.json` (43159 bytes, status `completed`). Top-level `stage` is null. `usage` is `mcp_calls` 7700 and `response_bytes` 11757149. `timing` is song 160, analyze 0, cast 121, frames 2305, clips 3532, scenes 3292, montage 161, with 17 `timing.shots`. There are 21 segments and 21 scenes with a file. The log tail includes `scenes: 21/21` and `montage: completed`. The keys `performance`, `s_per_step`, `degraded`, and `clip_perf` are absent (zero occurrences). `generation_memory.py` still unloads inactive image, tts, and music families below `HOCUSPOCUS_QUEUE_RAM_MIN_BYTES` (default 24 GiB, `24 * 1024**3`) and marks a run degraded above 1.6 times its seconds-per-step baseline. Those thresholds are the code, not a measurement from this file. No degraded clips were in the file, so no new release path and no `production_gpu.py` were added. The 21-scene Chromium wall clock was not remeasured. `timing.scenes` 3292 is the file's recorded total for those 21 scenes.
+`music_production.py` is still above 700 lines. Lettering and song generation moved out. The file was not gutted in this change.
 
-`usage` keeps `mcp_calls`, `response_bytes`, and `h3_takes`. It also reports `gpu_seconds` (song + frames + clips), `cpu_seconds` (scenes + montage; package has no stage), `retry_seconds`, and `reused_seconds`. Missing numbers are 0. `response_bytes` are not tokens and are not divided by 4. `retry_seconds` sums frames + clips on a run whose `retake` list is non-empty; otherwise it is the shot time times `(takes - 1) / takes` for takes beyond the first. `reused_seconds` sums `runs[].reused_seconds` plus scene `seconds` when `fingerprint_unchanged` is true or `fingerprint` equals `prior_fingerprint`. `Production.run` calls `note_run(state, retake, root)` after `finished` is set. That appends `{started, finished, retake, timing}` and, when status is `completed`, records the medians. `note_run` is what a test calls when it supplies the row directly.
-
-## Resolution, enhance, and clip phases
-
-`spec.resolution` is optional: `{frames, clips}`. Each value is a string. When the object or one side is omitted, that side stays `1280x704`, which is what frames and H3 clips already use. A string is accepted only when `app/defaults/minimax_h3_fused_turbo.json` lists it or it is one of `FRAME_RESOLUTIONS` (`1280x704`, `1152x640`, `1024x576`). Anything else fails `validate_spec` with `invalid_spec`. The runner still asks for `1280x704` until its resolution hook lands.
-
-`spec.enhance` is optional: `{"method": "flashvsr" or "rife", "scale": 2}`. There is no `video_upsampling` field. The integrated check is `validate_selection` (`shared.wangp1272.processors`), the same function `services/wangp_submission.py` calls for `spatial_upsampling` and `temporal_upsampling`. FlashVSR scale 2 is the spatial value `flashvsr2`. RIFE scale 2 is the temporal value `rife2`. Both are already methods of `tools.upscale` (`tools_upscale.run_tool_upscale`). `enhance_clip` validates that string and then calls an injected upscaler. It does not start FlashVSR, RIFE, or a second queue. The upscaler stands in for that GPU worker. `dry_run` adds one `enhance` warning with an unmeasured extra-minute estimate (`measured: false`) and leaves `minutes` unchanged. No enhance means no extra warning and the same numbers. A real 3-clip FlashVSR measure is still waiting on a free GPU; do not treat the estimate as a timing or an SSIM.
-
-`crop_report(width, height, out_w, out_h)` is the fit:fill crop as numbers. It does not open an image. `1280x704` into `1920x1080` is 1.818:1 into 1.778:1, so the sides are cropped. `clip_crop` uses `spec.resolution.clips` (default `1280x704`) against that 1920x1080 export.
-
-`production.status` `timing.shots` keeps `key`, `seconds`, and `takes`. When a completed job's status payload includes `performance`, those values are copied onto `state.clip_perf` and the shot row gains `s_per_step`, `degraded`, and `model`. A performance field that is absent is null. Nothing is guessed, and fields the payload does not carry (model load, compile) are not invented.
-
-`review.artistic.verdict` `pending` means pending judgement. It is never an automatic `ok`. It becomes `approved_by_review` only when every shot in `state.review_shots`, or in the sibling `<production_id>.review.json`, is `approved`, and `changes_requested` when any shot is `changes_requested`. With no review file and no `review_shots`, it stays `pending`.
-
-### Review one shot at a time
-
-Review state lives in `<id>.review.json` (schema version 1), written with a
-temporary file and `os.replace`. It is not stored in `production.json`. Each
-shot has `status` (`pending`, `approved`, or `changes_requested`), `locked`,
-`notes`, and `history`. A history entry keeps before/after snapshots of
-`frame`, `clip`, `frame_prompt`, `action`, and `overrides`. Undo restores the
-before snapshot and re-exports that scene only. It does not delete media files
-or takes.
-
-`shots.json` gains one additive field, `review` (`status`, `locked`, and
-`history_id` when a history entry exists). Other manifest fields stay as they
-are.
-
-`production.publish` rejects with `review_incomplete` when `shots.json` lists
-shots and any of them is not `approved`, unless `accept_unreviewed` is true.
-A missing review file counts as pending for those shots. A production with no
-shot manifest is an older publish and is not blocked.
-
-Commands use the same `{version: 1, input: {...}}` envelope as the other
-production commands (`additionalProperties` false). REST is
-`POST /api/v1/music-productions/{id}/shots/{shot}/review|lock|redo|request|undo`.
-
-* `production.shot.review` sets the status and an optional note. No GPU.
-* `production.shot.lock` sets `locked`. Locked shots are omitted from
-  `frames()`, `clips()`, and `scenes()`, including a named retake, until
-  unlock. `production.shot.redo` on a locked shot returns `shot_locked` and
-  changes nothing. Undo is still allowed.
-* `production.shot.redo` rebuilds one shot from `frame` (image, then clip,
-  then that scene), `clip` (new clip, same frame), or `scene` (re-export
-  only). It records history before the change and remounts that one montage
-  clip through `production_shot_edit` (`expected_revision`). GPU calls go
-  through `Production.image` and `Production.clip_job`, which already use
-  `guard_mcp`. Old takes stay on disk.
-* `production.shot.request` builds a data-only context from the shot row
-  (no file paths) and calls the configured app LLM (`llm_service.generate`).
-  No configured model returns `llm_unavailable` and does not invent a plan.
-  The reply must be a closed `ShotChangePlan`: `{summary, changes:[{op}]}`.
-  Ops are `set_overrides`, `redo`, `retake`, `use_take`, and `note`. An
-  unknown op, an extra field, a file path, or a shot other than the requested
-  one rejects the whole plan before anything is applied. The instruction and
-  the model text are data. `apply` defaults to false and returns `{plan, diff,
-  cost_estimate}` with `cost_estimate.tokens` null. `apply` true runs the
-  changes under a stable intent id `<id>-req-<16 hex>#<index>`, so a repeat
-  does not submit the same GPU step again. A plan `retake` is one new clip for
-  that shot, not `production.run`.
-* `production.shot.undo` restores `history_id` and re-exports that scene.
-
-The direct path, when the request plan is not used, is `production.shot.redo`,
-`production.shot.update`, `production.shot.use_take`, or `production.run` with
-`retake: [shot]`. The Review mode in Music productions approves with Enter,
-asks for a change (the text goes to `production.shot.request`, the diff is
-shown, then Apply), opens the scene, picks another kept take, and undoes.
-Arrow keys and J/K move between exported scenes. The wizard executor is not a
-tool-calling agent, so these commands are not registered there. Saving a
-scene from Video 2D does not lock the shot by itself. The voices-v2 GPU redo
-was not run with this change.
+Six portrait seeds and the gremlins-devday-v2 before/after were not measured.

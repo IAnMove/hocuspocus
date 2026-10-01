@@ -5,14 +5,15 @@ from routers.model3d_commands import command_catalog as model_catalog, command_h
 def command_catalog() -> list[dict]:
     entries = model_catalog()
     submit, status = entries
-    submit.update(name="model3d.rig", description="Rig an existing workspace GLB with native UniRig or procedural rigging. "
-                  "Preserves the source and publishes a new GLB. Procedural clips are body-chain approximations; "
-                  "UniRig humanoid idle/walk/wobble clips articulate recognizable Y-up limb branches; other clips "
-                  "remain approximations. Inspect animation_mode and animation_warnings. Poll model3d.rig.status.")
+    submit.update(name="model3d.rig", description="Rig an existing workspace GLB with UniRig, procedural, or the standard humanoid skeleton. "
+                  "Preserves the source and publishes a new GLB. Engine humanoid is CPU-only, names bones like Mixamo, "
+                  "and returns not_humanoid when the mesh is not a person in a T or A pose. "
+                  "Procedural clips stay body-chain approximations. Poll model3d.rig.status.")
     payload = submit["inputSchema"]["properties"]["input"]
     workspace = payload["properties"]["workspace"]
     payload.update(properties={"workspace": workspace, "source": {"type": "string", "minLength": 1},
-                              "engine": {"enum": ["unirig", "procedural"]},
+                              "engine": {"enum": ["unirig", "procedural", "humanoid"]},
+                              "pose": {"enum": ["t", "a"]},
                               "animations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
                               "rig_profile": {"type": "string"}, "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
                               "animation_bpm": {"type": "number", "minimum": 60, "maximum": 180}},

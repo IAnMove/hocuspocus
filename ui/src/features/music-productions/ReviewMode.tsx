@@ -174,9 +174,9 @@ function PlanDiff({ plan, busy, onApply }: { plan: ReviewPlan; busy?: boolean; o
   const cost = plan.cost_estimate
   return <section aria-label={t('musicProductions.diff')} className="flex flex-col gap-2 rounded border border-border p-3">
     <h4 className="text-[11px] font-medium text-text-primary">{t('musicProductions.planSummary')}</h4>
-    <p className="text-xs text-text-primary">{plan.plan.summary}</p>
-    <pre className="overflow-auto text-[11px] text-text-secondary">{JSON.stringify(plan.diff, null, 2)}</pre>
-    <p className="text-[11px] text-text-secondary">{t('musicProductions.cost')}: {cost.image_jobs} / {cost.clip_jobs} / {cost.scene_exports}</p>
+    <p className="text-xs text-text-primary">{plan.plan?.summary || ''}</p>
+    <pre className="overflow-auto text-[11px] text-text-secondary">{JSON.stringify(plan.diff || [], null, 2)}</pre>
+    <p className="text-[11px] text-text-secondary">{t('musicProductions.cost')}: {cost?.image_jobs ?? 0} / {cost?.clip_jobs ?? 0} / {cost?.scene_exports ?? 0}</p>
     <button type="button" className={buttonClass} disabled={busy} onClick={onApply}>{t('musicProductions.applyPlan')}</button>
   </section>
 }

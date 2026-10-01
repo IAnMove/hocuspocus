@@ -113,7 +113,7 @@ class CoreRuntimeTests(unittest.TestCase):
         import shutil
         import time
         capabilities = self.client.get("/api/v1/rig/capabilities").json()
-        self.assertEqual([engine["id"] for engine in capabilities["engines"]], ["procedural"])
+        self.assertEqual([engine["id"] for engine in capabilities["engines"]], ["procedural", "humanoid"])
         self.assertTrue(capabilities["engines"][0]["installed"], capabilities["engines"][0]["install_hint"])
         self.assertTrue(capabilities["animations"])
         folder, previous = self._in_temp_workspace()
