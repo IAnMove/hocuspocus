@@ -3,13 +3,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.production_project_link import LinkError, note_production_status, read_link_store, resolve_production_project
+from services.production_project_link import LinkError, bind_producer, note_production_status
 
 
 def register_generation(root: str, workspace: str, production_id: str, data: dict, *, form: str,
                         title: str, create_stub: bool = False) -> dict[str, Any]:
-    existing = next((row for row in read_link_store(root)["links"].values()
-                     if production_id in row.get("production_ids", [])), None)
     project = data.get("project")
     provenance = data.get("provenance") if isinstance(data.get("provenance"), dict) else {}
     if project is None and isinstance(provenance, dict) and provenance.get("project_id"):
@@ -17,13 +15,13 @@ def register_generation(root: str, workspace: str, production_id: str, data: dic
     origin = data.get("origin") or provenance.get("actor") or "ui"
     if origin not in {"mcp", "wizard", "ui"}:
         origin = "ui"
-    return resolve_production_project(root, {
+    return bind_producer(root, {
         "workspace": workspace, "production_id": production_id,
-        "intent_id": existing["intent_id"] if existing else f"generation-{production_id}",
         "origin": origin, "project": project, "episode_id": data.get("episode_id"),
         "format": form, "title": title,
         "idea": data.get("idea") or data.get("scene_description") or "",
-    }, create_stub=create_stub)
+        "write_stub": create_stub,
+    })
 
 
 def attach_music(production: Any, data: dict, spec: dict) -> dict[str, Any]:

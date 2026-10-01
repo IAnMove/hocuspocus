@@ -201,6 +201,7 @@
         "tests/test_production_project_link.py",
         "tests/test_production_work_commands.py",
         "tests/test_production_journey.py",
+        "tests/test_production_producer_link.py",
         "tests/test_production_shot_actions.py",
         "tests/test_production_shot_view.py",
         "tests/test_production_smoothness.py",
@@ -431,7 +432,11 @@
     },
     {
       "prefix": "app/services/production_project_link.py",
-      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py", "tests/test_production_journey.py"]
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py", "tests/test_production_journey.py", "tests/test_production_producer_link.py"]
+    },
+    {
+      "prefix": "app/services/production_producer_link.py",
+      "paths": ["tests/test_production_producer_link.py"]
     },
     {
       "prefix": "app/services/production_work_commands.py",
@@ -715,6 +720,7 @@
       "prefix": "app/services/music_production.py",
       "paths": [
         "tests/test_music_production.py",
+        "tests/test_production_producer_link.py",
         "tests/test_production_takes.py",
         "tests/test_production_timing.py",
         "tests/test_production_dry_run.py",
