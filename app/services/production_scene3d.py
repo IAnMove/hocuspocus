@@ -98,7 +98,8 @@ def _export(production, key, document, fingerprint, *, sleep):
 
 def export_scene3d_clips(production, spec, windows, retake=(), *, compiler=compile_document, sleep=time.sleep):
     # Same cut/fill rules as scenes(); import here to keep the planning module acyclic.
-    from services.music_production import segments
+    from services.music_production import ProductionError, segments
+    from services.production_shot_review import is_locked
 
     clips = production.state.setdefault("clips", {})
     segs = segments(windows, production.score(), lambda key: key in clips, spec.get("fill") or [])
@@ -106,6 +107,10 @@ def export_scene3d_clips(production, spec, windows, retake=(), *, compiler=compi
         if shot["kind"] != "scene3d":
             continue
         key, duration = shot["key"], round(end - start, 3)
+        if is_locked(production, key):
+            if key in retake:
+                raise ProductionError("shot_locked", "locked: " + key)
+            continue
         revisions = production.state.setdefault("scene3d_revisions", {})
         if key in retake:
             revisions[key] = revisions.get(key, 0) + 1

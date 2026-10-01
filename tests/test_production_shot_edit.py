@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from services.music_production import Production
+from services.music_production import Production, segments
 from services.production_shot_edit import ShotEditError, update_shot, use_take
+from services.production_shot_review import record_decision
 
 
 def _score() -> dict:
@@ -242,3 +243,33 @@ def test_update_stores_overrides_and_reexports_only_that_scene(tmp_path: Path):
     with pytest.raises(ShotEditError) as empty:
         update_shot(production, spec, "s0")
     assert empty.value.code == "empty_update"
+
+
+def test_scenes_keep_a_locked_shot_in_the_cut(tmp_path: Path):
+    production, spec, root, _saved, _edits = _build(tmp_path)
+    record_decision(root, "show", "s0", locked=True)
+    windows = [
+        {**spec["shots"][0], "kind": "h3", "t0": 0.0, "t1": 4.0},
+        {**spec["shots"][1], "kind": "h3", "t0": 10.0, "t1": 12.0},
+    ]
+    production.state.setdefault("scenes", {})["s0"] = {
+        "file": "keep-s0.mp4", "dur": 1.0, "clip": "other.mp4", "fingerprint": "stale",
+    }
+    calls: list[str] = []
+    inner = production.mcp
+
+    def counting(tool: str, arguments: dict) -> dict:
+        calls.append(tool)
+        return inner(tool, arguments)
+
+    production.mcp = counting
+    expected = [
+        [shot["key"], start, end]
+        for shot, start, end in segments(windows, production.score(), lambda key: key in production.state["clips"], [])
+    ]
+    production.scenes(spec, windows)
+    assert production.state["segments"] == expected
+    assert [row[0] for row in production.state["segments"]] == ["s0", "s1"]
+    assert production.state["scenes"]["s0"]["file"] == "keep-s0.mp4"
+    assert production.state["scenes"]["s0"]["fingerprint"] == "stale"
+    assert calls.count("scenes.video2d.export") == 1

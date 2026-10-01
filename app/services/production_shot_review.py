@@ -145,8 +145,17 @@ def is_locked(production: Any, key: str) -> bool:
     return bool(isinstance(row, dict) and row.get("locked"))
 
 
+def assert_retake_unlocked(production: Any, retake: tuple | list = ()) -> None:
+    """Refuse a named retake of a locked shot before the run mutates status."""
+    keys = [key for key in retake if isinstance(key, str) and key]
+    unlocked_windows(production, [{"key": key} for key in keys], keys)
+
+
 def unlocked_windows(production: Any, windows: list[dict], retake: tuple | list = ()) -> list[dict]:
-    """Drop locked shots. An explicit retake that names one raises shot_locked."""
+    """Drop locked shots from a frame or clip pass. An explicit retake that names one raises shot_locked.
+
+    ``scenes()`` does not use this: it keeps locked shots in the cut and skips only their export.
+    """
     body = load_review(getattr(production, "root", None), getattr(production, "id", ""))
     rows = body.get("shots") if isinstance(body, dict) else None
     if not isinstance(rows, dict):

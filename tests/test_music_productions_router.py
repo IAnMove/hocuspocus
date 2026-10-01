@@ -141,6 +141,56 @@ def test_retake_refuses_while_a_shot_edit_holds_the_production(tmp_path: Path):
         music_production._edits.pop("film/show", None)
 
 
+def test_retake_of_a_locked_shot_keeps_completed_status(tmp_path: Path):
+    from services.production_shot_review import record_decision
+
+    root = tmp_path / "film"
+    _write(root)
+    path = root / "show.production.json"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    body["status"] = "completed"
+    path.write_text(json.dumps(body), encoding="utf-8")
+    record_decision(root, "show", "s0", locked=True)
+    client = _client(root, token="token")
+    retake = client.post("/api/v1/music-productions/show/shots/s0/retake", params={"workspace": "film"})
+    assert retake.status_code == 422
+    assert retake.json()["detail"]["code"] == "shot_locked"
+    assert json.loads(path.read_text(encoding="utf-8"))["status"] == "completed"
+
+
+def test_request_without_apply_validates_the_plan_and_does_not_run_it(tmp_path: Path):
+    root = tmp_path / "film"
+    _write(root)
+    client = _client(root, token="token")
+    plan = {"summary": "note only", "changes": [{"op": "note", "text": "keep the take"}]}
+    response = client.post(
+        "/api/v1/music-productions/show/shots/s0/request",
+        params={"workspace": "film"},
+        json={"instruction": "keep it", "apply": False, "plan": plan},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["applied"] is False
+    assert body["plan"]["changes"][0]["text"] == "keep the take"
+    assert not (root / "show.review.json").exists()
+
+
+def test_request_apply_runs_the_posted_plan(tmp_path: Path):
+    root = tmp_path / "film"
+    _write(root)
+    client = _client(root, token="token")
+    plan = {"summary": "note only", "changes": [{"op": "note", "text": "keep the take"}]}
+    response = client.post(
+        "/api/v1/music-productions/show/shots/s0/request",
+        params={"workspace": "film"},
+        json={"instruction": "keep it", "apply": True, "plan": plan},
+    )
+    assert response.status_code == 200
+    assert response.json()["applied"] is True
+    notes = json.loads((root / "show.review.json").read_text(encoding="utf-8"))["shots"]["s0"]["notes"]
+    assert notes == "keep the take"
+
+
 def test_failed_use_take_releases_the_edit_slot(tmp_path: Path):
     from services import music_production
 

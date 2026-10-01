@@ -116,7 +116,10 @@ function MusicProductionsBody({ workspace, onClose }: { workspace: string; onClo
       onClose={() => setReviewing(false)}
       onApprove={shot => run(async () => { await reviewMusicProductionShot(workspace, selected, shot, 'approved'); await refresh() })}
       onRequest={(shot, instruction) => requestMusicProductionShot(workspace, selected, shot, instruction, false)}
-      onApply={(shot, instruction) => run(async () => { await requestMusicProductionShot(workspace, selected, shot, instruction, true); await refresh() })}
+      onApply={(shot, instruction, preview) => run(async () => {
+        await requestMusicProductionShot(workspace, selected, shot, instruction, true, preview.plan)
+        await refresh()
+      })}
       onOpenScene={sceneName => { void openSceneOutput(sceneOutput(workspace, sceneName)) }}
       onUseTake={(shot, takeFile) => run(async () => { await applyMusicProductionTake(workspace, selected, shot, takeFile); await refresh() })}
       onUndo={shot => {

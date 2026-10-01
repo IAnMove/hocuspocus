@@ -17,9 +17,10 @@ from services.production_progress import progress_summary
 from services.production_publication import OPERATION, publication_handlers
 from services.production_resolution import check_resolution, clip_resolution, crop_plan, frame_resolution
 from services.production_shot_redo import redo, undo
-from services.production_shot_request import RequestError, resolve_plan, validate_plan
+from services.production_shot_request import RequestError, request_shot, resolve_plan, validate_plan
 from services.production_shot_review import (
-    ReviewError, apply_artistic, assert_publishable, is_locked, load_review, record_decision, unlocked_windows,
+    ReviewError, apply_artistic, assert_publishable, assert_retake_unlocked, is_locked, load_review,
+    record_decision, unlocked_windows,
 )
 from services.production_timing import timing_summary
 from services.production_usage import usage_summary
@@ -282,6 +283,22 @@ def test_locked_shots_are_skipped_and_an_explicit_retake_is_refused(tmp_path):
     assert caught.value.code == "shot_locked"
 
 
+def test_run_refuses_a_locked_retake_before_changing_status(tmp_path):
+    production = _production(tmp_path)
+    production.state.update(status="completed", spec={"shots": [{"key": "s0"}]}, final="v.mp4")
+    production.save()
+    record_decision(tmp_path, "p", "s0", locked=True)
+    with pytest.raises(ProductionError) as caught:
+        production.run(production.state["spec"], retake=("s0",))
+    assert caught.value.code == "shot_locked"
+    disk = json.loads((tmp_path / "p.production.json").read_text())
+    assert disk["status"] == "completed"
+    assert disk.get("final") == "v.mp4"
+    assert_retake_unlocked(production, ())
+    with pytest.raises(ProductionError):
+        assert_retake_unlocked(production, ("s0",))
+
+
 def test_publish_requires_every_shot_when_the_spec_lists_them(tmp_path):
     assert_publishable(tmp_path, "p", {"spec": {"title": "Night"}})
     state = {"spec": {"shots": [{"key": "s0"}, {"key": "s1"}]}}
@@ -358,6 +375,78 @@ def test_redo_uses_injected_shooters_and_undo_restores_without_deleting(tmp_path
     with pytest.raises(ProductionError) as caught:
         redo(production, spec, "s0", "audio", shoot_frame=shoot_frame, shoot_clip=shoot_clip, export_scene=export_scene)
     assert caught.value.code == "invalid_redo"
+
+
+def test_redo_of_a_locked_shot_does_not_drop_the_frame(tmp_path):
+    """frames() skips locked keys, so popping before the shoot would save a hole."""
+    calls: list[tuple] = []
+    production = _production(tmp_path)
+    production.state = {
+        "frames": {"s0": "f.png"},
+        "clips": {"s0": {"file": "c.mp4"}},
+        "scenes": {"s0": {"file": "s.mp4"}},
+        "spec": {"shots": [{"key": "s0", "kind": "h3"}]},
+    }
+    record_decision(tmp_path, "p", "s0", locked=True)
+    spec = production.state["spec"]
+
+    def shoot_frame(_production, _spec, key, prompt):
+        calls.append(("frame", key, prompt))
+
+    def shoot_clip(_production, _spec, key, action):
+        calls.append(("clip", key, action))
+
+    def export_scene(_production, _spec, key):
+        calls.append(("scene", key))
+
+    with pytest.raises(ProductionError) as caught:
+        redo(production, spec, "s0", "frame", frame_prompt="closer", shoot_frame=shoot_frame, shoot_clip=shoot_clip, export_scene=export_scene)
+    assert caught.value.code == "shot_locked"
+    assert production.state["frames"]["s0"] == "f.png"
+    assert production.state["clips"]["s0"]["file"] == "c.mp4"
+    assert calls == []
+    with pytest.raises(ProductionError) as clip_caught:
+        redo(production, spec, "s0", "clip", shoot_frame=shoot_frame, shoot_clip=shoot_clip, export_scene=export_scene)
+    assert clip_caught.value.code == "shot_locked"
+    assert production.state["clips"]["s0"]["file"] == "c.mp4"
+    assert calls == []
+
+
+def test_apply_uses_the_previewed_plan_without_asking_again(tmp_path):
+    production = _production(tmp_path)
+    spec = {"shots": [{"key": "s0", "kind": "h3", "frame": "a face", "action": "sings"}]}
+    production.state = {"frames": {"s0": "old-frame.png"}, "clips": {}, "spec": spec}
+    calls: list[str] = []
+    inner = production.mcp
+
+    def counting(tool, arguments):
+        calls.append(tool)
+        return inner(tool, arguments)
+
+    production.mcp = counting
+    asked: list[str] = []
+
+    def note(_instruction):
+        asked.append("preview")
+        return {"summary": "note only", "changes": [{"op": "note", "text": "keep the take"}]}
+
+    preview = request_shot(production, spec, "s0", "keep it", apply=False, generate=note)
+    assert preview["applied"] is False
+    assert preview["plan"]["changes"][0]["op"] == "note"
+
+    def hostile(_instruction):
+        asked.append("apply")
+        return {"summary": "wipe", "changes": [{"op": "redo", "from": "frame", "frame_prompt": "wipe the face"}]}
+
+    applied = request_shot(production, spec, "s0", "keep it", apply=True, generate=hostile, plan=preview["plan"])
+    assert applied["applied"] is True
+    assert asked == ["preview"]
+    assert spec["shots"][0]["frame"] == "a face"
+    assert production.state["frames"]["s0"] == "old-frame.png"
+    notes = json.loads((tmp_path / "p.review.json").read_text(encoding="utf-8"))["shots"]["s0"]["notes"]
+    assert notes == "keep the take"
+    assert "generation.image" not in calls
+    assert "clip_job" not in calls
 
 
 def test_scene_export_lane_defaults_to_two_and_rejects_out_of_range(monkeypatch):

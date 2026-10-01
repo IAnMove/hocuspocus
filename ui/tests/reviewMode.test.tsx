@@ -59,7 +59,7 @@ test('review mode approves, navigates, filters, and applies a shown diff', () =>
       diff: [{ op: 'note', shot: 's0', text: 'warmer' }],
       cost_estimate: { image_jobs: 0, clip_jobs: 0, scene_exports: 0, tokens: null },
     })}
-    onApply={shot => { applied = shot }}
+    onApply={(shot, _instruction, shown) => { applied = `${shot}:${shown.plan?.summary}` }}
     onOpenScene={name => opened.push(name)}
     onUseTake={(_shot, file) => used.push(file)}
     onUndo={shot => undone.push(shot)}
@@ -87,7 +87,7 @@ test('review mode approves, navigates, filters, and applies a shown diff', () =>
   fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' })
   assert.deepEqual(approved, ['s0'])
   fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-  assert.equal(applied, 's0')
+  assert.equal(applied, 's0:warmer light')
   fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
   assert.deepEqual(undone, ['s0'])
   fireEvent.click(screen.getByRole('button', { name: 'Open scene' }))
