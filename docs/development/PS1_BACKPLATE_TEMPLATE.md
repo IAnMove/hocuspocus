@@ -7,12 +7,11 @@ paleta, la actuación y los cortes los decide el autor o el LLM. La escena conse
 biblioteca **`hocuspocus/ps1-backplates`** es independiente y se conserva al cambiar
 el nombre visible. Usa el renderer existente.
 
-Puedes pedirlo por su nombre humano: **«escena estilo PS1»**, **«escenas estilo
-PS1»** o **«escenas con gráficos prerenderizados»**. También se encuentra sin la
-tilde en «graficos». Un asistente con acceso a la biblioteca debe buscar ese
-nombre con `templates.list`, consultar los recursos con `templates.get` y usar
-el id devuelto para aplicar la composición. No necesitas escribir el id en tu
-petición:
+Se llama **Escena estilo PS1**. No hace falta escribir el nombre exacto ni el id: `templates.list`
+busca por palabras sueltas (sin distinguir mayúsculas, tildes ni plurales, en cualquier orden, y una
+frase entera vale) y devuelve los resultados ordenados; sin `query` lista todo. Un asistente con acceso
+a la biblioteca debe listar, elegir por título y descripción lo que encaje con la petición, consultar los
+recursos con `templates.get` y usar el id devuelto para aplicar la composición:
 
 > Haz un videoclip con escenas con gráficos prerenderizados, estilo PS1. Busca
 > «Escena estilo PS1» en la biblioteca: fondos de Qwen Image 2.1, personajes 3D
@@ -135,8 +134,8 @@ Para otra vista, crea otro fondo y otro plano con cámara fija.
 
 - Importar el paquete presenta ficha, recursos y miniatura tanto por HTTP como
   por `templates.list/get`; seleccionarlo en la UI aplica un documento válido.
-- Buscar por los nombres humanos, con o sin tilde, devuelve la misma ficha
-  **Escena estilo PS1** y el mismo id, también tras exportar y volver a importar.
+- Una búsqueda con otras palabras («escenas estilo PS1», «PS1 style scene», «escena de gráficos
+  prerenderizados») devuelve la misma ficha y el mismo id, también tras exportar y volver a importar.
 - Cambiar fondo, GLB, animación y recorrido, guardar y reabrir conserva esos cambios.
 - Exportar/importar el template en una biblioteca nueva conserva los controles y
   el recorrido sin incluir archivos privados. Los recursos pendientes son visibles.
