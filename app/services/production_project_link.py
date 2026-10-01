@@ -246,40 +246,63 @@ def _record(
 def _request(request: MappingRequest) -> dict[str, Any]:
     if not isinstance(request, dict):
         raise LinkError("invalid_request", "request must be an object")
-    workspace_id = _token(request.get("workspace_id") or request.get("workspace"), "invalid_request", "workspace is required")
-    if not _WORKSPACE.fullmatch(workspace_id):
-        raise LinkError("invalid_request", "workspace is invalid")
-    origin = str(request.get("origin") or "").strip()
-    if origin not in ORIGINS:
-        raise LinkError("invalid_request", "origin must be mcp, wizard, or ui")
-    intent_id = _token(request.get("intent_id"), "invalid_request", "intent_id is required")
-    new_execution = request.get("new_execution", False)
-    if not isinstance(new_execution, bool):
-        raise LinkError("invalid_request", "new_execution must be boolean")
-    project = _explicit(request)
-    episode_id = str(request.get("episode_id") or "").strip()
-    if episode_id and project is None:
-        project = {"kind": "episode", "id": _token(episode_id, "invalid_project", "episode_id is invalid")}
-    elif episode_id and project is not None and (project["kind"] != "episode" or project["id"] != episode_id):
-        raise LinkError("invalid_project", "episode_id does not match the explicit project")
-    form = str(request.get("format") or "").strip()
-    if project is None and form not in FORMATS:
-        raise LinkError("invalid_request", "format is required for a work without a project")
-    if form and form not in FORMATS and project is None:
-        raise LinkError("invalid_request", "format is not a story format")
-    if form and form not in FORMATS:
-        form = ""
+    project = _project_request(request)
+    form = _format(request, project)
     title = str(request.get("title") or "").strip()[:200] or _default_title(form, project)
     return {
-        "workspace_id": workspace_id,
-        "origin": origin,
-        "intent_id": intent_id,
-        "new_execution": new_execution,
+        "workspace_id": _workspace_id(request),
+        "origin": _origin(request),
+        "intent_id": _token(request.get("intent_id"), "invalid_request", "intent_id is required"),
+        "new_execution": _new_execution(request),
         "project": project,
         "format": form or None,
         "title": title,
         "idea": str(request.get("idea") or "").strip()[:2000],
     }
+
+
+def _workspace_id(request: dict[str, Any]) -> str:
+    workspace_id = _token(request.get("workspace_id") or request.get("workspace"), "invalid_request", "workspace is required")
+    if not _WORKSPACE.fullmatch(workspace_id):
+        raise LinkError("invalid_request", "workspace is invalid")
+    return workspace_id
+
+
+def _origin(request: dict[str, Any]) -> str:
+    origin = str(request.get("origin") or "").strip()
+    if origin not in ORIGINS:
+        raise LinkError("invalid_request", "origin must be mcp, wizard, or ui")
+    return origin
+
+
+def _new_execution(request: dict[str, Any]) -> bool:
+    value = request.get("new_execution", False)
+    if not isinstance(value, bool):
+        raise LinkError("invalid_request", "new_execution must be boolean")
+    return value
+
+
+def _project_request(request: dict[str, Any]) -> dict[str, str] | None:
+    return _with_episode(_explicit(request), str(request.get("episode_id") or "").strip())
+
+
+def _with_episode(project: dict[str, str] | None, episode_id: str) -> dict[str, str] | None:
+    if not episode_id:
+        return project
+    if project is None:
+        return {"kind": "episode", "id": _token(episode_id, "invalid_project", "episode_id is invalid")}
+    if project["kind"] != "episode" or project["id"] != episode_id:
+        raise LinkError("invalid_project", "episode_id does not match the explicit project")
+    return project
+
+
+def _format(request: dict[str, Any], project: dict[str, str] | None) -> str:
+    form = str(request.get("format") or "").strip()
+    if form in FORMATS:
+        return form
+    if project is None:
+        raise LinkError("invalid_request", "format is required for a work without a project")
+    return ""
 
 
 def _explicit(request: dict[str, Any]) -> dict[str, str] | None:
