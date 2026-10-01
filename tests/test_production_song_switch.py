@@ -4,8 +4,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from services.music_production import Production
-from services.production_song_switch import mark_moved_clips, use_candidate, windows_by_key
+from services.production_shot_review import record_decision
+from services.production_song_switch import SongSwitchError, mark_moved_clips, use_candidate, windows_by_key
 from services.production_takes import pending_windows
 
 
@@ -115,3 +118,48 @@ def test_use_candidate_keeps_a_shot_whose_window_barely_moved(tmp_path: Path, mo
     frames = {"frames": {"s0": "f0.png", "s1": "f1.png"}, "clip_takes": {"s0": 4, "s1": 4}}
     pending = pending_windows(windows, {**production.state, **frames}, ())
     assert [row["key"] for row in pending] == ["s1"]
+
+
+def test_use_candidate_refuses_when_a_locked_window_would_move(tmp_path: Path, monkeypatch):
+    score_a = {"duration": 20, "bpm": 120, "beat": 0.5, "recall": 0.9, "lines": [
+        {"t0": 1.0, "t1": 3.0, "text": "one"},
+        {"t0": 10.0, "t1": 12.0, "text": "two"},
+    ]}
+    score_b = {"duration": 20, "bpm": 120, "beat": 0.5, "recall": 0.4, "lines": [
+        {"t0": 1.1, "t1": 3.1, "text": "one"},
+        {"t0": 14.0, "t1": 16.0, "text": "two"},
+    ]}
+    root = tmp_path / "film"
+    spec = _spec()
+    state = {
+        "spec": spec,
+        "song": {"file": "song-11.wav", "recall": 0.9, "tail_rms": 0.01, "score_file": "score-a.json"},
+        "score": "score-a.json",
+        "song_candidates": [
+            {"id": "11", "file": "song-11.wav", "recall": 0.9, "tail_rms": 0.01, "score_file": "score-a.json"},
+            {"id": "22", "file": "song-22.wav", "recall": 0.4, "tail_rms": 0.01, "score_file": "score-b.json"},
+        ],
+        "clips": {"s0": {"file": "s0.mp4"}, "s1": {"file": "s1.mp4"}},
+    }
+    production = _production(tmp_path, state)
+    (root / "score-a.json").write_text(json.dumps(score_a), encoding="utf-8")
+    (root / "score-b.json").write_text(json.dumps(score_b), encoding="utf-8")
+    (root / "s0.mp4").write_bytes(b"s0")
+    (root / "s1.mp4").write_bytes(b"s1")
+    record_decision(root, "show", "s1", locked=True)
+
+    def analyze(path: str, lyrics: str, out_dir: str | None = None) -> dict:
+        raise AssertionError("locked switch must not re-analyse")
+
+    monkeypatch.setattr("services.music_production.audio_analysis.analyze", analyze)
+    with pytest.raises(SongSwitchError) as caught:
+        use_candidate(production, spec, "22")
+    assert caught.value.code == "shot_locked"
+    assert "s1" in str(caught.value)
+    assert production.state["song"]["file"] == "song-11.wav"
+    assert production.state["score"] == "score-a.json"
+    assert "obsolete" not in production.state["clips"]["s1"]
+    disk = json.loads((root / "show.production.json").read_text())
+    assert disk["song"]["file"] == "song-11.wav"
+    assert disk["clips"]["s1"] == {"file": "s1.mp4"}
+    assert (root / "s1.mp4").read_bytes() == b"s1"

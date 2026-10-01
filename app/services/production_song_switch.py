@@ -1,6 +1,7 @@
 """Remember every song candidate and switch to one without deleting clips."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
 WINDOW_MOVE = 0.3
@@ -51,7 +52,7 @@ def mark_moved_clips(state: dict, before: dict[str, tuple[float, float]], after:
             continue
         old, new = before.get(key), after.get(key)
         # Windows are stored to the millisecond. A raw float 0.3 is slightly over 0.3 and must still count as kept.
-        moved = old is None or new is None or round(abs(old[0] - new[0]), 3) > limit or round(abs(old[1] - new[1]), 3) > limit
+        moved = _window_moved(old, new, limit)
         if moved:
             clip["obsolete"] = True
             obsolete.append(key)
@@ -60,15 +61,61 @@ def mark_moved_clips(state: dict, before: dict[str, tuple[float, float]], after:
     return obsolete
 
 
+def _window_moved(old: tuple[float, float] | None, new: tuple[float, float] | None, limit: float = WINDOW_MOVE) -> bool:
+    return old is None or new is None or round(abs(old[0] - new[0]), 3) > limit or round(abs(old[1] - new[1]), 3) > limit
+
+
+def _read_score(production: Any, name: Any) -> dict[str, Any] | None:
+    if not isinstance(name, str) or not name or ".." in name:
+        return None
+    path = production.root / name
+    if not path.is_file():
+        return None
+    try:
+        body = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def _locked_moved(production: Any, before: dict[str, tuple[float, float]], after: dict[str, tuple[float, float]]) -> list[str]:
+    from services.production_shot_review import is_locked
+
+    blocked = []
+    for key, clip in (production.state.get("clips") or {}).items():
+        if not isinstance(clip, dict):
+            continue
+        if _window_moved(before.get(key), after.get(key)) and is_locked(production, key):
+            blocked.append(key)
+    return sorted(blocked)
+
+
 def use_candidate(production: Any, spec: dict, candidate: str) -> dict[str, Any]:
     """Point the production at ``candidate``, re-analyse it, and flag clips whose window moved."""
     chosen = find_candidate(production.state, candidate)
     current = production.score() if production.state.get("score") else {}
     before = windows_by_key(spec, current) if current else {}
+    peeked = _read_score(production, chosen.get("score_file"))
+    if peeked is not None and before:
+        blocked = _locked_moved(production, before, windows_by_key(spec, peeked))
+        if blocked:
+            raise SongSwitchError("shot_locked", "locked: " + ", ".join(blocked))
+    previous_song = production.state.get("song")
+    previous_score = production.state.get("score")
     production.state["song"] = {"file": chosen["file"], "recall": chosen.get("recall"), "tail_rms": chosen.get("tail_rms")}
     production.state.pop("score", None)
     production.analyze(spec)
-    obsolete = mark_moved_clips(production.state, before, windows_by_key(spec, production.score()))
+    after = windows_by_key(spec, production.score())
+    blocked = _locked_moved(production, before, after)
+    if blocked:
+        production.state["song"] = previous_song
+        if previous_score:
+            production.state["score"] = previous_score
+        else:
+            production.state.pop("score", None)
+        production.save()
+        raise SongSwitchError("shot_locked", "locked: " + ", ".join(blocked))
+    obsolete = mark_moved_clips(production.state, before, after)
     production.save()
     clips = production.state.get("clips") or {}
     return {"song": production.state["song"]["file"], "obsolete": obsolete, "kept": [key for key in clips if key not in obsolete]}

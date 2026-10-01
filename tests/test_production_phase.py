@@ -299,6 +299,24 @@ def test_run_refuses_a_locked_retake_before_changing_status(tmp_path):
         assert_retake_unlocked(production, ("s0",))
 
 
+def test_run_refuses_a_locked_obsolete_clip_before_changing_status(tmp_path):
+    """song.use flags a moved window; lock must not let the old take ride the new song."""
+    production = _production(tmp_path)
+    production.state.update(
+        status="completed", spec={"shots": [{"key": "s0"}]}, final="v.mp4",
+        clips={"s0": {"file": "old.mp4", "obsolete": True}},
+    )
+    production.save()
+    record_decision(tmp_path, "p", "s0", locked=True)
+    with pytest.raises(ProductionError) as caught:
+        production.run(production.state["spec"])
+    assert caught.value.code == "shot_locked"
+    disk = json.loads((tmp_path / "p.production.json").read_text())
+    assert disk["status"] == "completed"
+    assert disk.get("final") == "v.mp4"
+    assert disk["clips"]["s0"]["file"] == "old.mp4"
+
+
 def test_publish_requires_every_shot_when_the_spec_lists_them(tmp_path):
     assert_publishable(tmp_path, "p", {"spec": {"title": "Night"}})
     state = {"spec": {"shots": [{"key": "s0"}, {"key": "s1"}]}}
