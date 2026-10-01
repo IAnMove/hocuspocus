@@ -469,3 +469,11 @@ nothing. `new_execution: true` starts another production on the same project.
 The contract and the coverage matrix are in
 `docs/development/UNIFIED_PRODUCTIONS.md`. LLM token counts for this link are
 not available from the client.
+
+## Read the shots
+
+`GET /api/v1/production-projects/{production_id}/shots?workspace=` returns the
+shots already stored for that production. It does not render, retake, or mark
+an export stale. A missing manifest returns an empty shot list and
+`no_shots`. The UI listens for `hocuspocus:production-shots-open`. Choosing a
+take and publishing stay on the existing review commands.

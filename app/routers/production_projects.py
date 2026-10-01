@@ -8,6 +8,7 @@ from collections.abc import Callable
 from fastapi import APIRouter, HTTPException, Query
 
 from services.production_project_link import LinkError, note_production_status, resolve_production_project
+from services.production_shot_view import shot_view
 from services.production_work_catalog import find_work, list_works
 
 
@@ -93,6 +94,15 @@ def create_production_projects_router(*, workspace_dir: Callable[[str], str]) ->
         if found is None:
             raise HTTPException(status_code=404, detail="Production not found")
         return found
+
+    @router.get("/api/v1/production-projects/{production_id}/shots")
+    def shots_route(production_id: str, workspace: str = Query(default="", max_length=160)):
+        if not production_id or len(production_id) > 240:
+            raise HTTPException(status_code=400, detail="Invalid production ID")
+        view = shot_view(root(workspace), workspace, production_id)
+        if view is None:
+            raise HTTPException(status_code=404, detail="Production not found")
+        return view
 
     return router
 

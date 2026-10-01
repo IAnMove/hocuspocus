@@ -24,6 +24,7 @@ import { SeriesNativeBatchBanner } from './features/series/SeriesNativeBatchBann
 import { catalogFromOutputs, GenerationInspectorHost } from './features/generation-inspector'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
+import { LazyProductionShotsOverlay } from './features/production-shots/ProductionShotsOverlay'
 
 // Productions is an overlay opened on demand. Keep its sizeable workflow
 // code out of the initial route and load it only on the first open.
@@ -257,6 +258,7 @@ function AppContent() {
       <LazySettingsDrawer open={settingsOpen} />
       <LazyHelpOverlay />
       <LazyMusicProductionsOverlay />
+      <LazyProductionShotsOverlay />
       <LoraBrowser />
       <LazyDirectorOverlay open={dashboardOpen} />
       <StorageDashboard />

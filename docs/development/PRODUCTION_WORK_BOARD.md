@@ -73,3 +73,4 @@ Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
 | `music_production.py` | PR #716 `fix/music-production-under-700` | No se edita. El enlace vive en `.production-project-links-v1.json`. |
 | Bloque D (`production_shot_review.py`, `routers/music_productions.py`, `ReviewMode.tsx`) | revisión de planos | Consumir las operaciones. No duplicarlas. |
 | `scripts/ci_test_groups.json`, `tests/fixtures/route_table.json`, este tablero, el runbook | #716 y #717 | Cambios aditivos. Al rebasar se conservan ambas aportaciones. |
+| `app/services/production_shot_view.py`, `ui/src/features/production-shots/` | vista de planos, rama `feat/unified-productions-shots` | Solo lectura. No edita `ReviewMode`, el bloque D ni `music_production.py`. |
