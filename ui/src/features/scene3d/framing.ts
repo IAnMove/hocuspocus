@@ -9,8 +9,16 @@ export function validFraming(raw: unknown): raw is Scene3DFraming {
     && ['head', 'center', 'feet'].includes(f.anchor)
     && vector(f.from) && vector(f.to)
     && [f.lookFrom, f.lookTo].every(v => v == null || vector(v))
-    && [f.orbitTurns, f.rollFrom, f.rollTo].every(n => n == null || (typeof n === 'number' && Number.isFinite(n)))
+    && [f.orbitTurns, f.rollFrom, f.rollTo, f.fovFrom, f.fovTo].every(n => n == null || (typeof n === 'number' && Number.isFinite(n)))
+    && [f.fovFrom, f.fovTo].every(n => n == null || (n > 8 && n < 140))
     && (f.relativeToFacing == null || typeof f.relativeToFacing === 'boolean')
+}
+
+export function framingFov(f: Scene3DFraming | undefined, fallback: number, seconds: number, duration: number) {
+  const start = f?.fovFrom ?? f?.fovTo
+  if (start == null) return fallback
+  const end = f?.fovTo ?? start
+  return start + (end - start) * unitProgress(seconds, duration)
 }
 
 function turn(vector: Vec3, yaw: number, scale: number): Vec3 {

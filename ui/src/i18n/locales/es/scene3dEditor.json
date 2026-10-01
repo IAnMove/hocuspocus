@@ -1647,6 +1647,1702 @@
     "atmos-meadow-low": {
       "title": "Prado con nubes bajas · cámara baja",
       "description": "El mismo prado desde la hierba, mirando el campo y las nubes bajas."
+    },
+    "cine-slow-zoom-in": {
+      "title": "Zoom lento de acercamiento",
+      "description": "Movimiento. El objetivo cierra despacio sobre el rostro y el cuerpo de la cámara no se mueve."
+    },
+    "cine-slow-zoom-out": {
+      "title": "Zoom lento de alejamiento",
+      "description": "Movimiento. El objetivo abre despacio y devuelve la habitación alrededor del rostro."
+    },
+    "cine-crash-zoom-in": {
+      "title": "Zoom de golpe hacia dentro",
+      "description": "Movimiento. Un salto muy rápido hasta los ojos."
+    },
+    "cine-crash-zoom-out": {
+      "title": "Zoom de golpe hacia fuera",
+      "description": "Movimiento. Una apertura muy rápida, del rostro al cuerpo."
+    },
+    "cine-dolly-in": {
+      "title": "Travelling de acercamiento",
+      "description": "Movimiento. La cámara avanza y la perspectiva crece. El objetivo no cambia."
+    },
+    "cine-dolly-out": {
+      "title": "Travelling de alejamiento",
+      "description": "Movimiento. La cámara retrocede y descubre más decorado. El objetivo no cambia."
+    },
+    "cine-dolly-left": {
+      "title": "Travelling a la izquierda",
+      "description": "Movimiento. Un travelling lateral hacia la izquierda, a distancia constante."
+    },
+    "cine-dolly-right": {
+      "title": "Travelling a la derecha",
+      "description": "Movimiento. Un travelling lateral hacia la derecha, a distancia constante."
+    },
+    "cine-pan-left": {
+      "title": "Panorámica a la izquierda",
+      "description": "Movimiento. La cámara permanece fija y mira hacia la izquierda."
+    },
+    "cine-pan-right": {
+      "title": "Panorámica a la derecha",
+      "description": "Movimiento. La cámara permanece fija y mira hacia la derecha."
+    },
+    "cine-tilt-up": {
+      "title": "Inclinación hacia arriba",
+      "description": "Movimiento. La cámara sube la mirada del torso hasta por encima de la cabeza."
+    },
+    "cine-tilt-down": {
+      "title": "Inclinación hacia abajo",
+      "description": "Movimiento. La cámara baja la mirada del rostro a los pies."
+    },
+    "cine-whip-pan": {
+      "title": "Panorámica látigo",
+      "description": "Movimiento. Una mirada muy rápida de un lado al otro."
+    },
+    "cine-whip-tilt": {
+      "title": "Inclinación látigo",
+      "description": "Movimiento. Una inclinación muy rápida del suelo al techo."
+    },
+    "cine-pedestal-up": {
+      "title": "Pedestal hacia arriba",
+      "description": "Movimiento. Toda la cámara sube, sin dejar de mirar al sujeto."
+    },
+    "cine-pedestal-down": {
+      "title": "Pedestal hacia abajo",
+      "description": "Movimiento. Toda la cámara baja, sin dejar de mirar al sujeto."
+    },
+    "cine-crane-up": {
+      "title": "Grúa hacia arriba",
+      "description": "Movimiento. La cámara sube y se retira, abriendo el plano."
+    },
+    "cine-crane-down": {
+      "title": "Grúa hacia abajo",
+      "description": "Movimiento. La cámara baja de un plano alto y abierto a uno más cercano."
+    },
+    "cine-crane-over": {
+      "title": "Grúa por encima",
+      "description": "Movimiento. La cámara pasa de frente, por encima de la cabeza, y mira hacia la espalda."
+    },
+    "cine-jib": {
+      "title": "Toma de jíb",
+      "description": "Movimiento. Una subida corta de jíb, más breve que una grúa completa."
+    },
+    "cine-orbit-360": {
+      "title": "Órbita de 360 grados",
+      "description": "Movimiento. Un círculo completo alrededor del sujeto, a la altura de los ojos."
+    },
+    "cine-arc-left": {
+      "title": "Arco a la izquierda",
+      "description": "Movimiento. Un arco de un cuarto de círculo hacia la izquierda."
+    },
+    "cine-arc-right": {
+      "title": "Arco a la derecha",
+      "description": "Movimiento. Un arco de un cuarto de círculo hacia la derecha."
+    },
+    "cine-tracking": {
+      "title": "Plano de seguimiento",
+      "description": "Movimiento. La cámara acompaña de lado, al mismo ritmo."
+    },
+    "cine-follow": {
+      "title": "Plano de seguimiento por detrás",
+      "description": "Movimiento. La cámara sigue desde detrás de los hombros."
+    },
+    "cine-steadicam": {
+      "title": "Steadicam",
+      "description": "Movimiento. Un avance suave, como un paseo, con una leve deriva lateral."
+    },
+    "cine-handheld": {
+      "title": "Cámara en mano",
+      "description": "Movimiento. Una cámara de paso con un ligero balanceo, como si fuera en mano."
+    },
+    "cine-gimbal": {
+      "title": "Plano con gimbal",
+      "description": "Movimiento. Un deslizamiento estabilizado que cruza frente al sujeto."
+    },
+    "cine-fpv-drone": {
+      "title": "Dron FPV",
+      "description": "Movimiento. Una llegada baja, rápida y angular, como un dron de carreras."
+    },
+    "cine-aerial-pullback": {
+      "title": "Alejamiento aéreo",
+      "description": "Movimiento. La vista sube y se retira hasta dejar al sujeto pequeño en el decorado."
+    },
+    "cine-aerial-push": {
+      "title": "Acercamiento aéreo",
+      "description": "Movimiento. Una vista alta baja y se acerca al sujeto."
+    },
+    "cine-push-in": {
+      "title": "Push in",
+      "description": "Movimiento. Un avance motivado desde un plano medio hasta el rostro."
+    },
+    "cine-pull-out": {
+      "title": "Pull out",
+      "description": "Movimiento. Un retroceso desde el rostro hasta un plano medio-amplio."
+    },
+    "cine-static": {
+      "title": "Plano fijo bloqueado",
+      "description": "Movimiento. Un plano medio bloqueado. La cámara no se mueve."
+    },
+    "cine-dolly-zoom": {
+      "title": "Dolly zoom",
+      "description": "Movimiento. La cámara entra mientras el objetivo abre: el rostro mantiene un tamaño parecido y el fondo se estira."
+    },
+    "cine-dutch-roll": {
+      "title": "Balanceo holandés",
+      "description": "Movimiento. El horizonte pasa de una diagonal a la otra."
+    },
+    "cine-camera-roll": {
+      "title": "Rotación de cámara",
+      "description": "Movimiento. La cámara gira cerca de un cuarto de vuelta sobre el eje del objetivo."
+    },
+    "cine-double-dolly": {
+      "title": "Doble travelling",
+      "description": "Movimiento. Sujeto y cámara avanzan juntos: la figura flota y el decorado se desliza detrás."
+    },
+    "cine-snorricam": {
+      "title": "SnorriCam",
+      "description": "Movimiento. El rostro queda fijo en cuadro mientras el cuerpo recorre el decorado."
+    },
+    "cine-locked-on": {
+      "title": "Cámara anclada al sujeto",
+      "description": "Movimiento. La cámara se desplaza y la mirada sigue pegada al sujeto."
+    },
+    "cine-walk-and-talk": {
+      "title": "Caminar y hablar",
+      "description": "Movimiento. Dos figuras caminan y la cámara las sigue de tres cuartos."
+    },
+    "cine-hyperlapse": {
+      "title": "Hyperlapse",
+      "description": "Movimiento. Un recorrido largo reproducido rápido, como un hyperlapse."
+    },
+    "cine-slider": {
+      "title": "Plano de slider",
+      "description": "Movimiento. Un deslizamiento lateral corto y uniforme."
+    },
+    "cine-lazy-susan": {
+      "title": "Lazy Susan",
+      "description": "Movimiento. Media vuelta perezosa alrededor del sujeto."
+    },
+    "cine-bolt-cam": {
+      "title": "Bolt cam",
+      "description": "Movimiento. Un pase lateral muy rápido, como una cámara en un raíl de velocidad."
+    },
+    "cine-aerial": {
+      "title": "Aéreo",
+      "description": "Movimiento. Una vista alta que rodea al sujeto y al suelo."
+    },
+    "cine-arc": {
+      "title": "Arco",
+      "description": "Movimiento. Un arco suave que enseña las dos mejillas."
+    },
+    "cine-choreo": {
+      "title": "Coreografía de cámara",
+      "description": "Movimiento. La altura y la órbita cambian a la vez, como un movimiento coreografiado."
+    },
+    "cine-conveyor": {
+      "title": "Cinta transportadora",
+      "description": "Movimiento. Un pase lateral plano, como si el sujeto fuera en una cinta."
+    },
+    "cine-dolly": {
+      "title": "Travelling",
+      "description": "Movimiento. Un travelling recto de acercamiento al cuerpo."
+    },
+    "cine-falling": {
+      "title": "Caída",
+      "description": "Movimiento. La cámara cae rápido desde arriba hasta la altura de los ojos."
+    },
+    "cine-fixed-cam": {
+      "title": "Cámara fija",
+      "description": "Movimiento. Un plano corto bloqueado, más cerrado que el estático amplio."
+    },
+    "cine-omnidirectional": {
+      "title": "Omnidireccional",
+      "description": "Movimiento. Una órbita alta y completa alrededor de todo el cuerpo."
+    },
+    "cine-pan": {
+      "title": "Panorámica",
+      "description": "Movimiento. Una panorámica breve, de un poco a la izquierda a un poco a la derecha."
+    },
+    "cine-parallax": {
+      "title": "Parallax",
+      "description": "Movimiento. Un movimiento lateral cercano para que el sujeto se desplace contra el fondo."
+    },
+    "cine-pass-through": {
+      "title": "Paso a través",
+      "description": "Movimiento. La cámara llega hasta el sujeto y sigue de largo."
+    },
+    "cine-tilt": {
+      "title": "Inclinación",
+      "description": "Movimiento. Una inclinación corta del pecho a los ojos."
+    },
+    "cine-trucking": {
+      "title": "Trucking",
+      "description": "Movimiento. Un trucking lateral, paralelo al sujeto."
+    },
+    "cine-wandering": {
+      "title": "Deambular",
+      "description": "Movimiento. Un recorrido sin prisa que cambia de altura y de ángulo, como quien mira alrededor."
+    },
+    "cine-zoom": {
+      "title": "Zoom",
+      "description": "Movimiento. Un zoom óptico simple de acercamiento, casi sin cambiar la perspectiva."
+    },
+    "cine-eyes-in": {
+      "title": "Entrada a los ojos",
+      "description": "Movimiento. El cuadro se posa en los ojos."
+    },
+    "cine-mouth-in": {
+      "title": "Entrada a la boca",
+      "description": "Movimiento. El cuadro baja hasta la boca."
+    },
+    "cine-eating-zoom": {
+      "title": "Zoom de bocado",
+      "description": "Movimiento. Un salto rápido hacia la boca, como si un bocado llenara el cuadro."
+    },
+    "cine-buckle-up": {
+      "title": "Abróchate",
+      "description": "Movimiento. Una vista baja y angular desde la altura del regazo, hacia el pecho."
+    },
+    "cine-car-chasing": {
+      "title": "Persecución en coche",
+      "description": "Movimiento. Una vista de persecución desde atrás y un poco arriba, en la calle."
+    },
+    "cine-car-grip": {
+      "title": "Agarre al vehículo",
+      "description": "Movimiento. Una vista muy baja y pegada al costado, como si fuera montada en el vehículo."
+    },
+    "cine-road-rush": {
+      "title": "Rush de carretera",
+      "description": "Movimiento. Un rush bajo y angular hacia el objetivo, en la calle."
+    },
+    "cine-flying-cam-transition": {
+      "title": "Transición de cámara voladora",
+      "description": "Movimiento. La cámara pasa de una vista frontal baja a volar por encima, en un solo gesto."
+    },
+    "cine-through-object-in": {
+      "title": "Entrar a través del objeto",
+      "description": "Movimiento. La cámara entra desde fuera de la figura hasta quedar casi dentro del encuadre."
+    },
+    "cine-through-object-out": {
+      "title": "Salir a través del objeto",
+      "description": "Movimiento. La cámara empieza muy cerca y se retira a través del encuadre."
+    },
+    "cine-super-dolly-in": {
+      "title": "Super travelling de entrada",
+      "description": "Movimiento. Un travelling largo y rápido, de lejos hasta un plano corto."
+    },
+    "cine-super-dolly-out": {
+      "title": "Super travelling de salida",
+      "description": "Movimiento. Un travelling largo y rápido, de un plano corto a uno amplio."
+    },
+    "cine-dolly-zoom-in": {
+      "title": "Dolly zoom de entrada",
+      "description": "Movimiento. Avance con objetivo más angular: el rostro se mantiene y el fondo se hincha."
+    },
+    "cine-dolly-zoom-out": {
+      "title": "Dolly zoom de salida",
+      "description": "Movimiento. Retroceso con objetivo más largo: el rostro se mantiene y el fondo se comprime."
+    },
+    "cine-yoyo-zoom": {
+      "title": "Zoom yoyó",
+      "description": "Movimiento. Un salto óptico rápido hacia dentro. El plano lo reproduce una sola vez, de entrada."
+    },
+    "cine-rapid-zoom-in": {
+      "title": "Zoom rápido de entrada",
+      "description": "Movimiento. Un punch-in óptico rápido."
+    },
+    "cine-rapid-zoom-out": {
+      "title": "Zoom rápido de salida",
+      "description": "Movimiento. Una apertura óptica rápida."
+    },
+    "cine-head-tracking": {
+      "title": "Seguimiento de cabeza",
+      "description": "Movimiento. Un arco cercano que mantiene la cabeza en el centro."
+    },
+    "cine-hero-cam": {
+      "title": "Cámara de héroe",
+      "description": "Movimiento. Un avance desde abajo, mirando hacia arriba, como un plano de héroe."
+    },
+    "cine-robo-arm": {
+      "title": "Brazo robótico",
+      "description": "Movimiento. Un arco preciso que además sube, como un brazo de rig."
+    },
+    "cine-wiggle": {
+      "title": "Wiggle",
+      "description": "Movimiento. Un movimiento corto e inestable, con balanceo a ambos lados."
+    },
+    "cine-3d-rotation": {
+      "title": "Rotación 3D",
+      "description": "Movimiento. Órbita y rotación a la vez, de modo que el sujeto gira en el espacio."
+    },
+    "cine-crane-over-the-head": {
+      "title": "Grúa por encima de la cabeza",
+      "description": "Movimiento. La cámara corona justo encima de la cabeza y mira la coronilla."
+    },
+    "cine-earth-zoom": {
+      "title": "Zoom terrestre",
+      "description": "Movimiento. Un recorrido largo desde una vista alta y lejana hasta la escala de una persona."
+    },
+    "cine-jib-down": {
+      "title": "Jíb hacia abajo",
+      "description": "Movimiento. Una bajada corta de jíb hasta un plano más cercano."
+    },
+    "cine-jib-up": {
+      "title": "Jíb hacia arriba",
+      "description": "Movimiento. Una subida corta de jíb que abre un poco el plano."
+    },
+    "cine-extreme-close-up": {
+      "title": "Primerísimo primer plano",
+      "description": "Encuadre. Ojos y boca llenan el cuadro."
+    },
+    "cine-choker": {
+      "title": "Plano choker",
+      "description": "Encuadre. Un choker: desde justo bajo los labios hasta la coronilla."
+    },
+    "cine-close-up": {
+      "title": "Primer plano",
+      "description": "Encuadre. Un primer plano del rostro."
+    },
+    "cine-medium-close-up": {
+      "title": "Plano medio corto",
+      "description": "Encuadre. Cabeza y hombros."
+    },
+    "cine-medium-shot": {
+      "title": "Plano medio",
+      "description": "Encuadre. De la cintura hacia arriba."
+    },
+    "cine-cowboy-shot": {
+      "title": "Plano cowboy",
+      "description": "Encuadre. Desde mitad del muslo, el encuadre cowboy del western."
+    },
+    "cine-full-body": {
+      "title": "Cuerpo entero",
+      "description": "Encuadre. El cuerpo entero, con un poco de suelo y de aire sobre la cabeza."
+    },
+    "cine-long-shot": {
+      "title": "Plano general",
+      "description": "Encuadre. La figura se lee y el decorado tiene sitio alrededor."
+    },
+    "cine-extreme-long-shot": {
+      "title": "Gran plano general",
+      "description": "Encuadre. La figura es pequeña y manda el lugar."
+    },
+    "cine-establishing-shot": {
+      "title": "Plano de situación",
+      "description": "Encuadre. Una vista amplia que presenta el lugar, con la figura dentro."
+    },
+    "cine-master-shot": {
+      "title": "Plano máster",
+      "description": "Encuadre. Una vista amplia y fija que puede cubrir a dos personas."
+    },
+    "cine-two-shot": {
+      "title": "Plano de dos",
+      "description": "Encuadre. Dos personas comparten un plano medio-amplio."
+    },
+    "cine-three-shot": {
+      "title": "Plano de tres",
+      "description": "Encuadre. Tres figuras en un solo cuadro."
+    },
+    "cine-group-shot": {
+      "title": "Plano de grupo",
+      "description": "Encuadre. Un grupo de tres más abierto, con aire a los dos lados."
+    },
+    "cine-insert": {
+      "title": "Plano detalle",
+      "description": "Encuadre. Un inserto cerrado sobre el torso, donde se leen manos y atrezo."
+    },
+    "cine-cutaway": {
+      "title": "Cutaway",
+      "description": "Encuadre. La mirada abandona el rostro y se queda en el espacio de al lado."
+    },
+    "cine-reaction-shot": {
+      "title": "Plano de reacción",
+      "description": "Encuadre. Un primer plano de tres cuartos para una reacción."
+    },
+    "cine-over-the-shoulder-frame": {
+      "title": "Plano sobre el hombro",
+      "description": "Encuadre. Desde detrás de un hombro, mirando a la otra persona."
+    },
+    "cine-single": {
+      "title": "Plano individual",
+      "description": "Encuadre. Una persona, en un plano medio limpio."
+    },
+    "cine-cut-ins": {
+      "title": "Cut-ins",
+      "description": "Encuadre. Un inserto más cerrado que la cobertura, apuntado al pecho."
+    },
+    "cine-gesture": {
+      "title": "Gesto",
+      "description": "Encuadre. Encuadre para un gesto de la mano o del torso."
+    },
+    "cine-interview": {
+      "title": "Entrevista",
+      "description": "Encuadre. Un ángulo de entrevista a tres cuartos, con aire en la dirección de la mirada."
+    },
+    "cine-product": {
+      "title": "Producto",
+      "description": "Encuadre. Una vista limpia y un poco alta, apta para un objeto sobre el sujeto."
+    },
+    "cine-video-portraits": {
+      "title": "Retrato en vídeo",
+      "description": "Encuadre. Cabeza y hombros con una deriva mínima."
+    },
+    "cine-wide-shot": {
+      "title": "Plano abierto",
+      "description": "Encuadre. Un plano abierto de la figura en el decorado."
+    },
+    "cine-eye-level": {
+      "title": "A la altura de los ojos",
+      "description": "Ángulo. El objetivo queda a la altura de los ojos."
+    },
+    "cine-high-angle": {
+      "title": "Ángulo picado",
+      "description": "Ángulo. La cámara mira al sujeto desde arriba."
+    },
+    "cine-low-angle": {
+      "title": "Ángulo contrapicado",
+      "description": "Ángulo. La cámara mira desde abajo y el sujeto gana altura."
+    },
+    "cine-birds-eye": {
+      "title": "Vista de pájaro",
+      "description": "Ángulo. Casi en picado total, un poco fuera de la vertical."
+    },
+    "cine-worms-eye": {
+      "title": "Vista de gusano",
+      "description": "Ángulo. Desde el suelo, mirando con fuerza hacia arriba."
+    },
+    "cine-overhead": {
+      "title": "Cenital",
+      "description": "Ángulo. Una vista cenital, casi sobre la vertical."
+    },
+    "cine-ground-level": {
+      "title": "A ras de suelo",
+      "description": "Ángulo. El objetivo queda justo por encima del suelo."
+    },
+    "cine-dutch-angle": {
+      "title": "Ángulo holandés",
+      "description": "Ángulo. El horizonte queda ladeado y se mantiene así."
+    },
+    "cine-pov": {
+      "title": "Punto de vista",
+      "description": "Ángulo. La cámara se sienta en los ojos y mira hacia el decorado."
+    },
+    "cine-profile": {
+      "title": "Perfil",
+      "description": "Ángulo. Una vista lateral pura de la cabeza."
+    },
+    "cine-three-quarter": {
+      "title": "Tres cuartos",
+      "description": "Ángulo. El ángulo clásico de tres cuartos."
+    },
+    "cine-reverse-angle": {
+      "title": "Ángulo inverso",
+      "description": "Ángulo. La cámara se coloca al otro lado y mira de vuelta."
+    },
+    "cine-trunk-shot": {
+      "title": "Plano desde el maletero",
+      "description": "Ángulo. Una vista baja y angular hacia arriba, como desde dentro de un maletero."
+    },
+    "cine-hip-level": {
+      "title": "A la altura de la cadera",
+      "description": "Ángulo. El objetivo queda más o menos a la altura de la cadera."
+    },
+    "cine-shoulder-level": {
+      "title": "A la altura del hombro",
+      "description": "Ángulo. El objetivo queda justo bajo los ojos, a la altura del hombro."
+    },
+    "cine-first-person": {
+      "title": "Primera persona",
+      "description": "Ángulo. Una vista angular desde los ojos, mirando hacia delante."
+    },
+    "cine-fourth-wall": {
+      "title": "Cuarta pared",
+      "description": "Ángulo. De frente al objetivo, como si el sujeto se dirigiera a nosotros."
+    },
+    "cine-object-pov": {
+      "title": "Punto de vista de un objeto",
+      "description": "Ángulo. Una vista baja, a la altura de un objeto, mirando a la persona."
+    },
+    "cine-incline": {
+      "title": "Plano inclinado",
+      "description": "Ángulo. La cámara y el horizonte se inclinan, como en una pendiente."
+    },
+    "cine-three-point-lighting": {
+      "title": "Iluminación de tres puntos",
+      "description": "Luz. Una luz principal frontal, con nivel suficiente para leer el rostro."
+    },
+    "cine-key-light": {
+      "title": "Luz principal",
+      "description": "Luz. Una sola luz dura desde la izquierda, y poco más."
+    },
+    "cine-fill-light": {
+      "title": "Luz de relleno",
+      "description": "Luz. Un relleno frontal suave y bajo, con el contraste bajado."
+    },
+    "cine-backlight": {
+      "title": "Contraluz",
+      "description": "Luz. La lámpara queda detrás del sujeto y dibuja un borde luminoso."
+    },
+    "cine-rim-light": {
+      "title": "Luz de contorno",
+      "description": "Luz. Un contorno desde atrás a la derecha separa el hombro del decorado."
+    },
+    "cine-kicker": {
+      "title": "Kicker",
+      "description": "Luz. Un kicker frío desde atrás a la izquierda recoge el otro borde."
+    },
+    "cine-hair-light": {
+      "title": "Luz de pelo",
+      "description": "Luz. Una luz alta por detrás se posa en el pelo."
+    },
+    "cine-eye-light": {
+      "title": "Luz de ojos",
+      "description": "Luz. Una lámpara frontal pequeña, apuntada a los ojos."
+    },
+    "cine-high-key": {
+      "title": "Clave alta",
+      "description": "Luz. Una clave brillante y abierta, con sombras suaves."
+    },
+    "cine-low-key": {
+      "title": "Clave baja",
+      "description": "Luz. Casi todo el rostro cae en sombra. Queda un borde."
+    },
+    "cine-chiaroscuro": {
+      "title": "Claroscuro",
+      "description": "Luz. Un corte pictórico entre un plano iluminado y una sombra profunda."
+    },
+    "cine-rembrandt": {
+      "title": "Luz Rembrandt",
+      "description": "Luz. Una luz de tres cuartos que deja la mejilla lejana casi a oscuras."
+    },
+    "cine-butterfly-lighting": {
+      "title": "Luz mariposa",
+      "description": "Luz. Una luz frontal alta, la de belleza que cae sobre la nariz."
+    },
+    "cine-loop-lighting": {
+      "title": "Luz de lazo",
+      "description": "Luz. Una luz un poco fuera de eje, entre Rembrandt y mariposa."
+    },
+    "cine-split-lighting": {
+      "title": "Luz dividida",
+      "description": "Luz. Media cara queda iluminada y la otra a oscuras."
+    },
+    "cine-short-lighting": {
+      "title": "Luz corta",
+      "description": "Luz. La luz cae en el lado lejano de un rostro a tres cuartos."
+    },
+    "cine-broad-lighting": {
+      "title": "Luz ancha",
+      "description": "Luz. La luz cae en el lado cercano de un rostro a tres cuartos."
+    },
+    "cine-silhouette": {
+      "title": "Silueta",
+      "description": "Luz. Un contraluz fuerte y un frente oscuro convierten el cuerpo en una forma."
+    },
+    "cine-motivated-lighting": {
+      "title": "Luz motivada",
+      "description": "Luz. La luz llega de un lado, como si hubiera una ventana fuera de cuadro."
+    },
+    "cine-practical-lighting": {
+      "title": "Luz práctica",
+      "description": "Luz. Una lámpara cálida y baja, del color de una bombilla práctica."
+    },
+    "cine-available-light": {
+      "title": "Luz disponible",
+      "description": "Luz. Un nivel frío y modesto, como si solo hubiera la luz de la sala."
+    },
+    "cine-naturalistic-ambient": {
+      "title": "Ambiente naturalista",
+      "description": "Luz. Una luz ambiente cálida y suave, sin un filo teatral."
+    },
+    "cine-bounce-light": {
+      "title": "Luz rebotada",
+      "description": "Luz. La lámpara llega desde abajo y de frente, como luz rebotada en el suelo."
+    },
+    "cine-hard-light": {
+      "title": "Luz dura",
+      "description": "Luz. Una fuente pequeña y dura, con una línea de sombra marcada."
+    },
+    "cine-soft-light": {
+      "title": "Luz suave",
+      "description": "Luz. Una fuente amplia y baja, con la sombra abierta."
+    },
+    "cine-side-lighting": {
+      "title": "Luz lateral",
+      "description": "Luz. Una luz lateral pura."
+    },
+    "cine-top-light": {
+      "title": "Luz cenital",
+      "description": "Luz. La lámpara está encima."
+    },
+    "cine-under-light": {
+      "title": "Luz desde abajo",
+      "description": "Luz. La lámpara está bajo el rostro."
+    },
+    "cine-cross-lighting": {
+      "title": "Luces cruzadas",
+      "description": "Luz. Una luz empinada de lado y de frente, la versión con una sola lámpara de un cruce."
+    },
+    "cine-window-light": {
+      "title": "Luz de ventana",
+      "description": "Luz. Luz de día desde una ventana lateral."
+    },
+    "cine-candlelight": {
+      "title": "Luz de vela",
+      "description": "Luz. Una fuente naranja y tenue, baja y cercana."
+    },
+    "cine-neon-practical": {
+      "title": "Neones prácticos",
+      "description": "Luz. Un práctico magenta, del color de un neón."
+    },
+    "cine-golden-hour": {
+      "title": "Hora dorada",
+      "description": "Luz. Un sol bajo y cálido desde un lado."
+    },
+    "cine-blue-hour": {
+      "title": "Hora azul",
+      "description": "Luz. La luz fría y baja de después de la puesta."
+    },
+    "cine-dappled-light": {
+      "title": "Luz moteada",
+      "description": "Luz. Luz lateral cálida en la jungla, donde la copa rompería el sol."
+    },
+    "cine-gobo-lighting": {
+      "title": "Luz con gobo",
+      "description": "Luz. Una luz lateral dura. La lámpara del escenario no recorta un dibujo: el borde de sombra es una sola línea."
+    },
+    "cine-volumetric-light": {
+      "title": "Luz volumétrica",
+      "description": "Luz. Contraluz más calima, para que se lea el haz delante de la figura."
+    },
+    "cine-cameo-lighting": {
+      "title": "Luz cameo",
+      "description": "Luz. Un charco de luz desde arriba y un alrededor más oscuro."
+    },
+    "cine-epiphany": {
+      "title": "Epifanía",
+      "description": "Luz. Un contraluz cálido y alto, como si el plano fuera una revelación."
+    },
+    "cine-spotlight": {
+      "title": "Foco",
+      "description": "Luz. Un foco duro desde arriba, en un escenario por lo demás tenue."
+    },
+    "cine-glam": {
+      "title": "Glam",
+      "description": "Luz. Una luz de belleza brillante, un poco por encima de los ojos."
+    },
+    "cine-rule-of-thirds": {
+      "title": "Regla de los tercios",
+      "description": "Composición. El rostro queda en el tercio izquierdo, con espacio abierto a la derecha."
+    },
+    "cine-golden-ratio": {
+      "title": "Proporción áurea",
+      "description": "Composición. El rostro queda un poco dentro del tercio izquierdo, cerca de la sección áurea."
+    },
+    "cine-central-framing": {
+      "title": "Encuadre central",
+      "description": "Composición. El sujeto queda en el centro exacto."
+    },
+    "cine-centered-composition": {
+      "title": "Composición centrada",
+      "description": "Composición. Un tableau formal y centrado de una figura."
+    },
+    "cine-symmetry": {
+      "title": "Simetría",
+      "description": "Composición. Dos figuras equilibradas a cada lado del eje del objetivo."
+    },
+    "cine-asymmetry": {
+      "title": "Asimetría",
+      "description": "Composición. Una figura empujada a un lado, con el peso fuera del centro."
+    },
+    "cine-leading-lines": {
+      "title": "Líneas de fuga",
+      "description": "Composición. Una vista baja y centrada calle abajo, para que las líneas del decorado converjan."
+    },
+    "cine-frame-in-frame": {
+      "title": "Marco dentro del marco",
+      "description": "Composición. Un atrezo en primer término invade el borde y el sujeto queda en el hueco."
+    },
+    "cine-negative-space": {
+      "title": "Espacio negativo",
+      "description": "Composición. La figura es pequeña a la izquierda y casi todo el cuadro está vacío."
+    },
+    "cine-foreground-interest": {
+      "title": "Interés en primer término",
+      "description": "Composición. Un atrezo grande en primer término conduce a la figura de detrás."
+    },
+    "cine-layered-depth": {
+      "title": "Profundidad por capas",
+      "description": "Composición. Atrezo, héroe y una segunda figura quedan en tres profundidades."
+    },
+    "cine-diagonal-composition": {
+      "title": "Composición en diagonal",
+      "description": "Composición. El horizonte se inclina y la figura queda sobre una diagonal."
+    },
+    "cine-triangular-composition": {
+      "title": "Composición triangular",
+      "description": "Composición. Tres figuras forman un triángulo."
+    },
+    "cine-headroom": {
+      "title": "Aire sobre la cabeza",
+      "description": "Composición. La mirada queda alta, así que hay aire sobre el pelo."
+    },
+    "cine-lead-room": {
+      "title": "Aire en la mirada",
+      "description": "Composición. Espacio abierto a la derecha, en la dirección a la que mira el cuerpo."
+    },
+    "cine-short-siding": {
+      "title": "Aire corto",
+      "description": "Composición. El rostro queda contra el borde cercano, con poco aire delante de la mirada."
+    },
+    "cine-visual-weight": {
+      "title": "Peso visual",
+      "description": "Composición. Un ángulo bajo y un cuerpo descentrado dan peso a la figura."
+    },
+    "cine-repetition-pattern": {
+      "title": "Repetición y patrón",
+      "description": "Composición. Tres figuras se repiten en el cuadro, a la misma altura."
+    },
+    "cine-figure-ground": {
+      "title": "Figura y fondo",
+      "description": "Composición. Una figura en silueta contra un contraluz brillante."
+    },
+    "cine-contrast-composition": {
+      "title": "Contraste tonal",
+      "description": "Composición. Una luz lateral dura convierte el corte tonal en la composición."
+    },
+    "cine-one-point-perspective": {
+      "title": "Perspectiva de un punto",
+      "description": "Composición. El objetivo se sienta en el eje de la calle y el decorado fuga a un punto."
+    },
+    "cine-vanishing-point": {
+      "title": "Punto de fuga",
+      "description": "Composición. Una vista más baja y abierta, apuntada al mismo eje de la calle."
+    },
+    "cine-dirty-frame": {
+      "title": "Cuadro sucio",
+      "description": "Composición. Una forma en primer término corta el cuadro a propósito."
+    },
+    "cine-clean-frame": {
+      "title": "Cuadro limpio",
+      "description": "Composición. Nada compite con la figura. Los bordes quedan vacíos."
+    },
+    "cine-look-space": {
+      "title": "Espacio de mirada",
+      "description": "Composición. Aire delante del rostro, la forma práctica del aire de mirada."
+    },
+    "cine-architexture": {
+      "title": "Arquitectura del plano",
+      "description": "Composición. Una vista baja y abierta que entrega el cuadro a la ciudadela."
+    },
+    "cine-reflections": {
+      "title": "Reflejos",
+      "description": "Composición. El suelo refleja la figura."
+    },
+    "cine-screen-in-screen": {
+      "title": "Pantalla dentro de la pantalla",
+      "description": "Composición. La figura queda pequeña y el decorado se lee como un marco alrededor de otro marco."
+    },
+    "cine-tableau": {
+      "title": "Tableau",
+      "description": "Composición. Una disposición frontal, fija y formal de tres figuras."
+    },
+    "cine-void": {
+      "title": "Vacío",
+      "description": "Composición. La figura está en un escenario vacío y oscuro."
+    },
+    "cine-voyeur": {
+      "title": "Voyeur",
+      "description": "Composición. Un objetivo largo desde un lado, como si el plano se viera desde una esquina."
+    },
+    "cine-windows": {
+      "title": "Ventanas",
+      "description": "Composición. Luz lateral de ventana y un encuadre que deja a la figura cerca de la luz."
+    },
+    "cine-ultra-wide-14mm": {
+      "title": "Ultra gran angular de 14 mm",
+      "description": "Óptica. Un objetivo muy angular, cerca del cuerpo, con perspectiva marcada."
+    },
+    "cine-24mm-wide": {
+      "title": "Gran angular de 24 mm",
+      "description": "Óptica. Un gran angular, todavía lo bastante cerca como para sentir la sala."
+    },
+    "cine-35mm-moderate": {
+      "title": "Angular moderado de 35 mm",
+      "description": "Óptica. Un angular moderado a una distancia natural."
+    },
+    "cine-50mm-normal": {
+      "title": "Normal de 50 mm",
+      "description": "Óptica. El objetivo habitual: una perspectiva parecida a estar cerca de pie."
+    },
+    "cine-85mm-portrait": {
+      "title": "Retrato de 85 mm",
+      "description": "Óptica. Un teleobjetivo corto. La cámara se retira para que la cabeza conserve el tamaño."
+    },
+    "cine-135mm-telephoto": {
+      "title": "Teleobjetivo de 135 mm",
+      "description": "Óptica. Un objetivo más largo y una cámara más lejos. El fondo se comprime."
+    },
+    "cine-200mm-long": {
+      "title": "Teleobjetivo largo de 200 mm",
+      "description": "Óptica. Un objetivo muy largo. La cámara está lejos y el decorado se apila detrás del rostro."
+    },
+    "cine-anamorphic": {
+      "title": "Anamórfico",
+      "description": "Óptica. Un campo más abierto y un horizonte bajo. El escenario sigue en 16:9, sin compresión anamórfica."
+    },
+    "cine-spherical": {
+      "title": "Esférico",
+      "description": "Óptica. Un objetivo esférico normal, a una distancia directa."
+    },
+    "cine-fisheye": {
+      "title": "Ojo de pez",
+      "description": "Óptica. Un gran angular extremo, muy cerca del cuerpo."
+    },
+    "cine-tilt-shift": {
+      "title": "Descentrado",
+      "description": "Óptica. Una vista alta hacia abajo. El escenario no tiene desenfoque de descentrado: la sensación de miniatura viene del ángulo."
+    },
+    "cine-macro": {
+      "title": "Macro",
+      "description": "Óptica. Muy cerca del pecho, como un macro que aísla un detalle."
+    },
+    "cine-probe-lens": {
+      "title": "Óptica de sonda",
+      "description": "Óptica. Un angular casi en el suelo, empujado hacia los pies."
+    },
+    "cine-split-diopter": {
+      "title": "Dioptría partida",
+      "description": "Óptica. Dos personas a dos profundidades en un mismo cuadro profundo. El foco no se parte."
+    },
+    "cine-vintage-cine": {
+      "title": "Óptica de cine antigua",
+      "description": "Óptica. Un objetivo normal con una lámpara cálida y un poco tenue."
+    },
+    "cine-compression": {
+      "title": "Compresión de teleobjetivo",
+      "description": "Óptica. Un objetivo largo desde lejos, de modo que lo cercano y lo lejano se superponen."
+    },
+    "cine-magnification": {
+      "title": "Ampliación",
+      "description": "Óptica. Un objetivo cerrado sobre una zona pequeña del rostro."
+    },
+    "cine-teal-orange": {
+      "title": "Verde azulado y naranja",
+      "description": "Color. Una lámpara verde azulado sobre un decorado cálido: el grado de dos tonos en una sola luz."
+    },
+    "cine-bleach-bypass": {
+      "title": "Bleach bypass",
+      "description": "Color. Una luz dura y desaturada, con sombras profundas."
+    },
+    "cine-monochrome": {
+      "title": "Monocromo",
+      "description": "Color. Una lámpara gris neutra. El escenario no quita el color de las texturas."
+    },
+    "cine-sepia": {
+      "title": "Sepia",
+      "description": "Color. Una lámpara dorada y marrón sobre toda la figura."
+    },
+    "cine-desaturation": {
+      "title": "Desaturación",
+      "description": "Color. Una lámpara pálida y baja, el extremo quedo del etalonaje."
+    },
+    "cine-hyper-saturation": {
+      "title": "Hipersaturación",
+      "description": "Color. Una luz magenta intensa."
+    },
+    "cine-cool-blue": {
+      "title": "Azul frío",
+      "description": "Color. Toda la luz principal es azul."
+    },
+    "cine-warm-amber": {
+      "title": "Ámbar cálido",
+      "description": "Color. Toda la luz principal es ámbar."
+    },
+    "cine-filmic-faded": {
+      "title": "Fílmico lavado",
+      "description": "Color. Una lámpara tenue, cálida y de poco contraste."
+    },
+    "cine-cross-process": {
+      "title": "Proceso cruzado",
+      "description": "Color. Una luz verde amarillenta, el dominante del proceso cruzado."
+    },
+    "cine-day-for-night": {
+      "title": "Día por noche",
+      "description": "Color. Una luz azul y baja que hace de noche un decorado de día."
+    },
+    "cine-tungsten-balance": {
+      "title": "Equilibrio de tungsteno",
+      "description": "Color. Un equilibrio naranja de tungsteno."
+    },
+    "cine-moonlight-gel": {
+      "title": "Gel de luna",
+      "description": "Color. Un gel azul pálido desde arriba y desde atrás."
+    },
+    "cine-split-tone": {
+      "title": "Virado doble",
+      "description": "Color. Verde azulado en la luz y un decorado cálido detrás."
+    },
+    "cine-natural-grade": {
+      "title": "Etalonaje natural",
+      "description": "Color. Una luz cálida modesta, cercana a un día sin etalonar."
+    },
+    "cine-color-shift": {
+      "title": "Cambio de color",
+      "description": "Color. El plano empieza bajo una luz fría. La lámpara en sí no se anima."
+    },
+    "cine-vintage": {
+      "title": "Vintage",
+      "description": "Color. Luz sepia y un encuadre un poco más lejos y más blando."
+    },
+    "cine-palette": {
+      "title": "Paleta",
+      "description": "Color. Un solo acento saturado, aquí magenta, sobre una pose simple."
+    },
+    "cine-overexposed": {
+      "title": "Sobreexpuesto",
+      "description": "Color. La luz se empuja muy alta y el rostro se va hacia el blanco."
+    },
+    "cine-slow-motion": {
+      "title": "Cámara lenta",
+      "description": "Tiempo. Un avance corto reproducido a un cuarto de velocidad."
+    },
+    "cine-fast-motion": {
+      "title": "Cámara rápida",
+      "description": "Tiempo. Un lateral largo reproducido al doble de velocidad."
+    },
+    "cine-speed-ramp": {
+      "title": "Rampa de velocidad",
+      "description": "Tiempo. Un travelling largo que arranca y frena: lento en los extremos y más rápido en el centro."
+    },
+    "cine-freeze-frame": {
+      "title": "Fotograma congelado",
+      "description": "Tiempo. Un cuadro bloqueado. La pose no avanza."
+    },
+    "cine-time-lapse": {
+      "title": "Time-lapse",
+      "description": "Tiempo. Una órbita amplia reproducida rápido, de modo que la vista salta alrededor de la figura."
+    },
+    "cine-step-printing": {
+      "title": "Step printing",
+      "description": "Tiempo. Una órbita lenta. El escenario no tira fotogramas: el tartamudeo es solo el ritmo."
+    },
+    "cine-reverse-motion": {
+      "title": "Movimiento inverso",
+      "description": "Tiempo. El travelling va al revés, de cerca a lejos."
+    },
+    "cine-bullet-time": {
+      "title": "Bullet time",
+      "description": "Tiempo. Una órbita rápida a media velocidad: el círculo del instante congelado."
+    },
+    "cine-long-take": {
+      "title": "Plano secuencia largo",
+      "description": "Tiempo. Un solo recorrido que hace un arco y se acerca, sin corte."
+    },
+    "cine-one-er": {
+      "title": "Plano secuencia",
+      "description": "Tiempo. Un plano secuencia más breve: sube, describe un arco y aterriza en el rostro."
+    },
+    "cine-motion-blur": {
+      "title": "Desenfoque de movimiento",
+      "description": "Tiempo. Un trucking lateral rápido. El render no añade desenfoque de movimiento."
+    },
+    "cine-stutter": {
+      "title": "Tartamudeo",
+      "description": "Tiempo. Un avance corto y vacilante. No se descartan fotogramas."
+    },
+    "cine-boomerang": {
+      "title": "Boomerang",
+      "description": "Tiempo. Un salto hacia dentro. El plano no vuelve a salir."
+    },
+    "cine-infinite-loop": {
+      "title": "Bucle infinito",
+      "description": "Tiempo. Una órbita completa que puede repetirse sin un salto de ángulo."
+    },
+    "cine-stop-motion": {
+      "title": "Stop motion",
+      "description": "Tiempo. Una pose fija. El modelo no avanza a saltos como una marioneta."
+    },
+    "cine-low-shutter": {
+      "title": "Obturación baja",
+      "description": "Tiempo. Una panorámica rápida, el gesto que una obturación baja emborronaría."
+    },
+    "cine-timelapse-glam": {
+      "title": "Time-lapse glam",
+      "description": "Tiempo. Un encuadre de belleza reproducido rápido, con luz glam."
+    },
+    "cine-timelapse-human": {
+      "title": "Time-lapse humano",
+      "description": "Tiempo. Una órbita media de la figura, reproducida rápido."
+    },
+    "cine-timelapse-landscape": {
+      "title": "Time-lapse de paisaje",
+      "description": "Tiempo. Una órbita alta y amplia del lugar, reproducida rápido."
+    },
+    "cine-frozen-in-motion": {
+      "title": "Congelado en movimiento",
+      "description": "Tiempo. Una órbita a un cuarto de velocidad, como si el instante se sostuviera."
+    },
+    "cine-moonwalk": {
+      "title": "Moonwalk",
+      "description": "Tiempo. La figura retrocede y la cámara sostiene una vista frontal."
+    },
+    "cine-lens-flare": {
+      "title": "Destello de lente",
+      "description": "Efecto. Una luz baja, de sol, apuntada hacia el objetivo. No hay una pasada de destello."
+    },
+    "cine-anamorphic-flare": {
+      "title": "Destello anamórfico",
+      "description": "Efecto. Un cuadro amplio, bajo y brillante. No se dibujan las rayas."
+    },
+    "cine-halation": {
+      "title": "Halación",
+      "description": "Efecto. Un contraluz cálido que enciende el borde de la figura."
+    },
+    "cine-film-grain": {
+      "title": "Grano de película",
+      "description": "Efecto. Un encuadre cercano y contrastado. No se aplica grano."
+    },
+    "cine-bokeh": {
+      "title": "Bokeh",
+      "description": "Efecto. Un teleobjetivo corto sobre el rostro, el encuadre donde viviría el desenfoque del fondo."
+    },
+    "cine-double-exposure": {
+      "title": "Doble exposición",
+      "description": "Efecto. Dos figuras comparten un cuadro, un poco desplazadas, como una doble exposición."
+    },
+    "cine-rack-focus": {
+      "title": "Cambio de foco",
+      "description": "Efecto. Un avance desde una figura lejana a una cercana. El foco no viaja."
+    },
+    "cine-shallow-focus": {
+      "title": "Foco corto",
+      "description": "Efecto. Un objetivo de retrato cercano, el montaje de un plano de foco corto."
+    },
+    "cine-deep-focus": {
+      "title": "Foco profundo",
+      "description": "Efecto. Una vista angular, como de diafragma cerrado, con dos profundidades a un tamaño legible."
+    },
+    "cine-forced-perspective": {
+      "title": "Perspectiva forzada",
+      "description": "Efecto. Un atrezo cercano está agrandado y una figura lejana, reducida."
+    },
+    "cine-light-leak": {
+      "title": "Fuga de luz",
+      "description": "Efecto. Una luz de borde muy alta desde un lado, en lugar de una fuga."
+    },
+    "cine-vignette": {
+      "title": "Viñeta",
+      "description": "Efecto. Un charco de luz en el centro y un grado más oscuro alrededor."
+    },
+    "cine-chromatic-aberration": {
+      "title": "Aberración cromática",
+      "description": "Efecto. Un angular cerca de la figura, donde se verían los flecos de color. Los flecos no se dibujan."
+    },
+    "cine-infrared": {
+      "title": "Infrarrojo",
+      "description": "Efecto. Un grado pálido, de clave alta y un poco magenta."
+    },
+    "cine-night-vision": {
+      "title": "Visión nocturna",
+      "description": "Efecto. Un grado verde y tenue sobre un escenario oscuro."
+    },
+    "cine-thermal": {
+      "title": "Térmica",
+      "description": "Efecto. Un grado naranja y rojo, de calor."
+    },
+    "cine-slit-scan": {
+      "title": "Slit-scan",
+      "description": "Efecto. Un pase lateral largo, el gesto que un slit-scan emborronaría. La imagen no se corta en tiras."
+    },
+    "cine-kaleidoscope": {
+      "title": "Caleidoscopio",
+      "description": "Efecto. Una órbita centrada y un poco girada. El cuadro no se refleja."
+    },
+    "cine-light-flash": {
+      "title": "Destello",
+      "description": "Efecto. Una luz muy brillante durante un instante corto."
+    },
+    "cine-projection-mapping": {
+      "title": "Proyecciones",
+      "description": "Efecto. La figura está en un decorado oscuro con un baño frontal frío, como si la alcanzara una proyección."
+    },
+    "cine-match-morph": {
+      "title": "Morph",
+      "description": "Efecto. Un avance de una figura a la otra. La malla no se transforma."
+    },
+    "cine-altered-state": {
+      "title": "Estado alterado",
+      "description": "Efecto. Una deriva angular, inclinada y de color ácido."
+    },
+    "cine-anthropo": {
+      "title": "Anthropo",
+      "description": "Efecto. Una vista baja, cercana y angular que estira el cuerpo hacia el objetivo."
+    },
+    "cine-cinemagraph": {
+      "title": "Cinemagraph",
+      "description": "Efecto. Un retrato bloqueado. Solo se movería una animación posterior del modelo."
+    },
+    "cine-collage": {
+      "title": "Collage",
+      "description": "Efecto. Tres figuras apretadas en un cuadro gráfico y plano."
+    },
+    "cine-datamosh": {
+      "title": "Datamosh",
+      "description": "Efecto. Un avance rápido y roto, con giro. Los píxeles no se derriten."
+    },
+    "cine-diorama": {
+      "title": "Diorama",
+      "description": "Efecto. Una vista alta hacia la figura, como una escena de mesa."
+    },
+    "cine-distortions": {
+      "title": "Distorsiones",
+      "description": "Efecto. Un encuadre de ojo de pez cercano. La malla no se deforma."
+    },
+    "cine-duplication": {
+      "title": "Duplicación",
+      "description": "Efecto. El mismo planteamiento dos veces: dos figuras una al lado de la otra."
+    },
+    "cine-echo-print": {
+      "title": "Eco",
+      "description": "Efecto. Una figura y una segunda justo detrás, como un eco."
+    },
+    "cine-feedback": {
+      "title": "Feedback",
+      "description": "Efecto. Un avance hacia el rostro bajo una luz alta, el inicio de un bucle de feedback."
+    },
+    "cine-floating-ui": {
+      "title": "Interfaz flotante",
+      "description": "Efecto. Un encuadre de producto limpio y un poco alto, con sitio para texto. No se dibuja texto."
+    },
+    "cine-focal-shift": {
+      "title": "Cambio de focal",
+      "description": "Efecto. El objetivo abre mientras la cámara se queda, un cambio de focal."
+    },
+    "cine-generative": {
+      "title": "Generativo",
+      "description": "Efecto. Una órbita lenta bajo un grado magenta. La malla no se regenera."
+    },
+    "cine-levitation": {
+      "title": "Levitación",
+      "description": "Efecto. La figura queda elevada del suelo y gira despacio."
+    },
+    "cine-masking": {
+      "title": "Máscara",
+      "description": "Efecto. Un encuadre cerrado que recorta el cuerpo, como lo haría una máscara."
+    },
+    "cine-mixed-media": {
+      "title": "Técnica mixta",
+      "description": "Efecto. Una figura en el taller, bajo una luz de color papel."
+    },
+    "cine-morphing": {
+      "title": "Morphing",
+      "description": "Efecto. Un paso de una vista amplia del cuerpo al rostro. La malla no se mezcla."
+    },
+    "cine-object-portal": {
+      "title": "Portal de objeto",
+      "description": "Efecto. La cámara avanza hacia la figura como a través de una abertura, con un portal en los efectos del mundo."
+    },
+    "cine-photogrammetry": {
+      "title": "Fotogrametría",
+      "description": "Efecto. Una órbita lenta, como se presenta un objeto escaneado."
+    },
+    "cine-ratio-switch": {
+      "title": "Cambio de relación",
+      "description": "Efecto. La misma vista cercana, pasada a un cuadro vertical."
+    },
+    "cine-scale-shift": {
+      "title": "Cambio de escala",
+      "description": "Efecto. La cámara pasa de una vista amplia y pequeña a un primer plano enorme."
+    },
+    "cine-shadow-box": {
+      "title": "Caja de sombras",
+      "description": "Efecto. Una luz lateral dura y un encuadre frontal, como una caja de sombras."
+    },
+    "cine-transformation": {
+      "title": "Transformación",
+      "description": "Efecto. Una grúa baja hasta la figura mientras una onda marca el pulso."
+    },
+    "cine-typography": {
+      "title": "Tipografía",
+      "description": "Efecto. Un encuadre limpio y centrado, con aire arriba para un título. No se compone texto."
+    },
+    "cine-wigglegram": {
+      "title": "Wigglegram",
+      "description": "Efecto. Dos vistas laterales cercanas, en un pequeño vaivén lateral."
+    },
+    "cine-x-ray": {
+      "title": "Rayos X",
+      "description": "Efecto. Un grado pálido, frío y de clave alta, de frente al cuerpo."
+    },
+    "cine-zoetrope": {
+      "title": "Zoótropo",
+      "description": "Efecto. Una órbita completa, el bucle que haría girar un zoótropo."
+    },
+    "cine-focus-change": {
+      "title": "Cambio de enfoque",
+      "description": "Efecto. El cuadro viaja de un atrezo lateral al rostro."
+    },
+    "cine-floating-fall": {
+      "title": "Caída flotante",
+      "description": "Efecto. La figura cae despacio y la cámara acompaña el torso."
+    },
+    "cine-smash-and-grab": {
+      "title": "Golpe y arranque",
+      "description": "Efecto. Una entrada de golpe, con la energía de un avance rápido. Un solo gesto, hacia dentro."
+    },
+    "cine-cyclope": {
+      "title": "Cíclope",
+      "description": "Efecto. Un primerísimo primer plano centrado entre los ojos."
+    },
+    "cine-particles": {
+      "title": "Partículas",
+      "description": "Efecto. Unas chispas flotan alrededor de una figura a contraluz."
+    },
+    "cine-argus": {
+      "title": "Argos",
+      "description": "Efecto. Una órbita alta y de muchos ángulos, como si varios ojos rodearan a la vez."
+    },
+    "cine-sticker-peel": {
+      "title": "Pegatina que se despega",
+      "description": "Efecto. La cámara se despega de una vista frontal plana hacia un ángulo lateral."
+    },
+    "cine-selfie-twin": {
+      "title": "Selfie doble",
+      "description": "Efecto. Dos rostros cerca de un angular."
+    },
+    "cine-bubbles": {
+      "title": "Burbujas",
+      "description": "Efecto. Unas burbujas suben delante de un encuadre cercano y frío."
+    },
+    "cine-match-cut": {
+      "title": "Corte por semejanza",
+      "description": "Montaje. El cuadro sostiene un primer plano centrado, la forma en la que aterrizaría un match cut."
+    },
+    "cine-graphic-match": {
+      "title": "Corte gráfico",
+      "description": "Montaje. Un primer plano gráfico e inclinado, emparejado por la forma y no por la historia."
+    },
+    "cine-match-action": {
+      "title": "Corte en la acción",
+      "description": "Montaje. Una vista lateral que continúa un gesto a través del cuadro."
+    },
+    "cine-jump-cut": {
+      "title": "Jump cut",
+      "description": "Montaje. El tamaño salta sobre el mismo eje, como un jump cut que reinicia el cuadro."
+    },
+    "cine-smash-cut": {
+      "title": "Smash cut",
+      "description": "Montaje. Un salto brusco de abierto a cerrado."
+    },
+    "cine-dissolve": {
+      "title": "Fundido",
+      "description": "Montaje. Un paso lento de una distancia a otra. La imagen no se funde."
+    },
+    "cine-fade": {
+      "title": "Fundido de entrada y salida",
+      "description": "Montaje. El plano aterriza en un cuadro fijo y oscuro, como llega un fundido."
+    },
+    "cine-wipe": {
+      "title": "Cortinilla",
+      "description": "Montaje. Un pase lateral seco, el gesto de una cortinilla."
+    },
+    "cine-iris": {
+      "title": "Iris",
+      "description": "Montaje. Un zoom hacia el centro, como se cierra un iris."
+    },
+    "cine-cross-cut": {
+      "title": "Montaje alterno",
+      "description": "Montaje. La mirada salta de una persona a la otra."
+    },
+    "cine-split-screen": {
+      "title": "Pantalla partida",
+      "description": "Montaje. Dos personas en un cuadro amplio, cada una a un lado."
+    },
+    "cine-montage": {
+      "title": "Montaje",
+      "description": "Montaje. Una grúa que recorre el decorado, como un montaje que salta de lugar."
+    },
+    "cine-axial-cut": {
+      "title": "Corte axial",
+      "description": "Montaje. Un corte recto por el eje del objetivo, de medio a corto."
+    },
+    "cine-invisible-cut": {
+      "title": "Corte invisible",
+      "description": "Montaje. La cámara pasa muy cerca, donde se escondería un corte."
+    },
+    "cine-l-cut-visual": {
+      "title": "Preparación de corte en L",
+      "description": "Montaje. Un plano de dos sostenido, la imagen que seguiría bajo la frase siguiente."
+    },
+    "cine-crash-cut": {
+      "title": "Corte de impacto",
+      "description": "Montaje. Un salto violento hacia fuera, como un corte de impacto rompe el tamaño."
+    },
+    "cine-flash-cut": {
+      "title": "Corte de flash",
+      "description": "Montaje. Un instante de luz y un cuadro más cerrado."
+    },
+    "cine-match-motion": {
+      "title": "Corte por movimiento",
+      "description": "Montaje. Un movimiento lateral que podría continuar en el plano siguiente."
+    },
+    "cine-match-split": {
+      "title": "Corte partido",
+      "description": "Montaje. El cuadro reparte la atención entre dos profundidades."
+    },
+    "cine-quick-cuts": {
+      "title": "Cortes rápidos",
+      "description": "Montaje. Tres golpes rápidos de tamaño sobre un eje, en un solo salto hacia dentro."
+    },
+    "cine-set-transition": {
+      "title": "Transición de decorado",
+      "description": "Montaje. La cámara se eleva de una vista, como una transición abandona un decorado."
+    },
+    "cine-transitions": {
+      "title": "Transiciones",
+      "description": "Montaje. Un látigo de un lado del sujeto al otro."
+    },
+    "cine-fragments": {
+      "title": "Fragmentos",
+      "description": "Montaje. Un recorte cerrado y descentrado, un fragmento del cuerpo."
+    },
+    "cine-rain": {
+      "title": "Lluvia",
+      "description": "Atmósfera. Cae lluvia en la calle, alrededor de la figura."
+    },
+    "cine-fog": {
+      "title": "Niebla",
+      "description": "Atmósfera. Una niebla espesa ocupa el decorado."
+    },
+    "cine-mist": {
+      "title": "Bruma",
+      "description": "Atmósfera. Una bruma más ligera que la niebla, baja alrededor de las piernas."
+    },
+    "cine-haze": {
+      "title": "Calima",
+      "description": "Atmósfera. Una calima cálida entre la cámara y la figura."
+    },
+    "cine-smoke": {
+      "title": "Humo",
+      "description": "Atmósfera. El humo se acumula alrededor de la figura."
+    },
+    "cine-dust-motes": {
+      "title": "Motas de polvo",
+      "description": "Atmósfera. Un polvo fino queda suspendido en un haz de ventana."
+    },
+    "cine-steam": {
+      "title": "Vapor",
+      "description": "Atmósfera. Un vapor pálido sube en el taller."
+    },
+    "cine-snow": {
+      "title": "Nieve",
+      "description": "Atmósfera. Nieva en el decorado de nieve."
+    },
+    "cine-wet-down": {
+      "title": "Suelo mojado",
+      "description": "Atmósfera. Una lluvia ligera sobre la calle reflectante: el suelo mojado."
+    },
+    "cine-sparks": {
+      "title": "Chispas y brasas",
+      "description": "Atmósfera. Chispas y una luz cálida, como de un fuego cercano."
+    },
+    "cine-dust-storm": {
+      "title": "Polvo y arena",
+      "description": "Atmósfera. El polvo cruza el decorado del desierto."
+    },
+    "cine-underwater": {
+      "title": "Bajo el agua",
+      "description": "Atmósfera. Una calima azul y motas a la deriva sobre el mar."
+    },
+    "cine-ocean": {
+      "title": "Océano",
+      "description": "Atmósfera. Una vista amplia en mar abierto, con rocío."
+    },
+    "cine-film-noir": {
+      "title": "Cine negro",
+      "description": "Género. Un encuadre de calle en clave baja y ladeado."
+    },
+    "cine-neo-noir": {
+      "title": "Neo-noir",
+      "description": "Género. Neón y clave baja en la calle de noche."
+    },
+    "cine-german-expressionism": {
+      "title": "Expresionismo alemán",
+      "description": "Género. Un ángulo muy ladeado y una luz dura."
+    },
+    "cine-giallo-look": {
+      "title": "Giallo",
+      "description": "Género. Un primer plano saturado y un poco cruel, con una luz de color primario."
+    },
+    "cine-spaghetti-western": {
+      "title": "Western",
+      "description": "Género. Una vista baja, amplia y polvorienta en el desierto."
+    },
+    "cine-found-footage-look": {
+      "title": "Metraje encontrado",
+      "description": "Género. Un avance angular, inclinado e inquieto, como cámara en mano."
+    },
+    "cine-cinema-verite": {
+      "title": "Cinéma vérité",
+      "description": "Género. Un seguimiento a la altura del hombro, de observación."
+    },
+    "cine-french-new-wave": {
+      "title": "Nouvelle vague",
+      "description": "Género. Un salto casual hacia dentro en la calle, un poco descentrado."
+    },
+    "cine-wuxia-look": {
+      "title": "Wuxia",
+      "description": "Género. Una grúa que sube en la jungla, con la figura elevada."
+    },
+    "cine-tech-noir": {
+      "title": "Tech-noir",
+      "description": "Género. Prácticos magenta y un contorno frío en una calle oscura."
+    },
+    "cine-southern-gothic": {
+      "title": "Gótico sureño",
+      "description": "Género. Una luz cálida, baja y pesada, en un cuadro quieto."
+    },
+    "cine-cosmic-horror-look": {
+      "title": "Horror cósmico",
+      "description": "Género. Un encuadre bajo, amplio y enfermizo en el vacío, con un giro lento."
+    },
+    "cine-vaporwave-look": {
+      "title": "Vaporwave",
+      "description": "Género. Luz rosa, una pose centrada como de estatua y un suelo reflectante."
+    },
+    "cine-documentary-look": {
+      "title": "Documental",
+      "description": "Género. Un zoom modesto hacia dentro, el avance de observación de un documental."
+    },
+    "cine-blockbuster-gloss": {
+      "title": "Brillo de superproducción",
+      "description": "Género. Un avance de héroe bajo, brillante y pulido."
+    },
+    "cine-arthouse": {
+      "title": "Cine de autor",
+      "description": "Género. Una espera larga, quieta y descentrada."
+    },
+    "cine-animation": {
+      "title": "Animación",
+      "description": "Género. Un encuadre limpio, gráfico y un poco abierto, con una luz saturada."
+    },
+    "cine-bts": {
+      "title": "Entre bastidores",
+      "description": "Género. Una vista más amplia y casual del taller, como desde el equipo."
+    },
+    "cine-dreamcore": {
+      "title": "Dreamcore",
+      "description": "Género. Un encuadre blando, vacío y a una altura un poco rara, en un escenario desnudo."
+    },
+    "cine-dystopian": {
+      "title": "Distópico",
+      "description": "Género. Una vista amplia, dura y desaturada de la calle."
+    },
+    "cine-magical-realism": {
+      "title": "Realismo mágico",
+      "description": "Género. Un plano medio corriente, con la figura un poco despegada del suelo."
+    },
+    "cine-maximalism": {
+      "title": "Maximalismo",
+      "description": "Género. Tres figuras, un color intenso y casi ningún espacio vacío."
+    },
+    "cine-photography": {
+      "title": "Fotografía",
+      "description": "Género. Un retrato fijo al estilo de un 85 mm."
+    },
+    "cine-pixel-art": {
+      "title": "Pixel art",
+      "description": "Género. El aspecto bajo y de bloques de la N64, en un encuadre centrado y simple."
+    },
+    "cine-stylistic-suck": {
+      "title": "Feísmo deliberado",
+      "description": "Género. Un plano angular demasiado cerca, mal colocado y torcido."
+    },
+    "cine-video-game": {
+      "title": "Videojuego",
+      "description": "Género. Un seguimiento en tercera persona, con el aspecto bajo de consola."
+    },
+    "cine-weirdcore": {
+      "title": "Weirdcore",
+      "description": "Género. Una sala vacía, un horizonte raro y un grado pálido."
+    },
+    "cine-agamemnon": {
+      "title": "Agamenón",
+      "description": "Estilo. Un avance bajo, de bronce y heroico, como una máscara trágica que llena el cuadro."
+    },
+    "cine-ink-riot": {
+      "title": "Motín de tinta",
+      "description": "Estilo. Una luz lateral gráfica y dura, y un primer plano ladeado."
+    },
+    "cine-fallen-angel": {
+      "title": "Ángel caído",
+      "description": "Estilo. La figura está elevada, a contraluz, y la cámara mira hacia arriba."
+    },
+    "cine-fairytale-castle": {
+      "title": "Castillo de cuento",
+      "description": "Estilo. Una vista alta, de cuento, de la ciudadela, con la figura pequeña."
+    },
+    "cine-comic": {
+      "title": "Cómic",
+      "description": "Estilo. Un punch-in bajo una luz amarilla y plana."
+    },
+    "cine-cold-vision": {
+      "title": "Visión fría",
+      "description": "Estilo. Una vista cercana, azul y clínica."
+    },
+    "cine-casual-monster-slayer": {
+      "title": "Cazador casual",
+      "description": "Estilo. Una pose media-amplia y relajada, un poco baja."
+    },
+    "cine-mighty-fighter": {
+      "title": "Luchador",
+      "description": "Estilo. Un avance bajo y potente sobre el cuerpo."
+    },
+    "cine-canvas": {
+      "title": "Lienzo",
+      "description": "Estilo. Un tres cuartos quieto y pictórico, bajo una luz cálida y suave."
+    },
+    "cine-pigeons": {
+      "title": "Palomas",
+      "description": "Estilo. Una vista amplia a ras de calle, como si el cuadro fuera de la plaza."
+    },
+    "cine-superstar": {
+      "title": "Superestrella",
+      "description": "Estilo. Un foco glam y una media órbita lenta."
+    },
+    "cine-pearl-earring": {
+      "title": "Pendiente de perla",
+      "description": "Estilo. Un tres cuartos oscuro, girado como el retrato pintado."
+    },
+    "cine-lsd": {
+      "title": "LSD",
+      "description": "Estilo. Una deriva angular, con giro y color ácido."
+    },
+    "cine-blue-depth": {
+      "title": "Profundidad azul",
+      "description": "Estilo. Una vista larga y azul, con calima, para que la profundidad se lea como color."
+    },
+    "cine-knights-diary": {
+      "title": "Diario del caballero",
+      "description": "Estilo. Un plano medio a la luz de una vela, como una página de noche."
+    },
+    "cine-2000s-paparazzi": {
+      "title": "Paparazzi de los 2000",
+      "description": "Estilo. Un salto un poco tarde, con objetivo largo, desde el otro lado de la calle."
+    },
+    "cine-dolphin-ride": {
+      "title": "Paseo con delfín",
+      "description": "Estilo. Un deslizamiento bajo y rápido sobre el mar."
+    },
+    "cine-multiverse": {
+      "title": "Multiverso",
+      "description": "Estilo. Dos figuras sobre un eje y un avance que podría ser de cualquiera de las dos."
+    },
+    "cine-skatedog": {
+      "title": "Skate",
+      "description": "Estilo. Un trucking lateral y bajo, como al lado de una tabla."
+    },
+    "cine-sketch": {
+      "title": "Boceto",
+      "description": "Estilo. Un estudio gris y plano de cabeza y hombros."
+    },
+    "cine-monet-muse": {
+      "title": "Musa de Monet",
+      "description": "Estilo. Luz suave de jardín y un arco leve en la jungla."
+    },
+    "cine-akrill": {
+      "title": "Acrílico",
+      "description": "Estilo. Una pose centrada, saturada y plana, como una figura de acrílico."
+    },
+    "cine-magazine": {
+      "title": "Revista",
+      "description": "Estilo. Un tres cuartos pulido, de portada."
+    },
+    "cine-lost-in-a-book": {
+      "title": "Perdido en un libro",
+      "description": "Estilo. Un ángulo alto sobre el regazo y la cabeza inclinada."
+    },
+    "cine-penguin-ride": {
+      "title": "Paseo con pingüino",
+      "description": "Estilo. Un deslizamiento bajo por la nieve."
+    },
+    "cine-3d-render": {
+      "title": "Render 3D",
+      "description": "Estilo. Una órbita de producto limpia, sobre un suelo reflectante."
+    },
+    "cine-action-figure": {
+      "title": "Figura de acción",
+      "description": "Estilo. Una vista un poco alta, de caja de juguete, del cuerpo entero."
+    },
+    "cine-orbital-presence": {
+      "title": "Presencia orbital",
+      "description": "Estilo. Una órbita lenta, alta y casi ingrávida, en el espacio."
+    },
+    "cine-acid": {
+      "title": "Ácido",
+      "description": "Estilo. Una luz verde amarillenta y un leve giro."
+    },
+    "cine-noir": {
+      "title": "Noir",
+      "description": "Estilo. Un primer plano quieto y en sombra, de calle."
+    },
+    "cine-race-track": {
+      "title": "Circuito",
+      "description": "Estilo. Un lateral bajo, angular y rápido en la calle."
+    },
+    "cine-flash-comic": {
+      "title": "Cómic de flash",
+      "description": "Estilo. Un zoom de golpe bajo una luz plana de color primario."
+    },
+    "cine-paper": {
+      "title": "Papel",
+      "description": "Estilo. Una luz blanca de papel, suave, y un encuadre frontal y plano."
+    },
+    "cine-random-glow": {
+      "title": "Brillo aleatorio",
+      "description": "Estilo. Un práctico brillante y un movimiento corto e inestable."
+    },
+    "cine-toxic": {
+      "title": "Tóxico",
+      "description": "Estilo. Una luz verde tóxico con un poco de calima."
+    },
+    "cine-broken-mirror": {
+      "title": "Espejo roto",
+      "description": "Estilo. Un suelo reflectante y un ángulo ladeado, de cosa rota."
+    },
+    "cine-hand-paint": {
+      "title": "Pintado a mano",
+      "description": "Estilo. Un retrato cálido, blando y un poco desviado, como un estudio pintado."
+    },
+    "cine-lava": {
+      "title": "Lava",
+      "description": "Estilo. Luz de fuego y chispas, cerca y abajo."
+    },
+    "cine-marble": {
+      "title": "Mármol",
+      "description": "Estilo. Una órbita fría y pulida sobre un suelo de espejo."
+    },
+    "cine-modern": {
+      "title": "Moderno",
+      "description": "Estilo. Un plano medio limpio, frío y centrado."
+    },
+    "cine-puffin-ride": {
+      "title": "Paseo con frailecillo",
+      "description": "Estilo. Un movimiento bajo y rápido sobre el mar abierto, más cercano que el del delfín."
+    },
+    "cine-origami": {
+      "title": "Origami",
+      "description": "Estilo. Una vista plana, alta y de color papel, como una hoja doblada."
+    },
+    "cine-two-color": {
+      "title": "Dos colores",
+      "description": "Estilo. Una luz verde azulado contra un suelo cálido de desierto."
+    },
+    "cine-ultraviolet": {
+      "title": "Ultravioleta",
+      "description": "Estilo. Una luz violeta y un rostro cercano, un poco desde arriba."
     }
   },
   "atmos": {

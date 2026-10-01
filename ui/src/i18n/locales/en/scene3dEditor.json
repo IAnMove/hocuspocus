@@ -1647,6 +1647,1702 @@
     "atmos-meadow-low": {
       "title": "Meadow · low",
       "description": "The same meadow from the grass, looking across the field and the low clouds."
+    },
+    "cine-slow-zoom-in": {
+      "title": "Slow Zoom In",
+      "description": "Camera movement. The lens tightens slowly on the face while the camera body stays put."
+    },
+    "cine-slow-zoom-out": {
+      "title": "Slow Zoom Out",
+      "description": "Camera movement. The lens opens slowly and lets the room back in around the face."
+    },
+    "cine-crash-zoom-in": {
+      "title": "Crash Zoom In",
+      "description": "Camera movement. A very fast snap onto the eyes."
+    },
+    "cine-crash-zoom-out": {
+      "title": "Crash Zoom Out",
+      "description": "Camera movement. A very fast widening, from the face out to the body."
+    },
+    "cine-dolly-in": {
+      "title": "Dolly In",
+      "description": "Camera movement. The camera rolls closer and the perspective grows. The lens stays fixed."
+    },
+    "cine-dolly-out": {
+      "title": "Dolly Out",
+      "description": "Camera movement. The camera rolls back and reveals more of the set. The lens stays fixed."
+    },
+    "cine-dolly-left": {
+      "title": "Dolly Left",
+      "description": "Camera movement. A lateral dolly to the left at a constant distance."
+    },
+    "cine-dolly-right": {
+      "title": "Dolly Right",
+      "description": "Camera movement. A lateral dolly to the right at a constant distance."
+    },
+    "cine-pan-left": {
+      "title": "Pan Left",
+      "description": "Camera movement. The camera stays planted and looks across to the left."
+    },
+    "cine-pan-right": {
+      "title": "Pan Right",
+      "description": "Camera movement. The camera stays planted and looks across to the right."
+    },
+    "cine-tilt-up": {
+      "title": "Tilt Up",
+      "description": "Camera movement. The camera tilts from the torso up past the head."
+    },
+    "cine-tilt-down": {
+      "title": "Tilt Down",
+      "description": "Camera movement. The camera tilts from the face down to the feet."
+    },
+    "cine-whip-pan": {
+      "title": "Whip Pan",
+      "description": "Camera movement. A very fast look from one side to the other."
+    },
+    "cine-whip-tilt": {
+      "title": "Whip Tilt",
+      "description": "Camera movement. A very fast tilt from the floor to the ceiling."
+    },
+    "cine-pedestal-up": {
+      "title": "Pedestal Up",
+      "description": "Camera movement. The whole camera rises, still looking at the subject."
+    },
+    "cine-pedestal-down": {
+      "title": "Pedestal Down",
+      "description": "Camera movement. The whole camera descends, still looking at the subject."
+    },
+    "cine-crane-up": {
+      "title": "Crane Up",
+      "description": "Camera movement. The camera rises and pulls back, opening the shot."
+    },
+    "cine-crane-down": {
+      "title": "Crane Down",
+      "description": "Camera movement. The camera descends from a high wide view into a closer one."
+    },
+    "cine-crane-over": {
+      "title": "Crane Over",
+      "description": "Camera movement. The camera travels from the front, over the head, and looks down the back."
+    },
+    "cine-jib": {
+      "title": "Jib Shot",
+      "description": "Camera movement. A short jib rise, smaller than a full crane."
+    },
+    "cine-orbit-360": {
+      "title": "360-Degree Orbit",
+      "description": "Camera movement. A full circle around the subject at eye height."
+    },
+    "cine-arc-left": {
+      "title": "Arc Left",
+      "description": "Camera movement. A quarter-circle arc sliding to the left."
+    },
+    "cine-arc-right": {
+      "title": "Arc Right",
+      "description": "Camera movement. A quarter-circle arc sliding to the right."
+    },
+    "cine-tracking": {
+      "title": "Tracking Shot",
+      "description": "Camera movement. The camera tracks alongside at a matched pace."
+    },
+    "cine-follow": {
+      "title": "Follow Shot",
+      "description": "Camera movement. The camera follows from behind the shoulders."
+    },
+    "cine-steadicam": {
+      "title": "Steadicam",
+      "description": "Camera movement. A smooth walking move that drifts in and a little sideways."
+    },
+    "cine-handheld": {
+      "title": "Handheld",
+      "description": "Camera movement. A walking camera with a small roll, as if held by hand."
+    },
+    "cine-gimbal": {
+      "title": "Gimbal Shot",
+      "description": "Camera movement. A stabilized glide that pans across the subject."
+    },
+    "cine-fpv-drone": {
+      "title": "FPV Drone",
+      "description": "Camera movement. A low, fast, wide approach, the way a racing drone dives in."
+    },
+    "cine-aerial-pullback": {
+      "title": "Aerial Pullback",
+      "description": "Camera movement. The view climbs and retreats until the subject is small in the set."
+    },
+    "cine-aerial-push": {
+      "title": "Aerial Push In",
+      "description": "Camera movement. A high view drops and pushes in toward the subject."
+    },
+    "cine-push-in": {
+      "title": "Push In",
+      "description": "Camera movement. A motivated push from a medium shot into the face."
+    },
+    "cine-pull-out": {
+      "title": "Pull Out",
+      "description": "Camera movement. A pull back from the face to a medium-wide view."
+    },
+    "cine-static": {
+      "title": "Static Locked-Off",
+      "description": "Camera movement. A locked-off medium shot. Nothing in the camera moves."
+    },
+    "cine-dolly-zoom": {
+      "title": "Dolly Zoom",
+      "description": "Camera movement. The camera pushes in while the lens widens, so the face stays a similar size and the background stretches."
+    },
+    "cine-dutch-roll": {
+      "title": "Dutch Roll",
+      "description": "Camera movement. The horizon rolls from one diagonal to the other."
+    },
+    "cine-camera-roll": {
+      "title": "Camera Roll",
+      "description": "Camera movement. The camera rolls about a quarter turn around the lens axis."
+    },
+    "cine-double-dolly": {
+      "title": "Double Dolly",
+      "description": "Camera movement. Subject and camera travel together, so the figure floats and the set slides behind."
+    },
+    "cine-snorricam": {
+      "title": "SnorriCam",
+      "description": "Camera movement. The face stays locked in frame while the body travels through the set."
+    },
+    "cine-locked-on": {
+      "title": "Locked-On",
+      "description": "Camera movement. The camera travels but the look stays glued to the subject."
+    },
+    "cine-walk-and-talk": {
+      "title": "Walk and Talk",
+      "description": "Camera movement. Two figures walk and the camera tracks them from the front-side."
+    },
+    "cine-hyperlapse": {
+      "title": "Hyperlapse",
+      "description": "Camera movement. A long move played fast, the way a hyperlapse skips through space."
+    },
+    "cine-slider": {
+      "title": "Slider Shot",
+      "description": "Camera movement. A short, even lateral slide."
+    },
+    "cine-lazy-susan": {
+      "title": "Lazy Susan",
+      "description": "Camera movement. A lazy half-turn around the subject."
+    },
+    "cine-bolt-cam": {
+      "title": "Bolt Cam",
+      "description": "Camera movement. A very fast lateral pass, like a camera on a speed rail."
+    },
+    "cine-aerial": {
+      "title": "Aerial",
+      "description": "Camera movement. A high circling view over the subject and the floor."
+    },
+    "cine-arc": {
+      "title": "Arc",
+      "description": "Camera movement. A gentle arc that shows both cheeks."
+    },
+    "cine-choreo": {
+      "title": "Choreo",
+      "description": "Camera movement. Height and orbit change together, as a choreographed move."
+    },
+    "cine-conveyor": {
+      "title": "Conveyor",
+      "description": "Camera movement. A flat lateral pass, like the subject were on a belt."
+    },
+    "cine-dolly": {
+      "title": "Dolly",
+      "description": "Camera movement. A straight dolly-in on the body."
+    },
+    "cine-falling": {
+      "title": "Falling",
+      "description": "Camera movement. The camera drops quickly from above to eye height."
+    },
+    "cine-fixed-cam": {
+      "title": "Fixed Cam",
+      "description": "Camera movement. A locked close view, tighter than the wide static shot."
+    },
+    "cine-omnidirectional": {
+      "title": "Omnidirectional",
+      "description": "Camera movement. A full high orbit, looking around the whole body."
+    },
+    "cine-pan": {
+      "title": "Pan",
+      "description": "Camera movement. A modest pan from just left of the subject to just right."
+    },
+    "cine-parallax": {
+      "title": "Parallax",
+      "description": "Camera movement. A close lateral move so the subject shifts against the background."
+    },
+    "cine-pass-through": {
+      "title": "Pass Through",
+      "description": "Camera movement. The camera walks up to the subject and continues past."
+    },
+    "cine-tilt": {
+      "title": "Tilt",
+      "description": "Camera movement. A short tilt from the chest to the eyes."
+    },
+    "cine-trucking": {
+      "title": "Trucking",
+      "description": "Camera movement. A side truck that stays parallel to the subject."
+    },
+    "cine-wandering": {
+      "title": "Wandering",
+      "description": "Camera movement. An unhurried path that changes height and angle, like someone looking around."
+    },
+    "cine-zoom": {
+      "title": "Zoom",
+      "description": "Camera movement. A plain optical zoom in, with almost no change of perspective."
+    },
+    "cine-eyes-in": {
+      "title": "Eyes In",
+      "description": "Camera movement. The frame settles on the eyes."
+    },
+    "cine-mouth-in": {
+      "title": "Mouth In",
+      "description": "Camera movement. The frame drops onto the mouth."
+    },
+    "cine-eating-zoom": {
+      "title": "Eating Zoom",
+      "description": "Camera movement. A fast snap down onto the mouth, as a bite fills the frame."
+    },
+    "cine-buckle-up": {
+      "title": "Buckle Up",
+      "description": "Camera movement. A low wide view from lap height, pushing toward the chest."
+    },
+    "cine-car-chasing": {
+      "title": "Car Chasing",
+      "description": "Camera movement. A chase view from behind and a little above, on the street set."
+    },
+    "cine-car-grip": {
+      "title": "Car Grip",
+      "description": "Camera movement. A very low, close view along the side, as if mounted on the vehicle."
+    },
+    "cine-road-rush": {
+      "title": "Road Rush",
+      "description": "Camera movement. A wide, low rush toward the lens, on the street set."
+    },
+    "cine-flying-cam-transition": {
+      "title": "Flying Cam Transition",
+      "description": "Camera movement. The camera swings from a low front view up and over in one move."
+    },
+    "cine-through-object-in": {
+      "title": "Through Object In",
+      "description": "Camera movement. The camera pushes from outside the figure until it is almost inside the frame."
+    },
+    "cine-through-object-out": {
+      "title": "Through Object Out",
+      "description": "Camera movement. The camera starts very close and withdraws through the frame."
+    },
+    "cine-super-dolly-in": {
+      "title": "Super Dolly In",
+      "description": "Camera movement. A long, fast dolly from far away into a close view."
+    },
+    "cine-super-dolly-out": {
+      "title": "Super Dolly Out",
+      "description": "Camera movement. A long, fast dolly from a close view out to a wide one."
+    },
+    "cine-dolly-zoom-in": {
+      "title": "Dolly Zoom In",
+      "description": "Camera movement. Push in and widen the lens: the face holds, the background swells."
+    },
+    "cine-dolly-zoom-out": {
+      "title": "Dolly Zoom Out",
+      "description": "Camera movement. Pull back and tighten the lens: the face holds, the background compresses."
+    },
+    "cine-yoyo-zoom": {
+      "title": "YoYo Zoom",
+      "description": "Camera movement. A fast optical snap in. The stage plays the move once, inward."
+    },
+    "cine-rapid-zoom-in": {
+      "title": "Rapid Zoom In",
+      "description": "Camera movement. A quick optical punch-in."
+    },
+    "cine-rapid-zoom-out": {
+      "title": "Rapid Zoom Out",
+      "description": "Camera movement. A quick optical widening."
+    },
+    "cine-head-tracking": {
+      "title": "Head Tracking",
+      "description": "Camera movement. A close arc that keeps the head centered."
+    },
+    "cine-hero-cam": {
+      "title": "Hero Cam",
+      "description": "Camera movement. A low push that looks up, the way a hero shot does."
+    },
+    "cine-robo-arm": {
+      "title": "Robo Arm",
+      "description": "Camera movement. A precise arc that also climbs, like a rig arm."
+    },
+    "cine-wiggle": {
+      "title": "Wiggle",
+      "description": "Camera movement. A short unstable move with roll in both directions."
+    },
+    "cine-3d-rotation": {
+      "title": "3D Rotation",
+      "description": "Camera movement. Orbit and roll together, so the subject turns in space."
+    },
+    "cine-crane-over-the-head": {
+      "title": "Crane Over The Head",
+      "description": "Camera movement. The camera crests directly over the head and looks down the crown."
+    },
+    "cine-earth-zoom": {
+      "title": "Earth Zoom",
+      "description": "Camera movement. A long move from a far high view down into a human-scale shot."
+    },
+    "cine-jib-down": {
+      "title": "Jib Down",
+      "description": "Camera movement. A short jib drop into a closer view."
+    },
+    "cine-jib-up": {
+      "title": "Jib Up",
+      "description": "Camera movement. A short jib rise that opens a little."
+    },
+    "cine-extreme-close-up": {
+      "title": "Extreme Close-Up",
+      "description": "Framing. Eyes and mouth fill the frame."
+    },
+    "cine-choker": {
+      "title": "Choker Shot",
+      "description": "Framing. A choker framing, from just under the lips to the top of the head."
+    },
+    "cine-close-up": {
+      "title": "Close-Up",
+      "description": "Framing. A close-up of the face."
+    },
+    "cine-medium-close-up": {
+      "title": "Medium Close-Up",
+      "description": "Framing. Head and shoulders."
+    },
+    "cine-medium-shot": {
+      "title": "Medium Shot",
+      "description": "Framing. From the waist up."
+    },
+    "cine-cowboy-shot": {
+      "title": "Cowboy Shot",
+      "description": "Framing. From mid-thigh up, the western cowboy frame."
+    },
+    "cine-full-body": {
+      "title": "Full Body",
+      "description": "Framing. The whole body, with a little floor and a little headroom."
+    },
+    "cine-long-shot": {
+      "title": "Long Shot",
+      "description": "Framing. The figure is readable and the set has room around it."
+    },
+    "cine-extreme-long-shot": {
+      "title": "Extreme Long Shot",
+      "description": "Framing. The figure is small and the place dominates."
+    },
+    "cine-establishing-shot": {
+      "title": "Establishing Shot",
+      "description": "Framing. A wide view that introduces the place, with the figure inside it."
+    },
+    "cine-master-shot": {
+      "title": "Master Shot",
+      "description": "Framing. A wide locked view that can cover two people."
+    },
+    "cine-two-shot": {
+      "title": "Two-Shot",
+      "description": "Framing. Two people share a medium-wide frame."
+    },
+    "cine-three-shot": {
+      "title": "Three-Shot",
+      "description": "Framing. Three figures in one frame."
+    },
+    "cine-group-shot": {
+      "title": "Group Shot",
+      "description": "Framing. A wider three-figure group, with air on both sides."
+    },
+    "cine-insert": {
+      "title": "Insert Shot",
+      "description": "Framing. A tight insert on the torso, where hands and props read."
+    },
+    "cine-cutaway": {
+      "title": "Cutaway",
+      "description": "Framing. The look leaves the face and rests on the space beside them."
+    },
+    "cine-reaction-shot": {
+      "title": "Reaction Shot",
+      "description": "Framing. A close three-quarter view for a reaction."
+    },
+    "cine-over-the-shoulder-frame": {
+      "title": "Over-the-Shoulder Coverage",
+      "description": "Framing. From behind one shoulder, looking toward the other person."
+    },
+    "cine-single": {
+      "title": "Single",
+      "description": "Framing. One person, clean medium framing."
+    },
+    "cine-cut-ins": {
+      "title": "Cut-ins",
+      "description": "Framing. A tighter insert than the coverage, aimed at the chest."
+    },
+    "cine-gesture": {
+      "title": "Gesture",
+      "description": "Framing. Framing for a hand or torso gesture."
+    },
+    "cine-interview": {
+      "title": "Interview",
+      "description": "Framing. A three-quarter interview angle, with room in the look direction."
+    },
+    "cine-product": {
+      "title": "Product",
+      "description": "Framing. A clean, slightly high view suited to an object on the subject."
+    },
+    "cine-video-portraits": {
+      "title": "Video Portraits",
+      "description": "Framing. Head and shoulders with a very small drift."
+    },
+    "cine-wide-shot": {
+      "title": "Wide Shot",
+      "description": "Framing. A wide shot of the figure in the set."
+    },
+    "cine-eye-level": {
+      "title": "Eye Level",
+      "description": "Camera angle. The lens sits at eye height."
+    },
+    "cine-high-angle": {
+      "title": "High Angle",
+      "description": "Camera angle. The camera looks down on the subject."
+    },
+    "cine-low-angle": {
+      "title": "Low Angle",
+      "description": "Camera angle. The camera looks up, and the subject gains height."
+    },
+    "cine-birds-eye": {
+      "title": "Bird's-Eye View",
+      "description": "Camera angle. Almost straight down, a little off the vertical."
+    },
+    "cine-worms-eye": {
+      "title": "Worm's-Eye View",
+      "description": "Camera angle. From the floor, looking sharply up."
+    },
+    "cine-overhead": {
+      "title": "Overhead Top-Down",
+      "description": "Camera angle. A top-down view, nearly on the vertical."
+    },
+    "cine-ground-level": {
+      "title": "Ground Level",
+      "description": "Camera angle. The lens is just above the floor."
+    },
+    "cine-dutch-angle": {
+      "title": "Dutch Angle",
+      "description": "Camera angle. The horizon is canted and stays there."
+    },
+    "cine-pov": {
+      "title": "Point of View",
+      "description": "Camera angle. The camera sits at the eyes and looks out into the set."
+    },
+    "cine-profile": {
+      "title": "Profile",
+      "description": "Camera angle. A pure side view of the head."
+    },
+    "cine-three-quarter": {
+      "title": "Three-Quarter Angle",
+      "description": "Camera angle. The classic three-quarter angle."
+    },
+    "cine-reverse-angle": {
+      "title": "Reverse Angle",
+      "description": "Camera angle. The camera stands on the far side and looks back."
+    },
+    "cine-trunk-shot": {
+      "title": "Trunk Shot",
+      "description": "Camera angle. A low wide view looking up, as from inside a trunk."
+    },
+    "cine-hip-level": {
+      "title": "Hip Level",
+      "description": "Camera angle. The lens sits about at the hip."
+    },
+    "cine-shoulder-level": {
+      "title": "Shoulder Level",
+      "description": "Camera angle. The lens sits just below the eyes, at the shoulder."
+    },
+    "cine-first-person": {
+      "title": "First-Person",
+      "description": "Camera angle. A wide view from the eyes, looking forward."
+    },
+    "cine-fourth-wall": {
+      "title": "Fourth Wall",
+      "description": "Camera angle. Straight into the lens, as if the subject addresses us."
+    },
+    "cine-object-pov": {
+      "title": "Object POV",
+      "description": "Camera angle. A low view from object height, looking up at the person."
+    },
+    "cine-incline": {
+      "title": "Incline",
+      "description": "Camera angle. The camera and the horizon both lean, as on a slope."
+    },
+    "cine-three-point-lighting": {
+      "title": "Three-Point Lighting",
+      "description": "Lighting. A frontal key with enough level to read the face, the usual three-point balance reduced to the single stage lamp."
+    },
+    "cine-key-light": {
+      "title": "Key Light",
+      "description": "Lighting. One hard key from the left, and little else."
+    },
+    "cine-fill-light": {
+      "title": "Fill Light",
+      "description": "Lighting. A soft, dim frontal fill with the contrast pulled down."
+    },
+    "cine-backlight": {
+      "title": "Backlight",
+      "description": "Lighting. The lamp sits behind the subject and draws a bright edge."
+    },
+    "cine-rim-light": {
+      "title": "Rim Light",
+      "description": "Lighting. A rim from the back-right separates the shoulder from the set."
+    },
+    "cine-kicker": {
+      "title": "Kicker",
+      "description": "Lighting. A cool kicker from the back-left catches the other edge."
+    },
+    "cine-hair-light": {
+      "title": "Hair Light",
+      "description": "Lighting. A high back light sits on the hair."
+    },
+    "cine-eye-light": {
+      "title": "Eye Light",
+      "description": "Lighting. A small frontal lamp aimed at the eyes."
+    },
+    "cine-high-key": {
+      "title": "High-Key Lighting",
+      "description": "Lighting. A bright, open key with soft shadows."
+    },
+    "cine-low-key": {
+      "title": "Low-Key Lighting",
+      "description": "Lighting. Most of the face falls into shadow. One edge remains."
+    },
+    "cine-chiaroscuro": {
+      "title": "Chiaroscuro",
+      "description": "Lighting. A painterly split between a lit plane and a deep shadow."
+    },
+    "cine-rembrandt": {
+      "title": "Rembrandt Lighting",
+      "description": "Lighting. A three-quarter key that leaves the far cheek mostly dark."
+    },
+    "cine-butterfly-lighting": {
+      "title": "Butterfly Lighting",
+      "description": "Lighting. A high frontal key, the beauty light that sits over the nose."
+    },
+    "cine-loop-lighting": {
+      "title": "Loop Lighting",
+      "description": "Lighting. A key a little off axis, between Rembrandt and butterfly."
+    },
+    "cine-split-lighting": {
+      "title": "Split Lighting",
+      "description": "Lighting. Half the face is lit and half is left dark."
+    },
+    "cine-short-lighting": {
+      "title": "Short Lighting",
+      "description": "Lighting. The key hits the far side of a three-quarter face."
+    },
+    "cine-broad-lighting": {
+      "title": "Broad Lighting",
+      "description": "Lighting. The key hits the near side of a three-quarter face."
+    },
+    "cine-silhouette": {
+      "title": "Silhouette",
+      "description": "Lighting. A strong backlight and a dark front turn the body into a shape."
+    },
+    "cine-motivated-lighting": {
+      "title": "Motivated Lighting",
+      "description": "Lighting. The key comes from one side, as if a window just off camera were the source."
+    },
+    "cine-practical-lighting": {
+      "title": "Practical Lighting",
+      "description": "Lighting. A warm, low lamp, the color of a practical bulb."
+    },
+    "cine-available-light": {
+      "title": "Available Light",
+      "description": "Lighting. A cool, modest level, as if only the room light were on."
+    },
+    "cine-naturalistic-ambient": {
+      "title": "Naturalistic Ambient",
+      "description": "Lighting. Soft warm ambient light, without a theatrical edge."
+    },
+    "cine-bounce-light": {
+      "title": "Bounce Light",
+      "description": "Lighting. The lamp comes from low and in front, like light bounced off the floor."
+    },
+    "cine-hard-light": {
+      "title": "Hard Light",
+      "description": "Lighting. A small, hard source and a sharp shadow line."
+    },
+    "cine-soft-light": {
+      "title": "Soft Light",
+      "description": "Lighting. A broad, dim source and an open shadow."
+    },
+    "cine-side-lighting": {
+      "title": "Side Lighting",
+      "description": "Lighting. A pure side light."
+    },
+    "cine-top-light": {
+      "title": "Top Light",
+      "description": "Lighting. The lamp is overhead."
+    },
+    "cine-under-light": {
+      "title": "Underlighting",
+      "description": "Lighting. The lamp is under the face."
+    },
+    "cine-cross-lighting": {
+      "title": "Cross Lighting",
+      "description": "Lighting. A steep side-front key, the single-lamp version of a cross."
+    },
+    "cine-window-light": {
+      "title": "Window Light",
+      "description": "Lighting. Daylight from a side window."
+    },
+    "cine-candlelight": {
+      "title": "Candlelight",
+      "description": "Lighting. A dim orange source, low and close."
+    },
+    "cine-neon-practical": {
+      "title": "Neon Practicals",
+      "description": "Lighting. A magenta practical, the color of a neon sign."
+    },
+    "cine-golden-hour": {
+      "title": "Golden Hour",
+      "description": "Lighting. A low, warm sun from the side."
+    },
+    "cine-blue-hour": {
+      "title": "Blue Hour",
+      "description": "Lighting. The cool, low light after sunset."
+    },
+    "cine-dappled-light": {
+      "title": "Dappled Light",
+      "description": "Lighting. Warm side light in the jungle set, where the canopy would break the sun."
+    },
+    "cine-gobo-lighting": {
+      "title": "Gobo Lighting",
+      "description": "Lighting. A hard side key. The stage lamp cannot cut a pattern, so the shadow edge is a single line."
+    },
+    "cine-volumetric-light": {
+      "title": "Volumetric Light",
+      "description": "Lighting. Backlight plus haze, so the beam in front of the figure can read."
+    },
+    "cine-cameo-lighting": {
+      "title": "Cameo Lighting",
+      "description": "Lighting. A pool of light from above and a darker surround."
+    },
+    "cine-epiphany": {
+      "title": "Epiphany",
+      "description": "Lighting. A high warm backlight, as if the shot were a revelation."
+    },
+    "cine-spotlight": {
+      "title": "Spotlight",
+      "description": "Lighting. A hard overhead spot on an otherwise dim stage."
+    },
+    "cine-glam": {
+      "title": "Glam",
+      "description": "Lighting. A bright beauty key, a little above the eyes."
+    },
+    "cine-rule-of-thirds": {
+      "title": "Rule of Thirds",
+      "description": "Composition. The face sits on the left third, with open space to the right."
+    },
+    "cine-golden-ratio": {
+      "title": "Golden Ratio",
+      "description": "Composition. The face sits a little inside the left third, near the golden section."
+    },
+    "cine-central-framing": {
+      "title": "Central Framing",
+      "description": "Composition. The subject is dead center."
+    },
+    "cine-centered-composition": {
+      "title": "Centered Composition",
+      "description": "Composition. A formal, centered tableau of one figure."
+    },
+    "cine-symmetry": {
+      "title": "Symmetry",
+      "description": "Composition. Two figures balanced on either side of the lens axis."
+    },
+    "cine-asymmetry": {
+      "title": "Asymmetry",
+      "description": "Composition. One figure pushed far to the side, with the weight off center."
+    },
+    "cine-leading-lines": {
+      "title": "Leading Lines",
+      "description": "Composition. A low centered view down the street, so the set lines converge."
+    },
+    "cine-frame-in-frame": {
+      "title": "Frame within Frame",
+      "description": "Composition. A foreground prop crowds the edge and the subject sits in the gap."
+    },
+    "cine-negative-space": {
+      "title": "Negative Space",
+      "description": "Composition. The figure is small on the left and most of the frame is empty."
+    },
+    "cine-foreground-interest": {
+      "title": "Foreground Interest",
+      "description": "Composition. A large foreground prop leads into the figure behind it."
+    },
+    "cine-layered-depth": {
+      "title": "Layered Depth",
+      "description": "Composition. Prop, hero and a second figure sit on three depths."
+    },
+    "cine-diagonal-composition": {
+      "title": "Diagonal Composition",
+      "description": "Composition. The horizon leans and the figure sits on a diagonal."
+    },
+    "cine-triangular-composition": {
+      "title": "Triangular Composition",
+      "description": "Composition. Three figures form a triangle."
+    },
+    "cine-headroom": {
+      "title": "Headroom",
+      "description": "Composition. The look sits high, so there is room above the hair."
+    },
+    "cine-lead-room": {
+      "title": "Lead Room",
+      "description": "Composition. Open space on the right, in the direction the body faces."
+    },
+    "cine-short-siding": {
+      "title": "Short Siding",
+      "description": "Composition. The face is pushed against the near edge, with little room in front of the look."
+    },
+    "cine-visual-weight": {
+      "title": "Visual Weight",
+      "description": "Composition. A low angle and an off-center body make the figure heavy in the frame."
+    },
+    "cine-repetition-pattern": {
+      "title": "Repetition and Pattern",
+      "description": "Composition. Three figures repeat across the frame at the same height."
+    },
+    "cine-figure-ground": {
+      "title": "Figure-Ground",
+      "description": "Composition. A silhouetted figure against a bright back light."
+    },
+    "cine-contrast-composition": {
+      "title": "Tonal Contrast",
+      "description": "Composition. A hard side light makes the tonal split the composition."
+    },
+    "cine-one-point-perspective": {
+      "title": "One-Point Perspective",
+      "description": "Composition. The lens sits on the street axis, so the set vanishes to one point."
+    },
+    "cine-vanishing-point": {
+      "title": "Vanishing Point",
+      "description": "Composition. A lower, wider view aimed down the same street axis."
+    },
+    "cine-dirty-frame": {
+      "title": "Dirty Frame",
+      "description": "Composition. A foreground shape cuts into the frame on purpose."
+    },
+    "cine-clean-frame": {
+      "title": "Clean Frame",
+      "description": "Composition. Nothing competes with the figure. The edges stay empty."
+    },
+    "cine-look-space": {
+      "title": "Look Space",
+      "description": "Composition. Room in front of the face, the practical form of lead room."
+    },
+    "cine-architexture": {
+      "title": "Architexture",
+      "description": "Composition. A low wide view that gives the citadel the frame."
+    },
+    "cine-reflections": {
+      "title": "Reflections",
+      "description": "Composition. The floor mirrors the figure."
+    },
+    "cine-screen-in-screen": {
+      "title": "Screen in Screen",
+      "description": "Composition. The figure is staged small, with the set reading as a frame around a frame."
+    },
+    "cine-tableau": {
+      "title": "Tableau",
+      "description": "Composition. A locked, frontal, formal arrangement of three figures."
+    },
+    "cine-void": {
+      "title": "Void",
+      "description": "Composition. The figure stands in an empty, dim stage."
+    },
+    "cine-voyeur": {
+      "title": "Voyeur",
+      "description": "Composition. A long lens from off to the side, as if the shot were watched from a corner."
+    },
+    "cine-windows": {
+      "title": "Windows",
+      "description": "Composition. Side window light and a frame that keeps the figure near the light."
+    },
+    "cine-ultra-wide-14mm": {
+      "title": "14mm Ultra-Wide",
+      "description": "Lens. A very wide lens close to the body, with strong perspective."
+    },
+    "cine-24mm-wide": {
+      "title": "24mm Wide",
+      "description": "Lens. A wide lens, still close enough to feel the room."
+    },
+    "cine-35mm-moderate": {
+      "title": "35mm Moderate Wide",
+      "description": "Lens. A moderate wide lens at a natural distance."
+    },
+    "cine-50mm-normal": {
+      "title": "50mm Normal",
+      "description": "Lens. The ordinary lens: perspective close to standing nearby."
+    },
+    "cine-85mm-portrait": {
+      "title": "85mm Portrait",
+      "description": "Lens. A short telephoto. The camera steps back so the head stays the same size."
+    },
+    "cine-135mm-telephoto": {
+      "title": "135mm Telephoto",
+      "description": "Lens. A longer lens and a farther camera. The background packs in."
+    },
+    "cine-200mm-long": {
+      "title": "200mm Long Telephoto",
+      "description": "Lens. A very long lens. The camera is far and the set stacks behind the face."
+    },
+    "cine-anamorphic": {
+      "title": "Anamorphic",
+      "description": "Lens. A wider field and a low horizon. The stage stays 16:9, without an anamorphic squeeze."
+    },
+    "cine-spherical": {
+      "title": "Spherical",
+      "description": "Lens. A normal spherical lens at a straightforward distance."
+    },
+    "cine-fisheye": {
+      "title": "Fisheye",
+      "description": "Lens. An extreme wide lens very close to the body."
+    },
+    "cine-tilt-shift": {
+      "title": "Tilt-Shift",
+      "description": "Lens. A high view looking down. The stage has no tilt-shift blur, so the miniature feel comes from the angle."
+    },
+    "cine-macro": {
+      "title": "Macro",
+      "description": "Lens. Very close on the chest, the way a macro frame isolates a detail."
+    },
+    "cine-probe-lens": {
+      "title": "Probe Lens",
+      "description": "Lens. A wide lens almost on the floor, pushed toward the feet."
+    },
+    "cine-split-diopter": {
+      "title": "Split Diopter",
+      "description": "Lens. Two people at two depths in one deep frame. Focus does not split."
+    },
+    "cine-vintage-cine": {
+      "title": "Vintage Cine Glass",
+      "description": "Lens. A normal lens with a warm, slightly dim lamp."
+    },
+    "cine-compression": {
+      "title": "Telephoto Compression",
+      "description": "Lens. A long lens from far away, so near and far sit on top of each other."
+    },
+    "cine-magnification": {
+      "title": "Magnification",
+      "description": "Lens. A tight lens on a small area of the face."
+    },
+    "cine-teal-orange": {
+      "title": "Teal and Orange",
+      "description": "Color. A teal lamp on a warm-looking set, the two-tone grade in one light."
+    },
+    "cine-bleach-bypass": {
+      "title": "Bleach Bypass",
+      "description": "Color. A hard, desaturated key with deep shadows."
+    },
+    "cine-monochrome": {
+      "title": "Monochrome",
+      "description": "Color. A neutral gray lamp. The stage does not strip hue from textures."
+    },
+    "cine-sepia": {
+      "title": "Sepia",
+      "description": "Color. A brown-gold lamp over the whole figure."
+    },
+    "cine-desaturation": {
+      "title": "Desaturation",
+      "description": "Color. A pale, low lamp, the quiet end of the grade."
+    },
+    "cine-hyper-saturation": {
+      "title": "Hyper-Saturation",
+      "description": "Color. A loud magenta key."
+    },
+    "cine-cool-blue": {
+      "title": "Cool Blue",
+      "description": "Color. The whole key is blue."
+    },
+    "cine-warm-amber": {
+      "title": "Warm Amber",
+      "description": "Color. The whole key is amber."
+    },
+    "cine-filmic-faded": {
+      "title": "Filmic Faded",
+      "description": "Color. A dim, warm, low-contrast lamp."
+    },
+    "cine-cross-process": {
+      "title": "Cross Process",
+      "description": "Color. A sickly green-yellow key, the cross-process cast."
+    },
+    "cine-day-for-night": {
+      "title": "Day for Night",
+      "description": "Color. A dim blue key that plays a day set as night."
+    },
+    "cine-tungsten-balance": {
+      "title": "Tungsten Balance",
+      "description": "Color. An orange practical balance."
+    },
+    "cine-moonlight-gel": {
+      "title": "Moonlight Gel",
+      "description": "Color. A pale blue gel from above and behind."
+    },
+    "cine-split-tone": {
+      "title": "Split Toning",
+      "description": "Color. Teal in the key and a warm dressing behind it."
+    },
+    "cine-natural-grade": {
+      "title": "Natural Grade",
+      "description": "Color. A modest warm key, close to an ungraded daylight lamp."
+    },
+    "cine-color-shift": {
+      "title": "Color Shift",
+      "description": "Color. The move starts under a cool key. The lamp itself does not animate."
+    },
+    "cine-vintage": {
+      "title": "Vintage",
+      "description": "Color. Sepia light and a slightly farther, softer frame."
+    },
+    "cine-palette": {
+      "title": "Palette",
+      "description": "Color. A single saturated accent, here magenta, over a plain pose."
+    },
+    "cine-overexposed": {
+      "title": "Overexposed",
+      "description": "Color. The key is pushed very high and the face blows toward white."
+    },
+    "cine-slow-motion": {
+      "title": "Slow Motion",
+      "description": "Time. A short push played at quarter speed."
+    },
+    "cine-fast-motion": {
+      "title": "Fast Motion",
+      "description": "Time. A long lateral move played at double speed."
+    },
+    "cine-speed-ramp": {
+      "title": "Speed Ramp",
+      "description": "Time. A long dolly that eases in and eases out, slow at the ends and quicker through the middle."
+    },
+    "cine-freeze-frame": {
+      "title": "Freeze Frame",
+      "description": "Time. A locked frame. The pose does not advance."
+    },
+    "cine-time-lapse": {
+      "title": "Time-Lapse",
+      "description": "Time. A wide orbit played fast, so the view skips around the figure."
+    },
+    "cine-step-printing": {
+      "title": "Step Printing",
+      "description": "Time. A slow orbit. The stage does not drop frames, so the stutter is only the pace."
+    },
+    "cine-reverse-motion": {
+      "title": "Reverse Motion",
+      "description": "Time. The dolly runs backward, from close to far."
+    },
+    "cine-bullet-time": {
+      "title": "Bullet Time",
+      "description": "Time. A fast orbit at half speed, the frozen-moment circle."
+    },
+    "cine-long-take": {
+      "title": "Long Take",
+      "description": "Time. One continuous path that arcs and closes in, without a cut."
+    },
+    "cine-one-er": {
+      "title": "Oner",
+      "description": "Time. A shorter single take: rise, arc and land on the face."
+    },
+    "cine-motion-blur": {
+      "title": "Motion Blur",
+      "description": "Time. A fast lateral truck. The renderer does not add motion blur."
+    },
+    "cine-stutter": {
+      "title": "Stutter / Stop-Stutter",
+      "description": "Time. A hesitant short push. Frames are not dropped."
+    },
+    "cine-boomerang": {
+      "title": "Boomerang",
+      "description": "Time. A snap in. The shot does not play back out."
+    },
+    "cine-infinite-loop": {
+      "title": "Infinite Loop",
+      "description": "Time. A full orbit that can repeat without a jump in angle."
+    },
+    "cine-stop-motion": {
+      "title": "Stop Motion",
+      "description": "Time. A locked pose. The model is not stepped like a puppet."
+    },
+    "cine-low-shutter": {
+      "title": "Low Shutter",
+      "description": "Time. A fast pan, the kind of move a low shutter would smear."
+    },
+    "cine-timelapse-glam": {
+      "title": "Timelapse Glam",
+      "description": "Time. A beauty frame played fast under a glam key."
+    },
+    "cine-timelapse-human": {
+      "title": "Timelapse Human",
+      "description": "Time. A medium orbit of the figure, played fast."
+    },
+    "cine-timelapse-landscape": {
+      "title": "Timelapse Landscape",
+      "description": "Time. A high wide orbit of the place, played fast."
+    },
+    "cine-frozen-in-motion": {
+      "title": "Frozen in Motion",
+      "description": "Time. An orbit at quarter speed, as if the moment were held."
+    },
+    "cine-moonwalk": {
+      "title": "Moonwalk",
+      "description": "Time. The figure travels backward while the camera holds a front view."
+    },
+    "cine-lens-flare": {
+      "title": "Lens Flare",
+      "description": "Effect. A low sun-style key aimed into the lens. There is no flare pass."
+    },
+    "cine-anamorphic-flare": {
+      "title": "Anamorphic Flare",
+      "description": "Effect. A wide, low, bright frame. Streaks are not drawn."
+    },
+    "cine-halation": {
+      "title": "Halation",
+      "description": "Effect. A warm backlight that blooms the edge of the figure."
+    },
+    "cine-film-grain": {
+      "title": "Film Grain",
+      "description": "Effect. A contrasty close frame. Grain is not applied."
+    },
+    "cine-bokeh": {
+      "title": "Bokeh",
+      "description": "Effect. A short telephoto on the face, the framing where background blur would live."
+    },
+    "cine-double-exposure": {
+      "title": "Double Exposure",
+      "description": "Effect. Two figures share one frame, slightly offset, the way a double exposure stacks bodies."
+    },
+    "cine-rack-focus": {
+      "title": "Rack Focus",
+      "description": "Effect. A push from a far figure to a near one. Focus is not racked."
+    },
+    "cine-shallow-focus": {
+      "title": "Shallow Focus",
+      "description": "Effect. A close portrait lens, the setup for a shallow plane of focus."
+    },
+    "cine-deep-focus": {
+      "title": "Deep Focus",
+      "description": "Effect. A stopped-down wide view with two depths in acceptable size."
+    },
+    "cine-forced-perspective": {
+      "title": "Forced Perspective",
+      "description": "Effect. A near prop is scaled up and a far figure is scaled down."
+    },
+    "cine-light-leak": {
+      "title": "Light Leak",
+      "description": "Effect. A hot edge light from the side, standing in for a leak."
+    },
+    "cine-vignette": {
+      "title": "Vignette",
+      "description": "Effect. A pool of light in the center and a darker grade around it."
+    },
+    "cine-chromatic-aberration": {
+      "title": "Chromatic Aberration",
+      "description": "Effect. A wide lens close to the figure, where color fringes would show. Fringes are not drawn."
+    },
+    "cine-infrared": {
+      "title": "Infrared",
+      "description": "Effect. A pale, high-key, slightly magenta grade."
+    },
+    "cine-night-vision": {
+      "title": "Night Vision",
+      "description": "Effect. A dim green grade on a dark stage."
+    },
+    "cine-thermal": {
+      "title": "Thermal",
+      "description": "Effect. A hot orange-red grade."
+    },
+    "cine-slit-scan": {
+      "title": "Slit-Scan",
+      "description": "Effect. A long lateral pass, the move a slit-scan would smear. The image is not sliced."
+    },
+    "cine-kaleidoscope": {
+      "title": "Kaleidoscope",
+      "description": "Effect. A centered, slightly rolled orbit. The frame is not mirrored."
+    },
+    "cine-light-flash": {
+      "title": "Light Flash",
+      "description": "Effect. A very bright key for a short beat."
+    },
+    "cine-projection-mapping": {
+      "title": "Projections",
+      "description": "Effect. The figure stands in a dim set with a cool frontal wash, as if a projection hit them."
+    },
+    "cine-match-morph": {
+      "title": "Morph",
+      "description": "Effect. A push from one figure to the other. The mesh does not morph."
+    },
+    "cine-altered-state": {
+      "title": "Altered State",
+      "description": "Effect. A rolled, wide, acid-colored drift."
+    },
+    "cine-anthropo": {
+      "title": "Anthropo",
+      "description": "Effect. A low, close, wide view that stretches the body toward the lens."
+    },
+    "cine-cinemagraph": {
+      "title": "Cinemagraph",
+      "description": "Effect. A locked portrait. Only a later animation on the model would move."
+    },
+    "cine-collage": {
+      "title": "Collage",
+      "description": "Effect. Three figures packed into one flat, graphic frame."
+    },
+    "cine-datamosh": {
+      "title": "Datamosh",
+      "description": "Effect. A fast broken push with roll. Pixels are not melted."
+    },
+    "cine-diorama": {
+      "title": "Diorama",
+      "description": "Effect. A high view down onto the figure, like a tabletop scene."
+    },
+    "cine-distortions": {
+      "title": "Distortions",
+      "description": "Effect. A fisheye-close frame. The mesh is not warped."
+    },
+    "cine-duplication": {
+      "title": "Duplication",
+      "description": "Effect. The same staging twice: two figures side by side."
+    },
+    "cine-echo-print": {
+      "title": "Echo Print",
+      "description": "Effect. A figure and a second figure set just behind, like an echo."
+    },
+    "cine-feedback": {
+      "title": "Feedback",
+      "description": "Effect. A push into the face under a hot key, the start of a video feedback loop."
+    },
+    "cine-floating-ui": {
+      "title": "Floating UI",
+      "description": "Effect. A clean, slightly high product frame with room for type. No type is drawn."
+    },
+    "cine-focal-shift": {
+      "title": "Focal Shift",
+      "description": "Effect. The lens widens while the camera holds, a focal-length change."
+    },
+    "cine-generative": {
+      "title": "Generative",
+      "description": "Effect. A slow orbit under a shifting-looking magenta grade. The mesh is not regenerated."
+    },
+    "cine-levitation": {
+      "title": "Levitation",
+      "description": "Effect. The figure is raised off the floor and turns slowly."
+    },
+    "cine-masking": {
+      "title": "Masking",
+      "description": "Effect. A tight frame that crops the body, the way a mask would."
+    },
+    "cine-mixed-media": {
+      "title": "Mixed Media",
+      "description": "Effect. A figure in the workshop set under a paper-colored key."
+    },
+    "cine-morphing": {
+      "title": "Morphing",
+      "description": "Effect. A move from a wide body view into the face. The mesh does not blend."
+    },
+    "cine-object-portal": {
+      "title": "Object Portal",
+      "description": "Effect. The camera pushes toward the figure as if through an opening, with a gate in the world effects."
+    },
+    "cine-photogrammetry": {
+      "title": "Photogrammetry",
+      "description": "Effect. A slow orbit, the way a scan presents an object."
+    },
+    "cine-ratio-switch": {
+      "title": "Ratio Switch",
+      "description": "Effect. The same close view, switched into a vertical frame."
+    },
+    "cine-scale-shift": {
+      "title": "Scale Shift",
+      "description": "Effect. The camera rushes from a tiny wide view to a huge close one."
+    },
+    "cine-shadow-box": {
+      "title": "Shadow Box",
+      "description": "Effect. A hard side light and a square-on frame, like a shadow box."
+    },
+    "cine-transformation": {
+      "title": "Transformation",
+      "description": "Effect. A crane down onto the figure while a shockwave marks the beat."
+    },
+    "cine-typography": {
+      "title": "Typography",
+      "description": "Effect. A clean centered frame with headroom left for a title. No letters are set."
+    },
+    "cine-wigglegram": {
+      "title": "Wigglegram",
+      "description": "Effect. Two close side views, played as a short lateral wiggle."
+    },
+    "cine-x-ray": {
+      "title": "X-Ray",
+      "description": "Effect. A pale, cold, high-key grade on a straight-on body."
+    },
+    "cine-zoetrope": {
+      "title": "Zoetrope",
+      "description": "Effect. A full orbit, the loop a zoetrope would spin."
+    },
+    "cine-focus-change": {
+      "title": "Focus Change",
+      "description": "Effect. The frame travels from a side prop to the face."
+    },
+    "cine-floating-fall": {
+      "title": "Floating Fall",
+      "description": "Effect. The figure drops slowly while the camera stays with the torso."
+    },
+    "cine-smash-and-grab": {
+      "title": "Smash and Grab",
+      "description": "Effect. A crash in, then the energy of a fast push. One move, inward."
+    },
+    "cine-cyclope": {
+      "title": "Cyclope",
+      "description": "Effect. An extreme close-up centered between the eyes."
+    },
+    "cine-particles": {
+      "title": "Particles",
+      "description": "Effect. Sparks drift around a backlit figure."
+    },
+    "cine-argus": {
+      "title": "Argus",
+      "description": "Effect. A high, many-angled orbit, as if several eyes circled at once."
+    },
+    "cine-sticker-peel": {
+      "title": "Sticker Peel",
+      "description": "Effect. The camera peels off a flat frontal view into a side angle."
+    },
+    "cine-selfie-twin": {
+      "title": "Selfie Twin",
+      "description": "Effect. Two faces close to a wide lens."
+    },
+    "cine-bubbles": {
+      "title": "Bubbles",
+      "description": "Effect. Bubbles rise in front of a cool, close frame."
+    },
+    "cine-match-cut": {
+      "title": "Match Cut",
+      "description": "Editing. The frame holds a centered close view, the shape a match cut would land on."
+    },
+    "cine-graphic-match": {
+      "title": "Graphic Match",
+      "description": "Editing. A rolled, graphic close view, matched by shape rather than by story."
+    },
+    "cine-match-action": {
+      "title": "Match on Action",
+      "description": "Editing. A side view that continues a gesture across the frame."
+    },
+    "cine-jump-cut": {
+      "title": "Jump Cut",
+      "description": "Editing. The size jumps along the same axis, the way a jump cut resets the frame."
+    },
+    "cine-smash-cut": {
+      "title": "Smash Cut",
+      "description": "Editing. An abrupt snap from wide to close."
+    },
+    "cine-dissolve": {
+      "title": "Dissolve",
+      "description": "Editing. A slow ease from one distance to another. The picture does not dissolve."
+    },
+    "cine-fade": {
+      "title": "Fade In / Fade Out",
+      "description": "Editing. The shot lands on a still, dim frame, the way a fade arrives."
+    },
+    "cine-wipe": {
+      "title": "Wipe",
+      "description": "Editing. A hard lateral pass, the gesture of a wipe."
+    },
+    "cine-iris": {
+      "title": "Iris",
+      "description": "Editing. A zoom into the center, the way an iris closes."
+    },
+    "cine-cross-cut": {
+      "title": "Cross-Cutting",
+      "description": "Editing. The look swings from one person to the other."
+    },
+    "cine-split-screen": {
+      "title": "Split Screen",
+      "description": "Editing. Two people held in one wide frame, each on a side."
+    },
+    "cine-montage": {
+      "title": "Montage",
+      "description": "Editing. A crane that travels the set, the way a montage would skip through places."
+    },
+    "cine-axial-cut": {
+      "title": "Axial Cut",
+      "description": "Editing. A cut straight down the lens axis, from medium to close."
+    },
+    "cine-invisible-cut": {
+      "title": "Invisible Cut",
+      "description": "Editing. The camera passes very close, where a hidden cut would hide."
+    },
+    "cine-l-cut-visual": {
+      "title": "J-Cut / L-Cut (Visual Setup)",
+      "description": "Editing. A held two-shot, the picture that would carry under the next line."
+    },
+    "cine-crash-cut": {
+      "title": "Crash Cut",
+      "description": "Editing. A violent snap wider, as a crash cut breaks the size."
+    },
+    "cine-flash-cut": {
+      "title": "Flash Cut",
+      "description": "Editing. A one-beat blast of light and a tighter frame."
+    },
+    "cine-match-motion": {
+      "title": "Match Motion",
+      "description": "Editing. A lateral move that could continue into the next shot."
+    },
+    "cine-match-split": {
+      "title": "Match Split",
+      "description": "Editing. The frame splits its attention between two depths."
+    },
+    "cine-quick-cuts": {
+      "title": "Quick Cuts",
+      "description": "Editing. Three fast punches of size along one axis, played as one snap in."
+    },
+    "cine-set-transition": {
+      "title": "Set Transition",
+      "description": "Editing. The camera rises off one view, the way a transition would leave a set."
+    },
+    "cine-transitions": {
+      "title": "Transitions",
+      "description": "Editing. A whip from one side of the subject to the other."
+    },
+    "cine-fragments": {
+      "title": "Fragments",
+      "description": "Editing. A tight, off-center crop, one fragment of the body."
+    },
+    "cine-rain": {
+      "title": "Rain",
+      "description": "Atmosphere. Rain falls on the street around the figure."
+    },
+    "cine-fog": {
+      "title": "Fog",
+      "description": "Atmosphere. A thick fog sits in the set."
+    },
+    "cine-mist": {
+      "title": "Mist",
+      "description": "Atmosphere. A lighter mist than the fog shot, low around the legs."
+    },
+    "cine-haze": {
+      "title": "Atmospheric Haze",
+      "description": "Atmosphere. A warm haze between the camera and the figure."
+    },
+    "cine-smoke": {
+      "title": "Smoke",
+      "description": "Atmosphere. Smoke pools around the figure."
+    },
+    "cine-dust-motes": {
+      "title": "Dust Motes",
+      "description": "Atmosphere. Fine dust hangs in a shaft of window light."
+    },
+    "cine-steam": {
+      "title": "Steam",
+      "description": "Atmosphere. Pale steam rises in the workshop."
+    },
+    "cine-snow": {
+      "title": "Snow",
+      "description": "Atmosphere. Snow falls in the snow set."
+    },
+    "cine-wet-down": {
+      "title": "Wet-Down",
+      "description": "Atmosphere. A light rain on the reflective street, the wet-down look."
+    },
+    "cine-sparks": {
+      "title": "Sparks and Embers",
+      "description": "Atmosphere. Sparks and a warm key, as from a nearby fire."
+    },
+    "cine-dust-storm": {
+      "title": "Dust and Sand",
+      "description": "Atmosphere. Dust blows across the desert set."
+    },
+    "cine-underwater": {
+      "title": "Underwater",
+      "description": "Atmosphere. A blue haze and drifting motes over the sea set."
+    },
+    "cine-ocean": {
+      "title": "Ocean",
+      "description": "Atmosphere. A wide view on the open sea, with spray."
+    },
+    "cine-film-noir": {
+      "title": "Film Noir",
+      "description": "Genre. A low-key, canted street frame."
+    },
+    "cine-neo-noir": {
+      "title": "Neo-Noir",
+      "description": "Genre. Neon and a low key on the night street."
+    },
+    "cine-german-expressionism": {
+      "title": "German Expressionism",
+      "description": "Genre. A hard canted angle and a stark key."
+    },
+    "cine-giallo-look": {
+      "title": "Giallo",
+      "description": "Genre. A saturated, slightly evil close frame with a primary-colored key."
+    },
+    "cine-spaghetti-western": {
+      "title": "Spaghetti Western",
+      "description": "Genre. A low, wide, dusty view in the desert."
+    },
+    "cine-found-footage-look": {
+      "title": "Found Footage",
+      "description": "Genre. A wide, rolled, uneasy handheld push."
+    },
+    "cine-cinema-verite": {
+      "title": "Cinéma Vérité",
+      "description": "Genre. A shoulder-height observational follow."
+    },
+    "cine-french-new-wave": {
+      "title": "French New Wave",
+      "description": "Genre. A casual jump in on a street, a little off center."
+    },
+    "cine-wuxia-look": {
+      "title": "Wuxia",
+      "description": "Genre. A rising crane in the jungle, with the figure lifted."
+    },
+    "cine-tech-noir": {
+      "title": "Tech Noir",
+      "description": "Genre. Magenta practicals and a cold rim on a dark street."
+    },
+    "cine-southern-gothic": {
+      "title": "Southern Gothic",
+      "description": "Genre. Warm, dim, heavy light and a still porch-like frame."
+    },
+    "cine-cosmic-horror-look": {
+      "title": "Cosmic Horror",
+      "description": "Genre. A low, wide, sickly frame in the void, with a slow roll."
+    },
+    "cine-vaporwave-look": {
+      "title": "Vaporwave",
+      "description": "Genre. Pink light, a centered statue-like pose, and a reflective floor."
+    },
+    "cine-documentary-look": {
+      "title": "Documentary",
+      "description": "Genre. A modest zoom in, the observational push of a documentary."
+    },
+    "cine-blockbuster-gloss": {
+      "title": "Blockbuster Gloss",
+      "description": "Genre. A low, bright, polished hero push."
+    },
+    "cine-arthouse": {
+      "title": "Arthouse",
+      "description": "Genre. A long, still, off-center hold."
+    },
+    "cine-animation": {
+      "title": "Animation",
+      "description": "Genre. A clean, graphic, slightly wide frame with a saturated key."
+    },
+    "cine-bts": {
+      "title": "BTS",
+      "description": "Genre. A wider, casual view of the workshop, as if from the crew."
+    },
+    "cine-dreamcore": {
+      "title": "Dreamcore",
+      "description": "Genre. A soft, empty, slightly wrong-height frame in a bare stage."
+    },
+    "cine-dystopian": {
+      "title": "Dystopian",
+      "description": "Genre. A hard, desaturated wide view of the street."
+    },
+    "cine-magical-realism": {
+      "title": "Magical Realism",
+      "description": "Genre. An ordinary medium frame, with the figure lifted a little off the floor."
+    },
+    "cine-maximalism": {
+      "title": "Maximalism",
+      "description": "Genre. Three figures, a hot color and almost no empty space."
+    },
+    "cine-photography": {
+      "title": "Photography",
+      "description": "Genre. A locked 85 mm style portrait."
+    },
+    "cine-pixel-art": {
+      "title": "Pixel Art",
+      "description": "Genre. The low, chunky N64 look on a simple centered frame."
+    },
+    "cine-stylistic-suck": {
+      "title": "Stylistic Suck",
+      "description": "Genre. A badly placed, tilted, too-close wide shot."
+    },
+    "cine-video-game": {
+      "title": "Video Game",
+      "description": "Genre. A third-person follow with the low console look."
+    },
+    "cine-weirdcore": {
+      "title": "Weirdcore",
+      "description": "Genre. An empty room, a wrong horizon and a pale grade."
+    },
+    "cine-agamemnon": {
+      "title": "Agamemnon",
+      "description": "Look. A low, bronze, heroic push, like a tragedy mask filling the frame."
+    },
+    "cine-ink-riot": {
+      "title": "Ink Riot",
+      "description": "Look. A hard graphic side light and a canted close view."
+    },
+    "cine-fallen-angel": {
+      "title": "Fallen Angel",
+      "description": "Look. The figure is lifted, backlit, and the camera looks up."
+    },
+    "cine-fairytale-castle": {
+      "title": "Fairytale Castle",
+      "description": "Look. A high storybook view of the citadel with the figure small."
+    },
+    "cine-comic": {
+      "title": "Comic",
+      "description": "Look. A punch-in under a flat yellow key."
+    },
+    "cine-cold-vision": {
+      "title": "Cold Vision",
+      "description": "Look. A blue, clinical close view."
+    },
+    "cine-casual-monster-slayer": {
+      "title": "Casual Monster Slayer",
+      "description": "Look. A relaxed medium-wide stance, a little low."
+    },
+    "cine-mighty-fighter": {
+      "title": "Mighty Fighter",
+      "description": "Look. A low, powerful push on the body."
+    },
+    "cine-canvas": {
+      "title": "Canvas",
+      "description": "Look. A still, painterly three-quarter under a soft warm key."
+    },
+    "cine-pigeons": {
+      "title": "Pigeons",
+      "description": "Look. A street-level wide view, as if the frame belonged to the square."
+    },
+    "cine-superstar": {
+      "title": "Superstar",
+      "description": "Look. A glam spotlight and a slow half-orbit."
+    },
+    "cine-pearl-earring": {
+      "title": "Pearl Earring",
+      "description": "Look. A dark three-quarter, turned like the painted portrait."
+    },
+    "cine-lsd": {
+      "title": "LSD",
+      "description": "Look. A wide, rolling, acid-colored drift."
+    },
+    "cine-blue-depth": {
+      "title": "Blue Depth",
+      "description": "Look. A long blue view with haze, so the depth reads as color."
+    },
+    "cine-knights-diary": {
+      "title": "Knight's Diary",
+      "description": "Look. A candle-lit medium view, like a page lit at night."
+    },
+    "cine-2000s-paparazzi": {
+      "title": "2000s Paparazzi",
+      "description": "Look. A long, slightly late snap-in from across the street."
+    },
+    "cine-dolphin-ride": {
+      "title": "Dolphin Ride",
+      "description": "Look. A low, fast glide over the sea."
+    },
+    "cine-multiverse": {
+      "title": "Multiverse",
+      "description": "Look. Two figures on one axis and a push that could belong to either."
+    },
+    "cine-skatedog": {
+      "title": "Skatedog",
+      "description": "Look. A low side truck, as alongside a board."
+    },
+    "cine-sketch": {
+      "title": "Sketch",
+      "description": "Look. A gray, flat, head-and-shoulders study."
+    },
+    "cine-monet-muse": {
+      "title": "Monet Muse",
+      "description": "Look. Soft garden light and a gentle arc in the jungle set."
+    },
+    "cine-akrill": {
+      "title": "Akrill",
+      "description": "Look. A saturated, flat, centered pose like a painted acrylic figure."
+    },
+    "cine-magazine": {
+      "title": "Magazine",
+      "description": "Look. A polished three-quarter cover frame."
+    },
+    "cine-lost-in-a-book": {
+      "title": "Lost in a Book",
+      "description": "Look. A high angle onto the lap and the bowed head."
+    },
+    "cine-penguin-ride": {
+      "title": "Penguin Ride",
+      "description": "Look. A low glide across the snow."
+    },
+    "cine-3d-render": {
+      "title": "3D Render",
+      "description": "Look. A clean product orbit on a reflective floor."
+    },
+    "cine-action-figure": {
+      "title": "Action Figure",
+      "description": "Look. A slightly high toy-box view of the whole body."
+    },
+    "cine-orbital-presence": {
+      "title": "Orbital Presence",
+      "description": "Look. A slow, high, almost weightless orbit in space."
+    },
+    "cine-acid": {
+      "title": "Acid",
+      "description": "Look. A green-yellow key and a mild roll."
+    },
+    "cine-noir": {
+      "title": "Noir",
+      "description": "Look. A still, shadowed, street close-up."
+    },
+    "cine-race-track": {
+      "title": "Race Track",
+      "description": "Look. A low, wide, fast lateral on the street."
+    },
+    "cine-flash-comic": {
+      "title": "Flash Comic",
+      "description": "Look. A crash zoom under a flat primary key."
+    },
+    "cine-paper": {
+      "title": "Paper",
+      "description": "Look. A soft, paper-white key and a flat frontal frame."
+    },
+    "cine-random-glow": {
+      "title": "Random Glow",
+      "description": "Look. A bright practical and a short unsettled move."
+    },
+    "cine-toxic": {
+      "title": "Toxic",
+      "description": "Look. A toxic green key with a little haze."
+    },
+    "cine-broken-mirror": {
+      "title": "Broken Mirror",
+      "description": "Look. A reflective floor and a canted, broken-feeling angle."
+    },
+    "cine-hand-paint": {
+      "title": "Hand Paint",
+      "description": "Look. A warm, soft, slightly off portrait, like a painted study."
+    },
+    "cine-lava": {
+      "title": "Lava",
+      "description": "Look. Firelight and sparks, close and low."
+    },
+    "cine-marble": {
+      "title": "Marble",
+      "description": "Look. A cool, polished orbit on a mirror floor."
+    },
+    "cine-modern": {
+      "title": "Modern",
+      "description": "Look. A clean, cool, centered medium shot."
+    },
+    "cine-puffin-ride": {
+      "title": "Puffin Ride",
+      "description": "Look. A low fast move over the open sea, closer than the dolphin glide."
+    },
+    "cine-origami": {
+      "title": "Origami",
+      "description": "Look. A flat, high, paper-colored view, like a folded sheet."
+    },
+    "cine-two-color": {
+      "title": "Two Color",
+      "description": "Look. A teal key against a warm desert ground."
+    },
+    "cine-ultraviolet": {
+      "title": "Ultraviolet",
+      "description": "Look. A violet key and a close, slightly high face."
     }
   },
   "atmos": {
