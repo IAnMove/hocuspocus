@@ -151,6 +151,21 @@ def assert_retake_unlocked(production: Any, retake: tuple | list = ()) -> None:
     unlocked_windows(production, [{"key": key} for key in keys], keys)
 
 
+def assert_obsolete_unlocked(production: Any) -> None:
+    """Refuse a run that would keep a locked take shot against a previous song window.
+
+    ``production.song.use`` flags those clips ``obsolete``. The clip pass then
+    drops locked keys, so the montage would stitch the old take onto the new
+    soundtrack.
+    """
+    from services.production_takes import obsolete_clip
+
+    clips = (getattr(production, "state", None) or {}).get("clips") or {}
+    stale = [key for key, clip in clips.items() if isinstance(key, str) and obsolete_clip(clip)]
+    if stale:
+        assert_retake_unlocked(production, stale)
+
+
 def unlocked_windows(production: Any, windows: list[dict], retake: tuple | list = ()) -> list[dict]:
     """Drop locked shots from a frame or clip pass. An explicit retake that names one raises shot_locked.
 

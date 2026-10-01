@@ -14,8 +14,9 @@ def _host():
 
 def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
     host = _host()
-    from services.production_shot_review import assert_retake_unlocked
+    from services.production_shot_review import assert_obsolete_unlocked, assert_retake_unlocked
     assert_retake_unlocked(production, retake)
+    assert_obsolete_unlocked(production)
     production._cancel = arm(production.ws, production.id)
     prior_status = production.state.get("status")
     from services.production_preview import keep_completed_cut, remember_completed_cut
