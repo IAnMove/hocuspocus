@@ -10,6 +10,8 @@ import type { AgentAction } from './agentActions'
  */
 export const AGENT_ACTION_TYPES = [
   'open_tab',
+  'lips_creator',
+  'generate_lips',
   'open_story_section',
   'open_series_section',
   'prepare_video',

@@ -67,6 +67,8 @@ const RunsPanel = lazy(() => import('../../features/workspaces/WorkspacesPanel')
   .then(module => ({ default: module.RunsPanel })))
 const CharacterCreatorPanel = lazy(() => import('../../features/characters/CharacterCreatorPanel')
   .then(module => ({ default: module.CharacterCreatorPanel })))
+const LipsCreatorPanel = lazy(() => import('../../features/characters/LipsCreatorPanel')
+  .then(module => ({ default: module.LipsCreatorPanel })))
 const DeveloperToolsPanel = lazy(() => import('../../features/auditdev/DeveloperToolsPanel')
   .then(module => ({ default: module.DeveloperToolsPanel })))
 const AssetsPanel = lazy(() => import('../../features/assets/AssetsPanel')
@@ -681,6 +683,7 @@ export function MainContent() {
   }, [layout, range, outputs, activeIndex, handleItemVisible, openDetails])
   const [replacementTarget, setReplacementTarget] = useState(readVideoEditorReplacementTarget)
   const [directorReplacementTarget, setDirectorReplacementTarget] = useState(readDirectorClipReplacementTarget)
+  const [lipsBusy, setLipsBusy] = useState(false)
   // Re-read the pending replacement handoffs whenever the filter changes.
   const [handoffFilter, setHandoffFilter] = useState(mediaFilter)
   if (handoffFilter !== mediaFilter) {
@@ -699,6 +702,9 @@ export function MainContent() {
       {/* Content area: feed + thumbnails */}
       <div className={`flex-1 flex min-h-0 min-w-0 overflow-hidden relative ${workspaceSurface === 'generate' ? 'flex-col xl:flex-row' : 'flex-row'}`}>
         <Suspense fallback={<PanelLoadingFallback />}>
+        {(mediaFilter === 'lips' || lipsBusy) && <div hidden={mediaFilter !== 'lips'} className="flex-1 min-w-0 overflow-y-auto p-3 md:p-6">
+          <LipsCreatorPanel onBusyChange={setLipsBusy} />
+        </div>}
         {workspaceSurface === 'generate' && (
           <div className="flex max-h-full min-h-0 w-full shrink-0 flex-col border-b border-border xl:h-full xl:max-w-xl xl:border-b-0 xl:border-r 2xl:max-w-2xl">
             <DirectGenerationWorkspace />
@@ -760,7 +766,7 @@ export function MainContent() {
               <CharacterCreatorPanel />
             </div>
           </div>
-        ) : mediaFilter === 'styles' ? (
+        ) : mediaFilter === 'lips' ? null : mediaFilter === 'styles' ? (
           <div className="flex-1 overflow-hidden p-2 md:p-4">
             <div className="max-w-[1900px] mx-auto h-full">
               <StyleSheetPanel />

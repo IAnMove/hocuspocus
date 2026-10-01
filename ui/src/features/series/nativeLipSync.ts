@@ -5,6 +5,7 @@ import { speechPreparationReadiness } from '../../lib/characterSpeechPreparation
 import { usableCharacterAsset, type CharacterKitReviewPolicy } from '../../lib/characterKitReview'
 import { rebuildCutoutDialogueLayers } from '../../lib/cutoutDialogue'
 import { isFacePatchCompatible } from '../../lib/characterFacePatch'
+import { mouthStateForSound } from '../../lib/characterMouthStates'
 import type { SeriesProject, SeriesShot } from './types'
 
 export function seriesSpeakerKit(workspace: string, series: SeriesProject, characterId: string, library: CharacterKitLibrary) {
@@ -17,12 +18,13 @@ function hasMouthPlacement(kit?: CharacterKit) {
   return anchor && Object.values(anchor).every(Number.isFinite) && anchor.scale > 0
 }
 
-/** A listener only needs the saved rest pose, not four approved speech drawings. */
+/** A listener needs the saved pose and the mouth assigned to rest. */
 export function seriesRestKit(workspace: string, series: SeriesProject, id: string, library: CharacterKitLibrary,
   policy: CharacterKitReviewPolicy) {
   const kit = seriesSpeakerKit(workspace, series, id, library)
-  return kit && usableCharacterAsset(kit.base, policy) && usableCharacterAsset(kit.mouth.closed, policy)
-    && hasMouthPlacement(kit) && isFacePatchCompatible(kit.mouth.closed, 'base', kit.base?.source) ? kit : undefined
+  const rest = kit?.mouth[mouthStateForSound('rest', kit.mouthMapping)]
+  return kit && usableCharacterAsset(kit.base, policy) && usableCharacterAsset(rest, policy)
+    && hasMouthPlacement(kit) && isFacePatchCompatible(rest, 'base', kit.base?.source) ? kit : undefined
 }
 
 export function visibleSeriesSpeakers(shot: SeriesShot) {
@@ -53,9 +55,9 @@ export function seriesLipSyncIssues(workspace: string, series: SeriesProject, sh
 /** Only rendering inputs matter; saving unrelated voice/description fields does not stale a take. */
 export function seriesLipSyncFingerprint(workspace: string, series: SeriesProject, shot: SeriesShot, library: CharacterKitLibrary) {
   const speakers = [...shot.visibleCharacterIds].sort()
-  return JSON.stringify([4, shot.dialogueBeats, speakers, speakers.map(id => {
+  return JSON.stringify([5, shot.dialogueBeats, speakers, speakers.map(id => {
     const kit = seriesSpeakerKit(workspace, series, id, library)
-    return [id, kit?.id, kit?.base && { ...kit.base, width: undefined, height: undefined }, kit?.mouth, kit?.anchors.base]
+    return [id, kit?.id, kit?.base && { ...kit.base, width: undefined, height: undefined }, kit?.mouth, kit?.mouthMapping, kit?.anchors.base]
   })])
 }
 

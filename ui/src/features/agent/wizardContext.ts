@@ -1,3 +1,5 @@
+import { lipsLibrarySnapshot } from '../../api/lipsCreator'
+import { missingLipsSounds } from '../../lib/lipsCreator'
 import { useStore } from '../../stores/useStore'
 import { visibleWorkspaceSurface } from '../../lib/navigationCategories'
 import { emptyCharacterKitLibrary } from '../../lib/characterKit'
@@ -196,6 +198,7 @@ export interface BuildWizardContextOptions {
 }
 
 export interface WizardLabSnapshots {
+  lips_creator?: { revision: number; packs: { pack_id: string; title: string; mouths: number; candidates: number; missing_sounds: string[] }[] }
   story: {
     project_id: string
     title: string
@@ -616,6 +619,7 @@ function normalizeLabSnapshots(value: unknown): WizardLabSnapshots {
   const video3d = record(raw.video_3d || raw.video3d)
   const kit = record(raw.character_kit || raw.characterKit)
   const editor = record(raw.video_editor || raw.videoEditor)
+  const lips = record(raw.lips_creator)
   const count = (item: unknown): number => integerValue(item, 0) || 0
   return {
     story: {
@@ -640,6 +644,7 @@ function normalizeLabSnapshots(value: unknown): WizardLabSnapshots {
       kit_id: idValue(kit.kit_id || kit.kitId), title: stringValue(kit.title), poses: count(kit.poses),
       mouth: count(kit.mouth), eyes: count(kit.eyes), state: stringValue(kit.state, 'empty'),
     },
+    ...(Array.isArray(lips.packs) ? { lips_creator: { revision: count(lips.revision), packs: lips.packs.slice(0, 100).map(value => { const pack = record(value); return { pack_id: idValue(pack.pack_id), title: stringValue(pack.title), mouths: count(pack.mouths), candidates: count(pack.candidates), missing_sounds: Array.isArray(pack.missing_sounds) ? pack.missing_sounds.filter((sound): sound is string => typeof sound === 'string').slice(0, 9) : [] } }) } } : {}),
     video_editor: {
       project_id: idValue(editor.project_id || editor.projectId), title: stringValue(editor.title),
       clips: count(editor.clips), duration: Number.isFinite(Number(editor.duration)) ? Number(editor.duration) : 0,
@@ -820,6 +825,7 @@ export function buildWizardLabSnapshots(): WizardLabSnapshots {
     series: seriesSnapshot(),
     video_3d: video3dSnapshot(),
     character_kit: characterKitSnapshot(),
+    ...(() => { const library = lipsLibrarySnapshot(useStore.getState().activeWorkspace); return library ? { lips_creator: { revision: library.revision, packs: Object.values(library.kits).map(pack => ({ pack_id: pack.id, title: pack.name, mouths: Object.keys(pack.mouth).length, candidates: Object.keys(pack.mouthCandidates || {}).length, missing_sounds: missingLipsSounds(pack) })) } } : {} })(),
     video_editor: videoEditorSnapshot(),
   }
 }
@@ -866,6 +872,7 @@ function inferredLocation(state: ReturnType<typeof useStore.getState>): WizardCo
     world3d: { area: 'video_3d', tab: 'world_3d', section: 'world' },
     animate3d: { area: 'video_3d', tab: 'animate_3d', section: 'animate' },
     characters: { area: 'character_kit', tab: 'character_kit', section: '' },
+    lips: { area: 'lips_creator', tab: 'lips_creator', section: '' },
     workspaces: { area: 'workspaces', tab: 'workspaces', section: '' },
     videoclips: { area: 'gallery', tab: 'videos', section: 'videoclips' },
     trailers: { area: 'gallery', tab: 'videos', section: 'trailers' },

@@ -80,7 +80,8 @@
     "directAudio": "Crea voz, música, efectos o una mezcla.",
     "direct3d": "Genera un recurso 3D independiente.",
     "directEdit": "Edita, cambia el estilo, rellena o sustituye un resultado.",
-    "directTools": "Ejecuta herramientas de posprocesado sobre un recurso existente."
+    "directTools": "Ejecuta herramientas de posprocesado sobre un recurso existente.",
+    "lips": "Crea bocas y vincúlalas con sonidos."
   },
   "search": {
     "placeholder": "Buscar...",
@@ -117,7 +118,8 @@
     "edits": "Edits",
     "multiclip": "Multi-clip",
     "auditDev": "Auditoría interna dev",
-    "favorites": "Favoritos"
+    "favorites": "Favoritos",
+    "lips": "Lips Creator"
   },
   "short": {
     "all": "Todo",
@@ -144,7 +146,8 @@
     "animate3d": "Anim",
     "edits": "Edit",
     "multiclip": "MC",
-    "auditDev": "Audit"
+    "auditDev": "Audit",
+    "lips": "Lips"
   },
   "filters": {
     "allWorkspaces": "Todos los Workspaces"
@@ -163,7 +166,8 @@
     "scene3d": "Editor vídeo 2,5D",
     "world3d": "Editor vídeo 3D",
     "animate3d": "Rig y Animate",
-    "auditDev": "Auditoría interna"
+    "auditDev": "Auditoría interna",
+    "lips": "Lips Creator"
   },
   "outputFolder": {
     "option": "Salida",

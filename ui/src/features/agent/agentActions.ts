@@ -24,6 +24,8 @@ import {
   type ConfiguredStorySongIdentity,
 } from './storyWorkflowIdentity'
 import type {
+  AgentLipsCreatorAction,
+  AgentGenerateLipsAction,
   AgentApplyCharacterKitPresetAction,
   AgentAttachCharacterKitReferencesAction,
   AgentBuildCharacterKitAction,
@@ -621,6 +623,8 @@ export interface AgentUpdateWorkspaceCollectionAction {
 }
 
 export type AgentAction = AgentOpenTabAction
+  | AgentLipsCreatorAction
+  | AgentGenerateLipsAction
   | AgentPrepareProgrammaticVideoAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
@@ -3016,6 +3020,7 @@ const TAB_LABELS: Record<AgentTab, string> = {
   animate_3d: 'Animate 3D',
   character_creator: 'Character Creator',
   character_kit: 'CharacterKit',
+  lips_creator: 'Lips Creator',
   workspaces: 'Workspaces',
   settings: 'Settings',
 }

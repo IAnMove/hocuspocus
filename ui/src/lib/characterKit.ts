@@ -2,7 +2,7 @@ import type { SceneFaceBindingState, SceneLayer } from '../types'
 import type { SceneRecipeInventoryItem } from './sceneRecipe'
 import { usableCharacterAsset, type CharacterKitReviewPolicy } from './characterKitReview'
 import { assertFacePatchPose, facePatchSceneTransform, isFacePatchCompatible, type FacePatchMetadata } from './characterFacePatch'
-import { CHARACTER_MOUTH_STATES, type CharacterMouthState } from './characterMouthStates'
+import { CHARACTER_MOUTH_STATES, mouthStateForSound, type CharacterMouthState } from './characterMouthStates'
 import { characterRestPoseSource } from './characterRestPose'
 export type { CharacterMouthState } from './characterMouthStates'
 
@@ -50,6 +50,11 @@ export interface CharacterKit {
   restPose?: { asset: CharacterKitAsset; fingerprint: string }
   poses: Record<string, CharacterKitAsset>
   mouth: Partial<Record<CharacterMouthState, CharacterKitAsset>>
+  mouthMapping?: import('./characterMouthStates').CharacterMouthMapping
+  mouthPrompts?: Partial<Record<CharacterMouthState, string>>
+  mouthGenerationMode?: 'description' | 'reference'
+  /** Lips Creator drafts keep replacements separate from the approved drawings. */
+  mouthCandidates?: Partial<Record<CharacterMouthState, CharacterKitAsset>>
   eyes: Partial<Record<'open' | 'blink', CharacterKitAsset>>
   anchors: Record<string, {
     /** Legacy/default mouth placement used when a state-specific anchor is absent. */
@@ -340,6 +345,7 @@ export function mountCharacterKitLayers(
     ? fittedCharacterFaceTransform(transform, anchor, { width: poseAsset.width, height: poseAsset.height }, viewport)
     : appliedCharacterFaceTransform(transform, anchor)
   const layers: SceneLayer[] = [pose]
+  const restState = mouthStateForSound('rest', kit.mouthMapping)
   let z = 21
   for (const state of CHARACTER_MOUTH_STATES) {
     const asset = kit.mouth[state]
@@ -347,12 +353,12 @@ export function mountCharacterKitLayers(
     assertFacePatchPose(asset, poseId, poseAsset.source)
     const anchor = anchors?.mouthStates?.[state] ?? mouthAnchor
     const placed = asset.facePatch ? facePatchSceneTransform(transform, anchor, asset.facePatch, viewport) : faceTransform(anchor)
-    const mouthTransform = { ...placed, opacity: state === 'closed' ? 1 : 0 }
+    const mouthTransform = { ...placed, opacity: state === restState ? 1 : 0 }
     layers.push({
       id: `kit-${kit.id}-mouth-${state}`, name: `${kit.name} Mouth ${state}`, type: 'overlay', source: asset.source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: mouthTransform,
-      animation: { start: { ...mouthTransform, opacity: state === 'closed' ? 1 : 0 }, end: { ...mouthTransform, opacity: state === 'closed' ? 1 : 0 }, duration, curve: 'hold' },
-      faceBinding: { poseLayerId, role: 'mouth', state: stateForBinding(state) },
+      animation: { start: { ...mouthTransform }, end: { ...mouthTransform }, duration, curve: 'hold' },
+      faceBinding: { poseLayerId, role: 'mouth', state: stateForBinding(state), ...(kit.mouthMapping ? { mouthMapping: { ...kit.mouthMapping } } : {}) },
       relationship: { type: 'parent', targetLayerId: poseLayerId },
     })
   }

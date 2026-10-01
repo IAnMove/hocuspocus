@@ -19,6 +19,7 @@ import {
 import { useUiTranslation } from '../../i18n'
 import { CharacterSpeechWorkshopEntry } from './CharacterSpeechWorkshopEntry'
 import { CharacterFacePackMaker } from './CharacterFacePackMaker'
+import { CharacterImageCreator } from './CharacterImageCreator'
 import { Character3DLibraryEntry } from './Character3DLibraryEntry'
 import { useCharacterEditorHandoff } from './characterEditorHandoff'
 import { CharacterEditorSession } from './CharacterEditorSession'
@@ -553,6 +554,17 @@ function CharacterCreatorWorkshop() {
         )}
       </header>
       <div className="flex-1 overflow-y-auto p-3 md:p-4">
+        <CharacterImageCreator key={activeWorkspace} workspace={activeWorkspace} disabled={busy} onUseReference={async (asset, description, signal) => {
+          const workspace = activeWorkspace
+          const response = await fetch(asset.source, { signal })
+          if (!response.ok) throw new Error(t('creator.errors.needViewOrUpload'))
+          const blob = await response.blob()
+          const uploaded = await api.uploadImage(new File([blob], 'character-reference.png', { type: blob.type || 'image/png' }))
+          signal.throwIfAborted()
+          if (activeWorkspaceRef.current !== workspace) return
+          setKind('character'); setAPrompt(description); setShowAPrompt(true)
+          setRefs(current => [{ id: newId(), role: 'subject', preview: asset.source, path: uploaded.path, filename: uploaded.filename, url: uploaded.url }, ...current.filter(ref => ref.role !== 'subject').slice(0, MAX_REFS - 1)])
+        }} />
         <CharacterFacePackMaker />
         <CharacterSpeechWorkshopEntry workspace={activeWorkspace} />
         <Character3DLibraryEntry workspace={activeWorkspace} />

@@ -47,10 +47,11 @@ def _command_tool(operation):
               'required': [key for key in schema['required'] if key != 'operation']}
     guidance = 'Versioned command. Follow inputSchema for workspace and exact resource IDs.'
     if operation['mutation']:
-        guidance += ' Reuse intent_id on transport retries; inspect commands.receipt after an uncertain response.'
+        receipt_tool = operation.get('receipt_tool', 'commands.receipt')
+        guidance += f' Reuse intent_id on transport retries; inspect {receipt_tool} after an uncertain response.'
     return {
         'name': operation['name'], 'description': f"{operation['description']} {guidance}", 'inputSchema': schema,
-        'annotations': {'readOnlyHint': not operation['mutation'], 'destructiveHint': False, 'idempotentHint': True},
+        'annotations': {'readOnlyHint': not operation['mutation'], 'destructiveHint': bool(operation.get('destructive', False)), 'idempotentHint': True},
     }
 
 
