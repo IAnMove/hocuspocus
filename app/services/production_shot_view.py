@@ -106,7 +106,8 @@ def _music_shot(item: Any, index: int) -> dict[str, Any] | None:
         return None
     start, end = _number(item.get("start")), _number(item.get("end"))
     preview = _safe_name(item.get("clip")) or _safe_name(item.get("start_frame")) or _safe_name(item.get("scene_video"))
-    takes = _file_takes(item.get("takes"), preview)
+    rows = item.get("takes") or ([{"file": preview}] if preview else [])
+    takes = _file_takes(rows, preview)
     scene_name = _safe_name(item.get("scene_doc"))
     stale = _stored_bool(item, "video_stale", "export_stale")
     result = _shot(
