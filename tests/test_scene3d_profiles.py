@@ -40,3 +40,15 @@ def test_profiles_reject_path_escape_nonface_settings_and_oversized_data(tmp_pat
     for settings in [{"face": FACE, "audio": "/secret.wav"}, {"face": "invalid"}, {"face": FACE, "lip": "x" * 24001}]:
         assert client.put(BASE + DIGEST, json={**payload, "settings": settings}).status_code == 422
     assert client.put(BASE + "bad", json=payload).status_code == 400
+
+
+def test_bold_cartoon_profile_preserves_other_character_and_legacy_style(tmp_path):
+    client = client_for(tmp_path)
+    other_digest = "b" * 64
+    legacy = {"workspace": "song", "revision": 0, "settings": {"face": FACE, "style": "toon"}}
+    assert client.put(BASE + other_digest, json=legacy).status_code == 200
+    bold = {**legacy, "settings": {"face": copy.deepcopy(FACE), "style": "toon-bold"}}
+    bold["settings"]["face"]["center"][1] = .98
+    assert client.put(BASE + DIGEST, json=bold).status_code == 200
+    assert client.get(BASE + DIGEST, params={"workspace": "song"}).json()["settings"] == bold["settings"]
+    assert client.get(BASE + other_digest, params={"workspace": "song"}).json()["settings"] == legacy["settings"]

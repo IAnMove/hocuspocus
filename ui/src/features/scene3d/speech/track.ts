@@ -43,7 +43,7 @@ export function validFace(value: unknown): value is FacePlacement {
 }
 function speechAppearance(data: Record<string, unknown>, defaults: Scene3DSpeech) {
   return { clean: data.clean !== false,
-    style: data.style === 'toon' || data.style === 'pixel' ? data.style : 'soft',
+    style: data.style === 'toon' || data.style === 'toon-bold' || data.style === 'pixel' ? data.style : 'soft',
     driver: data.driver === 'rhubarb' || data.driver === 'rhubarb-vocals' || data.driver === 'amplitude' ? data.driver : 'imported',
     lip: typeof data.lip === 'string' && /^#[0-9a-f]{6}$/i.test(data.lip) ? data.lip : defaults.lip,
     expression: EXPRESSIONS.includes(data.expression as typeof EXPRESSIONS[number]) ? data.expression as typeof EXPRESSIONS[number] : 'neutral',

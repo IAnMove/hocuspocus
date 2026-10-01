@@ -57,6 +57,16 @@ skinning. El shader pinta sobre el material; no modifica el archivo GLB ni crea
 morph targets. El tamaño de la zona frontal sigue las dimensiones de la boca,
 para admitir modelos en metros y centímetros.
 
+`speech.style: "toon-bold"` selecciona labios cartoon gruesos, también en reposo
+y consonantes cerradas. Se elige en Ajustar cara y se guarda en el perfil del GLB;
+solo cambia ese personaje. Los estilos existentes y el valor predeterminado
+siguen iguales. Para una boca más baja o grande se ajustan `face.center` y
+`face.size`, sin modificar el modelo ni la calibración de otros personajes.
+`offset` positivo adelanta los gestos respecto al inicio de la fuente: por ejemplo,
+un plano que comienza en 45,5 s usa 45,6 para probar un adelanto de 100 ms.
+Si la canción ya suena en el montaje, se mantiene `audible: false`; así este
+ajuste mueve únicamente la boca y no duplica ni desplaza el audio.
+
 Audio y atlas usan `Scene3DSourceRef`. Los gestos viven en el reloj del audio:
 `tiempo de escena - inicio + recorte`. Hasta 32 intervenciones por personaje;
 se rechazan solapamientos. Una canción común se conserva en la pista de escena
