@@ -325,6 +325,7 @@
         "tests/test_safety_scan.py",
         "tests/test_scail2_workflows.py",
         "tests/test_scene3d_speech.py",
+        "tests/test_speech_file_commands.py",
         "tests/test_scene_asset_facts.py",
         "tests/test_scene_effect_commands.py",
         "tests/test_series_assembly_router.py",
