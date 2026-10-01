@@ -41,6 +41,16 @@ An existing workspace song can be supplied as `song.file` to avoid music generat
 Use a complete authored spec with `production.run`; the brief-only `production.plan`
 helper and internal chat have no dedicated PS1 action. This skill is for tool-capable external agents.
 
+## Before you create anything
+
+Every install has different things: a local GPU with some models, a cloud key, or both. Do not assume.
+Call `media.options` first (about 1 KB; `models.list` is the whole catalog and says nothing about what is installed).
+It lists the installed local image models, which cloud providers have a key (`ready` / `needs_key`, never the key)
+and the `profile` a request with no choice would use. If the user already said what to use, or only one option
+fits, go. If more than one fits and they have not said, ask once, naming the options and what each costs
+(local: GPU time and no tokens; cloud: provider tokens), then pass the choice explicitly (`model_type`, or the
+`style.image_model` of a production) instead of relying on the default.
+
 ## Operations
 
 - Create an output workspace with `POST /api/v1/workspaces`, `{name}`.
