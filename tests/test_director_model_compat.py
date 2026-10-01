@@ -1362,6 +1362,12 @@ class TestDirectorBackendValidation(unittest.TestCase):
                 SHOT_IMAGE_PROMPT_ONLY,
             )
 
+    def test_a_finished_job_reports_its_clip_files_by_position_not_by_key(self):
+        self.assertEqual(pipeline._positional_clip_outputs({"0": "a.mp4", "5": "b.mp4"}), ("a.mp4", None, None, None, None, "b.mp4"))
+        self.assertEqual(pipeline._positional_clip_outputs(["a.mp4", None]), ("a.mp4", None))
+        self.assertEqual(pipeline._positional_clip_outputs(None), ())
+        self.assertEqual(pipeline._positional_clip_outputs({}), ())
+
     def test_an_unknown_workflow_is_still_rejected(self):
         with self.assertRaisesRegex(pipeline.DirectorModelCompatibilityError, "Unknown Director workflow 'nope'"):
             pipeline._validate_director_models({"pipeline_type": "nope", "image_model": "image", "video_model": "ltx"})

@@ -5043,7 +5043,7 @@ def _submit_and_wait(
         if progress_at > last_activity_at:
             last_activity_at = progress_at
 
-        clip_outputs = tuple(j.get("clip_output_files") or ())
+        clip_outputs = _positional_clip_outputs(j.get("clip_output_files"))
         if _dir_pid and clip_outputs and clip_outputs != last_saved_clip_outputs:
             last_saved_clip_outputs = clip_outputs
             with _pipeline_lock:
@@ -5061,6 +5061,8 @@ def _submit_and_wait(
                         for local_index, name in enumerate(clip_outputs):
                             if local_index >= len(index_map):
                                 break
+                            if not name:
+                                continue
                             try:
                                 global_index = int(index_map[local_index])
                             except (TypeError, ValueError):
@@ -8780,6 +8782,24 @@ def _has_visual_references(params: dict) -> bool:
         or params.get("location_ref_paths")
         or params.get("provided_clip_image_paths")
     )
+
+
+def _positional_clip_outputs(raw) -> tuple:
+    """The job's clip files as a positional tuple.
+
+    While a multiclip render runs the job keeps a list; once it records its outputs the durable form is a mapping
+    ``{"0": file, ...}``. Iterating the mapping yields its keys, so the Director saved "0" and "1" as the clip
+    files of a comic film and then failed with "has no completed video checkpoint".
+    """
+    if isinstance(raw, dict):
+        positions = {}
+        for key, name in raw.items():
+            try:
+                positions[int(key)] = name
+            except (TypeError, ValueError):
+                continue
+        return tuple(positions.get(i) for i in range(max(positions) + 1)) if positions else ()
+    return tuple(raw or ())
 
 
 def _direct_video_settings(params: dict) -> tuple[bool, str]:
