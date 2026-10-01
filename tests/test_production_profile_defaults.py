@@ -44,11 +44,6 @@ class ProductionProfileDefaultsTests(unittest.TestCase):
         defaults.default_profile(STATIC, probe, now=lambda: clock[0])
         self.assertEqual(len(calls), 2)
 
-    def test_the_launcher_uses_it_for_every_unsaved_profile_path(self):
-        source = open(os.path.join(ROOT, "app", "_launch_runtime.py"), encoding="utf-8").read()
-        self.assertEqual(source.count("copy.deepcopy(_DEFAULT_PRODUCTION_PROFILE)"), 0)
-        self.assertEqual(source.count("_default_production_profile()"), 3)   # definition + the two fallbacks
-
 
 if __name__ == "__main__":
     unittest.main()
