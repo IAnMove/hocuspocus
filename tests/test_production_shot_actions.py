@@ -125,6 +125,32 @@ def test_undo_restores_the_previous_take_and_keeps_the_file(tmp_path: Path):
     assert montage["clips"][0]["source"] == "old-export.mp4"
 
 
+def test_undo_refuses_a_runner_history_snapshot(tmp_path: Path):
+    """Catalog undo must not write a runner clip dict into shots.json."""
+    from services.production_shot_review import record_decision
+
+    root = tmp_path / "film"
+    root.mkdir()
+    _production(root, "clip1")
+    _manifest(root)
+    record_decision(str(root), "clip1", "s1", snapshot={
+        "frame": "f.png",
+        "clip": {"file": "take-b.mp4"},
+        "scene": {"file": "s.mp4"},
+        "shot": {"key": "s1"},
+    })
+    history = _shot(root, "s1")["review"]["history_id"]
+    try:
+        _act(root, "s1", {"action": "undo", "history_id": history, "expected_revision": 0})
+    except ActionError as error:
+        assert error.code == "history_incompatible"
+    else:
+        raise AssertionError("expected history_incompatible")
+    manifest = json.loads((root / "clip1.shots.json").read_text(encoding="utf-8"))
+    assert manifest["shots"][0]["clip"] == "take-a.mp4"
+    assert isinstance(manifest["shots"][0]["clip"], str)
+
+
 def test_undo_after_reexport_restores_the_previous_montage_source(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()
