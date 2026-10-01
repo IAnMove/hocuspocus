@@ -46,7 +46,7 @@ import type {
 } from './characterKitActions'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
-import { world3dTemplateMessage } from './world3dTemplateCapabilities'
+import { shouldMountWorld3DScene, world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
 import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
@@ -727,7 +727,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const body = await response.json() as { status?: string; result?: Record<string, unknown>; detail?: { message?: string } }
       if (!response.ok) throw new Error(body.detail?.message || 'Video 3D template command failed')
       const scene = body.result?.scene as { document?: unknown; sceneId?: string; templateId?: string } | undefined
-      if (scene?.document) {
+      if (scene?.document && shouldMountWorld3DScene(action.operation)) {
         const { requestWorld3DDocument } = await import('../scene3d/world3dAgent')
         await navigate('video_3d')
         await requestWorld3DDocument({ document: scene.document, sceneId: scene.sceneId || 'world3d' })

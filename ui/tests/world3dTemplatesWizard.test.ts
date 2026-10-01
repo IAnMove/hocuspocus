@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { AGENT_ACTION_TYPES } from '../src/features/agent/agentActionTypes'
-import { registerWorld3DTemplateCapabilities, world3dTemplateMessage } from '../src/features/agent/world3dTemplateCapabilities'
+import { registerWorld3DTemplateCapabilities, shouldMountWorld3DScene, world3dTemplateMessage } from '../src/features/agent/world3dTemplateCapabilities'
 
 test('wizard capability sends the query and shows the real cards', async () => {
   let registered = 0
@@ -32,4 +32,14 @@ test('wizard capability sends the query and shows the real cards', async () => {
   assert.match(choice, /cine-orbit-360/)
   assert.match(choice, /Elige un id exacto/)
   assert.equal(world3dTemplateMessage({ status: 'not_found', result: { candidates: [] } }), 'Ninguna toma coincide con la búsqueda.')
+})
+
+test('inspect and publish do not remount the open editor', () => {
+  assert.equal(shouldMountWorld3DScene('world3d.scene.instantiate'), true)
+  assert.equal(shouldMountWorld3DScene('world3d.scene.apply_query'), true)
+  assert.equal(shouldMountWorld3DScene('world3d.scene.patch'), true)
+  assert.equal(shouldMountWorld3DScene('world3d.scene.inspect'), false)
+  assert.equal(shouldMountWorld3DScene('world3d.scene.publish'), false)
+  assert.equal(shouldMountWorld3DScene('world3d.scene.preview'), false)
+  assert.equal(shouldMountWorld3DScene('world3d.templates.get'), false)
 })

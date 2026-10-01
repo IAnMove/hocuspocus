@@ -15,6 +15,18 @@ export const WORLD3D_TEMPLATE_OPERATIONS = [
 
 export type World3DTemplateOperation = typeof WORLD3D_TEMPLATE_OPERATIONS[number]
 
+/** Only these replies should replace the open Video 3D editor. Inspect/publish
+ *  also return `scene.document`, but remounting them drops unsaved local edits. */
+const MOUNT_SCENE_OPERATIONS = new Set<string>([
+  'world3d.scene.instantiate',
+  'world3d.scene.apply_query',
+  'world3d.scene.patch',
+])
+
+export function shouldMountWorld3DScene(operation: string): boolean {
+  return MOUNT_SCENE_OPERATIONS.has(operation)
+}
+
 export interface AgentWorld3DTemplatesAction {
   type: 'world3d_templates'
   operation: World3DTemplateOperation
