@@ -18,16 +18,17 @@ import {
   ShaderMaterial,
   SphereGeometry,
   Vector3,
-  type BufferAttribute,
   type Material,
+  type Texture,
 } from 'three'
 import type { AtmosHandle } from './clearing.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
-import { hash2 } from '../noise.ts'
+import { fbm2, hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT, scatter, type Area } from '../layout.ts'
+import { boulders, paintedTerrain, ridge } from './kit.ts'
 
-type Kept = { geometries: BufferGeometry[]; materials: Material[] }
+type Kept = { geometries: BufferGeometry[]; materials: Material[]; textures: Texture[] }
 
 const DUST_VERTEX = `
   attribute float aSeed;
@@ -88,7 +89,7 @@ const LOW_EYE = [1.35, 0.42, 1.9] as const
 const LOW_LOOK = [-0.4, 2.6, -9.5] as const
 
 function emptyKept(): Kept {
-  return { geometries: [], materials: [] }
+  return { geometries: [], materials: [], textures: [] }
 }
 
 function hexColor(color: string): [number, number, number] {
@@ -131,6 +132,7 @@ function disposeKept(root: Group, kept: Kept) {
   root.removeFromParent()
   for (const geometry of kept.geometries) geometry.dispose()
   for (const material of kept.materials) material.dispose()
+  for (const texture of kept.textures) texture.dispose()
 }
 
 function idleHandle(root: Group, kept: Kept): AtmosHandle {
@@ -160,24 +162,28 @@ function flatMars(resolved: ResolvedAtmos): { root: Group; kept: Kept } {
   return { root, kept }
 }
 
+const SOIL: Record<string, { base: string; alt: string; fleck: string; rock: string[]; sand: string[]; mesa: string; haze: string }> = {
+  rust: { base: '#b8683c', alt: '#d99a62', fleck: '#f0c48c', rock: ['#7d3a26', '#92472e', '#6a2f20'], sand: ['#e0aa74', '#d39a66', '#ebbf8a'], mesa: '#a24d2e', haze: '#e09a55' },
+  dusk: { base: '#8a4630', alt: '#a85a3c', fleck: '#d98a64', rock: ['#5e2a22', '#6f332a', '#4d221c'], sand: ['#c27c58', '#b46d4c', '#d19070'], mesa: '#6e3028', haze: '#c46a62' },
+}
+
+/** Wind-rippled plain with a few broad dunes. */
+function marsHeight(resolved: ResolvedAtmos, x: number, z: number): number {
+  const dune = (fbm2(x * 0.11, z * 0.11, resolved.seed) - 0.5) * 0.9
+  const ripple = Math.sin(x * 2.3 + fbm2(x * 0.3, z * 0.3, resolved.seed + 3) * 4) * 0.035
+  return dune + ripple
+}
+
 function addGround(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new PlaneGeometry(32, 32, 16, 16)
-  geo.rotateX(-Math.PI / 2)
-  const pos = geo.attributes.position as BufferAttribute
-  for (let i = 0; i < pos.count; i += 1) {
-    const x = pos.getX(i)
-    const z = pos.getZ(i)
-    const dx = x - CLEARING_SUBJECT[0]
-    const dz = z - CLEARING_SUBJECT[2]
-    if (dx * dx + dz * dz < 2.2) continue
-    pos.setY(i, (hash2(Math.round(x * 3), Math.round(z * 3), resolved.seed) - 0.45) * 0.28)
-  }
-  geo.computeVertexNormals()
-  const mat = new MeshBasicMaterial({ color: resolved.stone })
-  const mesh = new Mesh(geo, mat)
-  mesh.name = 'atmos-ground'
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
+  const soil = SOIL[resolved.palette] ?? SOIL.rust
+  paintedTerrain(root, kept, {
+    size: 44, segments: 110, seed: resolved.seed,
+    paint: { base: soil.base, alt: soil.alt, fleck: soil.fleck, seed: resolved.seed, fleckAbove: 0.87 },
+    height: (x, z) => marsHeight(resolved, x, z),
+    tint: (x, z) => 0.88 + fbm2(x * 0.07 + 2, z * 0.07, resolved.seed + 5) * 0.4,
+    flat: { x: CLEARING_SUBJECT[0], z: CLEARING_SUBJECT[2], radius: 1.4 },
+    emissive: 0x4a2412,
+  })
 }
 
 function fieldSpots(count: number, seed: number, salt: number): Array<[number, number]> {
@@ -189,31 +195,13 @@ function fieldSpots(count: number, seed: number, salt: number): Array<[number, n
 }
 
 function addRocks(root: Group, resolved: ResolvedAtmos, kept: Kept) {
+  const soil = SOIL[resolved.palette] ?? SOIL.rust
   const spots = fieldSpots(resolved.grassBlades, resolved.seed, 17)
-  const base = new BoxGeometry(0.72, 0.32, 0.55)
-  const cap = new BoxGeometry(0.48, 0.14, 0.36)
-  const baseMat = new MeshBasicMaterial({ color: swatch(ROCK, resolved.palette) })
-  const capMat = new MeshBasicMaterial({ color: swatch(STRATA, resolved.palette) })
-  const rocks = new InstancedMesh(base, baseMat, spots.length)
-  const strata = new InstancedMesh(cap, capMat, spots.length)
-  rocks.name = 'atmos-rock'
-  strata.name = 'atmos-strata'
-  const dummy = new Object3D()
-  spots.forEach(([x, z], index) => {
-    const yaw = hash2(index, 8, resolved.seed) * Math.PI
-    dummy.position.set(x, 0.16, z)
-    dummy.rotation.set(0, yaw, 0)
-    dummy.scale.set(0.8 + hash2(index, 9, resolved.seed) * 0.7, 1, 0.8 + hash2(index, 10, resolved.seed) * 0.5)
-    dummy.updateMatrix()
-    rocks.setMatrixAt(index, dummy.matrix)
-    dummy.position.y = 0.38
-    dummy.scale.y = 1
-    dummy.updateMatrix()
-    strata.setMatrixAt(index, dummy.matrix)
-  })
-  addMesh(root, kept, rocks)
-  addMesh(root, kept, strata)
-  kept.materials.push(baseMat, capMat)
+  boulders(root, kept, spots.map(([x, z], index) => ({
+    x, z, size: 0.16 + hash2(index, 9, resolved.seed) * 0.4, flat: 0.6 + hash2(index, 10, resolved.seed) * 0.3,
+  })), soil.rock, resolved.seed, 'atmos-rock')
+  const pale = fieldSpots(Math.max(4, Math.round(resolved.grassBlades * 0.6)), resolved.seed, 41)
+  boulders(root, kept, pale.map(([x, z], index) => ({ x, z, size: 0.12 + hash2(index, 12, resolved.seed) * 0.26, flat: 0.5 })), soil.sand, resolved.seed + 3, 'atmos-strata')
 }
 
 function addDunes(root: Group, resolved: ResolvedAtmos, kept: Kept) {
@@ -222,6 +210,7 @@ function addDunes(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const mat = new MeshBasicMaterial({ color: swatch(STRATA, resolved.palette) })
   const mesh = new InstancedMesh(geo, mat, spots.length)
   mesh.name = 'atmos-dune'
+  mesh.visible = false // the dunes are part of the ground relief now
   const dummy = new Object3D()
   spots.forEach(([x, z], index) => {
     const width = 1.1 + hash2(index, 4, resolved.seed) * 0.9
@@ -235,20 +224,8 @@ function addDunes(root: Group, resolved: ResolvedAtmos, kept: Kept) {
 }
 
 function addRidge(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new ConeGeometry(1.1, 2.2, 4)
-  const mat = new MeshBasicMaterial({ color: swatch(ROCK, resolved.palette) })
-  const mesh = new InstancedMesh(geo, mat, 6)
-  mesh.name = 'atmos-ridge'
-  const dummy = new Object3D()
-  for (let i = 0; i < 6; i += 1) {
-    const height = 1.3 + hash2(i, 2, resolved.seed) * 0.8
-    dummy.position.set(-7.5 + i * 3, height, -13.2)
-    dummy.scale.set(1.4, height, 1.1)
-    dummy.updateMatrix()
-    mesh.setMatrixAt(i, dummy.matrix)
-  }
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
+  const soil = SOIL[resolved.palette] ?? SOIL.rust
+  ridge(root, kept, { seed: resolved.seed, count: 12, radius: 15, height: [1.8, 4.2], width: [3.6, 7.2], color: soil.mesa, haze: soil.haze, layers: 2 })
 }
 
 function shadeMatrix(matrix: Matrix4, x: number, z: number, alongX: number, alongZ: number, length: number, width: number) {
