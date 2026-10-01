@@ -109,6 +109,7 @@ Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
 | `app/services/production_shot_actions.py` | acciones, rama `feat/unified-productions-actions` | Elige toma, revisión, bloqueo, deshacer y export desactualizado sobre el manifiesto, el Director o el montaje. No edita `music_production.py`, `production_shot_redo.py` ni `ReviewMode.tsx` (#723). |
 | `app/services/production_work_commands.py`, `ui/src/features/production-catalog/`, una línea en `capabilityRegistry.ts`, un método `productionWorks.command` | catálogo, rama `feat/unified-productions-catalog` | Lista, abre y resuelve. El método del adaptador es aditivo. No reescribe plantillas World3D, `music_production.py` ni `wangp_mcp.py`. |
 | `link_existing_production`, `production.works.link` | obras antiguas, rama `feat/unified-productions-legacy` | Vincula por id un registro reconocible. No mueve medios ni crea una Story. |
+| `bind_producer`, `production_producer_link.py` | productores, rama `feat/unified-productions-producers` | `production.run`, `start_pipeline` y el render de serie llaman al enlace antes del worker. El gancho en `music_production.py` son dos líneas. No arranca un modelo. |
 
 ## Cómic a película, adenda 2026-10-01
 
