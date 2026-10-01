@@ -113,3 +113,27 @@ def test_publishing_a_retake_preserves_the_other_shot_and_montage(tmp_path):
     assert saved["shots"][0]["video_stale"] is True
     assert saved["shots"][1] == other
     assert montage.read_bytes() == before
+
+
+def test_frame_regeneration_refreshes_the_still_preview_and_marks_export_stale(tmp_path):
+    from types import SimpleNamespace
+    from services.production_shot_regeneration import publish_music_regeneration
+    from services.production_shot_view import shot_view
+    fixture(tmp_path, "still")
+    document = {"revision": 3, "shots": [{"key": "s1", "kind": "still", "start_frame": "old.png"}]}
+    (tmp_path / "clip1.shots.json").write_text(json.dumps(document))
+    publish_music_regeneration(SimpleNamespace(root=tmp_path, id="clip1", state={"frames": {"s1": "new.png"}}), "s1", "frame")
+    shot = shot_view(str(tmp_path), "film", "clip1")["shots"][0]
+    assert shot["selected_take_id"] == "new.png"
+    assert shot["montage"]["stale"] is True
+
+
+def test_imported_clip_has_no_regeneration_engine(tmp_path):
+    from services.production_shot_view import shot_view
+    fixture(tmp_path, "clip")
+    document = {"revision": 3, "shots": [{"key": "s1", "kind": "clip", "clip": "old.mp4"}]}
+    (tmp_path / "clip1.shots.json").write_text(json.dumps(document))
+    shot = shot_view(str(tmp_path), "film", "clip1")["shots"][0]
+    assert next(action for action in shot["actions"] if action["action"] == "regenerate")["enabled"] is False
+    with pytest.raises(ActionError, match="imported clip"):
+        regeneration_target(str(tmp_path), "film", "clip1", "s1", {"expected_revision": 3})

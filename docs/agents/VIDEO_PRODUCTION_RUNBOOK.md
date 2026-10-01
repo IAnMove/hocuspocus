@@ -525,13 +525,12 @@ The same id returns the same Story. Pass `project: {kind, id}` only when that
 Story or episode already exists; an unknown id is HTTP 422 and the thread does
 not start. `dry_run` does not create a project.
 
-Director `start_pipeline` binds the pipeline id before the worker. A second
-start of that id does not create another Story. `provenance.project_id` is not
-read as a Story id.
+Director `start_pipeline` binds its canonical production id before the worker.
+An existing `project` or `provenance.project_id` is validated and reused.
 
 Series episode render binds that episode after the request is accepted and
 before the worker starts. A refused render does not create a project. The link
-does not create a Story and it does not rewrite the series library. Tokens for
+does not create a Story and records the id in the episode's `productionIds`. Tokens for
 this link are not available from the client.
 
 
