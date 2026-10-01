@@ -14,13 +14,16 @@ import {
   ShaderMaterial,
   SphereGeometry,
   type Material,
+  MeshStandardMaterial,
+  type Texture,
 } from 'three'
 import type { AtmosHandle } from './clearing.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
 import { CLEARING_SUBJECT } from '../layout.ts'
+import { composeGeometry, skylineLayers, type Piece } from './kit.ts'
 
-type Kept = { geometries: BufferGeometry[]; materials: Material[] }
+type Kept = { geometries: BufferGeometry[]; materials: Material[]; textures: Texture[] }
 type Tower = { x: number; z: number; w: number; d: number; h: number }
 type BoxSpot = { x: number; y: number; z: number; sx: number; sy: number; sz: number; yaw: number }
 type Win = [number, number, number]
@@ -128,7 +131,7 @@ const LOW_EYE = [0.85, 0.55, 2.4] as const
 const LOW_LOOK = [-0.2, 2.4, -11] as const
 
 function emptyKept(): Kept {
-  return { geometries: [], materials: [] }
+  return { geometries: [], materials: [], textures: [] }
 }
 
 function hexColor(color: string): [number, number, number] {
@@ -166,6 +169,7 @@ function disposeKept(root: Group, kept: Kept) {
   root.removeFromParent()
   for (const geometry of kept.geometries) geometry.dispose()
   for (const material of kept.materials) material.dispose()
+  for (const texture of kept.textures) texture.dispose()
 }
 
 function idleHandle(root: Group, kept: Kept): AtmosHandle {
@@ -334,6 +338,43 @@ function addGround(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   kept.materials.push(mat)
 }
 
+/** Parapet, AC units, a water tank on legs, vents and a mast: the clutter of a real roof, in one mesh. */
+function roofPieces(): Piece[] {
+  const concrete = '#4a4a56'
+  return [
+    { type: 'box', at: [0, 0.3, -11.8], size: [27.6, 0.6, 0.35], color: concrete },
+    { type: 'box', at: [-13.8, 0.3, 0], size: [0.35, 0.6, 24], color: concrete },
+    { type: 'box', at: [13.8, 0.3, 0], size: [0.35, 0.6, 24], color: concrete },
+    { type: 'box', at: [-7, 0.55, -8], size: [2.2, 1.1, 1.4], color: '#6c6f7a' },
+    { type: 'cylinder', at: [-7, 1.13, -8], size: [1.0, 0.06, 1.0], color: '#2a2b33' },
+    { type: 'box', at: [-4.2, 0.45, -9.2], size: [1.5, 0.9, 1.1], color: '#6c6f7a' },
+    { type: 'cylinder', at: [-4.2, 0.93, -9.2], size: [0.8, 0.06, 0.8], color: '#2a2b33' },
+    { type: 'box', at: [6.5, 0.5, -9], size: [2.6, 1.0, 1.3], color: '#6c6f7a' },
+    { type: 'cylinder', at: [6.5, 1.03, -9], size: [1.1, 0.06, 1.1], color: '#2a2b33' },
+    { type: 'cylinder', at: [10, 0.5, -6.5], size: [0.34, 1.0, 0.34], color: '#7a7d88' },
+    { type: 'cone', at: [10, 1.12, -6.5], size: [0.5, 0.26, 0.5], color: '#7a7d88' },
+    { type: 'cylinder', at: [-10.5, 3.0, -7], size: [2.2, 2.0, 2.2], color: '#7a5a42' },
+    { type: 'cone', at: [-10.5, 4.35, -7], size: [2.4, 0.8, 2.4], color: '#5a4030' },
+    { type: 'cylinder', at: [-11, 1.0, -7.6], size: [0.16, 2.0, 0.16], color: '#2a2b33' },
+    { type: 'cylinder', at: [-10, 1.0, -7.6], size: [0.16, 2.0, 0.16], color: '#2a2b33' },
+    { type: 'cylinder', at: [-10, 1.0, -6.4], size: [0.16, 2.0, 0.16], color: '#2a2b33' },
+    { type: 'cylinder', at: [-11, 1.0, -6.4], size: [0.16, 2.0, 0.16], color: '#2a2b33' },
+    { type: 'cylinder', at: [12, 2.6, -10.5], size: [0.08, 5.2, 0.08], color: '#2a2b33' },
+    { type: 'box', at: [12, 4.2, -10.5], size: [1.2, 0.06, 0.06], color: '#2a2b33' },
+    { type: 'box', at: [12, 3.6, -10.5], size: [0.8, 0.06, 0.06], color: '#2a2b33' },
+    { type: 'box', at: [3.5, 0.2, -10.4], size: [4.2, 0.4, 0.5], color: '#3a3a44' },
+  ]
+}
+
+function addRoofProps(root: Group, kept: Kept) {
+  const geo = composeGeometry(roofPieces())
+  const mat = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95, emissive: 0x3a3a46, emissiveIntensity: 1 })
+  const mesh = new Mesh(geo, mat)
+  mesh.name = 'atmos-roof-props'
+  addMesh(root, kept, mesh)
+  kept.materials.push(mat)
+}
+
 function addCity(root: Group, kept: Kept, palette: string) {
   const geo = new PlaneGeometry(40, 26)
   geo.rotateX(-Math.PI / 2)
@@ -424,6 +465,8 @@ export function buildRooftopNight(resolved: ResolvedAtmos, webgl2: boolean): { r
   const kept = emptyKept()
   const skyline = skylineAmount(resolved.variant)
   addGround(root, resolved, kept)
+  addRoofProps(root, kept)
+  skylineLayers(root, kept, { seed: 11, count: 14, radius: 26, height: [7, 15], width: [3, 5.5], body: '#1b1830', haze: '#4a3a5c', layers: 3 })
   addCity(root, kept, resolved.palette)
   addBoxes(root, kept, 'atmos-parapet', PARAPET, swatch(RIM, resolved.palette))
   addBoxes(root, kept, 'atmos-vent', VENTS, swatch(VENT_COLOR, resolved.palette))

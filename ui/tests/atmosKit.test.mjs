@@ -45,3 +45,26 @@ test('boulders and ridges are deterministic and sit where they are told', () => 
   assert.equal(r1.count, 12)
   assert.ok(places(r1).every(([, , z]) => z < 0), 'ridges stay behind the scene')
 })
+
+test('composed pieces become one coloured geometry and a skyline stays behind the scene', async () => {
+  const { composeGeometry, skylineLayers } = await import('../src/features/scene3d/atmos/sets/kit.ts')
+  const geo = composeGeometry([
+    { type: 'box', at: [0, 0.5, 0], size: [1, 1, 1], color: '#ff0000' },
+    { type: 'sphere', at: [2, 0.5, 0], size: [1, 1, 1], color: '#00ff00' },
+    { type: 'cone', at: [4, 0.5, 0], size: [1, 1, 1], turn: [0, 0.5, 0], color: '#0000ff' },
+  ])
+  const colors = geo.getAttribute('color')
+  const position = geo.getAttribute('position')
+  assert.equal(colors.count, position.count)
+  assert.ok(position.count > 36 + 20, 'all three primitives are in the geometry')
+  assert.equal(geo.getAttribute('uv'), undefined)
+  assert.equal(geo.index, null, 'non-indexed, so every face keeps its own flat normal')
+  const first = [colors.getX(0), colors.getY(0), colors.getZ(0)]
+  const last = [colors.getX(colors.count - 1), colors.getY(colors.count - 1), colors.getZ(colors.count - 1)]
+  assert.notDeepEqual(first, last)
+  const a = skylineLayers(new Group(), kept(), { seed: 4, count: 6, radius: 20, height: [5, 9], width: [2, 3], body: '#202030', haze: '#605070', layers: 2 })
+  const b = skylineLayers(new Group(), kept(), { seed: 4, count: 6, radius: 20, height: [5, 9], width: [2, 3], body: '#202030', haze: '#605070', layers: 2 })
+  assert.deepEqual(places(a), places(b))
+  assert.equal(a.count, 12)
+  assert.ok(places(a).every(([, , z]) => z < -5), 'towers stay behind the roof')
+})
