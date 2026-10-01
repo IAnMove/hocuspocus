@@ -457,6 +457,11 @@ def _director_effective_shot_image_policy(params: dict) -> str:
 def _resolve_fresh_shot_image_policy(params: dict) -> str:
     """Resolve a new submission against the selected video's capabilities."""
 
+    if params.get("pipeline_type") == "comic_movie":
+        # The comic's own panels are the start images (prepared in the image stage). With an H3 engine the model
+        # alone would resolve to prompt-only, which skips preparing them: no plates, so a deterministic or I2V
+        # shot is handed an empty path and a quality test fails on the workspace folder itself.
+        return SHOT_IMAGE_GENERATE
     getter = getattr(_wgp, "get_model_def", None)
     if not callable(getter):
         return SHOT_IMAGE_GENERATE

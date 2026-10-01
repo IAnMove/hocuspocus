@@ -1346,6 +1346,22 @@ class TestDirectorBackendValidation(unittest.TestCase):
         with self.assertRaisesRegex(pipeline.DirectorModelCompatibilityError, "Comic Film"):
             pipeline._validate_director_models({"pipeline_type": "comic_movie", "image_model": "image", "video_model": "image"})
 
+    def test_a_comic_film_always_keeps_its_panels_as_start_images(self):
+        # With an H3 engine a fresh submission resolved to prompt_only, the pipeline then logged
+        # "Shot images skipped by saved policy" and prepared no plate for any panel.
+        from unittest import mock
+
+        with mock.patch.object(pipeline, "resolve_shot_image_policy", return_value=SHOT_IMAGE_PROMPT_ONLY) as resolve:
+            self.assertEqual(
+                pipeline._resolve_fresh_shot_image_policy({"pipeline_type": "comic_movie", "video_model": "ltx"}),
+                SHOT_IMAGE_GENERATE,
+            )
+            resolve.assert_not_called()
+            self.assertEqual(
+                pipeline._resolve_fresh_shot_image_policy({"pipeline_type": "short_film_story", "video_model": "ltx"}),
+                SHOT_IMAGE_PROMPT_ONLY,
+            )
+
     def test_an_unknown_workflow_is_still_rejected(self):
         with self.assertRaisesRegex(pipeline.DirectorModelCompatibilityError, "Unknown Director workflow 'nope'"):
             pipeline._validate_director_models({"pipeline_type": "nope", "image_model": "image", "video_model": "ltx"})
