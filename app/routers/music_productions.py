@@ -211,12 +211,27 @@ def create_music_productions_router(
 
     @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/request")
     def post_request(production_id: str, shot: str, workspace: str, body: dict):
-        from services.production_shot_request import RequestError, resolve_plan
+        from services.music_production import ProductionError
+        from services.production_shot_edit import ShotEditError
+        from services.production_shot_request import RequestError, request_from_input, resolve_plan
+        from services.production_shot_review import ReviewError
         payload = body or {}
+        data = {
+            "shot": shot,
+            "instruction": payload.get("instruction"),
+            "apply": payload.get("apply", False),
+            "plan": payload.get("plan"),
+        }
         try:
-            plan = resolve_plan(payload)
-        except RequestError as error:
-            raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
+            if data["apply"] is True:
+                with hold_edit(workspace, production_id):
+                    production_cls, mcp = studio()
+                    _root_path, state = state_of(workspace, production_id)
+                    production = production_cls(workspace, production_id, workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=mcp)
+                    return request_from_input(production, _spec(state), data)
+            plan = resolve_plan({"instruction": data["instruction"], "plan": data["plan"]})
+        except (RequestError, ProductionError, ShotEditError, ReviewError) as error:
+            raise HTTPException(status_code=422, detail={"code": getattr(error, "code", "shot_edit_failed"), "message": str(error)}) from error
         return {"plan": plan, "applied": False}
 
     @router.post("/api/v1/music-productions/{production_id}/shots/{shot}/undo")

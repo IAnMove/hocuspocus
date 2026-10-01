@@ -20,12 +20,16 @@ def review_catalog() -> list[dict[str, Any]]:
     return [
         {"name": REVIEW, "description": "Record a human review for one shot: pending, approved, or changes_requested. This is not an automatic ok.",
          "inputSchema": _envelope({**base, "status": {"enum": ["pending", "approved", "changes_requested"]}, "notes": {"type": "string", "maxLength": 500}}, required)},
-        {"name": LOCK, "description": "Lock a shot so a later run does not reshoot or re-export it. An explicit retake of a locked shot is shot_locked.",
-         "inputSchema": _envelope({**base, "locked": {"type": "boolean"}}, required)},
+        {"name": LOCK, "description": (
+            "Lock or unlock one shot. Locked shots skip frames and clips; scenes keep them in the cut and skip only their export. "
+            "An explicit retake of a locked shot is shot_locked."
+        ), "inputSchema": _envelope({**base, "locked": {"type": "boolean"}}, required)},
         {"name": REDO, "description": "Redo one shot from frame, clip, or scene. Frame and clip use the production runner. Scene re-exports only that shot.",
          "inputSchema": _envelope({**base, "from": {"enum": ["frame", "clip", "scene"]}, "frame_prompt": {"type": "string", "maxLength": 2000}, "action": {"type": "string", "maxLength": 2000}}, [*required, "from"])},
-        {"name": REQUEST, "description": "Validate a closed shot plan, or refuse when only an instruction is sent and no language model is configured. apply runs the plan.",
-         "inputSchema": _envelope({**base, "instruction": {"type": "string", "maxLength": 2000}, "plan": {"type": "object"}, "apply": {"type": "boolean"}}, required)},
+        {"name": REQUEST, "description": (
+            "Validate a closed shot plan, or refuse when only an instruction is sent and no language model is configured. "
+            "apply true with the previewed plan validates and runs that object and does not ask the LLM again."
+        ), "inputSchema": _envelope({**base, "instruction": {"type": "string", "maxLength": 2000}, "plan": {"type": "object"}, "apply": {"type": "boolean"}}, required)},
         {"name": UNDO, "description": "Restore one history snapshot into the production state and re-export that scene. It does not delete files.",
          "inputSchema": _envelope({**base, "history_id": {"type": "string", "minLength": 1, "maxLength": 32}}, [*required, "history_id"])},
     ]

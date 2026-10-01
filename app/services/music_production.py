@@ -690,6 +690,7 @@ class Production:
         docs: dict[str, dict] = {}
         from services.production_shot_review import is_locked
         for shot, a, b in segs:
+            # Stay on the cut. Do not re-export or refresh the fingerprint.
             if is_locked(self, shot["key"]):
                 continue
             dur = round(b - a, 3)
@@ -915,6 +916,8 @@ class Production:
             claim_animatic_video(self.state, previous if isinstance(previous, str) else None)
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
+        from services.production_shot_review import assert_retake_unlocked
+        assert_retake_unlocked(self, retake)
         self._cancel = arm(self.ws, self.id)
         prior_status = self.state.get("status")
         from services.production_preview import keep_completed_cut, remember_completed_cut
@@ -1073,6 +1076,20 @@ def loopback_mcp(app_url: Callable[[], str], token: Callable[[], str], sleep: Ca
     return call
 
 
+def _refuse_locked_retake(production: Production, data: dict) -> tuple[str, ...]:
+    """A named retake of a locked shot is shot_locked before status is saved as running."""
+    retake = tuple(item for item in (data.get("retake") or ()) if isinstance(item, str))
+    if data.get("package") is True:
+        return retake
+    from services.production_shot_review import assert_retake_unlocked
+    try:
+        assert_retake_unlocked(production, retake)
+    except ProductionError as error:
+        from fastapi import HTTPException
+        raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
+    return retake
+
+
 def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str], app_url: Callable[[], str], token: Callable[[], str]) -> dict:
     from fastapi import HTTPException
 
@@ -1106,6 +1123,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             target = production.preview
             args = (preview,)
         else:
+            retake = _refuse_locked_retake(production, data)
             try:
                 require_free_disk(production.root)
                 spec = validate_spec(data.get("spec") or production.state.get("spec"))
@@ -1120,7 +1138,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
                 target, args = production.repackage, (spec,)
             else:
                 target = production.run
-                args = (spec, tuple(data.get("retake") or ()), through)
+                args = (spec, retake, through)
         with _lock:
             if _slot_busy(key):
                 raise HTTPException(409, {"code": "already_running", "message": "This production is running", "retryable": True})

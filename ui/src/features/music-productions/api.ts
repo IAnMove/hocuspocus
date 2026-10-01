@@ -49,9 +49,12 @@ export async function lockMusicProductionShot(workspace: string, productionId: s
   }))
 }
 
-export async function requestMusicProductionShot(workspace: string, productionId: string, shot: string, instruction: string, apply: boolean): Promise<ReviewPlan> {
+export async function requestMusicProductionShot(
+  workspace: string, productionId: string, shot: string, instruction: string, apply: boolean, plan?: ReviewPlan['plan'],
+): Promise<ReviewPlan> {
   return await read(await fetch(shotUrl(workspace, productionId, shot, 'request'), {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instruction, apply }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ instruction, apply, ...(plan ? { plan } : {}) }),
   })) as ReviewPlan
 }
 

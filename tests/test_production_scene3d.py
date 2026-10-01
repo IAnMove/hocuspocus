@@ -61,6 +61,26 @@ def test_export_is_a_native_clip_covers_the_cut_and_resumes_without_work(tmp_pat
     assert len(production.calls) == 2
 
 
+def test_locked_shot_survives_a_fingerprint_change_and_refuses_an_explicit_retake(tmp_path):
+    from services.music_production import ProductionError
+    from services.production_shot_review import record_decision
+
+    production = Production(tmp_path)
+    render(production)
+    kept = dict(production.state["clips"]["hero"])
+    before = len(production.calls)
+    record_decision(tmp_path, "movie", "hero", locked=True)
+    render(production, [shot(motion={"to": [2, 0, 0]})])
+    assert production.state["clips"]["hero"] == kept
+    assert len(production.calls) == before
+    with pytest.raises(ProductionError) as caught:
+        render(production, [shot(motion={"to": [2, 0, 0]})], ("hero",))
+    assert caught.value.code == "shot_locked"
+    assert production.state["clips"]["hero"] == kept
+    assert production.state.get("scene3d_revisions", {}).get("hero") is None
+    assert len(production.calls) == before
+
+
 def test_changed_motion_and_one_explicit_retake_refresh_only_that_clip(tmp_path):
     production = Production(tmp_path)
     render(production)
