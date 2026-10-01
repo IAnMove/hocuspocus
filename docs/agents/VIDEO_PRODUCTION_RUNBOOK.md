@@ -455,3 +455,17 @@ How to add a style preset: add an entry to `app/shared/style_presets.json`. Do n
 `music_production.py` is still above 700 lines. Lettering and song generation moved out. The file was not gutted in this change.
 
 Six portrait seeds and the gremlins-devday-v2 before/after were not measured.
+
+## Project link before `production.run`
+
+Call `POST /api/v1/production-projects/resolve` before the first `production.run`
+when the clip should belong to a Story or an episode. Send `workspace`,
+`origin` (`mcp`, `wizard`, or `ui`), `intent_id`, and either `format`
+(`music_video`, `trailer`, `quick_video`, `full_story`) or `project`
+(`{kind: story|episode, id}`). The same `intent_id` returns the same
+`production_id`. Pass that id to `production.run`. Do not read the browser's
+active Story. An unknown project id fails with `invalid_project` and creates
+nothing. `new_execution: true` starts another production on the same project.
+The contract and the coverage matrix are in
+`docs/development/UNIFIED_PRODUCTIONS.md`. LLM token counts for this link are
+not available from the client.

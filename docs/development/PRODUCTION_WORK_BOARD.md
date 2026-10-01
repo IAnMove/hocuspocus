@@ -59,3 +59,17 @@ avance un bloque actualiza aquí su estado en el mismo PR. Estado comprobado el 
 | `production_review*.py` | B | Nadie más. Los chequeos nuevos de otros bloques entran como adaptadores que B registra. |
 | `docs/agents/VIDEO_PRODUCTION_RUNBOOK.md` | todos | Cada bloque añade su sección al final de la suya; sin reescribir lo ajeno. |
 | `scripts/ci_test_groups.json` | todos | Añadir el test propio en su grupo; los conflictos se resuelven conservando ambas líneas. |
+
+## Producciones unificadas (2026-10-01)
+
+Reclamado por Grok en `feat/unified-productions-identity`. Índice y enlace
+Story/episodio antes de generar. No rehace motores ni plantillas World3D.
+Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
+
+| Archivo | Quién más | Regla |
+|---|---|---|
+| `app/_launch_runtime.py` | PR #717 `feat/world3d-templates-mcp` | Solo el `include_router` de `production_projects` junto a `/api/v1/productions`. No tocar el bloque de plantillas World3D. |
+| `applicationAdapters.ts`, `capabilityRegistry.ts`, `wangp_mcp.py` | #717 | No se editan en el PR de identidad. El enganche Wizard/MCP espera o usa el HTTP de resolve. |
+| `music_production.py` | PR #716 `fix/music-production-under-700` | No se edita. El enlace vive en `.production-project-links-v1.json`. |
+| Bloque D (`production_shot_review.py`, `routers/music_productions.py`, `ReviewMode.tsx`) | revisión de planos | Consumir las operaciones. No duplicarlas. |
+| `scripts/ci_test_groups.json`, `tests/fixtures/route_table.json`, este tablero, el runbook | #716 y #717 | Cambios aditivos. Al rebasar se conservan ambas aportaciones. |

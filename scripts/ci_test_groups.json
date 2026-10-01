@@ -196,6 +196,7 @@
         "tests/test_production_publication.py",
         "tests/test_production_phase.py",
         "tests/test_production_preview.py",
+        "tests/test_production_project_link.py",
         "tests/test_production_smoothness.py",
         "tests/test_humanoid_animate.py",
         "tests/test_humanoid_clips.py",
@@ -409,6 +410,18 @@
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/production_project_link.py",
+      "paths": ["tests/test_production_project_link.py"]
+    },
+    {
+      "prefix": "app/services/production_work_catalog.py",
+      "paths": ["tests/test_production_project_link.py"]
+    },
+    {
+      "prefix": "app/routers/production_projects.py",
+      "paths": ["tests/test_production_project_link.py"]
+    },
     {
       "prefix": "app/services/lips_creator_commands.py",
       "paths": [
