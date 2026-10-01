@@ -125,6 +125,31 @@ def test_undo_restores_the_previous_take_and_keeps_the_file(tmp_path: Path):
     assert montage["clips"][0]["source"] == "old-export.mp4"
 
 
+def test_undo_after_reexport_restores_the_previous_montage_source(tmp_path: Path):
+    root = tmp_path / "film"
+    root.mkdir()
+    _production(root, "clip1")
+    _manifest(root)
+    (root / "take-a.mp4").write_bytes(b"a")
+    (root / "take-b.mp4").write_bytes(b"b")
+    (root / "old-export.mp4").write_bytes(b"old")
+    _act(root, "s1", {"action": "select", "take": "take-b.mp4", "expected_revision": 0})
+    _act(root, "s1", {"action": "reexport", "expected_revision": 1})
+    history = _shot(root, "s1")["review"]["history_id"]
+    restored = _act(root, "s1", {"action": "undo", "history_id": history, "expected_revision": 2})
+    assert restored["applied"] is True
+    manifest = json.loads((root / "clip1.shots.json").read_text(encoding="utf-8"))
+    montage = json.loads((root / "cut.montage.json").read_text(encoding="utf-8"))
+    assert manifest["shots"][0]["clip"] == "take-b.mp4"
+    assert manifest["shots"][0]["video_stale"] is True
+    assert manifest["shots"][1]["clip"] == "s2.mp4"
+    assert montage["clips"][0]["source"] == "old-export.mp4"
+    assert montage["clips"][0]["video_stale"] is True
+    assert montage["clips"][1]["source"] == "s2.mp4"
+    assert (root / "old-export.mp4").read_bytes() == b"old"
+    assert (root / "take-b.mp4").read_bytes() == b"b"
+
+
 def test_reexport_updates_only_the_selected_montage_clip(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()
