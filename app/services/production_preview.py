@@ -7,6 +7,7 @@ finished cut. Caption contrast is measured with Pillow against one real frame.
 """
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -510,8 +511,42 @@ def remember_completed_cut(state: dict, prior_status: object, through: object = 
     final = state.get("final")
     if not isinstance(final, str) or not final:
         return
-    state["completed_cut"] = {key: state[key] for key in _CUT_KEYS
-                              if isinstance(state.get(key), str) and state[key]}
+    cut = {key: state[key] for key in _CUT_KEYS
+           if isinstance(state.get(key), str) and state[key]}
+    if isinstance(state.get("scenes"), dict):
+        cut["scenes"] = copy.deepcopy(state["scenes"])
+    if isinstance(state.get("segments"), list):
+        cut["segments"] = copy.deepcopy(state["segments"])
+    state["completed_cut"] = cut
+
+
+def snapshot_cut_state(state: dict) -> dict:
+    """Official ``scenes`` / ``segments`` of a finished cut.
+
+    ``scenes()`` writes ``file: None`` and a new fingerprint before the
+    preview export lands. A crash or a failed export would otherwise leave
+    those holes on a production that ``keep_completed_cut`` marks completed
+    again. Prefer the persisted ``completed_cut`` snapshot so a resume does
+    not freeze the half-written map.
+    """
+    cut = state.get("completed_cut") if isinstance(state.get("completed_cut"), dict) else {}
+    scenes = cut.get("scenes") if isinstance(cut.get("scenes"), dict) else state.get("scenes")
+    segments = cut.get("segments") if isinstance(cut.get("segments"), list) else state.get("segments")
+    kept: dict = {}
+    if isinstance(scenes, dict):
+        kept["scenes"] = copy.deepcopy(scenes)
+    if isinstance(segments, list):
+        kept["segments"] = copy.deepcopy(segments)
+    return kept
+
+
+def restore_cut_state(state: dict, kept: dict) -> None:
+    if not isinstance(kept, dict):
+        return
+    if isinstance(kept.get("scenes"), dict):
+        state["scenes"] = copy.deepcopy(kept["scenes"])
+    if isinstance(kept.get("segments"), list):
+        state["segments"] = copy.deepcopy(kept["segments"])
 
 
 def completed_cut_final(state: dict) -> str | None:

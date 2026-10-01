@@ -85,7 +85,9 @@ function validProduction(p: Scene3DDocument['production']) {
     && (p.sourceId === undefined || (typeof p.sourceId === 'string' && p.sourceId.length <= 300))
 }
 function knownTemplateId(value: unknown): Scene3DTemplateId {
-  return typeof value === 'string' && (SCENE3D_TEMPLATE_IDS as readonly string[]).includes(value) ? value as Scene3DTemplateId : 'two-shot'
+  if (typeof value === 'string' && (SCENE3D_TEMPLATE_IDS as readonly string[]).includes(value)) return value as Scene3DTemplateId
+  if (typeof value === 'string' && value.match(/^user-[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/)) return value as Scene3DTemplateId
+  return 'two-shot'
 }
 
 function parseWorkshopScreen(value: unknown) {

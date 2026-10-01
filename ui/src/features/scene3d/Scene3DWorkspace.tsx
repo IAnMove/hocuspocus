@@ -57,7 +57,7 @@ import { Scene3DImageLookControls } from './Scene3DImageLookControls'
 import { Scene3DWindowControls } from './Scene3DWindowControls'
 import { commitSlotSourceChoice, pickerOutputFromSlot, type SlotSourceCapture, type SlotSourceLive } from './slotSource.ts'
 import type { Scene3DCameraFamily, Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLoop, Scene3DSlot } from './types.ts'
-import { documentFromWorld3DRequest, listenForWorld3DWorkflow } from './world3dAgent.ts'
+import { documentFromWorld3DRequest, listenForWorld3DDocument, listenForWorld3DWorkflow } from './world3dAgent.ts'
 
 const FAMILIES = ['fixed', 'establishment', 'orbit', 'follow', 'pursuit', 'side', 'front', 'chase', 'hood', 'wing', 'product', 'reveal', 'encounter', 'musical'] as const satisfies readonly Scene3DCameraFamily[]
 
@@ -209,6 +209,16 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     applyScene(next)
     setFrame(0)
     return { message: next.templateId, templateId: request.templateId, slotIds: next.slots.map(slot => slot.id) }
+  }), [applyScene, bumpGeneration])
+
+  useEffect(() => listenForWorld3DDocument(async request => {
+    if (!canMutateWorld3DScene(exportingRef.current)) throw new Error('world3d-export-in-progress')
+    const next = parseScene3DDocument(request.document)
+    if (!next) throw new Error('invalid_world3d_document')
+    bumpGeneration()
+    applyScene(next)
+    setFrame(0)
+    return { message: next.templateId, templateId: next.templateId, slotIds: next.slots.map(slot => slot.id) }
   }), [applyScene, bumpGeneration])
 
   const clipIssue = useMemo(() => {

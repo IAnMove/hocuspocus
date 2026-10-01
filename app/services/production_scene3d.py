@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
 CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
-               "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "rhythm", "width", "height", "fps"}
+               "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "rhythm", "width", "height", "fps",
+               "playbackSpeed"}
 
 
 def validate_scene3d_shot(shot):
