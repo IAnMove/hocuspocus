@@ -452,6 +452,6 @@ Qwen is already unloaded before the next model by `generation_memory.py`. The li
 
 How to add a style preset: add an entry to `app/shared/style_presets.json`. Do not put a person or project name in it. Set `style.preset` to that id. Add the id to `PRESET_IDS` in `app/services/production_style_presets.py` only when that preset needs a check beyond filling the style fields.
 
-`music_production.py` is still above 700 lines. Lettering and song generation moved out. The file was not gutted in this change.
+`music_production.py` is 688 lines. Shot windows live in `production_windows.py`. Cast, frames and the look preview live in `production_stage_frames.py`. Clip jobs live in `production_stage_clips.py`. Scenes, the package, the montage and the animatic live in `production_stage_scenes.py`. The run body lives in `production_stage_run.py`. `Production` still owns those methods and calls the modules. Wait stays at 1200 seconds with `until`. Resolution helpers, shot lock, planned enhance, and the 5 second save gate stay. The older 669-line cut was not reused.
 
 Six portrait seeds and the gremlins-devday-v2 before/after were not measured.
