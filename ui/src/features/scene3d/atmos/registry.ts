@@ -10,6 +10,7 @@ import { reefSet } from './sets/reef.ts'
 import { retroRoomSet } from './sets/retroRoom.ts'
 import { rooftopNightSet } from './sets/rooftopNight.ts'
 import { skyIslandsSet } from './sets/skyIslands.ts'
+import { siliconCircuitSet } from './sets/siliconCircuit.ts'
 import { siliconGridSet } from './sets/siliconGrid.ts'
 import { spaceRingSet } from './sets/spaceRing.ts'
 import { templeSet } from './sets/temple.ts'
@@ -20,7 +21,7 @@ import { moonSet } from './sets/moon.ts'
 import { snowSet } from './sets/snow.ts'
 import { waterfallSet } from './sets/waterfall.ts'
 
-export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet, marsSet, snowSet, desertSet, beachSet, crystalCaveSet, volcanoSet, templeSet, reefSet, neonRainSet, skyIslandsSet, meadowSet, rooftopNightSet, retroRoomSet, spaceRingSet, siliconGridSet]
+export const ATMOS_SETS: readonly AtmosSetDefinition[] = [clearingSet, waterfallSet, moonSet, marsSet, snowSet, desertSet, beachSet, crystalCaveSet, volcanoSet, templeSet, reefSet, neonRainSet, skyIslandsSet, meadowSet, rooftopNightSet, retroRoomSet, spaceRingSet, siliconGridSet, siliconCircuitSet]
 
 const extra: AtmosSetDefinition[] = []
 
