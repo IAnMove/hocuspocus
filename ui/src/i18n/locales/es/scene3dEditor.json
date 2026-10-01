@@ -357,7 +357,8 @@
     "cave": "Cueva",
     "volcano": "Volcán",
     "islands": "Islas",
-    "room": "Habitación"
+    "room": "Habitación",
+    "grid": "Rejilla"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1636,6 +1637,14 @@
       "title": "Planeta con anillos · plano abierto",
       "description": "Planeta con anillos y campo de asteroides, procedural. El hueco del personaje queda en una plataforma frente al planeta."
     },
+    "atmos-silicon-grid-wide": {
+      "title": "Rejilla de silicio · amplio",
+      "description": "Un llano procedural de rejilla de neón. Un sol a franjas, montañas de alambre y el hueco del personaje sobre un disco oscuro."
+    },
+    "atmos-silicon-grid-low": {
+      "title": "Rejilla de silicio · bajo",
+      "description": "La misma rejilla desde el disco, mirando las líneas hacia el sol y las montañas de alambre."
+    },
     "atmos-space-ring-low": {
       "title": "Planeta con anillos · cámara baja",
       "description": "La misma órbita desde la plataforma, mirando los anillos y los asteroides cercanos."
@@ -1715,7 +1724,9 @@
       "ice": "Hielo",
       "copper": "Cobre",
       "clover": "Trébol",
-      "hay": "Heno"
+      "hay": "Heno",
+      "outrun": "Outrun",
+      "chrome": "Cromo"
     },
     "fogDensity": "Niebla",
     "wind": "Viento",
@@ -1735,7 +1746,8 @@
     "skyline": "Perfil",
     "static": "Nieve",
     "orbit": "Órbita",
-    "breeze": "Brisa"
+    "breeze": "Brisa",
+    "grid": "Rejilla"
   },
   "gallerySearch": "Buscar en el catálogo",
   "galleryPlaceholder": "Retrato, baile, naves…",

@@ -357,7 +357,8 @@
     "cave": "Cave",
     "volcano": "Volcano",
     "islands": "Islands",
-    "room": "Room"
+    "room": "Room",
+    "grid": "Grid"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -1640,6 +1641,14 @@
       "title": "Ringed planet · low",
       "description": "The same orbit from the pad, looking up toward the rings and the near asteroids."
     },
+    "atmos-silicon-grid-wide": {
+      "title": "Silicon grid · wide",
+      "description": "A procedural neon grid plain. A striped sun, wire mountains, and the character spot stay on a dark pad."
+    },
+    "atmos-silicon-grid-low": {
+      "title": "Silicon grid · low",
+      "description": "The same grid from the pad, looking across the lines toward the sun and the wire mountains."
+    },
     "atmos-meadow-wide": {
       "title": "Meadow · wide",
       "description": "A procedural meadow under low clouds. Wind moves the grass, and the character spot stays on open ground."
@@ -1715,7 +1724,9 @@
       "ice": "Ice",
       "copper": "Copper",
       "clover": "Clover",
-      "hay": "Hay"
+      "hay": "Hay",
+      "outrun": "Outrun",
+      "chrome": "Chrome"
     },
     "fogDensity": "Fog",
     "wind": "Wind",
@@ -1735,7 +1746,8 @@
     "skyline": "Skyline",
     "static": "Static",
     "orbit": "Orbit",
-    "breeze": "Breeze"
+    "breeze": "Breeze",
+    "grid": "Grid"
   },
   "gallerySearch": "Search the catalog",
   "galleryPlaceholder": "Portrait, dance, ships…",

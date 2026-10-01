@@ -203,6 +203,29 @@ def test_scene3d_spec_enters_runner_and_montage_as_video_not_image(tmp_path, mon
     assert stages.index('clips') < stages.index('world3d') < stages.index('scenes')
 
 
+def test_silicon_grid_shots_pass_dry_run():
+    from services import music_production as runner
+    from services.production_dry_run import dry_run
+
+    shots = []
+    for index, template in enumerate(('atmos-silicon-grid-wide', 'atmos-silicon-grid-low')):
+        shots.append({
+            'key': f'grid{index}',
+            'kind': 'scene3d',
+            't0': index * 6,
+            'scene3d': {'template': template, 'subject': '/api/v1/file/hero.glb?workspace=test'},
+        })
+    spec = runner.validate_spec({
+        'title': 'Silicon grid',
+        'song': {'lyrics': 'neon', 'caption': 'grid', 'duration': 12, 'bpm': 120},
+        'style': {},
+        'shots': shots,
+    })
+    report = dry_run(spec)
+    assert report['dry_run'] is True
+    assert report['h3_frames'] == 0
+
+
 def test_native_fill_covers_an_h3_tail_and_arbitrary_shot_keys_are_safe(tmp_path):
     production = Production(tmp_path)
     production.state['clips'] = {'opening': {'file': 'h3.mp4'}}
