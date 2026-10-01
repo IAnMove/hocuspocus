@@ -175,7 +175,7 @@ La UI ofrece **Vincular a proyecto** solo en esa fila. El id lo escribe quien co
 
 `start_pipeline` llama a `link_director_start` antes de registrar el pipeline y antes del worker. El id del pipeline es el id de la obra. Un segundo arranque del mismo id no crea otra Story. `provenance.project_id` no se interpreta como Story.
 
-El render de un episodio llama a `link_series_render` cuando el episodio ya está cargado y antes de cambiar su estado. El proyecto es ese episodio. No crea una Story y no reescribe `.series-library-v1.json`.
+El render de un episodio llama a `link_series_render` cuando la petición ya es válida y antes de arrancar el worker. Un render rechazado no crea proyecto. El proyecto es ese episodio. No crea una Story y no reescribe `.series-library-v1.json` en el enlace.
 
 ## Límites conocidos en este corte
 

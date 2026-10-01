@@ -527,6 +527,7 @@ Director `start_pipeline` binds the pipeline id before the worker. A second
 start of that id does not create another Story. `provenance.project_id` is not
 read as a Story id.
 
-Series episode render binds that episode before it changes the episode. It
+Series episode render binds that episode after the request is accepted and
+before the worker starts. A refused render does not create a project. The link
 does not create a Story and it does not rewrite the series library. Tokens for
 this link are not available from the client.
