@@ -107,6 +107,45 @@ def _asset(value: Any, label: str) -> dict[str, Any]:
     return result
 
 
+def _copy_mouth_candidates(value: dict[str, Any], into: dict[str, Any]) -> None:
+    raw = value.get("mouthCandidates")
+    if raw is None:
+        return
+    if not isinstance(raw, dict) or any(key not in _MOUTH_STATES for key in raw):
+        raise ValueError("Mouth candidates are invalid")
+    into["mouthCandidates"] = {key: _asset(asset, f"Mouth candidate {key}") for key, asset in raw.items()}
+
+
+def _copy_mouth_mapping(value: dict[str, Any], into: dict[str, Any]) -> None:
+    raw = value.get("mouthMapping")
+    if raw is None:
+        return
+    if not isinstance(raw, dict) or any(
+        key not in _MOUTH_SOUNDS or not isinstance(state, str) or state not in _MOUTH_STATES
+        for key, state in raw.items()
+    ):
+        raise ValueError("Mouth sound assignments are invalid")
+    into["mouthMapping"] = dict(raw)
+
+
+def _copy_mouth_prompts(value: dict[str, Any], into: dict[str, Any]) -> None:
+    raw = value.get("mouthPrompts")
+    if raw is None:
+        return
+    if not isinstance(raw, dict) or any(key not in _MOUTH_STATES for key in raw):
+        raise ValueError("Mouth prompts are invalid")
+    into["mouthPrompts"] = {key: _text(text, "Mouth prompt", 1500) for key, text in raw.items()}
+
+
+def _copy_mouth_generation_mode(value: dict[str, Any], into: dict[str, Any]) -> None:
+    raw = value.get("mouthGenerationMode")
+    if raw is None:
+        return
+    if not isinstance(raw, str) or raw not in ("description", "reference"):
+        raise ValueError("Mouth generation mode is invalid")
+    into["mouthGenerationMode"] = raw
+
+
 def _anchor(value: Any, label: str) -> dict[str, float]:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be an object")
@@ -140,10 +179,8 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
     if not isinstance(mouth_raw, dict) or any(key not in _MOUTH_STATES for key in mouth_raw):
         raise ValueError("Character Kit mouth states are invalid")
     mouth = {key: _asset(asset, f"Mouth {key}") for key, asset in mouth_raw.items()}
-
-    candidates_raw = value.get("mouthCandidates")
-    if candidates_raw is not None and (not isinstance(candidates_raw, dict) or any(key not in _MOUTH_STATES for key in candidates_raw)):
-        raise ValueError("Mouth candidates are invalid")
+    lips_fields: dict[str, Any] = {}
+    _copy_mouth_candidates(value, lips_fields)
 
     eyes_raw = value.get("eyes") or {}
     if not isinstance(eyes_raw, dict) or any(key not in {"open", "blink"} for key in eyes_raw):
@@ -184,23 +221,10 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
     }
     if len(result["provenance"]) > 500 or any(not isinstance(item, dict) for item in result["provenance"]):
         raise ValueError("Character Kit provenance must contain at most 500 objects")
-    if candidates_raw is not None:
-        result["mouthCandidates"] = {key: _asset(asset, f"Mouth candidate {key}") for key, asset in candidates_raw.items()}
-    if value.get("mouthMapping") is not None:
-        mapping = value["mouthMapping"]
-        if not isinstance(mapping, dict) or any(key not in _MOUTH_SOUNDS or not isinstance(state, str) or state not in _MOUTH_STATES for key, state in mapping.items()):
-            raise ValueError("Mouth sound assignments are invalid")
-        result["mouthMapping"] = dict(mapping)
-    if value.get("mouthPrompts") is not None:
-        prompts = value["mouthPrompts"]
-        if not isinstance(prompts, dict) or any(key not in _MOUTH_STATES for key in prompts):
-            raise ValueError("Mouth prompts are invalid")
-        result["mouthPrompts"] = {key: _text(text, "Mouth prompt", 1500) for key, text in prompts.items()}
-    if value.get("mouthGenerationMode") is not None:
-        mode = value["mouthGenerationMode"]
-        if not isinstance(mode, str) or mode not in ("description", "reference"):
-            raise ValueError("Mouth generation mode is invalid")
-        result["mouthGenerationMode"] = mode
+    _copy_mouth_mapping(value, lips_fields)
+    _copy_mouth_prompts(value, lips_fields)
+    _copy_mouth_generation_mode(value, lips_fields)
+    result.update(lips_fields)
     if value.get("speech3d") is not None:
         result["speech3d"] = normalize_speech3d(value["speech3d"])
     if value.get("voice") is not None:

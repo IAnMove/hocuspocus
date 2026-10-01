@@ -10,24 +10,34 @@ export function LipsPackChoices({ workspace, kit, poseId, disabled, onApply }: {
   workspace: string; kit: CharacterKit; poseId: string; disabled: boolean; onApply: (kit: CharacterKit) => void
 }) {
   const { t } = useUiTranslation('characters')
-  const [packs, setPacks] = useState<CharacterKit[]>([]), [selected, setSelected] = useState('')
-  const [error, setError] = useState(''), [reload, setReload] = useState(0), [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState(false)
+  const [reload, setReload] = useState(0), [expanded, setExpanded] = useState(false)
+  return <details className="rounded-lg border border-cyan-300/30 p-3" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
+    <summary className="cursor-pointer text-sm font-medium">{t('lips.useCollection')}</summary>
+    {expanded && <LipsPackList key={`${workspace}:${reload}`} workspace={workspace} kit={kit} poseId={poseId} disabled={disabled} onApply={onApply} onReload={() => setReload(value => value + 1)} />}
+  </details>
+}
+
+function LipsPackList({ workspace, kit, poseId, disabled, onApply, onReload }: {
+  workspace: string; kit: CharacterKit; poseId: string; disabled: boolean
+  onApply: (kit: CharacterKit) => void; onReload: () => void
+}) {
+  const { t } = useUiTranslation('characters')
+  const [packs, setPacks] = useState<CharacterKit[]>([])
+  const [selected, setSelected] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
-    if (!expanded) return
     const abort = new AbortController()
-    setLoading(true); setPacks([]); setSelected(''); setError('')
     void fetchLipsLibrary(workspace, abort.signal).then(library => {
-      if (!abort.signal.aborted) setPacks(Object.values(library.kits).sort((a, b) => a.name.localeCompare(b.name)))
+      if (abort.signal.aborted) return
+      setPacks(Object.values(library.kits).sort((a, b) => a.name.localeCompare(b.name)))
     }).catch(cause => { if (!abort.signal.aborted) setError((cause as Error).message) })
       .finally(() => { if (!abort.signal.aborted) setLoading(false) })
     return () => abort.abort()
-  }, [workspace, reload, expanded])
+  }, [workspace])
   const pack = packs.find(item => item.id === selected)
   const missing = pack ? missingLipsSounds(pack) : []
-  return <details className="rounded-lg border border-cyan-300/30 p-3" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
-    <summary className="cursor-pointer text-sm font-medium">{t('lips.useCollection')}</summary>
-    <div className="mt-3 space-y-2">
+  return <div className="mt-3 space-y-2">
       <label className="block text-xs text-text-secondary">{t('lips.collection')}
         <select aria-label={t('lips.useCollection')} value={selected} disabled={disabled || loading} onChange={event => { setSelected(event.target.value); setError('') }} className="mt-1 w-full rounded border border-border bg-bg-primary p-2 text-sm">
           <option value="">{loading ? t('lips.loading') : t('lips.chooseCollection')}</option>
@@ -45,7 +55,6 @@ export function LipsPackChoices({ workspace, kit, poseId, disabled, onApply }: {
         <p className="text-xs text-text-muted">{t('lips.placeCollection')}</p>
       </>}
       {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
-      <button type="button" disabled={disabled || loading} onClick={() => setReload(value => value + 1)} className="text-xs text-text-secondary underline disabled:opacity-40">{t('lips.reload')}</button>
+      <button type="button" disabled={disabled || loading} onClick={onReload} className="text-xs text-text-secondary underline disabled:opacity-40">{t('lips.reload')}</button>
     </div>
-  </details>
 }

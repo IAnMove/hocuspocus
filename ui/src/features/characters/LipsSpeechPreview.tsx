@@ -15,13 +15,49 @@ import { LipsMorphPreview, type LipsMorphImage } from './LipsMorphPreview'
 
 type Preview = { url: string; cues: MouthCue[]; text: string }
 
+function speechModelKind(modelType: string) {
+  return /tts|kugelaudio/.test(modelType)
+}
+
+function chosenSpeechModel(model: string, models: { model_type: string }[], selected: string | undefined) {
+  if (model) return model
+  if (models.some(item => item.model_type === selected)) return selected || ''
+  const custom = models.find(item => item.model_type === 'qwen3_tts_customvoice')
+  return custom?.model_type || models[0]?.model_type || ''
+}
+
+function speechSample(language: string | undefined) {
+  const spanish = language?.startsWith('es') === true
+  return {
+    spanish,
+    text: spanish ? 'Hola. Mamá, Pepe y Lola miran un farol azul. A, e, i, o, u.' : 'Hello! This is a quick voice test. Watch my lips move as I speak.',
+    root: `/speech-examples/${spanish ? 'spanish' : 'english'}-preview`,
+  }
+}
+
+function previewCanPlay(ready: boolean, busy: boolean, mouthCount: number) {
+  return ready && !busy && mouthCount > 0
+}
+
+function plainText(translate: unknown) {
+  const call = translate as (key: string, values?: Record<string, string | number>) => string
+  return (key: string, values?: Record<string, string | number>) => call(key, values)
+}
+
+function PlayLabel({ playing, text }: { playing: boolean; text: (key: string) => string }) {
+  const label = playing ? 'lips.stop' : 'lips.play'
+  return <>{playing ? <Square size={15} /> : <Play size={15} />}{text(label)}</>
+}
+
 export function LipsSpeechPreview({ pack, workspace, onActiveState }: {
   pack: CharacterKit; workspace: string; onActiveState: (state: CharacterMouthState | undefined) => void
 }) {
   const { t, i18n } = useUiTranslation('characters')
-  const spanish = i18n.resolvedLanguage?.startsWith('es')
-  const sampleText = spanish ? 'Hola. Mamá, Pepe y Lola miran un farol azul. A, e, i, o, u.' : 'Hello! This is a quick voice test. Watch my lips move as I speak.'
-  const sampleRoot = `/speech-examples/${spanish ? 'spanish' : 'english'}-preview`
+  const say = plainText(t)
+  const sampleCopy = speechSample(i18n.resolvedLanguage)
+  const spanish = sampleCopy.spanish
+  const sampleText = sampleCopy.text
+  const sampleRoot = sampleCopy.root
   const [sample, setSample] = useState<Preview>()
   const [custom, setCustom] = useState<Preview>()
   const [text, setText] = useState(sampleText)
@@ -37,8 +73,8 @@ export function LipsSpeechPreview({ pack, workspace, onActiveState }: {
   const selectedSpeechModel = useStore(state => state.selectedModelPerAudioSubMode.speech)
   const models = useStore(state => state.models)
   const [model, setModel] = useState('')
-  const speechModels = models.filter(item => /tts|kugelaudio/.test(item.model_type) && item.is_downloaded !== false)
-  const speechModel = model || (speechModels.some(item => item.model_type === selectedSpeechModel) ? selectedSpeechModel : speechModels.find(item => item.model_type === 'qwen3_tts_customvoice')?.model_type || speechModels[0]?.model_type) || ''
+  const speechModels = models.filter(item => speechModelKind(item.model_type) && item.is_downloaded !== false)
+  const speechModel = chosenSpeechModel(model, speechModels, selectedSpeechModel)
   const preview = custom ?? sample
   useEffect(() => {
     const abort = new AbortController()
@@ -100,78 +136,167 @@ export function LipsSpeechPreview({ pack, workspace, onActiveState }: {
     } catch (cause) { if (!abort.signal.aborted) setError((cause as Error).message) }
     finally { if (!abort.signal.aborted) setBusy(false) }
   }
-  const mouthState = active ?? mouthStateForSound('rest', pack.mouthMapping)
-  const mouth = pack.mouth[mouthState]
-  const availableStates = CHARACTER_MOUTH_STATES.filter(state => pack.mouth[state]?.source)
-  const imageFor = (state: CharacterMouthState): LipsMorphImage => ({ source: pack.mouth[state]?.source ?? '',
-    ...(onCharacter && pack.base ? { anchor: faceRigAnchorFor(pack, 'base', state) } : {}) })
-  const from = availableStates.includes(fromState) ? fromState : availableStates[0]
-  const to = availableStates.includes(toState) ? toState : availableStates[1] ?? availableStates[0]
-  const manual = inspecting && from && to ? { from: imageFor(from), to: imageFor(to), progress: manualProgress / 100 } : undefined
-  const mouthClass = onCharacter && pack.base ? 'absolute object-contain' : 'max-h-[65%] max-w-[75%] object-contain'
-  const mouthStyle = onCharacter && pack.base ? faceRigOverlayPreviewStyle(faceRigAnchorFor(pack, 'base', mouthState)) : undefined
-  const mouthLabel = manual ? `${t(`faceRig.states.${from}`)} → ${t(`faceRig.states.${to}`)} · ${manualProgress}%` : t(`faceRig.states.${mouthState}`)
+  const pose = mouthPose(pack, active, onCharacter, inspecting, fromState, toState, manualProgress, say)
+  const canPlay = previewCanPlay(Boolean(preview), busy, Object.keys(pack.mouth).length)
   return <section aria-label={t('lips.preview')} className="space-y-4 rounded-xl border border-border bg-bg-secondary p-4">
     <div className="flex items-center justify-between gap-3"><h3 className="font-medium">{t('lips.preview')}</h3>
       {pack.base && <label className="flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={onCharacter} onChange={event => setOnCharacter(event.target.checked)} />{t('lips.onCharacter')}</label>}
     </div>
-    <div className="relative mx-auto flex aspect-square max-h-64 w-full max-w-64 items-center justify-center overflow-hidden rounded-xl bg-bg-primary">
-      {onCharacter && pack.base && <img src={pack.base.source} alt="" className="absolute inset-0 h-full w-full object-contain" />}
-      {mouth ? morph ? <LipsMorphPreview image={imageFor(mouthState)} images={availableStates.map(imageFor)} manual={manual}
-        duration={Math.min(morphDuration, transitionWindow)} animate={playing} resetToken={resetToken} alt={mouthLabel}
-        fallbackClassName={mouthClass} fallbackStyle={mouthStyle} onSupportChange={setMorphSupported} />
-        : <img src={mouth.source} alt={mouthLabel} className={mouthClass} style={mouthStyle} />
-        : <Volume2 size={36} strokeWidth={1.2} className="text-text-muted" />}
-    </div>
-    <p className="text-center text-xs text-text-muted">{mouthLabel}{!mouth && ` · ${t('lips.missing')}`}</p>
-    <div className="space-y-3 rounded-lg border border-border p-3">
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={morph} disabled={availableStates.length < 2}
-        onChange={event => { setMorph(event.target.checked); setInspecting(false) }} />{t('lips.morph')}</label>
-      {morph && <>
-        <label className="block text-xs text-text-secondary">{t('lips.morphDuration')} · {morphDuration} ms
-          <input type="range" aria-label={t('lips.morphDuration')} min={40} max={240} step={10} value={morphDuration}
-            onChange={event => setMorphDuration(Number(event.target.value))} className="mt-2 w-full accent-cyan-400" />
-        </label>
-        <p className="text-xs text-text-muted">{t('lips.morphHint')}</p>
-        {!morphSupported && <p role="status" className="text-xs text-amber-200">{t('lips.morphUnavailable')}</p>}
-        <details onToggle={event => { if (!playing) setInspecting(event.currentTarget.open) }} className="rounded-lg border border-border p-2">
-          <summary className="cursor-pointer text-xs text-text-secondary">{t('lips.morphCompare')}</summary>
-          <fieldset disabled={playing} className="mt-3 space-y-3 disabled:opacity-50">
-            <div className="grid grid-cols-2 gap-2">{(['from', 'to'] as const).map(side => <label key={side} className="text-xs text-text-secondary">{t(`lips.morph${side === 'from' ? 'From' : 'To'}`)}
-              <select aria-label={t(`lips.morph${side === 'from' ? 'From' : 'To'}`)} value={side === 'from' ? from : to}
-                onChange={event => { (side === 'from' ? setFromState : setToState)(event.target.value as CharacterMouthState); setInspecting(true) }}
-                className="mt-1 min-h-9 w-full rounded-lg border border-border bg-bg-primary p-1">
-                {availableStates.map(state => <option key={state} value={state}>{t(`faceRig.states.${state}`)}</option>)}
-              </select>
-            </label>)}</div>
-            <label className="block text-xs text-text-secondary">{t('lips.morphProgress')} · {manualProgress}%
-              <input type="range" aria-label={t('lips.morphProgress')} min={0} max={100} step={1} value={manualProgress}
-                onChange={event => { setManualProgress(Number(event.target.value)); setInspecting(true) }} className="mt-2 w-full accent-cyan-400" />
-            </label>
-            <p className="text-xs text-text-muted">{t('lips.morphCompareHint')}</p>
-          </fieldset>
-        </details>
-      </>}
-    </div>
-    <button type="button" disabled={!preview || busy || !Object.keys(pack.mouth).length} className="flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 text-sm font-medium text-black disabled:opacity-40"
+    <LipsMouthStage pack={pack} pose={pose} morph={morph} onCharacter={onCharacter} playing={playing} morphDuration={morphDuration} transitionWindow={transitionWindow} resetToken={resetToken} onSupportChange={setMorphSupported} />
+    <p className="text-center text-xs text-text-muted">{pose.label}{pose.mouth ? '' : ` · ${t('lips.missing')}`}</p>
+    <LipsMorphControls morph={morph} supported={morphSupported} playing={playing} duration={morphDuration} progress={manualProgress} available={pose.available} from={pose.from} to={pose.to}
+      onMorph={value => { setMorph(value); setInspecting(false) }} onDuration={setMorphDuration} onProgress={value => { setManualProgress(value); setInspecting(true) }}
+      onInspect={open => { if (!playing) setInspecting(open) }} onFrom={state => { setFromState(state); setInspecting(true) }} onTo={state => { setToState(state); setInspecting(true) }} text={say} />
+    <button type="button" disabled={!canPlay} className="flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 text-sm font-medium text-black disabled:opacity-40"
       onClick={() => { if (playing) audio.current?.pause(); else void audio.current?.play().catch(cause => setError((cause as Error).message)) }}>
-      {playing ? <Square size={15} /> : <Play size={15} />}{t(playing ? 'lips.stop' : 'lips.play')}
+      <PlayLabel playing={playing} text={say} />
     </button>
     <p className="text-sm text-text-secondary">{preview?.text ?? sampleText}</p>
     <audio ref={audio} controls src={preview?.url} preload="metadata" className="w-full" />
-    <details className="rounded-lg border border-border p-3">
-      <summary className="cursor-pointer text-sm text-text-secondary">{t('lips.customPhrase')}</summary>
-      <div className="mt-3 space-y-3">
-        <textarea aria-label={t('lips.phrase')} rows={2} maxLength={2000} value={text} disabled={busy} onChange={event => setText(event.target.value)} className="w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" />
-        {!pack.voice && <select aria-label={t('lips.voiceModel')} value={speechModel} onChange={event => setModel(event.target.value)} disabled={busy} className="w-full rounded-lg border border-border bg-bg-primary p-2 text-sm">
-          {!speechModels.length && <option value="">{t('lips.noVoiceModel')}</option>}{speechModels.map(item => <option key={item.model_type} value={item.model_type}>{item.name}</option>)}
-        </select>}
-        <button type="button" disabled={busy || !text.trim() || (!pack.voice && !speechModel)} onClick={() => void run()} className="min-h-10 rounded-lg border border-border px-3 text-sm disabled:opacity-40">{t(busy ? 'lips.working' : 'lips.generateVoice')}</button>
-        <label className="block text-xs text-text-secondary">{t('lips.uploadAudio')}<input type="file" accept="audio/*" disabled={busy} className="mt-2 block w-full" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void run(file) }} /></label>
-        {custom && <button type="button" disabled={busy} onClick={() => { audio.current?.pause(); setCustom(undefined); onActiveState(undefined) }} className="text-xs text-cyan-300">{t('lips.defaultSample')}</button>}
-      </div>
-    </details>
+    <LipsPhrasePanel pack={pack} textValue={text} busy={busy} speechModel={speechModel} speechModels={speechModels} custom={Boolean(custom)}
+      onText={setText} onModel={setModel} onGenerate={() => void run()} onFile={file => void run(file)}
+      onReset={() => { audio.current?.pause(); setCustom(undefined); onActiveState(undefined) }} label={say} />
     {busy && <p role="status" className="text-xs text-text-muted">{t('lips.working')}</p>}
     {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
   </section>
+}
+
+type Pose = {
+  mouthState: CharacterMouthState
+  mouth: CharacterKit['mouth'][CharacterMouthState]
+  available: CharacterMouthState[]
+  from: CharacterMouthState | undefined
+  to: CharacterMouthState | undefined
+  manual: { from: LipsMorphImage; to: LipsMorphImage; progress: number } | undefined
+  mouthClass: string
+  mouthStyle: ReturnType<typeof faceRigOverlayPreviewStyle> | undefined
+  label: string
+  imageFor: (state: CharacterMouthState) => LipsMorphImage
+}
+
+function mouthImage(pack: CharacterKit, onCharacter: boolean, state: CharacterMouthState): LipsMorphImage {
+  const placed = onCharacter && pack.base
+  return { source: pack.mouth[state]?.source ?? '', ...(placed ? { anchor: faceRigAnchorFor(pack, 'base', state) } : {}) }
+}
+
+function pickedState(available: CharacterMouthState[], chosen: CharacterMouthState, fallback: number) {
+  return available.includes(chosen) ? chosen : available[fallback]
+}
+
+function mouthPose(pack: CharacterKit, active: CharacterMouthState | undefined, onCharacter: boolean, inspecting: boolean, fromState: CharacterMouthState, toState: CharacterMouthState, manualProgress: number, text: (key: string) => string): Pose {
+  const mouthState = active ?? mouthStateForSound('rest', pack.mouthMapping)
+  const available = CHARACTER_MOUTH_STATES.filter(state => pack.mouth[state]?.source)
+  const from = pickedState(available, fromState, 0)
+  const to = pickedState(available, toState, 1) ?? available[0]
+  const placed = Boolean(onCharacter && pack.base)
+  const imageFor = (state: CharacterMouthState) => mouthImage(pack, onCharacter, state)
+  const manual = inspecting && from && to ? { from: imageFor(from), to: imageFor(to), progress: manualProgress / 100 } : undefined
+  const label = manual ? `${text(`faceRig.states.${from}`)} → ${text(`faceRig.states.${to}`)} · ${manualProgress}%` : text(`faceRig.states.${mouthState}`)
+  return {
+    mouthState, mouth: pack.mouth[mouthState], available, from, to, manual, imageFor, label,
+    mouthClass: placed ? 'absolute object-contain' : 'max-h-[65%] max-w-[75%] object-contain',
+    mouthStyle: placed ? faceRigOverlayPreviewStyle(faceRigAnchorFor(pack, 'base', mouthState)) : undefined,
+  }
+}
+
+function LipsMouthStage({ pack, pose, morph, onCharacter, playing, morphDuration, transitionWindow, resetToken, onSupportChange }: {
+  pack: CharacterKit; pose: Pose; morph: boolean; onCharacter: boolean; playing: boolean
+  morphDuration: number; transitionWindow: number; resetToken: number; onSupportChange: (supported: boolean) => void
+}) {
+  const showBase = Boolean(onCharacter && pack.base)
+  return <div className="relative mx-auto flex aspect-square max-h-64 w-full max-w-64 items-center justify-center overflow-hidden rounded-xl bg-bg-primary">
+    {showBase && pack.base && <img src={pack.base.source} alt="" className="absolute inset-0 h-full w-full object-contain" />}
+    <LipsMouthPicture pose={pose} morph={morph} playing={playing} morphDuration={morphDuration} transitionWindow={transitionWindow} resetToken={resetToken} onSupportChange={onSupportChange} />
+  </div>
+}
+
+function LipsMouthPicture({ pose, morph, playing, morphDuration, transitionWindow, resetToken, onSupportChange }: {
+  pose: Pose; morph: boolean; playing: boolean; morphDuration: number; transitionWindow: number; resetToken: number
+  onSupportChange: (supported: boolean) => void
+}) {
+  if (!pose.mouth) return <Volume2 size={36} strokeWidth={1.2} className="text-text-muted" />
+  if (!morph) return <img src={pose.mouth.source} alt={pose.label} className={pose.mouthClass} style={pose.mouthStyle} />
+  return <LipsMorphPreview image={pose.imageFor(pose.mouthState)} images={pose.available.map(pose.imageFor)} manual={pose.manual}
+    duration={Math.min(morphDuration, transitionWindow)} animate={playing} resetToken={resetToken} alt={pose.label}
+    fallbackClassName={pose.mouthClass} fallbackStyle={pose.mouthStyle} onSupportChange={onSupportChange} />
+}
+
+function LipsMorphControls({ morph, supported, playing, duration, progress, available, from, to, onMorph, onDuration, onProgress, onInspect, onFrom, onTo, text }: {
+  morph: boolean; supported: boolean; playing: boolean; duration: number; progress: number
+  available: CharacterMouthState[]; from: CharacterMouthState | undefined; to: CharacterMouthState | undefined
+  onMorph: (value: boolean) => void; onDuration: (value: number) => void; onProgress: (value: number) => void
+  onInspect: (open: boolean) => void; onFrom: (state: CharacterMouthState) => void; onTo: (state: CharacterMouthState) => void
+  text: (key: string) => string
+}) {
+  return <div className="space-y-3 rounded-lg border border-border p-3">
+    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={morph} disabled={available.length < 2}
+      onChange={event => onMorph(event.target.checked)} />{text('lips.morph')}</label>
+    {morph && <LipsMorphSliders supported={supported} playing={playing} duration={duration} progress={progress} available={available} from={from} to={to}
+      onDuration={onDuration} onProgress={onProgress} onInspect={onInspect} onFrom={onFrom} onTo={onTo} text={text} />}
+  </div>
+}
+
+function LipsMorphSliders({ supported, playing, duration, progress, available, from, to, onDuration, onProgress, onInspect, onFrom, onTo, text }: {
+  supported: boolean; playing: boolean; duration: number; progress: number
+  available: CharacterMouthState[]; from: CharacterMouthState | undefined; to: CharacterMouthState | undefined
+  onDuration: (value: number) => void; onProgress: (value: number) => void; onInspect: (open: boolean) => void
+  onFrom: (state: CharacterMouthState) => void; onTo: (state: CharacterMouthState) => void; text: (key: string) => string
+}) {
+  return <>
+    <label className="block text-xs text-text-secondary">{text('lips.morphDuration')} · {duration} ms
+      <input type="range" aria-label={text('lips.morphDuration')} min={40} max={240} step={10} value={duration}
+        onChange={event => onDuration(Number(event.target.value))} className="mt-2 w-full accent-cyan-400" />
+    </label>
+    <p className="text-xs text-text-muted">{text('lips.morphHint')}</p>
+    {!supported && <p role="status" className="text-xs text-amber-200">{text('lips.morphUnavailable')}</p>}
+    <details onToggle={event => onInspect(event.currentTarget.open)} className="rounded-lg border border-border p-2">
+      <summary className="cursor-pointer text-xs text-text-secondary">{text('lips.morphCompare')}</summary>
+      <fieldset disabled={playing} className="mt-3 space-y-3 disabled:opacity-50">
+        <div className="grid grid-cols-2 gap-2">
+          <MouthSide label={text('lips.morphFrom')} value={from} states={available} onChange={onFrom} text={text} />
+          <MouthSide label={text('lips.morphTo')} value={to} states={available} onChange={onTo} text={text} />
+        </div>
+        <label className="block text-xs text-text-secondary">{text('lips.morphProgress')} · {progress}%
+          <input type="range" aria-label={text('lips.morphProgress')} min={0} max={100} step={1} value={progress}
+            onChange={event => onProgress(Number(event.target.value))} className="mt-2 w-full accent-cyan-400" />
+        </label>
+        <p className="text-xs text-text-muted">{text('lips.morphCompareHint')}</p>
+      </fieldset>
+    </details>
+  </>
+}
+
+function MouthSide({ label, value, states, onChange, text }: {
+  label: string; value: CharacterMouthState | undefined; states: CharacterMouthState[]
+  onChange: (state: CharacterMouthState) => void; text: (key: string) => string
+}) {
+  return <label className="text-xs text-text-secondary">{label}
+    <select aria-label={label} value={value} onChange={event => onChange(event.target.value as CharacterMouthState)}
+      className="mt-1 min-h-9 w-full rounded-lg border border-border bg-bg-primary p-1">
+      {states.map(state => <option key={state} value={state}>{text(`faceRig.states.${state}`)}</option>)}
+    </select>
+  </label>
+}
+
+function LipsPhrasePanel({ pack, textValue, busy, speechModel, speechModels, custom, onText, onModel, onGenerate, onFile, onReset, label }: {
+  pack: CharacterKit; textValue: string; busy: boolean; speechModel: string
+  speechModels: { model_type: string; name: string }[]; custom: boolean
+  onText: (value: string) => void; onModel: (value: string) => void; onGenerate: () => void
+  onFile: (file: File) => void; onReset: () => void; label: (key: string) => string
+}) {
+  const needsModel = !pack.voice
+  const blocked = busy || !textValue.trim() || (needsModel && !speechModel)
+  return <details className="rounded-lg border border-border p-3">
+    <summary className="cursor-pointer text-sm text-text-secondary">{label('lips.customPhrase')}</summary>
+    <div className="mt-3 space-y-3">
+      <textarea aria-label={label('lips.phrase')} rows={2} maxLength={2000} value={textValue} disabled={busy} onChange={event => onText(event.target.value)} className="w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" />
+      {needsModel && <select aria-label={label('lips.voiceModel')} value={speechModel} onChange={event => onModel(event.target.value)} disabled={busy} className="w-full rounded-lg border border-border bg-bg-primary p-2 text-sm">
+        {!speechModels.length && <option value="">{label('lips.noVoiceModel')}</option>}
+        {speechModels.map(item => <option key={item.model_type} value={item.model_type}>{item.name}</option>)}
+      </select>}
+      <button type="button" disabled={blocked} onClick={onGenerate} className="min-h-10 rounded-lg border border-border px-3 text-sm disabled:opacity-40">{label(busy ? 'lips.working' : 'lips.generateVoice')}</button>
+      <label className="block text-xs text-text-secondary">{label('lips.uploadAudio')}<input type="file" accept="audio/*" disabled={busy} className="mt-2 block w-full" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onFile(file) }} /></label>
+      {custom && <button type="button" disabled={busy} onClick={onReset} className="text-xs text-cyan-300">{label('lips.defaultSample')}</button>}
+    </div>
+  </details>
 }

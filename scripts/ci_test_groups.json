@@ -401,11 +401,36 @@
         "tests/test_humanoid_rig_fixtures.py",
         "tests/test_humanoid_skeleton.py",
         "tests/test_humanoid_weights.py",
-        "tests/test_model3d_animate.py"
+        "tests/test_model3d_animate.py",
+        "tests/test_lips_creator.py",
+        "tests/test_lips_creator_commands.py"
       ]
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/lips_creator_commands.py",
+      "paths": [
+        "tests/test_lips_creator_commands.py",
+        "tests/test_lips_creator.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/lips_creator.py",
+      "paths": [
+        "tests/test_lips_creator.py",
+        "tests/test_lips_creator_commands.py"
+      ]
+    },
+    {
+      "prefix": "app/services/character_kit_library.py",
+      "paths": [
+        "tests/test_character_kit_library.py",
+        "tests/test_character_kit_library_router.py",
+        "tests/test_lips_creator.py",
+        "tests/test_lips_creator_commands.py"
+      ]
+    },
     {
       "prefix": "app/services/user_diagnostics.py",
       "paths": [
