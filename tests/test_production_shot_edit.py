@@ -273,3 +273,28 @@ def test_scenes_keep_a_locked_shot_in_the_cut(tmp_path: Path):
     assert production.state["scenes"]["s0"]["file"] == "keep-s0.mp4"
     assert production.state["scenes"]["s0"]["fingerprint"] == "stale"
     assert calls.count("scenes.video2d.export") == 1
+
+
+def test_locked_shot_without_a_scene_file_is_still_exported(tmp_path: Path):
+    """Lock means do not regenerate. The first scene, or a failed one, must still land."""
+    production, spec, root, _saved, _edits = _build(tmp_path)
+    record_decision(root, "show", "s0", locked=True)
+    windows = [
+        {**spec["shots"][0], "kind": "h3", "t0": 0.0, "t1": 4.0},
+        {**spec["shots"][1], "kind": "h3", "t0": 10.0, "t1": 12.0},
+    ]
+    production.state.setdefault("scenes", {})["s0"] = {"file": None, "dur": 4.0, "clip": "take-a.mp4"}
+    calls: list[str] = []
+    inner = production.mcp
+
+    def counting(tool: str, arguments: dict) -> dict:
+        calls.append(tool)
+        return inner(tool, arguments)
+
+    production.mcp = counting
+    production.scenes(spec, windows)
+    assert [row[0] for row in production.state["segments"]] == ["s0", "s1"]
+    assert production.state["scenes"]["s0"]["file"] == "show-s0.mp4"
+    assert calls.count("scenes.video2d.export") == 2
+    in_cut = [key for key, _, _ in production.state["segments"] if production.state["scenes"].get(key, {}).get("file")]
+    assert in_cut == ["s0", "s1"]
