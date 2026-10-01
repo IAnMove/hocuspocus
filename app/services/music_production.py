@@ -690,8 +690,10 @@ class Production:
         docs: dict[str, dict] = {}
         from services.production_shot_review import is_locked
         for shot, a, b in segs:
-            # Stay on the cut. Do not re-export or refresh the fingerprint.
-            if is_locked(self, shot["key"]):
+            # Stay on the cut. Skip re-export only when a scene file already
+            # exists; a lock before the first export (or after a failed one)
+            # must still produce that file or montage() drops the shot.
+            if is_locked(self, shot["key"]) and (done.get(shot["key"]) or {}).get("file"):
                 continue
             dur = round(b - a, 3)
             used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
