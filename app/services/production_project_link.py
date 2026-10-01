@@ -165,28 +165,40 @@ def _reconcile(workspace_dir: str, record: dict[str, Any]) -> None:
 
 
 def _attach_productions(workspace_dir: str, project_id: str, record: dict[str, Any]) -> None:
-    from services.story_library import read_story_library
+    from services.story_library import StoryLibraryRevisionConflict, patch_story_project, read_story_library
 
-    library = read_story_library(workspace_dir)
-    project = library["projects"].get(project_id)
-    if not isinstance(project, dict):
-        return
-    present = {
-        str(item.get("id"))
-        for item in project.get("productions") or []
-        if isinstance(item, dict) and item.get("id")
-    }
-    missing = [item for item in record.get("production_ids") or [] if item not in present]
-    if not missing:
-        return
-    entries = list(project.get("productions") or [])
-    title = str(record.get("title") or project_id)
-    for production_id in missing:
-        entries.append(_production_entry(production_id, title, record.get("format"), project_id, record["workspace_id"]))
-    updated = dict(project)
-    updated["productions"] = entries
-    updated["updatedAt"] = _now()
-    _upsert_story(workspace_dir, project_id, updated)
+    for _attempt in range(4):
+        library = read_story_library(workspace_dir)
+        project = library["projects"].get(project_id)
+        if not isinstance(project, dict):
+            return
+        present = {
+            str(item.get("id"))
+            for item in project.get("productions") or []
+            if isinstance(item, dict) and item.get("id")
+        }
+        missing = [item for item in record.get("production_ids") or [] if item not in present]
+        if not missing:
+            return
+        entries = list(project.get("productions") or [])
+        title = str(record.get("title") or project_id)
+        for production_id in missing:
+            entries.append(_production_entry(production_id, title, record.get("format"), project_id, record["workspace_id"]))
+        updated = dict(project)
+        updated["productions"] = entries
+        updated["updatedAt"] = _now()
+        try:
+            patch_story_project(
+                workspace_dir,
+                project_id,
+                updated,
+                base_revision=int(library["revision"]),
+                make_active=False,
+            )
+            return
+        except StoryLibraryRevisionConflict:
+            continue
+    raise LinkError("revision_conflict", "Story library changed while linking")
 
 
 def _ensure_stub(workspace_dir: str, record: dict[str, Any]) -> None:
