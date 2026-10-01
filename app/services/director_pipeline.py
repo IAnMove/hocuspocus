@@ -31,6 +31,7 @@ from typing import Any, Callable, Mapping, Optional
 from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
     acknowledge_cancel,
+    positional_clip_outputs,
     register_generation_job,
     request_cancel,
     snapshot_job,
@@ -92,6 +93,10 @@ from services.director_pipeline_state import (
     _pipeline_scan_dirs,
     _write_pipeline_json_unlocked,
     count_pipeline_states,
+)
+from services.director_comic_film import (
+    repeat_locked_sources,
+    resolve_comic_output_resolution,
 )
 from services.director_video_strategy import (
     BOUNDED_START_END,
@@ -438,9 +443,25 @@ def _director_has_visual_references(
     return any(os.path.isfile(path) for path in paths)
 
 
+def _comic_movie_request(value: dict | None) -> bool:
+    """True when this request or a saved snapshot is a comic film."""
+
+    if not isinstance(value, dict):
+        return False
+    if str(value.get("pipeline_type") or "") == "comic_movie":
+        return True
+    snapshot = value.get("_params_snapshot")
+    return (
+        isinstance(snapshot, dict)
+        and str(snapshot.get("pipeline_type") or "") == "comic_movie"
+    )
+
+
 def _director_effective_shot_image_policy(params: dict) -> str:
     """Return a resolved policy, retaining generated images as legacy default."""
 
+    if _comic_movie_request(params):
+        return SHOT_IMAGE_GENERATE
     if _direct_video_settings(params)[0]:
         return SHOT_IMAGE_PROMPT_ONLY
 
@@ -457,6 +478,8 @@ def _director_effective_shot_image_policy(params: dict) -> str:
 def _resolve_fresh_shot_image_policy(params: dict) -> str:
     """Resolve a new submission against the selected video's capabilities."""
 
+    if _comic_movie_request(params):
+        return SHOT_IMAGE_GENERATE
     getter = getattr(_wgp, "get_model_def", None)
     if not callable(getter):
         return SHOT_IMAGE_GENERATE
@@ -472,6 +495,8 @@ def _resolve_fresh_shot_image_policy(params: dict) -> str:
 def _saved_pipeline_shot_image_policy(state: dict) -> str:
     """Read a persisted policy; pre-feature projects required start images."""
 
+    if _comic_movie_request(state):
+        return SHOT_IMAGE_GENERATE
     snapshot = state.get("_params_snapshot") or {}
     if state.get("generation_mode") == "direct_video" or _direct_video_settings(snapshot)[0]:
         return SHOT_IMAGE_PROMPT_ONLY
@@ -1368,6 +1393,7 @@ def _save_pipeline_state_locked(pid: str) -> bool:
         "status": p.get("status", "unknown"),
         "phase": p.get("phase"),
         "error": p.get("error"),
+        "ffmpeg_stderr": p.get("ffmpeg_stderr"),
         "progress": copy.deepcopy(p.get("progress") or {}),
         "resource_schedule": copy.deepcopy(
             p.get("resource_schedule") or {}
@@ -5022,6 +5048,7 @@ def _submit_and_wait(
                     j["status"] = "cancelled"
                     j["message"] = "Cancelled"
 
+        clip_names = positional_clip_outputs(j.get("clip_output_files"))
         signature = (
             j.get("status"),
             j.get("progress"),
@@ -5029,7 +5056,7 @@ def _submit_and_wait(
             j.get("total_steps"),
             j.get("phase"),
             j.get("message"),
-            tuple(j.get("clip_output_files") or ()),
+            tuple(clip_names),
         )
         if signature != last_signature:
             last_signature = signature
@@ -5038,7 +5065,7 @@ def _submit_and_wait(
         if progress_at > last_activity_at:
             last_activity_at = progress_at
 
-        clip_outputs = tuple(j.get("clip_output_files") or ())
+        clip_outputs = tuple(clip_names)
         if _dir_pid and clip_outputs and clip_outputs != last_saved_clip_outputs:
             last_saved_clip_outputs = clip_outputs
             with _pipeline_lock:
@@ -5600,6 +5627,61 @@ def list_recent_pipelines(
     terminal.sort(key=sort_key, reverse=True)
     return active + terminal[:max(0, int(terminal_limit))]
 
+def _public_saved_preview(pid: str, saved: dict) -> dict:
+    """Return a disk PRE without relabeling it as a dead worker."""
+
+    fingerprint = saved.get("preview_fingerprint")
+    clips = list(saved.get("preview_clips") or [])
+    return {
+        "id": pid,
+        "status": "preview_ready",
+        "phase": "preview_ready",
+        "auto_mode": bool(saved.get("auto_mode", True)),
+        "progress": {
+            "current": len(clips),
+            "total": len(clips),
+            "message": "Recovered comic PRE — no video has been generated",
+            "step": 0,
+            "total_steps": 0,
+        },
+        "preview_clips": clips,
+        "clip_plans": list(saved.get("clip_plans") or []),
+        "clip_images": [],
+        "output_files": list(saved.get("output_files") or []),
+        "_comic_preflight_fingerprint": fingerprint,
+        "_preview_approved_fingerprint": saved.get(
+            "preview_approved_fingerprint"
+        ),
+        "_quality_gate": saved.get("quality_gate") or {
+            "status": "pending",
+            "fingerprint": fingerprint,
+            "required_test_indices": [],
+            "tested_indices": [],
+            "results": {},
+            "failures": [],
+        },
+        "error": None,
+        "pause_reason": None,
+        "llm_streaming": False,
+        "recovered_from_disk": True,
+    }
+
+
+def _status_for_saved_preview(pid: str, out_dir: str, saved: dict) -> dict:
+    """Rehydrate a PRE into memory, and never start video from a status read."""
+
+    if saved.get("preview_clips"):
+        ok, _message = resume_pipeline(pid, out_dir)
+        if ok:
+            live = get_pipeline(pid)
+            if (
+                live is not None
+                and str(live.get("status") or "") == "preview_ready"
+            ):
+                return live
+    return _public_saved_preview(pid, saved)
+
+
 def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
     """Return live status or a terminal disk snapshot after a UI reconnect.
 
@@ -5616,6 +5698,8 @@ def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
         return None
 
     saved_status = str(saved.get("status") or "unknown").strip().lower()
+    if saved_status == "preview_ready":
+        return _status_for_saved_preview(pid, out_dir, saved)
     if saved_status not in {"completed", "failed", "cancelled", "crashed"}:
         saved_status = "crashed"
     # Keep the existing live-status API contract for older browser bundles:
@@ -5656,6 +5740,7 @@ def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
             "HocusPocus Lab no longer has a live worker for this Director run."
             if saved_status == "crashed" else None
         ),
+        "ffmpeg_stderr": saved.get("ffmpeg_stderr") or None,
         "pause_reason": None,
         "llm_streaming": False,
         "recovered_from_disk": True,
@@ -6106,6 +6191,9 @@ def update_comic_preview(
     quality_waiver: bool = False,
     waiver_reason: str = "",
     accept_quality_test: bool = False,
+    accepted_via: str = "",
+    accepted_by: str = "",
+    acceptance_note: str = "",
 ) -> tuple[bool, str]:
     """Atomically apply durable PRE edits and rebuild prepared inputs.
 
@@ -6235,10 +6323,22 @@ def update_comic_preview(
                 "All required test clips must pass automatic checks before "
                 "visual acceptance.",
             )
+        requester = str(accepted_by or "").strip()
+        channel = str(accepted_via or "").strip()
+        note = str(acceptance_note or "").strip()
+        if not requester or not channel or not note:
+            return (
+                False,
+                "Visual acceptance requires who requested it, how, and the "
+                "attestation note.",
+            )
         gate = {
             **gate,
             "status": "passed",
             "accepted_at": time.time(),
+            "accepted_via": channel,
+            "accepted_by": requester,
+            "acceptance_note": note,
         }
         saved, message = persist_metadata({"_quality_gate": gate})
         if not saved:
@@ -7469,7 +7569,17 @@ def _run_pipeline(pid: str, resume: bool = False):
                     minimum_frames=minimum_frames,
                     maximum_frames=maximum_frames,
                     frame_step=frame_step,
+                    preserve_source_units=pipeline_type == "comic_movie",
                 )
+                if pipeline_type == "comic_movie":
+                    params["provided_clip_image_paths"] = repeat_locked_sources(
+                        params.get("provided_clip_image_paths") or [],
+                        clip_plans,
+                    )
+                    params["comic_shots"] = repeat_locked_sources(
+                        params.get("comic_shots") or [],
+                        clip_plans,
+                    )
                 params["_director_video_strategy"] = selected_strategy
                 params["planned_clips"] = planned_clips
                 print(
@@ -8032,10 +8142,7 @@ def _run_pipeline(pid: str, resume: bool = False):
             )
         elif provided_clip_image_paths:
             video_params = dict(params.get("video_params") or {})
-            video_params["resolution"] = _normalize_video_resolution(
-                params.get("video_model", ""),
-                video_params.get("resolution", "1280x720"),
-            )
+            video_params["resolution"] = _comic_output_resolution(params)
             params["video_params"] = video_params
             (
                 clip_images,
@@ -8332,10 +8439,7 @@ def _run_pipeline(pid: str, resume: bool = False):
             _oom_info = detect_oom(e, _coef)
         except Exception:
             pass  # Never fail a failure handler
-        _update_pipeline(pid, status="failed", error=str(e),
-                         oom_info=_oom_info,
-                         _completed_at=time.time(),
-                         progress={"current": 0, "total": 0, "message": f"Error: {e}", "step": 0, "total_steps": 0})
+        _update_pipeline(pid, **_pipeline_failure_update(e, _oom_info))
         failed_pipeline = _pipelines.get(pid) or {}
         if (
             failed_pipeline.get("_preview_run_type") == "test"
@@ -9058,7 +9162,7 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     # prompt generation forced one long action/dialogue description across
     # multiple hardware windows and made later windows repeat or improvise.
     if (
-        pipeline_type != "short_film_story"
+        pipeline_type not in {"short_film_story", "comic_movie"}
         and selected_video_strategy in {BOUNDED_START_END, OMNI_REFERENCE}
         and planned_clips
     ):
@@ -10764,10 +10868,7 @@ def _build_comic_video_previews(
     """
     video_model = str(params.get("video_model") or "ltx2_22B_distilled")
     video_params = dict(params.get("video_params") or {})
-    resolution = _normalize_video_resolution(
-        video_model,
-        video_params.get("resolution", "1280x720"),
-    )
+    resolution = _comic_output_resolution(params)
     video_params["resolution"] = resolution
     params["video_params"] = video_params
 
@@ -11255,6 +11356,62 @@ def _comic_resolution_tuple(resolution: str) -> tuple[int, int]:
     return max(2, width - width % 2), max(2, height - height % 2)
 
 
+class ComicFfmpegError(RuntimeError):
+    """A comic ffmpeg failure that keeps the full log and shows its tail."""
+
+    def __init__(self, label: str, stderr: str, stdout: str) -> None:
+        self.ffmpeg_stderr = stderr or ""
+        self.ffmpeg_stdout = stdout or ""
+        detail = (self.ffmpeg_stderr or self.ffmpeg_stdout).strip()
+        tail = detail[-1200:] if detail else (
+            "ffmpeg returned a failure without a message"
+        )
+        super().__init__(f"{label} failed: {tail}")
+
+
+def _pipeline_failure_update(error: BaseException, oom_info) -> dict:
+    """Build the failed-pipeline update, keeping a full ffmpeg log when set."""
+
+    updates = {
+        "status": "failed",
+        "error": str(error),
+        "oom_info": oom_info,
+        "_completed_at": time.time(),
+        "progress": {
+            "current": 0,
+            "total": 0,
+            "message": f"Error: {error}",
+            "step": 0,
+            "total_steps": 0,
+        },
+    }
+    stderr = getattr(error, "ffmpeg_stderr", None)
+    if stderr:
+        updates["ffmpeg_stderr"] = stderr
+    return updates
+
+
+def _comic_output_resolution(params: dict) -> str:
+    """Resolve the canvas PRE, image prep and the comic renderer share."""
+
+    video_model = str(params.get("video_model") or "")
+    model_def: dict = {}
+    getter = getattr(_wgp, "get_model_def", None)
+    if callable(getter) and video_model:
+        try:
+            model_def = dict(getter(video_model) or {})
+        except Exception:
+            model_def = {}
+    if video_model and "model_type" not in model_def:
+        model_def["model_type"] = video_model
+    resolution = resolve_comic_output_resolution(
+        params.get("video_params"),
+        _director_video_execution_profile(params),
+        model_def,
+    )
+    return _normalize_video_resolution(video_model, resolution)
+
+
 def _run_comic_ffmpeg(command: list[str], label: str) -> None:
     result = subprocess.run(
         command,
@@ -11263,8 +11420,10 @@ def _run_comic_ffmpeg(command: list[str], label: str) -> None:
         timeout=900,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"{label} failed: {(result.stderr or result.stdout)[-800:]}"
+        raise ComicFfmpegError(
+            label,
+            result.stderr or "",
+            result.stdout or "",
         )
 
 
@@ -11300,6 +11459,9 @@ def _render_deterministic_comic_clip(
         _run_comic_ffmpeg(
             [
                 _comic_ffmpeg_binary(),
+                "-hide_banner",
+                "-loglevel",
+                "error",
                 "-y",
                 "-loop",
                 "1",
@@ -11364,6 +11526,9 @@ def _normalize_comic_clip_duration(
     )
     command = [
         _comic_ffmpeg_binary(),
+        "-hide_banner",
+        "-loglevel",
+        "error",
         "-y",
         "-i",
         source_path,
@@ -11727,10 +11892,7 @@ def _run_comic_renderer_pipeline(
         params.get("video_model") or "ltx2_22B_distilled_1_1"
     )
     video_params = dict(params.get("video_params") or {})
-    resolution = _normalize_video_resolution(
-        video_model,
-        video_params.get("resolution", "1280x720"),
-    )
+    resolution = _comic_output_resolution(params)
     video_params["resolution"] = resolution
     runtime = _effective_ltx_runtime(video_model, video_params)
     video_params["num_inference_steps"] = runtime["num_inference_steps"]

@@ -515,3 +515,13 @@ not match a title. A second call with the same pair returns `reused: true`.
 The production file and its takes stay where they are. A missing sidecar still
 lists the file as unlinked. An unreadable production file is a warning, not a
 new project.
+
+## Comic film PRE after a restart
+
+A comic PRE that was ready before the lab stopped is still ready afterwards.
+Opening it restores the saved approval and does not start the film. The output
+size is the canvas chosen in the comic video controls, including an H3 720p
+canvas of 1280×704. A deterministic render that fails reports the end of the
+ffmpeg log and keeps the full log on the pipeline. Accepting a reviewed test
+clip records the person who requested that acceptance, the channel, and the
+attestation note. The review checkbox is not filled in by playback.

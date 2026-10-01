@@ -109,3 +109,13 @@ Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
 | `app/services/production_shot_actions.py` | acciones, rama `feat/unified-productions-actions` | Elige toma, revisión, bloqueo, deshacer y export desactualizado sobre el manifiesto, el Director o el montaje. No edita `music_production.py`, `production_shot_redo.py` ni `ReviewMode.tsx` (#723). |
 | `app/services/production_work_commands.py`, `ui/src/features/production-catalog/`, una línea en `capabilityRegistry.ts`, un método `productionWorks.command` | catálogo, rama `feat/unified-productions-catalog` | Lista, abre y resuelve. El método del adaptador es aditivo. No reescribe plantillas World3D, `music_production.py` ni `wangp_mcp.py`. |
 | `link_existing_production`, `production.works.link` | obras antiguas, rama `feat/unified-productions-legacy` | Vincula por id un registro reconocible. No mueve medios ni crea una Story. |
+
+## Cómic a película, adenda 2026-10-01
+
+Rama `fix/comic-film-pass-addendum`. Un cómic con motor H3 conserva cada viñeta
+en el PRE: un plano corto se alarga al mínimo del modelo y no se fusiona con el
+siguiente. LTX-2 entra en el selector cuando el catálogo lo marca compatible
+con película de cómic. Un PRE guardado se reabre con su estado y su aprobación.
+El error de ffmpeg muestra el final del registro y guarda el registro entero.
+La resolución ofrecida, por ejemplo 1280×704, llega al PRE y al render.
+Aceptar una prueba exige quién lo pidió, la vía y la nota de atestación.

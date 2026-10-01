@@ -9926,6 +9926,9 @@ async def director_pipeline_update_preview(pid: str, request: Request):
         quality_waiver=bool(body.get("quality_waiver", False)),
         waiver_reason=str(body.get("waiver_reason") or ""),
         accept_quality_test=bool(body.get("accept_quality_test", False)),
+        accepted_via=str(body.get("accepted_via") or ""),
+        accepted_by=str(body.get("accepted_by") or ""),
+        acceptance_note=str(body.get("acceptance_note") or ""),
     )
     if not ok:
         raise HTTPException(status_code=400, detail=message)
