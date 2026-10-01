@@ -127,6 +127,61 @@ def test_stale_story_save_is_restored_for_the_same_intent(tmp_path: Path):
     assert _story_count(root) == 1
 
 
+def test_link_keeps_a_newer_story_save_and_still_attaches(tmp_path: Path, monkeypatch):
+    """A Story Lab save during resolve must not be overwritten by the stale snapshot."""
+    root = tmp_path / "film"
+    root.mkdir()
+    project = {
+        "version": 1,
+        "id": "story-open",
+        "title": "Open",
+        "projectType": "full_story",
+        "language": "Español",
+        "beats": [{"id": "beat-1", "title": "Opening"}],
+    }
+    patch_story_project(str(root), "story-open", project, base_revision=0, make_active=True)
+
+    import services.story_library as story_library
+
+    original = story_library.patch_story_project
+
+    def collide(workspace_dir, project_id, body, *, base_revision, make_active=False):
+        collide.calls += 1
+        if collide.calls == 1:
+            current = read_story_library(workspace_dir)
+            newer = dict(current["projects"]["story-open"])
+            newer["title"] = "Open — edited"
+            newer["beats"] = [
+                {"id": "beat-1", "title": "Opening"},
+                {"id": "beat-2", "title": "The user just wrote this"},
+            ]
+            write_story_library(
+                workspace_dir,
+                {**current, "projects": {**current["projects"], "story-open": newer}},
+                base_revision=current["revision"],
+            )
+            raise story_library.StoryLibraryRevisionConflict(base_revision, current["revision"] + 1)
+        return original(
+            workspace_dir, project_id, body, base_revision=base_revision, make_active=make_active,
+        )
+
+    collide.calls = 0
+    monkeypatch.setattr(story_library, "patch_story_project", collide)
+
+    linked = resolve_production_project(str(root), {
+        "workspace": "film",
+        "origin": "ui",
+        "intent_id": "clip1",
+        "format": "music_video",
+        "title": "Night bus",
+        "project": {"kind": "story", "id": "story-open"},
+    })
+    saved = read_story_library(str(root))["projects"]["story-open"]
+    assert saved["title"] == "Open — edited"
+    assert {item["id"] for item in saved["beats"]} == {"beat-1", "beat-2"}
+    assert linked["production_id"] in {item["id"] for item in saved["productions"]}
+
+
 def test_new_execution_adds_a_production_on_the_same_project(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()
