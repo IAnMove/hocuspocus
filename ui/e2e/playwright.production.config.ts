@@ -19,6 +19,7 @@ export default defineConfig({
   use: { ...base.use, baseURL: uiURL },
   webServer: [
     { command: `npm run build && npx vite preview --host 127.0.0.1 --port ${uiPort} --strictPort`, url: uiURL, cwd: uiRoot,
+      env: { HOCUSPOCUS_API_TARGET: apiURL },
       reuseExistingServer: false, timeout: 360_000 },
     { command: `${quotedPython} e2e/helpers/productionApiServer.py --port ${apiPort}`, url: `${apiURL}/test/state`, cwd: uiRoot,
       reuseExistingServer: false, timeout: 30_000 },

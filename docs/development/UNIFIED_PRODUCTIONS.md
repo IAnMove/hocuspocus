@@ -16,8 +16,8 @@ almacén: es un índice de los registros que ya existen.
 
 El enlace está en `{workspace}/.production-project-links-v1.json`. No mueve
 medios. El campo opcional `project` de `production-record-v1` se copia al
-`{id}.production.json` cuando el fichero se crea o aún no lo tiene. Un
-`production.run` posterior hace `state.update` y conserva esa clave.
+`{id}.production.json` cuando el fichero se crea o aún no lo tiene. Los arranques de música y Director guardan ese enlace y su identidad en el
+estado antes del worker. Series guarda el id en `episode.productionIds`.
 
 ## Resolver antes de generar
 
@@ -38,6 +38,9 @@ medios. El campo opcional `project` de `production-record-v1` se copia al
 
 `origin` es `mcp`, `wizard` o `ui`. `format` es `music_video`, `trailer`,
 `quick_video` o `full_story`, y es obligatorio solo si no hay proyecto.
+`production_id` es opcional: permite conservar el id que ya usa un productor.
+Un id explícito identifica una sola ejecución y no admite `new_execution`.
+El resolve de un episodio no crea un fichero musical ficticio.
 
 1. Un `project` o `episode_id` explícito se valida. Si no existe, la respuesta
    es `invalid_project` y no se crea ninguna Story.
@@ -77,13 +80,12 @@ contacto ya es un nombre de fichero del workspace.
 
 | Productor | Proyecto | Producción | Planos / tomas | Qué reutiliza este cambio | Qué falta |
 |---|---|---|---|---|---|
-| `production.run` | Story mínima o el `project` que envíe el comando | `{id}.production.json` | `{id}.shots.json`, `takes`, review | el comando llama a `bind_producer` antes del hilo | un `dry_run` no crea proyecto |
-| Director | Story mínima por `pipeline_id`, o `params.project` | `_director_pipeline_*.json` | `clips[]`, `video_attempts` | `start_pipeline` enlaza antes del worker | `provenance.project_id` no se usa como Story |
-| Story Lab | la biblioteca | `projects[].productions[]` | el pipeline o el batch que dispare | Story mínima, fila `productions[]` y **Revisar planos** en Resultados | el laboratorio no tiene otro arranque distinto de estos productores |
-| Series | el episodio que ya existe | el id del episodio | `shots[]`, `attempts[]` | el render enlaza el episodio antes de mutar la cola | no reescribe la biblioteca de series ni crea una Story |
-| Montaje | no | `{nombre}.montage.json` | clips y tomas del editor | la vista lee el montaje nombrado o el que cita `productionId` | el catálogo de obras aún no indexa el montaje |
-| MCP `generation.video` | no | un job de Studio | no es una obra | no se convierte en proyecto | sigue en la galería hasta que alguien lo vincule |
-| Wizard | la Story que la acción envíe | handoff a Director o Series | los del destino | `production.works.list`, `open` y `resolve` | el handoff entra por el arranque del Director o el render de serie, que ya enlazan |
+| `production.run` | Story mínima o proyecto explícito | `{id}.production.json` | manifiesto, tomas y review | registro y estado guardados antes del hilo, incluida llamada MCP directa | preview, package y dry-run no crean proyecto |
+| Director | Story mínima, `project` o `provenance.project_id` | snapshot del pipeline con id canónico | clips e intentos | registro y snapshot antes de planificación; reintento usa su workspace | no migra obras antiguas automáticamente |
+| Story Lab / Wizard | proyecto enviado en la acción | producción del motor de destino | planos del destino | reusa el proyecto, sin leer la Story activa | jobs sueltos de Studio no se convierten en obras |
+| Series | episodio existente | enlace y `productionIds[]` | shots e intentos | registro antes del worker generado y antes del batch nativo 2D; estado de ejecución | el batch de Series no ofrece motor nativo 3D |
+| Montaje | vínculo previo, si existe | montaje existente | clips y tomas | revisión y selección existentes | regenerar un clip importado exige un generador de origen |
+| MCP `generation.video` | no | job de Studio | salida del job | conserva la galería | no crea una Story por cada recurso suelto |
 
 ## Coordinación
 
@@ -106,9 +108,12 @@ Archivos compartidos y regla:
 | `docs/agents/VIDEO_PRODUCTION_RUNBOOK.md` | #716 | Sección aditiva al final. |
 | Bloque D (`production_shot_review.py`, `ReviewMode.tsx`, `music_productions.py`) | revisión musical | Consumir sus operaciones. No reimplementarlas. |
 
-`music_production.py` sigue restringido a ganchos de pocas líneas. Este flujo
-no necesita un gancho: el fichero de producción se prepara antes y el run
-conserva las claves que no sustituye.
+La continuación `feat/production-shared-review-completion` incorpora el registro
+`bind_producer` del PR #746, conserva sus commits y lo usa desde los adaptadores
+de arranque. Solo queda un registro por productor. Añade metadatos persistidos,
+`productionIds` del episodio, regeneración y verificación Chromium. Los fixes
+#737, #739, #742 y #743 se conservan al integrar `development`.
+`music_production.py` mantiene el gancho breve y menos de 700 líneas.
 
 ## Vista de planos (solo lectura)
 
@@ -130,7 +135,7 @@ conserva; si el campo no está, `montage` queda en null.
 Si `selected_video_filename` está vacío, el `video_filename` del clip es la
 toma activa: es el campo que el Director ya usa. La UI abre esta misma
 respuesta con el evento `hocuspocus:production-shots-open` y el detalle
-`{workspace, productionId}`. No hay botón de navegación en este corte.
+`{workspace, productionId}`. La misma revisión se abre desde Obras, Story Lab y Series.
 
 ## Acciones de un plano
 
@@ -142,9 +147,12 @@ no borra ficheros. Un plano `locked` responde `shot_locked` (422) y no
 escribe. `expected_revision` distinto del fichero responde `stale_revision`
 (409). `review` solo acepta `pending`, `approved` o `changes_requested`.
 `request` con `apply` distinto de `true` devuelve `applied: false` y no
-escribe. `regenerate` responde `regenerate_needs_runner`: el fotograma y el
-clip siguen en el runner de la producción. Series no se reescribe; la
-revisión cae en el sidecar. Abrir la escena no muta (`applied: false`) y la
+escribe. `regenerate`, con `expected_revision`, devuelve `applied: false`
+y un destino `regeneration`: ese POST prepara la operación, no genera medios.
+La UI ejecuta el destino una sola vez y deja la revisión en `pending` solo
+cuando el motor acepta o completa la operación. Los clientes API deben ejecutar
+ese destino; un destino ausente no cuenta como reintento completado.
+La revisión de Series sigue en el sidecar. Abrir la escena no muta (`applied: false`) y la
 UI emite `hocuspocus:production-shot-scene`.
 
 ## Catálogo y accesos
@@ -177,18 +185,43 @@ La UI ofrece **Vincular a proyecto** solo en esa fila. El id lo escribe quien co
 
 El render de un episodio llama a `link_series_render` cuando la petición ya es válida y antes de arrancar el worker. Un render rechazado no crea proyecto. El proyecto es ese episodio. No crea una Story y no reescribe `.series-library-v1.json` en el enlace.
 
-## Límites conocidos en este corte
+## Regeneración compartida
 
-- El estado del enlace se alinea con el fichero al listar o al `POST` de estado.
-  No hay gancho dentro del hilo que ya está generando.
-- Los montajes y los jobs sueltos de `generation.video` no son proyectos.
-- **Vincular a proyecto** exige un id que ya exista. No adivina por el título.
-- El recorrido con navegador no está hecho en este corte: no hay herramienta de navegador y no se arrancan los puertos 42003, 42010, 42017 ni 42022.
-- Los tokens de LLM de este cambio no están disponibles: el cliente no los midió.
-  No se estiman a partir de bytes.
+- Música reutiliza el redo existente: H3 desde clip, imágenes desde frame y
+  escenas 3D desde scene. La toma nueva actualiza solo su fila del manifiesto,
+  conserva las anteriores y marca el export desactualizado; no cambia el montaje.
+- Director usa el índice exacto del clip y el workspace guardado.
+- Series generado usa `mode: selected` y un solo `shotIds`; Series nativo 2D
+  vuelve al episodio y usa su batch existente. Un batch ocupado falla de forma
+  explícita. No se añade un runner alternativo.
+- El motor HTTP vuelve a validar bloqueo, revisión y correspondencia con el
+  plano solicitado. No permite autorizar otro plano ni otro modo con ese token
+  de revisión. No hay reintento automático tras un error.
+- Medios importados y Series nativo 3D carecen de una operación de regeneración
+  disponible en este batch; el botón explica el límite. Los montajes y jobs
+  sueltos de Studio no se convierten en proyectos por esta integración.
 
-## Pruebas
+## Verificación y coste
 
-`tests/test_production_project_link.py` cubre reintento, proyecto inválido,
-episodio, escritura parcial, guardado viejo de la biblioteca, ejecución nueva,
-concurrencia, catálogo sin duplicar y el HTTP. Está en el grupo `python-a`.
+`tests/test_production_generation_link.py` comprueba el estado en disco antes
+del worker musical, Director y render de Series, reintentos, ids inválidos,
+colisiones y fallo de persistencia. `tests/test_production_shot_regeneration.py`
+comprueba el destino exacto, bloqueo, revisión, aislamiento entre planos y
+conservación del montaje. Ambos están registrados en el grupo `python-a`.
+
+`cd ui && npm run test:e2e:production` arranca una UI y una API aisladas y usa
+Chromium real. El recorrido genera mediante el handler real, recarga el cliente,
+abre Obras y Revisar planos, regenera una toma, comprueba que la anterior y el
+otro plano permanecen, aprueba y bloquea. El registro, el catálogo, la revisión,
+el redo y los JSON son reales; solo la producción de medios se simula. Los MP4
+son fixtures sintéticos: esta prueba no certifica calidad ni reproducción del
+vídeo. CI ejecuta este recorrido además del E2E general.
+
+El entorno Python mínimo está en `scripts/ci-production-browser-requirements.txt`.
+`HOCUS_PRODUCTION_TEST_PYTHON` selecciona su intérprete; los puertos de prueba
+se pueden configurar con `HOCUSPOCUS_E2E_PORT` y
+`HOCUS_PRODUCTION_TEST_API_PORT`. No reutiliza los servidores del usuario.
+
+Generaciones reales y consumo GPU: cero. Los tokens del agente no están
+expuestos por el cliente y se registran como no disponibles, sin estimarlos
+por bytes. El coste de validación procede de tests CPU y builds de la UI.

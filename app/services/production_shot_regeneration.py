@@ -84,7 +84,7 @@ def publish_music_regeneration(production, shot_id: str, mode: str) -> None:
         rows.update({item["file"]: item for item in take_rows(production.state, shot_id)})
         shot["takes"] = list(rows.values())
     else:
-        shot["frame"] = production.state["frames"][shot_id]
+        shot["start_frame"] = production.state["frames"][shot_id]
     shot["video_stale"] = True
     document["revision"] = int(document.get("revision") or 0) + 1
     temporary = path.with_suffix(".tmp")
@@ -99,7 +99,9 @@ def _music(root: str, workspace: str, production_id: str, shot_id: str) -> dict:
                  if item.get("key") == shot_id), None)
     if shot is None:
         raise ActionError("origin_unsupported", "The shot has no saved generation specification")
-    mode = {"h3": "clip", "clip": "clip", "scene3d": "scene"}.get(shot.get("kind"), "frame")
+    if shot.get("kind") == "clip":
+        raise ActionError("origin_unsupported", "An imported clip has no generator")
+    mode = {"h3": "clip", "scene3d": "scene"}.get(shot.get("kind"), "frame")
     return {"executor": "http", "path": f"/api/v1/music-productions/{quote(production_id)}/shots/{quote(shot_id)}/redo?workspace={quote(workspace)}",
             "body": {"from": mode}}
 

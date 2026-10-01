@@ -466,8 +466,9 @@ Six portrait seeds and the gremlins-devday-v2 before/after were not measured.
 
 ## Project link before `production.run`
 
-Call `POST /api/v1/production-projects/resolve` before the first `production.run`
-when the clip should belong to a Story or an episode. Send `workspace`,
+The producer registers ownership automatically before its worker. Call
+`POST /api/v1/production-projects/resolve` to prepare an intention before
+`production.run`, or send an explicit `project` to the producer. Send `workspace`,
 `origin` (`mcp`, `wizard`, or `ui`), `intent_id`, and either `format`
 (`music_video`, `trailer`, `quick_video`, `full_story`) or `project`
 (`{kind: story|episode, id}`). The same `intent_id` returns the same
@@ -493,8 +494,9 @@ take and publishing stay on the existing review commands.
 `expected_revision` from the GET for select, undo, and reexport. A locked shot
 returns `shot_locked` and does not write. A stale `expected_revision` returns
 `stale_revision`. `request` returns `applied: false` until `apply` is true,
-and then it runs only the `plan` object you send. `regenerate` returns
-`regenerate_needs_runner` and does not start a model. This path does not
+and then it runs only the `plan` object you send. `regenerate` with `expected_revision` returns `applied: false` and an execution
+target in `regeneration`. Execute that existing producer operation once; the
+shared UI does so automatically and marks review pending only after success. This path does not
 delete take files.
 
 ## List works and open the shared view
@@ -531,3 +533,22 @@ Series episode render binds that episode after the request is accepted and
 before the worker starts. A refused render does not create a project. The link
 does not create a Story and it does not rewrite the series library. Tokens for
 this link are not available from the client.
+
+
+## Shared regeneration and registration completion
+
+Direct music, Director and Series starts persist ownership before work starts.
+Director saves its canonical production id and project in the snapshot; a
+failed initial save refuses generation. Series stores the production id in its
+episode before generated-video workers or native 2D batch media operations.
+Native 3D Series and imported shots without a generator stay unsupported.
+
+Shared HTTP regeneration rechecks lock, revision and exact shot at the producer
+endpoint. Music refreshes only the target manifest row and marks its export
+stale without replacing the montage. Failed or occupied operations are errors,
+not successful takes. Keep the previous take and do not retry automatically.
+
+`cd ui && npm run test:e2e:production` verifies this journey with real Chromium,
+real registration/review HTTP and simulated media generation. It requires only
+the CPU packages in `scripts/ci-production-browser-requirements.txt`, downloads
+no models and uses isolated test ports. It does not assess visual quality.

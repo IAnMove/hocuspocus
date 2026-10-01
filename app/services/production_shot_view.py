@@ -105,10 +105,11 @@ def _music_shot(item: Any, index: int) -> dict[str, Any] | None:
     if not isinstance(item, dict) or not isinstance(item.get("key"), str) or not item["key"].strip():
         return None
     start, end = _number(item.get("start")), _number(item.get("end"))
-    takes = _file_takes(item.get("takes"), _safe_name(item.get("clip")))
+    preview = _safe_name(item.get("clip")) or _safe_name(item.get("start_frame")) or _safe_name(item.get("scene_video"))
+    takes = _file_takes(item.get("takes"), preview)
     scene_name = _safe_name(item.get("scene_doc"))
     stale = _stored_bool(item, "video_stale", "export_stale")
-    return _shot(
+    result = _shot(
         item["key"].strip()[:80], index + 1, "music",
         start=start, end=end, duration=_span(start, end),
         text=_text(item.get("lyric")), text_kind="lyric" if _text(item.get("lyric")) else None,
@@ -116,6 +117,8 @@ def _music_shot(item: Any, index: int) -> dict[str, Any] | None:
         scene={"kind": "scene2d", "id": scene_name} if scene_name else None,
         montage={"stale": stale} if stale is not None else None,
     )
+    result["regenerable"] = item.get("kind") != "clip"
+    return result
 
 
 def _series(workspace_dir: str, work: dict[str, Any]):
