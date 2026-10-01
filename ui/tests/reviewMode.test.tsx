@@ -97,3 +97,28 @@ test('review mode approves, navigates, filters, and applies a shown diff', () =>
   assert.equal(screen.getByRole('button', { name: 'Lock' }).getAttribute('type'), 'button')
   cleanup()
 })
+
+test('review mode disables undo when the shot is locked', () => {
+  const undone: string[] = []
+  render(<ReviewMode
+    workspace="film"
+    shots={[{
+      key: 's0',
+      lyric: 'hello night',
+      review: { status: 'approved' as const, locked: true, history_id: 'h1' },
+    }]}
+    onClose={() => undefined}
+    onApprove={() => undefined}
+    onRequest={() => undefined}
+    onApply={() => undefined}
+    onOpenScene={() => undefined}
+    onUseTake={() => undefined}
+    onUndo={shot => undone.push(shot)}
+    onLock={() => undefined}
+  />)
+  const undo = screen.getByRole('button', { name: 'Undo' })
+  assert.equal(undo.hasAttribute('disabled'), true)
+  fireEvent.click(undo)
+  assert.deepEqual(undone, [])
+  cleanup()
+})

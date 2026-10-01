@@ -123,8 +123,9 @@ function MusicProductionsBody({ workspace, onClose }: { workspace: string; onClo
       onOpenScene={sceneName => { void openSceneOutput(sceneOutput(workspace, sceneName)) }}
       onUseTake={(shot, takeFile) => run(async () => { await applyMusicProductionTake(workspace, selected, shot, takeFile); await refresh() })}
       onUndo={shot => {
-        const historyId = shots.find(item => item.key === shot)?.review?.history_id
-        if (!historyId) return
+        const row = shots.find(item => item.key === shot)
+        const historyId = row?.review?.history_id
+        if (!historyId || row?.review?.locked) return
         run(async () => { await undoMusicProductionShot(workspace, selected, shot, historyId); await refresh() })
       }}
       onLock={(shot, locked) => run(async () => { await lockMusicProductionShot(workspace, selected, shot, locked); await refresh() })}

@@ -40,7 +40,10 @@ def redo(
 
 
 def undo(production: Any, spec: dict, key: str, history_id: str, *, export_scene: Callable[..., Any]) -> dict:
-    from services.production_shot_review import history_entry, restore_snapshot
+    from services.production_shot_review import history_entry, is_locked, restore_snapshot
+    if is_locked(production, key):
+        from services.music_production import ProductionError
+        raise ProductionError("shot_locked", "locked: " + key)
     entry = history_entry(production.root, production.id, key, history_id)
     if not isinstance(entry, dict) or not isinstance(entry.get("snapshot"), dict):
         from services.music_production import ProductionError
