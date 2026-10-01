@@ -77,11 +77,11 @@ contacto ya es un nombre de fichero del workspace.
 
 | Productor | Proyecto | Producción | Planos / tomas | Qué reutiliza este cambio | Qué falta |
 |---|---|---|---|---|---|
-| `production.run` | no tenía Story | `{id}.production.json` | `{id}.shots.json`, `takes`, review | se enlaza antes de generar; el run conserva `project` | el run no llama a resolve; el cliente debe hacerlo |
-| Director | `provenance.project_id` opcional | `_director_pipeline_*.json` | `clips[]`, `video_attempts` | el catálogo indexa el snapshot | el arranque del pipeline no llama a resolve |
+| `production.run` | no tenía Story | `{id}.production.json` | `{id}.shots.json`, `takes`, review | se enlaza antes de generar; la vista lee el manifiesto y `review.json` | el run no llama a resolve; la vista no elige tomas |
+| Director | `provenance.project_id` opcional | `_director_pipeline_*.json` | `clips[]`, `video_attempts` | el catálogo indexa el snapshot; la vista lee los clips | el arranque del pipeline no llama a resolve |
 | Story Lab | la biblioteca | `projects[].productions[]` | el pipeline o el batch que dispare | Story mínima y fila `productions[]` | Resultados aún no abre la vista común |
-| Series | el episodio | `productionIds[]` no se reescribe | `shots[]`, `attempts[]` | un episodio explícito se reutiliza y no crea Story | no se añade el id al episodio |
-| Montaje | no | `{nombre}.montage.json` | clips y tomas del editor | aún no indexado | vista y enlace, en los PR siguientes |
+| Series | el episodio | `productionIds[]` no se reescribe | `shots[]`, `attempts[]` | un episodio explícito se reutiliza; la vista lee sus planos | no se añade el id al episodio |
+| Montaje | no | `{nombre}.montage.json` | clips y tomas del editor | la vista lee el montaje nombrado o el que cita `productionId` | el catálogo de obras aún no indexa el montaje |
 | MCP `generation.video` | no | un job de Studio | no es una obra | no se convierte en proyecto | sigue en la galería hasta que alguien lo vincule |
 | Wizard | la Story que la acción envíe | handoff a Director o Series | los del destino | el mismo resolve HTTP | el registro de capacidades lo ocupa el PR de plantillas World3D |
 
@@ -110,6 +110,43 @@ Archivos compartidos y regla:
 no necesita un gancho: el fichero de producción se prepara antes y el run
 conserva las claves que no sustituye.
 
+## Vista de planos (solo lectura)
+
+`GET /api/v1/production-projects/{production_id}/shots?workspace=`
+
+La lista sale del primer origen que ya tiene planos: `{id}.shots.json`, si no
+los `shots[]` del episodio, si no los `clips[]` del pipeline del Director, si
+no los clips del montaje nombrado por la producción o cuyo `origin.productionId`
+es esa producción. Los otros orígenes solo rellenan el mismo id (escena, toma,
+`video_stale` / `export_stale`). No se añaden planos de más.
+
+No se inventa letra, duración ni escena. Un nombre con `..` no se copia. La
+vista devuelve como mucho 200 planos y 20 tomas por plano. `review` solo
+aparece si `{id}.review.json` tiene esa clave, o si el intento aprobado de la
+serie ya trae `reviewDecision`. La aprobación artística sigue siendo
+`approved`, nunca `ok`. `video_stale: false` que ya escribe el Director se
+conserva; si el campo no está, `montage` queda en null.
+
+Si `selected_video_filename` está vacío, el `video_filename` del clip es la
+toma activa: es el campo que el Director ya usa. La UI abre esta misma
+respuesta con el evento `hocuspocus:production-shots-open` y el detalle
+`{workspace, productionId}`. No hay botón de navegación en este corte.
+
+## Acciones de un plano
+
+`POST /api/v1/production-projects/{production_id}/shots/{shot_id}` con
+`action`. `select` cambia solo esa toma, conserva las anteriores y marca
+`video_stale` sin tocar el `source` del montaje. `reexport` copia la toma
+elegida al clip de ese plano. `undo` restaura la instantánea de la revisión y
+no borra ficheros. Un plano `locked` responde `shot_locked` (422) y no
+escribe. `expected_revision` distinto del fichero responde `stale_revision`
+(409). `review` solo acepta `pending`, `approved` o `changes_requested`.
+`request` con `apply` distinto de `true` devuelve `applied: false` y no
+escribe. `regenerate` responde `regenerate_needs_runner`: el fotograma y el
+clip siguen en el runner de la producción. Series no se reescribe; la
+revisión cae en el sidecar. Abrir la escena no muta (`applied: false`) y la
+UI emite `hocuspocus:production-shot-scene`.
+
 ## Límites conocidos en este corte
 
 - Quien llama a `production.run` o al arranque del Director tiene que pedir
@@ -119,6 +156,8 @@ conserva las claves que no sustituye.
 - Los montajes y los jobs sueltos de `generation.video` no son proyectos.
 - Los tokens de LLM de este cambio no están disponibles: el cliente no los midió.
   No se estiman a partir de bytes.
+- `production.run`, el arranque del Director y el render de serie siguen sin
+  llamar a resolve. El conjunto no está cerrado.
 
 ## Pruebas
 

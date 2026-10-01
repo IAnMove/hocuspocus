@@ -469,3 +469,22 @@ nothing. `new_execution: true` starts another production on the same project.
 The contract and the coverage matrix are in
 `docs/development/UNIFIED_PRODUCTIONS.md`. LLM token counts for this link are
 not available from the client.
+
+## Read the shots
+
+`GET /api/v1/production-projects/{production_id}/shots?workspace=` returns the
+shots already stored for that production. It does not render, retake, or mark
+an export stale. A missing manifest returns an empty shot list and
+`no_shots`. The UI listens for `hocuspocus:production-shots-open`. Choosing a
+take and publishing stay on the existing review commands.
+
+## Update one shot from the shared view
+
+`POST /api/v1/production-projects/{production_id}/shots/{shot_id}` with
+`action` `select`, `review`, `lock`, `undo`, or `reexport`. Send
+`expected_revision` from the GET for select, undo, and reexport. A locked shot
+returns `shot_locked` and does not write. A stale `expected_revision` returns
+`stale_revision`. `request` returns `applied: false` until `apply` is true,
+and then it runs only the `plan` object you send. `regenerate` returns
+`regenerate_needs_runner` and does not start a model. This path does not
+delete take files.

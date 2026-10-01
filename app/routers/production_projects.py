@@ -8,6 +8,8 @@ from collections.abc import Callable
 from fastapi import APIRouter, HTTPException, Query
 
 from services.production_project_link import LinkError, note_production_status, resolve_production_project
+from services.production_shot_actions import ActionError, perform
+from services.production_shot_view import shot_view
 from services.production_work_catalog import find_work, list_works
 
 
@@ -19,7 +21,12 @@ _STATUS = {
     "revision_conflict": 409,
     "partial_write": 503,
 }
-_RETRYABLE = frozenset({"revision_conflict", "partial_write"})
+_RETRYABLE = frozenset({"revision_conflict", "partial_write", "stale_revision"})
+_ACTION_STATUS = {
+    "not_found": 404,
+    "shot_not_found": 404,
+    "stale_revision": 409,
+}
 
 
 def create_production_projects_router(*, workspace_dir: Callable[[str], str]) -> APIRouter:
@@ -93,6 +100,31 @@ def create_production_projects_router(*, workspace_dir: Callable[[str], str]) ->
         if found is None:
             raise HTTPException(status_code=404, detail="Production not found")
         return found
+
+    @router.get("/api/v1/production-projects/{production_id}/shots")
+    def shots_route(production_id: str, workspace: str = Query(default="", max_length=160)):
+        if not production_id or len(production_id) > 240:
+            raise HTTPException(status_code=400, detail="Invalid production ID")
+        view = shot_view(root(workspace), workspace, production_id)
+        if view is None:
+            raise HTTPException(status_code=404, detail="Production not found")
+        return view
+
+    @router.post("/api/v1/production-projects/{production_id}/shots/{shot_id}")
+    def act_route(production_id: str, shot_id: str, body: dict):
+        if not production_id or len(production_id) > 240 or not shot_id or len(shot_id) > 80:
+            raise HTTPException(status_code=400, detail="Invalid production ID")
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=422, detail={"code": "invalid_request", "message": "JSON object required"})
+        workspace = str(body.get("workspace") or "")
+        try:
+            return perform(root(workspace), workspace, production_id, shot_id, body)
+        except ActionError as error:
+            raise HTTPException(status_code=_ACTION_STATUS.get(error.code, 422), detail={
+                "code": error.code,
+                "message": str(error),
+                "retryable": error.code == "stale_revision",
+            }) from error
 
     return router
 
