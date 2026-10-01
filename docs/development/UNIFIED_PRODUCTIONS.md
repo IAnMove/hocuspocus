@@ -163,6 +163,12 @@ La UI abre **Producciones** desde **Obras** (`hocuspocus:production-catalog-open
 
 El asistente registra `production_works` con una línea en `capabilityRegistry.ts` y llama a `productionWorks.command`. Ese método es una adición en `applicationAdapters.ts`; no reescribe el registro de plantillas World3D ni `wangp_mcp.py`. No arranca un modelo. `applied: false` no se resume como obra nueva.
 
+## Obras antiguas
+
+`production.works.link` une un `production_id` que el catálogo ya reconoce con una Story o un episodio que ya existen. No crea una Story, no compara títulos y no reescribe el fichero de producción, las tomas ni la biblioteca de series. La segunda llamada con el mismo par responde `reused: true` y no añade otra fila. Si el id ya apunta a otro proyecto, responde `invalid_project`. Un fichero ilegible sigue en `warnings` y no se vincula. Sin el sidecar, la obra se lee igual y sale **Sin proyecto vinculado**.
+
+La UI ofrece **Vincular a proyecto** solo en esa fila. El id lo escribe quien conoce el proyecto.
+
 ## Límites conocidos en este corte
 
 - Quien llama a `production.run` o al arranque del Director tiene que pedir
@@ -170,7 +176,7 @@ El asistente registra `production_works` con una línea en `capabilityRegistry.t
 - El estado del enlace se alinea con el fichero al listar o al `POST` de estado.
   No hay gancho dentro del hilo de `production.run`.
 - Los montajes y los jobs sueltos de `generation.video` no son proyectos.
-- **Vincular a proyecto** para una obra antigua sin relación fiable es el paso 6.
+- **Vincular a proyecto** exige un id que ya exista. No adivina por el título.
 - El recorrido con navegador no está hecho en este corte: no hay herramienta de navegador y no se arrancan los puertos 42003, 42010, 42017 ni 42022.
 - Los tokens de LLM de este cambio no están disponibles: el cliente no los midió.
   No se estiman a partir de bytes.

@@ -34,5 +34,5 @@ function CatalogLoader({ workspace, onClose }: { workspace: string, onClose: () 
   }
   if (failed) return <p className="p-4 text-xs">{t('loadFailed')}</p>
   if (!page) return <p className="p-4 text-xs">{t('loading')}</p>
-  return <ProductionCatalogPanel workspace={workspace} page={page} format={format} status={status} onFormat={setFormat} onStatus={setStatus} onCreate={create} onClose={onClose} />
+  return <ProductionCatalogPanel workspace={workspace} page={page} format={format} status={status} onFormat={setFormat} onStatus={setStatus} onCreate={create} onLinked={() => setNonce(current => current + 1)} onClose={onClose} />
 }

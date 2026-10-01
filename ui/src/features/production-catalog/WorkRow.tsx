@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { previewUrl } from '../production-shots/preview'
+import { LinkProject } from './LinkProject'
 import { openLinkedProject } from './projectLink'
 import { ReviewShotsButton } from './ReviewShotsButton'
 import { linkedTarget } from './target'
 import { FORMAT_KEYS, ORIGIN_KEYS, STATUS_KEYS, isFormat, isOrigin, isStatus, type CatalogWork } from './types'
 
-export function WorkRow({ work }: { work: CatalogWork }) {
+export function WorkRow({ work, onLinked }: { work: CatalogWork, onLinked: () => void }) {
   const { t } = useTranslation('productionCatalog')
   const target = linkedTarget(work.project, work.series_id)
   const [missing, setMissing] = useState(false)
@@ -36,5 +37,6 @@ export function WorkRow({ work }: { work: CatalogWork }) {
       </div>
     </div>
     {preview ? <img src={preview} alt={t('previewAlt')} className="mt-2 h-16 w-28 rounded border border-border object-cover" /> : null}
+    {!work.project ? <LinkProject workspace={work.workspace_id} productionId={work.production_id} onLinked={onLinked} /> : null}
   </article>
 }

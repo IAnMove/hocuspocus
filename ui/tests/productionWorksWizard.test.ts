@@ -12,6 +12,8 @@ test('the wizard can list and open a production without treating a proposal as a
   assert.equal(capability.resolve({ type: 'production_works', operation: 'production.review', input: { workspace: 'film' } }), null)
   const action = capability.resolve({ type: 'production_works', operation: 'production.works.open', input: { production_id: 'clip-mcp' } })
   assert.equal(action?.type, 'production_works')
+  const link = capability.resolve({ type: 'production_works', operation: 'production.works.link', input: { production_id: 'old-a', project: { kind: 'story', id: 'nara' } } })
+  assert.equal(link?.type, 'production_works')
   if (!action || action.type !== 'production_works') return
   const listed = productionWorksMessage({ applied: false, works: [{ production_id: 'clip-mcp', origin: 'mcp', project: { id: 'story-mcp' } }] })
   assert.match(listed, /clip-mcp/)

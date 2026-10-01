@@ -3336,7 +3336,7 @@
       "persistence": "Sidecar .production-project-links-v1.json is written only by resolve, before the production file",
       "presentation": "productions",
       "test": "ui/tests/productionWorksWizard.test.ts",
-      "notes": "List and open do not start a generator. The same intent reuses the production. production.review stays the vision QA tool.",
+      "notes": "List and open do not start a generator. The same intent reuses the production. production.works.link attaches an existing production id to an existing project and does not match titles. production.review stays the vision QA tool.",
       "prompt_fixture": "",
       "blocking_defect": ""
     }

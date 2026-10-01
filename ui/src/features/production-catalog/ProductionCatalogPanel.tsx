@@ -7,7 +7,7 @@ const FILTER_FORMATS = ['', ...Object.keys(FORMAT_KEYS)] as const
 const FILTER_STATUSES = ['', ...Object.keys(STATUS_KEYS)] as const
 
 export function ProductionCatalogPanel({
-  workspace, page, format, status, onFormat, onStatus, onCreate, onClose,
+  workspace, page, format, status, onFormat, onStatus, onCreate, onLinked, onClose,
 }: {
   workspace: string
   page: CatalogPage
@@ -16,6 +16,7 @@ export function ProductionCatalogPanel({
   onFormat: (value: string) => void
   onStatus: (value: string) => void
   onCreate: (body: { intent_id: string, format: LightFormat, title: string }) => void
+  onLinked: () => void
   onClose: () => void
 }) {
   const { t } = useTranslation('productionCatalog')
@@ -43,6 +44,6 @@ export function ProductionCatalogPanel({
     </div>
     <LightCreate onCreate={onCreate} />
     {page.warnings.map(item => <p key={`${item.source}:${item.error}`} className="text-xs text-text-muted">{t('warning', { source: item.source, error: item.error })}</p>)}
-    {page.works.length ? page.works.map(work => <WorkRow key={work.production_id} work={work} />) : <p className="text-xs text-text-muted">{t('empty')}</p>}
+    {page.works.length ? page.works.map(work => <WorkRow key={work.production_id} work={work} onLinked={onLinked} />) : <p className="text-xs text-text-muted">{t('empty')}</p>}
   </div>
 }

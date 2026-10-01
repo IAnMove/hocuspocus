@@ -6,6 +6,7 @@ export const PRODUCTION_WORK_OPERATIONS = [
   'production.works.list',
   'production.works.open',
   'production.works.resolve',
+  'production.works.link',
 ] as const
 
 export type ProductionWorkOperation = typeof PRODUCTION_WORK_OPERATIONS[number]
