@@ -435,6 +435,8 @@ only: it neither re-renders the video nor starts any generation.
 
 `production.publish` refuses a completed production whose spec lists shot keys until each key is `approved` in the review file (`review_incomplete`). A spec with no shot list is unchanged. Artistic review stays `pending` without a human file. A human file may set `approved` or `changes_requested`. It is never the string ok.
 
+To let someone watch the completed cut before approving it, call `production.publish` with `input.mode: "preview"` (default: `"release"`). The preview has its own immutable page, prominently labelled **Review preview · Not approved for release**, and returns `mode: "preview"`. It copies the MP4, song and contact sheet through the same native publication path and never writes or changes a human review. A preview and a release have different publication identities even for the same media. Release publication still requires every shot to be approved; previews also require a completed production. Use a unique `slug` and the configured LAN root as usual; neither mode edits `index.html`.
+
 `face_consistent` is the human sheet question on `production.review`. No vision model means that answer stays unreliable, and the sheet must not invent yes or no. `appearance_changed` is the separate code check. It stays unknown unless an embedding backend was injected. The field `face_consistent` stays.
 
 Scene export and the contact-sheet painter share `HOCUS_SCENE_EXPORT_CONCURRENCY`. Unset or blank is 2. A value outside 1–4 is 1. Painters bind `127.0.0.1:0`. This change does not claim a measured speedup for 21 scenes.

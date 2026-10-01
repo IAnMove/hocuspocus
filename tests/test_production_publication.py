@@ -126,3 +126,67 @@ def test_public_mcp_catalog_and_handler_are_registered():
     from services.music_production import command_catalog, command_handlers
     assert any(item["name"] == "production.publish" for item in command_catalog())
     assert "production.publish" in command_handlers(lambda ws: ".", lambda: ".", lambda: "", lambda: "")
+
+
+def test_preview_shares_unreviewed_video_without_fabricating_approval(publication):
+    workspace, public, handler, arguments = publication
+    path = workspace / "test.production.json"
+    state = json.loads(path.read_text())
+    state["spec"]["shots"] = [{"key": "lead", "kind": "h3"}]
+    path.write_text(json.dumps(state))
+    with pytest.raises(HTTPException, match="review_required"):
+        call(handler, arguments)
+    arguments["input"]["mode"] = "preview"
+    result = call(handler, arguments)
+    directory = public / ("homage-" + result["publication_id"])
+    assert result["mode"] == "preview"
+    assert "Review preview · Not approved for release" in (directory / "homage.html").read_text()
+    assert json.loads((directory / "publication.json").read_text())["mode"] == "preview"
+    assert not (workspace / "test.review.json").exists()
+    assert json.loads(path.read_text()) == state
+    assert (public / "index.html").read_text() == "Another session owns this page"
+    assert call(handler, arguments) == result
+    arguments["input"]["mode"] = "release"
+    with pytest.raises(HTTPException, match="review_required"):
+        call(handler, arguments)
+
+
+def test_preview_and_approved_release_have_separate_immutable_pages(publication):
+    workspace, public, handler, arguments = publication
+    path = workspace / "test.production.json"
+    state = json.loads(path.read_text())
+    state["spec"]["shots"] = [{"key": "lead", "kind": "h3"}]
+    path.write_text(json.dumps(state))
+    review = {"version": 1, "shots": {"lead": {"status": "changes_requested"}}}
+    review_path = workspace / "test.review.json"
+    review_path.write_text(json.dumps(review))
+    arguments["input"]["mode"] = "preview"
+    preview = call(handler, arguments)
+    assert json.loads(review_path.read_text()) == review
+    review["shots"]["lead"]["status"] = "approved"
+    review_path.write_text(json.dumps(review))
+    arguments["input"]["mode"] = "release"
+    release = call(handler, arguments)
+    assert release["mode"] == "release"
+    assert preview["publication_id"] != release["publication_id"]
+    page = (public / ("homage-" + release["publication_id"]) / "homage.html").read_text()
+    assert "Not approved for release" not in page
+
+
+@pytest.mark.parametrize("mode", ["unknown", True, None, ["preview"]])
+def test_invalid_publication_mode_is_rejected(publication, mode):
+    _, _, handler, arguments = publication
+    arguments["input"]["mode"] = mode
+    with pytest.raises(HTTPException, match="mode must be release or preview"):
+        call(handler, arguments)
+
+
+def test_preview_still_requires_a_completed_production(publication):
+    workspace, _, handler, arguments = publication
+    path = workspace / "test.production.json"
+    state = json.loads(path.read_text())
+    state["status"] = "running"
+    path.write_text(json.dumps(state))
+    arguments["input"]["mode"] = "preview"
+    with pytest.raises(HTTPException, match="completed production"):
+        call(handler, arguments)
