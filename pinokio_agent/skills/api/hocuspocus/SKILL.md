@@ -13,6 +13,22 @@ Pass the discovered base URL, workspace, durable image URL and animated GLB URL 
 wraps the document as an authored `kind:"scene3d"` production shot. Choose the clip index
 and name from the actual GLB; Walking/Idle defaults describe the sample asset only.
 
+`clients/backplate_template.py` packs `clients/ps1_backplates_template.json` as a
+portable `.hptemplate`, optionally reusing an existing preview image, and imports it
+through the public library API after preflight. It never overwrites an existing id.
+The definition includes Qwen Image 2.1 defaults and a complete background prompt example.
+
+## Library template
+
+Import `hocuspocus/ps1-backplates` once, then discover it with `templates.list/get`.
+`templates.apply` fills `background` (image) and `actor` (GLB) in the chosen workspace;
+its manifest declares duration, start/end coordinates, actor scale, clip index/name,
+clip speed, fixed-camera perspective and light controls. A short Qwen prompt is in
+the background slot hint. Select the clip from the actual GLB and check `missingSlots`.
+Save the resulting scene with `scenes.document.save`; reopen with `scenes.document.get`.
+The same template appears in Video 3D's My templates panel. Its native document keeps
+`templateId:"two-shot"`; the independent library id identifies the reusable composition.
+
 ## PS1 style
 
 Use `style:{preset:"ps1-backplates"}` and explicit authored shots. Generate each empty

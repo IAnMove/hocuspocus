@@ -73,9 +73,11 @@ in expanded specs so the guard runs on resume. Native normalized documents with 
 and reuse. These are structural checks; the image's perspective and empty foreground
 still require visual review.
 
-This is a named backend style and an external-agent recipe. The internal chat does
-not yet have a dedicated PS1 capability or button, and the brief-only `production.plan`
-helper does not select it. Use explicit shots, rather than that helper's automatic plan.
+The reusable library template `hocuspocus/ps1-backplates` is available as a portable
+`.hptemplate`: see [import, editor controls, MCP usage and Qwen background prompt](PS1_BACKPLATE_TEMPLATE.md).
+After importing, the existing My templates panel and `templates.*` commands use the
+same scene. The brief-only `production.plan` helper still does not select this style;
+use explicit shots or the applied library document.
 
 Suggested request to a tool-capable assistant:
 “Haz un videoclip en estilo `ps1-backplates`: fondos vacíos de Qwen Image 2.1,
