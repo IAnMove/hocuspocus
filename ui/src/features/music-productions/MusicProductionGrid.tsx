@@ -75,7 +75,7 @@ function ShotCard({
       <button type="button" className={buttonClass} disabled={busy || !shot.scene_doc} onClick={() => shot.scene_doc && onOpenScene(shot.scene_doc)}>
         {t('musicProductions.openScene')}
       </button>
-      <button type="button" className={buttonClass} disabled={busy} onClick={() => onRetake(shot.key)}>
+      <button type="button" className={buttonClass} disabled={busy || shot.review?.locked === true} onClick={() => onRetake(shot.key)}>
         {t('musicProductions.anotherTake')}
       </button>
       <ReviewActions shot={shot} busy={busy} onReview={onReview} />

@@ -1,5 +1,5 @@
 import type { Scene, SceneFaceBinding, SceneFaceBindingState, SceneKeyframe, SceneLayer } from '../types'
-import { CHARACTER_MOUTH_STATES, MOUTH_STATE_FALLBACK, type CharacterMouthState } from './characterMouthStates'
+import { CHARACTER_MOUTH_STATES, MOUTH_SOUND_GROUPS, MOUTH_STATE_FALLBACK, PHONETIC_MOUTH_STATE, mouthStateForSound, normalizeMouthMapping, type CharacterMouthState, type CharacterMouthMapping } from './characterMouthStates'
 import { planPhoneticCutoutDialogue } from './cutoutPhonetic'
 
 export type CutoutViseme = CharacterMouthState
@@ -11,6 +11,15 @@ export type CutoutDialoguePlan = {
 }
 
 export type CutoutMouthLayers = Partial<Record<CutoutViseme | 'open', SceneLayer>>
+
+/** Text/word cadence is approximate, but still obeys the same user assignments. */
+export function mapCutoutDialoguePlan(plan: CutoutDialoguePlan, mapping?: CharacterMouthMapping): CutoutDialoguePlan {
+  if (!mapping || !Object.keys(mapping).length) return plan
+  return { ...plan, visemes: plan.visemes.map(beat => {
+    const sound = MOUTH_SOUND_GROUPS.find(sound => PHONETIC_MOUTH_STATE[sound] === beat.state)
+    return { ...beat, state: sound ? mouthStateForSound(sound, mapping) : beat.state }
+  }) }
+}
 
 export type SceneDialogueBeat = NonNullable<Scene['dialogueBeats']>[number]
 
@@ -30,7 +39,8 @@ export function normalizeFaceBinding(value: unknown): SceneFaceBinding | undefin
   const role = raw.role === 'mouth' || raw.role === 'blink' || raw.role === 'eyes' ? raw.role : undefined
   const state = FACE_STATES.includes(raw.state as SceneFaceBindingState) ? raw.state as SceneFaceBindingState : undefined
   if (!poseLayerId || !role) return undefined
-  return { poseLayerId, role, ...(state ? { state } : {}) }
+  const mouthMapping = role === 'mouth' ? normalizeMouthMapping(raw.mouthMapping) : undefined
+  return { poseLayerId, role, ...(state ? { state } : {}), ...(mouthMapping ? { mouthMapping } : {}) }
 }
 
 const bindingState = (layer: SceneLayer, state: CutoutViseme | 'open') =>
@@ -290,17 +300,18 @@ export function rebuildCutoutDialogueLayers(
     const targets = group[0].mouthLayerIds.flatMap(id => layerById.get(id) ? [layerById.get(id)!] : [])
     if (!targets.length) continue
     const mouthLayers = findCutoutMouthLayers(targets)
-    if (!(mouthLayers.open ?? mouthLayers.small ?? mouthLayers.wide ?? mouthLayers.round)) continue
+    if (!Object.values(mouthLayers).some(Boolean)) continue
     const units = normalizeAlignedCutoutUnits(group, 0, duration)
     if (!units.length) continue
-    const plan = planPhoneticCutoutDialogue(group[0], duration) ?? (group[0].confidence === 'aligned-audio' && !group[0].lipSync
+    const mapping = targets.find(layer => layer.faceBinding?.mouthMapping)?.faceBinding?.mouthMapping
+    const plan = planPhoneticCutoutDialogue(group[0], duration, mapping) ?? mapCutoutDialoguePlan(group[0].confidence === 'aligned-audio' && !group[0].lipSync
       ? planAlignedCutoutDialogue(units, fps)
       : planCutoutDialogue(
         group[0].text,
         Math.max(0, Math.min(duration, group[0].start)),
         Math.max(group[0].start + 1 / Math.max(1, fps), Math.min(duration, group[0].end)),
         fps,
-      ))
+      ), mapping)
     if (plan.start >= duration) continue
     const generated = applyCutoutDialogue(mouthLayers, plan)
     for (const [layerId, frames] of Object.entries(generated)) {
@@ -322,7 +333,7 @@ export function rebuildCutoutDialogueLayers(
 }
 
 export function applyCutoutDialogue(layers: CutoutMouthLayers, plan: CutoutDialoguePlan): Record<string, SceneKeyframe[]> {
-  const speakingFallback = layers.open ?? layers.wide ?? layers.small ?? layers.round
+  const speakingFallback = layers.open ?? layers.wide ?? layers.small ?? layers.round ?? Object.values(layers).find(Boolean)
   if (!speakingFallback) return {}
   const participants = [...new Set(Object.values(layers).filter((layer): layer is SceneLayer => Boolean(layer)))]
   const framesByLayer = Object.fromEntries(participants.map(layer => [layer.id, [] as SceneKeyframe[]]))
@@ -335,7 +346,9 @@ export function applyCutoutDialogue(layers: CutoutMouthLayers, plan: CutoutDialo
   // the requested end, otherwise an imported scene may normalize it away.
   const last = plan.visemes.at(-1)
   if (!last || last.start < plan.end) {
-    for (const layer of participants) framesByLayer[layer.id].push(pointFor(layer, plan.end, Number(layer === layers.closed)))
+    const mapping = participants.find(layer => layer.faceBinding?.mouthMapping)?.faceBinding?.mouthMapping
+    const resting = layers[mouthStateForSound('rest', mapping)] ?? layers.closed
+    for (const layer of participants) framesByLayer[layer.id].push(pointFor(layer, plan.end, Number(layer === resting)))
   }
   return framesByLayer
 }

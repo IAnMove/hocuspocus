@@ -25,6 +25,7 @@ import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
 import { hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT } from '../layout.ts'
+import { backdropRidge } from './kit.ts'
 
 type Kept = { geometries: BufferGeometry[]; materials: Material[] }
 type Spot = [number, number]
@@ -566,6 +567,7 @@ export function buildTemple(resolved: ResolvedAtmos, webgl2: boolean): { root: G
   addShafts(root, resolved, kept)
   addTrees(root, resolved, kept)
   addSun(root, resolved, kept)
+  backdropRidge(root, kept, resolved, { near: '#3f7a4a', height: [2.5, 5], width: [6, 10], radius: 16 })
   addSky(root, resolved, kept)
   const handle = liveHandle(root, kept, resolved)
   root.userData.atmos = handle

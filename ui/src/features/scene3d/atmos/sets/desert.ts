@@ -22,6 +22,7 @@ import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
 import { hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT, scatter, type Area } from '../layout.ts'
+import { backdropRidge } from './kit.ts'
 
 type Kept = { geometries: BufferGeometry[]; materials: Material[] }
 
@@ -341,6 +342,7 @@ export function buildDesert(resolved: ResolvedAtmos, webgl2: boolean): { root: G
   addPalms(root, resolved, kept)
   addPool(root, resolved, kept)
   addRuins(root, resolved, kept)
+  backdropRidge(root, kept, resolved, { height: [1.0, 2.4], width: [6, 10], tone: 0.86, radius: 16 })
   addSky(root, resolved, kept)
   const handle = liveHandle(root, kept, resolved)
   root.userData.atmos = handle

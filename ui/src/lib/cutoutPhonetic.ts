@@ -1,6 +1,6 @@
 import { parseMouthCues } from '../features/scene3d/speech/track'
 import type { MouthCue } from '../features/scene3d/speech/types'
-import { PHONETIC_MOUTH_STATE } from './characterMouthStates'
+import { mouthStateForSound, type CharacterMouthMapping } from './characterMouthStates'
 import type { CutoutDialoguePlan, SceneDialogueBeat } from './cutoutDialogue'
 
 /** Cues use the analyzed fragment's clock, independent of scene placement. */
@@ -48,19 +48,20 @@ export function currentCutoutLipSync(beat: SceneDialogueBeat): CutoutLipSync | u
 }
 
 /** Real phonetic durations, including pauses and bilabial closures. No letter sampling. */
-export function planPhoneticCutoutDialogue(beat: SceneDialogueBeat, duration: number): CutoutDialoguePlan | undefined {
+export function planPhoneticCutoutDialogue(beat: SceneDialogueBeat, duration: number, mapping?: CharacterMouthMapping): CutoutDialoguePlan | undefined {
   const sync = currentCutoutLipSync(beat)
   if (!sync) return undefined
   const start = Math.max(0, beat.start), end = Math.min(duration, beat.end)
-  const visemes: CutoutDialoguePlan['visemes'] = [{ start: 0, end: start, state: 'closed' }]
+  const rest = mouthStateForSound('rest', mapping)
+  const visemes: CutoutDialoguePlan['visemes'] = [{ start: 0, end: start, state: rest }]
   let cursor = start
   for (const cue of sync.cues) {
     const from = Math.max(start, beat.start + cue.start), until = Math.min(end, beat.start + cue.end)
     if (until <= from) continue
-    if (from > cursor) visemes.push({ start: cursor, end: from, state: 'closed' })
-    visemes.push({ start: from, end: until, state: PHONETIC_MOUTH_STATE[cue.viseme] })
+    if (from > cursor) visemes.push({ start: cursor, end: from, state: rest })
+    visemes.push({ start: from, end: until, state: mouthStateForSound(cue.viseme, mapping) })
     cursor = until
   }
-  visemes.push({ start: cursor, end, state: 'closed' })
+  visemes.push({ start: cursor, end, state: rest })
   return { start, end, visemes }
 }

@@ -25,6 +25,7 @@ import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
 import { hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT, scatter, type Area } from '../layout.ts'
+import { backdropRidge } from './kit.ts'
 
 type Kept = { geometries: BufferGeometry[]; materials: Material[] }
 
@@ -412,6 +413,7 @@ export function buildSnow(resolved: ResolvedAtmos, webgl2: boolean): { root: Gro
   addCabin(root, resolved, kept)
   addAurora(root, resolved, kept)
   addFlakes(root, resolved, kept)
+  backdropRidge(root, kept, resolved, { near: '#9db0c8', height: [3, 6.5], width: [5, 9], radius: 16 })
   addSky(root, resolved, kept)
   const handle = liveHandle(root, kept, resolved)
   root.userData.atmos = handle

@@ -29,5 +29,5 @@ export async function createCharacterSpeechPreview(options: {
   signal.throwIfAborted()
   const analysis = await services.analyze(wav, { dialogue: text, language, signal })
   signal.throwIfAborted()
-  return { filename: clip.filename, preview: previewFaceRigDialogueFromCues(kit, text, analysis, buffer.duration) }
+  return { filename: clip.filename, preview: previewFaceRigDialogueFromCues(kit, text, analysis, buffer.duration), cues: analysis, duration: buffer.duration }
 }

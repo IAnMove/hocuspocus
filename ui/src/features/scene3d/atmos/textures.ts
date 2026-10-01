@@ -84,6 +84,41 @@ export function floorTexture(grass: string, dirt: string, seed: number): Texture
   return texture
 }
 
+export type TerrainPaint = { base: string; alt: string; fleck: string; seed: number; fleckAbove?: number; patches?: number }
+
+/** Painterly ground for any terrain: two soils in soft patches, fine flecks and dark pockets. Tiles without a seam. */
+export function terrainTexture(paint: TerrainPaint): Texture | null {
+  const base = channels(paint.base)
+  const alt = channels(paint.alt)
+  const fleck = channels(paint.fleck)
+  const cells = paint.patches ?? 4
+  const above = paint.fleckAbove ?? 0.9
+  const texture = canvasTexture(FLOOR_SIZE, (ctx, size) => {
+    const img = ctx.createImageData(size, size)
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const u = x / size
+        const v = y / size
+        const patch = smooth(0.38, 0.66, tileNoise(u * cells, v * cells, cells, paint.seed))
+        const mid = tileNoise(u * 16, v * 16, 16, paint.seed + 1)
+        const fine = tileNoise(u * 128, v * 128, 128, paint.seed + 2)
+        const shade = 0.82 + mid * 0.36 + (fine - 0.5) * 0.14
+        const speck = fine > above ? 0.8 : 0
+        const pocket = fine < 0.1 ? 0.78 : 1
+        const i = (y * size + x) * 4
+        for (let c = 0; c < 3; c += 1) {
+          const soil = (base[c] * (1 - patch) + alt[c] * patch) * shade
+          img.data[i + c] = Math.min(255, (soil * (1 - speck) + fleck[c] * speck) * pocket)
+        }
+        img.data[i + 3] = 255
+      }
+    }
+    ctx.putImageData(img, 0, 0)
+  }, true)
+  if (texture) texture.repeat.set(8, 8)
+  return texture
+}
+
 /** Vertical bark ridges with dark crevices, lichen flecks and a few knots. Tiles around the trunk. */
 export function barkTexture(seed: number): Texture | null {
   const texture = canvasTexture(256, (ctx, size) => {
