@@ -7,22 +7,27 @@ import {
   FogExp2,
   Group,
   InstancedBufferAttribute,
+  IcosahedronGeometry,
   InstancedMesh,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
   ShaderMaterial,
   SphereGeometry,
   type Material,
+  type Texture,
 } from 'three'
 import type { AtmosHandle } from './clearing.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
-import { hash2 } from '../noise.ts'
+import { fbm2, hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT, scatter, type Area } from '../layout.ts'
+import { paintedTerrain, ridge } from './kit.ts'
+import { terrainTexture } from '../textures.ts'
 
-type Kept = { geometries: BufferGeometry[]; materials: Material[] }
+type Kept = { geometries: BufferGeometry[]; materials: Material[]; textures: Texture[] }
 type Spot = [number, number]
 type Cloud = [number, number, number, number, number, number]
 
@@ -123,7 +128,7 @@ const LOW_EYE = [1.05, 0.48, 5.8] as const
 const LOW_LOOK = [-2.8, 1.05, -4.4] as const
 
 function emptyKept(): Kept {
-  return { geometries: [], materials: [] }
+  return { geometries: [], materials: [], textures: [] }
 }
 
 function hexColor(color: string): [number, number, number] {
@@ -179,6 +184,7 @@ function disposeKept(root: Group, kept: Kept) {
   root.removeFromParent()
   for (const geometry of kept.geometries) geometry.dispose()
   for (const material of kept.materials) material.dispose()
+  for (const texture of kept.textures) texture.dispose()
 }
 
 function idleHandle(root: Group, kept: Kept): AtmosHandle {
@@ -231,18 +237,33 @@ function addDisc(root: Group, kept: Kept, name: string, color: string, radius: n
   kept.materials.push(mat)
 }
 
+const SOD: Record<string, { alt: string; hill: string }> = {
+  clover: { alt: '#58b24a', hill: '#4f9a4a' },
+  hay: { alt: '#dcbc62', hill: '#b99a58' },
+}
+
+function sodPaint(palette: string, seed: number) {
+  const sod = SOD[palette] ?? SOD.clover
+  return { base: swatch(FIELD, palette), alt: sod.alt, fleck: swatch(TIP, palette), seed, fleckAbove: 0.9 }
+}
+
 function addGround(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  // Extends behind both cameras. A uniform unlit color still clips cleanly at the near plane.
-  const geo = new PlaneGeometry(220, 420, 22, 40)
-  geo.rotateX(-Math.PI / 2)
-  geo.translate(0, 0, -190)
-  const mat = new MeshBasicMaterial({ color: swatch(FIELD, resolved.palette), fog: false })
-  const mesh = new Mesh(geo, mat)
-  mesh.name = 'atmos-ground'
+  // Covers both cameras and fades into the fog, so the horizon needs no flat backdrop.
+  const mesh = paintedTerrain(root, kept, {
+    size: 200, segments: 160, seed: resolved.seed,
+    paint: sodPaint(resolved.palette, resolved.seed),
+    height: (x, z) => (fbm2(x * 0.05, z * 0.05, resolved.seed) - 0.5) * 1.6 + (fbm2(x * 0.4, z * 0.4, resolved.seed + 2) - 0.5) * 0.12,
+    tint: (x, z) => 0.92 + fbm2(x * 0.06 + 4, z * 0.06, resolved.seed + 9) * 0.3,
+    flat: { x: CLEARING_SUBJECT[0], z: CLEARING_SUBJECT[2], radius: 6 },
+    emissive: 0x1d3a1c,
+  })
+  mesh.userData.palette = resolved.palette
   mesh.frustumCulled = false
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
-  addDisc(root, kept, 'atmos-clearing', swatch(BARE, resolved.palette), 1.55, 0.02)
+  addDisc(root, kept, 'atmos-clearing', swatch(BARE, resolved.palette), 1.55, 0.03)
+  const bare = root.getObjectByName('atmos-clearing') as Mesh
+  Object.assign(bare.material, { transparent: true, opacity: 0.32, depthWrite: false })
+  const sod = SOD[resolved.palette] ?? SOD.clover
+  ridge(root, kept, { seed: resolved.seed, count: 9, radius: 62, height: [6, 12], width: [26, 44], color: sod.hill, haze: swatch(HORIZON, resolved.palette), layers: 3 })
 }
 
 function grassMaterial(resolved: ResolvedAtmos): ShaderMaterial {
@@ -316,8 +337,9 @@ function placeClouds(mesh: InstancedMesh | undefined, seconds: number, bend: num
 function addClouds(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const spots = CLOUD_SPOTS.slice(0, resolved.moteCount)
   if (spots.length < 1) return
-  const geo = new SphereGeometry(1, 8, 6)
-  const mat = new MeshBasicMaterial({ color: cloudHex(resolved.palette, resolved.timeOfDay) })
+  const tint = cloudHex(resolved.palette, resolved.timeOfDay)
+  const geo = new IcosahedronGeometry(1, 1)
+  const mat = new MeshStandardMaterial({ color: tint, flatShading: true, roughness: 1, emissive: tint, emissiveIntensity: 0.32 })
   const mesh = new InstancedMesh(geo, mat, spots.length)
   mesh.name = 'atmos-cloud'
   mesh.frustumCulled = false
@@ -358,8 +380,9 @@ function paintGrass(mesh: InstancedMesh | undefined, seconds: number, bend: numb
 
 function paintClouds(mesh: InstancedMesh | undefined, palette: string, time: string) {
   const material = mesh?.material
-  if (!(material instanceof MeshBasicMaterial)) return
+  if (!(material instanceof MeshStandardMaterial)) return
   material.color.set(cloudHex(palette, time))
+  material.emissive.set(cloudHex(palette, time))
 }
 
 function paintBasic(root: Group, name: string, color: string) {
@@ -369,7 +392,14 @@ function paintBasic(root: Group, name: string, color: string) {
 }
 
 function paintGround(root: Group, palette: string) {
-  paintBasic(root, 'atmos-ground', swatch(FIELD, palette))
+  const ground = root.getObjectByName('atmos-ground') as Mesh | undefined
+  const material = ground?.material as MeshStandardMaterial | undefined
+  if (ground && material && ground.userData.palette !== palette) {
+    material.map?.dispose()
+    material.map = terrainTexture(sodPaint(palette, 7))
+    material.needsUpdate = true
+    ground.userData.palette = palette
+  }
   paintBasic(root, 'atmos-clearing', swatch(BARE, palette))
 }
 

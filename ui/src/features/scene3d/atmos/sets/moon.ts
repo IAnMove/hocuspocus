@@ -3,7 +3,6 @@ import {
   BoxGeometry,
   BufferGeometry,
   Color,
-  ConeGeometry,
   CylinderGeometry,
   Float32BufferAttribute,
   FogExp2,
@@ -20,16 +19,17 @@ import {
   ShaderMaterial,
   SphereGeometry,
   Vector3,
-  type BufferAttribute,
   type Material,
+  type Texture,
 } from 'three'
 import type { AtmosHandle } from './clearing.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosSettings, ResolvedAtmos } from '../params.ts'
-import { hash2 } from '../noise.ts'
+import { fbm2, hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT, scatter, type Area } from '../layout.ts'
+import { boulders, paintedTerrain, ridge } from './kit.ts'
 
-type Kept = { geometries: BufferGeometry[]; materials: Material[] }
+type Kept = { geometries: BufferGeometry[]; materials: Material[]; textures: Texture[] }
 type Spot = { x: number; z: number; size: number }
 
 const EARTH_VERTEX = `
@@ -78,7 +78,7 @@ const LOW_EYE = [1.4, 0.38, 1.85] as const
 const LOW_LOOK = [-0.8, 2.15, -8.4] as const
 
 function emptyKept(): Kept {
-  return { geometries: [], materials: [] }
+  return { geometries: [], materials: [], textures: [] }
 }
 
 function hexColor(color: string): [number, number, number] {
@@ -125,6 +125,7 @@ function disposeKept(root: Group, kept: Kept) {
   root.removeFromParent()
   for (const geometry of kept.geometries) geometry.dispose()
   for (const material of kept.materials) material.dispose()
+  for (const texture of kept.textures) texture.dispose()
 }
 
 function idleHandle(root: Group, kept: Kept): AtmosHandle {
@@ -154,24 +155,36 @@ function flatMoon(resolved: ResolvedAtmos): { root: Group; kept: Kept } {
   return { root, kept }
 }
 
+const CRATERS = 9
+const SOILS: Record<string, { base: string; alt: string; fleck: string; rock: string[]; ridge: string; haze: string }> = {
+  regolith: { base: '#9a948a', alt: '#bdb7aa', fleck: '#e8e3d8', rock: ['#8b867c', '#a39e92', '#6f6b63'], ridge: '#6b6a70', haze: '#1b1c26' },
+  basalt: { base: '#403d3a', alt: '#575350', fleck: '#8c867c', rock: ['#34312f', '#4a4643', '#2a2826'], ridge: '#2c2c33', haze: '#0e0f16' },
+}
+
+/** Bowl with a raised lip: height at x, z for one crater. */
+function craterProfile(spot: Spot, x: number, z: number): number {
+  const radius = spot.size * 0.95
+  const d = Math.hypot(x - spot.x, z - spot.z)
+  if (d < radius) return -0.24 * spot.size * (1 - (d / radius) ** 2)
+  return 0.1 * spot.size * Math.exp(-(((d - radius) / (radius * 0.22)) ** 2))
+}
+
+function terrainHeight(resolved: ResolvedAtmos, x: number, z: number): number {
+  let h = (fbm2(x * 0.18, z * 0.18, resolved.seed) - 0.5) * 0.3
+  for (let i = 0; i < CRATERS; i += 1) h += craterProfile(craterSpot(i, resolved.seed), x, z)
+  return h
+}
+
 function addGround(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new PlaneGeometry(30, 30, 12, 12)
-  geo.rotateX(-Math.PI / 2)
-  const pos = geo.attributes.position as BufferAttribute
-  for (let i = 0; i < pos.count; i += 1) {
-    const x = pos.getX(i)
-    const z = pos.getZ(i)
-    const dx = x - CLEARING_SUBJECT[0]
-    const dz = z - CLEARING_SUBJECT[2]
-    if (dx * dx + dz * dz < 2.2) continue
-    pos.setY(i, (hash2(Math.round(x * 4), Math.round(z * 4), resolved.seed) - 0.5) * 0.06)
-  }
-  geo.computeVertexNormals()
-  const mat = new MeshBasicMaterial({ color: resolved.stone })
-  const mesh = new Mesh(geo, mat)
-  mesh.name = 'atmos-ground'
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
+  const soil = SOILS[resolved.palette] ?? SOILS.regolith
+  paintedTerrain(root, kept, {
+    size: 40, segments: 96, seed: resolved.seed,
+    paint: { base: soil.base, alt: soil.alt, fleck: soil.fleck, seed: resolved.seed, fleckAbove: 0.88 },
+    height: (x, z) => terrainHeight(resolved, x, z),
+    tint: (x, z) => 0.95 + fbm2(x * 0.09 + 5, z * 0.09, resolved.seed + 6) * 0.4,
+    flat: { x: CLEARING_SUBJECT[0], z: CLEARING_SUBJECT[2], radius: 1.4 },
+    emissive: 0x4a4740,
+  })
 }
 
 function craterSpot(index: number, seed: number): Spot {
@@ -184,29 +197,31 @@ function craterSpot(index: number, seed: number): Spot {
   }
 }
 
-function layFlat(matrix: Matrix4, x: number, z: number, scale: number) {
+function layFlat(matrix: Matrix4, x: number, z: number, scale: number, y = 0.02) {
   matrix.makeBasis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0))
   matrix.scale(new Vector3(scale, scale, 1))
   matrix.elements[12] = x
-  matrix.elements[13] = 0.02
+  matrix.elements[13] = y
   matrix.elements[14] = z
 }
 
 function addCraters(root: Group, resolved: ResolvedAtmos, kept: Kept) {
   const floors = new RingGeometry(0, 0.82, 8)
   const rims = new RingGeometry(0.72, 1, 8)
-  const floorMat = new MeshBasicMaterial({ color: '#2c2926' })
-  const rimMat = new MeshBasicMaterial({ color: '#d9d3c6' })
+  const floorMat = new MeshBasicMaterial({ color: '#2c2926', transparent: true, opacity: 0.55, depthWrite: false })
+  const rimMat = new MeshBasicMaterial({ color: '#d9d3c6', transparent: true, opacity: 0.28, depthWrite: false })
   const floorMesh = new InstancedMesh(floors, floorMat, 9)
   const rimMesh = new InstancedMesh(rims, rimMat, 9)
   floorMesh.name = 'atmos-crater'
   rimMesh.name = 'atmos-rim'
+  floorMesh.visible = false // the bowls are carved into the ground now; the flat decals stay only as placement markers
+  rimMesh.visible = false
   const matrix = new Matrix4()
   for (let i = 0; i < 9; i += 1) {
     const spot = craterSpot(i, resolved.seed)
-    layFlat(matrix, spot.x, spot.z, spot.size)
+    layFlat(matrix, spot.x, spot.z, spot.size, -0.24 * spot.size + 0.02)
     floorMesh.setMatrixAt(i, matrix)
-    layFlat(matrix, spot.x, spot.z, spot.size)
+    layFlat(matrix, spot.x, spot.z, spot.size, 0.1 * spot.size * 0.9 + 0.02)
     rimMesh.setMatrixAt(i, matrix)
   }
   addMesh(root, kept, floorMesh)
@@ -223,23 +238,12 @@ function rockSpots(count: number, seed: number): Array<[number, number]> {
 }
 
 function addRocks(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const geo = new ConeGeometry(0.42, 0.78, 5)
-  geo.translate(0, 0.39, 0)
-  const mat = new MeshBasicMaterial({ color: '#ffffff' })
-  const spots = rockSpots(resolved.grassBlades, resolved.seed)
-  const mesh = new InstancedMesh(geo, mat, spots.length)
-  mesh.name = 'atmos-rock'
-  const dummy = new Object3D()
-  spots.forEach(([x, z], index) => {
-    const height = 0.55 + hash2(index, 8, resolved.seed) * 0.9
-    dummy.position.set(x, 0, z)
-    dummy.scale.set(0.7 + hash2(index, 9, resolved.seed) * 0.8, height, 0.7 + hash2(index, 10, resolved.seed) * 0.6)
-    dummy.updateMatrix()
-    mesh.setMatrixAt(index, dummy.matrix)
-    mesh.setColorAt(index, hexVec(resolved.grass).multiplyScalar(0.75 + hash2(index, 11, resolved.seed) * 0.45))
-  })
-  addMesh(root, kept, mesh)
-  kept.materials.push(mat)
+  const soil = SOILS[resolved.palette] ?? SOILS.regolith
+  const spots = rockSpots(resolved.grassBlades, resolved.seed).map(([x, z], index) => ({
+    x, z, size: 0.2 + hash2(index, 8, resolved.seed) * 0.46, flat: 0.55 + hash2(index, 9, resolved.seed) * 0.35,
+  }))
+  boulders(root, kept, spots, soil.rock, resolved.seed, 'atmos-rock')
+  ridge(root, kept, { seed: resolved.seed, count: 11, radius: 17, height: [1.5, 3.4], width: [3.2, 5.6], color: soil.ridge, haze: soil.haze, layers: 2 })
 }
 
 function shadeMatrix(matrix: Matrix4, x: number, z: number, alongX: number, alongZ: number, length: number, width: number) {
