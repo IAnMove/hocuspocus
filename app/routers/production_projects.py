@@ -28,6 +28,7 @@ _ACTION_STATUS = {
     "not_found": 404,
     "shot_not_found": 404,
     "stale_revision": 409,
+    "already_running": 409,
 }
 
 
@@ -141,7 +142,7 @@ def create_production_projects_router(*, workspace_dir: Callable[[str], str]) ->
             raise HTTPException(status_code=_ACTION_STATUS.get(error.code, 422), detail={
                 "code": error.code,
                 "message": str(error),
-                "retryable": error.code == "stale_revision",
+                "retryable": error.code in {"stale_revision", "already_running"},
             }) from error
 
     return router
