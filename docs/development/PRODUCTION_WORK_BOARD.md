@@ -9,6 +9,25 @@ agentes no abran lo mismo. GitHub tiene los issues desactivados: **este archivo 
 avance un bloque actualiza aquí su estado en el mismo PR. Estado comprobado el 2026-09-30 contra `origin/development` 40df83ec
 (archivos y ramas, no solo títulos de PR).
 
+## Estado 2026-10-01 (comprobado contra `origin/development` 50a2a17c)
+
+Los bloques 0, A, B, C y D están en `development`. Lo que sigue abierto son medidas con GPU, no código. El detalle original de
+cada bloque (archivos y aceptación) queda más abajo, sin tocar.
+
+| Bloque | Estado | PR | Pendiente |
+|---|---|---|---|
+| 0. Refactor de `music_production.py` | Hecho: 688 líneas, etapas en sus módulos | #716 | Nada |
+| A. Dirección | Hecho | #668 (arreglos de tráiler: #669, #670) | Nada |
+| B. Calidad medida | Hecho en código | #661 fluidez, #672 revisión en tres capas, #687 resolución y `enhance` planeado, #694 veredicto humano en `artistic` | Medir FlashVSR en 3 clips del Gremlins v2 (GPU). `enhance` solo corre con un upscaler inyectado y RIFE solo se recomienda |
+| C. Operativa | Hecho en código | #687: espera hasta 1200 s con `until`, progreso y ETA, estimación con historial, `gpu_seconds`/`reused_seconds`, `HOCUS_SCENE_EXPORT_CONCURRENCY` | Medidas con GPU: 21 escenas antes y después (punto 12) y s/paso de H3 tras Qwen con y sin descarga (punto 15) |
+| D. Revisión plano a plano | Hecho; el borrador #690 se cerró y su contenido entró por #694 | #694; #710 vistas previas; #726 y #728 lista de planos y acciones; #702, #708, #714, #715, #725 bloqueo y toma; #733 deshacer re-export (todo lo posterior a #694 entró por la integración #731) | Redo real de voices-v2 en GPU. `request` devuelve `applied: false` salvo `apply: true` |
+| Producciones unificadas | Hecho | #721 identidad Story/episodio; catálogo y vista de planos en #731; #727 conflicto de revisión; #734 obras antiguas | Nada |
+
+Mantenimiento del mismo día: #731 integró lo que seguía abierto (la búsqueda de plantillas por palabras de #720 incluida);
+#722 hace que un perfil sin guardar use Qwen Image 2.1 local si está instalado (producciones ya preferían Qwen por GPU desde
+#667 y `production_image_defaults.py`); #724 añade `media.options` para que un asistente vea qué hay y pregunte antes de crear.
+Quedaron fuera de la integración, por no abrirse ese día: #589, #583, #575, #564 y #486.
+
 ## Reglas
 1. Un bloque = un dueño = archivos exclusivos (columna "Archivos"). Si necesitas tocar un archivo de otro bloque, abre
    una nota en la tabla de solapes (abajo) y espera o pide el cambio al dueño.
@@ -34,15 +53,18 @@ avance un bloque actualiza aquí su estado en el mismo PR. Estado comprobado el 
 | 31: `production.publish` | mezclado (`production_publication.py`) |
 | Evaluación offline del paquete antes de publicar | #619 |
 | Base: #608, #613, #614, #632, #660 | Claude |
+| Bloques 0, A, B, C, D completos en código (medidas con GPU pendientes) | #716, #668, #661/#672/#687/#694, #687, #694/#731 |
+| Escenarios Video 3D Silicon Dreams (rejilla, circuito, mainframe) | #703, #709 |
+| Perfil sin guardar con Qwen Image 2.1 si está instalado; `media.options` | #722, #724 |
 
-## Bloques pendientes
+## Bloques (detalle original; el estado vigente está arriba)
 | Bloque | Puntos | Dueño propuesto | Rama | Archivos (exclusivos) | Aceptación |
 |---|---|---|---|---|---|
 | **0. Refactor de `music_production.py`** | 17, 18, 19, 20 | Grok | `fix/music-production-under-700` | `music_production.py`; `production_windows.py`, `production_stage_frames.py`, `production_stage_clips.py`, `production_stage_scenes.py`, `production_stage_run.py` | El corte antiguo de 669 líneas no se reutiliza: quitaría espera, resolución, bloqueo y enhance. Este corte deja el archivo en 688 líneas y conserva esos comportamientos. El guardado sigue cada 5 s (claves volátiles `log` y `usage`). |
-| **A. Dirección** (PR #668 abierto, 2026-09-30) | 21 tratamiento y variación; 23 modo `trailer` | Claude | `feat/production-treatment` | nuevos `production_treatment.py`, `production_structure.py`, `production_trailer_audio.py`; `production_shot_plan.py`, `production_plan.py` | `spec.treatment` validado; avisos `chorus_repeats_identical` y `moment_without_shot` en el dry-run (gancho de ≤ 5 líneas en `production_dry_run.py`); `structure: "trailer"` compila silencios, impactos y entrada tardía de la canción; el modo `clip` no cambia (tests de regresión sobre los specs actuales). |
+| **A. Dirección** (#668 mezclado) | 21 tratamiento y variación; 23 modo `trailer` | Claude | `feat/production-treatment` | nuevos `production_treatment.py`, `production_structure.py`, `production_trailer_audio.py`; `production_shot_plan.py`, `production_plan.py` | `spec.treatment` validado; avisos `chorus_repeats_identical` y `moment_without_shot` en el dry-run (gancho de ≤ 5 líneas en `production_dry_run.py`); `structure: "trailer"` compila silencios, impactos y entrada tardía de la canción; el modo `clip` no cambia (tests de regresión sobre los specs actuales). |
 | **B. Calidad medida** | 25 resolución y `enhance`; 26 fluidez; 27 veredictos por niveles; 30 fases de H3 | Grok (detalle en `GROK_PRODUCTION_BLOCKS_2026-09-30.md`) | `feat/production-quality-levels` | `production_review.py`, `production_review_checks.py`, `production_timing.py`; nuevos `production_smoothness.py`, `production_enhance.py`, `production_levels.py` | 26: clips sintéticos con fotogramas duplicados y cambios de cadencia detectados, y atribución clip→escena→final. 27: `review {execution, technical, artistic}` y `artistic` nunca `ok` automático (devuelve evidencias y "pendiente de criterio"); intención por plano `shot.allow`. 25: coste extra de GPU y mejora medibles en 3 clips del Gremlins v2. 30: fases (carga, compilación, pasos, s/paso) en `timing.shots`. El enganche de 25 en el runner espera al bloque 0. Estado 2026-09-30 en `feat/production-quality-levels`: 26 y la base de 27 ya están en development; este PR valida `spec.resolution` y `spec.enhance`, añade el coste no medido en dry_run, `enhance_clip` con upscaler inyectado (sin GPU) y `crop_report`; publica `s_per_step`, `degraded` y `model` en `timing.shots`; `artistic` `pending` significa pending judgement hasta `review.json` o `review_shots`. La medida FlashVSR de 3 clips sigue pendiente de GPU. |
 | **C. Operativa** | 12 exportar escenas en paralelo; 13 progreso y ETA; 14 sondeo largo (`MAX_WAIT_S` y `until`); 15 medir y, si hace falta, ajustar la descarga de Qwen antes de H3 (ya existe en `generation_memory.py`); 16 estimación con datos propios; 29 contabilidad `gpu_seconds`/`reused_seconds` | Grok (tras el bloque 0) | `feat/production-operations` | `production_wait.py`, `production_scene_retry.py`, `production_usage.py`; nuevos `production_progress.py`, `production_gpu.py`, `production_estimate.py` | 14 y 16 se pueden hacer ya (no tocan `music_production.py`); 12, 13, 15 esperan al bloque 0. 12: tiempo de 21 escenas antes/después con `HOCUS_SCENE_EXPORT_CONCURRENCY`. 15: s/paso de H3 tras Qwen con y sin la descarga. 29: sin conversión de bytes a tokens. |
-| **D. Revisión plano a plano** (borrador https://github.com/IAnMove/hocuspocus/pull/690) | Nuevo: cambios por plano pedidos a un LLM/asistente o a mano; rehacer un plano desde el fotograma con prompts nuevos; estado aprobado/pide cambios; bloqueo de ediciones manuales; historial y deshacer; modo Revisar en la UI; `publish` exige revisión | Grok | `feat/production-shot-review` | nuevos `production_shot_review.py`, `production_shot_redo.py`, `production_shot_request.py`, `ReviewMode.tsx`; `production_commands.py`, `routers/music_productions.py`, `production_publication.py`, `production_shot_edit.py` | Borrador abierto: https://github.com/IAnMove/hocuspocus/pull/690 (`feat/production-shot-review`). Aterrizó: `production.shot.review/lock/redo/request/undo`, `<id>.review.json`, campo `review` en el manifiesto, modo Revisar, `publish` rechaza planos no aprobados si `shots.json` los lista (salvo `accept_unreviewed`). `music_production.py` solo omite planos `locked`. Pendiente: el redo real de voices-v2 en GPU. |
+| **D. Revisión plano a plano** (#690 cerrado; entró en #694 y #731) | Nuevo: cambios por plano pedidos a un LLM/asistente o a mano; rehacer un plano desde el fotograma con prompts nuevos; estado aprobado/pide cambios; bloqueo de ediciones manuales; historial y deshacer; modo Revisar en la UI; `publish` exige revisión | Grok | `feat/production-shot-review` | nuevos `production_shot_review.py`, `production_shot_redo.py`, `production_shot_request.py`, `ReviewMode.tsx`; `production_commands.py`, `routers/music_productions.py`, `production_publication.py`, `production_shot_edit.py` | Borrador abierto: https://github.com/IAnMove/hocuspocus/pull/690 (`feat/production-shot-review`). Aterrizó: `production.shot.review/lock/redo/request/undo`, `<id>.review.json`, campo `review` en el manifiesto, modo Revisar, `publish` rechaza planos no aprobados si `shots.json` los lista (salvo `accept_unreviewed`). `music_production.py` solo omite planos `locked`. Pendiente: el redo real de voices-v2 en GPU. |
 | **Revisión** | todos | Claude | — | — | Claude revisa cada PR contra su fila (archivos fuera de la fila = comentario). |
 
 ## Orden y dependencias
