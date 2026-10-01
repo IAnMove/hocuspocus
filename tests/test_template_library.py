@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import runpy
 import zipfile
 from pathlib import Path
 
@@ -14,6 +15,128 @@ from services.template_format import TemplateError
 from services.template_library import TemplateLibrary
 
 WS = "space"
+BACKPLATE_CLIENT = Path(__file__).resolve().parents[1] / "pinokio_agent/skills/api/hocuspocus/clients/backplate_template.py"
+
+
+def _backplate_package():
+    client = runpy.run_path(str(BACKPLATE_CLIENT))
+    return client["build_package"](b"\x89PNG\r\n\x1a\nexisting-preview"), client
+
+
+def test_ps1_template_is_discoverable_with_declared_inputs_and_preview(env):
+    library, _, _ = env
+    data, client = _backplate_package()
+    report = library.preflight(data)
+    assert report["canImport"] and not report["exists"] and report["issues"] == []
+    assert report["media"] == []  # No weights, models or user images in the package.
+    imported = library.import_package(data)
+    assert imported["id"] == "hocuspocus/ps1-backplates" and imported["previewUrl"]
+    assert {slot["id"]: slot["accepts"] for slot in imported["slots"]} == {"background": ["image"], "actor": ["model3d"]}
+    assert all(slot["required"] for slot in imported["slots"])
+    commands = TemplateCommands(library)
+    listed = commands.execute("templates.list", {"version": 1, "input": {"editor": "video3d", "query": "PS1"}})["result"]
+    assert [item["id"] for item in listed["templates"]] == [imported["id"]]
+    definition = client["template_definition"]()
+    assert definition["imageDefaults"] == {"model_type": "qwen_image_21", "num_inference_steps": 40}
+    assert "no people" in definition["backgroundPrompt"].lower()
+    assert "foreground" in definition["backgroundPrompt"].lower()
+
+
+def test_ps1_template_changes_assets_and_controls_then_saves_and_reopens(env):
+    from services.production_backplates import validate_backplate_scene
+    from services.scene_documents import get_document, save_document
+
+    library, make, workspace = env
+    data, _ = _backplate_package()
+    library.import_package(data)
+    commands = TemplateCommands(library)
+    original = library.get("hocuspocus/ps1-backplates")["document"]
+    result = commands.execute("templates.apply", {"version": 1, "input": {
+        "id": "hocuspocus/ps1-backplates", "workspace": WS,
+        "slots": {"background": f"/api/v1/file/sky.png?workspace={WS}", "actor": f"/api/v1/file/hero.glb?workspace={WS}"},
+        "controls": {"duration": 12, "start_x": -2, "end_x": 2.5, "end_z": -.8,
+                     "actor_scale": 1.2, "clip_index": 1, "clip_name": "Run", "clip_speed": 1.1,
+                     "light_color": "#c0d0ff", "light_intensity": .9},
+    }})["result"]
+    document = result["document"]
+    actor = document["slots"][1]
+    assert result["missingSlots"] == [] and result["copiedMedia"] == []
+    assert document["duration"] == 12 and document["camera"]["family"] == "fixed"
+    assert actor["position"][0] == -2 and actor["motion"]["to"] == [2.5, 0, -.8]
+    assert actor["scale"] == 1.2 and actor["clip"] == {"index": 1, "name": "Run"}
+    assert actor["clipPlayback"]["speed"] == 1.1 and document["light"]["color"] == "#c0d0ff"
+    validate_backplate_scene({"document": document})
+    saved = save_document(WS, document, name="PS1 acceptance", preview=None, workspace_dir=library.workspace_dir)
+    reopened = get_document(WS, saved["name"], workspace_dir=library.workspace_dir)["document"]
+    assert reopened == document
+    assert library.get("hocuspocus/ps1-backplates")["document"] == original
+    _, exported = library.export("hocuspocus/ps1-backplates")
+    other = make("fresh-session")
+    other.import_package(exported)
+    empty = other.apply("hocuspocus/ps1-backplates", workspace=WS)
+    assert set(empty["missingSlots"]) == {"background", "actor"}
+    assert empty["document"]["camera"]["family"] == "fixed"
+    assert empty["document"]["slots"][1]["motion"] == original["slots"][1]["motion"]
+    assert (workspace / saved["name"]).is_file()
+
+
+@pytest.mark.parametrize("slots,controls,error", [
+    ({"actor": "/examples/background.png"}, {}, "slot_type"),
+    ({"background": "/examples/robot.glb"}, {}, "slot_type"),
+    ({"actor": "https://example.org/robot.glb"}, {}, "invalid_source"),
+    ({}, {"duration": 0}, "invalid_template"),
+    ({}, {"actor_scale": -1}, "invalid_template"),
+    ({}, {"clip_speed": .05}, "invalid_template"),
+    ({}, {"camera_family": "orbit"}, "unknown_input"),
+])
+def test_ps1_template_rejects_invalid_inputs_before_any_render(env, slots, controls, error):
+    library, _, _ = env
+    data, _ = _backplate_package()
+    library.import_package(data)
+    with pytest.raises(TemplateError) as caught:
+        library.apply("hocuspocus/ps1-backplates", workspace=WS, slots=slots, controls=controls)
+    assert caught.value.code == error
+
+
+def test_ps1_client_imports_via_the_same_http_api_as_the_ui(env, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.templates import create_templates_router
+
+    library, _, _ = env
+    package, client = _backplate_package()
+    api = FastAPI()
+    api.include_router(create_templates_router(TemplateCommands(library)))
+    http = TestClient(api)
+    calls = []
+
+    def post(base_url, path, body):
+        assert base_url == "https://app.example" and body == package
+        calls.append(path)
+        response = http.post(path, content=body, headers={"Content-Type": "application/zip"})
+        assert response.status_code == 200
+        return response.json()
+
+    monkeypatch.setitem(client["import_template"].__globals__, "_post_package", post)
+    imported = client["import_template"]("https://app.example", package)
+    assert imported["id"] == "hocuspocus/ps1-backplates"
+    assert http.get(imported["previewUrl"]).content == b"\x89PNG\r\n\x1a\nexisting-preview"
+    assert calls == ["/api/v1/templates/preflight", "/api/v1/templates/import"]
+    with pytest.raises(ValueError, match="already exists"):
+        client["import_template"]("https://app.example", package)
+    assert calls[-1] == "/api/v1/templates/preflight" and len(calls) == 3
+
+
+def test_ps1_package_is_reproducible_and_preview_is_optional():
+    package, client = _backplate_package()
+    assert client["build_package"](b"\x89PNG\r\n\x1a\nexisting-preview") == package
+    empty = client["build_package"]()
+    with zipfile.ZipFile(io.BytesIO(empty)) as archive:
+        assert set(archive.namelist()) == {"template.json", "document.json"}
+    with pytest.raises(ValueError, match="existing PNG"):
+        client["build_package"](b"not-a-preview")
+    with pytest.raises(ValueError, match="WebP image"):
+        client["build_package"](b"RIFF0000WAVE", preview_suffix=".webp")
 
 
 def _world(**extra):

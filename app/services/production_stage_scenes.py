@@ -86,8 +86,10 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
     docs: dict[str, dict] = {}
     from services.production_shot_review import is_locked
     for shot, start, end in segs:
-        # Stay on the cut. Do not re-export or refresh the fingerprint.
-        if is_locked(production, shot["key"]):
+        # Stay on the cut. Skip re-export only when a scene file already
+        # exists; a lock before the first export (or after a failed one)
+        # must still produce that file or montage() drops the shot.
+        if is_locked(production, shot["key"]) and (done.get(shot["key"]) or {}).get("file"):
             continue
         dur = round(end - start, 3)
         used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
@@ -246,10 +248,12 @@ def build_animatic(production: Any, spec: dict, windows: list[dict]) -> None:
     """CPU preview from the start frames. A new export is stored apart from ``final``."""
     from services.production_preview import (
         animatic_report, claim_animatic_video, completed_cut_final,
-        restore_cut_artifacts, snapshot_cut_artifacts,
+        restore_cut_artifacts, restore_cut_state, snapshot_cut_artifacts,
+        snapshot_cut_state,
     )
     previous = completed_cut_final(production.state)
     kept = snapshot_cut_artifacts(production.root, production.state)
+    cut_state = snapshot_cut_state(production.state) if previous else {}
     production.state["animatic_warnings"] = animatic_report(spec, windows, production.score(), production.state)
     production.state["caption_gate"] = "warn"
     try:
@@ -258,4 +262,6 @@ def build_animatic(production: Any, spec: dict, windows: list[dict]) -> None:
     finally:
         production.state.pop("caption_gate", None)
         restore_cut_artifacts(production.root, production.state, kept)
+        if previous:
+            restore_cut_state(production.state, cut_state)
         claim_animatic_video(production.state, previous if isinstance(previous, str) else None)

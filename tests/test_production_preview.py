@@ -12,7 +12,7 @@ from services.production_dry_run import dry_run
 from services.production_preview import (
     animatic_report, caption_failure, claim_animatic_video, completed_cut_final, hold_after_clip,
     keep_completed_cut, measure_caption, remember_completed_cut, restore_cut_artifacts,
-    snapshot_cut_artifacts, uncover_titles,
+    restore_cut_state, snapshot_cut_artifacts, snapshot_cut_state, uncover_titles,
 )
 from services.production_resume import load_running
 from services.production_shot_plan import plan_shots
@@ -279,6 +279,103 @@ def test_animatic_on_a_completed_run_keeps_the_finished_cut(tmp_path):
     assert summary["animatic"] == "/api/v1/file/anim.mp4?workspace=ws"
 
 
+def _failing_scene_mcp():
+    def mcp(tool, arguments):
+        if tool == "scenes.video2d.edit":
+            return {"result": {"document": arguments["input"]["document"]}}
+        if tool == "scenes.video2d.export":
+            return {"receipt": {"commandId": "preview"}}
+        if tool == "scenes.video2d.export.receipt":
+            return {"receipt": {"status": "failed"}, "task": {"status": "failed"}}
+        raise AssertionError(tool)
+
+    return mcp
+
+
+def _preview_scene_mcp(name="preview-s0.mp4"):
+    def mcp(tool, arguments):
+        if tool == "scenes.video2d.edit":
+            return {"result": {"document": arguments["input"]["document"]}}
+        if tool == "scenes.video2d.export":
+            return {"receipt": {"commandId": "preview"}}
+        if tool == "scenes.video2d.export.receipt":
+            return {"receipt": {"artifacts": [{"name": name}]}, "task": {"status": "completed"}}
+        raise AssertionError(tool)
+
+    return mcp
+
+
+def _completed_cut_production(tmp_path, mcp):
+    score = {"duration": 8, "beat": 0.5, "lines": [{"t0": 0.2, "t1": 3.0, "text": "hello"}]}
+    (tmp_path / "s.score.json").write_text(json.dumps(score), encoding="utf-8")
+    official = {"file": "keep-s0.mp4", "dur": 8.0, "clip": "take.mp4", "fingerprint": "stale"}
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=mcp)
+    for name in ("song", "analyze", "cast", "frames"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.score = lambda: score
+    production.montage = lambda spec: production.state.__setitem__("final", "anim.mp4")
+    production.state.update(
+        status="completed", final="done.mp4", score="s.score.json", spec=_spec(),
+        clips={"s0": {"file": "take.mp4", "url": "/api/v1/file/take.mp4?workspace=ws"}},
+        scenes={"s0": dict(official)},
+        segments=[["s0", 0.0, 8.0]],
+    )
+    return production, official
+
+
+def test_failed_animatic_on_a_completed_cut_keeps_official_scenes(tmp_path):
+    """scenes() saves file=None before a failed export. The finished cut must not keep that hole."""
+    production, official = _completed_cut_production(tmp_path, _failing_scene_mcp())
+    production.run(_spec(), through="animatic")
+    assert production.state["status"] == "completed"
+    assert production.state["final"] == "done.mp4"
+    assert production.state.get("error") is None
+    assert production.state["scenes"]["s0"] == official
+    assert production.state["segments"] == [["s0", 0.0, 8.0]]
+
+
+def test_successful_animatic_on_a_completed_cut_does_not_adopt_preview_scenes(tmp_path):
+    production, official = _completed_cut_production(tmp_path, _preview_scene_mcp())
+    production.run(_spec(), through="animatic")
+    assert production.state["status"] == "completed"
+    assert production.state["final"] == "done.mp4"
+    assert production.state["animatic_video"] == "anim.mp4"
+    assert production.state["scenes"]["s0"] == official
+    assert production.state["scenes"]["s0"]["file"] != "preview-s0.mp4"
+
+
+def test_resumed_animatic_restores_scenes_from_completed_cut_not_the_half_written_map(tmp_path):
+    official = {"file": "keep-s0.mp4", "dur": 8.0, "clip": "take.mp4", "fingerprint": "official"}
+    state = {
+        "final": "anim.mp4",
+        "scenes": {"s0": {"file": None, "dur": 8.0, "clip": "take.mp4", "fingerprint": "preview"}},
+        "segments": [["s0", 0.0, 4.0]],
+        "completed_cut": {"final": "done.mp4", "scenes": {"s0": dict(official)}, "segments": [["s0", 0.0, 8.0]]},
+    }
+    kept = snapshot_cut_state(state)
+    restore_cut_state(state, kept)
+    assert state["scenes"]["s0"] == official
+    assert state["segments"] == [["s0", 0.0, 8.0]]
+
+
+def test_first_animatic_keeps_preview_scenes(tmp_path):
+    score = {"duration": 8, "beat": 0.5, "lines": [{"t0": 0.2, "t1": 3.0, "text": "hello"}]}
+    (tmp_path / "s.score.json").write_text(json.dumps(score), encoding="utf-8")
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=_preview_scene_mcp())
+    for name in ("song", "analyze", "cast", "frames"):
+        setattr(production, name, lambda *args, **kwargs: None)
+    production.score = lambda: score
+    production.montage = lambda spec: production.state.__setitem__("final", "anim.mp4")
+    production.state.update(
+        score="s.score.json", spec=_spec(),
+        clips={"s0": {"file": "take.mp4", "url": "/api/v1/file/take.mp4?workspace=ws"}},
+    )
+    production.run(_spec(), through="animatic")
+    assert production.state["status"] == "animatic_ready"
+    assert production.state["scenes"]["s0"]["file"] == "preview-s0.mp4"
+
+
 def test_animatic_failure_on_a_completed_run_keeps_completed_and_final(tmp_path):
     production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
     for name in ("song", "analyze", "cast", "frames"):
@@ -334,6 +431,11 @@ def test_remember_completed_cut_only_on_a_finished_animatic(tmp_path):
     remember_completed_cut(state, "completed", "animatic")
     assert state["completed_cut"] == {"final": "done.mp4", "montage_file": "show.montage.json",
                                      "contact_sheet": "p-contact.jpg"}
+    state["scenes"] = {"s0": {"file": "keep-s0.mp4", "fingerprint": "official"}}
+    state["segments"] = [["s0", 0.0, 8.0]]
+    remember_completed_cut(state, "completed", "animatic")
+    assert state["completed_cut"]["scenes"] == {"s0": {"file": "keep-s0.mp4", "fingerprint": "official"}}
+    assert state["completed_cut"]["segments"] == [["s0", 0.0, 8.0]]
     assert completed_cut_final({"final": "anim.mp4", "completed_cut": {"final": "done.mp4"}}) == "done.mp4"
     assert keep_completed_cut({"final": "done.mp4"}, "completed")
     assert keep_completed_cut({"final": "anim.mp4", "completed_cut": {"final": "done.mp4"}}, "running")

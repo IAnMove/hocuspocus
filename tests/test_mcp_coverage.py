@@ -18,6 +18,7 @@ from services.scene_documents import OPERATIONS as SAVE_OPERATIONS
 from services.scene_documents import command_catalog as save_catalog
 from services.video2d_catalogs import command_catalog as video2d_catalog
 from services.video2d_catalogs import query_operation as video2d_query_operation
+from services.world3d_template_commands import command_catalog as world3d_template_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED = ROOT / "app" / "shared"
@@ -65,7 +66,7 @@ def _catalog_files() -> list[Path]:
 
 
 def _catalog_operations() -> list[dict]:
-    operations = [*effects_catalog(), *save_catalog(), *export_catalog(), *video2d_catalog(), video2d_query_operation()]
+    operations = [*effects_catalog(), *save_catalog(), *export_catalog(), *video2d_catalog(), video2d_query_operation(), *world3d_template_catalog()]
     return [item for item in operations if str(item.get("name", "")).endswith(".catalog")]
 
 
@@ -123,6 +124,7 @@ def test_shared_json_catalogs_are_exposed_by_a_catalog_operation():
         "scenes.atmospheres.catalog",
         "scenes.motion.catalog",
         "scenes.catalog",
+        "world3d.templates.catalog",
     ]
     for path in _catalog_files():
         readers = [item for item in (ROOT / "app").rglob("*.py") if path.name in item.read_text(encoding="utf-8")]

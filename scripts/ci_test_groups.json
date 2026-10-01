@@ -183,6 +183,7 @@
         "tests/test_workspace_commands.py",
         "tests/test_workspace_registry.py",
         "tests/test_world3d_owned_render_smoke.py",
+        "tests/test_world3d_templates.py",
         "tests/test_production_review.py",
         "tests/test_lipsync_span.py",
         "tests/test_production_disk.py",
@@ -409,6 +410,39 @@
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/world3d_template_catalog.py",
+      "paths": [
+        "tests/test_world3d_templates.py",
+        "tests/test_mcp_coverage.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_template_commands.py",
+      "paths": [
+        "tests/test_world3d_templates.py",
+        "tests/test_mcp_coverage.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_scenes.py",
+      "paths": [
+        "tests/test_world3d_templates.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/world3d_templates.py",
+      "paths": [
+        "tests/test_world3d_templates.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/world3d_templates.json",
+      "paths": [
+        "tests/test_world3d_templates.py",
+        "tests/test_mcp_coverage.py"
+      ]
+    },
     {
       "prefix": "app/services/lips_creator_commands.py",
       "paths": [
@@ -782,7 +816,8 @@
     {
       "prefix": "app/services/production_plan.py",
       "paths": [
-        "tests/test_production_plan.py"
+        "tests/test_production_plan.py",
+        "tests/test_world3d_templates.py"
       ]
     },
     {

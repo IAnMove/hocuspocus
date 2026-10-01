@@ -12,6 +12,7 @@ export const AGENT_ACTION_TYPES = [
   'open_tab',
   'lips_creator',
   'generate_lips',
+  'world3d_templates',
   'open_story_section',
   'open_series_section',
   'prepare_video',
