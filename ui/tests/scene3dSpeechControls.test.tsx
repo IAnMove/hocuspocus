@@ -17,6 +17,23 @@ function installDom(url = 'http://localhost/') {
 }
 installDom()
 
+test('face controls offer thick cartoon lips for the selected character', async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { FaceControls } = await import('../src/features/scene3d/speech/FaceControls')
+  const face = { meshIndex: 0, center: [0, 1, 0] as const, size: [.1, .1] as const, skin: [.5, .3, .2] as const,
+    eyes: { left: [-.1, 1, 0] as const, right: [.1, 1, 0] as const, size: [.04, .02] as const, skinLeft: [0, 0, 0] as const, skinRight: [0, 0, 0] as const } }
+  const original = { ...defaultSpeech(), face }
+  let changed: Scene3DSpeech | undefined
+  try {
+    render(<FaceControls speech={original} onChange={value => { changed = value }} initiallyOpen />)
+    const option = screen.getByRole('option', { name: 'Cartoon · thick lips' })
+    fireEvent.change(option.parentElement!, { target: { value: 'toon-bold' } })
+    assert.equal(changed?.style, 'toon-bold')
+    assert.equal(changed?.face, original.face)
+    assert.equal(original.style, 'soft')
+  } finally { cleanup() }
+})
+
 const slot = (speech: Scene3DSpeech, sourceUrl = '/api/v1/file/mira.glb?workspace=one'): Scene3DSlot => ({
   id: 'subject_1', slot: 'subject_1', position: [0, 0, 0], rotationY: 0, scale: 1, sourceUrl, media: 'model3d', clip: null, speech,
 })

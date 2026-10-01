@@ -34,7 +34,7 @@ export type Scene3DSpeech = {
   gain: number
   strength: number
   clean: boolean
-  style: 'soft' | 'toon' | 'pixel'
+  style: 'soft' | 'toon' | 'toon-bold' | 'pixel'
   lip: string
   expression: Expression
   blink: boolean

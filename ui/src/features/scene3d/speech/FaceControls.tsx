@@ -28,7 +28,7 @@ export function FaceControls({ speech, onChange, initiallyOpen = false }: { spee
       <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={speech.clean} onChange={e => onChange({ ...speech, clean: e.target.checked })} />{t('speech.clean')}</label>
       <SpeechNumber label={t('speech.strength')} value={speech.strength} min={0} max={1.5} step={.05} onChange={strength => onChange({ ...speech, strength })} />
       <label className="flex items-center gap-2 text-xs">{t('speech.style')}<select className={speechInput} value={speech.style} onChange={e => onChange({ ...speech, atlas: undefined, style: e.target.value as Scene3DSpeech['style'] })}>
-        {(['soft', 'toon', 'pixel'] as const).map(style => <option key={style} value={style}>{t(`speech.${style}`)}</option>)}</select></label>
+        {(['soft', 'toon', 'toon-bold', 'pixel'] as const).map(style => <option key={style} value={style}>{t(`speech.${style}`)}</option>)}</select></label>
       <label className="flex items-center gap-2 text-xs">{t('speech.lip')}<input type="color" value={speech.lip} onChange={e => onChange({ ...speech, lip: e.target.value, atlas: undefined })} /></label>
     </div>
     <div className="mt-3 flex flex-wrap items-center gap-3">
