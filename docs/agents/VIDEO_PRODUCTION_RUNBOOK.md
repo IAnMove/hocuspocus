@@ -455,3 +455,17 @@ How to add a style preset: add an entry to `app/shared/style_presets.json`. Do n
 `music_production.py` is 688 lines. Shot windows live in `production_windows.py`. Cast, frames and the look preview live in `production_stage_frames.py`. Clip jobs live in `production_stage_clips.py`. Scenes, the package, the montage and the animatic live in `production_stage_scenes.py`. The run body lives in `production_stage_run.py`. `Production` still owns those methods and calls the modules. Wait stays at 1200 seconds with `until`. Resolution helpers, shot lock, planned enhance, and the 5 second save gate stay. The older 669-line cut was not reused.
 
 Six portrait seeds and the gremlins-devday-v2 before/after were not measured.
+
+## Project link before `production.run`
+
+Call `POST /api/v1/production-projects/resolve` before the first `production.run`
+when the clip should belong to a Story or an episode. Send `workspace`,
+`origin` (`mcp`, `wizard`, or `ui`), `intent_id`, and either `format`
+(`music_video`, `trailer`, `quick_video`, `full_story`) or `project`
+(`{kind: story|episode, id}`). The same `intent_id` returns the same
+`production_id`. Pass that id to `production.run`. Do not read the browser's
+active Story. An unknown project id fails with `invalid_project` and creates
+nothing. `new_execution: true` starts another production on the same project.
+The contract and the coverage matrix are in
+`docs/development/UNIFIED_PRODUCTIONS.md`. LLM token counts for this link are
+not available from the client.

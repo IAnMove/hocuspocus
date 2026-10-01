@@ -36732,6 +36732,10 @@ api.include_router(create_productions_router(
     list_pipelines=_list_canonical_production_pipelines,
 ))
 
+from routers.production_projects import create_production_projects_router
+
+api.include_router(create_production_projects_router(workspace_dir=_workspace_dir))
+
 from routers.workspace_collections import create_workspace_collections_router
 from services.workspace_registry import WorkspaceRegistry
 
