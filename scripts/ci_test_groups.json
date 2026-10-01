@@ -691,6 +691,65 @@
       ]
     },
     {
+      "prefix": "app/services/production_windows.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_shot_plan.py",
+        "tests/test_production_plan.py",
+        "tests/test_production_structure.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_lipsync_span.py",
+        "tests/test_video_production_runbook.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_stage_frames.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_cast_portrait.py",
+        "tests/test_production_subject_count.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_stage_clips.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_takes.py",
+        "tests/test_production_clip_qa.py",
+        "tests/test_lipsync_span.py",
+        "tests/test_production_cancel.py",
+        "tests/test_production_smoothness.py",
+        "tests/test_production_subject_count.py",
+        "tests/test_production_song_switch.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_stage_scenes.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_package.py",
+        "tests/test_production_scene_retry.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_smoothness.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_stage_run.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_phase.py",
+        "tests/test_production_dry_run.py",
+        "tests/test_production_cancel.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_disk.py",
+        "tests/test_production_scene3d.py"
+      ]
+    },
+    {
       "prefix": "app/services/production_shot_edit.py",
       "paths": [
         "tests/test_production_shot_edit.py",

@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 import shutil
 import threading
 import time
@@ -27,29 +26,23 @@ from typing import Any, Callable
 import numpy as np
 
 from services import lipsync_qa, song_analysis as audio_analysis
-from services.production_disk import discard, release_completed, require_free_disk
+from services.production_disk import require_free_disk
 from services.production_publication import publication_catalog, publication_handlers
 from services.production_resume import open_mcp
 from services.production_resource_gate import guard_mcp
-from services.production_shot_plan import is_auto_pad, place_pads, plan_shots
+from services.production_shot_plan import plan_shots
 from services.production_timing import StageWatch, timing_summary
 from services.production_usage import attach_usage, usage_summary
 from services.production_structure import require_direction
-from services.production_trailer_audio import attach as attach_trailer_audio
 from services.production_quality import expand_quality
 from services.production_review import review_for_status
-from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.production_scene3d import export_scene3d_clips, validate_scene3d_shot
 from services.production_style_presets import expand_style_preset
 from services.production_commands import extra_catalog, extra_handlers
-from services.production_control import Cancelled, arm, checkpoint, disarm, sleep_until
-from services.production_package import (attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, editable_summary,
-                                         lyric_for, manifest_rows, write_manifest)
-from services.production_shot_edit import render_shot
+from services.production_control import Cancelled, sleep_until
+from services.production_package import editable_summary
 from services.production_sheets import compose_group, make_frames_sheet
-from services.production_takes import another_take, better_take, note_seconds, obsolete_clip, pending_windows, take_settled
 from services.production_wait import MAX_WAIT_S, wait_for_status
-from services.video2d_edit import MAX_OPERATIONS
 from services.video2d_edit_titles import TITLE_BUILDERS
 
 RUN, STATUS, PLAN = "production.run", "production.status", "production.plan"
@@ -200,72 +193,14 @@ def h3_frames_for(seconds: float) -> int:
 
 
 def shot_windows(spec: dict, score: dict) -> list[dict]:
-    lines = score.get("lines") or []
-    try:
-        duration = float(score.get("duration") or 0)
-    except (TypeError, ValueError):
-        duration = 0.0
-    out = []
-    for index, shot in enumerate(spec["shots"]):
-        if is_auto_pad(shot):
-            continue
-        line = lines[shot["line"]] if isinstance(shot.get("line"), int) and 0 <= shot["line"] < len(lines) else None
-        if "t0" in shot:
-            t0 = float(shot["t0"])
-        elif line:
-            t0 = line["t0"] - 0.25
-        elif isinstance(shot.get("after"), int) and 0 <= shot["after"] < len(lines):
-            t0 = lines[shot["after"]]["t1"] + 0.3
-        else:
-            t0 = 0.0
-        # an `after` card uses last.t1 + 0.3; when the last lyric ends at the song
-        # end that start is past duration and segments() drops it (b - a <= 0).
-        if duration > 0 and t0 >= duration:
-            t0 = max(0.0, duration - 4.0)
-        if line:
-            last = lines[min(len(lines) - 1, shot["line"] + shot.get("span", 1) - 1)]
-            t1 = last["t1"] + 0.2
-        elif "t1" in shot:
-            try:
-                t1 = float(shot["t1"])
-            except (TypeError, ValueError):
-                t1 = t0 + 4
-        else:
-            t1 = t0 + 4                       # untitled cards; a trailer bakes t1 so a held beat is not 4 s
-        out.append({**shot, "i": index, "t0": round(max(0.0, t0), 3), "t1": round(t1, 3)})
-    try:
-        bpm = float(score.get("bpm") or 120) or 120.0
-    except (TypeError, ValueError):
-        bpm = 120.0
-    shots = spec.get("shots") if isinstance(spec.get("shots"), list) else []
-    if spec.get("auto_pads") or any(is_auto_pad(shot) for shot in shots):
-        return place_pads(out, spec, duration, bpm)
-    return out
+    from services.production_windows import shot_windows as _shot_windows
+    return _shot_windows(spec, score)
 
 
 def segments(windows: list[dict], score: dict, clip_ok: Callable[[str], bool], fill: list[dict]) -> list[tuple[dict, float, float]]:
     """Scene cuts; an h3 shot longer than its clip is cut at the clip end and the rest filled on bar lines."""
-    cuts = [w["t0"] for w in windows] + [float(score["duration"])]
-    cuts[0] = 0.0
-    bar = 4 * float(score.get("beat") or 0.5)
-    out, used = [], 0
-    for n, shot in enumerate(windows):
-        a, b = cuts[n], cuts[n + 1]
-        if shot["kind"] == "h3" and clip_ok(shot["key"]) and fill:
-            length = h3_frames_for(shot["t1"] - shot["t0"]) / 24 - max(0.0, a - shot["t0"])
-            if b - a > length + 0.3:
-                out.append((shot, a, a + length))
-                t, k = a + length, 0
-                while t < b - 0.05:
-                    item = fill[used % len(fill)]
-                    used += 1
-                    end = min(b, t + 2 * bar)
-                    out.append(({**item, "key": f"{shot['key']}_fill{k}"}, t, end))
-                    t, k = end, k + 1
-                continue
-        if b - a > 0.05:
-            out.append((shot, a, b))
-    return out
+    from services.production_windows import segments as _segments
+    return _segments(windows, score, clip_ok, fill)
 
 
 def pick_song(candidates: dict[str, dict]) -> str:
@@ -471,374 +406,67 @@ class Production:
         return json.loads((self.root / self.state["score"]).read_text())
 
     def cast(self, spec: dict) -> None:
-        cast = self.state.setdefault("cast", {})
-        settings = spec.get("style") or {}
-        style = settings.get("image", "")
-        jobs = {c["id"]: self.image("cast-" + c["id"], c["sheet_prompt"] if style in c["sheet_prompt"] else f"{c['sheet_prompt']} {style}".strip(), None, "1536x1024", c.get("seed", 5),
-                                     c.get("image_model", settings.get("image_model", "flux2_klein_9b")), c.get("image_steps", settings.get("image_steps")),
-                                     self._attempt("cast_attempts", c["id"]))
-                for c in spec.get("cast") or [] if c["id"] not in cast and not c.get("group")}
-        for cid, name in self.wait(jobs).items():
-            if name:
-                cast[cid] = self.upload(name)[1]
-        from services.production_cast_portrait import ensure_portraits, group_sources
-        ensure_portraits(self, spec)
-        for c in spec.get("cast") or []:      # a group reference: the members' portraits side by side in one picture
-            members = c.get("group") or []
-            if members and c["id"] not in cast and all(member in cast for member in members):
-                out = f"{self.id}-group-{c['id']}.png"
-                if compose_group(group_sources(self, members), self.root / out):
-                    cast[c["id"]] = self.upload(out)[1]
-        self.log(f"cast: {len(cast)}")
-        absent = [c["id"] for c in spec.get("cast") or [] if c["id"] not in cast]
-        if absent:
-            raise ProductionError("cast_incomplete", "no reference sheet for " + ", ".join(f"{cid} ({self.failures.get(cid, 'no output')})" for cid in absent))
+        from services.production_stage_frames import cast_sheets
+        cast_sheets(self, spec)
 
     def _attempt(self, group: str, key: str) -> int:
-        """How many times this image was already submitted, so a resume asks for a fresh job instead of the journal's old answer."""
-        counts = self.state.setdefault(group, {})
-        if key not in counts:
-            counts[key] = 1 if any(line.startswith(("frames:", "cast:")) for line in self.state.get("log") or []) else 0
-            return counts[key]
-        counts[key] += 1
-        return counts[key]
+        from services.production_stage_frames import attempt_image
+        return attempt_image(self, group, key)
 
     def frame_prompt(self, spec: dict, w: dict) -> str:
-        """Start-frame prompt: the look, the shot, and how many distinct subjects the cast references stand for
-        (a model given a sheet with several views tends to draw the character several times)."""
-        style = (spec.get("style") or {}).get("image", "")
-        counts = {c["id"]: int(c.get("count", len(c.get("group") or []) or 1)) for c in spec.get("cast") or [] if isinstance(c, dict)}
-        subjects = sum(counts.get(c, 1) for c in w.get("cast", []) if c in self.state.get("cast", {}))
-        guard = f" Exactly {subjects} distinct {'subject' if subjects == 1 else 'subjects'} in the frame, no duplicated characters." if subjects else ""
-        return f"{style} {w['frame']}{guard}".strip()
+        from services.production_stage_frames import frame_prompt
+        return frame_prompt(self, spec, w)
 
     def frames(self, spec: dict, windows: list[dict]) -> None:
-        """One start frame per H3 shot. A missing frame is asked for again (new job; a smaller picture after an
-        out-of-memory) up to FRAME_ATTEMPTS times; what still fails is reported in ``frame_failures``."""
-        windows = self._unlocked(windows)
-        frames = self.state.setdefault("frames", {})
-        failures = self.state.setdefault("frame_failures", {})
-        settings = spec.get("style") or {}
-        for _round in range(FRAME_ATTEMPTS):
-            missing = [w for w in windows if w["kind"] == "h3" and w["key"] not in frames]
-            if not missing:
-                break
-            from services.production_cast_portrait import frame_references
-            from services.production_resolution import frame_resolution
-            jobs = {}
-            for w in missing:
-                attempt = self._attempt("frame_attempts", w["key"])
-                res = frame_resolution(spec, attempt, failures.get(w["key"], ""))
-                refs = frame_references(w, self.state.get("cast") or {}, self.state.get("cast_single") or {})
-                jobs[w["key"]] = self.image("frame-" + w["key"], self.frame_prompt(spec, w), refs or None, res, w.get("seed", 3) + (attempt or 0),
-                                            w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")), attempt)
-            for key, name in self.wait(jobs).items():
-                if name:
-                    frames[key] = name
-                    failures.pop(key, None)
-                else:
-                    failures[key] = self.failures.get(key, "no output")
-                    self.log(f"frame {key} failed ({failures[key]})")
-            self.save()
-        self.log(f"frames: {len(frames)}")
-        self.state["frames_sheet"] = make_frames_sheet(self.root, frames, f"{self.id}-frames.jpg")
-        from services.production_subject_count import note_media
-        note_media(self, spec, windows, "frame")
-        absent = [w["key"] for w in windows if w["kind"] == "h3" and w["key"] not in frames]
-        if absent:
-            raise ProductionError("frames_incomplete", "no start frame for " + ", ".join(f"{key} ({failures.get(key, 'no output')})" for key in absent[:6]))
+        from services.production_stage_frames import shoot_frames
+        shoot_frames(self, spec, windows)
 
     def preview(self, request: dict) -> None:
-        """Generate three look tests before committing GPU time to a song or clips."""
-        self._cancel = arm(self.ws, self.id)
-        self.state.update(status="running", preview_frames={})
-        self.save()
-        try:
-            model = request.get("image_model", "flux2_klein_9b")
-            jobs = {str(index): self.image(f"preview-{index}", prompt, None, request.get("resolution", "1280x704"),
-                                           (request.get("seeds") or [101, 102, 103])[index], model,
-                                           request.get("image_steps"))
-                    for index, prompt in enumerate(request["prompts"])}
-            self.state["preview_frames"] = {key: self.upload(name)[1] for key, name in self.wait(jobs).items() if name}
-            self.state["status"] = "preview_completed" if len(self.state["preview_frames"]) == 3 else "failed"
-            self.log(f"preview: {len(self.state['preview_frames'])}/3")
-        except Exception as error:
-            self.note_stop(error)
-        disarm(self.ws, self.id)
-        self.state["finished"] = time.time()
-        self.save()
+        from services.production_stage_frames import run_preview
+        run_preview(self, request)
+
 
     def clip_job(self, spec: dict, w: dict, seed: int, take: int = 0) -> str | None:
-        """Retakes change strategy, not only the seed: even takes are driven by the full mix (best on the
-        pilot, r 0.41 vs 0.16), odd takes by the isolated vocals for songs whose mix drowns the voice."""
-        frames = h3_frames_for(w["t1"] - w["t0"])
-        vocals = self.score().get("vocals_file")
-        source = vocals if take % 2 == 1 and vocals and w.get("sing") else self.state["song"]["file"]
-        slice_name = f"{self.id}-slice-{w['key']}-{take}.wav"
-        import subprocess
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(w["t0"]), "-t", str(frames / 24), "-i", str(self.root / source),
-                        "-ar", "48000", "-ac", "2", str(self.root / slice_name)], check=True)
-        discard(self.state, slice_name)
-        sing = " (S1) sings the lead vocal of the mapped driving audio, lips, jaw and breath in precise sync with every syllable." if w.get("sing") else ""
-        prompt = (f"integrated_multimodal_description: [Shot 1] {(spec.get('style') or {}).get('video', '')} {w['action']}{sing}\n"
-                  "overall_soundscape: The mapped driving audio: the song.\nnon_diegetic_music: N/A")
-        from services.production_resolution import clip_resolution
-        params = {"prompt": prompt, "model_type": "minimax_h3_fused_turbo", "resolution": clip_resolution(spec), "seed": seed, "generation_mode": "video",
-                  "workspace": self.ws, "image_prompt_type": "S", "image_start": self.upload(self.state["frames"][w["key"]])[0],
-                  "video_length": frames, "sliding_window_size": frames, "num_inference_steps": 4, "guidance_scale": 1, "image_mode": 0,
-                  "input_video_strength": 1.0, "audio_prompt_type": "A", "audio_guide": self.upload(slice_name)[0]}
-        # a resumed run must not collide with the journal entry of an earlier take
-        r = self.mcp("generate", {"request_id": f"{self.id}-{w['key']}-{seed}-{uuid.uuid4().hex[:8]}", "params": params})
-        job = r.get("job_id") or (r.get("result") or {}).get("job_id")
-        if not job:
-            self.log(f"clip {w['key']} not admitted: {json.dumps(r)[:140]}")
-        return job
+        from services.production_stage_clips import submit_clip
+        return submit_clip(self, spec, w, seed, take)
 
     def clips(self, spec: dict, windows: list[dict], retake: tuple[str, ...] = (), pause: float = 60) -> None:
-        """Shoot missing clips (or retake keys). Flat lip-sync r, max_takes, or 4 recorded takes stop an automatic
-        shoot; an explicit retake may pass the cap. The best r is kept. A fully failed round waits before the next."""
-        windows = self._unlocked(windows, retake)
-        self.state.setdefault("clips", {})
-        tried = self.state.setdefault("clip_takes", {})
-        max_takes = int(spec.get("max_takes", 3))
-        vocals = self.score().get("vocals_file")
-        # A song switch leaves files on disk and flags the shot. Treat those keys
-        # like an explicit retake so the new window can spend max_takes again.
-        stale = tuple(key for key, clip in self.state["clips"].items() if obsolete_clip(clip))
-        retake = tuple(dict.fromkeys((*retake, *stale)))
-        pending = pending_windows(windows, self.state, retake)
-        for w in pending:          # productions saved before clip_takes existed: count their logged takes
-            tried.setdefault(w["key"], sum(1 for line in self.state.get("log") or [] if line.startswith(f"clip {w['key']} take ")))
-        budget = {w["key"]: tried[w["key"]] + max_takes for w in pending}
-        while pending:
-            checkpoint(getattr(self, "_cancel", None))
-            started = time.perf_counter()
-            by_key = {w["key"]: w for w in pending}
-            retry_keys: set[str] = set()
-            landed: set[str] = set()
-            lost = self.state.setdefault("clip_lost", {})
-
-            def land(key: str, name: str | None) -> None:
-                """Judge and record one clip as soon as it exists: a restart mid-round keeps the ones already shot."""
-                if key in landed:
-                    return
-                landed.add(key)
-                if key in self.lost and lost.get(key, 0) < MAX_LOST_JOBS:
-                    lost[key] = lost.get(key, 0) + 1      # not a take: the job vanished, so shoot it again
-                    self.log(f"clip {key}: job lost (queue restarted), not counted as a take")
-                    retry_keys.add(key)
-                    return
-                tried[key] += 1
-                if another_take(self.judge_take(by_key[key], name, tried[key], vocals), tried[key], budget[key], key in retake):
-                    retry_keys.add(key)
-                self.save()
-
-            self.on_landed = land
-            try:
-                names = self.wait({w["key"]: self.clip_job(spec, w, 7000 + w["i"] * 10 + tried[w["key"]], tried[w["key"]]) for w in pending})
-            finally:
-                self.on_landed = None
-            for w in pending:
-                land(w["key"], names.get(w["key"]))         # a wait that reports only at the end (a stub) lands them here
-            retry = [w for w in pending if w["key"] in retry_keys]
-            note_seconds(self.state, pending, time.perf_counter() - started)
-            self.save()
-            if retry and not any(names.values()):
-                sleep_until(getattr(self, "_cancel", None), pause, time.sleep)
-            pending = retry
-        from services.production_subject_count import note_media
-        note_media(self, spec, windows, "clip")
-        from services.production_smoothness import note_outputs
-        note_outputs(self, "clip")
+        from services.production_stage_clips import shoot_clips
+        shoot_clips(self, spec, windows, retake, pause)
 
     def judge_take(self, w: dict, name: str | None, take: int, vocals: str | None) -> bool:
-        """Record one take; True when the clip needs no more takes. Sung shots keep the best lip-sync r; other shots keep the best visual score."""
-        key, failed, clips = w["key"], self.state.setdefault("clip_failures", {}), self.state.setdefault("clips", {})
-        if not name:
-            failed[key] = self.failures.get(key, "no output")
-            self.log(f"clip {key} take {take}: failed ({failed[key]})")
-            return False
-        failed.pop(key, None)
-        from services.production_clip_qa import clip_qa
-        qa = clip_qa(str(self.root / name), bool(w.get("sing")), str(self.root / vocals) if vocals else None, w["t0"], w["t1"])
-        drive = "vocals" if (take - 1) % 2 == 1 and w.get("sing") else "mix"
-        self.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
-        self.state.setdefault("takes", {}).setdefault(key, []).append(
-            {"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive})
-        best = clips.get(key)
-        # Obsolete r was measured on the previous song; ranking it would keep the
-        # old take and throw away the clip shot against the new window.
-        ranking = None if obsolete_clip(best) else best
-        previous = (ranking.get("qa") or {}).get("best_r") if ranking else None
-        if not ranking or better_take(qa, (ranking.get("qa") or {})):
-            if ranking and ranking.get("file") and ranking["file"] != name:
-                discard(self.state, ranking["file"])
-            clips[key] = {"file": name, "qa": qa, "url": self.upload(name)[1]}
-        else:
-            discard(self.state, name)
-        return take_settled(qa, previous)
+        from services.production_stage_clips import judge_take
+        return judge_take(self, w, name, take, vocals)
+
 
     def scenes(self, spec: dict, windows: list[dict]) -> None:
-        score = self.score()
-        from services.production_preview import ensure_caption_contrast
-        ensure_caption_contrast(self, spec, windows, score)
-        clips = self.state.get("clips", {})
-        segs = segments(windows, score, lambda k: k in clips, spec.get("fill") or [])
-        self.state["segments"] = [[s["key"], a, b] for s, a, b in segs]
-        done = self.state.setdefault("scenes", {})
-        style, stills = spec.get("style") or {}, spec.get("stills") or {}
-        docs: dict[str, dict] = {}
-        from services.production_shot_review import is_locked
-        for shot, a, b in segs:
-            # Stay on the cut. Skip re-export only when a scene file already
-            # exists; a lock before the first export (or after a failed one)
-            # must still produce that file or montage() drops the shot.
-            if is_locked(self, shot["key"]) and (done.get(shot["key"]) or {}).get("file"):
-                continue
-            dur = round(b - a, 3)
-            used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
-            prior = done.get(shot["key"], {})
-            fingerprint = scene_fingerprint(shot, style, stills, score, a, b)
-            if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
-                    and prior.get("fingerprint") == fingerprint):
-                continue
-            doc = self.scene_document(shot, a, b, score, clips, style, stills)
-            docs[shot["key"]] = doc
-            r = self.mcp("scenes.video2d.export", {"version": 1, "intent_id": f"{self.id}-scene-{shot['key']}-{int(time.time())}",
-                                                   "input": {"workspace": self.ws, "document": doc}})
-            done[shot["key"]] = {"intent": (r.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used,
-                                  "fingerprint": fingerprint, "file": None}
-            self.save()
-        failed = finish_scene_exports(
-            self.mcp, self.ws, self.id, done, docs,
-            lambda seconds: sleep_until(getattr(self, "_cancel", None), seconds, time.sleep), self.save, self.log)
-        apply_scene_export_failure(self.state, failed)
-        self.log(f"scenes: {sum(1 for s in done.values() if s.get('file'))}/{len(segs)}")
-        from services.production_smoothness import note_outputs
-        note_outputs(self, "scene")
+        from services.production_stage_scenes import export_scenes
+        export_scenes(self, spec, windows)
 
     def scene_document(self, shot: dict, a: float, b: float, score: dict, clips: dict, style: dict, stills: dict) -> dict:
-        shot, style = render_shot(shot, style)
-        dur = round(b - a, 3)
-        doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
-        return self.edit(doc, self.scene_ops(shot, a, b, dur, score, clips, style, stills))
+        from services.production_stage_scenes import scene_document
+        return scene_document(self, shot, a, b, score, clips, style, stills)
 
     def package(self, spec: dict, windows: list[dict]) -> None:
-        """Save what a person needs to retouch the video shot by shot: a durable scene document per shot and a manifest
-        (see production_package). Never fails the run: the video is already made."""
-        score, clips = self.score(), self.state.get("clips", {})
-        segs = segments(windows, score, lambda k: k in clips, spec.get("fill") or [])
-        style, stills = spec.get("style") or {}, spec.get("stills") or {}
-        swap, saved = clip_replacements(clips, self.ws), self.state.setdefault("scene_docs", {})
-        for shot, a, b in segs:
-            key = shot["key"]
-            try:
-                doc = durable_document(self.scene_document(shot, a, b, score, clips, style, stills), swap)
-                digest = doc_digest(doc)
-                if (saved.get(key) or {}).get("digest") == digest:
-                    continue
-                result = self.mcp("scenes.document.save", {"version": 1, "intent_id": f"{self.id}-doc-{key}-{digest}",
-                                                           "input": {"workspace": self.ws, "name": f"{self.id}-{key}", "document": doc}})
-                name = (result.get("result") or {}).get("name")
-                if not name:
-                    raise ProductionError("scene_doc_failed", json.dumps(result)[:160])
-                note = " · ".join(part for part in (shot.get("action"), f"seed {shot['seed']}" if shot.get("seed") is not None else "") if part)
-                saved[key] = {"scene": name, "digest": digest, "lyric": lyric_for(score.get("lines") or [], a, b), "note": note,
-                              "warnings": contrast_warnings(self.mcp, doc)}
-            except Exception as error:      # one shot's document must not stop the others
-                self.log(f"package {key}: {type(error).__name__}: {error}"[:200])
-        manifest = write_manifest(self.root, self.id, spec.get("title", self.id), manifest_rows(self.state, spec, segs, score, saved),
-                                  self.state.get("montage_file"))
-        self.state["package"] = {"manifest": manifest, "scene_docs": len(saved),
-                                 "warnings": sum(len(item.get("warnings") or []) for item in saved.values())}
-        self.log(f"package: {len(saved)} scene documents, manifest {manifest}")
+        from services.production_stage_scenes import package_shots
+        package_shots(self, spec, windows)
 
     def _finish_package(self, previous: str | None, previous_error: object, package_error: str | None) -> None:
-        """Restore the finished status. A leftover final is not success, and this must never look running:
-        auto-resume would start a full GPU production.run."""
-        if package_error:
-            self.state["error"] = package_error
-            self.state["status"] = previous if previous in ("completed", "failed") else "failed"
-        elif previous == "failed":
-            self.state["status"] = "failed"
-            self.state["error"] = previous_error
-        elif self.state.get("final"):
-            self.state.update(status="completed", error=None)
-        else:
-            self.state["status"] = "failed"
-            if previous_error:
-                self.state["error"] = previous_error
-        self.state["finished"] = time.time()
-        self.save()
+        from services.production_stage_scenes import finish_package
+        finish_package(self, previous, previous_error, package_error)
 
     def repackage(self, spec: dict) -> None:
-        """Package a production that is already finished (no GPU, no export): scene documents, manifest and the
-        montage clips' origins. This is how an older production becomes editable."""
-        previous, previous_error = self.state.get("status"), self.state.get("error")
-        try:
-            windows = shot_windows(spec, self.score())
-            self.package(spec, windows)
-            file = self.state.get("montage_file")
-            if file:
-                current = (self.mcp("montages.get", {"version": 1, "input": {"workspace": self.ws, "file": file}}).get("result") or {})
-                montage = current.get("montage") or current
-                if attach_origins(montage, self.state.get("scene_docs") or {}, self.id) and montage.get("clips"):
-                    revision = current.get("revision") or montage.get("revision")
-                    saved = self.mcp("montages.save", {"version": 1, "intent_id": f"{self.id}-origins-{int(time.time())}",
-                                                       "input": {"workspace": self.ws, "montage": montage, "file": file, "expected_revision": revision}})
-                    if "result" not in saved:
-                        raise ProductionError("montage_failed", json.dumps(saved)[:200])
-        except Exception as error:
-            self._finish_package(previous, previous_error, f"{type(error).__name__}: {error}"[:300])
-            return
-        self._finish_package(previous, previous_error, None)
+        from services.production_stage_scenes import repackage
+        repackage(self, spec)
 
     def edit(self, doc: dict, ops: list[dict]) -> dict:
-        # scenes.video2d.edit admits 32 ops; a long still with timed lyrics exceeds that in one shot.
-        for index in range(0, len(ops), MAX_OPERATIONS):
-            chunk = ops[index:index + MAX_OPERATIONS]
-            r = self.mcp("scenes.video2d.edit", {"version": 1, "input": {"document": doc, "operations": chunk, "full": True}})
-            if "result" not in r:
-                raise ProductionError("scene_edit_failed", json.dumps(r)[:300])
-            doc = r["result"]["document"]
-        return doc
+        from services.production_stage_scenes import edit_document
+        return edit_document(self, doc, ops)
 
     def scene_ops(self, shot: dict, a: float, b: float, dur: float, score: dict, clips: dict, style: dict, stills: dict) -> list[dict]:
-        ops: list[dict] = []
-        clip = clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None)
-        if shot["kind"] == "scene3d" and not clip:
-            raise ProductionError("scene3d_export_failed", f"scene3d clip missing: {shot['key']}")
-        if clip:
-            note_held(self.state, shot["key"], False)
-            ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-locked")})
-            skip = round(max(0.0, a - shot.get("t0", a)) + ((clip.get("qa") or {}).get("suggested_sync_s") or 0), 3) if shot["kind"] == "h3" else 0
-            # the animation duration is also the video span (sceneTimeline.getSceneLayerTiming): a camera preset's
-            # shorter duration would freeze the clip mid-scene, so it always covers the scene (+ the skipped head)
-            anim: dict[str, Any] = {"end": {"x": 50, "y": 50, "scale": 1.0, "rotation": 0},
-                                    "duration": round(dur + skip, 3)}
-            if skip > 0:
-                anim["trimStart"] = skip
-            ops.append({"op": "update_layer", "id": "bg", "patch": {"fill": True, "animation": anim}})
-        elif shot["kind"] == "screen":
-            desktop = {"theme": style.get("theme") or "tokyo-night", "layout": "triple", "apps": "mixed", "focus": "0", "workspace": "1",
-                       "switch": "none", **{k: str(v) for k, v in (shot.get("desktop") or {}).items()}}
-            ops.append({"op": "add_title", "id": "desk", "template": "desktop", "fields": desktop, "start": 0, "duration": dur})
-        else:
-            zoom = shot.get("zoom") or [1.0, 1.1]
-            source = stills.get(shot.get("still"), shot.get("still"))
-            if not source and shot["kind"] == "h3" and shot["key"] in self.state.get("frames", {}):
-                source = self.upload(self.state["frames"][shot["key"]])[1]      # clip failed: hold its start frame
-                note_held(self.state, shot["key"])
-            ops += [{"op": "add_layer", "id": "bg", "source": source, "type": "image", "preset": shot.get("camera", "camera-push-in")},
-                    {"op": "update_layer", "id": "bg", "patch": {"fill": True, "focus": shot.get("focus", {"x": 50, "y": 50}), "animation": {
-                        "start": {"x": 50, "y": 50, "scale": zoom[0], "rotation": 0}, "end": {"x": 50, "y": 50, "scale": zoom[1], "rotation": 0}}}}]
-        title_ops, used = self._title_ops(shot, dur, style)
-        ops.extend(title_ops)
-        ops.extend(self._lyric_ops(shot, a, b, dur, score, style, used))
-        ops.extend(self._footer_ops(dur, style))
-        if style.get("finish"):
-            ops.append({"op": "set_finish", **style["finish"]})
-        return ops
+        from services.production_stage_scenes import scene_layer_ops
+        return scene_layer_ops(self, shot, a, b, dur, score, clips, style, stills)
+
 
     @staticmethod
     def _title_ops(shot: dict, dur: float, style: dict) -> tuple[list[dict], int]:
@@ -855,137 +483,17 @@ class Production:
         return footer_ops(dur, style)
 
     def montage(self, spec: dict) -> None:
-        if skip_montage(self.state):
-            return
-        score, scenes = self.score(), self.state["scenes"]
-        clips = [{"id": k, "name": k, "source": f"/api/v1/file/{scenes[k]['file']}?workspace={self.ws}", "trimStart": 0, "trimEnd": scenes[k]["dur"],
-                  "muted": True, "fit": "fill", "transition": "none"} for k, _, _ in self.state["segments"] if scenes.get(k, {}).get("file")]
-        montage = {"version": 1, "name": spec["title"], "width": 1920, "height": 1080, "fps": 24, "clips": clips, "audioCues": [], "overlays": [],
-                   "soundtrack": {"source": f"/api/v1/file/{self.state['song']['file']}?workspace={self.ws}", "trimStart": 0, "trimEnd": score["duration"], "volume": 1.0, "loop": False}}
-        attach_origins(montage, self.state.get("scene_docs") or {}, self.id)
-        montage = attach_trailer_audio(self, spec, montage)
-        body: dict[str, Any] = {"workspace": self.ws, "montage": montage}
-        if self.state.get("montage_file"):
-            current = (self.mcp("montages.get", {"version": 1, "input": {"workspace": self.ws, "file": self.state["montage_file"]}}).get("result") or {})
-            revision = current.get("revision") or (current.get("montage") or {}).get("revision")
-            if revision:
-                body.update(file=self.state["montage_file"], expected_revision=revision)
-        saved = self.mcp("montages.save", {"version": 1, "intent_id": f"{self.id}-montage-{int(time.time())}", "input": body})
-        if "result" not in saved:
-            raise ProductionError("montage_failed", json.dumps(saved)[:300])
-        self.state["montage_file"] = saved["result"]["file"]
-        job = self.mcp("montages.export", {"version": 1, "intent_id": f"{self.id}-export-{int(time.time())}",
-                                           "input": {"workspace": self.ws, "file": self.state["montage_file"]}})["result"]["job"]
-        while True:
-            status = self.mcp("montages.export.status", {"version": 1, "input": {"workspace": self.ws, "job_id": job["job_id"]}})
-            status = (status.get("result") or status).get("job", status)
-            # montages.export queues a Video Editor job. cancelled is terminal there
-            # (user cancel or resource scheduler); polling only completed/failed hangs.
-            if status.get("status") in ("completed", "failed", "cancelled", "discarded", "error"):
-                break
-            sleep_until(getattr(self, "_cancel", None), 4, time.sleep)
-        # start_export pre-fills filename when the job is created. A failed
-        # render still carries that planned name; only a completed export is a video.
-        if not isinstance(status, dict) or status.get("status") != "completed" or not status.get("filename"):
-            raise ProductionError("montage_failed", failure_reason(status) if isinstance(status, dict) else "export job lost")
-        self.state["final"] = status["filename"]
-        if self.state["final"]:
-            import subprocess
-            sheet = f"{self.id}-contact.jpg"
-            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(self.root / self.state["final"]), "-vf", contact_sheet_filter(score["duration"]),
-                            "-frames:v", "1", str(self.root / sheet)])
-            self.state["contact_sheet"] = sheet
-        from services.production_smoothness import note_outputs
-        note_outputs(self, "final")
-        self.log(f"montage: {status.get('status')}")
+        from services.production_stage_scenes import build_montage
+        build_montage(self, spec)
 
     def animatic(self, spec: dict, windows: list[dict]) -> None:
-        """CPU preview from the start frames. A new export is stored apart from ``final``."""
-        from services.production_preview import (
-            animatic_report, claim_animatic_video, completed_cut_final,
-            restore_cut_artifacts, restore_cut_state, snapshot_cut_artifacts,
-            snapshot_cut_state,
-        )
-        previous = completed_cut_final(self.state)
-        kept = snapshot_cut_artifacts(self.root, self.state)
-        cut_state = snapshot_cut_state(self.state) if previous else {}
-        self.state["animatic_warnings"] = animatic_report(spec, windows, self.score(), self.state)
-        self.state["caption_gate"] = "warn"
-        try:
-            self.scenes(spec, windows)
-            self.montage(spec)
-        finally:
-            self.state.pop("caption_gate", None)
-            restore_cut_artifacts(self.root, self.state, kept)
-            if previous:
-                restore_cut_state(self.state, cut_state)
-            claim_animatic_video(self.state, previous if isinstance(previous, str) else None)
+        from services.production_stage_scenes import build_animatic
+        build_animatic(self, spec, windows)
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
-        from services.production_shot_review import assert_retake_unlocked
-        assert_retake_unlocked(self, retake)
-        self._cancel = arm(self.ws, self.id)
-        prior_status = self.state.get("status")
-        from services.production_preview import keep_completed_cut, remember_completed_cut
-        remember_completed_cut(self.state, prior_status, through)
-        self.state.update(spec=spec, status="running", started=self.state.get("started") or time.time(), through=through)
-        from services.production_close import note_resume
-        note_resume(self)
-        self.save()
-        try:
-            checkpoint(self._cancel)
-            from services.production_preview import log_title_cards
-            log_title_cards(self, spec)
-            watch = StageWatch(self)
-            watch.call("song", self.song, spec)
-            watch.call("analyze", self.analyze, spec)
-            watch.call("cast", self.cast, spec)
-            windows = shot_windows(spec, self.score())
-            watch.call("frames", self.frames, spec, windows)
-            if through == "frames":
-                self.state["status"] = "frames_ready"
-                self.log("frames: ready for a clean restart before clips")
-                return
-            if through == "animatic":
-                try:
-                    self.animatic(spec, windows)
-                except Exception as error:
-                    if isinstance(error, Cancelled) or not keep_completed_cut(self.state, prior_status):
-                        raise
-                    self.log(f"animatic failed: {type(error).__name__}: {error}"[:200])
-                if keep_completed_cut(self.state, prior_status):
-                    self.state.update(status="completed", error=None)
-                elif self.state.get("status") != "failed":
-                    self.state["status"] = "animatic_ready"
-                    self.log("animatic: ready; a resume continues with clips")
-                return
-            watch.call("clips", self.clips, spec, windows, retake)
-            if any(s.get("kind") == "scene3d" for s in [*spec["shots"], *(spec.get("fill") or [])]):
-                watch.call("clips", export_scene3d_clips, self, spec, windows, retake)
-            from services.production_enhance import enhance_clips
-            enhance_clips(self, spec)
-            watch.call("scenes", self.scenes, spec, windows)
-            try:
-                self.package(spec, windows)
-            except Exception as error:      # the video is made; editability is a bonus that must not fail the run
-                self.log(f"package failed: {type(error).__name__}: {error}"[:200])
-            watch.call("montage", self.montage, spec)
-            self.state["package"] = {**(self.state.get("package") or {}), "montage": self.state.get("montage_file")}
-            # A leftover final from a previous completed run is not success: scene
-            # export can fail, skip montage, and still leave that filename in state.
-            if self.state.get("status") != "failed" and self.state.get("final"):
-                self.state.update(status="completed", error=None)
-            elif self.state.get("status") != "failed":
-                self.state["status"] = "failed"
-        except Exception as error:  # the run is resumable; a cancel keeps the files and the spec
-            self.note_stop(error)
-        finally:
-            disarm(self.ws, self.id)
-            self.state["finished"] = time.time()
-            from services.production_close import close_run
-            close_run(self, retake)
-            release_completed(self.root, self.state, self.id)
-            self.save()
+        from services.production_stage_run import execute_run
+        execute_run(self, spec, retake, through)
+
 
 
 def status_summary(state: dict, workspace: str, root: str | None = None, production_id: str | None = None) -> dict[str, Any]:
