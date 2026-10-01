@@ -25,7 +25,9 @@ CONTROL = {"type": "object", "properties": {
 OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "templates.list": ({"editor": EDITOR, "tag": {"type": "string"}, "query": {"type": "string", "maxLength": 120}}, [], False,
                        "List user/imported/community scene templates in the local library: id (author/slug), editor, title, "
-                       "author, license, tags, slots to fill, controls to tune and preview URL."),
+                       "author, license, tags, slots to fill, controls to tune and preview URL. `query` is loose: any words, in any "
+                       "language or order, ignoring case, accents and plurals, and a whole sentence is fine; results are ranked best "
+                       "first. Leave it out to browse everything and choose by meaning from the titles and descriptions."),
     "templates.get": ({"id": TEMPLATE_ID}, ["id"], False, "Read one template: manifest (slots, controls, metadata) and its scene document."),
     "templates.save": ({"workspace": WORKSPACE, "editor": EDITOR, "document": {"type": "object"},
                         "title": {"type": "string", "minLength": 1, "maxLength": 80}, "description": {"type": "string", "maxLength": 600},

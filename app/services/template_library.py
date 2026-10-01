@@ -18,6 +18,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
+from services import template_search
 from services.scene_packages import (
     ScenePackageError,
     _read_zip_member,
@@ -168,11 +169,15 @@ class TemplateLibrary:
                 item = self.summary(template_id)
             except TemplateError:
                 continue
-            text = " ".join([item["title"] or "", item["description"] or "", " ".join(item["tags"] or [])]).casefold()
-            if (editor and item["editor"] != editor) or (tag and tag not in (item["tags"] or [])) or (query and query.casefold() not in text):
+            if (editor and item["editor"] != editor) or (tag and tag not in (item["tags"] or [])):
                 continue
-            items.append(item)
-        return sorted(items, key=lambda item: item.get("updatedAt") or "", reverse=True)
+            match = template_search.score(query or "", title=item["title"] or "", description=item["description"] or "", tags=item["tags"] or [])
+            if match:
+                items.append((match, item))
+        # best match first, then the most recently updated; without a query every score is equal, so only the date counts
+        items.sort(key=lambda pair: pair[1].get("updatedAt") or "", reverse=True)
+        items.sort(key=lambda pair: pair[0], reverse=True)
+        return [item for _, item in items]
 
     def get(self, template_id: str) -> dict[str, Any]:
         _, manifest, document = self._read(template_id)

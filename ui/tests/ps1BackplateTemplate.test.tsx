@@ -37,7 +37,7 @@ test('imported PS1 template is selectable with its preview and missing asset hin
   const applied: World3DUserTemplate[] = []
   try {
     render(<Scene3DUserTemplates document={scene} workspace="ps1-demo" disabled={false} onApply={pack => applied.push(pack)} />)
-    const card = await screen.findByRole('button', { name: definition.manifest.title })
+    const card = await screen.findByRole('button', { name: 'Escena estilo PS1' })
     assert.match(card.querySelector('img')?.getAttribute('src') ?? '', /\/hocuspocus\/ps1-backplates\/preview$/)
     fireEvent.click(card)
     await waitFor(() => assert.equal(applied.length, 1))
