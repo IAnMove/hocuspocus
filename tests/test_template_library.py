@@ -42,6 +42,28 @@ def test_ps1_template_is_discoverable_with_declared_inputs_and_preview(env):
     assert "foreground" in definition["backgroundPrompt"].lower()
 
 
+@pytest.mark.parametrize("query", [
+    "Escena estilo PS1", "escenas estilo PS1", "escenas con gráficos prerenderizados",
+    "escenas con graficos prerenderizados", "escena con gráficos prerenderizados",
+    "escena con graficos prerenderizados", "gráficos prerenderizados",
+    "graficos prerenderizados", "fondos prerenderizados", "PS1", "backplate",
+])
+def test_ps1_template_is_discoverable_by_human_names_after_import_and_round_trip(env, query):
+    library, make, _ = env
+    data, _ = _backplate_package()
+    library.import_package(data)
+    _, exported = library.export("hocuspocus/ps1-backplates")
+    reopened = make("human-name-round-trip")
+    reopened.import_package(exported)
+    for current in (library, reopened):
+        result = TemplateCommands(current).execute("templates.list", {
+            "version": 1, "input": {"editor": "video3d", "query": query},
+        })["result"]
+        assert [item["id"] for item in result["templates"]] == ["hocuspocus/ps1-backplates"]
+        assert result["templates"][0]["title"] == "Escena estilo PS1"
+        assert current.get("hocuspocus/ps1-backplates")["manifest"]["title"] == "Escena estilo PS1"
+
+
 def test_ps1_template_changes_assets_and_controls_then_saves_and_reopens(env):
     from services.production_backplates import validate_backplate_scene
     from services.scene_documents import get_document, save_document

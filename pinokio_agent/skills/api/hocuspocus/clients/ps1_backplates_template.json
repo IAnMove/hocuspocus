@@ -4,12 +4,12 @@
     "version": 1,
     "id": "hocuspocus/ps1-backplates",
     "editor": "video3d",
-    "title": "PS1 · Fondo pintado + personaje 3D",
-    "description": "Un fondo fijo generado con Qwen Image 2.1 y un personaje GLB animado. Cambia el lugar, personaje, recorrido, duración y luz. Ajusta los pies y la perspectiva antes de exportar. La imagen no aporta colisiones ni oclusión; cada nueva combinación necesita revisión visual.",
+    "title": "Escena estilo PS1",
+    "description": "Escenas con gráficos prerenderizados, al estilo PS1: fondos prerenderizados de Qwen Image 2.1 y personajes 3D (GLB) animados, con cámara fija. Nombres alternativos: escenas estilo PS1; escena con gráficos prerenderizados; escenas con graficos prerenderizados; escena con graficos prerenderizados. Cambia lugar, personaje, recorrido, duración y luz. Revisa pies y perspectiva antes de exportar. El fondo no aporta colisiones ni oclusión; cada nueva combinación necesita revisión visual.",
     "author": {"name": "HocusPocus"},
     "license": "all-rights-reserved",
-    "templateVersion": "1.0.0",
-    "tags": ["ps1", "backplate", "qwen-image-2-1", "fixed-camera"],
+    "templateVersion": "1.0.1",
+    "tags": ["ps1", "backplate", "qwen-image-2-1", "fixed-camera", "prerenderizados", "graficos-prerenderizados", "fondos-prerenderizados"],
     "slots": [
       {"id": "background", "label": "Fondo Qwen", "target": "background", "accepts": ["image"], "required": true, "hint": "Prompt: Estación vacía estilo fondo prerenderizado PS1, cámara fija elevada a tres cuartos, suelo libre en el tercio inferior, luz cálida desde arriba a la izquierda, sin personas, texto ni obstáculos. Qwen Image 2.1."},
       {"id": "actor", "label": "Personaje 3D", "target": "subject_1", "accepts": ["model3d"], "required": true, "hint": "GLB animado. Selecciona un clip que exista en este modelo; Walking es sólo el ejemplo."}

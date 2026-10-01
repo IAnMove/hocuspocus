@@ -1,16 +1,31 @@
-# Template PS1: fondo Qwen + personaje 3D
+# Escena estilo PS1: gráficos prerenderizados
 
-El template de biblioteca **`hocuspocus/ps1-backplates`** reutiliza la composición de
+El template **Escena estilo PS1** reutiliza la composición de
 la muestra PS1: imagen fija como entorno y un personaje GLB animado. El lugar, la
 paleta, la actuación y los cortes los decide el autor o el LLM. La escena conserva
 `templateId: "two-shot"` como formato nativo compatible; el identificador de
-biblioteca es independiente. Usa el renderer existente.
+biblioteca **`hocuspocus/ps1-backplates`** es independiente y se conserva al cambiar
+el nombre visible. Usa el renderer existente.
+
+Puedes pedirlo por su nombre humano: **«escena estilo PS1»**, **«escenas estilo
+PS1»** o **«escenas con gráficos prerenderizados»**. También se encuentra sin la
+tilde en «graficos». Un asistente con acceso a la biblioteca debe buscar ese
+nombre con `templates.list`, consultar los recursos con `templates.get` y usar
+el id devuelto para aplicar la composición. No necesitas escribir el id en tu
+petición:
+
+> Haz un videoclip con escenas con gráficos prerenderizados, estilo PS1. Busca
+> «Escena estilo PS1» en la biblioteca: fondos de Qwen Image 2.1, personajes 3D
+> animados y cámara fija. Usa mi canción y mis personajes. Muéstrame los fondos
+> y la propuesta de planos para revisión antes de exportar.
 
 ## Importar y usar en la interfaz
 
 1. Importa el archivo `.hptemplate` en **Video 3D → Mis plantillas → Importar**.
    Revisa nombre, recursos y controles; confirma la importación. Aparecerá la ficha
-   **PS1 · Fondo pintado + personaje 3D**, con la miniatura incluida en el paquete.
+   **Escena estilo PS1**, con la miniatura incluida en el paquete. Si ya importaste
+   la versión anterior, revisa y confirma su reemplazo para actualizar el nombre
+   y sus términos de búsqueda; las escenas guardadas conservan su documento.
 2. Selecciona la ficha. La escena avisa de los recursos que faltan: `background`
    (imagen) y `actor` (GLB). Asigna tus archivos desde el editor. Elige una animación
    que exista en el GLB; `Walking`, índice 0, sólo describe el personaje de la muestra.
@@ -49,7 +64,7 @@ La interfaz y los agentes comparten `templates.list`, `templates.get`,
 `templates.import` y `templates.apply`. Una vez importado el paquete:
 
 ```json
-{"version":1,"input":{"editor":"video3d","query":"PS1"}}
+{"version":1,"input":{"editor":"video3d","query":"escenas con gráficos prerenderizados"}}
 ```
 
 Usa ese sobre con `templates.list`, y consulta `templates.get` con
@@ -120,6 +135,8 @@ Para otra vista, crea otro fondo y otro plano con cámara fija.
 
 - Importar el paquete presenta ficha, recursos y miniatura tanto por HTTP como
   por `templates.list/get`; seleccionarlo en la UI aplica un documento válido.
+- Buscar por los nombres humanos, con o sin tilde, devuelve la misma ficha
+  **Escena estilo PS1** y el mismo id, también tras exportar y volver a importar.
 - Cambiar fondo, GLB, animación y recorrido, guardar y reabrir conserva esos cambios.
 - Exportar/importar el template en una biblioteca nueva conserva los controles y
   el recorrido sin incluir archivos privados. Los recursos pendientes son visibles.
