@@ -1746,12 +1746,19 @@ def _normalize_production_profile(value) -> dict:
     }
 
 
+def _default_production_profile() -> dict:
+    """The unsaved profile: local Qwen Image 2.1 when installed, else the static default."""
+    from services import production_profile_defaults
+
+    return production_profile_defaults.default_profile(_DEFAULT_PRODUCTION_PROFILE, _check_model_downloaded)
+
+
 def _active_production_profile() -> dict:
     raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
     try:
         return _normalize_production_profile(raw)
     except ValueError:
-        return copy.deepcopy(_DEFAULT_PRODUCTION_PROFILE)
+        return _default_production_profile()
 
 
 def _effective_llm_routing(services: dict | None = None) -> tuple[str, str, str]:
@@ -1802,7 +1809,7 @@ def _production_profile_response() -> dict:
         profile = _normalize_production_profile(raw)
         configured = True
     except ValueError:
-        profile = copy.deepcopy(_DEFAULT_PRODUCTION_PROFILE)
+        profile = _default_production_profile()
         configured = False
     return {"configured": configured, "profile": profile}
 
