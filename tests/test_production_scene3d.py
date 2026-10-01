@@ -302,3 +302,47 @@ def test_native_fill_covers_an_h3_tail_and_arbitrary_shot_keys_are_safe(tmp_path
     render(production, [shot() | {'key': 'long key / ☀' * 40}])
     intent = production.calls[-2][1]['intent_id']
     assert len(intent) <= 160 and intent.isascii() and ' ' not in intent
+
+
+def test_many_native_cuts_stay_within_one_frame_of_continuous_audio():
+    from services.production_windows import segments
+
+    windows = [shot() | {'key': f's{i}', 't0': i * 1.009} for i in range(100)]
+    cuts = segments(windows, {'duration': 100.9}, lambda _: False, [])
+    elapsed_frames = 0
+    for index, (_, start, end) in enumerate(cuts):
+        # Simulate the actual CFR montage; later mouths must not accumulate
+        # rounding error against an uninterrupted song.
+        assert elapsed_frames / 24 == pytest.approx(start)
+        assert abs(elapsed_frames / 24 - windows[index]['t0']) <= .5 / 24
+        elapsed_frames += round(round(end - start, 3) * 24)
+    assert abs(elapsed_frames / 24 - 100.9) <= .5 / 24
+
+
+def test_native_export_and_wrapping_scene_share_fractional_cut_lengths(tmp_path):
+    from services import music_production as runner
+
+    production = Production(tmp_path)
+    production.score = lambda: {'duration': 36.567, 'beat': .5, 'lines': []}
+    windows = [shot() | {'key': f's{i}', 't0': round(i * 6.092492, 3)} for i in range(6)]
+    render(production, windows)
+    cuts = runner.segments(windows, production.score(), lambda _: True, [])
+    wrapped_frames = []
+    for window, start, end in cuts:
+        duration = production.state['clips'][window['key']]['world3d_document']['duration']
+        assert duration == round(end - start, 3)
+        wrapped_frames.append(round(duration * 24))
+    assert wrapped_frames == [146, 146, 147, 146, 146, 147]
+    assert sum(wrapped_frames) == round(production.score()['duration'] * 24)
+
+
+def test_mixed_native_cuts_share_the_grid_and_existing_2d_cuts_stay_unchanged():
+    from services.production_frame_clock import align_native_cuts
+
+    first = ({'key': 'still', 'kind': 'still'}, 0, 1.009)
+    second = (shot(), 1.009, 2.018)
+    cuts = align_native_cuts([first, second])
+    assert cuts[0][2] == cuts[1][1]
+    assert round((cuts[0][2] - cuts[0][1]) * 24) + round((cuts[1][2] - cuts[1][1]) * 24) == 48
+    legacy = [first, ({'key': 'clip', 'kind': 'clip'}, 1.009, 2.018)]
+    assert align_native_cuts(legacy) == legacy

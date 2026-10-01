@@ -336,6 +336,14 @@ montage adds the song normally. Empty `cast` and all-3D shots request no cast
 images, start frames or H3 generation. Both template and full-document shots
 are supported in `fill`.
 
+Cuts containing native 3D use the montage's 24 fps grid: round each absolute
+boundary to its nearest frame, then subtract boundaries for each shot's length.
+The native export, Video 2D wrapper and montage share those lengths. Rounding
+every length independently would accumulate lip/audio drift over many cuts.
+When authoring muted speech against source-clock cues, set `speech.offset` to
+the source position at that actual frame-aligned start; account for the returned
+`time_map` when `audio.shorten` has repeated or crossfaded the song.
+
 State stores each native document in `clips[key].world3d_document`, the export
 receipt identity and a config/duration fingerprint. Resume reuses unchanged
 clips; a changed scene or `retake: [key]` exports that shot again. A locked clip

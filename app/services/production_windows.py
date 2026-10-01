@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from services.production_frame_clock import align_native_cuts
 from services.production_shot_plan import is_auto_pad, place_pads
 
 
@@ -77,4 +78,4 @@ def segments(windows: list[dict], score: dict, clip_ok: Callable[[str], bool], f
                 continue
         if b - a > 0.05:
             out.append((shot, a, b))
-    return out
+    return align_native_cuts(out)

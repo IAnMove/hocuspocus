@@ -107,6 +107,12 @@ por lo que cada plano conserva `speech.offset` igual al inicio de su recorte.
 Usa la voz aislada de `audio.analyze` para canto. Este análisis es CPU, no genera
 voz y no descarga herramientas. Sin Rhubarb devuelve `speech_unavailable`.
 
+En producciones con planos 3D, los cortes se alinean por su posición absoluta
+a la cuadrícula de 24 fps. Usa esa posición para el recorte de gestos: redondear
+por separado la duración de cada plano acumularía desfase contra la canción.
+Si se repite un fragmento mediante `audio.shorten`, su `time_map` incluye los
+solapes de audio; no se obtiene el inicio multiplicando la duración del fragmento.
+
 Instala [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) con sus
 recursos y licencia. Configura `RHUBARB_EXECUTABLE` con la ruta absoluta al
 binario, o añádelo a PATH, y reinicia HocusPocus. No hay descargas automáticas.
