@@ -901,10 +901,12 @@ class Production:
         """CPU preview from the start frames. A new export is stored apart from ``final``."""
         from services.production_preview import (
             animatic_report, claim_animatic_video, completed_cut_final,
-            restore_cut_artifacts, snapshot_cut_artifacts,
+            restore_cut_artifacts, restore_cut_state, snapshot_cut_artifacts,
+            snapshot_cut_state,
         )
         previous = completed_cut_final(self.state)
         kept = snapshot_cut_artifacts(self.root, self.state)
+        cut_state = snapshot_cut_state(self.state) if previous else {}
         self.state["animatic_warnings"] = animatic_report(spec, windows, self.score(), self.state)
         self.state["caption_gate"] = "warn"
         try:
@@ -913,6 +915,8 @@ class Production:
         finally:
             self.state.pop("caption_gate", None)
             restore_cut_artifacts(self.root, self.state, kept)
+            if previous:
+                restore_cut_state(self.state, cut_state)
             claim_animatic_video(self.state, previous if isinstance(previous, str) else None)
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
