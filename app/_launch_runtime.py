@@ -30314,6 +30314,8 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         with _series_render_jobs_lock:
             _series_render_jobs[job_id] = copy.deepcopy(job)
             _series_render_store(workspace).save(job)
+    from services.production_producer_link import link_series_render
+    link_series_render(_workspace_dir(workspace), workspace, episode_id)
     threading.Thread(
         target=_run_series_render_job, args=(job_id,),
         name=f"series-render-{job_id[-6:]}", daemon=False,

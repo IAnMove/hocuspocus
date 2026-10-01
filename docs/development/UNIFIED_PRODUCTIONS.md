@@ -77,13 +77,13 @@ contacto ya es un nombre de fichero del workspace.
 
 | Productor | Proyecto | Producción | Planos / tomas | Qué reutiliza este cambio | Qué falta |
 |---|---|---|---|---|---|
-| `production.run` | no tenía Story | `{id}.production.json` | `{id}.shots.json`, `takes`, review | se enlaza antes de generar; la vista lee el manifiesto y `review.json` | el run no llama a resolve; la vista no elige tomas |
-| Director | `provenance.project_id` opcional | `_director_pipeline_*.json` | `clips[]`, `video_attempts` | el catálogo indexa el snapshot; la vista lee los clips | el arranque del pipeline no llama a resolve |
-| Story Lab | la biblioteca | `projects[].productions[]` | el pipeline o el batch que dispare | Story mínima, fila `productions[]` y **Revisar planos** en Resultados | el run no llama a resolve |
-| Series | el episodio | `productionIds[]` no se reescribe | `shots[]`, `attempts[]` | un episodio explícito se reutiliza; la vista lee sus planos | no se añade el id al episodio |
+| `production.run` | Story mínima o el `project` que envíe el comando | `{id}.production.json` | `{id}.shots.json`, `takes`, review | el comando llama a `bind_producer` antes del hilo | un `dry_run` no crea proyecto |
+| Director | Story mínima por `pipeline_id`, o `params.project` | `_director_pipeline_*.json` | `clips[]`, `video_attempts` | `start_pipeline` enlaza antes del worker | `provenance.project_id` no se usa como Story |
+| Story Lab | la biblioteca | `projects[].productions[]` | el pipeline o el batch que dispare | Story mínima, fila `productions[]` y **Revisar planos** en Resultados | el laboratorio no tiene otro arranque distinto de estos productores |
+| Series | el episodio que ya existe | el id del episodio | `shots[]`, `attempts[]` | el render enlaza el episodio antes de mutar la cola | no reescribe la biblioteca de series ni crea una Story |
 | Montaje | no | `{nombre}.montage.json` | clips y tomas del editor | la vista lee el montaje nombrado o el que cita `productionId` | el catálogo de obras aún no indexa el montaje |
 | MCP `generation.video` | no | un job de Studio | no es una obra | no se convierte en proyecto | sigue en la galería hasta que alguien lo vincule |
-| Wizard | la Story que la acción envíe | handoff a Director o Series | los del destino | `production.works.list`, `open` y `resolve` | `production.run`, el arranque del Director y el render de serie siguen sin llamar a resolve |
+| Wizard | la Story que la acción envíe | handoff a Director o Series | los del destino | `production.works.list`, `open` y `resolve` | el handoff entra por el arranque del Director o el render de serie, que ya enlazan |
 
 ## Coordinación
 
@@ -169,19 +169,23 @@ El asistente registra `production_works` con una línea en `capabilityRegistry.t
 
 La UI ofrece **Vincular a proyecto** solo en esa fila. El id lo escribe quien conoce el proyecto.
 
+## Productores
+
+`production.run` llama a `link_production_run` después de validar el spec y antes de arrancar el hilo. Sin `project` crea una Story mínima y el mismo `production_id` la reutiliza. Un `project` que no existe responde 422 y no arranca el hilo. `dry_run` no crea proyecto.
+
+`start_pipeline` llama a `link_director_start` antes de registrar el pipeline y antes del worker. El id del pipeline es el id de la obra. Un segundo arranque del mismo id no crea otra Story. `provenance.project_id` no se interpreta como Story.
+
+El render de un episodio llama a `link_series_render` cuando la petición ya es válida y antes de arrancar el worker. Un render rechazado no crea proyecto. El proyecto es ese episodio. No crea una Story y no reescribe `.series-library-v1.json` en el enlace.
+
 ## Límites conocidos en este corte
 
-- Quien llama a `production.run` o al arranque del Director tiene que pedir
-  resolve antes. El servidor aún no intercepta esos comandos.
 - El estado del enlace se alinea con el fichero al listar o al `POST` de estado.
-  No hay gancho dentro del hilo de `production.run`.
+  No hay gancho dentro del hilo que ya está generando.
 - Los montajes y los jobs sueltos de `generation.video` no son proyectos.
 - **Vincular a proyecto** exige un id que ya exista. No adivina por el título.
 - El recorrido con navegador no está hecho en este corte: no hay herramienta de navegador y no se arrancan los puertos 42003, 42010, 42017 ni 42022.
 - Los tokens de LLM de este cambio no están disponibles: el cliente no los midió.
   No se estiman a partir de bytes.
-- `production.run`, el arranque del Director y el render de serie siguen sin
-  llamar a resolve. El conjunto no está cerrado.
 
 ## Pruebas
 
