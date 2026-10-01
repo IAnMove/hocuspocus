@@ -199,6 +199,7 @@
         "tests/test_production_phase.py",
         "tests/test_production_preview.py",
         "tests/test_production_project_link.py",
+        "tests/test_production_work_commands.py",
         "tests/test_production_shot_actions.py",
         "tests/test_production_shot_view.py",
         "tests/test_production_smoothness.py",
@@ -418,7 +419,11 @@
   "path_rules": [
     {
       "prefix": "app/services/production_project_link.py",
-      "paths": ["tests/test_production_project_link.py"]
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py"]
+    },
+    {
+      "prefix": "app/services/production_work_commands.py",
+      "paths": ["tests/test_production_work_commands.py"]
     },
     {
       "prefix": "app/services/production_work_catalog.py",
@@ -426,7 +431,7 @@
     },
     {
       "prefix": "app/routers/production_projects.py",
-      "paths": ["tests/test_production_project_link.py", "tests/test_production_shot_view.py", "tests/test_production_shot_actions.py"]
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py", "tests/test_production_shot_view.py", "tests/test_production_shot_actions.py"]
     },
     {
       "prefix": "app/services/production_shot_view.py",

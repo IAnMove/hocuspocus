@@ -1,0 +1,52 @@
+{
+  "title": "Productions",
+  "close": "Close",
+  "workspace": "Workspace {{workspace}}",
+  "loading": "Loading…",
+  "loadFailed": "The catalog could not be read.",
+  "empty": "No works in this workspace.",
+  "reviewShots": "Review shots",
+  "openProject": "Open project",
+  "unlinked": "No linked project",
+  "projectUnavailable": "The project is not in this workspace.",
+  "updated": "Updated {{when}}",
+  "updatedUnknown": "No update time",
+  "previewAlt": "Preview",
+  "projectStory": "Story {{id}}",
+  "projectEpisode": "Episode {{id}}",
+  "warning": "{{source}}: {{error}}",
+  "filters": {
+    "format": "Type",
+    "status": "Status",
+    "all": "All"
+  },
+  "formats": {
+    "music_video": "Music video",
+    "trailer": "Trailer",
+    "quick_video": "Quick video",
+    "full_story": "Full story"
+  },
+  "statuses": {
+    "pending": "Pending",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "unknown": "Unknown"
+  },
+  "origins": {
+    "mcp": "MCP",
+    "wizard": "Wizard",
+    "ui": "Studio",
+    "file": "File",
+    "link": "Link",
+    "story": "Story",
+    "director": "Director"
+  },
+  "create": {
+    "title": "Light story",
+    "hint": "A music video, trailer, or quick video can be reviewed without writing a full narrative.",
+    "name": "Title",
+    "untitled": "Untitled",
+    "submit": "Create work"
+  }
+}

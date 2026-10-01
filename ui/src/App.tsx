@@ -92,6 +92,10 @@ const MusicProductionsOverlay = lazy(() => import('./features/music-productions/
   default: module.MusicProductionsOverlay,
 })))
 
+const ProductionCatalogOverlay = lazy(() => import('./features/production-catalog/ProductionCatalogOverlay').then(module => ({
+  default: module.ProductionCatalogOverlay,
+})))
+
 export function LazyMusicProductionsOverlay() {
   const [open, setOpen] = useState(false)
   const [everOpened, setEverOpened] = useState(false)
@@ -111,6 +115,28 @@ export function LazyMusicProductionsOverlay() {
   if (!everOpened) return null
   return <Suspense fallback={null}>
     <MusicProductionsOverlay open={open} onClose={() => setOpen(false)} />
+  </Suspense>
+}
+
+export function LazyProductionCatalogOverlay() {
+  const [open, setOpen] = useState(false)
+  const [everOpened, setEverOpened] = useState(false)
+  useEffect(() => {
+    const openPanel = () => {
+      setEverOpened(true)
+      setOpen(true)
+    }
+    const closePanel = () => setOpen(false)
+    window.addEventListener('hocuspocus:production-catalog-open', openPanel)
+    window.addEventListener('hocuspocus:production-catalog-close', closePanel)
+    return () => {
+      window.removeEventListener('hocuspocus:production-catalog-open', openPanel)
+      window.removeEventListener('hocuspocus:production-catalog-close', closePanel)
+    }
+  }, [])
+  if (!everOpened) return null
+  return <Suspense fallback={null}>
+    <ProductionCatalogOverlay open={open} onClose={() => setOpen(false)} />
   </Suspense>
 }
 
@@ -258,6 +284,7 @@ function AppContent() {
       <LazySettingsDrawer open={settingsOpen} />
       <LazyHelpOverlay />
       <LazyMusicProductionsOverlay />
+      <LazyProductionCatalogOverlay />
       <LazyProductionShotsOverlay />
       <LoraBrowser />
       <LazyDirectorOverlay open={dashboardOpen} />

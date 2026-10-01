@@ -18,6 +18,7 @@ import fcntl
 
 
 LINK_FILENAME = ".production-project-links-v1.json"
+REVIEW_EVENT = "hocuspocus:production-shots-open"
 FORMATS = frozenset({"music_video", "trailer", "quick_video", "full_story"})
 ORIGINS = frozenset({"mcp", "wizard", "ui"})
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
@@ -480,6 +481,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         "created_at": record.get("created_at"),
         "updated_at": record.get("updated_at"),
         "review": {
+            "event": REVIEW_EVENT,
+            "workspace": record["workspace_id"],
             "workspace_id": record["workspace_id"],
             "production_id": record["production_id"],
             "project": dict(record["project"]),
@@ -591,7 +594,7 @@ MappingRequest = dict[str, Any]
 
 
 __all__ = [
-    "FORMATS", "LINK_FILENAME", "LinkError", "ORIGINS",
+    "FORMATS", "LINK_FILENAME", "LinkError", "ORIGINS", "REVIEW_EVENT",
     "created_story_id", "note_production_status", "production_id_for",
     "read_link_store", "refresh_link_status", "resolve_production_project",
 ]

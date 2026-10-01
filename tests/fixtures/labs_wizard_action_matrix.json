@@ -3313,6 +3313,32 @@
       "notes": "MCP, the Wizard and the production planner share the editor catalog. A tie or an unknown id does not invent a scene.",
       "prompt_fixture": "",
       "blocking_defect": ""
+    },
+    {
+      "id": "production.works.review",
+      "lab": "productions",
+      "surface": "read",
+      "user_operation": "List works and open the shared shot review",
+      "control": "Ask to the Wizard → Productions",
+      "ui_handler": "productionWorks.command",
+      "domain_function": "registerProductionWorkCapabilities",
+      "domain_module": "ui/src/features/agent/productionWorkCapabilities.ts",
+      "adapter": "productionWorks.command",
+      "api": "POST /api/v1/production-projects/commands",
+      "wizard_capability": "production_works",
+      "wizard_schema": "productionWorkCapabilities.production_works.inputSchema",
+      "in_wizard_context": true,
+      "wizard_status": "registrada",
+      "wizard_available": true,
+      "classification": "operativa",
+      "phase": "out_of_scope",
+      "preconditions": "A workspace; an existing production id to open; an intent id reuses the same light Story",
+      "persistence": "Sidecar .production-project-links-v1.json is written only by resolve, before the production file",
+      "presentation": "productions",
+      "test": "ui/tests/productionWorksWizard.test.ts",
+      "notes": "List and open do not start a generator. The same intent reuses the production. production.review stays the vision QA tool.",
+      "prompt_fixture": "",
+      "blocking_defect": ""
     }
   ],
   "audited_control_groups": [

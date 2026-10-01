@@ -24,6 +24,8 @@
     "loadPreview": "Cargar previsualización",
     "savedMetadata": "Petición de generación guardada y metadatos del resultado",
     "reject": "Rechazar",
+    "sharedShots": "Revisar planos",
+    "sharedShotsMissing": "Este episodio no tiene una producción vinculada",
     "seedMeta": "semilla {{seed}} · {{seconds}}s · {{model}}",
     "durableQueue": "Cola de render duradera",
     "durableQueueHint": "Los planos terminados sobreviven a cancelar y reiniciar. Los planos aprobados no entran en las corridas masivas de pendientes o fallidos.",
