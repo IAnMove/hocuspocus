@@ -47,7 +47,7 @@
     "profileLoaded": "Ajuste recuperado. Las voces y tiempos de esta escena no han cambiado.",
     "profileMissing": "Este modelo aún no tiene un ajuste guardado.",
     "loadBeforeSave": "Ya existe un ajuste. Recupéralo antes de actualizarlo.",
-    "phoneticHint": "Rhubarb propone gestos; no reconoce quién habla. Para canciones funciona mejor con voz aislada: puedes usarla como guía muda de la boca y mantener la canción en el audio de la escena.",
+    "phoneticHint": "El análisis automático prefiere el motor de fonemas instalado. Para canciones funciona mejor con voz aislada y la letra exacta del fragmento. Mantén la canción original en su pista y revisa la boca antes de exportar.",
     "productionEntry": "Lip-sync con personajes 3D",
     "productionHint": "Elige los GLB y el audio existente. Prepararemos un plano en Vídeo 3D sin cambiar la producción original ni generar modelos o voces. Tiempos de reparto sin marcas: propuesta inicial editable; no alineación de palabras.",
     "twoSpeakers": "Usa uno o dos personajes por plano. Divide las intervenciones si necesitas más.",
@@ -74,7 +74,7 @@
     "noFace": "Espera a que cargue el GLB y reintenta. La boca necesita una malla con un único material estándar.",
     "voice": "Voz del personaje",
     "pickVoice": "Elige audio (máx. 10 min / 32 MB); analiza fragmentos de hasta 90 s",
-    "analyze": "Calcular gestos con Rhubarb (local)",
+    "analyze": "Analizar sincronización labial (local)",
     "importCues": "Importar gestos JSON",
     "fit": "Ajustar duración a las voces",
     "cues_one": "{{count}} gesto",
@@ -83,9 +83,11 @@
       "imported": "Gestos importados",
       "rhubarb": "Gestos fonéticos · Rhubarb",
       "amplitude": "Movimiento por volumen",
-      "rhubarb-vocals": "Rhubarb · voz aislada"
+      "rhubarb-vocals": "Rhubarb · voz aislada",
+      "phoneme": "Alineación por fonemas acústicos",
+      "phoneme-vocals": "Fonemas acústicos · voz aislada"
     },
-    "amplitudeHint": "El volumen solo abre/cierra la boca: no reconoce fonemas. Calcula gestos con Rhubarb para mejorar el resultado.",
+    "amplitudeHint": "El volumen solo abre/cierra la boca: no reconoce fonemas. Analiza la sincronización labial para mejorar.",
     "start": "Inicio en escena (s)",
     "offset": "Recortar inicio del audio (s)",
     "gain": "Volumen",
@@ -278,6 +280,22 @@
         "portuguese": "Portugués",
         "italian": "Italiano"
       }
+    },
+    "analysis": {
+      "engine": "Motor de sincronización labial",
+      "auto": "Automático (preferir fonemas)",
+      "phoneme": "Fonemas acústicos (CPU)",
+      "rhubarb": "Rhubarb (local)",
+      "loading": "Comprobando el motor instalado…",
+      "installed": "El motor de fonemas está preparado. Automático lo utiliza.",
+      "missing": "El motor de fonemas no está instalado. Automático usa Rhubarb si está disponible.",
+      "unavailable": "No se pudo comprobar el motor de sincronización labial.",
+      "install": "Instalar motor de fonemas (1,26 GB)",
+      "installing": "Instalando el motor de fonemas…",
+      "transcript": "Diálogo o letra exacta de este fragmento (opcional)",
+      "transcriptHint": "Incluye solo las palabras audibles en el fragmento analizado. Déjalo vacío para reconocer los sonidos directamente. Revisa las vocales cantadas antes de exportar.",
+      "language": "Idioma de la voz",
+      "fallback": "Este análisis utilizó Rhubarb porque el motor de fonemas no está instalado."
     }
   },
   "title": "Estudio de escenas 3D",

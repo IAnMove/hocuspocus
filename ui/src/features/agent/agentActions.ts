@@ -624,7 +624,10 @@ export interface AgentUpdateWorkspaceCollectionAction {
   productionIds?: string[]
 }
 
+export interface AgentSpeechAnalysisEngineAction { type: 'speech_analysis_engine'; install: boolean }
+
 export type AgentAction = AgentOpenTabAction
+  | AgentSpeechAnalysisEngineAction
   | AgentLipsCreatorAction
   | AgentGenerateLipsAction
   | AgentWorld3DTemplatesAction

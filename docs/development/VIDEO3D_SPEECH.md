@@ -25,8 +25,12 @@ sujeto seleccionado y se guardan en el documento nativo de la escena.
    Descartar no cambia la voz del personaje. Cancelar, cerrar el panel o cambiar
    de sujeto libera el micrófono, también si el permiso llega tarde.
 7. Una grabación o audio nuevo empieza con movimiento aproximado por volumen.
-   **Calcular gestos con Rhubarb (local)** añade análisis fonético si está
-   instalado. La vista previa de audio permite escuchar antes de reproducir la
+   **Analizar sincronización labial (local)** usa el motor compartido con MCP
+   y Wizard: **Automático** prefiere fonemas acústicos instalados y, si faltan,
+   utiliza Rhubarb indicando esa alternativa. Puedes elegir el motor, aportar
+   la letra exacta del fragmento y el idioma. **Instalar motor de fonemas**
+   ejecuta el instalador nativo opcional (1,26 GB); analizar nunca descarga.
+   La vista previa de audio permite escuchar antes de reproducir la
    escena. La grabación se limita a 90 segundos y requiere HTTPS o localhost;
    en HTTP de red local siguen disponibles el ejemplo y la subida de archivos.
 8. Configura el inicio y recorte del audio. **Ajustar duración a las voces**
@@ -95,17 +99,23 @@ snapshots independientes. Los perfiles guardados se identifican por el contenido
 del GLB; hay que cargar un perfil existente antes de sobrescribirlo. Un JSON
 solo referencia medios: no los empaqueta para otro ordenador.
 
-## Rhubarb y exportación
+## Análisis compartido y exportación
 
 Los agentes pueden usar MCP `audio.mouth_cues` con
-`{version:1,input:{workspace,file,start:0,duration:75,dialogue:"",language:""}}`.
+`{version:1,input:{workspace,file,start:0,duration:75,dialogue:"",language:"",engine:"auto",isolate_vocals:false}}`.
 La app decodifica audio del workspace a PCM mono 16 kHz y reutiliza el mismo
-analizador Rhubarb instalado. Cada ventana admite hasta 90 s; la fuente hasta
+servicio `speech_alignment` que el editor y `scenes.speech.prepare` del Wizard.
+`engine` admite `auto`, `phoneme` y `rhubarb`; el automático prefiere fonemas
+instalados, con `fallbackReason: "phoneme_not_installed"` si usa Rhubarb.
+El resultado identifica `engine`, `requestedEngine`, `driver` y `analysisSource`.
+Elegir `phoneme` explícitamente sin instalarlo produce un error; un fallo del
+motor no cambia silenciosamente a otro. Cada ventana admite hasta 90 s; la fuente hasta
 600 s / 32 MB. Repite con ventanas contiguas para una canción larga. Los gestos
 devueltos y el JSON publicado usan el reloj de la fuente (incluyen `start`),
 por lo que cada plano conserva `speech.offset` igual al inicio de su recorte.
-Usa la voz aislada de `audio.analyze` para canto. Este análisis es CPU, no genera
-voz y no descarga herramientas. Sin Rhubarb devuelve `speech_unavailable`.
+Usa la voz aislada de `audio.analyze` para canto, o `isolate_vocals:true` para
+la separación local ya instalada. Este análisis comparte un carril CPU entre
+las tres entradas, no genera voz y no descarga herramientas.
 
 Para vocales de canto que Rhubarb confunde, MCP `audio.phonemes.setup`
 `{version:1,input:{}}` consulta el motor opcional; `input.install:true` instala
@@ -120,7 +130,9 @@ el análisis. El modelo está entrenado para habla: revisar el canto, la letra
 exacta y `quality.low_confidence_phonemes`; no garantiza sincronía perfecta.
 El reconocimiento devuelve nueve formas compatibles con el atlas actual;
 los diptongos usan una transición inferida y requieren revisión. Importa los
-gestos como `driver:"imported"`; conserva `audible:false` en un videoclip.
+gestos con el `driver` devuelto (`phoneme` o `phoneme-vocals`); conserva
+`audible:false` en un videoclip. `audio.phoneme_cues` conserva compatibilidad
+como alias que exige el mismo motor `phoneme`.
 No compenses una nueva pista de fonemas con el antiguo adelanto arbitrario de
 otra pista: evalúa solo el pequeño margen del morph y del muestreo de vídeo.
 Fuente: [Wav2Vec2Phoneme](https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft).
@@ -137,9 +149,18 @@ binario, o añádelo a PATH, y reinicia HocusPocus. No hay descargas automática
 Sin él se puede usar el ejemplo, importar gestos o trabajar por volumen.
 
 `POST /api/v1/character-kits/speech/analyze` recibe WAV PCM mono, 16 kHz/16 bits,
-hasta 90 s / 3 MB. Un proceso, dos hilos y timeout de 90 s. No acepta rutas ni
+hasta 90 s / 3 MB, o el sobre JSON con `wavBase64`, `dialogue`, `language`
+y `engine`. `isolate_vocals` es un parámetro de consulta. El endpoint utiliza
+exactamente el servicio de análisis MCP, con su caché y motor CPU de dos hilos.
+Rhubarb conserva timeout de 90 s; el proceso de fonemas tiene 360 s. No acepta rutas ni
 URLs externas. El editor convierte el audio antes de enviarlo. Una voz existente
 puede durar hasta 600 s / 32 MB; se analizan fragmentos de hasta 90 s.
+`GET /api/v1/character-kits/speech/capabilities` y `scenes.speech.capabilities`
+devuelven las mismas capacidades sin cargar modelos.
+`POST /api/v1/character-kits/speech/phonemes/setup` acepta exactamente el sobre
+de `audio.phonemes.setup` y llama al mismo handler. El botón de instalación y
+la capacidad Wizard `speech_analysis_engine` usan ese endpoint; `install:false`
+solo consulta estado y `install:true` debe ser una instalación solicitada.
 
 La separación vocal y Rhubarb reutilizan una caché por contenido del audio,
 versión de herramienta, parámetros y ventana analizada. Las solicitudes
@@ -164,6 +185,13 @@ calcula los gestos y devuelve un documento preparado sin guardar ni exportar.
 Puede reutilizar la calibración guardada en el JSON. El Wizard usa el mismo
 comando a través de `prepare_programmatic_video.scene_command`. Ver el contrato
 [SFX, operaciones compartidas y MCP](SCENE_EFFECTS_AND_MCP.md).
+Acepta `engine`, `language`, `isolate_vocals` y el `text` exacto del fragmento.
+Guarda `driver`, `analysisEngine`, `language` y `analysisFallback` en la
+intervención. El editor conserva esos datos al guardar y abrir el documento,
+y los botones de análisis, generación de línea, producción y Lips Creator
+comparten la misma política. La fuente original conserva su reproducción y
+recorte; los gestos usan su reloj, sin aplicar adelantos arbitrarios comunes
+a todos los personajes. Tamaño de boca, contorno y posición siguen en el perfil.
 
 Grabar y colocar mediante clic son acciones del navegador. MCP puede preparar
 la voz sin una pestaña, pero este circuito de exportación utiliza el editor.

@@ -51,6 +51,7 @@ import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateM
 import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
 import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
+import { setupSpeechAnalysis } from './speechAnalysisAdapter'
 
 export interface AdapterOutcome {
   commandResult?: CommandResult
@@ -168,6 +169,7 @@ export interface VideoclipAdapter {
 }
 
 export interface Video3DAdapter {
+  setupSpeechAnalysis(action: import('./agentActions').AgentSpeechAnalysisEngineAction): Promise<AdapterOutcome>
   open(animate?: boolean): Promise<AdapterOutcome>
   prepareProgrammaticVideo(action: import('./programmaticVideo').AgentPrepareProgrammaticVideoAction): Promise<AdapterOutcome>
   applyRhythm(action: AgentApply3dRhythmAction): Promise<AdapterOutcome>
@@ -900,6 +902,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     },
   }
   adapters.video3d = {
+    setupSpeechAnalysis,
     open: animate => navigate(animate ? 'animate_3d' : 'video_3d'),
     async prepareProgrammaticVideo(action) {
       const workspace = useStore.getState().activeWorkspace || 'default'

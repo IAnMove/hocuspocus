@@ -338,6 +338,7 @@
         "tests/test_safety_scan.py",
         "tests/test_scail2_workflows.py",
         "tests/test_scene3d_speech.py",
+        "tests/test_speech_alignment_parity.py",
         "tests/test_speech_file_commands.py",
         "tests/test_phoneme_commands.py",
         "tests/test_phoneme_ctc.py",
@@ -428,6 +429,10 @@
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/speech_alignment.py",
+      "paths": ["tests/test_speech_alignment_parity.py"]
+    },
     {
       "prefix": "app/services/production_generation_link.py",
       "paths": ["tests/test_production_generation_link.py"]

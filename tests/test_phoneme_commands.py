@@ -4,7 +4,7 @@ import subprocess
 import pytest
 
 from services import phoneme_commands as commands
-from services import phoneme_runtime
+from services import phoneme_runtime, phoneme_analysis
 from services.scene3d_speech import SpeechAnalysisUnavailable
 from tests.test_speech_file_commands import voice_file, envelope
 
@@ -29,7 +29,7 @@ def test_window_keeps_source_clock_and_transcript_sensitive_cache(tmp_path, monk
         calls.append((dialogue, language))
         return json.dumps({'mouthCues': [{'start': .1, 'end': .9, 'value': 'E'}],
                            'phonemes': [{'start': .1, 'end': .9, 'emission_end': .3, 'phoneme': 'ɔ'}], 'duration': 1}).encode()
-    monkeypatch.setattr(commands, '_worker', worker)
+    monkeypatch.setattr(phoneme_analysis, '_worker', worker)
     window, _, root = commands.freeze_window(envelope(start=1, dialogue='four', language='en'), lambda _: tmp_path)
     result = commands.analyze_window(window, source, root)
     assert result['phonemes'][0]['start'] == pytest.approx(1.1)
@@ -53,8 +53,8 @@ def test_worker_cannot_use_cuda_or_inherit_mcp_secret(monkeypatch):
         assert 'HOCUS_MCP_TOKEN' not in options['env']
         assert json.loads(options['input'])['language'] == 'en-us'
         return subprocess.CompletedProcess(argv, 0, b'{}', b'')
-    monkeypatch.setattr(commands.subprocess, 'run', run)
-    assert commands._worker(b'pcm', 'four', 'en') == b'{}'
+    monkeypatch.setattr(phoneme_analysis.subprocess, 'run', run)
+    assert phoneme_analysis._worker(b'pcm', 'four', 'en') == b'{}'
     assert len(seen) == 1
 
 

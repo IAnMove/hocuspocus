@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ApiOutput } from '../../../api/outputs'
 import { fetchOutputs } from '../../../api/client'
-import { analyzeSceneSpeech } from '../../../api/scene3dSpeech'
 import { AssetInput } from '../../asset-picker/AssetInput'
 import { useUiTranslation } from '../../../i18n'
 import type { Scene3DSlot } from '../types'
@@ -10,8 +9,9 @@ import type { PlacementMode } from './calibration'
 import { EXPRESSIONS, defaultSpeech, type FacePlacement, type Scene3DSpeech } from './types'
 import { FACE_PACK_GLB, FACE_PACK_IDS, FACE_PACKS, applyBundledFacePack, facePackIdOf, talkingScreen } from './facePackExamples'
 import { amplitudeCues, parseMouthCues } from './track'
-import { decodeVoice, voiceWav } from './audio'
-import { analysisWindow, mapFragmentCues, replaceCueInterval } from './cueEdit'
+import { decodeVoice } from './audio'
+import { analyzeSpeechFragment } from './analyzeFragment'
+import { SpeechAnalysisControls } from './SpeechAnalysisControls'
 import { CueTimeline } from './CueTimeline'
 import { importSpeechKit } from './kit'
 import { SpeechNumber, speechInput } from './FaceControls'
@@ -131,17 +131,19 @@ export function Scene3DSpeechControls({ slot, workspace, disabled, calibrate, on
     {(speech.audio || speech.cues.length > 0) && <CueTimeline speech={speech} disabled={locked} analyzing={busy}
       onChange={onChange} onReanalyze={(from, to) => void run(async signal => {
         const buffer = await decodeVoice(speech.audio!.url)
-        const next = await analyzedSpeech(speech, buffer, from, to, signal, isolateVocals)
+        const next = await analyzeSpeechFragment(speech, buffer, from, to, signal, isolateVocals)
         return () => onChange(next)
       })} />}
     <fieldset disabled={locked} className="space-y-3 disabled:opacity-60">
       <AssetInput label={t('speech.voice')} placeholder={t('speech.pickVoice')} items={items} value={audioValue} optional
         disabled={voiceDisabled} workspaceId={workspace} accept="audio/*" constraints={{ kinds: ['audio'], maxCount: 1, optional: true }} onChoose={applyVoice} />
+      <SpeechAnalysisControls settings={speech} disabled={locked} onBusyChange={setBusy}
+        onChange={settings => onChange({ ...speech, ...settings })} />
       <div className="flex flex-wrap gap-3">
         <button type="button" className={speechInput} disabled={!speech.audio} onClick={() => void run(async signal => {
           const buffer = await decodeVoice(speech.audio!.url)
           const span = Math.min(buffer.duration - speech.offset, (speech.end ?? speech.start + buffer.duration - speech.offset) - speech.start)
-          const next = await analyzedSpeech(speech, buffer, speech.offset, speech.offset + span, signal, isolateVocals)
+          const next = await analyzeSpeechFragment(speech, buffer, speech.offset, speech.offset + span, signal, isolateVocals)
           return () => onChange(next)
         })}>{t('speech.analyze')}</button>
         <button type="button" className={speechInput} disabled={!speech.cues.length} onClick={() => onFit(Math.max(.1, speech.start + (speech.cues.at(-1)?.end ?? 0) - speech.offset))}>{t('speech.fit')}</button>
@@ -181,14 +183,6 @@ export function Scene3DSpeechControls({ slot, workspace, disabled, calibrate, on
     {busy && <p role="status" className="text-xs">{t('speech.busy')}</p>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
   </section>
-}
-
-async function analyzedSpeech(speech: Scene3DSpeech, buffer: AudioBuffer, from: number, to: number, signal: AbortSignal, isolateVocals: boolean): Promise<Scene3DSpeech> {
-  const fragment = analysisWindow(from, to, buffer.duration)
-  const localCues = await analyzeSceneSpeech(await voiceWav(buffer, fragment.start, fragment.duration), signal, isolateVocals)
-  const mapped = mapFragmentCues(localCues, fragment.start)
-  return { ...speech, cues: replaceCueInterval(speech.cues, fragment.start, fragment.start + fragment.duration, mapped),
-    driver: isolateVocals ? 'rhubarb-vocals' : 'rhubarb' }
 }
 
 function speechAudioOutput(speech: Scene3DSpeech): ApiOutput | undefined {

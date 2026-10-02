@@ -52,6 +52,7 @@ import { registerNavigationQueueCapabilities } from './navigationQueueCapabiliti
 import { registerEditorAuxCapabilities } from './editorAuxCapabilities'
 import { registerToolCapabilities } from './toolCapabilities'
 import { registerProgrammaticVideoCapability } from './programmaticVideo'
+import { registerSpeechAnalysisCapability } from './speechAnalysisCapability'
 export { reconcileProgrammaticVideoRequest, type AgentPrepareProgrammaticVideoAction } from './programmaticVideo'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import {
@@ -1208,6 +1209,7 @@ registerNavigationQueueCapabilities(defineCapability)
 registerEditorAuxCapabilities(defineCapability)
 registerToolCapabilities(defineCapability)
 registerProgrammaticVideoCapability(defineCapability)
+registerSpeechAnalysisCapability(defineCapability)
 
 export function getCapability(name: string): CapabilityDefinition | undefined {
   return definitions.get(name)

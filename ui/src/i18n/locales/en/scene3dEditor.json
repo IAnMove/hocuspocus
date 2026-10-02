@@ -47,7 +47,7 @@
     "profileLoaded": "Placement restored. This scene's voices and timings have not changed.",
     "profileMissing": "This model has no saved placement yet.",
     "loadBeforeSave": "A saved placement exists. Load it before updating it.",
-    "phoneticHint": "Rhubarb proposes mouth gestures; it does not identify speakers. Songs work better with isolated vocals: use them as a muted mouth guide while keeping the song on the scene soundtrack.",
+    "phoneticHint": "Automatic analysis prefers the installed phoneme engine. Songs work better with isolated vocals and the exact lyrics for the fragment. Keep the original song on the soundtrack and review the mouth before export.",
     "productionEntry": "Lip-sync with 3D characters",
     "productionHint": "Choose GLBs and existing audio. Prepare a shot in Video 3D without changing the original production or generating models or voices. Speaker timings without timestamps are editable initial suggestions, not word alignment.",
     "twoSpeakers": "Use one or two characters per shot. Split interventions for a larger cast.",
@@ -74,7 +74,7 @@
     "noFace": "Wait for the GLB to load, then retry. Mouth painting needs a mesh with one standard material.",
     "voice": "Character voice",
     "pickVoice": "Choose audio (max. 10 min / 32 MB); analyze fragments up to 90 s",
-    "analyze": "Calculate gestures with Rhubarb (local)",
+    "analyze": "Analyze lip-sync (local)",
     "importCues": "Import cues JSON",
     "fit": "Fit duration to voices",
     "cues_one": "{{count}} cue",
@@ -83,9 +83,11 @@
       "imported": "Imported cues",
       "rhubarb": "Phonetic cues · Rhubarb",
       "amplitude": "Volume-driven motion",
-      "rhubarb-vocals": "Rhubarb · isolated vocals"
+      "rhubarb-vocals": "Rhubarb · isolated vocals",
+      "phoneme": "Acoustic phoneme alignment",
+      "phoneme-vocals": "Acoustic phonemes · isolated vocals"
     },
-    "amplitudeHint": "Volume only opens/closes the mouth: it does not recognize phonemes. Calculate Rhubarb cues for better results.",
+    "amplitudeHint": "Volume only opens/closes the mouth: it does not recognize phonemes. Analyze lip-sync for better results.",
     "start": "Scene start (s)",
     "offset": "Trim audio start (s)",
     "gain": "Volume",
@@ -278,6 +280,22 @@
         "portuguese": "Portuguese",
         "italian": "Italian"
       }
+    },
+    "analysis": {
+      "engine": "Lip-sync engine",
+      "auto": "Automatic (prefer phonemes)",
+      "phoneme": "Acoustic phonemes (CPU)",
+      "rhubarb": "Rhubarb (local)",
+      "loading": "Checking the installed engine…",
+      "installed": "Phoneme alignment is ready. Automatic uses it.",
+      "missing": "Phoneme engine is not installed. Automatic uses Rhubarb when available.",
+      "unavailable": "Could not check the lip-sync engine.",
+      "install": "Install phoneme engine (1.26 GB)",
+      "installing": "Installing phoneme engine…",
+      "transcript": "Exact dialogue or lyrics for this fragment (optional)",
+      "transcriptHint": "Use only the words audible in the analyzed fragment. Leave empty to recognize sounds directly. Review sung vowels before export.",
+      "language": "Voice language",
+      "fallback": "This analysis used Rhubarb because the phoneme engine is not installed."
     }
   },
   "title": "3D scene studio",
