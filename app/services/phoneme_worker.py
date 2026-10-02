@@ -50,9 +50,16 @@ def emissions(model, processor, samples):
 
 
 def transcript_tokens(tokenizer, dialogue, language):
+    from phonemizer.backend import EspeakBackend
+    from phonemizer.separator import Separator
+    # The app ships phonemizer-fork; Transformers' distribution-name probe cannot
+    # see it. Use its compatible native API, then encode IPA without that probe.
+    backend = EspeakBackend(language, preserve_punctuation=False, with_stress=False)
     tokens, words = [], []
-    for word in re.findall(r"\w+(?:[-']\w+)*", dialogue):
-        ids = tokenizer(word, add_special_tokens=False, phonemizer_lang=language)["input_ids"]
+    written = re.findall(r"\w+(?:[-']\w+)*", dialogue)
+    phonetic = backend.phonemize(written, separator=Separator(phone=" ", word="|", syllable=""), strip=True)
+    for word, ipa in zip(written, phonetic):
+        ids = tokenizer(ipa.replace("|", " "), add_special_tokens=False, do_phonemize=False)["input_ids"]
         if not ids or any(token < 4 for token in ids):
             raise ValueError("Transcript contains an unsupported phoneme or word.")
         tokens.extend(ids)
@@ -71,7 +78,7 @@ def analyze(data):
     with wave.open(io.BytesIO(base64.b64decode(data["pcm"])), "rb") as audio:
         samples = np.frombuffer(audio.readframes(audio.getnframes()), dtype="<i2").astype(np.float32) / 32768
     duration = len(samples) / 16000
-    processor = Wav2Vec2Processor.from_pretrained(ROOT, local_files_only=True)
+    processor = Wav2Vec2Processor.from_pretrained(ROOT, local_files_only=True, do_phonemize=False)
     model = Wav2Vec2ForCTC.from_pretrained(ROOT, local_files_only=True).to("cpu").eval()
     logp = emissions(model, processor, samples)
     dialogue = data.get("dialogue", "").strip()

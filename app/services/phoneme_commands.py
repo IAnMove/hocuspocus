@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import subprocess
@@ -40,6 +41,7 @@ def _worker(pcm, dialogue, language):
                             cwd=Path(__file__).resolve().parents[1], env=env,
                             input=json.dumps(body).encode(), capture_output=True, timeout=360, check=False)
     if result.returncode:
+        logging.getLogger(__name__).error("CPU phoneme worker failed: %s", result.stderr.decode(errors="replace")[-6000:])
         raise RuntimeError("CPU phoneme alignment failed; check the local runtime and transcript.")
     return result.stdout
 
