@@ -122,14 +122,16 @@ def _resolve(workspace_dir: str, spec: dict[str, Any], *, create_stub: bool = Tr
         if spec.get("production_id") and spec["production_id"] != current["production_id"]:
             raise LinkError("invalid_production", "intent is already linked to another production")
         _same_project(workspace_dir, spec, current)
-        _reconcile(workspace_dir, current)
-        if create_stub:
-            _ensure_stub(workspace_dir, current)
-        return current
+        return _finish_existing(workspace_dir, current, create_stub)
     execution = _execution(current, spec["new_execution"])
     production_id = spec.get("production_id") or production_id_for(spec["workspace_id"], spec["intent_id"], execution)
-    if _link_for_production(store, production_id) is not None:
-        raise LinkError("invalid_production", "Production already belongs to another execution")
+    found = _link_for_production(store, production_id)
+    if found is not None:
+        if spec["new_execution"]:
+            raise LinkError("invalid_production", "Production already belongs to another execution")
+        _intent, record = found
+        _same_project(workspace_dir, spec, record)
+        return _finish_existing(workspace_dir, record, create_stub)
     project, created, seed = _project(workspace_dir, spec, current if isinstance(current, dict) else None)
     previous = current.get("production_ids") if isinstance(current, dict) else []
     identifiers = [item for item in previous if isinstance(item, str)]
@@ -138,6 +140,16 @@ def _resolve(workspace_dir: str, spec: dict[str, Any], *, create_stub: bool = Tr
     record = _record(spec, project, created, seed, production_id, identifiers, execution)
     store["links"][spec["intent_id"]] = record
     _write(workspace_dir, store)
+    try:
+        _reconcile(workspace_dir, record)
+        if create_stub:
+            _ensure_stub(workspace_dir, record)
+    except OSError as error:
+        raise LinkError("partial_write", "The link is stored; retry to finish the production file") from error
+    return record
+
+
+def _finish_existing(workspace_dir: str, record: dict[str, Any], create_stub: bool) -> dict[str, Any]:
     try:
         _reconcile(workspace_dir, record)
         if create_stub:

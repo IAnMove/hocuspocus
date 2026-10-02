@@ -125,10 +125,45 @@ def test_bad_production_identity_has_no_side_effect(tmp_path, identifier):
 def test_production_cannot_get_a_second_owner_by_another_intent(tmp_path):
     from services.production_project_link import resolve_production_project
     request = {"workspace": "film", "origin": "ui", "intent_id": "one", "format": "quick_video", "production_id": "clip1"}
-    resolve_production_project(str(tmp_path), request)
-    with pytest.raises(LinkError):
-        resolve_production_project(str(tmp_path), {**request, "intent_id": "other"})
+    first = resolve_production_project(str(tmp_path), request)
+    second = resolve_production_project(str(tmp_path), {**request, "intent_id": "other"})
+    assert second["production_id"] == first["production_id"] == "clip1"
+    assert second["project"] == first["project"]
+    assert list(read_link_store(str(tmp_path))["links"]) == ["one"]
     assert len(read_story_library(str(tmp_path))["projects"]) == 1
+
+
+def test_native_batch_resolve_reuses_the_bound_episode_production(tmp_path):
+    """Series GPU render binds with b+digest; the native batch resolve uses generation-series-*."""
+    from services.production_project_link import resolve_production_project
+    series = create_series_project("film", title="Series")
+    episode = create_series_episode(series)
+    series["episodesById"][episode["id"]] = episode
+    write_series_library(str(tmp_path), {"workspaceId": "film", "seriesById": {series["id"]: series},
+                                      "seriesOrder": [series["id"]]}, "film")
+    bound = attach_episode(str(tmp_path), "film", episode, {})
+    production_id = f"series-{episode['id']}"
+    resolved = resolve_production_project(str(tmp_path), {
+        "workspace": "film", "origin": "ui", "format": "full_story",
+        "production_id": production_id, "intent_id": f"generation-{production_id}",
+        "title": episode["title"], "project": {"kind": "episode", "id": episode["id"]},
+    }, create_stub=False)
+    assert resolved["production_id"] == bound["production_id"] == production_id
+    assert resolved["project"] == bound["project"] == {"kind": "episode", "id": episode["id"]}
+    assert list(read_link_store(str(tmp_path))["links"]) == [bound["intent_id"]]
+    other = create_series_episode(series)
+    series["episodesById"][other["id"]] = other
+    write_series_library(str(tmp_path), {"workspaceId": "film", "seriesById": {series["id"]: series},
+                                      "seriesOrder": [series["id"]]}, "film")
+    with pytest.raises(LinkError) as error:
+        resolve_production_project(str(tmp_path), {
+            "workspace": "film", "origin": "ui", "format": "full_story",
+            "production_id": production_id, "intent_id": f"generation-{production_id}",
+            "project": {"kind": "episode", "id": other["id"]},
+        }, create_stub=False)
+    assert error.value.code == "invalid_project"
+    assert not read_story_library(str(tmp_path))["projects"]
+    assert not list(tmp_path.glob("*.production.json"))
 
 
 def test_series_render_worker_observes_episode_production_ids_on_disk(tmp_path, monkeypatch):
