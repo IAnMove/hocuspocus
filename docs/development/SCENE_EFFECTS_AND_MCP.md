@@ -34,10 +34,14 @@ The same visual renderer paints both previews and MP4 frames.
 Use the existing **Video 3D → Voice and lip-sync** controls. Choose a GLB, place
 its lips with **Add lips** or **Place with a click on the face**. Attach audio,
 record with a microphone, or use the bundled English example. For new audio,
-**Calculate gestures with Rhubarb (local)** refines the initial volume-based motion.
+**Analyze lip-sync (local)** refines the initial volume-based motion with the
+shared editor/MCP/Wizard service. Automatic prefers installed acoustic phonemes;
+Rhubarb fallback is explicit. Choose the engine, exact fragment text and language.
 Use interventions to schedule different speakers; each intervention keeps its
 literal dialogue, source audio, trim offset, timing and phonetic cues.
-Rhubarb must be installed as described in [VIDEO3D_SPEECH.md](VIDEO3D_SPEECH.md).
+Install the optional phoneme engine with the visible button or Wizard
+`speech_analysis_engine` (`install:true` only when requested). See
+[VIDEO3D_SPEECH.md](VIDEO3D_SPEECH.md) for engine installation and limits.
 A static mesh can speak using the face overlay; a GLB does not need blendshapes.
 Face placement is per model and must be reviewed visually.
 
@@ -61,8 +65,8 @@ MP4 download also retrieves the finalized file in this case.
 | `scenes.effects.catalog` | Empty input; returns the 30 presets, screen/world coordinates, and world kinds. |
 | `scenes.effects.showcase` | `dimension` 2d/3d, `sound`, `collection` all/anime, optional native `document`. Returns the built-in template. Do not supply prompts or an effect list. |
 | `scenes.effects.apply` | Native `document`, `cues` and/or `worldCues`, optional `replace`. Cue IDs upsert; world cues require Video3D. |
-| `scenes.speech.capabilities` | Empty input; returns installed Rhubarb and optional local vocal-isolation availability without loading a model. |
-| `scenes.speech.prepare` | Native `document`, exact `slot_id`, `clip_id`, `workspace`, existing `audio_filename`, literal `text`, scene `start`/`end`, source `offset`, optional `isolate_vocals`. Rhubarb analyzes up to 90 seconds and returns a scene with the intervention attached. |
+| `scenes.speech.capabilities` | Empty input; returns the same phoneme/Rhubarb/vocal-isolation availability and default engine as the editor, without loading a model. |
+| `scenes.speech.prepare` | Native `document`, exact `slot_id`, `clip_id`, `workspace`, existing `audio_filename`, literal `text`, scene `start`/`end`, source `offset`, optional `engine` auto/phoneme/rhubarb, `language`, `isolate_vocals`. The shared analyzer processes up to 90 seconds and attaches source-clock cues with the actual engine and fallback. |
 
 These operations return a detached document, SHA-256, `state: prepared`,
 `saved: false`, and `exported: false`. They do not save over a project, generate
@@ -82,7 +86,7 @@ To attach speech through Wizard, supply the exact scene document and audio name.
 
 MCP exposes the five operation names directly; its `tools/call` arguments use
 `{"version":1,"input":{...}}` (the tool name selects the operation). Preparation
-and Rhubarb run without an open browser. Rendering these scenes still uses the
+and analysis run without an open browser. Rendering these scenes still uses the
 native editor; this slice does not implement a headless server renderer.
 
 ## Enable and connect MCP

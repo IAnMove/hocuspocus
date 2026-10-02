@@ -1,5 +1,6 @@
 import { EXPRESSIONS, VISEMES, defaultSpeech, type Expression, type ExpressionCue, type FacePlacement, type MouthCue, type Scene3DSpeech, type SpeechClip, type Scene3DSoundtrack, type Viseme } from './types'
 import { parseScene3DSourceRef } from '../slotSource'
+import { speechAnalysisSettings } from './analysis'
 
 const RHUBARB: Record<string, Viseme> = { X: 'rest', A: 'M', B: 'I', C: 'E', D: 'A', E: 'O', F: 'U', G: 'F', H: 'L' }
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -46,7 +47,7 @@ function speechAppearance(data: Record<string, unknown>, defaults: Scene3DSpeech
   return { clean: data.clean !== false,
     ...(data.morph !== undefined ? { morph: data.morph } : {}),
     style: data.style === 'toon' || data.style === 'toon-bold' || data.style === 'pixel' ? data.style : 'soft',
-    driver: data.driver === 'rhubarb' || data.driver === 'rhubarb-vocals' || data.driver === 'amplitude' ? data.driver : 'imported',
+    driver: ['rhubarb', 'rhubarb-vocals', 'phoneme', 'phoneme-vocals', 'amplitude'].includes(data.driver as string) ? data.driver : 'imported',
     lip: typeof data.lip === 'string' && /^#[0-9a-f]{6}$/i.test(data.lip) ? data.lip : defaults.lip,
     expression: EXPRESSIONS.includes(data.expression as typeof EXPRESSIONS[number]) ? data.expression as typeof EXPRESSIONS[number] : 'neutral',
     blink: data.blink !== false, eyes: data.eyes !== false } as Pick<Scene3DSpeech, 'clean' | 'morph' | 'style' | 'driver' | 'lip' | 'expression' | 'blink' | 'eyes'>
@@ -76,7 +77,7 @@ export function parseSpeech(raw: unknown): Scene3DSpeech | undefined {
   const clips = data.clips === undefined ? undefined : parseSpeechClips(data.clips)
   const facePack = ref('facePack')
   const expressionCues = data.expressionCues === undefined ? undefined : parseExpressionCues(data.expressionCues)
-  return { ...defaults, ...speechAppearance(data, defaults), ...speechRange(data), ...(clips ? { clips } : {}),
+  return { ...defaults, ...speechAppearance(data, defaults), ...speechRange(data), ...speechAnalysisSettings(data), ...(clips ? { clips } : {}),
     version: 1, enabled: data.enabled, face: data.face as FacePlacement | undefined,
     audio: ref('audio'), atlas: ref('atlas'), ...(facePack ? { facePack } : {}),
     cues: parseMouthCues(data.cues), ...(expressionCues && expressionCues.length ? { expressionCues } : {}),
@@ -93,7 +94,7 @@ export function parseSpeechClips(raw: unknown): SpeechClip[] {
     // Strip nested clips before parsing; a clip is never another face configuration.
     const speech = parseSpeech({ ...defaultSpeech(), ...clip, clips: undefined })!
     if (clip.text !== undefined && (typeof clip.text !== 'string' || clip.text.length > 4000)) throw new Error('Invalid intervention text.')
-    return { id: clip.id, ...(clip.text !== undefined ? { text: clip.text as string } : {}), audio: speech.audio,
+    return { id: clip.id, ...speechAnalysisSettings(clip), audio: speech.audio,
       cues: speech.cues, driver: speech.driver, start: speech.start, offset: speech.offset,
       ...(speech.end !== undefined ? { end: speech.end } : {}), gain: speech.gain,
       ...(speech.audible !== undefined ? { audible: speech.audible } : {}) }

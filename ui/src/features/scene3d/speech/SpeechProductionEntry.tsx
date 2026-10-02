@@ -12,6 +12,9 @@ import { useCharacterKitLibrary } from '../../characters/useCharacterKitLibrary'
 import { fetchCharacterKitLibrary } from '../../../api/characters'
 import type { CharacterKitRef } from '../../../lib/characterVoice'
 import { characterSlotPatch, speechCastIsReady } from './characterBinding'
+import { SpeechAnalysisControls } from './SpeechAnalysisControls'
+import { VocalIsolationOption } from './VocalIsolationOption'
+import type { SpeechAnalysisSettings } from './types'
 
 type ProductionEntryProps = {
   kind: SpeechProductionInput['kind']; title: string; sourceId?: string; audio?: Scene3DSourceRef
@@ -35,6 +38,7 @@ function ScopedSpeechProductionEntry({ kind, title, sourceId, audio, cast: initi
   const [voice, setVoice] = useState<ApiOutput | undefined>()
   const [offset, setOffset] = useState(0), [duration, setDuration] = useState(8)
   const [phonetic, setPhonetic] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [analysis, setAnalysis] = useState<SpeechAnalysisSettings>({}), [isolateVocals, setIsolateVocals] = useState(false)
   const job = useRef<AbortController | null>(null)
   useEffect(() => {
     let live = true
@@ -67,6 +71,8 @@ function ScopedSpeechProductionEntry({ kind, title, sourceId, audio, cast: initi
       <SpeechNumber label={t('duration')} value={duration} min={.1} max={90} step={.1} onChange={setDuration} />
       <label className="flex items-center gap-2"><input type="checkbox" checked={phonetic} onChange={e => setPhonetic(e.target.checked)} />{t('speech.analyze')}</label>
       <p className="text-text-muted">{t('speech.phoneticHint')}</p>
+      {phonetic && <><SpeechAnalysisControls settings={analysis} disabled={busy} onChange={setAnalysis} onBusyChange={setBusy} />
+        <VocalIsolationOption checked={isolateVocals} onChange={setIsolateVocals} /></>}
       {!phonetic && <p className="text-amber-200">{t('speech.amplitudeHint')}</p>}
       {!source && <p className="text-text-muted">{t('speech.textOnlyProduction')}</p>}
       <button type="button" className={speechInput} disabled={busy || !speechCastIsReady(cast, models, links, speech3dKits)}
@@ -84,6 +90,7 @@ function ScopedSpeechProductionEntry({ kind, title, sourceId, audio, cast: initi
             }))
             captured.signal.throwIfAborted()
             const document = await prepareSpeechProduction({ kind, title, sourceId, workspace, audio: source, duration, offset, lines,
+              analysis: { ...analysis, isolateVocals },
               cast: resolved }, phonetic, captured.signal)
             if (!captured.signal.aborted) openSpeechProduction(document)
           }).catch(reason => { if (!captured.signal.aborted) setError(reason.message) }).finally(() => { if (!captured.signal.aborted) setBusy(false) })

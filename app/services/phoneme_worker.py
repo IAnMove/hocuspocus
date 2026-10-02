@@ -97,7 +97,7 @@ def analyze(data):
     return {"mouthCues": mouth_cues(phones, quiet_spans(samples, duration), duration),
             "phonemes": phones, "duration": duration, "recognizer": "wav2vec2-phoneme",
             "alignment": "transcript-ctc" if dialogue else "recognized-ctc", "revision": REVISION,
-            "quality": {"mean_confidence": round(float(np.mean([p["confidence"] for p in phones])), 5),
+            "quality": {"mean_confidence": round(float(np.mean([p["confidence"] for p in phones])), 5) if phones else 0.0,
                         "low_confidence_phonemes": sum(p["confidence"] < .2 for p in phones),
                         "phonemes": len(phones), "review_required": True}, "device": "cpu"}
 

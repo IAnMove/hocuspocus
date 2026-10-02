@@ -13,14 +13,22 @@ built-in 2D mouth on the animated GLB; it does not use H3. Headless exports acce
 muted speech and cue-only faces; audible speech still requires the editor's audio
 export path. Leave the H3-only `sing` flag unset on these scene3d shots.
 
+The editor, MCP and Ask the Wizard share one CPU lip-sync analysis service.
+`audio.mouth_cues` accepts `engine: "auto"` (default), `"phoneme"` or `"rhubarb"`;
+auto prefers installed phonemes and reports `fallbackReason` when using Rhubarb.
+Wizard `scenes.speech.prepare` uses the same engine, exact `text`, `language`
+and optional `isolate_vocals`, preserving face calibration and source-clock cues.
 If singing vowels are wrong, use native `audio.phonemes.setup` to inspect or
-explicitly install the optional CPU phoneme engine, then `audio.phoneme_cues`
+explicitly install the optional CPU phoneme engine, then `audio.mouth_cues`
 with the isolated voice, source window, and exact `dialogue`. It aligns acoustic
 phonemes to the transcript and returns source-clock mouth cues plus confidence.
 Import these into `slot.speech`, review sustained vowels and low-confidence
 phones, and recalibrate the small mouth transition offset. A global advance of
 the older Rhubarb track cannot fix a misclassified vowel. See
 [Video 3D speech](../development/VIDEO3D_SPEECH.md) for the native contract and limits.
+The editor's engine installer and Wizard `speech_analysis_engine` invoke the
+same native setup handler; analysis never downloads. The older
+`audio.phoneme_cues` remains an explicit-phoneme alias.
 Call `production.plan` with the eight-field brief when you do not already have a spec. It returns the spec. Then `production.run`.
 
 ## Call order

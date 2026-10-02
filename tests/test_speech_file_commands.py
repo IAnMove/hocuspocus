@@ -74,7 +74,7 @@ def test_cues_use_source_time_and_preserve_real_phonetic_shapes(tmp_path, monkey
 
     monkeypatch.setattr(commands, "analyze_voice", analyze)
     result = commands.analyze_window(window, source, root)
-    assert received == [(1, {"dialogue": "Hello", "language": "en"})]
+    assert received == [(1, {"dialogue": "Hello", "language": "en", "engine": "auto", "isolate_vocals": False})]
     assert result["duration"] == 1
     assert result["mouthCues"] == [{"start": 1.1, "end": 1.3, "value": "D"}, {"start": 1.3, "end": 2, "value": "X"}]
     assert json.loads((root / result["file"]).read_text())["mouthCues"] == result["mouthCues"]

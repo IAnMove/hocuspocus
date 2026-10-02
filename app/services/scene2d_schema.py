@@ -303,7 +303,7 @@ def _lip_sync() -> dict:
         "viseme": _enum(["rest", "M", "I", "E", "A", "O", "U", "F", "L"]), "manual": {"const": True},
     }, ["start", "end", "viseme"])
     return _object({
-        "version": {"const": 1}, "driver": _enum(["phonetic", "pocketSphinx", "energy"]),
+        "version": {"const": 1}, "driver": _enum(["phonetic", "pocketSphinx", "wav2vec2-phoneme", "energy"]),
         "text": _string(4000), "audioTrackId": _string(120), "filename": _string(1200),
         "offset": _number(0, 600), "duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 90},
         "cues": _array(cue, max_items=10000),

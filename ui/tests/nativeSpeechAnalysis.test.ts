@@ -31,3 +31,15 @@ test('unavailable phonetic analysis is an explicit error, never a successful let
   await assert.rejects(analyzeNativeSpeech(scene, 'source', 'es', { decode: async () => ({ duration: 2 }) as AudioBuffer,
     wav: async () => new ArrayBuffer(8), analyze: async () => { throw new Error('Rhubarb is unavailable') } }), /Rhubarb/)
 })
+
+test('native 2D dialogue retains the phoneme engine identity and round-trips its cues', async () => {
+  const { parseCutoutLipSync } = await import('../src/lib/cutoutPhonetic')
+  const scene = { duration: 3, layers: [], audioTracks: [{ id: 'voice', filename: 'voice.wav', startTime: 0, prompt: 'Four' }],
+    dialogueBeats: [{ id: 'line', text: 'Four', start: 0, end: 2, mouthLayerIds: ['mouth'], audioTrackId: 'voice', confidence: 'known-text' }] } as unknown as Scene
+  const result = await analyzeNativeSpeech(scene, 'source', 'en', { decode: async () => ({ duration: 2 }) as AudioBuffer,
+    wav: async () => new ArrayBuffer(8), analyze: async () => ({ recognizer: 'wav2vec2-phoneme', duration: 2,
+      mouthCues: [{ start: .12, end: 1.8, value: 'E' }] }) })
+  const lips = result.dialogueBeats![0].lipSync!
+  assert.equal(lips.driver, 'wav2vec2-phoneme')
+  assert.deepEqual(parseCutoutLipSync(JSON.parse(JSON.stringify(lips))), lips)
+})

@@ -2,8 +2,10 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
+from typing import Literal
 
-from services.scene3d_speech import MAX_BYTES, SpeechAnalysisError, SpeechAnalysisUnavailable, analyze_voice
+from services.scene3d_speech import MAX_BYTES, SpeechAnalysisError, SpeechAnalysisUnavailable
+from services.speech_alignment import SpeechEngine, analyze_voice, capabilities as speech_capabilities
 from services.speech_analysis_request import MAX_REQUEST_BYTES, speech_request
 
 
@@ -18,6 +20,13 @@ class SpeechAnalysisResponse(BaseModel):
     recognizer: str = "phonetic"
     duration: float
     analysisSource: str = 'original'
+    engine: Literal['phoneme', 'rhubarb']
+    requestedEngine: SpeechEngine
+    driver: str
+    fallbackReason: str | None = None
+    phonemes: list[dict] = Field(default_factory=list)
+    quality: dict | None = None
+    alignment: str | None = None
 
 
 def create_scene3d_speech_router() -> APIRouter:
@@ -25,12 +34,15 @@ def create_scene3d_speech_router() -> APIRouter:
 
     @router.get('/speech/capabilities')
     def capabilities():
-        from services.vocal_isolation import isolation_capability
-        from services.scene3d_speech import rhubarb_executable
-        return {'rhubarb': bool(rhubarb_executable()), 'vocalIsolation': isolation_capability()}
+        return speech_capabilities()
+
+    @router.post('/speech/phonemes/setup')
+    async def setup(arguments: dict):
+        from services.phoneme_commands import SETUP, command_handlers
+        return await command_handlers(lambda _: None)[SETUP](arguments)
 
     @router.post("/speech/analyze", response_model=SpeechAnalysisResponse)
-    async def analyze(request: Request, isolate_vocals: bool = False):
+    async def analyze(request: Request, isolate_vocals: bool = False, engine: SpeechEngine = 'auto'):
         content_type = request.headers.get("content-type", "").split(";")[0]
         if content_type not in {"audio/wav", "application/json"}:
             raise HTTPException(415, "Expected audio/wav or application/json.")
@@ -42,6 +54,7 @@ def create_scene3d_speech_router() -> APIRouter:
             data.extend(chunk)
         try:
             audio, options = speech_request(bytes(data), content_type)
+            options.setdefault('engine', engine)
             return await run_in_threadpool(analyze_voice, audio, isolate_vocals=isolate_vocals, **options)
         except SpeechAnalysisError as exc:
             raise HTTPException(400, str(exc)) from exc

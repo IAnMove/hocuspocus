@@ -6,7 +6,7 @@ import type { CutoutDialoguePlan, SceneDialogueBeat } from './cutoutDialogue'
 /** Cues use the analyzed fragment's clock, independent of scene placement. */
 export type CutoutLipSync = {
   version: 1
-  driver: 'phonetic' | 'pocketSphinx' | 'energy'
+  driver: 'phonetic' | 'pocketSphinx' | 'wav2vec2-phoneme' | 'energy'
   text: string
   audioTrackId: string
   filename: string
@@ -17,7 +17,7 @@ export type CutoutLipSync = {
 
 export const CUTOUT_LIP_SYNC_SCHEMA = {
   type: 'object', additionalProperties: false,
-  properties: { version: { const: 1 }, driver: { enum: ['phonetic', 'pocketSphinx', 'energy'] },
+  properties: { version: { const: 1 }, driver: { enum: ['phonetic', 'pocketSphinx', 'wav2vec2-phoneme', 'energy'] },
     text: { type: 'string', maxLength: 4000 }, audioTrackId: { type: 'string', maxLength: 120 },
     filename: { type: 'string', maxLength: 1200 }, offset: { type: 'number', minimum: 0, maximum: 600 },
     duration: { type: 'number', exclusiveMinimum: 0, maximum: 90 },
@@ -32,7 +32,7 @@ export function parseCutoutLipSync(raw: unknown): CutoutLipSync | undefined {
   if (raw === undefined) return undefined
   if (!raw || typeof raw !== 'object') throw new Error('Invalid cutout lip sync.')
   const value = raw as CutoutLipSync
-  if (value.version !== 1 || !['phonetic', 'pocketSphinx', 'energy'].includes(value.driver)
+  if (value.version !== 1 || !['phonetic', 'pocketSphinx', 'wav2vec2-phoneme', 'energy'].includes(value.driver)
     || ![value.text, value.audioTrackId, value.filename].every(item => typeof item === 'string' && item.length <= 4000)
     || !Number.isFinite(value.offset) || value.offset < 0
     || !Number.isFinite(value.duration) || value.duration <= 0 || value.duration > 90) throw new Error('Invalid cutout lip sync source.')

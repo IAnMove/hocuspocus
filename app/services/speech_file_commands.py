@@ -1,4 +1,4 @@
-"""Workspace audio windows to native Rhubarb cues, without a browser or GPU."""
+"""Workspace audio windows through the shared local lip-sync analysis."""
 from __future__ import annotations
 
 import hashlib
@@ -6,13 +6,13 @@ import json
 import math
 from pathlib import Path
 import subprocess
-import uuid
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
 
-from services.scene3d_speech import SpeechAnalysisError, SpeechAnalysisUnavailable, analyze_voice
+from services.scene3d_speech import SpeechAnalysisError, SpeechAnalysisUnavailable
+from services.speech_alignment import SpeechEngine, analyze_voice
 
 OPERATION = "audio.mouth_cues"
 
@@ -25,6 +25,8 @@ class VoiceWindow(BaseModel):
     duration: float = Field(gt=0, le=90, allow_inf_nan=False)
     dialogue: str = Field(default="", max_length=4000)
     language: str = Field(default="", max_length=16)
+    engine: SpeechEngine = "auto"
+    isolate_vocals: bool = False
 
 
 def freeze_window(arguments, workspace_dir):
@@ -74,39 +76,37 @@ def _window_wav(source, start, duration):
     return output.getvalue()
 
 
-def analyze_window(window, source, root):
+def analyze_window(window, source, root, prefix="mouth-cues"):
     duration = min(window.duration, _probe_duration(source) - window.start)
     if duration <= 0:
         raise SpeechAnalysisError("The analysis window begins after the audio ends.")
-    result = analyze_voice(_window_wav(source, window.start, duration), dialogue=window.dialogue, language=window.language)
+    result = analyze_voice(_window_wav(source, window.start, duration), dialogue=window.dialogue,
+                           language=window.language, engine=window.engine, isolate_vocals=window.isolate_vocals)
     # Global source-clock cues can be shared by all shots with speech.offset=t0.
-    result["mouthCues"] = [{**cue, "start": round(cue["start"] + window.start, 5),
-                           "end": round(cue["end"] + window.start, 5)} for cue in result["mouthCues"]]
-    result.update(source=window.file, start=window.start, duration=duration)
+    for key in ("mouthCues", "phonemes"):
+        for cue in result.get(key, []):
+            for time in ("start", "end", "emission_end"):
+                if time in cue:
+                    cue[time] = round(cue[time] + window.start, 5)
+    result.update(source=window.file, start=window.start, duration=duration,
+                  dialogue=window.dialogue, language=window.language)
     identity = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()[:24]
-    filename = f"mouth-cues-{identity}.json"
+    filename = f"{prefix}-{identity}.json"
     (root / filename).write_text(json.dumps(result), encoding="utf-8")
     return {**result, "file": filename, "url": f"/api/v1/file/{filename}?workspace={window.workspace}"}
 
 
 def command_catalog():
-    return [{"name": OPERATION, "description": "Analyze a workspace voice window (up to 90 seconds) with the installed local Rhubarb engine, on CPU. Accepts ordinary audio formats and returns durable native mouth cues on the source clock. Use isolated vocals from audio.analyze for singing; no downloads or synthetic voice.",
+    return [{"name": OPERATION, "description": "Shared UI/Wizard/MCP lip sync: engine=auto prefers installed CPU phonemes, otherwise explicitly reports Rhubarb fallback. Select phoneme or rhubarb, provide exact dialogue/language and optional isolate_vocals. Up to 90 seconds; native cues and phonemes use the source clock. No downloads or synthetic voice.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "input"],
                              "properties": {"version": {"type": "integer", "const": 1}, "input": VoiceWindow.model_json_schema()}}}]
 
 
 def command_handlers(workspace_dir):
     async def handle(arguments):
-        from services import resource_scheduler
         window, source, root = freeze_window(arguments, workspace_dir)
-
-        def run():
-            with resource_scheduler.coordinator.acquire(resource_scheduler.cpu_lane("speech-analysis"),
-                                                        task_id=f"mouth-cues-{uuid.uuid4().hex}", description="Local mouth cues"):
-                return analyze_window(window, source, root)
-
         try:
-            result = await run_in_threadpool(run)
+            result = await run_in_threadpool(analyze_window, window, source, root)
         except SpeechAnalysisUnavailable as exc:
             raise HTTPException(503, {"code": "speech_unavailable", "message": str(exc), "retryable": True}) from exc
         except (SpeechAnalysisError, subprocess.SubprocessError, OSError, ValueError, KeyError) as exc:

@@ -34,6 +34,7 @@ export function Scene3DSpeakerControls(props: SpeechControlsProps) {
   const change = (next: Scene3DSpeech) => {
     if (!stored.clips) { commit(next); return }
     const updated: SpeechClip = { ...clip, audio: next.audio, cues: next.cues, driver: next.driver,
+      text: next.text, language: next.language, analysisEngine: next.analysisEngine, analysisFallback: next.analysisFallback,
       start: next.start, offset: next.offset, end: next.end, gain: next.gain, audible: next.audible }
     commit({ ...stored, ...faceSettings(next), enabled: next.enabled, clips: clips.map((item, i) => i === index ? updated : item) })
   }

@@ -163,6 +163,8 @@ class EffectsShowcase(Strict):
 
 class SpeechPrepare(DocumentInput):
     isolate_vocals: bool = False
+    engine: Literal['auto', 'phoneme', 'rhubarb'] = 'auto'
+    language: str = Field(default='', max_length=16)
     slot_id: str = Field(min_length=1, max_length=160)
     clip_id: str = Field(min_length=1, max_length=160)
     workspace: str = Field(min_length=1, max_length=120)
@@ -174,11 +176,11 @@ class SpeechPrepare(DocumentInput):
 
 
 OPERATIONS = {
-    'scenes.speech.capabilities': (Strict, 'Read local Rhubarb and optional installed-only CPU BS-RoFormer availability. No model downloads or inference.'),
+    'scenes.speech.capabilities': (Strict, 'Read the shared UI/MCP/Wizard engine policy, CPU phoneme status, Rhubarb and local vocal-isolation availability. No model downloads or inference.'),
     'scenes.effects.catalog': (Strict, f'List {len(CATALOG)} screen overlays plus world-space kinds in result.worldKinds (portal, magic_circle, summoning_gate, lightning, energy_beam, laser, energy_orb, anime_aura, arcane_missiles, shockwave, smoke, sparks, explosion, fire, rain, snow, fog, shield, tornado, splash, dust, ice_burst, black_hole, media_portal). Screen uses percent; world uses meters. Retro looks (psx, vhs, crt, consoles) are screen-only. No AI generation.'),
     'scenes.effects.apply': (EffectsApply, 'Return an editable 2D/3D document with timed SFX. Screen cues go to sfx; worldCues go to worldSfx on Video3D only. Matching IDs replace in place. No save or export.'),
     'scenes.effects.showcase': (EffectsShowcase, f'Return a reusable SFX showcase: all effects {ALL_SECONDS} seconds, collection anime {ANIME_SECONDS} seconds, or collection retro {RETRO_SECONDS} seconds. Retains actors/camera and replaces only SFX. No save or export.'),
-    'scenes.speech.prepare': (SpeechPrepare, 'Analyze an existing workspace voice with Rhubarb and attach it to an exact 3D speaker/clip. Optional isolate_vocals uses installed-only local CPU BS-RoFormer, preserving original playback. Returns an editable document; face calibration may be needed. No downloads, voice generation, save or video export.'),
+    'scenes.speech.prepare': (SpeechPrepare, 'Same lip-sync analysis as the editor and audio.mouth_cues: engine=auto prefers installed CPU phonemes, otherwise reports Rhubarb fallback. Optional engine=phoneme or rhubarb, exact text, language and isolate_vocals. Attach source-clock cues to an exact 3D speaker/clip, preserving audio and face calibration. No downloads, voice generation, save or export.'),
 }
 
 
@@ -246,10 +248,8 @@ class SceneCommands:
         model = OPERATIONS[name][0]
         value = model.model_validate(command['input'])
         if name == 'scenes.speech.capabilities':
-            from services.vocal_isolation import isolation_capability
-            from services.scene3d_speech import rhubarb_executable
-            return {'version': 1, 'status': 'completed', 'result': {
-                'rhubarb': bool(rhubarb_executable()), 'vocalIsolation': isolation_capability()}}
+            from services.speech_alignment import capabilities
+            return {'version': 1, 'status': 'completed', 'result': capabilities()}
         if name == 'scenes.effects.catalog':
             return {'version': 1, 'status': 'completed', 'result': {
                 'effects': deepcopy(CATALOG),

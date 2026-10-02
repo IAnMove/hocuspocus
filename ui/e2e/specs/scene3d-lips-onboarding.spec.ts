@@ -133,15 +133,45 @@ test('reopened isolated voice keeps isolation until explicitly disabled', async 
   await openSpeech(page, doc)
   const option = page.getByLabel('Isolate vocals before calculating lips', { exact: true })
   await expect(option).toBeChecked()
-  await page.getByRole('button', { name: 'Calculate gestures with Rhubarb (local)', exact: true }).click()
+  await page.getByRole('button', { name: 'Analyze lip-sync (local)', exact: true }).click()
   await expect.poll(() => requests).toEqual([true])
   await expect(page.getByTestId('scene3d-speech')).toContainText('1 cue')
   const saved = await saveSpeech(page, info, 'isolated-reanalysis')
   expect(saved.slots[0].speech?.clips?.[0].driver).toBe('rhubarb-vocals')
   await option.uncheck()
-  await page.getByRole('button', { name: 'Calculate gestures with Rhubarb (local)', exact: true }).click()
+  await page.getByRole('button', { name: 'Analyze lip-sync (local)', exact: true }).click()
   await expect.poll(() => requests).toEqual([true, false])
   await expect(page.getByTestId('scene3d-speech')).toContainText('1 cue')
   expect((await saveSpeech(page, info, 'explicit-mixed-reanalysis')).slots[0].speech?.clips?.[0].driver).toBe('rhubarb')
+  await closeApp(page, app.session)
+})
+
+test('phoneme analysis uses the literal turn and retains its engine and contour settings', async ({ page }, info) => {
+  const app = await speechApp(page), doc = speechFixture(false, true)
+  doc.slots[0].speech!.morph = true
+  await page.route('**/api/v1/character-kits/speech/capabilities', route => route.fulfill({ json: {
+    rhubarb: true, phonemes: { installed: true, dependencies_available: true }, vocalIsolation: { available: false },
+  } }))
+  const requests: { dialogue: string; language: string; engine: string; wavBase64: string }[] = []
+  await page.route('**/api/v1/character-kits/speech/analyze*', route => {
+    requests.push(route.request().postDataJSON())
+    return route.fulfill({ json: { mouthCues: [{ start: .1, end: 1.1, value: 'E' }], duration: 4,
+      recognizer: 'wav2vec2-phoneme', engine: 'phoneme', requestedEngine: 'phoneme', driver: 'phoneme', fallbackReason: null } })
+  })
+  await openSpeech(page, doc)
+  await page.getByLabel('Lip-sync engine', { exact: true }).selectOption('phoneme')
+  await page.getByLabel('Exact dialogue or lyrics for this fragment (optional)', { exact: true }).fill('Four')
+  await page.getByLabel('Voice language', { exact: true }).fill('en')
+  await page.getByRole('button', { name: 'Analyze lip-sync (local)', exact: true }).click()
+  await expect.poll(() => requests.length).toBe(1)
+  expect(requests[0]).toMatchObject({ dialogue: 'Four', language: 'en', engine: 'phoneme' })
+  expect(Buffer.from(requests[0].wavBase64, 'base64').toString('ascii', 0, 4)).toBe('RIFF')
+  await expect(page.getByTestId('scene3d-speech')).toContainText('Acoustic phoneme alignment')
+  const saved = await saveSpeech(page, info, 'phoneme-lip-sync')
+  expect(saved.slots[0].speech!.clips![0]).toMatchObject({ text: 'Four', language: 'en', analysisEngine: 'phoneme',
+    driver: 'phoneme', analysisFallback: null, offset: 0, cues: [{ start: .1, end: 1.1, viseme: 'O' }] })
+  expect(saved.slots[0].speech!.morph).toBe(true)
+  expect(saved.slots[0].speech!.face).toEqual(doc.slots[0].speech!.face)
+  expect(app.requests).toHaveLength(0)
   await closeApp(page, app.session)
 })

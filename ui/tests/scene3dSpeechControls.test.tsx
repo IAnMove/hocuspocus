@@ -137,11 +137,45 @@ test('a late analysis after the character changes does not commit another calibr
         onChange={next => { commits++; setSpeech(next) }} onImport={() => {}} onFit={() => {}} />
     }
     const view = render(<Harness sourceUrl="/api/v1/file/mira.glb?workspace=one" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Calculate gestures with Rhubarb (local)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze lip-sync (local)' }))
     await waitFor(() => assert.ok(finish))
     view.rerender(<Harness sourceUrl="/api/v1/file/other.glb?workspace=one" />)
     finish!(Response.json({ mouthCues: [{ start: 0, end: 0.4, value: 'F' }], recognizer: 'phonetic', duration: 0.4 }))
-    await waitFor(() => assert.equal(screen.getByRole('button', { name: 'Calculate gestures with Rhubarb (local)' }).hasAttribute('disabled'), false))
+    await waitFor(() => assert.equal(screen.getByRole('button', { name: 'Analyze lip-sync (local)' }).hasAttribute('disabled'), false))
     assert.equal(commits, 0)
+  } finally { cleanup() }
+})
+
+test('a partial reanalysis recognizes its audio instead of forcing the whole line transcript', async () => {
+  const { render, screen, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
+  const { Scene3DSpeechControls } = await import('../src/features/scene3d/speech/Scene3DSpeechControls')
+  fakeAudio()
+  const bodies: { dialogue: string; engine: string; language: string }[] = []
+  let changed: Scene3DSpeech | undefined
+  globalThis.fetch = async (url, init) => {
+    const value = String(url)
+    if (value.includes('/outputs')) return Response.json({ outputs: [], total: 0 })
+    if (value.includes('/capabilities')) return Response.json({ phonemes: { installed: true }, vocalIsolation: { available: false } })
+    if (value.includes('/analyze')) {
+      bodies.push(JSON.parse(init!.body as string))
+      return Response.json({ mouthCues: [{ start: 0, end: .4, value: 'E' }], recognizer: 'wav2vec2-phoneme',
+        engine: 'phoneme', driver: 'phoneme', duration: .4, fallbackReason: null })
+    }
+    return new Response(new Uint8Array(1000))
+  }
+  try {
+    const original = { ...voiced(), analysisEngine: 'phoneme' as const, language: 'en', text: 'one more race', morph: true }
+    render(<Scene3DSpeechControls slot={slot(original)} workspace="one" disabled={false} calibrate={() => undefined}
+      onChange={value => { changed = value }} onImport={() => {}} onFit={() => {}} />)
+    await waitFor(() => assert.ok(screen.getByLabelText('Waveform')))
+    fireEvent.change(screen.getByLabelText('Selection start (source s)'), { target: { value: '0.4' } })
+    fireEvent.change(screen.getByLabelText('Selection end (source s)'), { target: { value: '0.8' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Recalculate selection' }))
+    await waitFor(() => assert.ok(changed))
+    assert.deepEqual([bodies[0].dialogue, bodies[0].engine, bodies[0].language], ['', 'phoneme', 'en'])
+    assert.equal(changed!.text, original.text)
+    assert.equal(changed!.driver, 'phoneme')
+    assert.equal(changed!.morph, true)
+    assert.equal(changed!.cues[0].manual, true)
   } finally { cleanup() }
 })
