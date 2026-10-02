@@ -30,6 +30,20 @@ from services.humanoid_rig.compatibility import (
     retarget_world,
     weight_issues,
 )
+from services.humanoid_rig.descriptor import (
+    ALGORITHM_VERSION,
+    analysis_reusable,
+    apply_role_overrides,
+    assign_clip_selection,
+    assign_destination,
+    assign_options,
+    assign_reference_pose,
+    build_descriptor,
+    cache_identity,
+    load_descriptor,
+    save_descriptor,
+    verification_applies,
+)
 from services.humanoid_rig.gltf_accessors import AccessorError, read_accessor, split_glb
 from services.humanoid_rig.names import BONE_PARENTS, CLIP_IDS
 from services.humanoid_rig.pose_math import (
@@ -639,3 +653,134 @@ def test_bind_shape_scale_is_applied_once():
     assert described["height_m"] == pytest.approx(1.7)
     assert described["height_method"] == "skinned_bounds_m"
     assert described["height_m"] < 10
+
+
+def _append_child(nodes, parent_index, name):
+    index = len(nodes)
+    nodes.append({"name": name, "children": []})
+    nodes[parent_index].setdefault("children", []).append(index)
+    return index
+
+
+def _descriptor_nodes():
+    nodes = _body()
+    left_a = _append_child(nodes, 10, "LeftExtra")
+    left_b = _append_child(nodes, 10, "LeftExtra")
+    right_extra = _append_child(nodes, 10, "RightExtra")
+    return nodes, left_a, left_b, right_extra
+
+
+def test_rig_descriptor_round_trip(tmp_path):
+    nodes, left_a, left_b, _right_extra = _descriptor_nodes()
+    document = {"nodes": nodes, "skins": [{"joints": [1]}], **_clips()}
+    described = describe(document, asset_hash="asset-a")
+    descriptor = build_descriptor(document, asset_hash="asset-a", options={"root": "in_place"})
+    assert set(described) <= set(descriptor)
+    assert descriptor["skin_index"] == 0
+    assert descriptor["algorithm_version"] == ALGORITHM_VERSION
+    assert descriptor["parent_indexes"][left_b] == 10
+    assert descriptor["height_m"] == described["height_m"]
+    assert descriptor["height_method"] == described["height_method"]
+    assert descriptor["clips"] == described["clips"]
+    assert descriptor["native_playback"] is False
+    assert descriptor["retarget_verified"] is False
+    saved = apply_role_overrides(descriptor, nodes, {"leftHand": left_b})
+    assert saved["role_overrides"] == {"leftHand": left_b}
+    assert saved["roles"]["leftHand"]["node_index"] == left_b
+    assert nodes[left_a]["name"] == nodes[left_b]["name"] == "LeftExtra"
+    asset = tmp_path / "hero.glb"
+    asset.write_bytes(b"synthetic")
+    path = save_descriptor(saved, asset)
+    assert path.name == "hero.glb.rig-descriptor.json"
+    loaded = load_descriptor(asset)
+    assert loaded == saved
+    assert loaded["role_overrides"] == {"leftHand": left_b}
+    names = sorted(item.name for item in tmp_path.iterdir())
+    assert names == ["hero.glb", "hero.glb.rig-descriptor.json"]
+
+
+def test_role_override_uses_the_node_index():
+    nodes, left_a, left_b, _right_extra = _descriptor_nodes()
+    document = {"nodes": nodes, "skins": [{"joints": [1]}]}
+    descriptor = build_descriptor(document, asset_hash="asset-a")
+    saved = apply_role_overrides(descriptor, nodes, {"leftHand": left_b})
+    assert saved["status"] == "mapped"
+    assert saved["retarget_verified"] is False
+    assert saved["native_playback"] is False
+    assert saved["role_nodes"]["leftHand"] == left_b
+    assert saved["role_nodes"]["leftHand"] != left_a
+    assert saved["roles"]["leftHand"]["name"] == nodes[left_a]["name"]
+    assert len(set(saved["role_nodes"].values())) == len(saved["role_nodes"])
+
+
+def test_role_override_rejects_crossed_side_and_duplicate_role():
+    nodes, left_a, left_b, right_extra = _descriptor_nodes()
+    document = {"nodes": nodes, "skins": [{"joints": [1]}]}
+    descriptor = build_descriptor(document, asset_hash="asset-a")
+    crossed = apply_role_overrides(descriptor, nodes, {"leftHand": right_extra})
+    assert crossed["status"] == "needs_review"
+    assert crossed["retarget_status"] == "needs_review"
+    assert crossed["retarget_verified"] is False
+    assert crossed["verification"] is None
+    assert crossed["native_playback"] is False
+    assert any(reason.startswith("crossed_side:") for reason in crossed["reasons"])
+    assert any(item["code"] == "crossed_side" for item in crossed["structured_reasons"])
+    duplicate = apply_role_overrides(descriptor, nodes, [("leftHand", left_a), ("leftHand", left_b)])
+    assert duplicate["status"] == "needs_review"
+    assert duplicate["retarget_verified"] is False
+    assert any(reason.startswith("duplicate_role:leftHand") for reason in duplicate["reasons"])
+    assert any(item["code"] == "duplicate_role" for item in duplicate["structured_reasons"])
+    assert descriptor["retarget_verified"] is False
+    assert descriptor["roles"]["leftHand"]["name"] == "LeftHand"
+
+
+def test_verification_clears_when_override_or_destination_changes():
+    nodes, _left_a, left_b, _right_extra = _descriptor_nodes()
+    document, buffers = _weighted({"nodes": nodes, "skins": [{"joints": [1]}], **_clips()})
+    descriptor = build_descriptor(document, buffers, asset_hash="source-hash", options={"root": "in_place"})
+    certified = record_verification(descriptor, _evidence(descriptor))
+    assert certified["retarget_verified"] is True
+    assert verification_applies(certified, "target-a") is True
+    assert verification_applies(certified, "target-b") is False
+    overridden = apply_role_overrides(certified, nodes, {"leftHand": left_b})
+    assert overridden["status"] == "mapped"
+    assert overridden["retarget_verified"] is False
+    assert overridden["verification"] is None
+    moved = assign_destination(certified, "target-b")
+    assert cache_identity(moved) == cache_identity(certified)
+    assert moved["retarget_verified"] is False
+    assert moved["verification"] is None
+    assert verification_applies(moved, "target-a") is False
+    assert verification_applies(moved, "target-b") is False
+    assert assign_reference_pose(certified, "t")["retarget_verified"] is False
+    assert assign_clip_selection(certified, 1)["retarget_verified"] is False
+    assert assign_options(certified, {"root": "preserve"})["retarget_verified"] is False
+    assert certified["retarget_verified"] is True
+    assert descriptor["retarget_verified"] is False
+
+
+def test_stale_asset_hash_is_not_a_cache_hit(tmp_path):
+    nodes = _body()
+    document = {"nodes": nodes, "skins": [{"joints": [1]}]}
+    stored = build_descriptor(document, asset_hash="hash-a", options={"pose": "rest", "root": "in_place"})
+    asset = tmp_path / "hero.glb"
+    asset.write_bytes(b"synthetic")
+    save_descriptor(stored, asset)
+    loaded = load_descriptor(asset)
+    assert loaded["asset_hash"] == "hash-a"
+    assert loaded["profile_id"] == "meshy-blender-body-reference-v1"
+    stale = dict(loaded)
+    stale["asset_hash"] = "hash-b"
+    assert analysis_reusable(loaded, loaded) is True
+    assert analysis_reusable(loaded, stale) is False
+    assert cache_identity(loaded) != cache_identity(stale)
+    profile = dict(loaded)
+    profile["profile_id"] = "external-native"
+    assert cache_identity(loaded) == cache_identity(profile)
+    assert analysis_reusable(loaded, profile) is False
+    other_skin = dict(loaded)
+    other_skin["skin_index"] = 1
+    assert analysis_reusable(loaded, other_skin) is False
+    other_options = dict(loaded)
+    other_options["options"] = {"root": "in_place", "pose": "rest"}
+    assert analysis_reusable(loaded, other_options) is True
