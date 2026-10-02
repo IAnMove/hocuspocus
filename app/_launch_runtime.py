@@ -36819,6 +36819,7 @@ _world3d_export = World3DExportService(
     workspace_dir=_workspace_dir,
     registry_for=_task_registry,
     app_url=os.environ.get("HOCUS_APP_URL", ""),
+    uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
 )
 bind_world3d_renderer_origin(api, _world3d_export)
 api.include_router(create_world3d_export_router(_world3d_export))
