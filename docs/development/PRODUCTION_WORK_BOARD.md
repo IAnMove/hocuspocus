@@ -84,6 +84,16 @@ Quedaron fuera de la integración, por no abrirse ese día: #589, #583, #575, #5
 
 ## Producciones unificadas (2026-10-01)
 
+### Cierre de integración automática — Codex
+
+Reclamado en `feat/production-project-generation`: registro antes de iniciar
+`production.run`, Director y Series; regeneración desde la revisión compartida;
+recorrido Chromium sin GPU. Módulos nuevos de integración y ganchos pequeños en
+los puntos de arranque, sin cambios de renderers ni launchers. La fila «Hecho»
+anterior describe las capacidades del catálogo; no implica que los productores
+ya llamen automáticamente al registro. No se tocan los fixes de undo (#737),
+slot de escritura (#739), song switch (#742) ni audio del Director (#741/#743).
+
 Reclamado por Grok en `feat/unified-productions-identity`. Índice y enlace
 Story/episodio antes de generar. No rehace motores ni plantillas World3D.
 Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
@@ -100,3 +110,13 @@ Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
 | `app/services/production_work_commands.py`, `ui/src/features/production-catalog/`, una línea en `capabilityRegistry.ts`, un método `productionWorks.command` | catálogo, rama `feat/unified-productions-catalog` | Lista, abre y resuelve. El método del adaptador es aditivo. No reescribe plantillas World3D, `music_production.py` ni `wangp_mcp.py`. |
 | `link_existing_production`, `production.works.link` | obras antiguas, rama `feat/unified-productions-legacy` | Vincula por id un registro reconocible. No mueve medios ni crea una Story. |
 | `bind_producer`, `production_producer_link.py` | productores, rama `feat/unified-productions-producers` | `production.run`, `start_pipeline` y el render de serie llaman al enlace antes del worker. El gancho en `music_production.py` son dos líneas. No arranca un modelo. |
+
+## Cómic a película, adenda 2026-10-01
+
+Rama `fix/comic-film-pass-addendum`. Un cómic con motor H3 conserva cada viñeta
+en el PRE: un plano corto se alarga al mínimo del modelo y no se fusiona con el
+siguiente. LTX-2 entra en el selector cuando el catálogo lo marca compatible
+con película de cómic. Un PRE guardado se reabre con su estado y su aprobación.
+El error de ffmpeg muestra el final del registro y guarda el registro entero.
+La resolución ofrecida, por ejemplo 1280×704, llega al PRE y al render.
+Aceptar una prueba exige quién lo pidió, la vía y la nota de atestación.

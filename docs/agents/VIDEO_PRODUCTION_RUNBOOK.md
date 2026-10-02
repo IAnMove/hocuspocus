@@ -12,6 +12,15 @@ the offset to the shot's position in the analyzed vocal track. This paints the
 built-in 2D mouth on the animated GLB; it does not use H3. Headless exports accept
 muted speech and cue-only faces; audible speech still requires the editor's audio
 export path. Leave the H3-only `sing` flag unset on these scene3d shots.
+
+If singing vowels are wrong, use native `audio.phonemes.setup` to inspect or
+explicitly install the optional CPU phoneme engine, then `audio.phoneme_cues`
+with the isolated voice, source window, and exact `dialogue`. It aligns acoustic
+phonemes to the transcript and returns source-clock mouth cues plus confidence.
+Import these into `slot.speech`, review sustained vowels and low-confidence
+phones, and recalibrate the small mouth transition offset. A global advance of
+the older Rhubarb track cannot fix a misclassified vowel. See
+[Video 3D speech](../development/VIDEO3D_SPEECH.md) for the native contract and limits.
 Call `production.plan` with the eight-field brief when you do not already have a spec. It returns the spec. Then `production.run`.
 
 ## Call order
@@ -60,7 +69,7 @@ Agents use the same actions as commands:
 
 - `production.shot.use_take` `{workspace, production_id, shot, take_file}` sets that kept take as the shot clip, saves a new scene revision, re-exports only that scene and replaces its montage clip under the same `expected_revision` a repackage uses. The clip origin stays. `take_not_found` when the file is not one of that shot's takes. No GPU.
 - `production.shot.update` `{workspace, production_id, shot, lyric_style?, title?, camera?}` stores those fields on `spec.shots[i].overrides` and re-exports only that scene. A `lyric_style` override replaces the global lyric look for that shot. This is the agent path; people use the panel.
-- `production.song.use` `{workspace, production_id, candidate}` switches to a candidate kept in `song_candidates` (its id or its file). The switch re-analyses the song, recomputes windows and marks a clip `obsolete` when its audio window moved by more than 0.3 s. It does not delete clip files. Shots whose window stayed put keep their clip.
+- `production.song.use` `{workspace, production_id, candidate}` switches to a candidate kept in `song_candidates` (its id or its file). The switch re-analyses the song, recomputes windows and marks a clip `obsolete` when its audio window moved by more than 0.3 s. It does not delete clip files. Shots whose window stayed put keep their clip. A locked shot whose window would move is `shot_locked` and the current song stays; otherwise the later `production.run` would keep that old take on the new soundtrack.
 - `production.cancel` `{workspace, production_id}` asks a live run to stop between rounds. Status becomes `cancelled` (a restart will not treat that as `running` and will not launch a GPU run by itself). The files and the spec stay. A later `production.run` with the same id resumes.
 
 `production.run {workspace, production_id, package: true}` does the packaging for a production made before this existed (no GPU, no export; it saves the scene documents, the manifest and the montage clips' origins). Each document goes through the Video 2D scene validator: `production.status` → `editable.warnings` counts what it flags (text cut off or overlapping, low contrast when it can sample it), listed per shot in the manifest. It does not see everything: `dymo` lyrics used to punch their letters out of black tape and vanished on dark pictures; `dymo` now defaults to dark letters on cream tape (set `lyric_style.box` to choose your own).
@@ -280,6 +289,16 @@ verdict says so, using `retake_keys` unchanged. Poll `production.status` with `w
 
 ## Native Video 3D shots
 
+For a shared GPU workstation, set `HOCUS_SCENE_RENDER_DEVICE=cpu` in the
+owned instance's Pinokio environment before starting it. Native Video 3D and
+Video 2D exports then use Chromium SwiftShader with hardware acceleration
+disabled and the existing CPU H.264 encoder. Video 3D takes a CPU render lane;
+`production.run` still checks disk space but does not wait for GPU memory for
+these software exports. Music, image and video generation retain their GPU
+guards. The default `auto` keeps the existing hardware discovery. Resolution,
+frame rate, document, mouth morph and camera stay part of the same renderer;
+software export may take longer. Video 3D capabilities expose `renderDevice`.
+
 Video 3D automatically separates its fallback ground from authored surfaces
 by 2 mm and applies a depth bias, including when the projected-floor material
 changes. Floor/wall image surfaces receive a stable depth priority in document
@@ -446,7 +465,7 @@ only: it neither re-renders the video nor starts any generation.
 
 `timing.shots` adds `s_per_step`, `degraded`, and `model` only when the H3 job returned a performance object. Missing fields are null. A job without that object adds nothing.
 
-`production.shot.review` records `pending`, `approved`, or `changes_requested` in `<id>.review.json`, not in the production file. `production.shot.lock` sets `locked`. Locked shots are omitted from `frames()` and `clips()`, including a named retake, until unlock. `scenes()` keeps them in the cut and skips re-export only when that scene file already exists, so a lock before the first export, or after a failed one, still writes the file. A retake of another shot does not drop or stretch the locked one. An explicit retake of a locked shot is `shot_locked` before the run sets `status` to `running`, so a completed production stays completed. `production.shot.redo` on a locked shot returns `shot_locked` and changes nothing. `production.shot.undo` restores one shot. A locked shot is `shot_locked` and the cut stays. Undo does not delete files. `production.shot.request` validates a closed plan. With no plan and no configured language model it is `llm_unavailable` and does not invent a plan. `apply` true with the previewed plan validates and runs that closed object; the LLM is not asked again. The REST request route validates and returns `applied: false` when apply is not true.
+`production.shot.review` records `pending`, `approved`, or `changes_requested` in `<id>.review.json`, not in the production file. `production.shot.lock` sets `locked`. Locked shots are omitted from `frames()` and `clips()`, including a named retake, until unlock. `scenes()` keeps them in the cut and skips re-export only when that scene file already exists, so a lock before the first export, or after a failed one, still writes the file. A retake of another shot does not drop or stretch the locked one. An explicit retake of a locked shot, or a run while a locked clip is still marked `obsolete` after `production.song.use`, is `shot_locked` before the run sets `status` to `running`, so a completed production stays completed. `production.shot.redo` on a locked shot returns `shot_locked` and changes nothing. `production.shot.undo` restores one shot. A locked shot is `shot_locked` and the cut stays. Undo does not delete files. `production.shot.request` validates a closed plan. With no plan and no configured language model it is `llm_unavailable` and does not invent a plan. `apply` true with the previewed plan validates and runs that closed object; the LLM is not asked again. The REST request route validates and returns `applied: false` when apply is not true.
 
 `production.publish` refuses a completed production whose spec lists shot keys until each key is `approved` in the review file (`review_incomplete`). A spec with no shot list is unchanged. Artistic review stays `pending` without a human file. A human file may set `approved` or `changes_requested`. It is never the string ok.
 
@@ -534,3 +553,13 @@ before the episode is marked `rendering` or the queue is persisted. A refused
 render does not create a project. A failed bind does not leave a queued job
 without a worker. The link does not create a Story and it does not rewrite
 the series library. Tokens for this link are not available from the client.
+
+## Comic film PRE after a restart
+
+A comic PRE that was ready before the lab stopped is still ready afterwards.
+Opening it restores the saved approval and does not start the film. The output
+size is the canvas chosen in the comic video controls, including an H3 720p
+canvas of 1280×704. A deterministic render that fails reports the end of the
+ffmpeg log and keeps the full log on the pipeline. Accepting a reviewed test
+clip records the person who requested that acceptance, the channel, and the
+attestation note. The review checkbox is not filled in by playback.

@@ -595,9 +595,10 @@ def _refuse_locked_retake(production: Production, data: dict) -> tuple[str, ...]
     retake = tuple(item for item in (data.get("retake") or ()) if isinstance(item, str))
     if data.get("package") is True:
         return retake
-    from services.production_shot_review import assert_retake_unlocked
+    from services.production_shot_review import assert_obsolete_unlocked, assert_retake_unlocked
     try:
         assert_retake_unlocked(production, retake)
+        assert_obsolete_unlocked(production)
     except ProductionError as error:
         from fastapi import HTTPException
         raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error

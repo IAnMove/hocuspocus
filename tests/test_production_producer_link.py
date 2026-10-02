@@ -12,8 +12,9 @@ from fastapi import HTTPException
 from services.music_production import command_handlers
 from services.production_project_link import LINK_FILENAME, LinkError, bind_producer
 from services.production_producer_link import link_director_start, link_series_render
+from services.production_stage_run import adopt_prepared_identity
 from services.series_library import create_series_episode, create_series_project, series_library_path, write_series_library
-from services.story_library import read_story_library
+from services.story_library import read_story_library, write_story_library
 
 
 def test_a_run_creates_one_story_and_a_repeat_reuses_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -65,7 +66,6 @@ def test_a_busy_edit_blocks_the_run_before_the_link_rewrites_the_file(tmp_path: 
         "spec": {"title": "Night bus", "song": {}, "style": {}, "shots": []},
         "clips": {"s1": {"file": "keep.mp4"}},
     }), encoding="utf-8")
-    started: list[object] = []
     held = ""
 
     def occupy_then_accept(spec):
@@ -97,7 +97,6 @@ def test_a_busy_edit_blocks_the_run_before_the_link_rewrites_the_file(tmp_path: 
             }))
         assert caught.value.status_code == 409
         assert caught.value.detail["code"] == "already_running"
-        assert started == []
         state = json.loads(path.read_text(encoding="utf-8"))
         assert state["clips"]["s1"]["file"] == "edited.mp4"
         assert "project" not in state
@@ -106,6 +105,42 @@ def test_a_busy_edit_blocks_the_run_before_the_link_rewrites_the_file(tmp_path: 
     finally:
         if held:
             release_edit(music, held)
+
+
+def test_first_save_keeps_the_project_written_before_the_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def fake_execute(production, spec, retake=(), through="all"):
+        adopt_prepared_identity(production)
+        production.state.update(spec=spec, status="running")
+        production.save()
+
+    class _Thread:
+        def __init__(self, *, target, args, name, daemon):
+            self.target = target
+            self.args = args
+
+        def start(self) -> None:
+            self.target(*self.args)
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr("services.production_stage_run.execute_run", fake_execute)
+    monkeypatch.setattr("services.music_production.threading.Thread", _Thread)
+    monkeypatch.setattr("services.music_production.validate_spec", lambda spec: spec)
+    root = tmp_path / "film"
+    root.mkdir()
+    handlers = command_handlers(lambda _name: str(root), lambda: str(root), lambda: "http://127.0.0.1:9", lambda: "token")
+    asyncio.run(handlers["production.run"]({
+        "version": 1,
+        "input": {"workspace": "film", "production_id": "clip1", "spec": {"title": "Night bus"}},
+    }))
+    state = json.loads((root / "clip1.production.json").read_text(encoding="utf-8"))
+    project = next(iter(read_story_library(str(root))["projects"].values()))
+    assert state["status"] == "running"
+    assert state["spec"]["title"] == "Night bus"
+    assert state["project"] == {"kind": "story", "id": project["id"]}
+    assert state["intent_id"]
+    assert state["origin"] == "mcp"
 
 
 def test_an_unknown_project_refuses_the_run_before_the_thread(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -202,4 +237,58 @@ def test_bind_refuses_a_second_project_for_the_same_id(tmp_path: Path):
         })
     assert caught.value.code == "invalid_project"
     ids = [item["id"] for item in read_story_library(str(tmp_path))["projects"]["nara"]["productions"]]
+    assert ids == ["clip1"]
+
+
+def test_bind_retry_finishes_the_stub_without_a_second_story(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import services.production_project_link as link_module
+
+    original = link_module._ensure_stub
+
+    def boom(workspace_dir, record):
+        boom.calls += 1
+        if boom.calls == 1:
+            raise OSError("disk")
+        return original(workspace_dir, record)
+
+    boom.calls = 0
+    request = {
+        "workspace": "film", "production_id": "clip1", "origin": "mcp",
+        "format": "music_video", "title": "Night bus", "write_stub": True,
+    }
+    monkeypatch.setattr(link_module, "_ensure_stub", boom)
+    with pytest.raises(LinkError) as caught:
+        bind_producer(str(tmp_path), request)
+    assert caught.value.code == "partial_write"
+    assert (tmp_path / "clip1.production.json").exists() is False
+    monkeypatch.setattr(link_module, "_ensure_stub", original)
+    again = bind_producer(str(tmp_path), request)
+    assert again["reused"] is True
+    state = json.loads((tmp_path / "clip1.production.json").read_text(encoding="utf-8"))
+    assert state["project"] == again["project"]
+    assert len(read_story_library(str(tmp_path))["projects"]) == 1
+
+
+def test_bind_retry_reattaches_a_story_that_lost_the_row(tmp_path: Path):
+    first = bind_producer(str(tmp_path), {
+        "workspace": "film", "production_id": "clip1", "origin": "mcp",
+        "format": "music_video", "title": "Night bus", "write_stub": True,
+    })
+    library = read_story_library(str(tmp_path))
+    project_id = first["project"]["id"]
+    cleared = dict(library["projects"][project_id])
+    cleared["productions"] = []
+    write_story_library(
+        str(tmp_path),
+        {**library, "projects": {**library["projects"], project_id: cleared}},
+        base_revision=library["revision"],
+    )
+    assert read_story_library(str(tmp_path))["projects"][project_id]["productions"] == []
+    again = bind_producer(str(tmp_path), {
+        "workspace": "film", "production_id": "clip1", "origin": "mcp",
+        "format": "music_video", "title": "Night bus", "write_stub": True,
+    })
+    assert again["reused"] is True
+    assert again["project"] == first["project"]
+    ids = [item["id"] for item in read_story_library(str(tmp_path))["projects"][project_id]["productions"]]
     assert ids == ["clip1"]

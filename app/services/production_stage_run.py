@@ -1,10 +1,14 @@
 """One production.run. The stage methods stay on Production so a resume calls the same code."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from services.production_control import Cancelled, arm, checkpoint, disarm
 from services.production_disk import release_completed
+
+_IDENTITY_KEYS = ("project", "intent_id", "origin", "format")
 
 
 def _host():
@@ -12,14 +16,38 @@ def _host():
     return host
 
 
+def adopt_prepared_identity(production: Any) -> None:
+    """Copy link identity from the stub written before this worker started.
+
+    ``Production`` is constructed before ``bind_producer`` writes
+    ``{id}.production.json``. The first ``save()`` would otherwise replace that
+    file and drop ``project`` / ``intent_id`` / ``origin``.
+    """
+    path = getattr(production, "path", None)
+    state = getattr(production, "state", None)
+    if path is None or not isinstance(state, dict):
+        return
+    try:
+        disk = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return
+    if not isinstance(disk, dict):
+        return
+    for key in _IDENTITY_KEYS:
+        if key not in state and key in disk:
+            state[key] = disk[key]
+
+
 def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
     host = _host()
-    from services.production_shot_review import assert_retake_unlocked
+    from services.production_shot_review import assert_obsolete_unlocked, assert_retake_unlocked
     assert_retake_unlocked(production, retake)
+    assert_obsolete_unlocked(production)
     production._cancel = arm(production.ws, production.id)
     prior_status = production.state.get("status")
     from services.production_preview import keep_completed_cut, remember_completed_cut
     remember_completed_cut(production.state, prior_status, through)
+    adopt_prepared_identity(production)
     production.state.update(spec=spec, status="running", started=production.state.get("started") or host.time.time(), through=through)
     from services.production_close import note_resume
     note_resume(production)

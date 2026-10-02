@@ -147,6 +147,10 @@ export interface PipelineQualityGate {
     output_files?: string[]
   }>
   waiver_reason?: string
+  accepted_via?: string
+  accepted_by?: string
+  acceptance_note?: string
+  accepted_at?: number
 }
 
 export interface PipelineResourceSchedule {
@@ -303,6 +307,9 @@ export async function updatePipelinePreview(
     expectedFingerprint: string
     approvePreview?: boolean
     acceptQualityTest?: boolean
+    acceptedVia?: string
+    acceptedBy?: string
+    acceptanceNote?: string
     qualityWaiver?: boolean
     waiverReason?: string
   },
@@ -316,7 +323,12 @@ export async function updatePipelinePreview(
         clips,
         expected_fingerprint: options.expectedFingerprint,
         ...(options.approvePreview ? { approve_preview: true } : {}),
-        ...(options.acceptQualityTest ? { accept_quality_test: true } : {}),
+        ...(options.acceptQualityTest ? {
+          accept_quality_test: true,
+          accepted_via: options.acceptedVia || '',
+          accepted_by: options.acceptedBy || '',
+          acceptance_note: options.acceptanceNote || '',
+        } : {}),
         ...(options.qualityWaiver ? {
           quality_waiver: true,
           waiver_reason: options.waiverReason || '',

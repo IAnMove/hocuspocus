@@ -176,6 +176,7 @@ def summary(score: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------- MCP
 def command_catalog() -> list[dict[str, Any]]:
     from services.speech_file_commands import command_catalog as speech_catalog
+    from services.phoneme_commands import command_catalog as phoneme_catalog
     return [{
         "name": OPERATION,
         "description": ("Analyze a song in the workspace on the CPU: tempo grid (period x phase search), isolated vocals and, "
@@ -190,11 +191,12 @@ def command_catalog() -> list[dict[str, Any]]:
                 "lyrics": {"type": "string", "maxLength": 20000, "description": "Written lyrics; [Section] tags are ignored"},
             }},
         }},
-    }] + speech_catalog()
+    }] + speech_catalog() + phoneme_catalog()
 
 
 def command_handlers(workspace_dir: Callable[[str], str]) -> dict[str, Callable[[Any], Any]]:
     from services.speech_file_commands import command_handlers as speech_handlers
+    from services.phoneme_commands import command_handlers as phoneme_handlers
     async def handle(arguments: Any) -> dict[str, Any]:
         from fastapi import HTTPException
         from starlette.concurrency import run_in_threadpool
@@ -215,4 +217,4 @@ def command_handlers(workspace_dir: Callable[[str], str]) -> dict[str, Callable[
         score = await run_in_threadpool(run)
         return {"version": 1, "status": "completed", "operation": OPERATION, "result": summary(score)}
 
-    return {OPERATION: handle, **speech_handlers(workspace_dir)}
+    return {OPERATION: handle, **speech_handlers(workspace_dir), **phoneme_handlers(workspace_dir)}

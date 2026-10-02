@@ -371,7 +371,7 @@ class ShotPlan:
             mood=d.get("mood", ""),
             action_beats=d.get("action_beats", []),
             camera_plan=CameraPlan.from_dict(d["camera_plan"]) if "camera_plan" in d else CameraPlan(framing="medium shot"),
-            audio_plan=AudioPlan.from_dict(d["audio_plan"]) if "audio_plan" in d else AudioPlan(mode="ambient_only"),
+            audio_plan=AudioPlan.from_dict(d["audio_plan"]) if "audio_plan" in d else AudioPlan(mode="ambient_only", timing_anchor="video"),
             ending_beat=d.get("ending_beat", ""),
             narrative_role=d.get("narrative_role"),
             scene_type=d.get("scene_type"),

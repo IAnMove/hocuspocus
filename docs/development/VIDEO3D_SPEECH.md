@@ -107,6 +107,24 @@ por lo que cada plano conserva `speech.offset` igual al inicio de su recorte.
 Usa la voz aislada de `audio.analyze` para canto. Este análisis es CPU, no genera
 voz y no descarga herramientas. Sin Rhubarb devuelve `speech_unavailable`.
 
+Para vocales de canto que Rhubarb confunde, MCP `audio.phonemes.setup`
+`{version:1,input:{}}` consulta el motor opcional; `input.install:true` instala
+explícitamente el modelo de fonemas, fijado por revisión y SHA-256 (1,26 GB).
+`audio.phoneme_cues` acepta la misma ventana de audio y `dialogue` con el texto
+real de ese fragmento. Alinea los fonemas por CTC sobre la voz; sin texto reconoce
+la secuencia acústica. Devuelve `phonemes`, confianza y `mouthCues` en el reloj
+de la fuente. Las vocales sostenidas conservan su gesto entre emisiones CTC;
+solo el silencio medido cierra la boca. Las sílabas repetidas siguen su orden.
+Todo se ejecuta en un proceso CPU de dos hilos, sin CUDA ni descargas durante
+el análisis. El modelo está entrenado para habla: revisar el canto, la letra
+exacta y `quality.low_confidence_phonemes`; no garantiza sincronía perfecta.
+El reconocimiento devuelve nueve formas compatibles con el atlas actual;
+los diptongos usan una transición inferida y requieren revisión. Importa los
+gestos como `driver:"imported"`; conserva `audible:false` en un videoclip.
+No compenses una nueva pista de fonemas con el antiguo adelanto arbitrario de
+otra pista: evalúa solo el pequeño margen del morph y del muestreo de vídeo.
+Fuente: [Wav2Vec2Phoneme](https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft).
+
 En producciones con planos 3D, los cortes se alinean por su posición absoluta
 a la cuadrícula de 24 fps. Usa esa posición para el recorte de gestos: redondear
 por separado la duración de cada plano acumularía desfase contra la canción.

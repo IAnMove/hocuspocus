@@ -299,6 +299,24 @@ def test_run_refuses_a_locked_retake_before_changing_status(tmp_path):
         assert_retake_unlocked(production, ("s0",))
 
 
+def test_run_refuses_a_locked_obsolete_clip_before_changing_status(tmp_path):
+    """song.use flags a moved window; lock must not let the old take ride the new song."""
+    production = _production(tmp_path)
+    production.state.update(
+        status="completed", spec={"shots": [{"key": "s0"}]}, final="v.mp4",
+        clips={"s0": {"file": "old.mp4", "obsolete": True}},
+    )
+    production.save()
+    record_decision(tmp_path, "p", "s0", locked=True)
+    with pytest.raises(ProductionError) as caught:
+        production.run(production.state["spec"])
+    assert caught.value.code == "shot_locked"
+    disk = json.loads((tmp_path / "p.production.json").read_text())
+    assert disk["status"] == "completed"
+    assert disk.get("final") == "v.mp4"
+    assert disk["clips"]["s0"]["file"] == "old.mp4"
+
+
 def test_publish_requires_every_shot_when_the_spec_lists_them(tmp_path):
     assert_publishable(tmp_path, "p", {"spec": {"title": "Night"}})
     state = {"spec": {"shots": [{"key": "s0"}, {"key": "s1"}]}}
@@ -411,6 +429,31 @@ def test_redo_of_a_locked_shot_does_not_drop_the_frame(tmp_path):
         redo(production, spec, "s0", "clip", shoot_frame=shoot_frame, shoot_clip=shoot_clip, export_scene=export_scene)
     assert clip_caught.value.code == "shot_locked"
     assert production.state["clips"]["s0"]["file"] == "c.mp4"
+    assert calls == []
+
+
+def test_undo_refuses_a_catalog_history_snapshot(tmp_path):
+    """Runner undo must not delete frames or stringify clips from a catalog select."""
+    production = _production(tmp_path)
+    production.state = {
+        "frames": {"s0": "f.png"},
+        "clips": {"s0": {"file": "c.mp4"}},
+        "scenes": {"s0": {"file": "s.mp4"}},
+        "spec": {"shots": [{"key": "s0", "camera": "wide"}]},
+    }
+    record_decision(tmp_path, "p", "s0", snapshot={"clip": "take-a.mp4", "video_stale": False})
+    history = load_review(tmp_path, "p")["shots"]["s0"]["history"]
+    calls: list[str] = []
+
+    def export_scene(_production, _spec, _key):
+        calls.append("export")
+
+    with pytest.raises(ProductionError) as caught:
+        undo(production, production.state["spec"], "s0", history[0]["id"], export_scene=export_scene)
+    assert caught.value.code == "history_incompatible"
+    assert production.state["frames"]["s0"] == "f.png"
+    assert production.state["clips"]["s0"] == {"file": "c.mp4"}
+    assert production.state["scenes"]["s0"] == {"file": "s.mp4"}
     assert calls == []
 
 

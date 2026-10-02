@@ -744,6 +744,21 @@ def _merge_units(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _pad_locked_units(
+    units: list[dict[str, Any]],
+    minimum_seconds: float,
+) -> list[dict[str, Any]]:
+    """Lengthen a locked panel onto the model minimum without merging it."""
+
+    padded: list[dict[str, Any]] = []
+    for unit in units:
+        if unit["duration"] < minimum_seconds:
+            unit = dict(unit)
+            unit["duration"] = minimum_seconds
+        padded.append(unit)
+    return padded
+
+
 def _merge_short_units(
     units: list[dict[str, Any]],
     *,
@@ -948,13 +963,17 @@ def adapt_bounded_timeline(
     minimum_frames: int,
     maximum_frames: int,
     frame_step: int,
+    preserve_source_units: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Convert a Director plan into bounded model-native independent shots.
 
     Long rolling-window scenes are divided before image generation, while
-    adjacent cuts shorter than the model minimum are combined.  The returned
-    durations already lie on the model's frame lattice, so generation,
-    Dashboard reruns, and source-audio slicing share exact boundaries.
+    adjacent cuts shorter than the model minimum are combined.  Locked comic
+    panels are the exception: each source stays its own shot and a short
+    panel is padded onto the hardware minimum instead of being merged.
+    The returned durations already lie on the model's frame lattice, so
+    generation, Dashboard reruns, and source-audio slicing share exact
+    boundaries.
     """
 
     try:
@@ -987,11 +1006,14 @@ def adapt_bounded_timeline(
             }
         )
 
-    units = _merge_short_units(
-        units,
-        minimum_seconds=minimum_seconds,
-        maximum_seconds=maximum_seconds,
-    )
+    if preserve_source_units:
+        units = _pad_locked_units(units, minimum_seconds)
+    else:
+        units = _merge_short_units(
+            units,
+            minimum_seconds=minimum_seconds,
+            maximum_seconds=maximum_seconds,
+        )
 
     segmented: list[dict[str, Any]] = []
     for unit in units:

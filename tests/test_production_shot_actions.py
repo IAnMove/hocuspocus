@@ -125,6 +125,32 @@ def test_undo_restores_the_previous_take_and_keeps_the_file(tmp_path: Path):
     assert montage["clips"][0]["source"] == "old-export.mp4"
 
 
+def test_undo_refuses_a_runner_history_snapshot(tmp_path: Path):
+    """Catalog undo must not write a runner clip dict into shots.json."""
+    from services.production_shot_review import record_decision
+
+    root = tmp_path / "film"
+    root.mkdir()
+    _production(root, "clip1")
+    _manifest(root)
+    record_decision(str(root), "clip1", "s1", snapshot={
+        "frame": "f.png",
+        "clip": {"file": "take-b.mp4"},
+        "scene": {"file": "s.mp4"},
+        "shot": {"key": "s1"},
+    })
+    history = _shot(root, "s1")["review"]["history_id"]
+    try:
+        _act(root, "s1", {"action": "undo", "history_id": history, "expected_revision": 0})
+    except ActionError as error:
+        assert error.code == "history_incompatible"
+    else:
+        raise AssertionError("expected history_incompatible")
+    manifest = json.loads((root / "clip1.shots.json").read_text(encoding="utf-8"))
+    assert manifest["shots"][0]["clip"] == "take-a.mp4"
+    assert isinstance(manifest["shots"][0]["clip"], str)
+
+
 def test_undo_after_reexport_restores_the_previous_montage_source(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()
@@ -246,6 +272,87 @@ def test_director_selection_marks_stale_without_dropping_attempts(tmp_path: Path
     view = shot_view(str(root), "film", "bus")
     assert view["shots"][0]["selected_take_id"] == "new.mp4"
     assert view["shots"][0]["montage"]["stale"] is False
+
+
+def test_catalog_shot_writes_refuse_while_the_production_is_held(tmp_path: Path):
+    """The runner replaces shots.json from live state; a catalog select would vanish."""
+    import threading
+
+    from services import music_production
+    from services.production_commands import occupy_edit, release_edit
+
+    root = tmp_path / "film"
+    root.mkdir()
+    _production(root, "clip1")
+    _manifest(root)
+    before = (root / "clip1.shots.json").read_text(encoding="utf-8")
+    hold = threading.Event()
+    thread = threading.Thread(target=hold.wait, name="production-clip1", daemon=True)
+    thread.start()
+    music_production._threads["film/clip1"] = thread
+    try:
+        for body in (
+            {"action": "select", "take": "take-b.mp4", "expected_revision": 0},
+            {"action": "reexport", "expected_revision": 0},
+            {"action": "undo", "history_id": "missing", "expected_revision": 0},
+        ):
+            try:
+                _act(root, "s1", body)
+            except ActionError as error:
+                assert error.code == "already_running"
+            else:
+                raise AssertionError(body["action"])
+        assert (root / "clip1.shots.json").read_text(encoding="utf-8") == before
+        reviewed = _act(root, "s1", {"action": "review", "status": "approved"})
+        assert reviewed["applied"] is True and reviewed["status"] == "approved"
+    finally:
+        hold.set()
+        thread.join(timeout=2)
+        music_production._threads.pop("film/clip1", None)
+    key = occupy_edit(music_production, "film", "clip1")
+    try:
+        try:
+            _act(root, "s1", {"action": "select", "take": "take-b.mp4", "expected_revision": 0})
+        except ActionError as error:
+            assert error.code == "already_running"
+        else:
+            raise AssertionError("occupy_edit")
+        assert (root / "clip1.shots.json").read_text(encoding="utf-8") == before
+    finally:
+        release_edit(music_production, key)
+        music_production._edits.pop("film/clip1", None)
+    selected = _act(root, "s1", {"action": "select", "take": "take-b.mp4", "expected_revision": 0})
+    assert selected["applied"] is True and selected["revision"] == 1
+
+
+def test_http_catalog_action_reports_already_running(tmp_path: Path):
+    import threading
+
+    from services import music_production
+
+    root = tmp_path / "film"
+    root.mkdir()
+    _production(root, "clip1")
+    _manifest(root)
+    app = FastAPI()
+    app.include_router(create_production_projects_router(workspace_dir=lambda name: str(root) if name == "film" else str(tmp_path / "missing")))
+    client = TestClient(app)
+    hold = threading.Event()
+    thread = threading.Thread(target=hold.wait, name="production-clip1", daemon=True)
+    thread.start()
+    music_production._threads["film/clip1"] = thread
+    try:
+        denied = client.post("/api/v1/production-projects/clip1/shots/s1", json={
+            "workspace": "film", "action": "select", "take": "take-b.mp4", "expected_revision": 0,
+        })
+        assert denied.status_code == 409
+        assert denied.json()["detail"]["code"] == "already_running"
+        assert denied.json()["detail"]["retryable"] is True
+        assert json.loads((root / "clip1.shots.json").read_text(encoding="utf-8"))["shots"][0]["clip"] == "take-a.mp4"
+    finally:
+        hold.set()
+        thread.join(timeout=2)
+        music_production._threads.pop("film/clip1", None)
 
 
 def test_http_action_reports_a_stale_revision(tmp_path: Path):

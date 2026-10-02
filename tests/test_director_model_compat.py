@@ -1338,6 +1338,18 @@ class TestDirectorBackendValidation(unittest.TestCase):
                 "video_model": "ovi",
             })
 
+    def test_comic_movie_is_a_known_workflow_that_needs_only_an_i2v_model(self):
+        # The comic Video tab starts a Director pipeline of this type; before it was listed the real backend
+        # answered 400 "Unknown Director workflow 'comic_movie'" for every comic.
+        pipeline._validate_director_models({"pipeline_type": "comic_movie", "image_model": "image", "video_model": "ltx"})
+        pipeline._validate_director_models({"pipeline_type": "comic_movie", "image_model": "image", "video_model": "ovi"})
+        with self.assertRaisesRegex(pipeline.DirectorModelCompatibilityError, "Comic Film"):
+            pipeline._validate_director_models({"pipeline_type": "comic_movie", "image_model": "image", "video_model": "image"})
+
+    def test_an_unknown_workflow_is_still_rejected(self):
+        with self.assertRaisesRegex(pipeline.DirectorModelCompatibilityError, "Unknown Director workflow 'nope'"):
+            pipeline._validate_director_models({"pipeline_type": "nope", "image_model": "image", "video_model": "ltx"})
+
     def test_story_workflow_accepts_native_audio_only_model(self):
         pipeline._validate_director_models({
             "pipeline_type": "short_film_story",

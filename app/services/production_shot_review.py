@@ -151,6 +151,21 @@ def assert_retake_unlocked(production: Any, retake: tuple | list = ()) -> None:
     unlocked_windows(production, [{"key": key} for key in keys], keys)
 
 
+def assert_obsolete_unlocked(production: Any) -> None:
+    """Refuse a run that would keep a locked take shot against a previous song window.
+
+    ``production.song.use`` flags those clips ``obsolete``. The clip pass then
+    drops locked keys, so the montage would stitch the old take onto the new
+    soundtrack.
+    """
+    from services.production_takes import obsolete_clip
+
+    clips = (getattr(production, "state", None) or {}).get("clips") or {}
+    stale = [key for key, clip in clips.items() if isinstance(key, str) and obsolete_clip(clip)]
+    if stale:
+        assert_retake_unlocked(production, stale)
+
+
 def unlocked_windows(production: Any, windows: list[dict], retake: tuple | list = ()) -> list[dict]:
     """Drop locked shots from a frame or clip pass. An explicit retake that names one raises shot_locked.
 
@@ -182,6 +197,11 @@ def snapshot(production: Any, key: str) -> dict:
     }
 
 
+def is_runner_snapshot(snap: Any) -> bool:
+    """Runner redo writes frame/clip/scene/shot. Catalog select writes a filename clip."""
+    return isinstance(snap, dict) and all(key in snap for key in ("frame", "clip", "scene", "shot"))
+
+
 def history_entry(root: Any, production_id: str, key: str, history_id: str) -> dict | None:
     body = load_review(root, production_id)
     rows = body.get("shots") if isinstance(body, dict) else None
@@ -197,12 +217,17 @@ def history_entry(root: Any, production_id: str, key: str, history_id: str) -> d
 
 def restore_snapshot(production: Any, key: str, snap: dict) -> None:
     """Put the snapshot back. Files on disk stay."""
+    if not is_runner_snapshot(snap):
+        raise ReviewError("history_incompatible", "this history belongs to the shot catalog")
     for field, store in (("frame", "frames"), ("clip", "clips"), ("scene", "scenes")):
         bucket = production.state.setdefault(store, {})
-        if snap.get(field) is None:
+        value = snap.get(field)
+        if field == "clip" and value is not None and not isinstance(value, dict):
+            raise ReviewError("history_incompatible", "this history belongs to the shot catalog")
+        if value is None:
             bucket.pop(key, None)
         else:
-            bucket[key] = snap[field]
+            bucket[key] = value
     shot = snap.get("shot")
     spec = production.state.get("spec") if isinstance(production.state.get("spec"), dict) else None
     if isinstance(spec, dict) and isinstance(shot, dict):

@@ -1,8 +1,17 @@
 """Check the built renderer and installed browser without launching a render."""
 from functools import lru_cache
 from pathlib import Path
+import os
 import shutil
 import subprocess
+
+
+def scene_render_device() -> str:
+    """Explicit software export stays on CPU; auto retains hardware discovery."""
+    value = os.environ.get("HOCUS_SCENE_RENDER_DEVICE", "auto").strip().lower()
+    if value not in {"auto", "cpu"}:
+        raise ValueError("HOCUS_SCENE_RENDER_DEVICE must be auto or cpu")
+    return value
 
 
 @lru_cache(maxsize=4)

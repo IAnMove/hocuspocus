@@ -10,10 +10,11 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
-from services.production_shot_review import history_entry, load_review, record_decision
+from services.production_shot_review import history_entry, is_runner_snapshot, load_review, record_decision
 from services.production_work_catalog import find_work
 
 
@@ -72,7 +73,7 @@ def perform(workspace_dir: str, workspace_id: str, production_id: str, shot_id: 
         return _review(workspace_dir, production_id, shot_id, body)
     if action == "lock":
         return _lock(workspace_dir, production_id, shot_id, body)
-    return _mutate(workspace_dir, production_id, shot_id, action, body)
+    return _mutate(workspace_dir, workspace_id, production_id, shot_id, action, body)
 
 
 def _request(workspace_dir: str, workspace_id: str, production_id: str, shot_id: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -88,18 +89,43 @@ def _request(workspace_dir: str, workspace_id: str, production_id: str, shot_id:
     return {"plan": plan, "applied": True, "result": result}
 
 
-def _mutate(workspace_dir: str, production_id: str, shot_id: str, action: str, body: dict[str, Any]) -> dict[str, Any]:
-    kind, document, path = _require_document(workspace_dir, production_id)
-    if kind not in _WRITABLE or not isinstance(document, dict) or path is None:
-        raise ActionError("origin_unsupported", "This origin has no shared edit")
-    _expect(document, body.get("expected_revision"))
-    if _locked(workspace_dir, production_id, shot_id):
-        raise ActionError("shot_locked", "locked: " + shot_id)
-    if action == "select":
-        return _select(workspace_dir, production_id, shot_id, kind, document, path, body)
-    if action == "undo":
-        return _undo(workspace_dir, production_id, shot_id, kind, document, path, body)
-    return _reexport(workspace_dir, production_id, shot_id, kind, document, path)
+def _mutate(workspace_dir: str, workspace_id: str, production_id: str, shot_id: str, action: str, body: dict[str, Any]) -> dict[str, Any]:
+    with _hold_edit(workspace_id, production_id):
+        kind, document, path = _require_document(workspace_dir, production_id)
+        if kind not in _WRITABLE or not isinstance(document, dict) or path is None:
+            raise ActionError("origin_unsupported", "This origin has no shared edit")
+        _expect(document, body.get("expected_revision"))
+        if _locked(workspace_dir, production_id, shot_id):
+            raise ActionError("shot_locked", "locked: " + shot_id)
+        if action == "select":
+            return _select(workspace_dir, production_id, shot_id, kind, document, path, body)
+        if action == "undo":
+            return _undo(workspace_dir, production_id, shot_id, kind, document, path, body)
+        return _reexport(workspace_dir, production_id, shot_id, kind, document, path)
+
+
+@contextmanager
+def _hold_edit(workspace_id: str, production_id: str) -> Iterator[None]:
+    """Occupy the same slot production.run and music shot edits use.
+
+    Catalog select/undo/reexport rewrite ``<id>.shots.json``. The runner's
+    ``write_manifest`` replaces that file from live state, so a concurrent
+    write would drop the catalog take or the new clip.
+    """
+    from fastapi import HTTPException
+
+    from services import music_production
+    from services.production_commands import holding_edit
+
+    try:
+        with holding_edit(music_production, workspace_id, production_id):
+            yield
+    except HTTPException as error:
+        detail = error.detail if isinstance(error.detail, dict) else {}
+        raise ActionError(
+            str(detail.get("code") or "already_running"),
+            str(detail.get("message") or "This production is running"),
+        ) from error
 
 
 def _select(workspace_dir: str, production_id: str, shot_id: str, kind: str, document: dict, path: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -225,6 +251,8 @@ def _undo(workspace_dir: str, production_id: str, shot_id: str, kind: str, docum
     snap = entry.get("snapshot") if isinstance(entry, dict) else None
     if not isinstance(snap, dict):
         raise ActionError("history_not_found", history_id)
+    if is_runner_snapshot(snap):
+        raise ActionError("history_incompatible", "this history belongs to the production runner")
     if kind == "music":
         _restore_music(workspace_dir, document, shot_id, snap)
     elif kind == "director":
@@ -239,7 +267,10 @@ def _undo(workspace_dir: str, production_id: str, shot_id: str, kind: str, docum
 def _restore_music(workspace_dir: str, document: dict, shot_id: str, snap: dict) -> None:
     shot = _row(document.get("shots"), "key", shot_id)
     if "clip" in snap:
-        shot["clip"] = snap.get("clip")
+        clip = snap.get("clip")
+        if clip is not None and not isinstance(clip, str):
+            raise ActionError("history_incompatible", "this history belongs to the production runner")
+        shot["clip"] = clip
     _put_bool(shot, "video_stale", snap.get("video_stale"))
     if "montage_source" in snap:
         _restore_montage(workspace_dir, document.get("montage"), shot_id, snap)
