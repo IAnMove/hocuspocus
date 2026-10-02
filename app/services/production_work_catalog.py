@@ -65,6 +65,9 @@ def _from_files(workspace_dir: str, workspace_id: str, rows: dict[str, dict], wa
         if body is None:
             warnings.append({"source": name, "error": "unreadable"})
             continue
+        # An episode file still identifies the work for shot review. Its
+        # pending status must not replace a stronger link status; ``_merge``
+        # keeps that rule when the file timestamp is newer.
         _merge(rows, _file_row(workspace_id, production_id, body))
 
 
@@ -223,6 +226,11 @@ def _merge(rows: dict[str, dict], candidate: dict[str, Any]) -> None:
         current["updated_at"] = candidate["updated_at"]
         if candidate.get("status") not in (None, "", "unknown", "draft", "pending"):
             current["status"] = candidate["status"]
+    # Episode status lives on the link. A leftover pending file with a newer
+    # timestamp must not hide running or completed.
+    if _episode_kind(current.get("project")) or _episode_kind(candidate.get("project")):
+        if _weak_status(current.get("status")) and not _weak_status(candidate.get("status")):
+            current["status"] = candidate["status"]
 
 
 def _project(value: Any) -> dict[str, str] | None:
@@ -251,6 +259,14 @@ def _json_file(path: str) -> dict[str, Any] | None:
 
 def _empty(value: Any) -> bool:
     return value in (None, "", [], {})
+
+
+def _episode_kind(project: Any) -> bool:
+    return isinstance(project, dict) and project.get("kind") == "episode"
+
+
+def _weak_status(status: Any) -> bool:
+    return status in (None, "", "unknown", "draft", "pending")
 
 
 __all__ = ["find_work", "list_works"]

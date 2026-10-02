@@ -269,6 +269,93 @@ def test_episode_bind_does_not_write_a_music_stub_or_accept_a_song_run(tmp_path)
     assert not read_story_library(str(tmp_path))["projects"]
 
 
+def test_first_song_bind_cannot_claim_a_series_episode_id(tmp_path):
+    """production.run used series-{episode} before GPU bind and invented a Story.
+
+    attach_episode then failed with invalid_project, so the episode could not
+    render until the link file was repaired by hand.
+    """
+    series = create_series_project("film", title="Series")
+    episode = create_series_episode(series)
+    series["episodesById"][episode["id"]] = episode
+    write_series_library(str(tmp_path), {"workspaceId": "film", "seriesById": {series["id"]: series},
+                                      "seriesOrder": [series["id"]]}, "film")
+    production_id = f"series-{episode['id']}"
+    with pytest.raises(LinkError) as error:
+        bind_producer(str(tmp_path), {
+            "workspace": "film", "production_id": production_id, "origin": "mcp",
+            "format": "music_video", "title": "Night bus", "write_stub": True,
+        })
+    assert error.value.code == "invalid_project"
+    with pytest.raises(LinkError) as error:
+        bind_producer(str(tmp_path), {
+            "workspace": "film", "production_id": production_id, "origin": "mcp",
+            "format": "music_video", "title": "Night bus", "write_stub": True,
+            "project": {"kind": "episode", "id": episode["id"]},
+        })
+    assert error.value.code == "invalid_project"
+    assert not read_link_store(str(tmp_path))["links"]
+    assert not read_story_library(str(tmp_path))["projects"]
+    assert not list(tmp_path.glob("*.production.json"))
+    bound = attach_episode(str(tmp_path), "film", episode, {})
+    assert bound["production_id"] == production_id
+    assert bound["project"] == {"kind": "episode", "id": episode["id"]}
+
+
+def test_first_resolve_cannot_claim_a_series_episode_id_as_a_story(tmp_path):
+    from services.production_project_link import resolve_production_project
+    series = create_series_project("film", title="Series")
+    episode = create_series_episode(series)
+    series["episodesById"][episode["id"]] = episode
+    write_series_library(str(tmp_path), {"workspaceId": "film", "seriesById": {series["id"]: series},
+                                      "seriesOrder": [series["id"]]}, "film")
+    production_id = f"series-{episode['id']}"
+    with pytest.raises(LinkError) as error:
+        resolve_production_project(str(tmp_path), {
+            "workspace": "film", "origin": "mcp", "intent_id": "agent-1",
+            "format": "music_video", "title": "Night bus", "production_id": production_id,
+        })
+    assert error.value.code == "invalid_project"
+    resolved = resolve_production_project(str(tmp_path), {
+        "workspace": "film", "origin": "mcp", "intent_id": "agent-1",
+        "format": "full_story", "title": episode["title"], "production_id": production_id,
+    })
+    assert resolved["project"] == {"kind": "episode", "id": episode["id"]}
+    assert not read_story_library(str(tmp_path))["projects"]
+    assert not list(tmp_path.glob("*.production.json"))
+    again = attach_episode(str(tmp_path), "film", episode, {})
+    assert again["production_id"] == production_id
+    assert again["project"] == resolved["project"]
+
+
+def test_leftover_pending_stub_with_newer_timestamp_stays_completed(tmp_path):
+    from services.production_project_link import note_production_status
+    from services.production_work_commands import run_command
+    series = create_series_project("film", title="Series")
+    episode = create_series_episode(series)
+    series["episodesById"][episode["id"]] = episode
+    write_series_library(str(tmp_path), {"workspaceId": "film", "seriesById": {series["id"]: series},
+                                      "seriesOrder": [series["id"]]}, "film")
+    bound = attach_episode(str(tmp_path), "film", episode, {})
+    production_id = f"series-{episode['id']}"
+    note_production_status(str(tmp_path), production_id, "completed")
+    (tmp_path / f"{production_id}.production.json").write_text(json.dumps({
+        "status": "pending",
+        "project": {"kind": "episode", "id": episode["id"]},
+        "intent_id": bound["intent_id"],
+        "origin": "ui",
+        "spec": {"title": episode["title"]},
+        "format": "full_story",
+        "updated_at": "2099-01-01T00:00:00+00:00",
+    }), encoding="utf-8")
+    listed = run_command(str(tmp_path), {
+        "operation": "production.works.list", "version": 1, "input": {"workspace": "film"},
+    })
+    work = next(item for item in listed["works"] if item["production_id"] == production_id)
+    assert work["status"] == "completed"
+    assert read_link_store(str(tmp_path))["links"][bound["intent_id"]]["status"] == "completed"
+
+
 def test_series_render_worker_observes_episode_production_ids_on_disk(tmp_path, monkeypatch):
     import threading
     import time

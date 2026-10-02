@@ -176,15 +176,7 @@ def _project(
     spec: dict[str, Any],
     current: dict[str, Any] | None,
 ) -> tuple[dict[str, str], bool, dict[str, Any] | None]:
-    explicit = spec.get("project")
-    if explicit is not None:
-        return _explicit_project(workspace_dir, spec, explicit), False, None
-    if isinstance(current, dict) and isinstance(current.get("project"), dict):
-        project = {"kind": str(current["project"]["kind"]), "id": str(current["project"]["id"])}
-        created = current.get("story_created") is True
-        seed = current.get("story_seed") if isinstance(current.get("story_seed"), dict) else None
-        return project, created, seed
-    return _create_story(workspace_dir, spec)
+    return _bind_project(workspace_dir, spec, current)
 
 
 def _same_project(workspace_dir: str, spec: dict[str, Any], current: dict[str, Any]) -> None:
@@ -457,10 +449,7 @@ def _bind_producer(workspace_dir: str, spec: dict[str, Any]) -> dict[str, Any]:
     found = _link_for_production(store, spec["production_id"])
     if found is not None:
         return _reuse_producer(workspace_dir, spec, found)
-    if spec["project"] is not None:
-        project, created, seed = _explicit_project(workspace_dir, spec, spec["project"]), False, None
-    else:
-        project, created, seed = _create_story_for(workspace_dir, spec, spec["production_id"])
+    project, created, seed = _bind_project(workspace_dir, spec, None)
     record = _record(spec, project, created, seed, spec["production_id"], [spec["production_id"]], 1)
     store["links"][spec["intent_id"]] = record
     _write(workspace_dir, store)
@@ -483,8 +472,7 @@ def _reuse_producer(workspace_dir: str, spec: dict[str, Any], found: tuple[str, 
         checked = _explicit_project(workspace_dir, spec, spec["project"])
         if checked != {"kind": stored.get("kind"), "id": stored.get("id")}:
             raise LinkError("invalid_project", "This production is already linked to another project")
-    if stored.get("kind") == "episode" and spec.get("format") not in {None, "full_story"}:
-        raise LinkError("invalid_project", "This production belongs to a series episode")
+    _refuse_song_on_episode(spec, stored if isinstance(stored, dict) else {})
     try:
         _reconcile(workspace_dir, record)
         if spec["write_stub"]:
@@ -497,14 +485,51 @@ def _reuse_producer(workspace_dir: str, spec: dict[str, Any], found: tuple[str, 
     return public
 
 
-def _create_story_for(
-    workspace_dir: str, spec: dict[str, Any], production_id: str,
-) -> tuple[dict[str, str], bool, dict[str, Any]]:
-    project_id = created_story_id(spec["workspace_id"], spec["intent_id"])
-    seed = _story_seed(project_id, spec, [production_id])
-    if not _story_exists(workspace_dir, project_id):
-        _upsert_story(workspace_dir, project_id, seed)
-    return {"kind": "story", "id": project_id}, True, seed
+def _bind_project(
+    workspace_dir: str,
+    spec: dict[str, Any],
+    current: dict[str, Any] | None,
+) -> tuple[dict[str, str], bool, dict[str, Any] | None]:
+    """Resolve the project for a first bind. ``series-{episode}`` is reserved."""
+    reserved = _reserved_episode(workspace_dir, spec)
+    explicit = spec.get("project")
+    if reserved is not None:
+        if explicit is not None and explicit != reserved:
+            raise LinkError("invalid_project", "This production belongs to a series episode")
+        _refuse_song_on_episode(spec, reserved)
+        return reserved, False, None
+    if explicit is not None:
+        return _explicit_project(workspace_dir, spec, explicit), False, None
+    if isinstance(current, dict) and isinstance(current.get("project"), dict):
+        project = {"kind": str(current["project"]["kind"]), "id": str(current["project"]["id"])}
+        created = current.get("story_created") is True
+        seed = current.get("story_seed") if isinstance(current.get("story_seed"), dict) else None
+        return project, created, seed
+    return _create_story(workspace_dir, spec)
+
+
+def _series_episode_id(production_id: str) -> str | None:
+    prefix = "series-"
+    if not production_id.startswith(prefix):
+        return None
+    token = production_id[len(prefix):]
+    return token or None
+
+
+def _reserved_episode(workspace_dir: str, spec: dict[str, Any]) -> dict[str, str] | None:
+    episode_id = _series_episode_id(str(spec.get("production_id") or ""))
+    if episode_id is None:
+        return None
+    try:
+        _require_episode(workspace_dir, spec["workspace_id"], episode_id)
+    except LinkError:
+        return None
+    return {"kind": "episode", "id": episode_id}
+
+
+def _refuse_song_on_episode(spec: dict[str, Any], project: dict[str, Any]) -> None:
+    if project.get("kind") == "episode" and spec.get("format") not in {None, "full_story"}:
+        raise LinkError("invalid_project", "This production belongs to a series episode")
 
 
 def _request(request: MappingRequest) -> dict[str, Any]:
