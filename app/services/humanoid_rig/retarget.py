@@ -104,8 +104,9 @@ def retarget_gltf(
     target_height: float,
     source_height: float | None = None,
     buffers: list[bytes] | None = None,
+    animation_index: int | None = None,
 ) -> dict:
-    """Retarget ``animations[0]`` from a glTF JSON document.
+    """Retarget one glTF clip. The default remains ``animations[0]``.
 
     Buffer bytes come from ``buffers`` (index-aligned) or from a
     ``data:`` base64 URI. Any other buffer URI raises ``ValueError``.
@@ -116,7 +117,7 @@ def retarget_gltf(
     if not isinstance(document, dict):
         raise ValueError("gltf document")
     nodes = list(document.get("nodes") or [])
-    tracks, warnings = _gltf_tracks(document, nodes, buffers)
+    tracks, warnings = _gltf_tracks(document, nodes, buffers, animation_index)
     height = _gltf_height(source_height, nodes)
     times = _timeline(tracks)
     scale = target / height
@@ -455,9 +456,9 @@ def _position_channels(channels, row) -> np.ndarray:
     return position
 
 
-def _gltf_tracks(document, nodes, buffers):
+def _gltf_tracks(document, nodes, buffers, animation_index=None):
     warnings = _node_warnings(nodes)
-    animation = _first_animation(document)
+    animation = _animation_at(document, animation_index)
     tracks: dict = {}
     for channel in animation.get("channels") or []:
         _take_channel(document, nodes, animation, channel, buffers, tracks, warnings)
@@ -466,11 +467,20 @@ def _gltf_tracks(document, nodes, buffers):
     return tracks, warnings
 
 
-def _first_animation(document: dict) -> dict:
+def _animation_at(document: dict, animation_index: int | None) -> dict:
     clips = document.get("animations") or []
-    if not clips or not isinstance(clips[0], dict):
+    chosen = 0 if animation_index is None else animation_index
+    if _valid_clip_index(clips, chosen):
+        return clips[chosen]
+    if animation_index is None:
         raise ValueError("missing animation")
-    return clips[0]
+    raise ValueError("invalid animation_index")
+
+
+def _valid_clip_index(clips, chosen) -> bool:
+    if isinstance(chosen, bool) or not isinstance(chosen, int):
+        return False
+    return 0 <= chosen < len(clips) and isinstance(clips[chosen], dict)
 
 
 def _node_warnings(nodes) -> list[str]:
