@@ -109,7 +109,12 @@ def _service(tmp_path: Path, renderer=None):
     def registry_for(name: str):
         return TaskRegistry(workspace_dir(name), interrupt_stale=False)
 
-    return World3DExportService(workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer)
+    uploads = tmp_path / "uploads"
+    uploads.mkdir(exist_ok=True)
+    return World3DExportService(
+        workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer,
+        uploads_dir=lambda: str(uploads),
+    )
 
 
 def _client(service, tmp_path: Path) -> TestClient:
@@ -251,6 +256,55 @@ def test_bundled_template_refs_do_not_require_duplicate_workspace_uploads(tmp_pa
     with pytest.raises(Exception) as error:
         _service(tmp_path)._assert_refs(frozen["effective"]["input"]["snapshot"]["refs"], WORKSPACE)
     assert error.value.detail["code"] == "missing_ref"
+
+
+def test_freeze_marks_uploads_gallery_file_urls():
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/hero.glb?workspace=__uploads__"
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["refs"] == [{
+        "slotId": "subject_1", "url": "/api/v1/file/hero.glb?workspace=__uploads__",
+        "kind": "model3d", "filename": "hero.glb", "root": "uploads",
+    }]
+
+
+def test_uploads_gallery_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    (Path(service.uploads_dir()) / "hero.glb").write_bytes(b"glb")
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/hero.glb?workspace=__uploads__"
+    receipt = service.submit(_command(intent_id="world3d-uploads-gallery", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_uploads_prefix_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    (Path(service.uploads_dir()) / "local.glb").write_bytes(b"glb")
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/uploads/local.glb"
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["refs"][0]["root"] == "uploads"
+    receipt = service.submit(_command(intent_id="world3d-uploads-prefix", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_scoped_workspace_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    (Path(service.workspace_dir("assets")) / "shared.glb").write_bytes(b"glb")
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/shared.glb?workspace=assets"
+    receipt = service.submit(_command(intent_id="world3d-scoped", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_same_basename_in_export_workspace_does_not_admit_missing_scoped_file(tmp_path):
+    service = _service(tmp_path)
+    (Path(service.workspace_dir(WORKSPACE)) / "shared.glb").write_bytes(b"wrong")
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/shared.glb?workspace=assets"
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent_id="world3d-scoped-missing", document=document))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
 
 
 @pytest.mark.parametrize("url", ["/examples/../private.png", "/examples/%2e%2e/private.png", "/examples/a%5cprivate.png"])

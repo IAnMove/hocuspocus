@@ -373,14 +373,22 @@ def _ref_from_url(slot: dict, url: str, workspace: str) -> dict:
         if ".." in path.split("/") or "\\" in path or "\x00" in path:
             raise http_error(422, "missing_ref", "Use a valid bundled example URL")
         return {"slotId": slot["id"], "url": url, "kind": slot.get("media") or "model3d"}
-    path, ref_workspace = parse_media_ref(url, workspace)
+    # Honor the URL's own workspace. Passing the export workspace into
+    # parse_media_ref would hide gallery Uploads (`?workspace=__uploads__`)
+    # and media picked from another workspace folder.
+    path, scoped = parse_media_ref(url)
     filename = os.path.basename((path or "").replace("\\", "/"))
     if not filename:
         raise http_error(422, "missing_ref", "Each used slot needs a durable media ref")
-    return {
+    record = {
         "slotId": slot["id"], "url": url, "kind": slot.get("media") or "model3d",
-        "filename": filename, "workspace": ref_workspace or workspace,
+        "filename": filename,
     }
+    if url.lower().startswith("/api/v1/uploads/") or scoped == "__uploads__":
+        record["root"] = "uploads"
+    else:
+        record["workspace"] = scoped or workspace
+    return record
 
 
 def _index_refs(refs) -> dict:
@@ -524,11 +532,12 @@ class World3DExportService:
     render_page = "/world3d-render.html"
     render_bridge = "__world3dExport"
 
-    def __init__(self, *, workspace_dir, registry_for, renderer=None, app_url=None):
+    def __init__(self, *, workspace_dir, registry_for, renderer=None, app_url=None, uploads_dir=None):
         self.workspace_dir = workspace_dir
         self.registry_for = registry_for
         self.renderer = renderer
         self.app_url = app_url if app_url is not None else os.environ.get("HOCUS_APP_URL", "")
+        self.uploads_dir = uploads_dir or (lambda: os.path.join(os.getcwd(), "uploads"))
         self.owner = uuid.uuid4().hex
         self._lock = threading.RLock()
         self._workers: dict[str, threading.Thread] = {}
@@ -542,10 +551,20 @@ class World3DExportService:
         return self.registry_for(workspace)
 
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
-        root = Path(self.workspace_dir(workspace))
+        workspace_root = Path(self.workspace_dir(workspace))
+        uploads_root = Path(self.uploads_dir())
         for ref in refs:
             name = ref.get("filename")
             if not name:
+                continue
+            named = ref.get("workspace", workspace)
+            if ref.get("root") == "uploads" or named == "__uploads__":
+                root = uploads_root
+            elif named == workspace:
+                root = workspace_root
+            elif isinstance(named, str) and WORKSPACE_RE.fullmatch(named):
+                root = Path(self.workspace_dir(named))
+            else:
                 continue
             if not (root / str(name)).is_file():
                 raise http_error(409, "missing_ref", "Upload local scene resources before exporting")

@@ -225,8 +225,8 @@ class Scene2DExportService(World3DExportService):
     render_bridge = "__scene2dExport"
 
     def __init__(self, *, workspace_dir, registry_for, renderer=None, app_url=None, uploads_dir=None):
-        super().__init__(workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer, app_url=app_url)
-        self.uploads_dir = uploads_dir or (lambda: os.path.join(os.getcwd(), "uploads"))
+        super().__init__(workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer,
+                         app_url=app_url, uploads_dir=uploads_dir)
 
     def capabilities(self) -> dict:
         module = playwright_module()
