@@ -116,6 +116,11 @@ def read_link_store(workspace_dir: str) -> dict[str, Any]:
 
 
 def _resolve(workspace_dir: str, spec: dict[str, Any], *, create_stub: bool = True) -> dict[str, Any]:
+    # Episode media lives in the series library. A music-shaped stub would be
+    # pending, and refresh_link_status would copy that over running/completed.
+    project = spec.get("project")
+    if isinstance(project, dict) and project.get("kind") == "episode":
+        create_stub = False
     store = _read(workspace_dir)
     current = store["links"].get(spec["intent_id"])
     if isinstance(current, dict) and not spec["new_execution"]:
