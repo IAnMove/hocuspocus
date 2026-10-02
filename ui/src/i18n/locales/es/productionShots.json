@@ -1,5 +1,7 @@
 {
   "title": "Revisar planos",
+  "working": "Actualizando el plano…",
+  "actionFailed": "No se pudo completar el cambio. Las tomas anteriores siguen disponibles.",
   "close": "Cerrar",
   "project": "Proyecto {{kind}} {{id}}",
   "noProject": "Sin proyecto vinculado",

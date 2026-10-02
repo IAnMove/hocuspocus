@@ -111,6 +111,17 @@ Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
 | `link_existing_production`, `production.works.link` | obras antiguas, rama `feat/unified-productions-legacy` | Vincula por id un registro reconocible. No mueve medios ni crea una Story. |
 | `bind_producer`, `production_producer_link.py` | productores, rama `feat/unified-productions-producers` | `production.run`, `start_pipeline` y el render de serie llaman al enlace antes del worker. El gancho en `music_production.py` son dos líneas. No arranca un modelo. |
 
+### Integración compartida: continuación de #746
+
+`feat/production-shared-review-completion` conserva los commits de #746 y usa
+su `bind_producer`. El registro pasa dentro de la admisión válida, antes del
+worker, con id canónico y metadatos persistidos. No se mantienen dos ganchos
+independientes. Se añaden `productionIds` del episodio, el batch nativo 2D,
+regeneración por los motores existentes y la prueba Chromium aislada en CI.
+La continuación se presenta en un PR separado; no modifica la rama de Grok.
+Los fixes de undo, slot, song switch y audio integrados en development se
+conservan. Detalles y límites: `UNIFIED_PRODUCTIONS.md`.
+
 ## Cómic a película, adenda 2026-10-01
 
 Rama `fix/comic-film-pass-addendum`. Un cómic con motor H3 conserva cada viñeta

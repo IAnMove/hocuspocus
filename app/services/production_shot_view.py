@@ -105,10 +105,12 @@ def _music_shot(item: Any, index: int) -> dict[str, Any] | None:
     if not isinstance(item, dict) or not isinstance(item.get("key"), str) or not item["key"].strip():
         return None
     start, end = _number(item.get("start")), _number(item.get("end"))
-    takes = _file_takes(item.get("takes"), _safe_name(item.get("clip")))
+    preview = _safe_name(item.get("clip")) or _safe_name(item.get("start_frame")) or _safe_name(item.get("scene_video"))
+    rows = item.get("takes") or ([{"file": preview}] if preview else [])
+    takes = _file_takes(rows, preview)
     scene_name = _safe_name(item.get("scene_doc"))
     stale = _stored_bool(item, "video_stale", "export_stale")
-    return _shot(
+    result = _shot(
         item["key"].strip()[:80], index + 1, "music",
         start=start, end=end, duration=_span(start, end),
         text=_text(item.get("lyric")), text_kind="lyric" if _text(item.get("lyric")) else None,
@@ -116,6 +118,8 @@ def _music_shot(item: Any, index: int) -> dict[str, Any] | None:
         scene={"kind": "scene2d", "id": scene_name} if scene_name else None,
         montage={"stale": stale} if stale is not None else None,
     )
+    result["regenerable"] = item.get("kind") != "clip"
+    return result
 
 
 def _series(workspace_dir: str, work: dict[str, Any]):
@@ -146,13 +150,15 @@ def _series_shot(item: Any, index: int) -> dict[str, Any] | None:
     action = _text(item.get("action"))
     takes, selected, technical, review = _series_takes(item)
     scene_id = _text(item.get("sceneId"))
-    return _shot(
+    result = _shot(
         identifier[:80], _order(item.get("order"), index + 1), "series",
         duration=_number(item.get("durationSeconds")),
         text=dialogue or action, text_kind="dialogue" if dialogue else ("action" if action else None),
         takes=takes, selected_take_id=selected, technical_status=technical, review=review,
         scene={"kind": None, "id": scene_id} if scene_id else None,
     )
+    result["regenerable"] = item.get("productionMethod") in {None, "generated_video", "animation_2d"}
+    return result
 
 
 def _series_takes(item: dict[str, Any]):

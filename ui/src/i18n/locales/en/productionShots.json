@@ -20,6 +20,8 @@
   "duration": "{{value}} s",
   "loading": "Reading shots…",
   "loadFailed": "Could not read the shots",
+  "working": "Updating the shot…",
+  "actionFailed": "The change could not be completed. The previous takes are still available.",
   "missingTarget": "A workspace and a production are required.",
   "order": "Shot {{order}}",
   "actions": {

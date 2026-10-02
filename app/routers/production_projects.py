@@ -60,7 +60,9 @@ def create_production_projects_router(*, workspace_dir: Callable[[str], str]) ->
             raise HTTPException(status_code=422, detail={"code": "invalid_request", "message": "JSON object required"})
         workspace = str(body.get("workspace") or "")
         try:
-            return resolve_production_project(root(workspace), body)
+            project = body.get("project")
+            episode = isinstance(project, dict) and project.get("kind") == "episode"
+            return resolve_production_project(root(workspace), body, create_stub=not episode)
         except LinkError as error:
             raise fail(error) from error
 

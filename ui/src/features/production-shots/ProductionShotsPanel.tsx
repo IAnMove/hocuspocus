@@ -165,7 +165,9 @@ function TakeRow({ file, id, selected, workspace, selectable, onAction }: {
   const { t } = useTranslation('productionShots')
   const src = previewUrl(file, workspace)
   return <li className="flex flex-col gap-1 sm:flex-row sm:items-center">
-    {src ? <img src={src} alt={file ?? id} className="h-24 w-auto max-w-full object-contain" /> : null}
+    {src ? (/\.(mp4|webm|mov)$/i.test(file ?? '')
+      ? <video src={src} controls preload="metadata" aria-label={file ?? id} className="h-24 w-auto max-w-full object-contain" />
+      : <img src={src} alt={file ?? id} className="h-24 w-auto max-w-full object-contain" />) : null}
     <span>{file ?? id}</span>
     {selected ? <span>{t('selected')}</span> : null}
     {!selected && selectable ? <button type="button" data-action="select" onClick={() => onAction?.({ action: 'select', take: id })}>{t('actions.select')}</button> : null}
@@ -244,6 +246,8 @@ export function ShotLoader({ workspace, productionId, onClose }: {
   const [view, setView] = useState<ShotView | null>(null)
   const [failed, setFailed] = useState(false)
   const [nonce, setNonce] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [actionFailed, setActionFailed] = useState(false)
   useEffect(() => {
     let live = true
     loadShotView(workspace, productionId).then(
@@ -254,13 +258,21 @@ export function ShotLoader({ workspace, productionId, onClose }: {
   }, [workspace, productionId, nonce])
   if (failed) return <p>{t('loadFailed')}</p>
   if (!view) return <p>{t('loading')}</p>
-  return <ProductionShotsPanel view={view} workspace={workspace} onClose={onClose} onAction={body => {
+  return <>
+    {busy ? <p role="status">{t('working')}</p> : null}
+    {actionFailed ? <p role="alert">{t('actionFailed')}</p> : null}
+    <fieldset disabled={busy} className="h-full min-h-0 w-full border-0 p-0">
+    <ProductionShotsPanel view={view} workspace={workspace} onClose={onClose} onAction={body => {
+    if (busy) return
+    setBusy(true)
+    setActionFailed(false)
     const { shotId, request } = actionRequest(body, view.revision ?? 0)
     postShotAction(workspace, productionId, shotId, request).then(
       () => setNonce(current => current + 1),
-      () => setFailed(true),
-    )
+      () => { setActionFailed(true); setNonce(current => current + 1) },
+    ).finally(() => setBusy(false))
   }} />
+  </fieldset></>
 }
 
 function actionRequest(body: Record<string, unknown>, revision: number) {

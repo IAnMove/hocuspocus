@@ -210,7 +210,9 @@
         "tests/test_humanoid_glb.py",
         "tests/test_humanoid_landmarks.py",
         "tests/test_humanoid_retarget.py",
-        "tests/test_humanoid_rig_api.py"
+        "tests/test_humanoid_rig_api.py",
+        "tests/test_production_generation_link.py",
+        "tests/test_production_shot_regeneration.py"
       ]
     },
     {
@@ -425,6 +427,14 @@
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/production_generation_link.py",
+      "paths": ["tests/test_production_generation_link.py"]
+    },
+    {
+      "prefix": "app/services/production_shot_regeneration.py",
+      "paths": ["tests/test_production_shot_regeneration.py"]
+    },
     {
       "prefix": "app/services/production_project_link.py",
       "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py", "tests/test_production_journey.py", "tests/test_production_producer_link.py"]

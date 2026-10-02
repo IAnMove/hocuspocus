@@ -205,7 +205,7 @@ def test_request_without_apply_does_not_change_the_shot(tmp_path: Path):
     try:
         _act(root, "s1", {"action": "regenerate", "expected_revision": 0})
     except ActionError as error:
-        assert error.code == "regenerate_needs_runner"
+        assert error.code == "origin_unsupported"
     else:
         raise AssertionError("regenerate")
     assert (root / "clip1.shots.json").read_text(encoding="utf-8") == before

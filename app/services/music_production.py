@@ -551,6 +551,7 @@ def command_catalog() -> list[dict[str, Any]]:
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
                                           "dry_run": {"type": "boolean"},
+                                          "project": {"type": "object", "required": ["kind", "id"], "properties": {"kind": {"enum": ["story", "episode"]}, "id": {"type": "string"}}},
                                           "package": {"type": "boolean", "description": "true: make a finished production editable shot by shot (scene documents, manifest, montage origins) without any GPU or export"},
                                           "auto_resume": {"type": "boolean", "description": "true: after a server restart this production continues by itself (for 24 h). Off unless asked (or HOCUS_PRODUCTION_AUTORESUME=1)."},
                                           "through": {"enum": ["all", "frames", "animatic"]},
@@ -654,18 +655,19 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             else:
                 target = production.run
                 args = (spec, retake, through)
-        from services.production_producer_link import link_production_run
         with _lock:
             if _slot_busy(key):
                 raise HTTPException(409, {"code": "already_running", "message": "This production is running", "retryable": True})
             # Bind only after this slot is ours. Stamping identity rewrites the
             # production file; doing that while a shot/song edit holds the slot
             # drops the edit's clips, takes and scene revision.
-            link_production_run(workspace_dir(data["workspace"]), data)
+            if preview is None and data.get("package") is not True:
+                from services.production_generation_link import attach_music
+                registered = attach_music(production, data, spec)
             thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
             _threads[key] = thread
             thread.start()
-        return {"version": 1, "status": "completed", "operation": RUN, "result": {"production_id": data["production_id"], "running": True}}
+        return {"version": 1, "status": "completed", "operation": RUN, "result": {"production_id": data["production_id"], "running": True, **(registered if preview is None and data.get("package") is not True else {})}}
 
     async def status(arguments: Any) -> dict:
         data = _input(arguments)

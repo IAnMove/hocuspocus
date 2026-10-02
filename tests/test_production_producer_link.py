@@ -188,7 +188,7 @@ def test_director_start_reuses_one_story_for_the_same_pipeline(tmp_path: Path):
     assert len(read_story_library(str(tmp_path))["projects"]) == 2
     assert list(tmp_path.glob("*.production.json")) == []
     source = inspect.getsource(__import__("services.director_pipeline", fromlist=["start_pipeline"]).start_pipeline)
-    assert source.index("link_director_start") < source.index("_start_pipeline_worker")
+    assert source.index("attach_director") < source.index("_start_pipeline_worker")
 
 
 def test_series_render_keeps_the_episode_and_does_not_rewrite_the_library(tmp_path: Path):
@@ -211,8 +211,8 @@ def test_series_render_keeps_the_episode_and_does_not_rewrite_the_library(tmp_pa
     assert list(tmp_path.glob("*.production.json")) == []
     text = (Path(__file__).resolve().parents[1] / "app/_launch_runtime.py").read_text(encoding="utf-8")
     body = text.split("def start_series_episode_render", 1)[1].split("\ndef ", 1)[0]
-    assert body.index("link_series_render") < body.index('episode["status"] = "rendering"')
-    assert body.index("link_series_render") < body.index("_run_series_render_job")
+    assert body.index("attach_episode") < body.index('episode["status"] = "rendering"')
+    assert body.index("attach_episode") < body.index("_run_series_render_job")
 
 
 def test_bind_refuses_a_second_project_for_the_same_id(tmp_path: Path):
