@@ -655,10 +655,13 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
                 target = production.run
                 args = (spec, retake, through)
         from services.production_producer_link import link_production_run
-        link_production_run(workspace_dir(data["workspace"]), data)
         with _lock:
             if _slot_busy(key):
                 raise HTTPException(409, {"code": "already_running", "message": "This production is running", "retryable": True})
+            # Bind only after this slot is ours. Stamping identity rewrites the
+            # production file; doing that while a shot/song edit holds the slot
+            # drops the edit's clips, takes and scene revision.
+            link_production_run(workspace_dir(data["workspace"]), data)
             thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
             _threads[key] = thread
             thread.start()
