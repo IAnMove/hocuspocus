@@ -211,11 +211,15 @@ def _merge(rows: dict[str, dict], candidate: dict[str, Any]) -> None:
     if current is None:
         rows[candidate["production_id"]] = candidate
         return
+    previous_at = current.get("updated_at")
     for key in ("title", "status", "origin", "format", "project", "updated_at", "preview"):
         if _empty(current.get(key)) and not _empty(candidate.get(key)):
             current[key] = candidate[key]
     current["linked"] = current.get("project") is not None or candidate["linked"]
-    if candidate.get("updated_at") and str(candidate.get("updated_at")) > str(current.get("updated_at") or ""):
+    # Compare against the timestamp that arrived with this row. Filling an empty
+    # updated_at above would otherwise make a later completed link look "the same
+    # age" as a pending file and leave the catalog unfinished.
+    if candidate.get("updated_at") and str(candidate.get("updated_at")) > str(previous_at or ""):
         current["updated_at"] = candidate["updated_at"]
         if candidate.get("status") not in (None, "", "unknown", "draft", "pending"):
             current["status"] = candidate["status"]
