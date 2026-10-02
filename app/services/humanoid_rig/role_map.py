@@ -19,6 +19,7 @@ from services.humanoid_rig.body_roles import (
     SPINE_TORSO_ROLES,
     normalized_joint_name,
 )
+from services.humanoid_rig.names import BONE_PARENTS
 
 _LIMB_BY_NAME = {
     "leftshoulder": "leftShoulder",
@@ -50,12 +51,49 @@ _AUXILIARY_NAMES = {
 
 
 def node_parents(nodes: list[dict]) -> list[int | None]:
+    """First valid parent wins. A second parent is reported, not overwritten."""
     parents: list[int | None] = [None] * len(nodes)
+    claimed: set[int] = set()
     for index, node in enumerate(nodes):
-        for child in node.get("children") or []:
-            if isinstance(child, int) and 0 <= child < len(nodes):
-                parents[child] = index
+        for child in _child_indexes(node, index, len(nodes)):
+            if child in claimed:
+                continue
+            claimed.add(child)
+            parents[child] = index
     return parents
+
+
+def graph_reasons(nodes: list[dict]) -> list[str]:
+    reasons: list[str] = []
+    claimed: dict[int, int] = {}
+    for index, node in enumerate(nodes):
+        children = node.get("children") or []
+        if not isinstance(children, list):
+            reasons.append(f"invalid_child:{index}")
+            continue
+        for child in children:
+            if isinstance(child, bool) or not isinstance(child, int) or child < 0 or child >= len(nodes) or child == index:
+                reasons.append(f"invalid_child:{index}")
+                continue
+            if child in claimed and claimed[child] != index:
+                reasons.append(f"multiple_parents:{child}")
+                continue
+            claimed[child] = index
+    return reasons
+
+
+def _child_indexes(node: dict, parent_index: int, count: int) -> list[int]:
+    children = node.get("children") or []
+    if not isinstance(children, list):
+        return []
+    valid = []
+    for child in children:
+        if isinstance(child, bool) or not isinstance(child, int):
+            continue
+        if child < 0 or child >= count or child == parent_index or child in valid:
+            continue
+        valid.append(child)
+    return valid
 
 
 def has_cycle(parents: list[int | None]) -> bool:
@@ -101,6 +139,8 @@ def map_roles(nodes: list[dict], metadata: dict | None = None) -> dict:
         _put(roles, "hips", hips, reasons)
     auxiliaries, limb_reasons = _map_limbs(nodes, parents, set(chain), roles)
     reasons.extend(limb_reasons)
+    reasons.extend(graph_reasons(nodes))
+    reasons.extend(_semantic_parents(nodes, parents, roles))
     missing = [role for role in REQUIRED_RETARGET_ROLES if role not in roles]
     profile_id, evidence = classify_profile(nodes, parents, chain, roles, metadata)
     return {
@@ -123,8 +163,8 @@ def classify_profile(nodes, parents, chain, roles, metadata: dict | None) -> tup
         return meta, "metadata"
     if _meshy_chain(nodes, chain, roles):
         return PROFILE_MESHY, "hierarchy"
-    if _legacy_hips_scale(nodes, roles):
-        return PROFILE_LEGACY, "hips_scale"
+    if _legacy_export(nodes, parents):
+        return PROFILE_LEGACY, "export_structure"
     return PROFILE_EXTERNAL, "unversioned"
 
 
@@ -135,12 +175,92 @@ def _meshy_chain(nodes, chain, roles) -> bool:
     return names == MESHY_SPINE_CHAIN
 
 
-def _legacy_hips_scale(nodes, roles) -> bool:
-    hips = roles.get("hips")
-    if hips is None:
+def _legacy_export(nodes, parents) -> bool:
+    """v0 is the saved export: full hierarchy, identity rests, hips scale only."""
+    indexes = {}
+    for index, node in enumerate(nodes):
+        name = node.get("name") or ""
+        if name in indexes:
+            return False
+        indexes[name] = index
+    if any(name not in indexes for name, _parent in BONE_PARENTS):
         return False
-    scale = nodes[hips].get("scale") or [1.0, 1.0, 1.0]
-    return any(abs(float(axis) - 1.0) > 1e-6 for axis in scale)
+    for name, parent_name in BONE_PARENTS:
+        index = indexes[name]
+        if not _identity_rotation(nodes[index].get("rotation")):
+            return False
+        if not _legacy_scale(name, nodes[index].get("scale")):
+            return False
+        parent = parents[index]
+        if parent_name is None:
+            if parent is not None and not _armature_wrapper(nodes[parent]):
+                return False
+            continue
+        if parent is None or (nodes[parent].get("name") or "") != parent_name:
+            return False
+    return True
+
+
+def _legacy_scale(name: str, scale) -> bool:
+    axes = [1.0, 1.0, 1.0] if not scale else [float(value) for value in scale]
+    if len(axes) != 3 or any(not _finite(axis) or axis <= 0.0 for axis in axes):
+        return False
+    if name == "Hips":
+        return abs(axes[0] - axes[1]) <= 1e-6 and abs(axes[0] - axes[2]) <= 1e-6 and abs(axes[0] - 1.0) > 1e-6
+    return all(abs(axis - 1.0) <= 1e-6 for axis in axes)
+
+
+def _identity_rotation(rotation) -> bool:
+    if not rotation:
+        return True
+    quat = [float(value) for value in rotation]
+    if len(quat) != 4 or any(not _finite(value) for value in quat):
+        return False
+    return abs(quat[0]) <= 1e-6 and abs(quat[1]) <= 1e-6 and abs(quat[2]) <= 1e-6 and abs(abs(quat[3]) - 1.0) <= 1e-6
+
+
+def _armature_wrapper(node: dict) -> bool:
+    return (node.get("name") or "") in ("Armature", "HocusPocusRoot")
+
+
+def _finite(value: float) -> bool:
+    return value == value and abs(value) != float("inf")
+
+
+def _semantic_parents(nodes, parents, roles: dict) -> list[str]:
+    """Each role must descend from the nearest mapped body parent, same side."""
+    role_of = {index: role for role, index in roles.items()}
+    reasons = []
+    for role, index in roles.items():
+        expected = _nearest_mapped_parent(role, roles)
+        if expected is None:
+            continue
+        ancestor = roles[expected]
+        if is_ancestor(parents, index, ancestor):
+            continue
+        observed = _observed_parent(nodes, parents, index, role_of)
+        reasons.append(f"semantic_parent:{role}:expected={expected}:observed={observed}")
+    return reasons
+
+
+def _nearest_mapped_parent(role: str, roles: dict) -> str | None:
+    cursor = PARENT_ROLE.get(role)
+    seen: set[str] = set()
+    while cursor and cursor not in seen:
+        if cursor in roles:
+            return cursor
+        seen.add(cursor)
+        cursor = PARENT_ROLE.get(cursor)
+    return None
+
+
+def _observed_parent(nodes, parents, index: int, role_of: dict) -> str:
+    parent = parents[index]
+    if parent is None:
+        return "root"
+    if parent in role_of:
+        return role_of[parent]
+    return nodes[parent].get("name") or "unmapped"
 
 
 def _assign_spine(nodes, chain) -> tuple[dict, list[str]]:

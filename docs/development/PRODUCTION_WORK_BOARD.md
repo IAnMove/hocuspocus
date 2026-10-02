@@ -140,3 +140,11 @@ vive en módulos nuevos bajo `app/services/humanoid_rig/`. El lector antiguo de
 argumento opcional. No edita `rig_service.py`, Scene3D ni el panel de rig.
 El modelo privado de referencia no entra en el repositorio. Un parse correcto
 queda en `mapped`; `retarget_verified` exige evidencia del destino.
+
+## Rig humanoide, correcciones R1–R8 2026-10-02
+
+Rama `feat/humanoid-compatibility-fixes`, después del merge de #755. Corrige
+jerarquía semántica, perfil legacy, altura con skin, lectura de accessors,
+rotación de vectores y la certificación por clip. No abre el editor manual ni
+toca `rig_service.py` ni Scene3D. `native_playback` sigue en false hasta que
+un visor reproduzca el clip.
