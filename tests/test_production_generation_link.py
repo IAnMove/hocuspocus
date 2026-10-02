@@ -166,6 +166,49 @@ def test_native_batch_resolve_reuses_the_bound_episode_production(tmp_path):
     assert not list(tmp_path.glob("*.production.json"))
 
 
+def test_works_resolve_does_not_reset_a_finished_episode_to_pending(tmp_path):
+    """Series bind writes no music stub. MCP resolve defaults to create_stub=True.
+
+    The pending stub's status is copied onto the link the next time the catalog
+    lists works, so a completed episode looks unfinished and an agent may start
+    another GPU render — or production.run, which then hides series shots.
+    """
+    from services.production_project_link import note_production_status, resolve_production_project
+    from services.production_work_commands import run_command
+    series = create_series_project("film", title="Series")
+    episode = create_series_episode(series)
+    series["episodesById"][episode["id"]] = episode
+    write_series_library(str(tmp_path), {"workspaceId": "film", "seriesById": {series["id"]: series},
+                                      "seriesOrder": [series["id"]]}, "film")
+    bound = attach_episode(str(tmp_path), "film", episode, {})
+    production_id = f"series-{episode['id']}"
+    note_production_status(str(tmp_path), production_id, "completed")
+    assert read_link_store(str(tmp_path))["links"][bound["intent_id"]]["status"] == "completed"
+
+    resolved = resolve_production_project(str(tmp_path), {
+        "workspace": "film", "origin": "ui", "format": "full_story",
+        "production_id": production_id, "intent_id": f"generation-{production_id}",
+        "title": episode["title"], "project": {"kind": "episode", "id": episode["id"]},
+    })
+    catalog = run_command(str(tmp_path), {
+        "operation": "production.works.resolve", "version": 1,
+        "input": {
+            "workspace": "film", "origin": "ui", "format": "full_story",
+            "production_id": production_id, "intent_id": "generation-catalog",
+            "title": episode["title"], "project": {"kind": "episode", "id": episode["id"]},
+        },
+    })
+    listed = run_command(str(tmp_path), {
+        "operation": "production.works.list", "version": 1, "input": {"workspace": "film"},
+    })
+    work = next(item for item in listed["works"] if item["production_id"] == production_id)
+    assert resolved["production_id"] == catalog["production_id"] == production_id
+    assert work["status"] == "completed"
+    assert read_link_store(str(tmp_path))["links"][bound["intent_id"]]["status"] == "completed"
+    assert not list(tmp_path.glob("*.production.json"))
+    assert not read_story_library(str(tmp_path))["projects"]
+
+
 def test_series_render_worker_observes_episode_production_ids_on_disk(tmp_path, monkeypatch):
     import threading
     import time

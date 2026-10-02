@@ -92,7 +92,11 @@ def _open(workspace_dir: str, workspace_id: str, data: dict[str, Any]) -> dict[s
 def _resolve(workspace_dir: str, workspace_id: str, data: dict[str, Any]) -> dict[str, Any]:
     intent = data.get("intent_id")
     existed = _intent_exists(workspace_dir, intent)
-    record = resolve_production_project(workspace_dir, {**data, "workspace": workspace_id})
+    project = data.get("project")
+    episode = isinstance(project, dict) and project.get("kind") == "episode"
+    record = resolve_production_project(
+        workspace_dir, {**data, "workspace": workspace_id}, create_stub=not episode,
+    )
     found = find_work(workspace_dir, workspace_id, str(record["production_id"]))
     work = _annotate(found, _series_map(workspace_dir, workspace_id)) if found else None
     return {
