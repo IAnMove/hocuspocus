@@ -438,7 +438,7 @@
     },
     {
       "prefix": "app/services/production_project_link.py",
-      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py", "tests/test_production_journey.py", "tests/test_production_producer_link.py"]
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_generation_link.py", "tests/test_production_work_commands.py", "tests/test_production_journey.py", "tests/test_production_producer_link.py"]
     },
     {
       "prefix": "app/services/production_producer_link.py",
@@ -450,7 +450,7 @@
     },
     {
       "prefix": "app/services/production_work_catalog.py",
-      "paths": ["tests/test_production_project_link.py"]
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_generation_link.py"]
     },
     {
       "prefix": "app/routers/production_projects.py",

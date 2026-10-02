@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from services.production_project_link import (
     LinkError,
+    bind_producer,
     created_story_id,
     note_production_status,
     production_id_for,
@@ -87,6 +88,46 @@ def test_episode_is_reused_and_a_missing_episode_creates_nothing(tmp_path: Path)
     assert raised.value.code == "invalid_project"
     assert _story_count(root) == 0
     assert len(read_link_store(str(root))["links"]) == 1
+
+
+def test_leftover_episode_stub_does_not_reset_completed_and_cannot_take_a_song(tmp_path: Path):
+    """A pending file beside series-{episode} is not the render. Catalog stays completed."""
+    root = tmp_path / "film"
+    root.mkdir()
+    series = create_series_project("film", title="Show")
+    episode = create_series_episode(series)
+    series["episodesById"] = {episode["id"]: episode}
+    write_series_library(str(root), {
+        "workspaceId": "film",
+        "seriesById": {series["id"]: series},
+        "seriesOrder": [series["id"]],
+    }, "film")
+    linked = _resolve(root, project={"kind": "episode", "id": episode["id"]})
+    note_production_status(str(root), linked["production_id"], "completed")
+    (root / f"{linked['production_id']}.production.json").write_text(json.dumps({
+        "status": "pending",
+        "project": linked["project"],
+        "intent_id": linked["intent_id"],
+        "origin": "mcp",
+        "spec": {"title": "Episode"},
+        "format": "full_story",
+    }), encoding="utf-8")
+    listed = list_works(str(root), "film")
+    work = next(item for item in listed["works"] if item["production_id"] == linked["production_id"])
+    assert work["status"] == "completed"
+    assert read_link_store(str(root))["links"][linked["intent_id"]]["status"] == "completed"
+    bind_producer(str(root), {
+        "workspace": "film", "production_id": linked["production_id"], "origin": "mcp",
+        "format": "full_story", "title": "Episode", "write_stub": True,
+        "project": {"kind": "episode", "id": episode["id"]},
+    })
+    with pytest.raises(LinkError) as raised:
+        bind_producer(str(root), {
+            "workspace": "film", "production_id": linked["production_id"], "origin": "mcp",
+            "format": "music_video", "title": "Night bus", "write_stub": True,
+        })
+    assert raised.value.code == "invalid_project"
+    assert json.loads((root / f"{linked['production_id']}.production.json").read_text(encoding="utf-8"))["status"] == "pending"
 
 
 def test_partial_write_reconciles_on_retry_without_a_second_story(tmp_path: Path, monkeypatch):

@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 from services import music_production as music
 from services.production_generation_link import attach_episode, register_generation
-from services.production_project_link import LinkError, read_link_store
+from services.production_project_link import LinkError, bind_producer, read_link_store
 from services.production_work_catalog import list_works
 from services.series_library import create_series_project, create_series_episode, write_series_library
 from services.story_library import read_story_library
@@ -205,6 +205,66 @@ def test_works_resolve_does_not_reset_a_finished_episode_to_pending(tmp_path):
     assert resolved["production_id"] == catalog["production_id"] == production_id
     assert work["status"] == "completed"
     assert read_link_store(str(tmp_path))["links"][bound["intent_id"]]["status"] == "completed"
+    assert not list(tmp_path.glob("*.production.json"))
+    assert not read_story_library(str(tmp_path))["projects"]
+
+
+def test_leftover_pending_stub_does_not_downgrade_a_finished_episode(tmp_path):
+    """A pre-fix resolve wrote a pending music stub next to the episode id.
+
+    Listing works used to copy that file status onto the completed link, so the
+    catalog looked unfinished and an agent started another GPU render.
+    """
+    from services.production_project_link import note_production_status
+    from services.production_work_commands import run_command
+    series = create_series_project("film", title="Series")
+    episode = create_series_episode(series)
+    series["episodesById"][episode["id"]] = episode
+    write_series_library(str(tmp_path), {"workspaceId": "film", "seriesById": {series["id"]: series},
+                                      "seriesOrder": [series["id"]]}, "film")
+    bound = attach_episode(str(tmp_path), "film", episode, {})
+    production_id = f"series-{episode['id']}"
+    note_production_status(str(tmp_path), production_id, "completed")
+    (tmp_path / f"{production_id}.production.json").write_text(json.dumps({
+        "status": "pending",
+        "project": {"kind": "episode", "id": episode["id"]},
+        "intent_id": bound["intent_id"],
+        "origin": "ui",
+        "spec": {"title": episode["title"]},
+        "format": "full_story",
+    }), encoding="utf-8")
+
+    listed = run_command(str(tmp_path), {
+        "operation": "production.works.list", "version": 1, "input": {"workspace": "film"},
+    })
+    work = next(item for item in listed["works"] if item["production_id"] == production_id)
+    assert work["status"] == "completed"
+    assert read_link_store(str(tmp_path))["links"][bound["intent_id"]]["status"] == "completed"
+
+
+def test_episode_bind_does_not_write_a_music_stub_or_accept_a_song_run(tmp_path):
+    """write_stub still defaults on for a music producer. An episode id is not one."""
+    series = create_series_project("film", title="Series")
+    episode = create_series_episode(series)
+    series["episodesById"][episode["id"]] = episode
+    write_series_library(str(tmp_path), {"workspaceId": "film", "seriesById": {series["id"]: series},
+                                      "seriesOrder": [series["id"]]}, "film")
+    bound = attach_episode(str(tmp_path), "film", episode, {})
+    production_id = f"series-{episode['id']}"
+    again = bind_producer(str(tmp_path), {
+        "workspace": "film", "production_id": production_id, "origin": "mcp",
+        "format": "full_story", "title": episode["title"], "write_stub": True,
+        "project": {"kind": "episode", "id": episode["id"]},
+    })
+    assert again["reused"] is True
+    assert again["project"] == bound["project"]
+    assert not list(tmp_path.glob("*.production.json"))
+    with pytest.raises(LinkError) as error:
+        bind_producer(str(tmp_path), {
+            "workspace": "film", "production_id": production_id, "origin": "mcp",
+            "format": "music_video", "title": "Night bus", "write_stub": True,
+        })
+    assert error.value.code == "invalid_project"
     assert not list(tmp_path.glob("*.production.json"))
     assert not read_story_library(str(tmp_path))["projects"]
 

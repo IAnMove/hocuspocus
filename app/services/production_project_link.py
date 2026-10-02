@@ -96,11 +96,18 @@ def note_production_status(workspace_dir: str, production_id: str, status: str) 
 
 
 def refresh_link_status(workspace_dir: str) -> None:
-    """Copy the producer file status onto the link. Missing files stay as stored."""
+    """Copy the producer file status onto the link. Missing files stay as stored.
+
+    Episode status lives on the link (``note_production_status``). A leftover
+    music-shaped ``.production.json`` is not the series render, so it must not
+    overwrite running or completed.
+    """
     with _exclusive(workspace_dir):
         store = _read(workspace_dir)
         changed = False
         for record in store["links"].values():
+            if _episode_project(record.get("project")):
+                continue
             status = _file_status(workspace_dir, str(record.get("production_id") or ""))
             if status and status != record.get("status"):
                 record["status"] = status
@@ -257,6 +264,8 @@ def _attach_productions(workspace_dir: str, project_id: str, record: dict[str, A
 
 
 def _ensure_stub(workspace_dir: str, record: dict[str, Any]) -> None:
+    if _episode_project(record.get("project")):
+        return
     production_id = str(record["production_id"])
     path = os.path.join(workspace_dir, f"{production_id}.production.json")
     current = _read_json(path)
@@ -469,11 +478,13 @@ def _bind_producer(workspace_dir: str, spec: dict[str, Any]) -> dict[str, Any]:
 
 def _reuse_producer(workspace_dir: str, spec: dict[str, Any], found: tuple[str, dict[str, Any]]) -> dict[str, Any]:
     _intent, record = found
+    stored = record.get("project") if isinstance(record.get("project"), dict) else {}
     if spec["project"] is not None:
         checked = _explicit_project(workspace_dir, spec, spec["project"])
-        stored = record.get("project") if isinstance(record.get("project"), dict) else {}
         if checked != {"kind": stored.get("kind"), "id": stored.get("id")}:
             raise LinkError("invalid_project", "This production is already linked to another project")
+    if stored.get("kind") == "episode" and spec.get("format") not in {None, "full_story"}:
+        raise LinkError("invalid_project", "This production belongs to a series episode")
     try:
         _reconcile(workspace_dir, record)
         if spec["write_stub"]:
@@ -677,6 +688,10 @@ def _link_for_production(store: dict[str, Any], production_id: str) -> tuple[str
         if production_id == record.get("production_id") or production_id in (record.get("production_ids") or []):
             return str(intent_id), record
     return None
+
+
+def _episode_project(project: Any) -> bool:
+    return isinstance(project, dict) and project.get("kind") == "episode"
 
 
 def _file_status(workspace_dir: str, production_id: str) -> str:
