@@ -256,6 +256,37 @@ def snapshot_job(job: MutableMapping[str, Any]) -> dict[str, Any]:
         return snapshot
 
 
+def positional_clip_outputs(value: Any) -> list[Any]:
+    """Return clip filenames in shot order for a list or an indexed dict.
+
+    A live multiclip job stores a sparse list. Registration stores
+    ``{"0": filename}``. Iterating the dict yields the keys ``"0"`` and
+    ``"1"``, which Director then saved as if they were video files.
+    """
+
+    if isinstance(value, Mapping):
+        indexed: list[tuple[int, Any]] = []
+        for key, filename in value.items():
+            try:
+                index = int(key)
+            except (TypeError, ValueError):
+                continue
+            if index >= 0:
+                indexed.append((index, filename or None))
+        if not indexed:
+            return []
+        last = max(index for index, _filename in indexed)
+        slots: list[Any] = [None] * (last + 1)
+        for index, filename in sorted(indexed, key=lambda item: item[0]):
+            if index >= len(slots):
+                slots.extend([None] * (index + 1 - len(slots)))
+            slots[index] = filename
+        return slots
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return []
+
+
 def record_job_outputs(
     job: MutableMapping[str, Any],
     output_files: list[str],

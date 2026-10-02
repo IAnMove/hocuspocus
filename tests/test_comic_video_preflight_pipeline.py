@@ -480,9 +480,19 @@ def test_metadata_only_approval_test_review_and_human_acceptance(
             str(tmp_path),
             expected_fingerprint=fingerprint,
             accept_quality_test=True,
+            accepted_via="ui",
+            accepted_by="user",
+            acceptance_note=(
+                "I reviewed this exact generated clip and accept its "
+                "visual quality."
+            ),
         )
         assert (ok, message) == (True, "quality_test_accepted")
-        assert director_pipeline._pipelines[pid]["_quality_gate"]["status"] == "passed"
+        gate = director_pipeline._pipelines[pid]["_quality_gate"]
+        assert gate["status"] == "passed"
+        assert gate["accepted_by"] == "user"
+        assert gate["accepted_via"] == "ui"
+        assert "visual quality" in gate["acceptance_note"]
     finally:
         director_pipeline._pipelines.pop(pid, None)
         director_pipeline._pipelines.pop("quality-child", None)
@@ -557,6 +567,12 @@ def test_quality_acceptance_rolls_back_when_checkpoint_write_fails(
             str(tmp_path),
             expected_fingerprint=fingerprint,
             accept_quality_test=True,
+            accepted_via="ui",
+            accepted_by="user",
+            acceptance_note=(
+                "I reviewed this exact generated clip and accept its "
+                "visual quality."
+            ),
         )
 
         assert ok is False

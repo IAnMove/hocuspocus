@@ -4,7 +4,7 @@ export interface ModelFamily {
   order: number
 }
 
-export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story'
+export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story' | 'comic_movie'
 export type DirectorShotImageGuidance = 'auto' | 'prompt_only' | 'generate'
 export type DirectorShotImagePolicy = 'generate' | 'prompt_only' | 'direct_references'
 
