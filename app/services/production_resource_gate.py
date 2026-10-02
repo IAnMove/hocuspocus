@@ -6,6 +6,8 @@ import shutil
 import subprocess
 import time
 
+from services.world3d_renderer_support import scene_render_device
+
 GPU_OPERATIONS = frozenset({"generation.music", "generation.image", "generate", "scenes.world3d.export", "scenes.video2d.export"})
 
 
@@ -25,6 +27,8 @@ def guard_mcp(production, mcp, *, run=subprocess.run, usage=shutil.disk_usage, s
     def call(operation, arguments):
         minimum = float(os.environ.get("HOCUS_PRODUCTION_MIN_FREE_GB", "0"))
         limit = float(os.environ.get("HOCUS_PRODUCTION_EXTERNAL_VRAM_MB", "0"))
+        if operation in {"scenes.world3d.export", "scenes.video2d.export"} and scene_render_device() == "cpu":
+            limit = 0  # The owned browser forces SwiftShader and H.264 uses libx264.
         if operation not in GPU_OPERATIONS or (minimum <= 0 and limit <= 0):
             return mcp(operation, arguments)
         waiting = False

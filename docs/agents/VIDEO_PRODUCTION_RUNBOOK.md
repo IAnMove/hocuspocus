@@ -289,6 +289,16 @@ verdict says so, using `retake_keys` unchanged. Poll `production.status` with `w
 
 ## Native Video 3D shots
 
+For a shared GPU workstation, set `HOCUS_SCENE_RENDER_DEVICE=cpu` in the
+owned instance's Pinokio environment before starting it. Native Video 3D and
+Video 2D exports then use Chromium SwiftShader with hardware acceleration
+disabled and the existing CPU H.264 encoder. Video 3D takes a CPU render lane;
+`production.run` still checks disk space but does not wait for GPU memory for
+these software exports. Music, image and video generation retain their GPU
+guards. The default `auto` keeps the existing hardware discovery. Resolution,
+frame rate, document, mouth morph and camera stay part of the same renderer;
+software export may take longer. Video 3D capabilities expose `renderDevice`.
+
 Video 3D automatically separates its fallback ground from authored surfaces
 by 2 mm and applies a depth bias, including when the projected-floor material
 changes. Floor/wall image surfaces receive a stable depth priority in document

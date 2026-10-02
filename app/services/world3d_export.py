@@ -29,6 +29,7 @@ from pydantic import ValidationError
 from services.asset_manifest import publish_generation_sidecar
 from services import resource_scheduler
 from services.world3d_media_cache import prepare_media_snapshot
+from services.world3d_renderer_support import scene_render_device
 from services.media_refs import parse_media_ref
 from services.scene_commands import DocumentInput, command_error as scene_error
 from services.scene_recording import SceneRecordingTranscodeError, validate_scene_recording_output
@@ -118,6 +119,12 @@ if (!appUrl) process.exit(2);
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
 async function launchRenderer() {
+  if (process.env.HOCUS_SCENE_RENDER_DEVICE === 'cpu') {
+    console.log('World3D CPU software renderer');
+    return chromium.launch({ headless: true, args: [
+      '--disable-gpu', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+    ] });
+  }
   if (process.platform === 'linux') {
     let accelerated;
     try {
@@ -185,7 +192,8 @@ def run_owned_browser(snapshot: dict, staging: Path, cancelled, *, app_url: str,
     proc = subprocess.Popen(
         ["node", str(script), str(staging / "snapshot.json"), str(staging)],
         env={**os.environ, "HOCUS_APP_URL": app_url, "PLAYWRIGHT_MODULE": str(module),
-             "HOCUS_RENDER_PAGE": page, "HOCUS_RENDER_BRIDGE": bridge},
+             "HOCUS_RENDER_PAGE": page, "HOCUS_RENDER_BRIDGE": bridge,
+             "HOCUS_SCENE_RENDER_DEVICE": scene_render_device()},
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     stderr = _wait_owned_browser(proc, cancelled)
@@ -206,6 +214,7 @@ def export_capabilities(app_url: str | None = None) -> dict:
         "ffmpeg": ffmpeg, "playwright": playwright,
         "realRender": "ready" if ffmpeg and playwright and renderer_available(app_url) else "pending",
         "renderer": "world3d-export-flow",
+        "renderDevice": scene_render_device(),
         "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": 0,
     }
 
@@ -734,6 +743,8 @@ class World3DExportService:
         return freeze_export_command(command)
 
     def resource_lane(self):
+        if scene_render_device() == "cpu":
+            return resource_scheduler.cpu_lane("world3d-render")
         return resource_scheduler.local_gpu_lane(0)
 
     def prepare_snapshot(self, snapshot: dict, cancelled) -> dict:

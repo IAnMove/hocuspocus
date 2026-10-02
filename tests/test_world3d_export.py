@@ -41,6 +41,20 @@ from services.world3d_export import (
 WORKSPACE = "workspace-a"
 
 
+def test_explicit_cpu_renderer_uses_a_cpu_lane_and_reports_its_device(monkeypatch):
+    monkeypatch.setenv("HOCUS_SCENE_RENDER_DEVICE", " CPU ")
+    assert World3DExportService.resource_lane(None) == resource_scheduler.cpu_lane("world3d-render")
+    assert export_capabilities()["renderDevice"] == "cpu"
+    monkeypatch.delenv("HOCUS_SCENE_RENDER_DEVICE")
+    assert World3DExportService.resource_lane(None) == resource_scheduler.local_gpu_lane(0)
+
+
+def test_unknown_renderer_device_fails_before_resource_admission(monkeypatch):
+    monkeypatch.setenv("HOCUS_SCENE_RENDER_DEVICE", "automatic-gpu-bypass")
+    with pytest.raises(ValueError, match="auto or cpu"):
+        World3DExportService.resource_lane(None)
+
+
 def _document(**overrides):
     document = {
         "version": 1, "units": "meters", "up": "y", "width": 64, "height": 64,
