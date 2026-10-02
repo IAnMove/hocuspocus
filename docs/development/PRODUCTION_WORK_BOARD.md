@@ -148,3 +148,11 @@ jerarquía semántica, perfil legacy, altura con skin, lectura de accessors,
 rotación de vectores y la certificación por clip. No abre el editor manual ni
 toca `rig_service.py` ni Scene3D. `native_playback` sigue en false hasta que
 un visor reproduzca el clip.
+
+## Rig humanoide, descriptor 2026-10-02
+
+Rama `feat/humanoid-rig-descriptor`. El descriptor se guarda junto al asset
+como `{asset}.rig-descriptor.json` y se reabre con los mismos overrides de
+rol, por índice de nodo. Un override cruzado o duplicado deja `needs_review`
+y borra la verificación. Cambiar el hash o el perfil no reutiliza el análisis.
+`native_playback` sigue en false. No toca `rig_service.py` ni Scene3D.
