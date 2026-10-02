@@ -179,11 +179,11 @@ La UI ofrece **Vincular a proyecto** solo en esa fila. El id lo escribe quien co
 
 ## Productores
 
-`production.run` llama a `link_production_run` después de validar el spec y antes de arrancar el hilo. Sin `project` crea una Story mínima y el mismo `production_id` la reutiliza. Un `project` que no existe responde 422 y no arranca el hilo. `dry_run` no crea proyecto.
+`production.run` llama a `link_production_run` después de validar el spec, cuando el hueco ya es suyo y antes de arrancar el hilo. Sin `project` crea una Story mínima y el mismo `production_id` la reutiliza. Un `project` que no existe responde 422 y no arranca el hilo. Un 409 de edición o de otro run no escribe el sidecar ni el fichero. `dry_run` no crea proyecto.
 
 `start_pipeline` llama a `link_director_start` antes de registrar el pipeline y antes del worker. El id del pipeline es el id de la obra. Un segundo arranque del mismo id no crea otra Story. `provenance.project_id` no se interpreta como Story.
 
-El render de un episodio llama a `link_series_render` cuando la petición ya es válida y antes de arrancar el worker. Un render rechazado no crea proyecto. El proyecto es ese episodio. No crea una Story y no reescribe `.series-library-v1.json` en el enlace.
+El render de un episodio llama a `link_series_render` cuando la petición ya es válida y antes de marcar el episodio como `rendering` o persistir la cola. Un render rechazado no crea proyecto. Un enlace que falla no deja un job colgado. El proyecto es ese episodio. No crea una Story y no reescribe `.series-library-v1.json` en el enlace.
 
 ## Regeneración compartida
 

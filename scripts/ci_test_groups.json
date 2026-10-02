@@ -234,6 +234,7 @@
         "tests/test_character_speech_definition.py",
         "tests/test_ci_shards.py",
         "tests/test_code_health.py",
+        "tests/test_comic_film_pass_addendum.py",
         "tests/test_core_mcp.py",
         "tests/test_core_runtime.py",
         "tests/test_core_series_assembly.py",
@@ -337,6 +338,10 @@
         "tests/test_scail2_workflows.py",
         "tests/test_scene3d_speech.py",
         "tests/test_speech_file_commands.py",
+        "tests/test_phoneme_commands.py",
+        "tests/test_phoneme_ctc.py",
+        "tests/test_phoneme_runtime.py",
+        "tests/test_phoneme_worker.py",
         "tests/test_scene_asset_facts.py",
         "tests/test_scene_effect_commands.py",
         "tests/test_series_assembly_router.py",
@@ -518,6 +523,15 @@
       "prefix": "app/services/user_diagnostics.py",
       "paths": [
         "tests/test_user_diagnostics.py"
+      ]
+    },
+    {
+      "prefix": "app/services/phoneme",
+      "paths": [
+        "tests/test_phoneme_commands.py",
+        "tests/test_phoneme_ctc.py",
+        "tests/test_phoneme_runtime.py",
+        "tests/test_phoneme_worker.py"
       ]
     },
     {

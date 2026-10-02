@@ -32,7 +32,8 @@ def _triangle_glb():
 
 
 @pytest.mark.skipif(os.environ.get('RUN_WORLD3D_RENDER_SMOKE') != '1', reason='explicit built-UI Chromium smoke')
-def test_real_worker_loads_glb_and_exports_24fps_from_built_ui(tmp_path):
+def test_real_worker_loads_glb_and_exports_24fps_from_built_ui(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOCUS_SCENE_RENDER_DEVICE', 'cpu')
     dist = Path(__file__).resolve().parents[1] / 'ui' / 'dist'
     assert (dist / 'world3d-render.html').is_file(), 'Build the UI first'
     requests = []

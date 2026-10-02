@@ -12,6 +12,15 @@ the offset to the shot's position in the analyzed vocal track. This paints the
 built-in 2D mouth on the animated GLB; it does not use H3. Headless exports accept
 muted speech and cue-only faces; audible speech still requires the editor's audio
 export path. Leave the H3-only `sing` flag unset on these scene3d shots.
+
+If singing vowels are wrong, use native `audio.phonemes.setup` to inspect or
+explicitly install the optional CPU phoneme engine, then `audio.phoneme_cues`
+with the isolated voice, source window, and exact `dialogue`. It aligns acoustic
+phonemes to the transcript and returns source-clock mouth cues plus confidence.
+Import these into `slot.speech`, review sustained vowels and low-confidence
+phones, and recalibrate the small mouth transition offset. A global advance of
+the older Rhubarb track cannot fix a misclassified vowel. See
+[Video 3D speech](../development/VIDEO3D_SPEECH.md) for the native contract and limits.
 Call `production.plan` with the eight-field brief when you do not already have a spec. It returns the spec. Then `production.run`.
 
 ## Call order
@@ -280,6 +289,16 @@ verdict says so, using `retake_keys` unchanged. Poll `production.status` with `w
 
 ## Native Video 3D shots
 
+For a shared GPU workstation, set `HOCUS_SCENE_RENDER_DEVICE=cpu` in the
+owned instance's Pinokio environment before starting it. Native Video 3D and
+Video 2D exports then use Chromium SwiftShader with hardware acceleration
+disabled and the existing CPU H.264 encoder. Video 3D takes a CPU render lane;
+`production.run` still checks disk space but does not wait for GPU memory for
+these software exports. Music, image and video generation retain their GPU
+guards. The default `auto` keeps the existing hardware discovery. Resolution,
+frame rate, document, mouth morph and camera stay part of the same renderer;
+software export may take longer. Video 3D capabilities expose `renderDevice`.
+
 Video 3D automatically separates its fallback ground from authored surfaces
 by 2 mm and applies a depth bias, including when the projected-floor material
 changes. Floor/wall image surfaces receive a stable depth priority in document
@@ -520,19 +539,22 @@ new project.
 
 ## Producers link before the worker
 
-`production.run` binds the given `production_id` before it starts the thread.
-The same id returns the same Story. Pass `project: {kind, id}` only when that
-Story or episode already exists; an unknown id is HTTP 422 and the thread does
-not start. `dry_run` does not create a project.
+`production.run` binds the given `production_id` after the slot is free and
+before it starts the thread. The same id returns the same Story. Pass
+`project: {kind, id}` only when that Story or episode already exists; an
+unknown id is HTTP 422 and the thread does not start. A concurrent shot or
+song edit is HTTP 409 and does not rewrite the production file. `dry_run`
+does not create a project.
 
 Director `start_pipeline` binds its canonical production id before the worker.
 An existing `project` or `provenance.project_id` is validated and reused.
 
 Series episode render binds that episode after the request is accepted and
-before the worker starts. A refused render does not create a project. The link
-does not create a Story and records the id in the episode's `productionIds`. Tokens for
-this link are not available from the client.
-
+before the episode is marked `rendering` or the queue is persisted. A refused
+render does not create a project. A failed bind does not leave a queued job
+without a worker. The link does not create a Story, records the id in the
+episode's `productionIds`, and does not rewrite the series library on the
+bind itself. Tokens for this link are not available from the client.
 
 ## Shared regeneration and registration completion
 
@@ -551,3 +573,13 @@ not successful takes. Keep the previous take and do not retry automatically.
 real registration/review HTTP and simulated media generation. It requires only
 the CPU packages in `scripts/ci-production-browser-requirements.txt`, downloads
 no models and uses isolated test ports. It does not assess visual quality.
+
+## Comic film PRE after a restart
+
+A comic PRE that was ready before the lab stopped is still ready afterwards.
+Opening it restores the saved approval and does not start the film. The output
+size is the canvas chosen in the comic video controls, including an H3 720p
+canvas of 1280×704. A deterministic render that fails reports the end of the
+ffmpeg log and keeps the full log on the pipeline. Accepting a reviewed test
+clip records the person who requested that acceptance, the channel, and the
+attestation note. The review checkbox is not filled in by playback.

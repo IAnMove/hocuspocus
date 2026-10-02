@@ -20,67 +20,18 @@ import type {
   ComicAsset, ComicCharacter, ComicDirectorRequest, ComicGlossaryEntry, ComicPlanPanel,
   ComicVideoOverrideField,
 } from './types'
+import {
+  comicDirectorResolutionFields,
+  comicMovieResolutions,
+  installedComicMovieEngine,
+  isH3Family,
+  resolutionMegapixels,
+  selectableComicMovieEngines,
+} from './movieEngines'
+import type { ComicMovieAspect, ComicMovieQuality } from './movieEngines'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
-type ComicMovieQuality =
-  | '480p' | '720p' | '1080p'
-  | 'h3-fast' | 'h3-default' | 'h3-balanced' | 'h3-native'
-type ComicMovieAspect = 'landscape' | 'portrait' | 'square'
-
-type ComicMovieResolution = {
-  quality: ComicMovieQuality
-  value: string
-  label: string
-  recommended?: boolean
-}
-
-const resolutionMegapixels = (value: string): number => {
-  const [width, height] = value.split('x').map(Number)
-  return (width * height) / 1_000_000
-}
-
-const comicMovieResolutions = (
-  t: TFunction<'comics'>,
-  modelId: string,
-  aspect: ComicMovieAspect,
-): ComicMovieResolution[] => {
-  if (modelId === 'minimax_h3') {
-    if (aspect === 'square') {
-      return [
-        { quality: 'h3-fast', value: '640x640', label: t('video.fastPreview', { size: '640×640', mp: '0.41' }) },
-        { quality: 'h3-default', value: '736x736', label: t('video.rtxDefault', { size: '736×736', mp: '0.54' }), recommended: true },
-        { quality: 'h3-balanced', value: '864x864', label: t('video.balancedRes', { size: '864×864', mp: '0.75' }) },
-        { quality: 'h3-native', value: '992x992', label: t('video.nativeRes', { size: '992×992', mp: '0.98' }) },
-      ]
-    }
-    const portrait = aspect === 'portrait'
-    return [
-      { quality: 'h3-fast', value: portrait ? '480x864' : '864x480', label: t('video.fastPreview', { size: portrait ? '480×864' : '864×480', mp: '0.41' }) },
-      { quality: 'h3-default', value: portrait ? '544x960' : '960x544', label: t('video.rtxDefault', { size: portrait ? '544×960' : '960×544', mp: '0.52' }), recommended: true },
-      { quality: 'h3-balanced', value: portrait ? '640x1152' : '1152x640', label: t('video.balancedRes', { size: portrait ? '640×1152' : '1152×640', mp: '0.74' }) },
-      { quality: 'h3-native', value: portrait ? '768x1344' : '1344x768', label: t('video.nativeRes', { size: portrait ? '768×1344' : '1344×768', mp: '1.03' }) },
-    ]
-  }
-  return [
-    {
-      quality: '480p',
-      value: aspect === 'portrait' ? '448x832' : aspect === 'square' ? '640x640' : '832x448',
-      label: t('video.p480', { size: aspect === 'portrait' ? '448×832' : aspect === 'square' ? '640×640' : '832×448' }),
-    },
-    {
-      quality: '720p',
-      value: aspect === 'portrait' ? '704x1280' : aspect === 'square' ? '1024x1024' : '1280x704',
-      label: t('video.p720', { size: aspect === 'portrait' ? '704×1280' : aspect === 'square' ? '1024×1024' : '1280×704' }),
-      recommended: true,
-    },
-    {
-      quality: '1080p',
-      value: aspect === 'portrait' ? '1088x1920' : aspect === 'square' ? '1408x1408' : '1920x1088',
-      label: t('video.p1080', { size: aspect === 'portrait' ? '1088×1920' : aspect === 'square' ? '1408×1408' : '1920×1088' }),
-    },
-  ]
-}
 
 const motionLevelLabel = (t: TFunction<'comics'>, level: number) => (
   level <= 0
@@ -828,18 +779,25 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const includedVideoShots = videoShotRows.filter(row => row.planned.videoIncluded !== false)
   const selectedTestShots = includedVideoShots.filter(row => row.planned.videoTestSelected)
   const selectableVideoModels = useMemo(
-    () => videoModels
-      .filter(model => model.is_i2v && enabledModels.has(model.model_type))
-      .sort((left, right) => left.name.localeCompare(right.name)),
+    () => selectableComicMovieEngines(videoModels, enabledModels),
     [enabledModels, videoModels],
   )
-  const effectiveVideoModel = selectedVideoModel || 'ltx2_22B_distilled_1_1'
-  const effectiveVideoModelName = videoModels.find(
-    model => model.model_type === effectiveVideoModel,
-  )?.name || effectiveVideoModel
+  const effectiveVideoModel = installedComicMovieEngine(
+    videoModels,
+    enabledModels,
+    selectedVideoModel || '',
+  )
+  const selectedEngine = videoModels.find(model => model.model_type === effectiveVideoModel)
+  const h3Family = isH3Family(effectiveVideoModel, selectedEngine?.architecture || '')
+  const effectiveVideoModelName = selectedEngine?.name || effectiveVideoModel
   const movieResolutionOptions = useMemo(
-    () => comicMovieResolutions(t, effectiveVideoModel, aspect),
-    [aspect, effectiveVideoModel, t],
+    () => comicMovieResolutions(
+      t,
+      effectiveVideoModel,
+      aspect,
+      selectedEngine?.architecture || '',
+    ),
+    [aspect, effectiveVideoModel, selectedEngine?.architecture, t],
   )
   const selectedMovieResolution = movieResolutionOptions.find(
     option => option.quality === movieQuality,
@@ -1371,7 +1329,11 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       ].filter(Boolean).join('\n\n')
 
       const before = useStore.getState()
-      const videoModel = before.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
+      const videoModel = installedComicMovieEngine(
+        before.models,
+        before.enabledModels,
+        before.selectedModelPerMode.video || '',
+      )
       await before.loadModelOptions(videoModel)
       const state = useStore.getState()
       if (
@@ -1457,6 +1419,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         },
         image_loras: state.savedLoraPerMode.image || {},
         video_model: videoModel,
+        ...comicDirectorResolutionFields(selectedMovieResolution),
         video_params: {
           ...(state.savedParamsPerMode.video || { num_inference_steps: 8, guidance_scale: 1 }),
           // LTX Distilled is designed around its 8-step first stage plus the
@@ -1603,7 +1566,11 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             <option value={effectiveVideoModel}>{effectiveVideoModelName}</option>
           )}
           {selectableVideoModels.map(model => (
-            <option key={model.model_type} value={model.model_type}>
+            <option
+              key={model.model_type}
+              value={model.model_type}
+              disabled={model.is_downloaded === false}
+            >
               {model.name}{model.is_downloaded === false ? t('video.notInstalled') : ''}
             </option>
           ))}
@@ -1655,11 +1622,11 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
               </select>
               <span className="mt-1 block text-[9px] text-text-muted">
                 {t('video.exactRequest', { value: selectedMovieResolution.value.replace('x', '×') })}
-                {effectiveVideoModel === 'minimax_h3'
+                {h3Family
                   ? t('video.h3Grid', { mp: resolutionMegapixels(selectedMovieResolution.value).toFixed(2) })
                   : t('video.compatiblePreset')}
               </span>
-              {effectiveVideoModel === 'minimax_h3' && (
+              {h3Family && (
                 <span className="mt-1 block rounded border border-cyan-400/25 bg-cyan-400/5 px-1.5 py-1 text-[9px] text-cyan-100">
                   {t('video.h3Presets')}
                 </span>
@@ -2028,6 +1995,7 @@ export function ComicVideoPreflightPanel({
   const [waiverReason, setWaiverReason] = useState('')
   const [bulkDuration, setBulkDuration] = useState(3)
   const [reviewedTestIndices, setReviewedTestIndices] = useState<number[]>([])
+  const [acceptanceRequester, setAcceptanceRequester] = useState('')
   const [busy, setBusy] = useState<'save' | 'approve' | 'accept' | 'test' | 'all' | number | null>(null)
   const storageKey = `maestro-comic-preflight:${activeWorkspace}:${project.id}`
   const hasUnsavedLocalChanges = dirty
@@ -2396,6 +2364,11 @@ export function ComicVideoPreflightPanel({
       notify('error', t('preflight.reviewShots', { count: missingReviews.length, list: missingReviews.map(index => index + 1).join(', ') }))
       return
     }
+    const requester = acceptanceRequester.trim()
+    if (!requester) {
+      notify('error', t('preflight.requesterRequired'))
+      return
+    }
     const testedCount = status.quality_gate.tested_indices?.length || 0
     if (!window.confirm(t('preflight.acceptConfirm', { count: testedCount }))) return
     setBusy('accept')
@@ -2403,6 +2376,9 @@ export function ComicVideoPreflightPanel({
       await api.updatePipelinePreview(pipelineId, [], {
         expectedFingerprint: status.preview_fingerprint,
         acceptQualityTest: true,
+        acceptedVia: 'ui',
+        acceptedBy: requester,
+        acceptanceNote: t('preflight.acceptClip'),
       })
       const refreshed = await api.fetchPipelineStatus(pipelineId)
       setStatus(refreshed)
@@ -2692,9 +2668,20 @@ export function ComicVideoPreflightPanel({
               )}
             </div>
             {qualityGate.status === 'review_required' && (
-              <button className={`${button} ml-auto border-emerald-400/50 text-emerald-200`} disabled={busy !== null || frontendSourceStale || Boolean(pendingVisualReviews.length)} onClick={() => void acceptTestedClips()} title={pendingVisualReviews.length ? t('preflight.reviewFirst') : t('preflight.acceptTitle')}>
-                {busy === 'accept' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} {t('preflight.acceptTested')}
-              </button>
+              <div className="ml-auto flex flex-wrap items-end gap-2">
+                <label className="min-w-40 text-[9px] text-cyan-100">
+                  {t('preflight.requestedBy')}
+                  <input
+                    className={`${input} mt-1`}
+                    value={acceptanceRequester}
+                    onChange={event => setAcceptanceRequester(event.target.value)}
+                    placeholder={t('preflight.requestedByPlaceholder')}
+                  />
+                </label>
+                <button className={`${button} border-emerald-400/50 text-emerald-200`} disabled={busy !== null || frontendSourceStale || Boolean(pendingVisualReviews.length) || !acceptanceRequester.trim()} onClick={() => void acceptTestedClips()} title={pendingVisualReviews.length ? t('preflight.reviewFirst') : t('preflight.acceptTitle')}>
+                  {busy === 'accept' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} {t('preflight.acceptTested')}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -2762,8 +2749,6 @@ export function ComicVideoPreflightPanel({
                         controls
                         preload="metadata"
                         className="max-h-64 w-full rounded bg-black"
-                        onEnded={() => setReviewedTestIndices(current =>
-                          current.includes(clip.index) ? current : [...current, clip.index])}
                       />
                       <label className="mt-2 flex items-center gap-1.5 text-[9px] text-cyan-100">
                         <input

@@ -33,7 +33,13 @@ def attach_music(production: Any, data: dict, spec: dict) -> dict[str, Any]:
                                          title=spec.get("title") or production.id)
     except LinkError as error:
         raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
-    production.state.update(project=registered["project"], intent_id=registered["intent_id"])
+    production.state.update(
+        project=registered["project"],
+        intent_id=registered["intent_id"],
+        origin=registered["origin"],
+    )
+    if registered.get("format"):
+        production.state["format"] = registered["format"]
     production.save()
     return registered
 

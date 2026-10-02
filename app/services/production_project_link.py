@@ -457,9 +457,12 @@ def _reuse_producer(workspace_dir: str, spec: dict[str, Any], found: tuple[str, 
         stored = record.get("project") if isinstance(record.get("project"), dict) else {}
         if checked != {"kind": stored.get("kind"), "id": stored.get("id")}:
             raise LinkError("invalid_project", "This production is already linked to another project")
-    _reconcile(workspace_dir, record)
-    if spec["write_stub"]:
-        _ensure_stub(workspace_dir, record)
+    try:
+        _reconcile(workspace_dir, record)
+        if spec["write_stub"]:
+            _ensure_stub(workspace_dir, record)
+    except OSError as error:
+        raise LinkError("partial_write", "The link is stored; retry to finish the production file") from error
     public = _public(record)
     public["reused"] = True
     public["applied"] = True

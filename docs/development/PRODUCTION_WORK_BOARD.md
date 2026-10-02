@@ -111,7 +111,6 @@ Detalle y matriz: `docs/development/UNIFIED_PRODUCTIONS.md`.
 | `link_existing_production`, `production.works.link` | obras antiguas, rama `feat/unified-productions-legacy` | Vincula por id un registro reconocible. No mueve medios ni crea una Story. |
 | `bind_producer`, `production_producer_link.py` | productores, rama `feat/unified-productions-producers` | `production.run`, `start_pipeline` y el render de serie llaman al enlace antes del worker. El gancho en `music_production.py` son dos líneas. No arranca un modelo. |
 
-
 ### Integración compartida: continuación de #746
 
 `feat/production-shared-review-completion` conserva los commits de #746 y usa
@@ -122,3 +121,13 @@ regeneración por los motores existentes y la prueba Chromium aislada en CI.
 La continuación se presenta en un PR separado; no modifica la rama de Grok.
 Los fixes de undo, slot, song switch y audio integrados en development se
 conservan. Detalles y límites: `UNIFIED_PRODUCTIONS.md`.
+
+## Cómic a película, adenda 2026-10-01
+
+Rama `fix/comic-film-pass-addendum`. Un cómic con motor H3 conserva cada viñeta
+en el PRE: un plano corto se alarga al mínimo del modelo y no se fusiona con el
+siguiente. LTX-2 entra en el selector cuando el catálogo lo marca compatible
+con película de cómic. Un PRE guardado se reabre con su estado y su aprobación.
+El error de ffmpeg muestra el final del registro y guarda el registro entero.
+La resolución ofrecida, por ejemplo 1280×704, llega al PRE y al render.
+Aceptar una prueba exige quién lo pidió, la vía y la nota de atestación.
