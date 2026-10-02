@@ -111,15 +111,19 @@ def _mutate(workspace_dir: str, workspace_id: str, production_id: str, shot_id: 
 def _hold_edit(workspace_id: str, production_id: str) -> Iterator[None]:
     """Occupy the same slot production.run and music shot edits use.
 
-    Catalog select/undo/reexport rewrite ``<id>.shots.json``. The runner's
-    ``write_manifest`` replaces that file from live state, so a concurrent
-    write would drop the catalog take or the new clip.
+    Catalog select/undo/reexport rewrite ``<id>.shots.json`` or
+    ``_director_pipeline_*.json``. A live music runner or Director save
+    replaces that file from memory, so a concurrent write would drop the
+    catalog take.
     """
     from fastapi import HTTPException
 
     from services import music_production
+    from services.director.pipeline_locks import director_holds_production
     from services.production_commands import holding_edit
 
+    if director_holds_production(production_id):
+        raise ActionError("already_running", "This production is running")
     try:
         with holding_edit(music_production, workspace_id, production_id):
             yield

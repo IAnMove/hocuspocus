@@ -248,6 +248,59 @@ def test_series_selection_is_refused_and_review_does_not_rewrite_the_episode(tmp
     assert read_story_library(str(root))["projects"] == {}
 
 
+def test_catalog_director_writes_refuse_while_the_pipeline_is_live(tmp_path: Path):
+    """The Director worker replaces the pipeline file from memory; a catalog
+    select would reset selected_video_filename to None on the next save."""
+    import threading
+
+    from services import director_pipeline
+
+    root = tmp_path / "film"
+    root.mkdir()
+    path = root / "_director_pipeline_pid1.json"
+    _write(path, {
+        "pipeline_id": "pid1", "production_id": "p-hash", "status": "running", "title": "Bus",
+        "clips": [{
+            "shot_id": "c1", "video_filename": "old.mp4", "selected_video_filename": "old.mp4",
+            "video_attempts": [{"filename": "old.mp4"}, {"filename": "new.mp4"}],
+        }],
+    })
+    before = path.read_text(encoding="utf-8")
+    hold = threading.Event()
+    thread = threading.Thread(target=hold.wait, name="director-pid1", daemon=True)
+    thread.start()
+    director_pipeline._pipelines["pid1"] = {
+        "id": "pid1", "production_id": "p-hash", "status": "running",
+    }
+    director_pipeline._pipeline_threads["pid1"] = thread
+    try:
+        for body in (
+            {"action": "select", "take": "new.mp4", "expected_revision": 0},
+            {"action": "reexport", "expected_revision": 0},
+            {"action": "undo", "history_id": "missing", "expected_revision": 0},
+        ):
+            try:
+                perform(str(root), "film", "p-hash", "c1", body)
+            except ActionError as error:
+                assert error.code == "already_running"
+            else:
+                raise AssertionError(body["action"])
+        assert path.read_text(encoding="utf-8") == before
+        reviewed = perform(str(root), "film", "p-hash", "c1", {"action": "review", "status": "approved"})
+        assert reviewed["applied"] is True and reviewed["status"] == "approved"
+    finally:
+        hold.set()
+        thread.join(timeout=2)
+        director_pipeline._pipeline_threads.pop("pid1", None)
+        director_pipeline._pipelines.pop("pid1", None)
+    selected = perform(str(root), "film", "p-hash", "c1", {
+        "action": "select", "take": "new.mp4", "expected_revision": 0,
+    })
+    assert selected["applied"] is True and selected["revision"] == 1
+    clip = json.loads(path.read_text(encoding="utf-8"))["clips"][0]
+    assert clip["selected_video_filename"] == "new.mp4" and clip["video_stale"] is True
+
+
 def test_director_selection_marks_stale_without_dropping_attempts(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()
