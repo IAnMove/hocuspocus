@@ -30,15 +30,20 @@ from services.humanoid_rig.compatibility import (
     retarget_world,
     weight_issues,
 )
-from services.humanoid_rig.gltf_accessors import read_accessor, split_glb
-from services.humanoid_rig.names import CLIP_IDS
+from services.humanoid_rig.gltf_accessors import AccessorError, read_accessor, split_glb
+from services.humanoid_rig.names import BONE_PARENTS, CLIP_IDS
 from services.humanoid_rig.pose_math import (
+    IDENTITY_QUAT,
     PoseMathError,
     axis_angle_quat,
     constant_child_translation,
+    quat_mul,
+    quat_rotate,
     quats_equivalent,
+    rest_axes_agree,
     sample_channel,
     scale_channel_policy,
+    target_world_quat,
     trs_matrix,
     world_matrices,
 )
@@ -170,12 +175,12 @@ def test_mixamo_order_and_names_do_not_invent_a_version():
     assert described["preservation"]["clear_previous_skin"] is False
 
 
-def test_legacy_profile_uses_hips_scale_not_names():
-    rows = _mixamo_rows()
+def test_legacy_profile_matches_a_saved_export():
+    rows = [(name, parent, {}) for name, parent in BONE_PARENTS]
     rows[0] = ("Hips", None, {"scale": [1.2, 1.2, 1.2]})
     described = describe({"nodes": _nodes(rows)})
     assert described["profile_id"] == "hocuspocus-legacy-body-v0"
-    assert described["profile_evidence"] == "hips_scale"
+    assert described["profile_evidence"] == "export_structure"
     assert described["preservation"]["silent_migration"] is False
     assert described["preservation"]["legacy_clip_count"] == 14
     assert len(CLIP_IDS) == 14
@@ -324,18 +329,59 @@ def test_stride_is_honored_and_weights_are_not_truncated():
     assert "joint_index_outside_skin" in weight_issues([[4]], [[1.0]], 4)
 
 
-def test_verification_requires_destination_evidence():
-    described = _described_body()
-    refused = record_verification(described, {"neutral_passed": True, "axis_passed": True})
-    assert refused["retarget_verified"] is False
-    accepted = record_verification(described, {
+def _weighted(document):
+    joints = np.array([[0, 0, 0, 0]], dtype="<u2").tobytes()
+    weights = np.array([[1, 0, 0, 0]], dtype="<f4").tobytes()
+    blob = joints + weights
+    accessors = list(document.get("accessors") or [])
+    base = len(accessors)
+    weighted = {
+        **document,
+        "buffers": [{"byteLength": len(blob)}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(joints)},
+            {"buffer": 0, "byteOffset": len(joints), "byteLength": len(weights)},
+        ],
+        "accessors": accessors + [
+            {"bufferView": 0, "componentType": 5123, "count": 1, "type": "VEC4"},
+            {"bufferView": 1, "componentType": 5126, "count": 1, "type": "VEC4"},
+        ],
+        "meshes": [{"primitives": [{"attributes": {"JOINTS_0": base, "WEIGHTS_0": base + 1}}]}],
+    }
+    return weighted, [blob]
+
+
+def _evidence(described, **overrides):
+    evidence = {
         "destination_id": "target-a",
+        "source_hash": "source-hash",
+        "target_hash": "target-hash",
+        "clip_index": 1,
+        "profile_id": described["profile_id"],
+        "contract_version": described["contract_version"],
+        "reference": "rest",
+        "options": {"root": "in_place"},
         "neutral_passed": True,
         "axis_passed": True,
-    })
+    }
+    evidence.update(overrides)
+    return evidence
+
+
+def test_verification_requires_destination_evidence():
+    document, buffers = _weighted({"nodes": _body(), "skins": [{"joints": [1]}], **_clips()})
+    described = describe(document, buffers, asset_hash="source-hash")
+    assert described["weights_status"] == "passed"
+    refused = record_verification(described, {"neutral_passed": True, "axis_passed": True})
+    assert refused["retarget_verified"] is False
+    accepted = record_verification(described, _evidence(described))
     assert accepted["retarget_verified"] is True
     assert accepted["status"] == "retarget_verified"
+    assert accepted["verification"]["scope"] == "clip"
     assert described["retarget_verified"] is False
+    revoked = record_verification(accepted, _evidence(described, neutral_passed=False))
+    assert revoked["retarget_verified"] is False
+    assert revoked["status"] == "mapped"
 
 
 def test_reflection_and_cycles_are_not_silently_fixed():
@@ -343,7 +389,8 @@ def test_reflection_and_cycles_are_not_silently_fixed():
     rows[6] = ("LeftArm", "Spine2", {"scale": [-1.0, 1.0, 1.0]})
     reflected = describe({"nodes": _nodes(rows), "skins": [{"joints": [0]}]})
     assert reflected["retarget_status"] == "needs_review"
-    assert reflected["native_playback"] is True
+    assert reflected["native_playback"] is False
+    assert reflected["native_candidate"] is True
     assert any(reason.startswith("unsupported_transform") for reason in reflected["reasons"])
     loop = [
         {"name": "Hips", "children": [1]},
@@ -442,3 +489,153 @@ def test_opt_in_reference_glb_lists_motion_clips():
     if described["height_m"] is not None:
         assert described["height_m"] == pytest.approx(1.7, abs=1e-3)
         assert described["height_m"] < 10
+
+
+def _rotate(quat, vector):
+    return trs_matrix([0, 0, 0], quat, [1, 1, 1])[:3, :3] @ np.asarray(vector, dtype=float)
+
+
+def test_crossed_or_disconnected_limbs_need_review():
+    crossed = [(name, "RightArm" if name == "LeftForeArm" else parent, extra) for name, parent, extra in _mixamo_rows()]
+    disconnected = [(name, None if name == "LeftArm" else parent, extra) for name, parent, extra in _mixamo_rows()]
+    for rows in (crossed, disconnected):
+        result = describe({"nodes": _nodes(rows), "skins": [{"joints": list(range(16))}]})
+        assert result["retarget_status"] != "mapped"
+        assert any(reason.startswith("semantic_parent:") for reason in result["reasons"])
+
+
+def test_arbitrary_hips_scale_stays_external():
+    rows = _mixamo_rows()
+    rows[0] = ("Hips", None, {"scale": [1.2, 1.2, 1.2], "rotation": axis_angle_quat([0, 0, 1], np.pi / 2).tolist()})
+    result = describe({"nodes": _nodes(rows), "skins": [{"joints": [0]}]})
+    assert result["profile_id"] == "external-native"
+
+
+def test_zero_scale_and_empty_skin_are_rejected():
+    rows = _mixamo_rows()
+    rows[0] = ("Hips", None, {"scale": [0, 0, 0]})
+    zero = describe({"nodes": _nodes(rows), "skins": [{"joints": [0]}]})
+    assert zero["retarget_status"] != "mapped"
+    empty = describe({"nodes": _nodes(_mixamo_rows()), "skins": [{"joints": []}]})
+    assert empty["native_playback"] is False
+    assert empty["native_candidate"] is False
+
+
+def test_world_delta_moves_the_anatomical_endpoint():
+    source_ref = axis_angle_quat([0, 0, 1], np.pi / 2)
+    target_ref = IDENTITY_QUAT
+    world_motion = axis_angle_quat([0, 1, 0], np.pi / 2)
+    source_animated = quat_mul(world_motion, source_ref)
+    np.testing.assert_allclose(_rotate(source_ref, [0, -1, 0]), _rotate(target_ref, [1, 0, 0]), atol=1e-10)
+    assert rest_axes_agree(source_ref, target_ref, [0, -1, 0], [1, 0, 0])
+    target_animated = target_world_quat(source_animated, source_ref, target_ref)
+    np.testing.assert_allclose(_rotate(target_animated, [1, 0, 0]), _rotate(source_animated, [0, -1, 0]), atol=1e-10)
+    assert rest_axes_agree(source_ref, target_ref, [0, 1, 0], [1, 0, 0]) is False
+
+
+def test_quaternion_rotation_keeps_length_and_zero():
+    np.testing.assert_allclose(quat_rotate(IDENTITY_QUAT, [2, 0, 0]), [2, 0, 0])
+    np.testing.assert_allclose(quat_rotate(IDENTITY_QUAT, [0, 0, 0]), [0, 0, 0])
+
+
+def test_verification_rejects_bad_evidence():
+    unsupported = {
+        "status": "unsupported",
+        "retarget_status": "unsupported",
+        "retarget_verified": False,
+        "reasons": ["skeleton_cycle"],
+        "weights_status": "passed",
+    }
+    evidence = {"destination_id": "target-a", "neutral_passed": True, "axis_passed": True}
+    assert record_verification(unsupported, evidence)["retarget_verified"] is False
+    document, buffers = _weighted({"nodes": _body(), "skins": [{"joints": [1]}], **_clips()})
+    described = describe(document, buffers, asset_hash="source-hash")
+    text = record_verification(described, _evidence(described, neutral_passed="false", axis_passed="false"))
+    assert text["retarget_verified"] is False
+    assert text["status"] == "mapped"
+    other = record_verification(described, _evidence(described, target_hash="other-target", neutral_passed=False))
+    assert other["retarget_verified"] is False
+    assert other["verification"]["target_hash"] == "other-target"
+
+
+def test_accessor_stays_inside_its_buffer_view():
+    document = {
+        "bufferViews": [{"buffer": 0, "byteLength": 4}],
+        "accessors": [{"bufferView": 0, "count": 2, "componentType": 5126, "type": "SCALAR"}],
+    }
+    with pytest.raises(AccessorError):
+        read_accessor(document, 0, [struct.pack("<ff", 1, 999)])
+
+
+def test_unreadable_samples_are_not_a_static_pose():
+    document = {
+        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 4}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "count": 2, "type": "SCALAR"}],
+        "animations": [{
+            "name": "pose",
+            "samplers": [{"input": 0, "interpolation": "LINEAR"}],
+            "channels": [{"sampler": 0}],
+        }],
+    }
+    clip = list_clips(document, [struct.pack("<f", 1.0)])[0]
+    assert clip["unreadable"] is True
+    assert clip["static_pose"] is False
+
+
+def test_height_uses_every_primitive_and_one_wrapper_scale():
+    nodes = _nodes(_mixamo_rows())
+    document = {
+        "nodes": nodes,
+        "skins": [{"joints": [0]}],
+        "meshes": [{"primitives": [
+            {"attributes": {"POSITION": 0}},
+            {"attributes": {"POSITION": 1}},
+        ]}],
+        "accessors": [
+            {"type": "VEC3", "min": [0, 0, 0], "max": [0.3, 0.5, 0.2]},
+            {"type": "VEC3", "min": [0, 0, 0], "max": [0.8, 1.7, 0.5]},
+        ],
+    }
+    assert describe(document)["height_m"] == pytest.approx(1.7)
+    wrapped = {
+        "nodes": [
+            {"name": "Armature", "scale": [0.01, 0.01, 0.01], "children": [1]},
+            {"name": "Body", "mesh": 0},
+        ],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+        "accessors": [{"type": "VEC3", "min": [0, 0, 0], "max": [0.2, 170, 0.2]}],
+    }
+    measured = describe(wrapped)
+    assert measured["height_m"] == pytest.approx(1.7)
+    assert measured["height_method"] == "node_bounds_m"
+    assert measured["wrapper_scale_applied_again"] is False
+
+
+def test_bind_shape_scale_is_applied_once():
+    points = np.array([[0, 0, 0], [0, 170, 0]], dtype="<f4").tobytes()
+    joints = np.array([[0, 0, 0, 0], [0, 0, 0, 0]], dtype="<u2").tobytes()
+    weights = np.array([[1, 0, 0, 0], [1, 0, 0, 0]], dtype="<f4").tobytes()
+    inverse = np.identity(4, dtype="<f4")
+    inverse[0, 0] = inverse[1, 1] = inverse[2, 2] = 0.01
+    blob = points + joints + weights + inverse.reshape(-1, order="F").tobytes()
+    document = {
+        "nodes": [{"name": "Hips", "skin": 0, "mesh": 0}],
+        "skins": [{"joints": [0], "inverseBindMatrices": 3}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "JOINTS_0": 1, "WEIGHTS_0": 2}}]}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(points)},
+            {"buffer": 0, "byteOffset": len(points), "byteLength": len(joints)},
+            {"buffer": 0, "byteOffset": len(points) + len(joints), "byteLength": len(weights)},
+            {"buffer": 0, "byteOffset": len(points) + len(joints) + len(weights), "byteLength": 64},
+        ],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 2, "type": "VEC3", "min": [0, 0, 0], "max": [0, 170, 0]},
+            {"bufferView": 1, "componentType": 5123, "count": 2, "type": "VEC4"},
+            {"bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC4"},
+            {"bufferView": 3, "componentType": 5126, "count": 1, "type": "MAT4"},
+        ],
+    }
+    described = describe(document, [blob])
+    assert described["height_m"] == pytest.approx(1.7)
+    assert described["height_method"] == "skinned_bounds_m"
+    assert described["height_m"] < 10

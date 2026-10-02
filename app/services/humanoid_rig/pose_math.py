@@ -81,9 +81,13 @@ def axis_angle_quat(axis, radians: float) -> np.ndarray:
 
 
 def quat_rotate(quat, vector) -> np.ndarray:
-    x, y, z = np.asarray(vector, dtype=np.float64)
-    rotated = quat_mul(quat_mul(quat, [x, y, z, 0.0]), quat_inv(quat))
-    return rotated[:3]
+    """Rotate a vector by a unit quaternion. Length is preserved, including zero.
+
+    Orientation products stay in ``quat_mul``, which normalizes. A vector is
+    not an orientation, so it is applied with the rotation matrix.
+    """
+    direction = np.asarray(vector, dtype=np.float64).reshape(3)
+    return trs_matrix([0.0, 0.0, 0.0], quat, [1.0, 1.0, 1.0])[:3, :3] @ direction
 
 
 def lerp(left, right, t: float) -> np.ndarray:
@@ -184,15 +188,22 @@ def _lerp_keys(clocks, samples, t: float, channel: str):
 
 
 def target_world_quat(source_t, source_ref, target_ref) -> np.ndarray:
-    """D_s = R_s(t) inv(R_s_ref); R_t = A D_s inv(A) R_t_ref.
+    """Carry the source world delta onto the target rest.
 
-    A is the target reference expressed in the source reference, so a source
-    standing on its reference lands on the target reference.
+    ``R_t(t) = R_s(t) inv(R_s_ref) R_t_ref``. The two rest quaternions are the
+    calibrated frames. At the reference, the target stays on its own rest.
+    Child offsets are not inferred: if those frames were not calibrated, the
+    result stays unverified.
     """
-    source_delta = quat_mul(source_t, quat_inv(source_ref))
-    alignment = quat_mul(target_ref, quat_inv(source_ref))
-    swung = quat_mul(quat_mul(alignment, source_delta), quat_inv(alignment))
-    return quat_mul(swung, as_quat(target_ref))
+    delta = quat_mul(source_t, quat_inv(source_ref))
+    return quat_mul(delta, target_ref)
+
+
+def rest_axes_agree(source_ref, target_ref, source_axis, target_axis, *, tol: float = 1e-3) -> bool:
+    """True when the two local axes point the same way in the calibrated rest."""
+    source = quat_rotate(source_ref, source_axis)
+    target = quat_rotate(target_ref, target_axis)
+    return float(np.linalg.norm(source - target)) <= tol
 
 
 def local_from_parent(parent_world, child_world) -> np.ndarray:

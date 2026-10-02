@@ -49,7 +49,10 @@ def select_by_name(clips: list[dict], name: str) -> dict:
 def default_motion_index(clips: list[dict]) -> int | None:
     """First clip with a positive duration. A leading static pose is not used."""
     for clip in clips:
-        if float(clip.get("duration") or 0.0) > 0.0:
+        duration = clip.get("duration")
+        if duration is None:
+            continue
+        if float(duration) > 0.0:
             return int(clip["index"])
     return None
 
@@ -64,8 +67,16 @@ def playback_time(clip: dict, clock: float) -> float:
 
 
 def _summarize(document: dict, animation: dict, index: int, buffers: list[bytes]) -> dict:
-    start, end, interpolations, channels = _span(document, animation, buffers)
-    duration = 0.0 if start is None or end is None else float(end) - float(start)
+    start, end, interpolations, channels, error = _span(document, animation, buffers)
+    if error:
+        duration = None
+        static_pose = False
+    elif start is None or end is None:
+        duration = 0.0
+        static_pose = True
+    else:
+        duration = float(end) - float(start)
+        static_pose = duration == 0.0
     return {
         "index": index,
         "name": animation.get("name") or "",
@@ -73,7 +84,9 @@ def _summarize(document: dict, animation: dict, index: int, buffers: list[bytes]
         "time_start": 0.0 if start is None else float(start),
         "interpolations": sorted(interpolations),
         "channel_count": channels,
-        "static_pose": duration == 0.0,
+        "static_pose": static_pose,
+        "unreadable": bool(error),
+        "error": error,
     }
 
 
@@ -82,6 +95,7 @@ def _span(document, animation, buffers: list[bytes]):
     end = None
     kinds: set[str] = set()
     count = 0
+    error = None
     samplers = animation.get("samplers") or []
     for channel in animation.get("channels") or []:
         count += 1
@@ -89,12 +103,14 @@ def _span(document, animation, buffers: list[bytes]):
         if sampler is None:
             continue
         kinds.add(sampler.get("interpolation") or "LINEAR")
-        low, high = _sampler_times(document, sampler, buffers)
+        low, high, problem = _sampler_times(document, sampler, buffers)
+        if problem and error is None:
+            error = problem
         if low is None:
             continue
         start = low if start is None else min(start, low)
         end = high if end is None else max(end, high)
-    return start, end, kinds, count
+    return start, end, kinds, count, error
 
 
 def _sampler(samplers, channel) -> dict | None:
@@ -107,17 +123,18 @@ def _sampler(samplers, channel) -> dict | None:
 
 def _sampler_times(document, sampler, buffers: list[bytes]):
     index = sampler.get("input")
-    if not isinstance(index, int):
-        return None, None
-    accessor = (document.get("accessors") or [None])[index] if index < len(document.get("accessors") or []) else None
+    if not isinstance(index, int) or isinstance(index, bool):
+        return None, None, None
+    accessors = document.get("accessors") or []
+    accessor = accessors[index] if 0 <= index < len(accessors) else None
     if isinstance(accessor, dict) and "min" in accessor and "max" in accessor:
-        return float(accessor["min"][0]), float(accessor["max"][0])
+        return float(accessor["min"][0]), float(accessor["max"][0]), None
     if not buffers:
-        return None, None
+        return None, None, None
     try:
         times = read_accessor(document, index, buffers)
-    except AccessorError:
-        return None, None
+    except AccessorError as exc:
+        return None, None, exc.reason
     if len(times) == 0:
-        return None, None
-    return float(times.min()), float(times.max())
+        return None, None, "empty_channel"
+    return float(times.min()), float(times.max()), None
