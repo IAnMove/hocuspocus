@@ -207,6 +207,7 @@
         "tests/test_production_smoothness.py",
         "tests/test_humanoid_animate.py",
         "tests/test_humanoid_clips.py",
+        "tests/test_humanoid_compatibility.py",
         "tests/test_humanoid_glb.py",
         "tests/test_humanoid_landmarks.py",
         "tests/test_humanoid_retarget.py",
@@ -1136,6 +1137,7 @@
       "paths": [
         "tests/test_humanoid_animate.py",
         "tests/test_humanoid_clips.py",
+        "tests/test_humanoid_compatibility.py",
         "tests/test_humanoid_glb.py",
         "tests/test_humanoid_landmarks.py",
         "tests/test_humanoid_retarget.py",

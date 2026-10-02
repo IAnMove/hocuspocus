@@ -131,3 +131,12 @@ con película de cómic. Un PRE guardado se reabre con su estado y su aprobació
 El error de ffmpeg muestra el final del registro y guarda el registro entero.
 La resolución ofrecida, por ejemplo 1280×704, llega al PRE y al render.
 Aceptar una prueba exige quién lo pidió, la vía y la nota de atestación.
+
+## Rig humanoide, compatibilidad 2026-10-02
+
+Rama `feat/humanoid-rig-compatibility`. El contrato de roles, clips y poses
+vive en módulos nuevos bajo `app/services/humanoid_rig/`. El lector antiguo de
+`retarget.py` sigue en el clip 0 y solo acepta LINEAR; el índice de clip es un
+argumento opcional. No edita `rig_service.py`, Scene3D ni el panel de rig.
+El modelo privado de referencia no entra en el repositorio. Un parse correcto
+queda en `mapped`; `retarget_verified` exige evidencia del destino.

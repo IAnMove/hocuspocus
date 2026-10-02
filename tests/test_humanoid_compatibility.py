@@ -1,0 +1,444 @@
+"""Compatibility contract: hierarchy map, clips, and pose math.
+
+A finished parse is ``mapped``. It is not ``retarget_verified``.
+"""
+
+from __future__ import annotations
+
+import base64
+import os
+import struct
+
+import numpy as np
+import pytest
+
+from services.humanoid_rig.body_roles import REQUIRED_RETARGET_ROLES
+from services.humanoid_rig.clip_inventory import (
+    ClipSelectError,
+    default_motion_index,
+    list_clips,
+    playback_time,
+    select_by_name,
+    select_clip,
+)
+from services.humanoid_rig.compatibility import (
+    describe,
+    preservation_plan,
+    record_verification,
+    retarget_locals,
+    retarget_root,
+    retarget_world,
+    weight_issues,
+)
+from services.humanoid_rig.gltf_accessors import read_accessor, split_glb
+from services.humanoid_rig.names import CLIP_IDS
+from services.humanoid_rig.pose_math import (
+    PoseMathError,
+    axis_angle_quat,
+    constant_child_translation,
+    quats_equivalent,
+    sample_channel,
+    scale_channel_policy,
+    trs_matrix,
+    world_matrices,
+)
+from services.humanoid_rig.retarget import _floats_at, retarget_gltf
+from services.humanoid_rig.role_map import is_ancestor, node_parents
+
+IDENTITY = [0.0, 0.0, 0.0, 1.0]
+
+
+def _nodes(rows):
+    nodes = []
+    indexes = {}
+    for name, _parent, extra in rows:
+        node = {"name": name, "children": []}
+        node.update(extra)
+        indexes[name] = len(nodes)
+        nodes.append(node)
+    for name, parent, _extra in rows:
+        if parent is not None:
+            nodes[indexes[parent]]["children"].append(indexes[name])
+    return nodes
+
+
+def _body(hips_scale=None):
+    extra = {} if hips_scale is None else {"scale": hips_scale}
+    rows = [
+        ("Armature", None, {"scale": [0.01, 0.01, 0.01]}),
+        ("Hips", "Armature", extra),
+        ("Spine02", "Hips", {}),
+        ("Spine01", "Spine02", {}),
+        ("Spine", "Spine01", {}),
+        ("neck", "Spine", {}),
+        ("Head", "neck", {}),
+        ("head_end", "Head", {}),
+        ("headfront", "Head", {}),
+        ("LeftArm", "Spine", {}),
+        ("LeftForeArm", "LeftArm", {}),
+        ("LeftHand", "LeftForeArm", {}),
+        ("RightArm", "Spine", {}),
+        ("RightForeArm", "RightArm", {}),
+        ("RightHand", "RightForeArm", {}),
+        ("LeftUpLeg", "Hips", {}),
+        ("LeftLeg", "LeftUpLeg", {}),
+        ("LeftFoot", "LeftLeg", {}),
+        ("RightUpLeg", "Hips", {}),
+        ("RightLeg", "RightUpLeg", {}),
+        ("RightFoot", "RightLeg", {}),
+    ]
+    return _nodes(rows)
+
+
+def _mixamo_rows():
+    return [
+        ("Hips", None, {}),
+        ("Spine", "Hips", {}),
+        ("Spine1", "Spine", {}),
+        ("Spine2", "Spine1", {}),
+        ("Neck", "Spine2", {}),
+        ("Head", "Neck", {}),
+        ("LeftArm", "Spine2", {}),
+        ("LeftForeArm", "LeftArm", {}),
+        ("LeftHand", "LeftForeArm", {}),
+        ("RightArm", "Spine2", {}),
+        ("RightForeArm", "RightArm", {}),
+        ("RightHand", "RightForeArm", {}),
+        ("LeftUpLeg", "Hips", {}),
+        ("LeftLeg", "LeftUpLeg", {}),
+        ("LeftFoot", "LeftLeg", {}),
+        ("RightUpLeg", "Hips", {}),
+        ("RightLeg", "RightUpLeg", {}),
+        ("RightFoot", "RightLeg", {}),
+    ]
+
+
+def _clips():
+    return {
+        "accessors": [
+            {"count": 1, "type": "SCALAR", "min": [0.0], "max": [0.0]},
+            {"count": 2, "type": "SCALAR", "min": [2.0], "max": [3.033]},
+            {"count": 2, "type": "SCALAR", "min": [0.0], "max": [0.633]},
+        ],
+        "animations": [
+            {"name": "pose", "samplers": [{"input": 0, "interpolation": "STEP"}], "channels": [{"sampler": 0}]},
+            {
+                "name": "Walking",
+                "samplers": [{"input": 1, "interpolation": "LINEAR"}],
+                "channels": [{"sampler": 0}, {"sampler": 0}],
+            },
+            {"name": "Walking", "samplers": [{"input": 2, "interpolation": "LINEAR"}], "channels": [{"sampler": 0}]},
+        ],
+    }
+
+
+def _described_body():
+    document = {"nodes": _body(), "skins": [{"joints": [1]}], **_clips()}
+    return describe(document)
+
+
+def test_spine_chain_wins_over_the_name_spine():
+    described = _described_body()
+    assert described["roles"]["spine"]["name"] == "Spine02"
+    assert described["roles"]["chest"]["name"] == "Spine01"
+    assert described["roles"]["upperChest"]["name"] == "Spine"
+    assert described["roles"]["neck"]["name"] == "neck"
+    assert described["roles"]["head"]["name"] == "Head"
+    assert described["status"] == "mapped"
+    assert described["retarget_verified"] is False
+    assert described["profile_id"] == "meshy-blender-body-reference-v1"
+    assert described["profile_evidence"] == "hierarchy"
+
+
+def test_missing_toe_end_is_not_a_missing_body_part():
+    described = _described_body()
+    assert described["missing_required"] == []
+    assert "LeftToe_End" not in described["roles"]
+    assert described["auxiliaries"]["head_end"]["export_name"] == "HeadTop_End"
+    assert described["auxiliaries"]["headfront"]["required"] is False
+    assert set(REQUIRED_RETARGET_ROLES) <= set(described["roles"])
+
+
+def test_mixamo_order_and_names_do_not_invent_a_version():
+    document = {"nodes": _nodes(_mixamo_rows()), "skins": [{"joints": [0]}]}
+    described = describe(document)
+    assert described["roles"]["spine"]["name"] == "Spine"
+    assert described["roles"]["chest"]["name"] == "Spine1"
+    assert described["roles"]["upperChest"]["name"] == "Spine2"
+    assert described["profile_id"] == "external-native"
+    assert described["profile_evidence"] == "unversioned"
+    assert described["preservation"]["clear_previous_skin"] is False
+
+
+def test_legacy_profile_uses_hips_scale_not_names():
+    rows = _mixamo_rows()
+    rows[0] = ("Hips", None, {"scale": [1.2, 1.2, 1.2]})
+    described = describe({"nodes": _nodes(rows)})
+    assert described["profile_id"] == "hocuspocus-legacy-body-v0"
+    assert described["profile_evidence"] == "hips_scale"
+    assert described["preservation"]["silent_migration"] is False
+    assert described["preservation"]["legacy_clip_count"] == 14
+    assert len(CLIP_IDS) == 14
+
+
+def test_metadata_profile_overrides_the_chain():
+    described = describe({"nodes": _body()}, metadata={"profile_id": "hocuspocus-body-v1"})
+    assert described["profile_id"] == "hocuspocus-body-v1"
+    assert described["profile_evidence"] == "metadata"
+    assert preservation_plan("hocuspocus-body-v1")["hips_normalization_scale"] == 1
+
+
+def test_static_pose_is_not_the_default_motion():
+    clips = list_clips(_clips())
+    assert clips[0]["duration"] == 0.0
+    assert clips[0]["static_pose"] is True
+    assert clips[1]["duration"] == pytest.approx(1.033)
+    assert clips[1]["time_start"] == 2.0
+    assert default_motion_index(clips) == 1
+    assert playback_time(clips[1], 0.0) == 2.0
+    assert playback_time(clips[1], 1.033) == pytest.approx(3.033)
+    with pytest.raises(ClipSelectError):
+        playback_time(clips[1], 1.1)
+    with pytest.raises(ClipSelectError):
+        select_by_name(clips, "Walking")
+    chosen = select_clip(_clips(), 2, asset_hash="abc")
+    assert chosen["index"] == 2
+    assert chosen["asset_hash"] == "abc"
+    with pytest.raises(ClipSelectError):
+        select_clip(_clips(), 9)
+
+
+def test_position_bounds_are_the_recorded_height():
+    document = {
+        "nodes": [
+            {"name": "Armature", "scale": [0.01, 0.01, 0.01], "translation": [0, 0, 0]},
+            {"name": "Hips", "translation": [0, 98.0, 0]},
+        ],
+        "meshes": [{
+            "primitives": [{
+                "attributes": {"POSITION": 0},
+            }],
+        }],
+        "accessors": [{"min": [0.0, 0.0, 0.0], "max": [0.4, 1.7, 0.2], "type": "VEC3"}],
+        "skins": [{"joints": [1]}],
+    }
+    described = describe(document)
+    assert described["height_m"] == pytest.approx(1.7)
+    assert described["height_method"] == "position_bounds_m"
+    assert described["wrapper_scale_applied_again"] is False
+    assert described["rejected"][0]["method"] == "node_translation_span"
+    assert described["rejected"][0]["value"] == pytest.approx(98.0)
+    assert described["height_m"] != described["rejected"][0]["value"]
+
+
+def test_wrapper_scale_is_applied_once_in_fk():
+    parent = trs_matrix([0, 0, 0], IDENTITY, [0.01, 0.01, 0.01])
+    child = trs_matrix([0, 170, 0], IDENTITY, [1, 1, 1])
+    worlds = world_matrices([parent, child], [None, 0])
+    assert worlds[1][1, 3] == pytest.approx(1.7)
+
+
+def test_step_holds_and_cubicspline_is_explicit():
+    held = sample_channel([0.0, 1.0], [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]], 0.9, "STEP", channel="translation")
+    landed = sample_channel([0.0, 1.0], [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]], 1.0, "STEP", channel="translation")
+    np.testing.assert_allclose(held, [0.0, 0.0, 0.0])
+    np.testing.assert_allclose(landed, [1.0, 2.0, 3.0])
+    with pytest.raises(PoseMathError) as caught:
+        sample_channel([0.0, 1.0], [IDENTITY, IDENTITY], 0.5, "CUBICSPLINE", clip="Walking", channel="Hips.rotation")
+    assert caught.value.reason == "unsupported_interpolation"
+    assert caught.value.clip == "Walking"
+    assert caught.value.channel == "Hips.rotation"
+
+
+def test_negative_quaternion_is_the_same_orientation():
+    turn = axis_angle_quat([0, 1, 0], np.pi / 2)
+    assert quats_equivalent(turn, -turn)
+    worlds = retarget_world({"leftUpperArm": -turn}, {"leftUpperArm": turn}, {"leftUpperArm": IDENTITY})
+    assert quats_equivalent(worlds["leftUpperArm"], IDENTITY)
+
+
+def test_reference_pose_lands_on_the_target_reference():
+    source_ref = {"hips": IDENTITY, "spine": IDENTITY, "leftUpperArm": IDENTITY, "rightUpperArm": IDENTITY}
+    target_ref = {
+        "hips": IDENTITY,
+        "spine": axis_angle_quat([1, 0, 0], np.pi / 2),
+        "leftUpperArm": IDENTITY,
+        "rightUpperArm": axis_angle_quat([0, 0, 1], 0.3),
+    }
+    worlds = retarget_world(source_ref, source_ref, target_ref)
+    for role, quat in target_ref.items():
+        assert quats_equivalent(worlds[role], quat)
+    moved = dict(source_ref)
+    moved["leftUpperArm"] = axis_angle_quat([0, 1, 0], np.pi / 2)
+    changed = retarget_world(moved, source_ref, target_ref)
+    assert quats_equivalent(changed["rightUpperArm"], target_ref["rightUpperArm"])
+    assert not quats_equivalent(changed["leftUpperArm"], target_ref["leftUpperArm"])
+    locals_out = retarget_locals(worlds, {"spine": "hips", "leftUpperArm": "spine", "rightUpperArm": "spine", "hips": None})
+    assert quats_equivalent(locals_out["spine"], target_ref["spine"])
+
+
+def test_in_place_drops_horizontal_travel_and_refuses_a_hundredfold_scale():
+    samples = [[0.0, 0.9, 0.0], [2.0, 1.1, -3.0]]
+    short, short_meta = retarget_root(samples, 1.7, 1.0)
+    same, same_meta = retarget_root(samples, 1.7, 1.7)
+    np.testing.assert_allclose(short[:, 0], [0.0, 0.0])
+    np.testing.assert_allclose(short[:, 2], [0.0, 0.0])
+    assert short[1, 1] == pytest.approx(0.9 + 0.2 / 1.7)
+    assert same[1, 1] == pytest.approx(1.1)
+    assert short_meta["trajectory_yaw"] == "not_removed"
+    assert short_meta["policy"] == "in_place"
+    assert same_meta["height_ratio"] == pytest.approx(1.0)
+    kept, kept_meta = retarget_root(samples, 1.7, 1.0, policy="preserve")
+    assert kept[1, 0] == pytest.approx(2.0 / 1.7)
+    assert kept_meta["policy"] == "preserve"
+    with pytest.raises(PoseMathError) as caught:
+        retarget_root(samples, 0.017, 1.7)
+    assert caught.value.reason == "height_ratio_refused"
+
+
+def test_constant_channels_record_their_policy():
+    rest = constant_child_translation([[0.0, 1.0, 0.0], [0.0, 1.0 + 1e-6, 0.0]], [0.0, 1.0, 0.0])
+    moving = constant_child_translation([[0.0, 1.0, 0.0], [0.2, 1.0, 0.0]], [0.0, 1.0, 0.0])
+    assert rest["collapsed"] is True
+    assert rest["policy"] == "constant_child_translation_to_rest"
+    assert moving["reason"] == "variable_translation"
+    quiet = scale_channel_policy([[1.0, 1.0, 1.0], [1.0, 1.0 + 1e-7, 1.0]])
+    loud = scale_channel_policy([[1.0, 1.0, 1.0], [1.0, 1.2, 1.0]])
+    assert quiet["ignored"] is True
+    assert loud["reason"] == "variable_scale"
+
+
+def test_stride_is_honored_and_weights_are_not_truncated():
+    blob = struct.pack("<3ff3f", 1, 2, 3, 9, 4, 5, 6)
+    document = {
+        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteStride": 16, "byteLength": len(blob)}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "count": 2, "type": "VEC3"}],
+    }
+    read = read_accessor(document, 0, [blob])
+    tight = _floats_at(blob, 0, 2, 3)
+    np.testing.assert_allclose(read, [[1, 2, 3], [4, 5, 6]])
+    assert not np.allclose(read, tight)
+    wide = np.full((2, 8), 0.125)
+    assert weight_issues(np.zeros((2, 8), dtype=np.int32), wide, 4) == []
+    assert "negative_weight" in weight_issues([[0]], [[-0.2]], 1)
+    assert "joint_index_outside_skin" in weight_issues([[4]], [[1.0]], 4)
+
+
+def test_verification_requires_destination_evidence():
+    described = _described_body()
+    refused = record_verification(described, {"neutral_passed": True, "axis_passed": True})
+    assert refused["retarget_verified"] is False
+    accepted = record_verification(described, {
+        "destination_id": "target-a",
+        "neutral_passed": True,
+        "axis_passed": True,
+    })
+    assert accepted["retarget_verified"] is True
+    assert accepted["status"] == "retarget_verified"
+    assert described["retarget_verified"] is False
+
+
+def test_reflection_and_cycles_are_not_silently_fixed():
+    rows = _mixamo_rows()
+    rows[6] = ("LeftArm", "Spine2", {"scale": [-1.0, 1.0, 1.0]})
+    reflected = describe({"nodes": _nodes(rows), "skins": [{"joints": [0]}]})
+    assert reflected["retarget_status"] == "needs_review"
+    assert reflected["native_playback"] is True
+    assert any(reason.startswith("unsupported_transform") for reason in reflected["reasons"])
+    loop = [
+        {"name": "Hips", "children": [1]},
+        {"name": "Spine", "children": [0]},
+    ]
+    cycled = describe({"nodes": loop, "skins": [{"joints": [0]}]})
+    assert cycled["status"] == "unsupported"
+    parents = node_parents(_body())
+    assert is_ancestor(parents, 6, 1)
+
+
+def test_legacy_reader_still_defaults_to_clip_zero_and_rejects_step():
+    times = np.array([0.0, 1.0], dtype="<f4").tobytes()
+    first = np.array([IDENTITY, IDENTITY], dtype="<f4").tobytes()
+    second = np.array([IDENTITY, axis_angle_quat([0, 1, 0], np.pi / 2)], dtype="<f4").tobytes()
+    blob = times + first + second
+    uri = "data:application/octet-stream;base64," + base64.b64encode(blob).decode("ascii")
+    document = {
+        "asset": {"version": "2.0"},
+        "buffers": [{"uri": uri, "byteLength": len(blob)}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": 8},
+            {"buffer": 0, "byteOffset": 8, "byteLength": 32},
+            {"buffer": 0, "byteOffset": 40, "byteLength": 32},
+        ],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 2, "type": "SCALAR"},
+            {"bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC4"},
+            {"bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC4"},
+        ],
+        "nodes": [{"name": "LeftArm"}],
+        "animations": [
+            {"samplers": [{"input": 0, "output": 1, "interpolation": "LINEAR"}], "channels": [
+                {"sampler": 0, "target": {"node": 0, "path": "rotation"}},
+            ]},
+            {"samplers": [{"input": 0, "output": 2, "interpolation": "LINEAR"}], "channels": [
+                {"sampler": 0, "target": {"node": 0, "path": "rotation"}},
+            ]},
+        ],
+    }
+    default = retarget_gltf(document, 1.0, source_height=1.0)
+    chosen = retarget_gltf(document, 1.0, source_height=1.0, animation_index=1)
+    np.testing.assert_allclose(default["rotations"]["LeftArm"][1], IDENTITY)
+    assert not np.allclose(chosen["rotations"]["LeftArm"][1], IDENTITY)
+    with pytest.raises(ValueError, match="invalid animation_index"):
+        retarget_gltf(document, 1.0, source_height=1.0, animation_index=4)
+    document["animations"][0]["samplers"][0]["interpolation"] = "STEP"
+    with pytest.raises(ValueError, match="unsupported interpolation"):
+        retarget_gltf(document, 1.0, source_height=1.0)
+
+
+def test_old_name_match_misses_the_reference_spine():
+    document = {
+        "asset": {"version": "2.0"},
+        "buffers": [{"uri": "data:application/octet-stream;base64," + base64.b64encode(
+            np.array([0.0, 1.0], dtype="<f4").tobytes() + np.array([IDENTITY, IDENTITY], dtype="<f4").tobytes()
+        ).decode("ascii"), "byteLength": 40}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": 8},
+            {"buffer": 0, "byteOffset": 8, "byteLength": 32},
+        ],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 2, "type": "SCALAR"},
+            {"bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC4"},
+        ],
+        "nodes": _body(),
+        "animations": [{"samplers": [{"input": 0, "output": 1, "interpolation": "LINEAR"}], "channels": [
+            {"sampler": 0, "target": {"node": 1, "path": "rotation"}},
+        ]}],
+    }
+    parsed = retarget_gltf(document, 1.0, source_height=1.7)
+    assert "unrecognized joint Spine02" in parsed["warnings"]
+    assert "Spine02" not in parsed["bones"]
+    described = describe(document)
+    assert described["roles"]["spine"]["name"] == "Spine02"
+    assert described["roles"]["upperChest"]["name"] == "Spine"
+
+
+def test_opt_in_reference_glb_lists_motion_clips():
+    path = os.environ.get("HOCUS_RIG_REFERENCE_GLB")
+    if not path:
+        pytest.skip("HOCUS_RIG_REFERENCE_GLB is not set")
+    document, buffers = split_glb(open(path, "rb").read())
+    described = describe(document, buffers)
+    assert len(described["clips"]) == 10
+    assert described["clips"][0]["duration"] == 0.0
+    assert described["default_motion_index"] not in (None, 0)
+    assert described["roles"]["spine"]["name"] == "Spine02"
+    assert described["roles"]["chest"]["name"] == "Spine01"
+    assert described["roles"]["upperChest"]["name"] == "Spine"
+    assert described["status"] == "mapped"
+    assert described["retarget_verified"] is False
+    assert described["profile_id"] == "meshy-blender-body-reference-v1"
+    assert described["preservation"]["clear_previous_skin"] is False
+    assert described["height_method"] != "node_translation_span"
+    if described["height_m"] is not None:
+        assert described["height_m"] == pytest.approx(1.7, abs=1e-3)
+        assert described["height_m"] < 10
