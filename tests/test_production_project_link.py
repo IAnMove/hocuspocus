@@ -111,6 +111,7 @@ def test_leftover_episode_stub_does_not_reset_completed_and_cannot_take_a_song(t
         "origin": "mcp",
         "spec": {"title": "Episode"},
         "format": "full_story",
+        "updated_at": "2099-01-01T00:00:00+00:00",
     }), encoding="utf-8")
     listed = list_works(str(root), "film")
     work = next(item for item in listed["works"] if item["production_id"] == linked["production_id"])
