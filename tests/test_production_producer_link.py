@@ -55,6 +55,59 @@ def test_a_run_creates_one_story_and_a_repeat_reuses_it(tmp_path: Path, monkeypa
     assert len(read_story_library(str(root))["projects"]) == 1
 
 
+def test_a_busy_edit_blocks_the_run_before_the_link_rewrites_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from services.production_commands import occupy_edit, release_edit
+    import services.music_production as music
+
+    root = tmp_path / "film"
+    root.mkdir()
+    path = root / "clip1.production.json"
+    path.write_text(json.dumps({
+        "status": "completed",
+        "spec": {"title": "Night bus", "song": {}, "style": {}, "shots": []},
+        "clips": {"s1": {"file": "keep.mp4"}},
+    }), encoding="utf-8")
+    held = ""
+
+    def occupy_then_accept(spec):
+        nonlocal held
+        held = occupy_edit(music, "film", "clip1")
+        current = json.loads(path.read_text(encoding="utf-8"))
+        current["clips"]["s1"] = {"file": "edited.mp4"}
+        path.write_text(json.dumps(current), encoding="utf-8")
+        return spec
+
+    class _Thread:
+        def __init__(self, **_kwargs):
+            raise AssertionError("thread started")
+
+        def start(self) -> None:
+            raise AssertionError("thread started")
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr("services.music_production.threading.Thread", _Thread)
+    monkeypatch.setattr("services.music_production.validate_spec", occupy_then_accept)
+    handlers = command_handlers(lambda _name: str(root), lambda: str(root), lambda: "http://127.0.0.1:9", lambda: "token")
+    try:
+        with pytest.raises(HTTPException) as caught:
+            asyncio.run(handlers["production.run"]({
+                "version": 1,
+                "input": {"workspace": "film", "production_id": "clip1", "spec": {"title": "Night bus"}},
+            }))
+        assert caught.value.status_code == 409
+        assert caught.value.detail["code"] == "already_running"
+        state = json.loads(path.read_text(encoding="utf-8"))
+        assert state["clips"]["s1"]["file"] == "edited.mp4"
+        assert "project" not in state
+        assert (root / LINK_FILENAME).exists() is False
+        assert read_story_library(str(root))["projects"] == {}
+    finally:
+        if held:
+            release_edit(music, held)
+
+
 def test_first_save_keeps_the_project_written_before_the_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     def fake_execute(production, spec, retake=(), through="all"):
         adopt_prepared_identity(production)
@@ -198,7 +251,7 @@ def test_director_start_reuses_one_story_for_the_same_pipeline(tmp_path: Path):
     assert len(read_story_library(str(tmp_path))["projects"]) == 2
     assert list(tmp_path.glob("*.production.json")) == []
     source = inspect.getsource(__import__("services.director_pipeline", fromlist=["start_pipeline"]).start_pipeline)
-    assert source.index("link_director_start") < source.index("_start_pipeline_worker")
+    assert source.index("attach_director") < source.index("_start_pipeline_worker")
 
 
 def test_series_render_keeps_the_episode_and_does_not_rewrite_the_library(tmp_path: Path):
@@ -221,7 +274,8 @@ def test_series_render_keeps_the_episode_and_does_not_rewrite_the_library(tmp_pa
     assert list(tmp_path.glob("*.production.json")) == []
     text = (Path(__file__).resolve().parents[1] / "app/_launch_runtime.py").read_text(encoding="utf-8")
     body = text.split("def start_series_episode_render", 1)[1].split("\ndef ", 1)[0]
-    assert body.index("link_series_render") < body.index("_run_series_render_job")
+    assert body.index("attach_episode") < body.index('episode["status"] = "rendering"')
+    assert body.index("attach_episode") < body.index("_run_series_render_job")
 
 
 def test_bind_refuses_a_second_project_for_the_same_id(tmp_path: Path):

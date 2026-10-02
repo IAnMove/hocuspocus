@@ -41,11 +41,11 @@ def production_id_for(workspace_id: str, intent_id: str, execution: int) -> str:
     return "p" + _digest(f"{workspace_id}:{intent_id}:{execution}")
 
 
-def resolve_production_project(workspace_dir: str, request: MappingRequest) -> dict[str, Any]:
+def resolve_production_project(workspace_dir: str, request: MappingRequest, *, create_stub: bool = True) -> dict[str, Any]:
     """Validate or create the project, then persist the production relation."""
     spec = _request(request)
     with _exclusive(workspace_dir):
-        return _public(_resolve(workspace_dir, spec))
+        return _public(_resolve(workspace_dir, spec, create_stub=create_stub))
 
 
 def link_existing_production(workspace_dir: str, request: MappingRequest) -> dict[str, Any]:
@@ -115,17 +115,24 @@ def read_link_store(workspace_dir: str) -> dict[str, Any]:
         return _read(workspace_dir)
 
 
-def _resolve(workspace_dir: str, spec: dict[str, Any]) -> dict[str, Any]:
+def _resolve(workspace_dir: str, spec: dict[str, Any], *, create_stub: bool = True) -> dict[str, Any]:
     store = _read(workspace_dir)
     current = store["links"].get(spec["intent_id"])
     if isinstance(current, dict) and not spec["new_execution"]:
+        if spec.get("production_id") and spec["production_id"] != current["production_id"]:
+            raise LinkError("invalid_production", "intent is already linked to another production")
         _same_project(workspace_dir, spec, current)
-        _reconcile(workspace_dir, current)
-        _ensure_stub(workspace_dir, current)
-        return current
-    project, created, seed = _project(workspace_dir, spec, current if isinstance(current, dict) else None)
+        return _finish_existing(workspace_dir, current, create_stub)
     execution = _execution(current, spec["new_execution"])
-    production_id = production_id_for(spec["workspace_id"], spec["intent_id"], execution)
+    production_id = spec.get("production_id") or production_id_for(spec["workspace_id"], spec["intent_id"], execution)
+    found = _link_for_production(store, production_id)
+    if found is not None:
+        if spec["new_execution"]:
+            raise LinkError("invalid_production", "Production already belongs to another execution")
+        _intent, record = found
+        _same_project(workspace_dir, spec, record)
+        return _finish_existing(workspace_dir, record, create_stub)
+    project, created, seed = _project(workspace_dir, spec, current if isinstance(current, dict) else None)
     previous = current.get("production_ids") if isinstance(current, dict) else []
     identifiers = [item for item in previous if isinstance(item, str)]
     if production_id not in identifiers:
@@ -135,7 +142,18 @@ def _resolve(workspace_dir: str, spec: dict[str, Any]) -> dict[str, Any]:
     _write(workspace_dir, store)
     try:
         _reconcile(workspace_dir, record)
-        _ensure_stub(workspace_dir, record)
+        if create_stub:
+            _ensure_stub(workspace_dir, record)
+    except OSError as error:
+        raise LinkError("partial_write", "The link is stored; retry to finish the production file") from error
+    return record
+
+
+def _finish_existing(workspace_dir: str, record: dict[str, Any], create_stub: bool) -> dict[str, Any]:
+    try:
+        _reconcile(workspace_dir, record)
+        if create_stub:
+            _ensure_stub(workspace_dir, record)
     except OSError as error:
         raise LinkError("partial_write", "The link is stored; retry to finish the production file") from error
     return record
@@ -178,7 +196,7 @@ def _explicit_project(workspace_dir: str, spec: dict[str, Any], explicit: dict[s
 
 def _create_story(workspace_dir: str, spec: dict[str, Any]) -> tuple[dict[str, str], bool, dict[str, Any]]:
     project_id = created_story_id(spec["workspace_id"], spec["intent_id"])
-    seed = _story_seed(project_id, spec, [production_id_for(spec["workspace_id"], spec["intent_id"], 1)])
+    seed = _story_seed(project_id, spec, [spec.get("production_id") or production_id_for(spec["workspace_id"], spec["intent_id"], 1)])
     if not _story_exists(workspace_dir, project_id):
         _upsert_story(workspace_dir, project_id, seed)
     return {"kind": "story", "id": project_id}, True, seed
@@ -323,7 +341,10 @@ _PRODUCTION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,239}$")
 def _existing_request(request: MappingRequest) -> dict[str, Any]:
     if not isinstance(request, dict):
         raise LinkError("invalid_request", "request must be an object")
-    production_id = str(request.get("production_id") or "").strip()
+    production_id = request.get("production_id")
+    if not isinstance(production_id, str):
+        raise LinkError("invalid_request", "production_id must be a string")
+    production_id = production_id.strip()
     if not _PRODUCTION_ID.fullmatch(production_id) or ".." in production_id:
         raise LinkError("invalid_request", "production_id is required")
     project = _project_request(request)
@@ -387,7 +408,10 @@ def _existing_record(spec: dict[str, Any], found: dict[str, Any], project: dict[
 def _producer_spec(request: MappingRequest) -> dict[str, Any]:
     if not isinstance(request, dict):
         raise LinkError("invalid_request", "request must be an object")
-    production_id = str(request.get("production_id") or "").strip()
+    production_id = request.get("production_id")
+    if not isinstance(production_id, str):
+        raise LinkError("invalid_request", "production_id must be a string")
+    production_id = production_id.strip()
     if not _PRODUCTION_ID.fullmatch(production_id) or ".." in production_id:
         raise LinkError("invalid_request", "production_id is required")
     workspace_id = _workspace_id(request)
@@ -474,6 +498,7 @@ def _request(request: MappingRequest) -> dict[str, Any]:
     form = _format(request, project)
     title = str(request.get("title") or "").strip()[:200] or _default_title(form, project)
     return {
+        "production_id": _requested_production_id(request),
         "workspace_id": _workspace_id(request),
         "origin": _origin(request),
         "intent_id": _token(request.get("intent_id"), "invalid_request", "intent_id is required"),
@@ -483,6 +508,17 @@ def _request(request: MappingRequest) -> dict[str, Any]:
         "title": title,
         "idea": str(request.get("idea") or "").strip()[:2000],
     }
+
+
+def _requested_production_id(request: dict[str, Any]) -> str | None:
+    value = request.get("production_id")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not _PRODUCTION_ID.fullmatch(value) or ".." in value:
+        raise LinkError("invalid_production", "Invalid production_id")
+    if request.get("new_execution") is True:
+        raise LinkError("invalid_production", "A supplied production_id identifies one execution")
+    return value
 
 
 def _workspace_id(request: dict[str, Any]) -> str:

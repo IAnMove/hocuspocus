@@ -15,4 +15,11 @@ export async function postShotAction(workspace: string, productionId: string, sh
     body: JSON.stringify({ workspace, ...body }),
   })
   if (!response.ok) throw new Error(String(response.status))
+  const result = await response.json()
+  if (body.action === 'regenerate') {
+    if (!result.regeneration) throw new Error('The generation source is unavailable')
+    const { executeRegeneration } = await import('./regenerate')
+    await executeRegeneration(result.regeneration)
+    await postShotAction(workspace, productionId, shotId, { action: 'review', status: 'pending' })
+  }
 }
