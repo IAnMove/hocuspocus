@@ -9,9 +9,10 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
-from services.music_production import command_handlers
+from services.music_production import Production, command_handlers
 from services.production_project_link import LINK_FILENAME, LinkError, bind_producer
 from services.production_producer_link import link_director_start, link_series_render
+from services.production_stage_frames import run_preview
 from services.production_stage_run import adopt_prepared_identity
 from services.series_library import create_series_episode, create_series_project, series_library_path, write_series_library
 from services.story_library import read_story_library, write_story_library
@@ -141,6 +142,68 @@ def test_first_save_keeps_the_project_written_before_the_worker(tmp_path: Path, 
     assert state["project"] == {"kind": "story", "id": project["id"]}
     assert state["intent_id"]
     assert state["origin"] == "mcp"
+
+
+def test_preview_first_save_keeps_the_project_written_before_the_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class _Thread:
+        def __init__(self, *, target, args, name, daemon):
+            self.target = target
+            self.args = args
+
+        def start(self) -> None:
+            self.target(*self.args)
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr("services.music_production.threading.Thread", _Thread)
+    monkeypatch.setattr("services.music_production.Production.image", lambda self, *_args, **_kwargs: "job")
+    monkeypatch.setattr("services.music_production.Production.wait", lambda self, jobs: {key: f"{key}.png" for key in jobs})
+    monkeypatch.setattr("services.music_production.Production.upload", lambda self, name: (name, f"/u/{name}"))
+    root = tmp_path / "film"
+    root.mkdir()
+    handlers = command_handlers(lambda _name: str(root), lambda: str(root), lambda: "http://127.0.0.1:9", lambda: "token")
+    asyncio.run(handlers["production.run"]({
+        "version": 1,
+        "input": {
+            "workspace": "film",
+            "production_id": "look1",
+            "preview": {"prompts": ["one look", "two look", "three look"]},
+        },
+    }))
+    state = json.loads((root / "look1.production.json").read_text(encoding="utf-8"))
+    project = next(iter(read_story_library(str(root))["projects"].values()))
+    assert state["status"] == "preview_completed"
+    assert state["project"] == {"kind": "story", "id": project["id"]}
+    assert state["intent_id"]
+    assert state["origin"] == "mcp"
+    assert state["format"] == "music_video"
+
+
+def test_run_preview_adopts_identity_written_after_construction(tmp_path: Path):
+    production = Production(
+        "film", "look1",
+        workspace_dir=lambda _: str(tmp_path),
+        uploads_dir=lambda: str(tmp_path),
+        mcp=None,
+    )
+    (tmp_path / "look1.production.json").write_text(json.dumps({
+        "status": "pending",
+        "project": {"kind": "story", "id": "storyabc"},
+        "intent_id": "bintent",
+        "origin": "mcp",
+        "format": "music_video",
+    }), encoding="utf-8")
+    production.image = lambda *_args, **_kwargs: "job"
+    production.wait = lambda jobs: {key: f"{key}.png" for key in jobs}
+    production.upload = lambda name: (name, f"/u/{name}")
+    run_preview(production, {"prompts": ["one look", "two look", "three look"]})
+    state = json.loads((tmp_path / "look1.production.json").read_text(encoding="utf-8"))
+    assert state["status"] == "preview_completed"
+    assert state["project"] == {"kind": "story", "id": "storyabc"}
+    assert state["intent_id"] == "bintent"
+    assert state["origin"] == "mcp"
+    assert state["format"] == "music_video"
 
 
 def test_an_unknown_project_refuses_the_run_before_the_thread(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

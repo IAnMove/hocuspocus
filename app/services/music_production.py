@@ -661,13 +661,15 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             # Bind only after this slot is ours. Stamping identity rewrites the
             # production file; doing that while a shot/song edit holds the slot
             # drops the edit's clips, takes and scene revision.
-            if preview is None and data.get("package") is not True:
+            if data.get("package") is not True:
                 from services.production_generation_link import attach_music
-                registered = attach_music(production, data, spec)
+                from services.production_stage_run import adopt_prepared_identity
+                registered = attach_music(production, data, spec if preview is None else {})
+                adopt_prepared_identity(production)
             thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
             _threads[key] = thread
             thread.start()
-        return {"version": 1, "status": "completed", "operation": RUN, "result": {"production_id": data["production_id"], "running": True, **(registered if preview is None and data.get("package") is not True else {})}}
+        return {"version": 1, "status": "completed", "operation": RUN, "result": {"production_id": data["production_id"], "running": True, **(registered if data.get("package") is not True else {})}}
 
     async def status(arguments: Any) -> dict:
         data = _input(arguments)

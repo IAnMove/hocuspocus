@@ -101,7 +101,9 @@ def shoot_frames(production: Any, spec: dict, windows: list[dict]) -> None:
 def run_preview(production: Any, request: dict) -> None:
     """Generate three look tests before committing GPU time to a song or clips."""
     from services.production_control import arm, disarm
+    from services.production_stage_run import adopt_prepared_identity
     production._cancel = arm(production.ws, production.id)
+    adopt_prepared_identity(production)
     production.state.update(status="running", preview_frames={})
     production.save()
     try:
