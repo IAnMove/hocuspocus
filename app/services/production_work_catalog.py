@@ -65,12 +65,9 @@ def _from_files(workspace_dir: str, workspace_id: str, rows: dict[str, dict], wa
         if body is None:
             warnings.append({"source": name, "error": "unreadable"})
             continue
-        # Episode media lives in the series library. A leftover
-        # ``.production.json`` is not the render, so its pending status must
-        # not enter the catalog even when its timestamp is newer than the link.
-        project = _project(body.get("project"))
-        if project and project.get("kind") == "episode":
-            continue
+        # An episode file still identifies the work for shot review. Its
+        # pending status must not replace a stronger link status; ``_merge``
+        # keeps that rule when the file timestamp is newer.
         _merge(rows, _file_row(workspace_id, production_id, body))
 
 
