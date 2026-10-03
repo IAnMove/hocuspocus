@@ -42,6 +42,16 @@ export async function checkPublishPreset(payload: {
   return body.warnings || []
 }
 
+/** Export jobs return `/api/v1/file/name` without a workspace. The resolver rejects that. */
+export function publishMediaSource(source: string, workspace: string): string {
+  if (!source.startsWith('/api/v1/file/')) return source
+  const cut = source.indexOf('?')
+  const path = cut < 0 ? source : source.slice(0, cut)
+  const query = cut < 0 ? '' : source.slice(cut + 1)
+  if (query.split('&').some(part => part.split('=')[0] === 'workspace')) return source
+  return `${path}?${query ? `${query}&` : ''}workspace=${encodeURIComponent(workspace)}`
+}
+
 export async function publishVideo(payload: {
   workspace: string
   source: string
@@ -56,7 +66,11 @@ export async function publishVideo(payload: {
   const res = await fetch(`${BASE}/api/v1/video-editor/publish`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...payload, loudnorm: payload.loudnorm !== false }),
+    body: JSON.stringify({
+      ...payload,
+      source: publishMediaSource(payload.source, payload.workspace),
+      loudnorm: payload.loudnorm !== false,
+    }),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Could not publish the video' }))
