@@ -4023,13 +4023,53 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/library",
+      "endpoint": "catalog",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/asset_library.py",
+      "ordinal": 402
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/library/install",
+      "endpoint": "install",
+      "status_code": 202,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/asset_library.py",
+      "ordinal": 403
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/library/install/{job_id}",
+      "endpoint": "cancel",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/asset_library.py",
+      "ordinal": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/library/files/{key}",
+      "endpoint": "installed_file",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/asset_library.py",
+      "ordinal": 405
+    },
+    {
+      "method": "GET",
       "path": "/",
       "endpoint": "index",
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 402
+      "ordinal": 406
     }
   ]
 }

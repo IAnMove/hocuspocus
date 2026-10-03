@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hocuspocus.local/schemas/asset-library-v1.schema.json",
+  "title": "HocusPocus Asset Library",
+  "description": "Pinned catalog of optional library files (app/resources/asset_library.json). Checked by services/asset_library.py.",
+  "type": "object",
+  "required": ["schema", "revision", "files", "collections"],
+  "properties": {
+    "schema": { "const": "hocuspocus.asset-library" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "files": {
+      "type": "object",
+      "description": "Relative file name inside its collection archive -> file entry.",
+      "additionalProperties": { "$ref": "#/$defs/file" }
+    },
+    "collections": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+      "additionalProperties": { "$ref": "#/$defs/collection" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "file": {
+      "type": "object",
+      "required": ["kind", "size", "sha256", "collection", "license", "source", "source_url", "author", "retrieved_at"],
+      "properties": {
+        "kind": { "enum": ["hdri", "material", "lut", "animation", "sfx", "model3d"] },
+        "size": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "collection": { "type": "string" },
+        "license": { "enum": ["CC0-1.0"], "description": "SPDX id. Accepting CC-BY is the user's decision." },
+        "source": { "type": "string", "minLength": 1, "description": "Short source name, e.g. polyhaven, ambientcg, quaternius, kenney, freesound." },
+        "source_url": { "type": "string", "pattern": "^https://", "description": "Page of this file at its source." },
+        "author": { "type": "string", "minLength": 1 },
+        "retrieved_at": { "type": "string", "format": "date" }
+      },
+      "additionalProperties": true
+    },
+    "collection": {
+      "type": "object",
+      "required": ["files", "size", "archive"],
+      "properties": {
+        "title": { "type": "string" },
+        "files": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+        "dependencies": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "size": { "type": "integer", "minimum": 1, "description": "Sum of the file sizes." },
+        "archive": {
+          "type": "object",
+          "required": ["url", "size", "sha256"],
+          "properties": {
+            "url": { "type": "string", "pattern": "^https://(github\\.com|objects\\.githubusercontent\\.com|release-assets\\.githubusercontent\\.com)/" },
+            "size": { "type": "integer", "minimum": 1 },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
