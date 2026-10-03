@@ -610,3 +610,37 @@ def test_receipt_reports_the_quality_level(tmp_path):
     assert viewed["receipt"]["quality"] == "final"
     assert viewed["task"]["metadata"]["quality"] == "final"
     forget_task_registry(registry.workspace_dir)
+
+
+def test_final_and_master_plans_blur_motion_with_a_half_frame_shutter():
+    final = export_plan(_document(), "final")
+    master = export_plan(_document(), "master")
+    assert (final["subframes"], final["shutter"]) == (4, 180)
+    assert (master["subframes"], master["shutter"]) == (8, 180)
+    assert "subframes" not in export_plan(_document()), "draft stays one sharp frame"
+
+
+def test_shutter_overrides_and_pixel_worlds_stay_sharp():
+    assert export_plan(_document(), "final", 90)["shutter"] == 90
+    assert (export_plan(_document(), "master", 0)["subframes"], export_plan(_document(), "master", 0)["shutter"]) == (1, 0)
+    pixel = export_plan(_document(pixelWorld={"pixelSize": 4, "levels": 16}), "master")
+    assert (pixel["subframes"], pixel["shutter"]) == (1, 0)
+    with pytest.raises(ValueError):
+        export_plan(_document(), "final", 400)
+    with pytest.raises(ValueError):
+        export_plan(_document(), "draft", 180)
+
+
+@pytest.mark.parametrize("patch", [{"shutter": 400}, {"shutter": "wide"}, {"shutter": True}, {"shutter": 180}])
+def test_bad_or_draft_shutter_is_refused_before_admission(tmp_path, patch):
+    service = _service(tmp_path, renderer=_paint)
+    with pytest.raises(Exception) as caught:
+        service.submit(_command(intent_id="world3d-shutter", **patch))
+    assert caught.value.status_code == 422
+    assert "shutter" in caught.value.detail["message"] or "Motion blur" in caught.value.detail["message"]
+
+
+def test_catalog_offers_the_shutter():
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["shutter"]
+    assert (schema["minimum"], schema["maximum"]) == (0, 360)
+    assert export_capabilities()["motionBlur"]["default"] == 180

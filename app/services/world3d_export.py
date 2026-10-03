@@ -45,14 +45,15 @@ WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 BLOCKED_URLS = ("blob:", "file:", "javascript:", "filesystem:")
 MEDIA_KINDS = frozenset({"model3d", "image", "screen"})
 COMMAND_KEYS = frozenset({"version", "operation", "intent_id", "input"})
-INPUT_KEYS = frozenset({"workspace", "document", "refs", "quality"})
+INPUT_KEYS = frozenset({"workspace", "document", "refs", "quality", "shutter"})
 INTENT_RE = re.compile(r"[A-Za-z0-9._-]{1,160}")
 # Render and encode settings of each export quality level. Draft is the export as it was
 # before levels existed: its plan carries no quality fields, so earlier intents replay.
+# Final and master average subframes for motion blur; the shutter is in degrees of one frame (180 = half a frame).
 QUALITY_PROFILES = {
-    "draft": {"supersample": 1, "samples": 0, "crf": 18, "preset": "fast", "threads": "1"},
-    "final": {"supersample": 1.5, "samples": 4, "crf": 14, "preset": "slow", "threads": "0"},
-    "master": {"supersample": 2, "samples": 4, "crf": 12, "preset": "slow", "threads": "0"},
+    "draft": {"supersample": 1, "samples": 0, "subframes": 1, "shutter": 0, "crf": 18, "preset": "fast", "threads": "1"},
+    "final": {"supersample": 1.5, "samples": 4, "subframes": 4, "shutter": 180, "crf": 14, "preset": "slow", "threads": "0"},
+    "master": {"supersample": 2, "samples": 4, "subframes": 8, "shutter": 180, "crf": 12, "preset": "slow", "threads": "0"},
 }
 QUALITIES = tuple(QUALITY_PROFILES)
 
@@ -99,7 +100,7 @@ def frame_count(duration: float, fps: int) -> int:
     return max(1, round(float(duration) * int(fps)))
 
 
-def export_plan(document: dict, quality: str = "draft") -> dict:
+def export_plan(document: dict, quality: str = "draft", shutter: float | None = None) -> dict:
     duration = output_duration(document)
     fps = document.get("fps", 30)
     if fps not in (24, 30, 60):
@@ -112,7 +113,20 @@ def export_plan(document: dict, quality: str = "draft") -> dict:
     if quality != "draft":
         profile = QUALITY_PROFILES[quality]
         plan.update(quality=quality, supersample=profile["supersample"], samples=profile["samples"])
+        plan.update(_motion_blur(document, profile, shutter))
+    elif shutter:
+        raise ValueError("Motion blur needs quality final or master")
     return plan
+
+
+def _motion_blur(document: dict, profile: dict, shutter: float | None) -> dict:
+    """Subframes and shutter for one plan. Pixel worlds stay sharp: their art is drawn on a pixel grid."""
+    angle = profile["shutter"] if shutter is None else float(shutter)
+    if not 0 <= angle <= 360:
+        raise ValueError("shutter must be between 0 and 360 degrees")
+    if angle == 0 or document.get("pixelWorld"):
+        return {"subframes": 1, "shutter": 0}
+    return {"subframes": profile["subframes"], "shutter": angle}
 
 
 def plan_quality(plan: dict) -> str:
@@ -235,7 +249,7 @@ def export_capabilities(app_url: str | None = None) -> dict:
         "renderer": "world3d-export-flow",
         "renderDevice": scene_render_device(),
         "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": 0,
-        "qualities": list(QUALITIES),
+        "qualities": list(QUALITIES), "motionBlur": {"shutterDegrees": [0, 360], "default": 180},
     }
 
 
@@ -310,6 +324,11 @@ def _input(value) -> dict:
         raise http_error(422, "invalid_command", "input may only include workspace, document, refs and quality")
     if value.get("quality", "draft") not in QUALITY_PROFILES:
         raise http_error(422, "invalid_command", f"quality must be one of {', '.join(QUALITIES)}")
+    shutter = value.get("shutter")
+    if shutter is not None and (isinstance(shutter, bool) or not isinstance(shutter, (int, float)) or not 0 <= shutter <= 360):
+        raise http_error(422, "invalid_command", "shutter must be a number of degrees between 0 and 360")
+    if shutter and value.get("quality", "draft") == "draft":
+        raise http_error(422, "invalid_command", "Motion blur needs quality final or master")
     workspace = value.get("workspace")
     if not isinstance(workspace, str) or not WORKSPACE_RE.fullmatch(workspace):
         raise http_error(422, "invalid_workspace", "Use an explicit valid output workspace")
@@ -449,10 +468,11 @@ def _validated_refs(document: dict, refs, workspace: str) -> list[dict]:
     return resolved
 
 
-def build_snapshot(document: dict, refs: list[dict], workspace: str, quality: str = "draft") -> dict:
+def build_snapshot(document: dict, refs: list[dict], workspace: str, quality: str = "draft",
+                   shutter: float | None = None) -> dict:
     return {
         "workspace": workspace, "document": deepcopy(document), "refs": deepcopy(refs),
-        "plan": export_plan(document, quality),
+        "plan": export_plan(document, quality, shutter),
     }
 
 
@@ -464,7 +484,7 @@ def freeze_export_command(command) -> dict:
     reasons = unsupported_capabilities(document)
     if reasons:
         raise http_error(422, "unsupported_capability", "Unsupported export capability: " + ", ".join(reasons))
-    snapshot = build_snapshot(document, refs, payload["workspace"], payload.get("quality", "draft"))
+    snapshot = build_snapshot(document, refs, payload["workspace"], payload.get("quality", "draft"), payload.get("shutter"))
     original = deepcopy(envelope)
     effective = {"version": 1, "operation": OPERATION,
                  "input": {"workspace": payload["workspace"], "snapshot": snapshot}}
@@ -485,7 +505,9 @@ def command_catalog() -> list[dict]:
                     "properties": {"workspace": workspace, "document": {"type": "object"},
                                    "refs": {"type": "array", "maxItems": 64},
                                    "quality": {"enum": list(QUALITIES), "default": "draft",
-                                               "description": "draft: as before. final: 1.5x supersampling, 4x MSAA, crf 14. master: 2x supersampling, 4x MSAA, crf 12. Same output size; higher levels take longer."}},
+                                               "description": "draft: as before. final: 1.5x supersampling, 4x MSAA, motion blur of 4 subframes, crf 14. master: 2x supersampling, 4x MSAA, motion blur of 8 subframes, crf 12. Same output size; higher levels take longer."},
+                                   "shutter": {"type": "number", "minimum": 0, "maximum": 360,
+                                               "description": "Motion blur shutter in degrees of one frame for final/master (default 180; 0 = sharp). Pixel worlds stay sharp."}},
                     "required": ["workspace", "document"]}
     return [
         {"name": OPERATION, "version": 1, "supportedVersions": [1], "domain": "scenes", "mutation": True,
@@ -818,6 +840,7 @@ class World3DExportService:
                 "scene_recipe": {"engine": "world3d", "document": snapshot["document"], "refs": snapshot["refs"]},
                 "width": plan["width"], "height": plan["height"], "fps": plan["fps"],
                 "duration_seconds": plan["duration"], "quality": plan_quality(plan),
+                "shutter": plan.get("shutter", 0),
             },
             "generation_mode": "video", "tool": "world3d-export", "output_filename": name,
         }
