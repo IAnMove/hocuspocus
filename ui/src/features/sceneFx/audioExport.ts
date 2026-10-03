@@ -31,3 +31,11 @@ export function sceneAudioWav(buffer: AudioBuffer): Blob {
   }
   return new Blob([bytes], { type: 'audio/wav' })
 }
+
+/** The WAV mix as a data URL, the form the owned-browser export bridges hand to the server. */
+export async function sceneAudioWavDataUrl(buffer: AudioBuffer): Promise<string> {
+  const bytes = new Uint8Array(await sceneAudioWav(buffer).arrayBuffer())
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
+  return `data:audio/wav;base64,${btoa(binary)}`
+}

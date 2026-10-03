@@ -94,11 +94,36 @@ Time per frame at 1080p, blur included:
 A one-minute `master` export at 24 fps takes about 38 minutes on CPU, so the planned estimate before rendering (1.F5) is
 needed.
 
+## Voice on the server render (1.F5)
+
+Voiced scenes now export on the server too. A voiced scene has audible speech clips, a soundtrack, or `sfx`/`worldSfx`
+cues with sound.
+
+- **Same audio as the browser.** After the frames, the owned page's `audio()` runs `mixSceneSpeech` on the frozen
+  snapshot. That is the mixer the browser export uses, with the same playback speed and the same 180 s bound. The mix is
+  returned as a WAV data URL (`sceneAudioWavDataUrl`, shared with Video 2D).
+- **Muxing.** `finish_media` muxes `fx.wav` under the encoded video: AAC 192k, video copied, trimmed or padded to the
+  plan's duration. It then validates the result with `validate_scene_recording_output(..., expected_audio=True)`.
+- **No silent publish.** A voiced scene whose page produced no mix is not published as a silent MP4, and the page's
+  error message (`audio-error.txt`) is reported.
+- **Audio refs.** Voice and soundtrack files are frozen as `audio` refs (`audioId`, `filename`, `workspace` or
+  `root`), with the same blocked-URL and existence checks as model refs. Admission answers `missing_ref` when a file is
+  absent.
+- **Limits.** `capabilities.maxVoicedDuration` is 180; longer voiced scenes are refused with `voiced_duration`.
+
+Real headless render (GPU, 320×180, 24 fps, 2 s): a soundtrack at gain 0.3 plus a speech clip at 0.2 s.
+
+| Check | `playbackSpeed: 1` | `playbackSpeed: 2` (4 s scene) |
+|---|---|---|
+| Streams | H.264 + AAC | H.264 + AAC |
+| Duration (video / audio) | 2.000 / 2.000 s | 2.000 / 2.000 s |
+| Frames | 48 | 48 |
+| 50 ms RMS envelope against the sources (correlation, mean error) | 1.000, 0.0006 | 1.000, 0.0001 |
+
 ## Not in this phase
 
 Owned by other phases of the roadmap:
 
 - 4K output and the H.264 levels (1.F3);
 - the optional ProRes master, remuxing valid uploads, and lossless editor intermediates (1.F4);
-- voiced scenes on the server render (1.F5);
-- the level picker in the UI (1.F5).
+- the level picker and the time estimate in the UI (1.F5, Grok).
