@@ -3,7 +3,7 @@ import { worldSfxAudioCues } from '../../sceneFx/world'
 import type { Scene3DDocument } from '../types'
 import { scene3dOutputDuration, scene3dPlaybackSpeed } from '../clock'
 import { safeMediaUrl } from './track'
-import { sceneVoiceTracks } from './timeline'
+import { sceneVoiceTracks, speechClips } from './timeline'
 
 export const MAX_VOICE_SECONDS = 600
 export const MAX_DECODED_VOICES = 8
@@ -127,21 +127,41 @@ function edgeFade(time: number, start: number, end: number): number {
   return 1
 }
 
+/** True when inaudible lip-sync already points at this file: the clip is the scene tape, not a music bed. */
+export function soundtrackIsSceneTape(url: string | undefined, document: Scene3DDocument): boolean {
+  if (!url) return false
+  return document.slots.some(slot => slot.speech?.enabled && speechClips(slot.speech).some(clip =>
+    clip.audible === false && clip.audio?.url === url))
+}
+
 /** Linear gain of one soundtrack clip at an output time. Dialogue windows use output seconds. */
-export function soundtrackGainAt(time: number, gain: number, start: number, end: number, windows: readonly DuckWindow[]): number {
+export function soundtrackGainAt(
+  time: number,
+  gain: number,
+  start: number,
+  end: number,
+  windows: readonly DuckWindow[],
+  fade = true,
+): number {
   let depth = 0
   for (const window of windows) depth = Math.max(depth, duckDepth(time, window))
   const ducked = 1 + (DUCK_LINEAR - 1) * depth
-  return Math.max(0, gain) * ducked * edgeFade(time, start, end)
+  return Math.max(0, gain) * ducked * (fade ? edgeFade(time, start, end) : 1)
 }
 
-export function soundtrackGainCurve(start: number, duration: number, gain: number, windows: readonly DuckWindow[]): Float32Array {
+export function soundtrackGainCurve(
+  start: number,
+  duration: number,
+  gain: number,
+  windows: readonly DuckWindow[],
+  fade = true,
+): Float32Array {
   const count = Math.max(2, Math.floor(duration / SOUNDTRACK_GAIN_STEP) + 1)
   const curve = new Float32Array(count)
   const end = start + duration
   for (let index = 0; index < count; index += 1) {
     const time = start + (duration * index) / (count - 1)
-    curve[index] = soundtrackGainAt(time, gain, start, end, windows)
+    curve[index] = soundtrackGainAt(time, gain, start, end, windows, fade)
   }
   return curve
 }
@@ -187,8 +207,14 @@ export async function mixSceneSpeech(document: Scene3DDocument): Promise<AudioBu
     const buffer = await decodeVoice(track.audio!.url)
     const schedule = voiceSchedule(track.start, track.offset, buffer.duration, Math.min(document.duration, track.end ?? document.duration), speed)
     if (schedule.duration <= 0) continue
+    const tape = soundtrackIsSceneTape(track.audio?.url, document)
+    // The production tape is the audible mix. Music fades would swallow the first word and last 400 ms.
+    if (tape && !windows.length) {
+      scheduleBuffer(context, buffer, schedule, track.gain)
+      continue
+    }
     const span = schedule.duration / schedule.rate
-    scheduleBuffer(context, buffer, schedule, track.gain, soundtrackGainCurve(schedule.when, span, track.gain, windows))
+    scheduleBuffer(context, buffer, schedule, track.gain, soundtrackGainCurve(schedule.when, span, track.gain, windows, !tape))
   }
   return context.startRendering()
 }

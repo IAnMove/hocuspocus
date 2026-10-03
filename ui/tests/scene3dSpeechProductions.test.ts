@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { soundtrackIsSceneTape } from '../src/features/scene3d/speech/audio'
 import { buildSpeechProduction, queueSpeechProduction, takeSpeechProduction, type SpeechProductionInput } from '../src/features/scene3d/speech/production'
 import { sceneVoiceTracks, speechEnd } from '../src/features/scene3d/speech/timeline'
 import { parseScene3DDocument } from '../src/features/scene3d/document'
@@ -26,6 +27,7 @@ test('production carries identity, literal dialogue, exact source offsets and on
   assert.equal(innkeeper.speech!.clips![0].offset, 22.5)
   assert.equal(sceneVoiceTracks(doc).length, 1)
   assert.equal(sceneVoiceTracks(doc)[0].offset, 20)
+  assert.equal(soundtrackIsSceneTape(doc.soundtrack![0].audio.url, doc), true)
   assert.deepEqual(parseScene3DDocument(JSON.parse(JSON.stringify(doc))), doc)
   assert.equal(speechEnd(mira.speech!), 8)
 })
