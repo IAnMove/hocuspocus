@@ -1,13 +1,23 @@
 import { BASE } from './http'
 
-export type PublishPreset = 'x' | 'youtube' | 'shorts' | 'archive'
+export type PublishPreset = 'x' | 'youtube' | 'shorts' | 'apple' | 'broadcast' | 'archive'
+
+export interface PublishLoudness {
+  lufs: number
+  true_peak: number
+  target_lufs?: number
+  target_true_peak?: number
+}
 
 export interface PublishWarning {
-  code: 'duration' | 'aspect' | 'safe_area'
+  code: 'duration' | 'aspect' | 'safe_area' | 'loudness'
   limit?: number
   duration?: number
   expected?: string
   ids?: string[]
+  lufs?: number
+  true_peak?: number
+  target_lufs?: number
 }
 
 export async function checkPublishPreset(payload: {
@@ -42,7 +52,7 @@ export async function publishVideo(payload: {
   duration: number
   overlays?: Array<{ id: string; y: number; width: number }>
   loudnorm?: boolean
-}): Promise<{ file: string; url: string; thumbnail: string; sidecar: string; warnings: PublishWarning[] }> {
+}): Promise<{ file: string; url: string; thumbnail: string; sidecar: string; warnings: PublishWarning[]; loudness?: PublishLoudness | null }> {
   const res = await fetch(`${BASE}/api/v1/video-editor/publish`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
