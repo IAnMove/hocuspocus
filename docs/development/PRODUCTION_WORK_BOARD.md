@@ -209,7 +209,7 @@ abriendo el borrador el primer día y actualizando la fila en el mismo PR.
 | 4.F3 Emparentar en el cliente | Grok | Tras 4.F1 | |
 | 4.F4 Parpadeo, mirada y cabeza | Grok | Ya | |
 | 4.F5 Manos | Claude | Tras 4.F3 | |
-| 5.F1 Ducking en Video 3D | Grok | Ya | Borrador `feat/calidad-5-f1-ducking-video3d` |
+| 5.F1 Ducking en Video 3D | Grok | Ya | Borrador https://github.com/IAnMove/hocuspocus/pull/772 |
 | 5.F2 Volumen por plataforma | Grok | Ya | |
 | 5.F3 Contactos de pie | Claude | Tras el PR #765 | |
 | 5.F4 Pasos | Grok | Tras 5.F3 | |
