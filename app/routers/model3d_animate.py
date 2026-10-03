@@ -41,7 +41,7 @@ def command_catalog():
              "description": "Add humanoid clips to a GLB that already has the standard Mixamo-named skeleton (from "
                             "model3d.rig engine humanoid). Clips are baked for that body. import.file is a .bvh, .glb or "
                             ".gltf inside the workspace (Mixamo, VRM/VRoid, Unreal, Blender, Daz or CMU bone names); every "
-                            "animation in it is retargeted in place. CPU only. Returns each clip index, name and duration "
+                            "animation in it is retargeted in place. CPU only. Returns each clip index, name, duration and foot landings "
                             "for a Video 3D slot, plus warnings. Unusable inputs (no skeleton, no humanoid in the file, "
                             "compressed meshes) answer invalid_input; the same intent replays that answer.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],

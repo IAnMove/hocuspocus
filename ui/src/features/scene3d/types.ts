@@ -265,10 +265,20 @@ export type Scene3DDocument = {
   slots: Scene3DSlot[]
 }
 
+/** A foot landing inside a clip, in clip seconds, written by the humanoid rig as
+ * `animations[i].extras.hocuspocus_contacts`. */
+export type Scene3DFootContact = {
+  t: number
+  foot: 'left' | 'right'
+  strength: number
+}
+
 export type Scene3DClipCatalogEntry = {
   index: number
   name: string
   durationSeconds: number | null
+  /** Foot landings, when the GLB records them. */
+  contacts?: Scene3DFootContact[]
 }
 
 export type Scene3DClipError = {
