@@ -9,9 +9,11 @@ import { scene3dPlaybackSpeed } from './clock'
 import { paintSceneFx } from '../sceneFx/paint'
 import { ensureTextFonts, paintKineticTexts, paintSceneLyrics } from '../../lib/kineticText'
 import { paintClipNumber } from './performance'
+import { renderQualityOf } from './exportQuality'
 import type { Scene3DDocument } from './types'
 
-type Size = { width: number; height: number }
+/** The export plan: output size, plus the supersampling and MSAA of the quality level. */
+type Size = { width: number; height: number; supersample?: number; samples?: number }
 type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; dispose: () => void }
 declare global { interface Window { __world3dExport: Renderer } }
 
@@ -33,7 +35,7 @@ window.__world3dExport = {
     // Load props and resources before locking the stage for deterministic export.
     await waitForWorld3DAssets(stage, scene, 90000)
     await ensureTextFonts(scene.texts)
-    snapshot = startWorld3DExport(stage, scene, size)
+    snapshot = startWorld3DExport(stage, scene, size, renderQualityOf(size))
     canvas.width = size.width
     canvas.height = size.height
   },
@@ -43,6 +45,8 @@ window.__world3dExport = {
     await stage.prepareFrame?.(time, snapshot)
     const source = paintWorld3DExportFrame(stage, snapshot, time)
     const context = canvas.getContext('2d')!
+    // A supersampled stage is larger than the output; scale it down with the high-quality filter.
+    context.imageSmoothingQuality = 'high'
     context.drawImage(source, 0, 0, canvas.width, canvas.height)
     paintSceneFx(context, canvas.width, canvas.height, time, snapshot.sfx)
     paintKineticTexts(context, canvas.width, canvas.height, time, snapshot.texts)
