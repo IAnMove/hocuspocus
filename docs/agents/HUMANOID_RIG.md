@@ -167,6 +167,25 @@ again until the walk is baked anew. A new GLB is saved; the original stays.
 `motion.points` adds waypoints between the start and `to`. Video 3D walks them
 on the same curve the bake uses.
 
+## Sit, reach and look
+
+`model3d.animate` with `interactions` bakes clips that meet the scene. Their points are in the model's own metres;
+Video 3D exposes `modelSpacePoint` on the stage to convert a scene point.
+
+- **`{kind: "sit", seat: [x, y, z], stand_up?, look?}`** lowers the hips onto the middle of the seat's top and stays
+  seated, or stands up again at the end with `stand_up`. The hips end within 2 cm of the seat, the feet stay on the
+  floor, and the torso leans forward while sitting down. Natural seat heights are 0.3–0.9 leg lengths above the
+  floor; outside that the result lists `seat_height_unusual`. A seat too far behind the feet lists `seat_out_of_reach`.
+- **`{kind: "reach", target, hand?: left | right | auto, hold?, look?}`** brings a wrist to the target and holds it,
+  or returns it with `hold: false`.
+  - The torso turns the reaching shoulder toward the target, bends, and crouches for low targets. It does so only as
+    much as needed: the smallest lean that reaches is found by bisection.
+  - A reachable target is reached to within 1 % of the arm.
+  - A target the arm cannot reach even with the lean lists `target_out_of_reach`.
+- **`{kind: "look", target}`** turns the head and neck toward a point (±70° of yaw).
+
+Each interaction takes a `duration` (0.8–30 s) and a `name`. Warnings come back prefixed with the clip's name.
+
 ## Known limits
 
 - No fingers, face or eyes; the hand moves as one piece.
