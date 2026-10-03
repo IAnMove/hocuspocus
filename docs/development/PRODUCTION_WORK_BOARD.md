@@ -203,7 +203,7 @@ abriendo el borrador el primer día y actualizando la fila en el mismo PR.
 | 3.F6 Poly Haven en vivo | Grok | Solo si el usuario lo aprueba |
 | 4.F1 Recorridos sin patinar | Claude (#778) | Tras el PR #765 |
 | 4.F2 Núcleo de fundidos | Claude (#781) | Tras el PR #765 |
-| 4.F2 UI de secuencias | Grok (`feat/calidad-4-f2-secuencias`) | En revisión |
+| 4.F2 UI de secuencias | Grok (#790) | En revisión |
 | 4.F3 IK de objetos | Claude (#780) | Tras 4.F1 |
 | 4.F3 Emparentar en el cliente | Grok | Tras 4.F1 |
 | 4.F4 Parpadeo, mirada y cabeza | Grok | Ya |
