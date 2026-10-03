@@ -12,6 +12,7 @@ import { worldSfxAudioCues } from '../sceneFx/world'
 import { applyWorldSfxDemo } from '../sceneFx/worldDemo'
 import { WORLD_SFX_SELECT_PREFIX } from './transformGizmo'
 import { Scene3DMotionControls } from './Scene3DMotionControls'
+import { useWalkBake } from './useWalkBake'
 import { Scene3DSpeakerControls } from './speech/Scene3DSpeakerControls'
 import { Scene3DSpeechStatus } from './speech/Scene3DSpeechStatus'
 import { Scene3DSpeechSelector } from './speech/Scene3DSpeechSelector'
@@ -137,6 +138,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   }, [])
   const workspaceRef = useRef('')
   const stageRef = useRef<Scene3DStageHandle>(null)
+  const walkBake = useWalkBake(stageRef, sceneDoc, applyScene, { needsSaved: editorT('travel.walkNeedsSaved'), failed: editorT('travel.walkFailed') })
   const exportAbortRef = useRef<AbortController | null>(null)
   const fps = sceneDoc.fps
   const speed = scene3dPlaybackSpeed(sceneDoc.playbackSpeed)
@@ -466,7 +468,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         >{t('stage.exportCancel')}</button>}
       </div>
       <p className="text-xs text-text-muted">{t('stage.exportQualityHint')}</p>
-      {selected && (selected.media !== 'image' || selected.surface === 'cutout') && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))} />}
+      {selected && (selected.media !== 'image' || selected.surface === 'cutout') && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
+        walk={walkBake.control(selected)} />}
       <button type="button" disabled={editingLocked || sceneDoc.slots.length >= 64} className="min-h-11 self-start rounded-lg border border-cyan-400/50 px-4 text-sm text-text-primary" onClick={() => {
         if (!canMutateWorld3DScene(exportingRef.current)) return
         const id = `screen_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`

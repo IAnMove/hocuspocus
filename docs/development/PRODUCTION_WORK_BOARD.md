@@ -170,3 +170,59 @@ La UI añade animaciones a un personaje ya rigueado y sube el archivo fuera de
 la galería. Los rigs de la primera versión siguen aceptando clips nuevos. Los
 módulos de compatibilidad de #755–#762 no cambian salvo sus tests del lector
 antiguo, que pasan a comprobar el importador nuevo.
+
+## Calidad local 2026-10-03
+
+Hoja de ruta para mejorar los vídeos deterministas (sin IA) con recursos locales:
+`docs/development/calidad-local/01-render-master.md` a `06-control-calidad.md`.
+
+Decisiones del usuario:
+
+- 1080p es el tamaño por defecto, 4K el máximo opcional, y ProRes es opcional y está desactivado.
+- Solo las escenas nuevas usan la iluminación nueva.
+- Los paquetes CC0 se descargan solo si el usuario quiere.
+- Los fallos de calidad avisan y no bloquean nada.
+- El juicio artístico es humano.
+
+Fases como `n.Fm` (punto n del documento `0n`, fase m). Rama: `feat/calidad-<n>-f<m>-<tema>`. Se reclama como siempre:
+abriendo el borrador el primer día y actualizando la fila en el mismo PR.
+
+| Fase | Dueño | Puede empezar |
+|---|---|---|
+| 1.F0 Medidas base | Grok | Ya |
+| 1.F1 Niveles de calidad, supersampling y antialiasing | Claude (#771) | Ya |
+| 1.F2 Motion blur determinista | Claude (#773) | Tras 1.F1 |
+| 1.F3 4K y niveles H.264 | Grok | Tras 1.F1 |
+| 1.F4 Máster y fin de las recodificaciones | Grok | Ya, el remux y el editor sin pérdidas; tras 1.F1, el ProRes |
+| 1.F5 Voz en el render del servidor | Claude (#777) | Tras 1.F1 |
+| 1.F5 UI y estimación | Grok | Tras 1.F1 |
+| 2.F1 Contrato de color y entorno | Claude (#776) | Ya |
+| 2.F2-F5 HDRI, LUT, valores por set y sol | Grok | Tras 2.F1 |
+| 3.F1 Contrato, licencias y descargador seguro | Claude (#770) | Ya |
+| 3.F2-F5 Curación, navegador, consumidores y créditos | Grok | Tras 3.F1 (3.F4 también tras el PR #765) |
+| 3.F6 Poly Haven en vivo | Grok | Solo si el usuario lo aprueba |
+| 4.F1 Recorridos sin patinar | Claude (#778) | Tras el PR #765 |
+| 4.F2 Núcleo de fundidos | Claude (#781) | Tras el PR #765 |
+| 4.F2 UI de secuencias | Grok | Tras el núcleo |
+| 4.F3 IK de objetos | Claude (#780) | Tras 4.F1 |
+| 4.F3 Emparentar en el cliente | Grok | Tras 4.F1 |
+| 4.F4 Parpadeo, mirada y cabeza | Grok | Ya |
+| 4.F5 Manos | Claude (#783) | Tras 4.F3 |
+| 5.F1 Ducking en Video 3D | Grok (#772) | Ya |
+| 5.F2 Volumen por plataforma | Grok (#774) | Ya |
+| 5.F3 Contactos de pie | Claude (#775) | Tras el PR #765 |
+| 5.F4 Pasos | Grok | Tras 5.F3 |
+| 5.F5-F7 Ambientes, editor y reverb | Grok | Ya |
+| 6.F1 Sondas de ffmpeg | Grok (#769) | Ya |
+| 6.F2 Geometría antes del render | Claude (#782) | Tras 4.F1 |
+| 6.F3 Avisos en 2D y en el editor | Grok | Ya |
+| 6.F4 Panel de revisión | Grok | Tras 6.F1 |
+| 6.F5 Ajuste de umbrales | Grok | Tras 6.F4 |
+
+Solapes:
+
+- `app/services/export_receipts.py`: 1.F1 añade `quality` y 6.F1 añade `qa`.
+- `app/services/publish_presets.py`: 1.F4 y 5.F2.
+- `ui/src/features/scene3d/speech/audio.ts`: 5.F1 y 5.F4.
+
+En los tres casos, el segundo PR rebasa sobre el primero.

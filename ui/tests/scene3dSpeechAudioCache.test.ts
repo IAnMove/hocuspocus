@@ -30,7 +30,7 @@ function installAudio() {
       return { duration: 2, sampleRate: this.sampleRate, length: samples.length, numberOfChannels: 1, getChannelData: () => samples }
     }
     createBufferSource() { return { buffer: null as AudioBuffer | null, playbackRate: { value: 1 }, connect() {}, start() {} } }
-    createGain() { return { gain: { value: 1 }, connect() {} } }
+    createGain() { return { gain: { value: 1, setValueCurveAtTime() {} }, connect() {} } }
     startRendering() {
       return { duration: this.length / this.sampleRate, sampleRate: this.sampleRate, numberOfChannels: 1,
         getChannelData: () => new Float32Array(this.length) }

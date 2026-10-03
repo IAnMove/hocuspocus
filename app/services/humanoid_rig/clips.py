@@ -14,8 +14,9 @@ from functools import lru_cache
 import numpy as np
 
 from services.humanoid_rig.clip_recipes import RECIPES
+from services.humanoid_rig.contacts import foot_contacts
 from services.humanoid_rig.errors import InvalidInput
-from services.humanoid_rig.motion import Pose, Rig, bake
+from services.humanoid_rig.motion import Pose, Rig, bake_with_frames
 from services.humanoid_rig.names import BONE_NAMES, CLIP_IDS, CLIP_INFO, CLIP_LABELS
 
 FPS = 30
@@ -74,7 +75,7 @@ def _build_clip(clip_id: str, bpm: float, rig: Rig) -> dict:
     u = times / duration
     pose = Pose(rig, u)
     author(pose, u)
-    local, root = bake(pose)
+    local, root, positions, worlds = bake_with_frames(pose)
     _close_loop(local, root)
     rotations = {name: local[:, index] for index, name in enumerate(BONE_NAMES) if not name.endswith("_End")}
     return {
@@ -86,6 +87,7 @@ def _build_clip(clip_id: str, bpm: float, rig: Rig) -> dict:
         "times": times,
         "rotations": rotations,
         "hips_translation": root,
+        "contacts": foot_contacts(rig, times, positions, worlds, loop=True),
     }
 
 

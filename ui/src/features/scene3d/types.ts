@@ -146,9 +146,13 @@ export type Scene3DClipPlayback = {
 export type Scene3DMotion = {
   to: Vec3
   via?: Vec3
+  /** Waypoints between the start and `to`, walked on a centripetal Catmull-Rom curve. */
+  points?: Vec3[]
   faceTravel?: boolean
   turnTo?: number
   easing?: 'linear' | 'smooth'
+  /** A baked humanoid walk of this path with planted feet; while it matches, the clip moves the model. */
+  walk?: import('./walkPath').Scene3DMotionWalk
 }
 
 export type Scene3DSlotMedia = 'model3d' | 'image' | 'screen'
@@ -189,6 +193,8 @@ export type Scene3DSlot = {
   grounded?: boolean
   clip: Scene3DClipRef | null
   clipPlayback?: Scene3DClipPlayback
+  /** A sequence of clips with crossfades. When present it drives the model; `clip` and `clipPlayback` are ignored. */
+  clips?: import('./clipCues').Scene3DClipCue[]
   motion?: Scene3DMotion
   loop?: Scene3DLoop
 }
@@ -261,14 +267,28 @@ export type Scene3DDocument = {
   environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road'; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number }
   dressing?: Scene3DDressing
   atmos?: AtmosSettings
+  /** Light from the environment (reflections, soft fill). New scenes get a generated room. */
+  lighting?: import('./look').Scene3DLighting
+  /** Tone mapping, exposure and an optional LUT. Absent: the renderer's previous behaviour. */
+  look?: import('./look').Scene3DLook
   workshopScreen?: 'code' | 'error' | 'success'
   slots: Scene3DSlot[]
+}
+
+/** A foot landing inside a clip, in clip seconds, written by the humanoid rig as
+ * `animations[i].extras.hocuspocus_contacts`. */
+export type Scene3DFootContact = {
+  t: number
+  foot: 'left' | 'right'
+  strength: number
 }
 
 export type Scene3DClipCatalogEntry = {
   index: number
   name: string
   durationSeconds: number | null
+  /** Foot landings, when the GLB records them. */
+  contacts?: Scene3DFootContact[]
 }
 
 export type Scene3DClipError = {

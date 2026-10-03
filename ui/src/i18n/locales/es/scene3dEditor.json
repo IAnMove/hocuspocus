@@ -3533,7 +3533,14 @@
     "code": "Programando",
     "error": "Build fallido",
     "success": "Build correcto",
-    "repeat": "Repeticiones de textura"
+    "repeat": "Repeticiones de textura",
+    "walk": "Caminar sin patinar",
+    "walkHelp": "Para personajes rigueados: hornea un paseo por este recorrido con cada pie apoyado en el suelo. Se guarda un GLB nuevo; el original no cambia.",
+    "walkBaking": "Horneando el paseo…",
+    "walkReady": "Paseo horneado: el clip mueve al personaje y cada pie se queda apoyado.",
+    "walkStale": "Cambió el recorrido o la colocación del personaje: vuelve a hornear el paseo.",
+    "walkNeedsSaved": "Carga el personaje desde el espacio de trabajo (un GLB rigueado y guardado) para hornear un paseo.",
+    "walkFailed": "No se pudo hornear el paseo"
   },
   "framing": {
     "title": "Encuadre del protagonista",

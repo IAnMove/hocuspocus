@@ -232,3 +232,79 @@ def test_a_worker_crash_is_a_server_error(tmp_path):
     assert response.status_code == 500
     assert response.json()["detail"]["code"] == "animate_failed"
     assert "new intent_id" in response.json()["detail"]["message"]
+
+
+@pytest.mark.parametrize("path,message", [
+    ({"points": [[0, 0]], "duration": 2}, "2 to 64"),
+    ({"points": [[0, 0], [1, "x"]], "duration": 2}, "2 to 64"),
+    ({"points": [[0, 0], [1, 1]], "duration": 0.1}, "duration"),
+    ({"points": [[0, 0], [1, 1]]}, "points and duration"),
+    ({"points": [[0, 0], [1, 1]], "duration": 2, "speed": 3}, "points and duration"),
+])
+def test_a_bad_path_is_refused_before_the_worker(tmp_path, path, message):
+    root = tmp_path / "ws"
+    (root / "movie").mkdir(parents=True)
+    (root / "movie" / "pet.glb").write_bytes(b"source-glb")
+    handlers = command_handlers(lambda name: str(root / name), tmp_path / "journal.db", lambda *_: None)
+    args = _args(clips=[])
+    args["input"]["path"] = path
+    with pytest.raises(ValueError, match=message):
+        asyncio.run(handlers["model3d.animate"](args))
+
+
+def test_a_path_alone_reaches_the_worker_and_is_part_of_the_intent(tmp_path):
+    root = tmp_path / "ws"
+    (root / "movie").mkdir(parents=True)
+    (root / "movie" / "pet.glb").write_bytes(b"source-glb")
+    calls = []
+
+    def runner(request, output):
+        calls.append(request)
+        output.write_bytes(b"animated-glb")
+        return {"clips": [{"index": 3, "name": "Path Walk", "duration": 4.0, "contacts": []}], "warnings": []}
+
+    handlers = command_handlers(lambda name: str(root / name), tmp_path / "journal.db", runner)
+    args = _args(clips=[])
+    args["input"]["path"] = {"points": [[0, 0], [0, 2]], "duration": 4}
+    result = asyncio.run(handlers["model3d.animate"](args))["result"]
+    assert result["clips"][0]["name"] == "Path Walk"
+    assert calls[0]["path"] == {"points": [[0.0, 0.0], [0.0, 2.0]], "duration": 4.0}
+    other = _args(clips=[])
+    other["input"]["path"] = {"points": [[0, 0], [0, 3]], "duration": 4}
+    with pytest.raises(ValueError, match="different parameters"):
+        asyncio.run(handlers["model3d.animate"](other))
+
+
+@pytest.mark.parametrize("items,message", [
+    ([], "1 to 8"), ([{"kind": "dance"}], "sit, reach or look"), ([{"kind": "sit"}], "sit takes"),
+    ([{"kind": "sit", "seat": [0, 1]}], "seat must be"), ([{"kind": "reach", "target": [0, 1, 1], "hand": "both"}], "hand"),
+    ([{"kind": "reach", "target": [0, 1, 1], "duration": 99}], "duration"), ([{"kind": "look", "target": [0, 1, 1], "hold": True}], "look takes"),
+])
+def test_bad_interactions_are_refused_before_the_worker(tmp_path, items, message):
+    root = tmp_path / "ws"
+    (root / "movie").mkdir(parents=True)
+    (root / "movie" / "pet.glb").write_bytes(b"source-glb")
+    handlers = command_handlers(lambda name: str(root / name), tmp_path / "journal.db", lambda *_: None)
+    args = _args(clips=[])
+    args["input"]["interactions"] = items
+    with pytest.raises(ValueError, match=message):
+        asyncio.run(handlers["model3d.animate"](args))
+
+
+def test_interactions_alone_reach_the_worker_cleaned(tmp_path):
+    root = tmp_path / "ws"
+    (root / "movie").mkdir(parents=True)
+    (root / "movie" / "pet.glb").write_bytes(b"source-glb")
+    calls = []
+
+    def runner(request, output):
+        calls.append(request)
+        output.write_bytes(b"animated-glb")
+        return {"clips": [{"index": 3, "name": "Sit", "duration": 3.0, "contacts": []}], "warnings": []}
+
+    handlers = command_handlers(lambda name: str(root / name), tmp_path / "journal.db", runner)
+    args = _args(clips=[])
+    args["input"]["interactions"] = [{"kind": "sit", "seat": [0, 0.45, -0.3], "stand_up": True}, {"kind": "reach", "target": [0, 1, 0.5], "look": False}]
+    asyncio.run(handlers["model3d.animate"](args))
+    assert calls[0]["interactions"] == [{"kind": "sit", "seat": [0.0, 0.45, -0.3], "stand_up": True},
+                                        {"kind": "reach", "target": [0.0, 1.0, 0.5], "look": False}]

@@ -427,7 +427,7 @@ def _timestamp(value: Any) -> float | None:
 
 def _director_path(workspace_dir: str, production_id: str) -> str | None:
     try:
-        names = os.listdir(workspace_dir)
+        names = sorted(os.listdir(workspace_dir))
     except OSError:
         return None
     chosen: str | None = None
@@ -437,12 +437,18 @@ def _director_path(workspace_dir: str, production_id: str) -> str | None:
             continue
         path = os.path.join(workspace_dir, name)
         body, problem = _read(path)
-        if problem or not isinstance(body, dict) or str(body.get("production_id") or "") != production_id:
+        if problem or not isinstance(body, dict) or not _director_matches(body, production_id):
             continue
         rank = snapshot_recency(path, body)
         if chosen_rank is None or rank > chosen_rank:
             chosen, chosen_rank = path, rank
     return chosen
+
+
+def _director_matches(body: dict, production_id: str) -> bool:
+    from services.production_run import pipeline_matches_production
+
+    return pipeline_matches_production(body, production_id)
 
 
 def _montage_path(workspace_dir: str, production_id: str) -> str | None:

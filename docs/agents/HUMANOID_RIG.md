@@ -98,6 +98,32 @@ the landmarks, detected pose, confidence and warnings.
 
 Clip names are what Video 3D plays: a model slot uses `clip: {index, name}`.
 
+### Foot landings
+
+Each clip records when a foot touches down, for footsteps that follow the animation. The landings are stored on the
+animation as `extras.hocuspocus_contacts`:
+
+```json
+[{"t": 0.4667, "foot": "right", "strength": 0.261}, {"t": 0.9667, "foot": "left", "strength": 0.261}]
+```
+
+- `t` is in clip seconds.
+- `strength` (0–1) is the downward speed of the foot just before it lands. A jump landing is around 0.76; a walk step is
+  around 0.26.
+
+How a landing is detected:
+
+- A landing is the first frame a foot is back within 1.2 % of the leg length above the floor, after rising above 3.5 %.
+  A clip that keeps both feet down (Idle, Wave, Clap) records none.
+- Heights are measured against the floor, so in-place walks count like real steps.
+- Library clips and imported animations get the same detection. A looping library clip is scanned once around its loop.
+- Walk lands within one frame of the frame where its recipe puts the foot back down.
+- Run lands about two frames after the start of its stance phase, because the body is still coming down from the
+  flight phase.
+
+The rig sidecar, the `model3d.rig` result and the `model3d.animate` result list the same `contacts` for each clip.
+pygltflib drops empty lists when it saves, so a clip without landings has no key.
+
 ## Add animations later
 
 **Studios → Animate → Add animations to a rigged character** lists the GLBs in
@@ -113,9 +139,89 @@ rig does not have (fingers, props) are skipped and listed.
 Rigs made by the first humanoid release (identity rest rotations, no `extras`
 marker) still accept new clips: each bone is corrected to the canonical frame.
 
+## Sequence clips on a slot
+
+A Video 3D model slot can chain clips with crossfades instead of playing a single
+`clip`. While `clips` is present it drives the model, and `clip` and
+`clipPlayback` are ignored:
+
+```json
+"clips": [
+  {"clip": {"index": 0, "name": "Idle"}, "start": 0},
+  {"clip": {"index": 1, "name": "Wave"}, "start": 1.5, "fade": 0.6},
+  {"clip": {"index": 3, "name": "Path Walk"}, "start": 3, "loop": false}
+]
+```
+
+- **`start`.** In scene seconds. A cue lasts until the next one starts, or until the shot ends.
+- **`fade`.** Seconds, 0.3 by default; 0 is a cut. The next cue fades in over its own first `fade` seconds with a
+  smooth curve, while the cue before it keeps playing.
+- **`speed`, `offset` and `loop`.** They set the clip time: `offset` is where the clip starts, `speed` goes from 0.1 to
+  4, and `loop` defaults to true. Without a loop, the clip holds its last frame.
+- **`duration`.** Stops the cue's clock early and holds the pose.
+- **Before the first cue.** The model holds the first cue's start pose.
+- **Limits.** Up to 32 cues; invalid cues are dropped and the rest are sorted by start.
+
+The weights at any time come from `clipWeightsAt(cues, sceneSeconds, shotDuration, clipDuration)`, a pure function of
+scene time. Seeking, scrubbing and motion-blur subframes therefore always give the same pose.
+
+- **Same clip twice.** Two cues of the same clip share one animation action, so a fade between them cuts to the cue
+  with more weight.
+- **A baked walk as a cue.** A baked Path Walk can be one cue: the slot stays still while that bake matches its path,
+  as above.
+- **Footsteps.** Foot landings for a sequence come from `cueContactsInScene`.
+
+## Walk a path without sliding
+
+Video 3D used to move a model along its path while the clip walked in place,
+so the soles skated. **Video 3D → Travel → Walk without sliding** (or
+`model3d.animate` with `path`) bakes a new clip, «Path Walk», on the rigged
+character:
+
+- **Footprints.** The hips follow the path (a centripetal Catmull-Rom curve
+  through the points). Every footprint stays fixed in the world while its foot
+  carries the body, and each swing goes from one footprint to the next, turning
+  with the path.
+- **Steps.** Steps lengthen with speed, between 0.35 and 0.85 leg lengths. A
+  path faster than a natural walk (2.6 leg lengths per second) is still baked,
+  and the result lists `path_too_fast`.
+- **Start and stop.** The walk starts and ends standing, with the feet side by
+  side.
+- **Measured.** A planted foot slips less than 0.2 % of the leg on straight,
+  90° and S-shaped paths. The body faces the path, except for the walk's own
+  5° hip twist.
+
+The clip moves the hips, so the slot stays at its start: the scene records
+`motion.walk = {sourceUrl, clip, key}`. If the path, the slot's position, turn
+or scale, or the shot length change, the bake is stale. The slot then slides
+again until the walk is baked anew. A new GLB is saved; the original stays.
+
+`motion.points` adds waypoints between the start and `to`. Video 3D walks them
+on the same curve the bake uses.
+
+## Sit, reach and look
+
+`model3d.animate` with `interactions` bakes clips that meet the scene. Their points are in the model's own metres;
+Video 3D exposes `modelSpacePoint` on the stage to convert a scene point.
+
+- **`{kind: "sit", seat: [x, y, z], stand_up?, look?}`** lowers the hips onto the middle of the seat's top and stays
+  seated, or stands up again at the end with `stand_up`. The hips end within 2 cm of the seat, the feet stay on the
+  floor, and the torso leans forward while sitting down. Natural seat heights are 0.3–0.9 leg lengths above the
+  floor; outside that the result lists `seat_height_unusual`. A seat too far behind the feet lists `seat_out_of_reach`.
+- **`{kind: "reach", target, hand?: left | right | auto, hold?, look?}`** brings a wrist to the target and holds it,
+  or returns it with `hold: false`.
+  - The torso turns the reaching shoulder toward the target, bends, and crouches for low targets. It does so only as
+    much as needed: the smallest lean that reaches is found by bisection.
+  - A reachable target is reached to within 1 % of the arm.
+  - A target the arm cannot reach even with the lean lists `target_out_of_reach`.
+- **`{kind: "look", target}`** turns the head and neck toward a point (±70° of yaw).
+
+Each interaction takes a `duration` (0.8–30 s) and a `name`. Warnings come back prefixed with the clip's name.
+
 ## Known limits
 
-- No fingers, face or eyes; the hand moves as one piece.
+- No fingers, face or eyes; the hand moves as one piece. What generated meshes offer for hands, and the proposed next
+  steps, are in `docs/development/HUMANOID_HANDS_RESEARCH.md`.
 - Raising arms that were modeled steep (A pose past ~55°) stretches the
   shoulders a little; the result lists `arms_steep`.
 - Characters with arms modeled down at the sides, robes or fused legs are

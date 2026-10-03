@@ -48,7 +48,7 @@ def _rig(request: dict, output: Path) -> None:
         "confidence": sidecar["confidence"],
         "warnings": sidecar["warnings"],
         "animations": clip_ids,
-        "clips": [{key: row[key] for key in ("index", "name", "duration")} for row in sidecar["clips"]],
+        "clips": [{key: row[key] for key in ("index", "name", "duration", "contacts") if key in row} for row in sidecar["clips"]],
         "pose": sidecar["pose"],
         "arm_drop": sidecar["arm_drop"],
     }), flush=True)
@@ -70,6 +70,8 @@ def _animate(request: dict, output: Path) -> None:
         payload,
         suffix,
         str(request.get("import_label") or "Imported"),
+        request.get("path"),
+        request.get("interactions"),
     )
     output.write_bytes(data)
     print("MAESTRO_RESULT " + json.dumps({"ok": True, "output": str(output), "clips": clips, "warnings": warnings}), flush=True)

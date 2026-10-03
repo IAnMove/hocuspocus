@@ -13,7 +13,7 @@ import re
 from typing import Any
 
 from services.production_project_link import read_link_store
-from services.production_run import adapt_pipeline_record
+from services.production_run import pipeline_matches_production
 from services.production_shot_actions import annotate_actions, snapshot_recency, stored_revision
 from services.production_shot_review import load_review
 from services.production_work_catalog import find_work
@@ -213,13 +213,7 @@ def _director(workspace_dir: str, workspace_id: str, production_id: str):
 
 
 def _pipeline_matches(body: dict[str, Any], workspace_id: str, production_id: str) -> bool:
-    if str(body.get("production_id") or "") == production_id:
-        return True
-    try:
-        adapted = adapt_pipeline_record(body, workspace_id)
-    except ValueError:
-        return False
-    return adapted["production"]["id"] == production_id
+    return pipeline_matches_production(body, production_id, workspace_id)
 
 
 def _director_shot(item: Any, index: int) -> dict[str, Any] | None:

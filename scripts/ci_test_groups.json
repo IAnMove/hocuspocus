@@ -55,6 +55,8 @@
         "tests/test_generation_record.py",
         "tests/test_generation_runtime.py",
         "tests/test_example_assets.py",
+        "tests/test_secure_download.py",
+        "tests/test_asset_library.py",
         "tests/test_inpaint_preparation.py",
         "tests/test_h3_benchmark_client.py",
         "tests/test_h3_director_dialogue.py",
@@ -208,6 +210,9 @@
         "tests/test_humanoid_animate.py",
         "tests/test_humanoid_clips.py",
         "tests/test_humanoid_compatibility.py",
+        "tests/test_humanoid_contacts.py",
+        "tests/test_humanoid_interactions.py",
+        "tests/test_humanoid_path_walk.py",
         "tests/test_humanoid_glb.py",
         "tests/test_humanoid_landmarks.py",
         "tests/test_humanoid_retarget.py",
@@ -333,6 +338,7 @@
         "tests/test_music_production.py",
         "tests/test_production_wait.py",
         "tests/test_export_receipts.py",
+        "tests/test_export_qa.py",
         "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",
         "tests/test_safety_scan.py",
@@ -429,6 +435,48 @@
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/secure_download.py",
+      "paths": [
+        "tests/test_secure_download.py",
+        "tests/test_example_assets.py",
+        "tests/test_template_library.py",
+        "tests/test_asset_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/asset_library.py",
+      "paths": [
+        "tests/test_asset_library.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/asset_library.py",
+      "paths": [
+        "tests/test_asset_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/media_kinds.py",
+      "paths": [
+        "tests/test_asset_library.py",
+        "tests/test_asset_manifest.py"
+      ]
+    },
+    {
+      "prefix": "app/services/example_collections.py",
+      "paths": [
+        "tests/test_example_assets.py",
+        "tests/test_secure_download.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_community.py",
+      "paths": [
+        "tests/test_template_library.py",
+        "tests/test_secure_download.py"
+      ]
+    },
     {
       "prefix": "app/services/speech_alignment.py",
       "paths": ["tests/test_speech_alignment_parity.py"]
@@ -1143,8 +1191,11 @@
         "tests/test_humanoid_animate.py",
         "tests/test_humanoid_clips.py",
         "tests/test_humanoid_compatibility.py",
+        "tests/test_humanoid_contacts.py",
         "tests/test_humanoid_glb.py",
+        "tests/test_humanoid_interactions.py",
         "tests/test_humanoid_landmarks.py",
+        "tests/test_humanoid_path_walk.py",
         "tests/test_humanoid_retarget.py",
         "tests/test_humanoid_rig_api.py",
         "tests/test_humanoid_rig_fixtures.py",
@@ -1167,6 +1218,14 @@
         "tests/test_model3d_rig_spawn_cancellation.py",
         "tests/test_model3d_rig_task_identity.py"
       ]
+    },
+    {
+      "prefix": "app/services/export_qa.py",
+      "paths": ["tests/test_export_qa.py"]
+    },
+    {
+      "prefix": "app/services/export_receipts.py",
+      "paths": ["tests/test_export_receipts.py", "tests/test_export_qa.py"]
     }
   ]
 }
