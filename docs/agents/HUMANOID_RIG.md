@@ -139,6 +139,38 @@ rig does not have (fingers, props) are skipped and listed.
 Rigs made by the first humanoid release (identity rest rotations, no `extras`
 marker) still accept new clips: each bone is corrected to the canonical frame.
 
+## Sequence clips on a slot
+
+A Video 3D model slot can chain clips with crossfades instead of playing a single
+`clip`. While `clips` is present it drives the model, and `clip` and
+`clipPlayback` are ignored:
+
+```json
+"clips": [
+  {"clip": {"index": 0, "name": "Idle"}, "start": 0},
+  {"clip": {"index": 1, "name": "Wave"}, "start": 1.5, "fade": 0.6},
+  {"clip": {"index": 3, "name": "Path Walk"}, "start": 3, "loop": false}
+]
+```
+
+- **`start`.** In scene seconds. A cue lasts until the next one starts, or until the shot ends.
+- **`fade`.** Seconds, 0.3 by default; 0 is a cut. The next cue fades in over its own first `fade` seconds with a
+  smooth curve, while the cue before it keeps playing.
+- **`speed`, `offset` and `loop`.** They set the clip time: `offset` is where the clip starts, `speed` goes from 0.1 to
+  4, and `loop` defaults to true. Without a loop, the clip holds its last frame.
+- **`duration`.** Stops the cue's clock early and holds the pose.
+- **Before the first cue.** The model holds the first cue's start pose.
+- **Limits.** Up to 32 cues; invalid cues are dropped and the rest are sorted by start.
+
+The weights at any time come from `clipWeightsAt(cues, sceneSeconds, shotDuration, clipDuration)`, a pure function of
+scene time. Seeking, scrubbing and motion-blur subframes therefore always give the same pose.
+
+- **Same clip twice.** Two cues of the same clip share one animation action, so a fade between them cuts to the cue
+  with more weight.
+- **A baked walk as a cue.** A baked Path Walk can be one cue: the slot stays still while that bake matches its path,
+  as above.
+- **Footsteps.** Foot landings for a sequence come from `cueContactsInScene`.
+
 ## Walk a path without sliding
 
 Video 3D used to move a model along its path while the clip walked in place,
