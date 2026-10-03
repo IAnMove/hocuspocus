@@ -172,22 +172,38 @@ def test_voiced_duration_is_an_explicit_preflight_reject():
     assert "voiced_duration" in error.value.detail["message"]
 
 
-def test_short_voiced_scene_is_rejected_instead_of_silent_mp4():
-    document = _document(duration=2, sfx=[{"id": "spark", "kind": "sparks", "start": 0, "end": 1,
-                                          "sound": True, "volume": 0.4}])
-    assert "voiced_audio" in unsupported_capabilities(document)
-    with pytest.raises(Exception) as error:
-        freeze_export_command(_command(document=document))
-    assert error.value.status_code == 422
-    assert error.value.detail["code"] == "unsupported_capability"
-    assert "voiced_audio" in error.value.detail["message"]
-    spoken = _document(slots=[{
+def _spoken(**speech):
+    return _document(duration=2, slots=[{
         "id": "subject_1", "slot": "subject_1", "position": [0, 0, 0], "rotationY": 0,
         "scale": 1, "sourceUrl": "", "media": "model3d", "clip": None,
-        "speech": {"enabled": True, "audio": {"url": "/api/v1/file/voice.wav", "filename": "voice.wav"}},
+        "speech": {"enabled": True, "audio": {"url": "/api/v1/file/voice.wav", "filename": "voice.wav"}, **speech},
     }])
+
+
+def test_short_voiced_scene_is_admitted_with_its_audio_frozen_as_a_ref():
+    effects = _document(duration=2, sfx=[{"id": "spark", "kind": "sparks", "start": 0, "end": 1,
+                                         "sound": True, "volume": 0.4}])
+    assert unsupported_capabilities(effects) == []
+    spoken = _spoken()
+    assert unsupported_capabilities(spoken) == []
+    refs = freeze_export_command(_command(document=spoken))["effective"]["input"]["snapshot"]["refs"]
+    assert refs == [{"audioId": "subject_1/voice", "url": "/api/v1/file/voice.wav", "kind": "audio",
+                     "filename": "voice.wav", "workspace": WORKSPACE}]
+
+
+def test_voiced_admission_requires_the_audio_file(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
     with pytest.raises(Exception) as error:
-        freeze_export_command(_command(document=spoken))
+        service.submit(_command(intent_id="voiced-missing", document=_spoken()))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+    (Path(service.workspace_dir(WORKSPACE)) / "voice.wav").write_bytes(b"RIFF")
+    assert service.submit(_command(intent_id="voiced-present", document=_spoken()))["replayed"] is False
+    forget_task_registry(service._registry(WORKSPACE).workspace_dir)
+
+
+def test_ephemeral_audio_urls_are_refused():
+    with pytest.raises(Exception) as error:
+        freeze_export_command(_command(document=_spoken(audio={"url": "blob:http://x/1"})))
     assert error.value.detail["code"] == "unsupported_capability"
 
 
@@ -206,25 +222,30 @@ def test_muted_mouth_animation_is_exportable(speech):
     assert snapshot["document"]["slots"][0]["speech"] == speech
 
 
-def test_one_audible_intervention_still_blocks_headless_export():
+def test_only_audible_clips_become_audio_refs():
     document = _document()
     document["slots"][0]["speech"] = {"enabled": True, "audible": False, "clips": [
-        {"audio": {"url": "/api/v1/file/one.wav"}, "audible": False},
-        {"audio": {"url": "/api/v1/file/two.wav"}},
+        {"id": "one", "audio": {"url": "/api/v1/file/one.wav"}, "audible": False},
+        {"id": "two", "audio": {"url": "/api/v1/file/two.wav"}},
     ]}
-    assert "voiced_audio" in unsupported_capabilities(document)
+    document["soundtrack"] = [{"id": "bed", "audio": {"url": "/api/v1/uploads/bed.wav"}}]
+    assert unsupported_capabilities(document) == []
+    refs = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]["refs"]
+    assert [(ref["audioId"], ref["filename"], ref.get("root")) for ref in refs] == [
+        ("soundtrack/bed", "bed.wav", "uploads"), ("subject_1/two", "two.wav", None)]
 
 
-def test_publish_refuses_a_voiced_snapshot_even_if_preflight_is_bypassed(tmp_path):
+def test_publish_refuses_a_voiced_snapshot_without_its_audio_mix(tmp_path):
     service = _service(tmp_path, renderer=_paint)
     snapshot = {
         "workspace": WORKSPACE,
-        "document": _document(duration=2, soundtrack=[{"id": "bed", "audio": {"url": "/api/v1/file/bed.wav"}}]),
+        "document": _document(soundtrack=[{"id": "bed", "audio": {"url": "/api/v1/file/bed.wav"}}]),
         "refs": [],
-        "plan": export_plan(_document(duration=2)),
+        "plan": export_plan(_document()),
     }
-    frames = [tmp_path / "frame_000001.png"]
-    write_png(frames[0], 64, 64, (1, 2, 3))
+    frames = [tmp_path / "frame_000001.png", tmp_path / "frame_000002.png"]
+    for frame in frames:
+        write_png(frame, 64, 64, (1, 2, 3))
 
     class _Token:
         def is_cancelled(self):
@@ -509,7 +530,7 @@ def test_capabilities_endpoint_matches_worker_preflight(tmp_path):
     assert listed["renderer"] == "world3d-export-flow"
     assert listed["realRender"] in {"ready", "pending"}
     assert listed["ffmpeg"] is export_capabilities()["ffmpeg"]
-    assert listed["maxVoicedDuration"] == 0
+    assert listed["maxVoicedDuration"] == 180
     assert listed["fps"] == [24, 30, 60]
 
 
@@ -644,3 +665,49 @@ def test_catalog_offers_the_shutter():
     schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["shutter"]
     assert (schema["minimum"], schema["maximum"]) == (0, 360)
     assert export_capabilities()["motionBlur"]["default"] == 180
+
+
+def _tone_wav(path: Path, seconds: float, rate: int = 48000) -> None:
+    import math
+    import struct
+    import wave
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(2); out.setsampwidth(2); out.setframerate(rate)
+        frames = bytearray()
+        for index in range(int(seconds * rate)):
+            value = int(12000 * math.sin(2 * math.pi * 440 * index / rate))
+            frames += struct.pack("<hh", value, value)
+        out.writeframes(bytes(frames))
+
+
+def test_voiced_publish_muxes_the_page_mix_under_the_video(tmp_path):
+    if not export_capabilities()["ffmpeg"]:
+        pytest.skip("ffmpeg is required to mux the audio")
+    service = _service(tmp_path, renderer=_paint)
+    document = _document(duration=1, fps=24, soundtrack=[{"id": "bed", "audio": {"url": "/api/v1/file/bed.wav"}}])
+    snapshot = {"workspace": WORKSPACE, "document": document, "refs": [], "plan": export_plan(document)}
+    frames = []
+    for index in range(24):
+        frames.append(tmp_path / "frames" / f"frame_{index + 1:06d}.png")
+        write_png(frames[-1], 64, 64, (index * 8, 40, 90))
+    _tone_wav(tmp_path / "fx.wav", 1.0)
+
+    class _Token:
+        def is_cancelled(self):
+            return False
+
+    published = service._publish(snapshot, tmp_path, frames, WORKSPACE, service._registry(WORKSPACE), "task", _Token())
+    output = Path(service.workspace_dir(WORKSPACE)) / published["name"]
+    streams = probe_scene_recording_output(output)["streams"]
+    assert sorted(item["codec_name"] for item in streams) == ["aac", "h264"]
+    audio = next(item for item in streams if item["codec_type"] == "audio")
+    assert abs(float(audio["duration"]) - 1.0) < 1 / 24 + 0.03
+
+
+def test_a_failed_page_mix_is_reported_instead_of_a_silent_mp4(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
+    document = _document(soundtrack=[{"id": "bed", "audio": {"url": "/api/v1/file/bed.wav"}}])
+    (tmp_path / "audio-error.txt").write_text("Voice could not be loaded.")
+    with pytest.raises(RuntimeError, match="Voice could not be loaded.*silent MP4"):
+        service.finish_media({"document": document, "plan": export_plan(document)}, tmp_path, tmp_path / "encoded.mp4")
+    assert "audio-error.txt" in _OWNED_BROWSER_JS
