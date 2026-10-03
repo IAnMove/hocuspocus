@@ -18,7 +18,7 @@ Object.assign(globalThis, {
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
 
 const { cleanup, fireEvent, render, screen } = await import('@testing-library/react')
-const { publishMediaSource } = await import('../src/api/publish')
+const { formatPublishNumber, publishMediaSource } = await import('../src/api/publish')
 const { PublishPresetBar } = await import('../src/features/video-editor/PublishPresetBar')
 
 afterEach(() => cleanup())
@@ -51,6 +51,24 @@ test('the publish bar names each platform target and shows the measured loudness
   fireEvent.change(screen.getByLabelText('Publish preset'), { target: { value: 'apple' } })
   fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
   assert.ok(await screen.findByText('-16.0 LUFS · -1.4 dBTP'))
+})
+
+test('measured loudness survives a missing true peak', async () => {
+  assert.equal(formatPublishNumber(-16), '-16.0')
+  assert.equal(formatPublishNumber(null), '—')
+  assert.equal(formatPublishNumber(Number.NEGATIVE_INFINITY), '—')
+
+  const publish = async () => ({
+    file: 'clip_youtube.mp4',
+    url: '/api/v1/file/clip_youtube.mp4',
+    thumbnail: 'clip_youtube.png',
+    sidecar: 'clip_youtube.publish.json',
+    warnings: [{ code: 'loudness' as const, lufs: -70, target_lufs: -14 }],
+    loudness: { lufs: -70, true_peak: null, target_lufs: -14, target_true_peak: -1 },
+  })
+  render(<PublishPresetBar {...props} publish={publish} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+  assert.ok(await screen.findByText('-70.0 LUFS · — dBTP'))
 })
 
 test('publish attaches the workspace to an export file URL', async () => {

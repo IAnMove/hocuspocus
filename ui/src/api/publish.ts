@@ -3,10 +3,14 @@ import { BASE } from './http'
 export type PublishPreset = 'x' | 'youtube' | 'shorts' | 'apple' | 'broadcast' | 'archive'
 
 export interface PublishLoudness {
-  lufs: number
-  true_peak: number
+  lufs: number | null
+  true_peak: number | null
   target_lufs?: number
   target_true_peak?: number
+}
+
+export function formatPublishNumber(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(1) : '—'
 }
 
 export interface PublishWarning {

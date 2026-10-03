@@ -10,7 +10,7 @@ import pytest
 
 from services.publish_presets import (
     collect_warnings, encode_args, integrated_lufs, loudness_report, loudness_target, loudness_warning,
-    publish_command, render_publish, measure_loudnorm,
+    loudnorm_usable, publish_command, render_publish, measure_loudnorm,
 )
 
 
@@ -100,6 +100,25 @@ def test_archive_skips_loudness_and_a_miss_only_warns():
     assert loudness_warning({"lufs": -14.0, "true_peak": -0.2}, (-14.0, -1.0))["code"] == "loudness"
 
 
+def test_silent_loudnorm_measurement_is_not_applied():
+    silent = {
+        "input_i": "-inf",
+        "input_tp": "-inf",
+        "input_lra": "0.00",
+        "input_thresh": "-70.00",
+        "target_offset": "inf",
+    }
+    assert loudnorm_usable(silent) is False
+    assert loudnorm_usable(None) is False
+    assert "-af" not in publish_command("in.mp4", "out.mp4", "youtube", loudnorm=silent)
+    warning = loudness_warning({"lufs": -70.0, "true_peak": float("-inf")}, (-14.0, -1.0))
+    assert warning["code"] == "loudness"
+    assert warning["lufs"] == -70.0
+    assert warning["true_peak"] is None
+    dumped = json.dumps({"loudness": warning}, allow_nan=False)
+    assert "Infinity" not in dumped
+
+
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg required")
 @pytest.mark.parametrize("preset,target", [("youtube", -14.0), ("shorts", -14.0), ("apple", -16.0), ("broadcast", -23.0)])
 def test_each_delivery_preset_hits_its_target(tmp_path: Path, preset: str, target: float):
@@ -135,3 +154,38 @@ def test_publish_receipt_stores_the_measured_loudness(tmp_path: Path):
     assert stored["loudness"] == result["loudness"]
     assert stored["warnings"] == []
     print("receipt", stored["loudness"])
+
+
+def _silent(path: Path) -> None:
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=black:s=320x180:r=24:d=3",
+            "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+            "-shortest", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac",
+            str(path),
+        ],
+        check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60,
+    )
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg required")
+def test_silent_editor_export_publishes_and_warns(tmp_path: Path):
+    from routers.publish_presets import publish_file
+
+    source = tmp_path / "silent.mp4"
+    _silent(source)
+    folder = tmp_path / "ws"
+    measured = measure_loudnorm(str(source), "youtube")
+    assert loudnorm_usable(measured) is False
+    result = publish_file(
+        {"preset": "youtube", "source": source.name, "workspace": "ws", "width": 320, "height": 180, "duration": 3, "loudnorm": True},
+        resolve_source=lambda _name, _workspace: str(source),
+        workspace_dir=lambda _workspace: str(folder),
+    )
+    assert (folder / result["file"]).is_file()
+    assert any(item["code"] == "loudness" for item in result["warnings"])
+    assert result["loudness"]["true_peak"] is None or result["loudness"]["lufs"] <= -60
+    stored = json.loads((folder / result["sidecar"]).read_text(encoding="utf-8"))
+    json.dumps(stored, allow_nan=False)
+    print("silent receipt", stored["loudness"], stored["warnings"])

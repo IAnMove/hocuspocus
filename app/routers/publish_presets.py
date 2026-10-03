@@ -14,6 +14,7 @@ from services.publish_presets import (
     encode_args,
     loudness_report,
     loudness_target,
+    loudnorm_usable,
     measure_loudnorm,
     render_publish,
 )
@@ -49,9 +50,15 @@ def publish_file(
     name = f"{stem}_{preset}.mp4"
     destination = os.path.join(folder, name)
     normalize = bool(body.get("loudnorm")) and loudness_target(preset) is not None
-    measured = measure_loudnorm(source, preset) if normalize else None
+    measured = None
+    if normalize:
+        try:
+            measured = measure_loudnorm(source, preset)
+        except PublishPresetError:
+            measured = None
+    applied = measured if loudnorm_usable(measured) else None
     try:
-        render_publish(source, destination, preset, premium=bool(body.get("premium")), loudnorm=measured)
+        render_publish(source, destination, preset, premium=bool(body.get("premium")), loudnorm=applied)
         report = loudness_report(destination, preset) if normalize else None
     except PublishPresetError as exc:
         raise HTTPException(exc.status, {"code": "publish_preset", "message": str(exc)}) from exc
@@ -70,7 +77,7 @@ def publish_file(
     }
     sidecar_name = os.path.splitext(name)[0] + ".publish.json"
     with open(os.path.join(folder, sidecar_name), "w", encoding="utf-8") as handle:
-        json.dump(sidecar, handle, ensure_ascii=False, indent=2)
+        json.dump(sidecar, handle, ensure_ascii=False, indent=2, allow_nan=False)
     return {
         "file": name,
         "url": f"/api/v1/file/{name}",
