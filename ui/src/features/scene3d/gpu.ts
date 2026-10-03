@@ -59,7 +59,7 @@ import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { PixelPalette } from './pixel/pixelPalettes'
 import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
 import { EnvironmentLighting, applyLook } from './environmentLighting'
-import { clipWeightsAt, type Scene3DClipCue } from './clipCues'
+import { clipWeightsAt, parseClipCues, type Scene3DClipCue } from './clipCues'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -465,12 +465,13 @@ export function paintClipCues(gpu: Pick<SlotGpu, 'root' | 'animations' | 'cues'>
 }
 
 function paintSlotSequence(gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number, shotDuration: number) {
-  if (slot.clips?.length && gpu.kind === 'model') paintClipCues(gpu, slot.clips, sceneSeconds, shotDuration)
+  const cues = parseClipCues(slot.clips)
+  if (cues && gpu.kind === 'model') paintClipCues(gpu, cues, sceneSeconds, shotDuration)
 }
 
 /** The slot's single bound clip; a slot with a sequence has none. */
 function singleClip(gpu: SlotGpu, slot: Scene3DSlot) {
-  if (slot.clips?.length) return undefined
+  if (parseClipCues(slot.clips)) return undefined
   return gpu.animations.find((_clip: { duration?: number }, index: number) => clipMatches(gpu, index))
 }
 
