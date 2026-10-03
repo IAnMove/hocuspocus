@@ -61,3 +61,15 @@ test('environment light needs a real renderer; without lighting the scene keeps 
   lighting.sync({} as never, scene, doc)
   assert.equal(scene.environment, null)
 })
+
+test('only scenes with a real model bake the environment; placeholders and effects-only scenes skip it', () => {
+  const scene = new Scene()
+  const lighting = new EnvironmentLighting()
+  const doc = createDefaultScene3DDocument()
+  doc.slots = doc.slots.map(slot => ({ ...slot, sourceUrl: '' }))
+  let baked = 0
+  const renderer = { getRenderTarget() { baked++; return null } }
+  lighting.sync(renderer as never, scene, doc)
+  assert.equal(baked, 0)
+  assert.equal(scene.environment, null)
+})

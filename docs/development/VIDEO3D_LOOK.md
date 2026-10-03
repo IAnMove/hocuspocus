@@ -28,6 +28,14 @@ look?: { toneMapping: 'aces' | 'agx' | 'neutral', exposure: -4..4 EV, lut?: { as
   with `PMREMGenerator` and sets `scene.environment`, `environmentIntensity` and `environmentRotation`. Nothing is
   downloaded.
   - Pixel worlds keep their flat look and get no environment light.
+  - Only scenes with a real model (a `model3d` slot with a source) bake and use it. Placeholder boxes, sets and
+    effects-only scenes skip the bake.
+    - **Why.** Each stage mount bakes its own PMREM, and with SwiftShader in CI that made the editor and world-effect
+      E2E specs 1.5–2.2× slower.
+    - **Result.** With the gate they run as fast as before: 2.8 / 6.4 / 3.6 s against 2.7 / 7.1 / 3.7 s on
+      `development`. All 103 E2E tests pass.
+  - Template thumbnails, which are placeholders in a shared background loop, render without lighting or look.
+  - A scene with its own `look` sets tone mapping only in `applyLook`, so programs do not flip every frame.
   - `source: 'none'` or intensity 0 clears the environment.
   - Until 2.F2 loads files, `hdri` lights with the room. 2.F2 replaces that branch with `HDRLoader` → PMREM, plus the
     background modes.

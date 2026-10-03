@@ -7,13 +7,15 @@ const TONE_MAPPING: Record<ToneMappingName, ToneMapping> = {
   aces: ACESFilmicToneMapping, agx: AgXToneMapping, neutral: NeutralToneMapping,
 }
 
-/** The scene's environment light: reflections and soft fill for PBR materials. Pixel worlds keep their flat look. */
+/** The scene's environment light: reflections and soft fill for the models' PBR materials. Pixel worlds keep
+ * their flat look, and scenes without a model (placeholders, sets or effects only) skip the bake. */
 export class EnvironmentLighting {
   private room?: Texture
   private applied = false
 
   sync(renderer: WebGLRenderer, scene: Scene, document: Scene3DDocument) {
-    const environment = document.pixelWorld ? undefined : document.lighting?.environment
+    const lit = !document.pixelWorld && document.slots.some(slot => slot.media === 'model3d' && Boolean(slot.sourceUrl))
+    const environment = lit ? document.lighting?.environment : undefined
     if (!environment || environment.source === 'none' || environment.intensity <= 0) {
       if (this.applied) { scene.environment = null; this.applied = false }
       return

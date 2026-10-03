@@ -135,8 +135,9 @@ export class CinematicRuntime {
     this.document = doc
     this.syncBackground(doc); this.syncStage(doc)
     const active = Boolean(doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld || isAtmosDressing(doc?.dressing))
-    // Pixel worlds show their palette as painted; filmic curves would shift it.
-    this.world.renderer.toneMapping = active && !doc.pixelWorld ? ACESFilmicToneMapping : NoToneMapping
+    // Pixel worlds show their palette as painted; filmic curves would shift it. A scene with its own
+    // look sets tone mapping in applyLook; setting it here too would flip programs every frame.
+    if (!doc.look || doc.pixelWorld) this.world.renderer.toneMapping = active && !doc.pixelWorld ? ACESFilmicToneMapping : NoToneMapping
     if (!active) { this.road?.sync(false, undefined, seconds); return }
     this.ensureComposer()
     this.bloom!.strength = doc.environment?.bloom ?? .48
