@@ -301,6 +301,42 @@ def test_catalog_director_writes_refuse_while_the_pipeline_is_live(tmp_path: Pat
     assert clip["selected_video_filename"] == "new.mp4" and clip["video_stale"] is True
 
 
+def test_director_select_writes_the_newest_snapshot_when_two_share_an_id(tmp_path: Path):
+    """A second Start from the same Story Lab handoff keeps production_id and
+    writes another pipeline file. Review used to merge both; select wrote the
+    first name on disk, so the take landed on the older cut."""
+    root = tmp_path / "film"
+    root.mkdir()
+    older = root / "_director_pipeline_zzz.json"
+    newer = root / "_director_pipeline_aaa.json"
+    _write(older, {
+        "pipeline_id": "zzz", "production_id": "story-cut", "status": "completed",
+        "updated_at": 100.0, "revision": 0,
+        "clips": [{
+            "shot_id": "c1", "video_filename": "old.mp4", "selected_video_filename": "old.mp4",
+            "video_attempts": [{"filename": "old.mp4"}, {"filename": "older-take.mp4"}],
+        }],
+    })
+    _write(newer, {
+        "pipeline_id": "aaa", "production_id": "story-cut", "status": "completed",
+        "updated_at": 200.0, "revision": 0,
+        "clips": [{
+            "shot_id": "c1", "video_filename": "fresh.mp4", "selected_video_filename": "fresh.mp4",
+            "video_attempts": [{"filename": "fresh.mp4"}, {"filename": "pick.mp4"}],
+        }],
+    })
+    view = shot_view(str(root), "film", "story-cut")
+    assert view["shot_count"] == 1
+    assert view["shots"][0]["selected_take_id"] == "fresh.mp4"
+    assert [item["file"] for item in view["shots"][0]["takes"]] == ["fresh.mp4", "pick.mp4"]
+    selected = perform(str(root), "film", "story-cut", "c1", {
+        "action": "select", "take": "pick.mp4", "expected_revision": 0,
+    })
+    assert selected["applied"] is True
+    assert json.loads(newer.read_text(encoding="utf-8"))["clips"][0]["selected_video_filename"] == "pick.mp4"
+    assert json.loads(older.read_text(encoding="utf-8"))["clips"][0]["selected_video_filename"] == "old.mp4"
+
+
 def test_director_selection_marks_stale_without_dropping_attempts(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()

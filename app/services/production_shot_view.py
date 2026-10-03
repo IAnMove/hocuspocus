@@ -14,7 +14,7 @@ from typing import Any
 
 from services.production_project_link import read_link_store
 from services.production_run import adapt_pipeline_record
-from services.production_shot_actions import annotate_actions, stored_revision
+from services.production_shot_actions import annotate_actions, snapshot_recency, stored_revision
 from services.production_shot_review import load_review
 from services.production_work_catalog import find_work
 
@@ -189,20 +189,27 @@ def _director(workspace_dir: str, workspace_id: str, production_id: str):
         names = os.listdir(workspace_dir)
     except OSError:
         return None, []
-    rows, limits, seen = [], [], False
+    limits: list[str] = []
+    chosen: dict[str, Any] | None = None
+    chosen_rank: tuple[float, float] | None = None
     for name in names:
         if not name.startswith("_director_pipeline_") or not name.endswith(".json"):
             continue
-        body, problem = _read_json(os.path.join(workspace_dir, name))
+        path = os.path.join(workspace_dir, name)
+        body, problem = _read_json(path)
         if problem:
             limits.append("director_unreadable")
             continue
         if body is None or not _pipeline_matches(body, workspace_id, production_id):
             continue
-        seen = True
-        clips = body.get("clips") if isinstance(body.get("clips"), list) else []
-        rows.extend(shot for index, clip in enumerate(clips) if (shot := _director_shot(clip, index)))
-    return (rows, limits) if seen else (None, limits)
+        rank = snapshot_recency(path, body)
+        if chosen_rank is None or rank > chosen_rank:
+            chosen, chosen_rank = body, rank
+    if chosen is None:
+        return None, limits
+    clips = chosen.get("clips") if isinstance(chosen.get("clips"), list) else []
+    rows = [shot for index, clip in enumerate(clips) if (shot := _director_shot(clip, index))]
+    return rows, limits
 
 
 def _pipeline_matches(body: dict[str, Any], workspace_id: str, production_id: str) -> bool:
