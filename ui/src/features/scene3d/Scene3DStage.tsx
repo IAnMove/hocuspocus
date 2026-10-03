@@ -39,6 +39,7 @@ import {
   worldAssetsReady,
 } from './gpu.ts'
 import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DSlot } from './types.ts'
+import type { ExportRenderQuality } from './exportQuality.ts'
 
 type Props = {
   document: Scene3DDocument
@@ -57,7 +58,7 @@ export type Scene3DStageHandle = {
   paint: (seconds: number, document?: Scene3DDocument) => HTMLCanvasElement | null
   ready: (slots: readonly Scene3DSlot[]) => boolean
   setExportSize: (width: number, height: number) => void
-  setExportQuality: (enabled: boolean) => void
+  setExportQuality: (enabled: boolean, render?: ExportRenderQuality) => void
   restoreSize: () => void
   canvas: () => HTMLCanvasElement | null
   beginExport: (document: Scene3DDocument) => void
@@ -200,10 +201,10 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       const world = worldRef.current
       if (world) setWorldSize(world, width, height)
     },
-    setExportQuality(enabled) {
+    setExportQuality(enabled, render) {
       const world = worldRef.current
       if (!world) return
-      setWorldExportQuality(world, enabled)
+      setWorldExportQuality(world, enabled, render)
       const doc = documentRef.current
       if (isAtmosDressing(doc.dressing)) syncDressing(world, doc.dressing, undefined, doc.atmos)
     },
