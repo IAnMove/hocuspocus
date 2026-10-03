@@ -12,11 +12,18 @@ import { paintClipNumber } from './performance'
 import { mixSceneSpeech } from './speech/audio'
 import { sceneAudioWavDataUrl } from '../sceneFx/audioExport'
 import { FrameAccumulator, motionBlurOf, renderQualityOf, subframeTimes, type MotionBlur } from './exportQuality'
+import { checkGeometry, geometrySampleTimes, type GeometryReport, type GeometrySample } from './geometryChecks'
 import type { Scene3DDocument } from './types'
 
 /** The export plan: output size, plus the supersampling and MSAA of the quality level. */
 type Size = { width: number; height: number; fps?: number; supersample?: number; samples?: number; subframes?: number; shutter?: number }
-type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; audio: () => Promise<string>; dispose: () => void }
+type Renderer = {
+  load: (raw: unknown, size: Size) => Promise<void>
+  frame: (seconds: number) => Promise<string>
+  audio: () => Promise<string>
+  checkGeometry: () => Promise<GeometryReport>
+  dispose: () => void
+}
 declare global { interface Window { __world3dExport: Renderer } }
 
 const root = createRoot(document.getElementById('root')!)
@@ -84,6 +91,18 @@ window.__world3dExport = {
     if (!snapshot) throw new Error('Load a World3D snapshot first')
     const buffer = await mixSceneSpeech(snapshot)
     return buffer ? sceneAudioWavDataUrl(buffer) : ''
+  },
+  /** Geometry warnings over the shot, before any frame is rendered. The stage is a pure function of time,
+   * so sampling here does not change the frames that follow. */
+  async checkGeometry() {
+    if (!stage || !snapshot) throw new Error('Load a World3D snapshot first')
+    const samples: GeometrySample[] = []
+    for (const time of geometrySampleTimes(snapshot.duration)) {
+      await stage.prepareFrame?.(time, snapshot)
+      const sample = stage.geometrySample?.(time, snapshot)
+      if (sample) samples.push(sample)
+    }
+    return checkGeometry(samples)
   },
   dispose() {
     if (stage && snapshot) finishWorld3DExport(stage)

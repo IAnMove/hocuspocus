@@ -711,3 +711,31 @@ def test_a_failed_page_mix_is_reported_instead_of_a_silent_mp4(tmp_path):
     with pytest.raises(RuntimeError, match="Voice could not be loaded.*silent MP4"):
         service.finish_media({"document": document, "plan": export_plan(document)}, tmp_path, tmp_path / "encoded.mp4")
     assert "audio-error.txt" in _OWNED_BROWSER_JS
+
+
+def test_geometry_warnings_from_the_render_page_reach_the_receipt(tmp_path):
+    def painter(snapshot, staging, progress, cancelled):
+        (Path(staging) / "geometry.json").write_text(json.dumps({
+            "verdict": "fail", "samples": 8,
+            "warnings": [{"code": "below_floor", "severity": "fail", "slot": "subject_1", "start": 0.25, "end": 1.0, "detail": "under"}]}))
+        return _paint(snapshot, staging, progress, cancelled)
+
+    service = _service(tmp_path, renderer=painter)
+    receipt = service.submit(_command(intent_id="world3d-geometry-1"))["receipt"]
+    registry = service._registry(WORKSPACE)
+    _wait(registry, receipt["taskIds"][0], {"completed", "failed"})
+    viewed = service.receipt(WORKSPACE, "world3d-geometry-1")
+    assert viewed["task"]["status"] == "completed", "a warning never blocks the export"
+    assert viewed["receipt"]["geometry"]["verdict"] == "fail"
+    assert viewed["receipt"]["geometry"]["warnings"][0]["code"] == "below_floor"
+    forget_task_registry(registry.workspace_dir)
+
+
+def test_a_malformed_geometry_report_is_ignored(tmp_path):
+    from services.world3d_export import read_geometry_report
+
+    (tmp_path / "geometry.json").write_text("{not json")
+    assert read_geometry_report(tmp_path) is None
+    (tmp_path / "geometry.json").write_text(json.dumps({"verdict": "maybe"}))
+    assert read_geometry_report(tmp_path) is None
+    assert read_geometry_report(tmp_path / "missing") is None

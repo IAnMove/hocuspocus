@@ -193,6 +193,9 @@ try {
   const plan = snapshot.plan;
   const doc = snapshot.document;
   await page.evaluate(({ document: scene, plan: size, bridge: name }) => window[name].load(scene, size), { document: doc, plan, bridge });
+  // Geometry warnings first; the stage is a pure function of time, so the frames do not change.
+  const geometry = await page.evaluate(name => (window[name].checkGeometry ? window[name].checkGeometry() : null), bridge).catch(() => null);
+  if (geometry) fs.writeFileSync(`${staging}/geometry.json`, JSON.stringify(geometry));
   for (let index = 0; index < plan.count; index += 1) {
     const png = await page.evaluate(({ seconds, bridge: name }) => window[name].frame(seconds), { seconds: Math.min(plan.duration, index / plan.fps), bridge });
     const name = String(index + 1).padStart(6, '0');
@@ -319,6 +322,19 @@ def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, durat
         raise RuntimeError(str(error)) from error
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def read_geometry_report(staging: Path) -> dict | None:
+    """The render page's geometry warnings, bounded; a missing or malformed report is simply absent."""
+    path = Path(staging) / "geometry.json"
+    try:
+        report = json.loads(path.read_text(encoding="utf-8")) if path.is_file() and path.stat().st_size < 1_000_000 else None
+    except (OSError, ValueError):
+        return None
+    if not isinstance(report, dict) or report.get("verdict") not in ("ok", "watch", "fail"):
+        return None
+    warnings = [item for item in report.get("warnings") or [] if isinstance(item, dict)][:200]
+    return {"verdict": report["verdict"], "samples": int(report.get("samples") or 0), "warnings": warnings}
 
 
 def _digest(value) -> str:
@@ -815,10 +831,12 @@ class World3DExportService:
             json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
         frames = self._render_frames(snapshot, staging, token, registry, task_id)
         published = self._publish(snapshot, staging, frames, workspace, registry, task_id, token)
+        metadata = {"operation": self.operation, "quality": plan_quality(snapshot["plan"]), "output": published}
+        geometry = read_geometry_report(staging)
+        if geometry is not None:
+            metadata["geometry"] = geometry
         self._finish(registry, task_id, "completed", phase="completed",
-                     message=f"Published {self.title} MP4", result_refs=[published["name"]],
-                     metadata={"operation": self.operation, "quality": plan_quality(snapshot["plan"]),
-                               "output": published})
+                     message=f"Published {self.title} MP4", result_refs=[published["name"]], metadata=metadata)
 
     def _owned_browser(self, snapshot, staging, progress, cancelled) -> list[Path]:
         module = playwright_module()
