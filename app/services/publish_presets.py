@@ -11,9 +11,11 @@ import subprocess
 from typing import Any
 
 PRESETS = {
-    "x": {"max_seconds": 140, "premium_max_seconds": 180, "aspect": (16, 9), "audio_bitrate": "128k"},
-    "youtube": {"max_seconds": None, "premium_max_seconds": None, "aspect": (16, 9), "audio_bitrate": "192k"},
-    "shorts": {"max_seconds": 60, "premium_max_seconds": 90, "aspect": (9, 16), "audio_bitrate": "128k"},
+    "x": {"max_seconds": 140, "premium_max_seconds": 180, "aspect": (16, 9), "audio_bitrate": "128k", "lufs": -14.0, "true_peak": -1.0},
+    "youtube": {"max_seconds": None, "premium_max_seconds": None, "aspect": (16, 9), "audio_bitrate": "192k", "lufs": -14.0, "true_peak": -1.0},
+    "shorts": {"max_seconds": 60, "premium_max_seconds": 90, "aspect": (9, 16), "audio_bitrate": "128k", "lufs": -14.0, "true_peak": -1.0},
+    "apple": {"max_seconds": None, "premium_max_seconds": None, "aspect": None, "audio_bitrate": "192k", "lufs": -16.0, "true_peak": -1.0},
+    "broadcast": {"max_seconds": None, "premium_max_seconds": None, "aspect": None, "audio_bitrate": "192k", "lufs": -23.0, "true_peak": -1.0},
     "archive": {"max_seconds": None, "premium_max_seconds": None, "aspect": None, "audio_bitrate": "320k"},
 }
 
@@ -83,10 +85,24 @@ def _run(command: list[str], timeout: int = 180) -> subprocess.CompletedProcess[
     return result
 
 
-def measure_loudnorm(source: str) -> dict[str, str]:
+def loudness_target(preset: str) -> tuple[float, float] | None:
+    spec = PRESETS.get(preset)
+    if spec is None:
+        raise PublishPresetError("Unknown publish preset")
+    lufs = spec.get("lufs")
+    if lufs is None:
+        return None
+    return float(lufs), float(spec["true_peak"])
+
+
+def measure_loudnorm(source: str, preset: str = "x") -> dict[str, str]:
+    target = loudness_target(preset)
+    if target is None:
+        raise PublishPresetError("This preset is not loudness-normalized")
+    lufs, peak = target
     result = _run([
         "ffmpeg", "-hide_banner", "-i", source,
-        "-af", "loudnorm=I=-14:TP=-1:LRA=11:print_format=json",
+        "-af", f"loudnorm=I={lufs:g}:TP={peak:g}:LRA=11:print_format=json",
         "-f", "null", "-",
     ])
     start = result.stderr.rfind("{")
@@ -97,25 +113,65 @@ def measure_loudnorm(source: str) -> dict[str, str]:
     return {key: str(measured[key]) for key in ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")}
 
 
-def loudnorm_filter(measured: dict[str, str]) -> str:
+def loudnorm_filter(measured: dict[str, str], preset: str = "x") -> str:
+    target = loudness_target(preset)
+    if target is None:
+        raise PublishPresetError("This preset is not loudness-normalized")
+    lufs, peak = target
     return (
-        "loudnorm=I=-14:TP=-1:LRA=11:"
+        f"loudnorm=I={lufs:g}:TP={peak:g}:LRA=11:"
         f"measured_I={measured['input_i']}:measured_TP={measured['input_tp']}:"
         f"measured_LRA={measured['input_lra']}:measured_thresh={measured['input_thresh']}:"
         f"offset={measured['target_offset']}:linear=true"
     )
 
 
-def integrated_lufs(path: str) -> float:
-    result = _run(["ffmpeg", "-hide_banner", "-i", path, "-af", "ebur128", "-f", "null", "-"])
-    matches = []
+def _program(path: str) -> dict[str, float]:
+    result = _run(["ffmpeg", "-hide_banner", "-i", path, "-af", "ebur128=peak=true", "-f", "null", "-"])
+    lufs = None
+    peak = None
     for line in result.stderr.splitlines():
         stripped = line.strip()
         if stripped.startswith("I:"):
-            matches.append(float(stripped.split()[1]))
-    if not matches:
+            lufs = float(stripped.split()[1])
+        elif stripped.startswith("Peak:"):
+            peak = float(stripped.split()[1])
+    if lufs is None or peak is None:
         raise PublishPresetError("ebur128 did not report integrated loudness", status=500)
-    return matches[-1]
+    return {"lufs": lufs, "true_peak": peak}
+
+
+def integrated_lufs(path: str) -> float:
+    return _program(path)["lufs"]
+
+
+def loudness_warning(reading: dict[str, float], target: tuple[float, float]) -> dict[str, Any] | None:
+    lufs, peak = target
+    if abs(reading["lufs"] - lufs) <= 1.0 and reading["true_peak"] <= peak + 0.05:
+        return None
+    return {
+        "code": "loudness",
+        "lufs": round(reading["lufs"], 1),
+        "true_peak": round(reading["true_peak"], 1),
+        "target_lufs": lufs,
+        "target_true_peak": peak,
+    }
+
+
+def loudness_report(path: str, preset: str) -> dict[str, Any] | None:
+    """Measured output loudness. A miss is a warning and does not raise."""
+    target = loudness_target(preset)
+    if target is None:
+        return None
+    reading = _program(path)
+    lufs, peak = target
+    return {
+        "lufs": round(reading["lufs"], 1),
+        "true_peak": round(reading["true_peak"], 1),
+        "target_lufs": lufs,
+        "target_true_peak": peak,
+        "warning": loudness_warning(reading, target),
+    }
 
 
 def render_publish(source: str, destination: str, preset: str, *, premium: bool = False, loudnorm: dict[str, str] | None = None) -> list[str]:
@@ -126,8 +182,8 @@ def render_publish(source: str, destination: str, preset: str, *, premium: bool 
 
 def publish_command(source: str, destination: str, preset: str, *, premium: bool = False, loudnorm: dict[str, str] | None = None) -> list[str]:
     command = ["ffmpeg", "-y", "-i", source]
-    if loudnorm:
-        command += ["-af", loudnorm_filter(loudnorm)]
+    if loudnorm and loudness_target(preset) is not None:
+        command += ["-af", loudnorm_filter(loudnorm, preset)]
     command += encode_args(preset, premium=premium)
     command += ["-movflags", "+faststart", destination]
     return command
