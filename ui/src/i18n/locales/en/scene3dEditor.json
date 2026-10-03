@@ -3533,7 +3533,14 @@
     "code": "Coding",
     "error": "Build failed",
     "success": "Build passed",
-    "repeat": "Texture repetitions"
+    "repeat": "Texture repetitions",
+    "walk": "Walk without sliding",
+    "walkHelp": "For humanoid rigs: bakes a walk along this path with each foot planted on the floor. A new GLB is saved; the original stays.",
+    "walkBaking": "Baking the walk…",
+    "walkReady": "Baked walk: the clip moves the character and each foot stays planted.",
+    "walkStale": "The path or the character's placement changed: bake the walk again.",
+    "walkNeedsSaved": "Load the character from the workspace (a saved, rigged GLB) to bake a walk.",
+    "walkFailed": "Could not bake the walk"
   },
   "framing": {
     "title": "Subject framing",

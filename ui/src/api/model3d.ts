@@ -296,10 +296,13 @@ export async function animateHumanoid(params: {
   clips: string[]
   bpm: number
   importFile?: string | null
+  /** A walk along these model-space ground points with the feet planted. */
+  path?: { points: [number, number][]; duration: number; name?: string }
 }): Promise<HumanoidAnimateResult> {
   const input: Record<string, unknown> = { workspace: params.workspace, source: params.source, bpm: params.bpm }
   if (params.clips.length) input.clips = params.clips
   if (params.importFile) input.import = { file: params.importFile }
+  if (params.path) input.path = params.path
   const res = await fetch(`${BASE}/api/v1/model3d/animate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

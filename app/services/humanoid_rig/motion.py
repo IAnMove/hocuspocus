@@ -160,10 +160,13 @@ class Pose:
         self._set(f"{side}Shoulder", 2, sign * self._vector(shrug))
         self._set(f"{side}Shoulder", 1, -sign * self._vector(forward))
 
-    def plant(self, side: str, forward=0.0, up=0.0, out=0.0, pitch=0.0) -> None:
-        """Ankle target as an offset from the rest ankle, in leg lengths. IK solves the leg."""
+    def plant(self, side: str, forward=0.0, up=0.0, out=0.0, pitch=0.0, yaw=0.0) -> None:
+        """Ankle target as an offset from the rest ankle, in leg lengths. IK solves the leg.
+
+        ``yaw`` turns the planted foot about the vertical, in degrees (> 0 toward the character's left).
+        """
         offset = np.stack((side_sign(side) * self._vector(out), self._vector(up), self._vector(forward)), axis=1)
-        self.feet[side] = {"offset": offset, "pitch": self._vector(pitch).copy()}
+        self.feet[side] = {"offset": offset, "pitch": self._vector(pitch).copy(), "yaw": self._vector(yaw).copy()}
 
     def reach(self, side: str, target, pole=(0.3, -1.0, -0.5)) -> None:
         """Wrist target in metres from the chest joint, in the chest frame (x mirrored for the right)."""
@@ -232,7 +235,7 @@ def _solve_feet(pose: Pose, local: np.ndarray, root: np.ndarray) -> None:
         local[:, hip] = rot.multiply(rot.inverse(pelvis), thigh)
         local[:, knee] = rot.axis_angle(np.broadcast_to(hinge, goal.shape), bend)
         _positions, worlds = rig.forward(local, root)
-        local[:, ankle] = rot.multiply(rot.inverse(worlds[:, knee]), _planted(rig, ankle, target["pitch"]))
+        local[:, ankle] = rot.multiply(rot.inverse(worlds[:, knee]), _planted(rig, ankle, target["pitch"], target.get("yaw")))
 
 
 def _leg_chain(rig: Rig, side: str, hip: np.ndarray, goal: np.ndarray, pole: np.ndarray):
@@ -259,10 +262,12 @@ def _leg_chain(rig: Rig, side: str, hip: np.ndarray, goal: np.ndarray, pole: np.
     return thigh, bend, hinge
 
 
-def _planted(rig: Rig, ankle: int, pitch: np.ndarray) -> np.ndarray:
-    """The foot's rest orientation in the world, toes lifted by ``pitch`` degrees."""
+def _planted(rig: Rig, ankle: int, pitch: np.ndarray, yaw: np.ndarray | None = None) -> np.ndarray:
+    """The foot's rest orientation in the world, toes lifted by ``pitch`` degrees, then turned by ``yaw``."""
     axis = rot.rotate(rig.facing, _X)
     turn = rot.axis_angle(np.broadcast_to(axis, (len(pitch), 3)), -np.asarray(pitch, dtype=np.float64))
+    if yaw is not None and np.any(yaw):
+        turn = rot.multiply(rot.axis_angle(np.broadcast_to(_Y, (len(pitch), 3)), np.asarray(yaw, dtype=np.float64)), turn)
     return rot.multiply(turn, np.broadcast_to(rig.rest_worlds[ankle], turn.shape))
 
 

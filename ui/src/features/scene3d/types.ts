@@ -146,9 +146,13 @@ export type Scene3DClipPlayback = {
 export type Scene3DMotion = {
   to: Vec3
   via?: Vec3
+  /** Waypoints between the start and `to`, walked on a centripetal Catmull-Rom curve. */
+  points?: Vec3[]
   faceTravel?: boolean
   turnTo?: number
   easing?: 'linear' | 'smooth'
+  /** A baked humanoid walk of this path with planted feet; while it matches, the clip moves the model. */
+  walk?: import('./walkPath').Scene3DMotionWalk
 }
 
 export type Scene3DSlotMedia = 'model3d' | 'image' | 'screen'

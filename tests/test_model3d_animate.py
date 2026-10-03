@@ -232,3 +232,44 @@ def test_a_worker_crash_is_a_server_error(tmp_path):
     assert response.status_code == 500
     assert response.json()["detail"]["code"] == "animate_failed"
     assert "new intent_id" in response.json()["detail"]["message"]
+
+
+@pytest.mark.parametrize("path,message", [
+    ({"points": [[0, 0]], "duration": 2}, "2 to 64"),
+    ({"points": [[0, 0], [1, "x"]], "duration": 2}, "2 to 64"),
+    ({"points": [[0, 0], [1, 1]], "duration": 0.1}, "duration"),
+    ({"points": [[0, 0], [1, 1]]}, "points and duration"),
+    ({"points": [[0, 0], [1, 1]], "duration": 2, "speed": 3}, "points and duration"),
+])
+def test_a_bad_path_is_refused_before_the_worker(tmp_path, path, message):
+    root = tmp_path / "ws"
+    (root / "movie").mkdir(parents=True)
+    (root / "movie" / "pet.glb").write_bytes(b"source-glb")
+    handlers = command_handlers(lambda name: str(root / name), tmp_path / "journal.db", lambda *_: None)
+    args = _args(clips=[])
+    args["input"]["path"] = path
+    with pytest.raises(ValueError, match=message):
+        asyncio.run(handlers["model3d.animate"](args))
+
+
+def test_a_path_alone_reaches_the_worker_and_is_part_of_the_intent(tmp_path):
+    root = tmp_path / "ws"
+    (root / "movie").mkdir(parents=True)
+    (root / "movie" / "pet.glb").write_bytes(b"source-glb")
+    calls = []
+
+    def runner(request, output):
+        calls.append(request)
+        output.write_bytes(b"animated-glb")
+        return {"clips": [{"index": 3, "name": "Path Walk", "duration": 4.0, "contacts": []}], "warnings": []}
+
+    handlers = command_handlers(lambda name: str(root / name), tmp_path / "journal.db", runner)
+    args = _args(clips=[])
+    args["input"]["path"] = {"points": [[0, 0], [0, 2]], "duration": 4}
+    result = asyncio.run(handlers["model3d.animate"](args))["result"]
+    assert result["clips"][0]["name"] == "Path Walk"
+    assert calls[0]["path"] == {"points": [[0.0, 0.0], [0.0, 2.0]], "duration": 4.0}
+    other = _args(clips=[])
+    other["input"]["path"] = {"points": [[0, 0], [0, 3]], "duration": 4}
+    with pytest.raises(ValueError, match="different parameters"):
+        asyncio.run(handlers["model3d.animate"](other))
