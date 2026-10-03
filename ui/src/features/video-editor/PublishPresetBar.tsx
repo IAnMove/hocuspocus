@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { checkPublishPreset, publishVideo, type PublishPreset, type PublishWarning } from '../../api/publish'
 
-const PRESETS: PublishPreset[] = ['x', 'youtube', 'shorts', 'archive']
+const PRESETS: PublishPreset[] = ['x', 'youtube', 'shorts', 'apple', 'broadcast', 'archive']
 
 export function PublishPresetBar({
   width,
@@ -29,6 +29,7 @@ export function PublishPresetBar({
   const [preset, setPreset] = useState<PublishPreset>('x')
   const [premium, setPremium] = useState(false)
   const [warnings, setWarnings] = useState<PublishWarning[]>([])
+  const [measured, setMeasured] = useState<string>('')
   const [busy, setBusy] = useState(false)
   const review = (nextPreset: PublishPreset, nextPremium: boolean) => {
     check({ preset: nextPreset, premium: nextPremium, width, height, duration, overlays })
@@ -61,7 +62,13 @@ export function PublishPresetBar({
           disabled={busy}
           onClick={() => {
             setBusy(true)
-            publish({ workspace, source, preset, premium, width, height, duration, overlays, loudnorm: true })
+            publish({ workspace, source, preset, premium, width, height, duration, overlays, loudnorm: preset !== 'archive' })
+              .then(result => {
+                setWarnings(result.warnings || [])
+                setMeasured(result.loudness
+                  ? t('toolbar.publishMeasured', { lufs: result.loudness.lufs.toFixed(1), peak: result.loudness.true_peak.toFixed(1) })
+                  : '')
+              })
               .catch(reason => onError(reason instanceof Error ? reason.message : String(reason)))
               .finally(() => setBusy(false))
           }}
@@ -70,9 +77,10 @@ export function PublishPresetBar({
           {busy ? t('toolbar.publishWorking') : t('toolbar.publishApply')}
         </button>
       )}
+      {measured && <span className="text-[10px] text-text-muted">{measured}</span>}
       {warnings.length > 0 && (
         <span className="max-w-48 truncate text-[10px] text-amber-300" title={warnings.map(item => item.code).join(', ')}>
-          {warnings.map(item => t(`toolbar.publishWarning_${item.code}`, { limit: item.limit, expected: item.expected })).join(' · ')}
+          {warnings.map(item => t(`toolbar.publishWarning_${item.code}`, { limit: item.limit, expected: item.expected, lufs: item.lufs, target: item.target_lufs })).join(' · ')}
         </span>
       )}
     </div>

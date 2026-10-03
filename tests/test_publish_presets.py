@@ -1,13 +1,17 @@
 """Platform publish presets: encode args, warnings, and loudness."""
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from services.publish_presets import collect_warnings, encode_args, integrated_lufs, publish_command, render_publish, measure_loudnorm
+from services.publish_presets import (
+    collect_warnings, encode_args, integrated_lufs, loudness_report, loudness_target, loudness_warning,
+    publish_command, render_publish, measure_loudnorm,
+)
 
 
 def test_encode_args_follow_the_preset():
@@ -17,6 +21,8 @@ def test_encode_args_follow_the_preset():
     assert encode_args("youtube")[encode_args("youtube").index("-b:a") + 1] == "192k"
     assert encode_args("archive")[encode_args("archive").index("-crf") + 1] == "12"
     assert encode_args("shorts")[encode_args("shorts").index("-b:a") + 1] == "128k"
+    assert encode_args("apple")[encode_args("apple").index("-b:a") + 1] == "192k"
+    assert encode_args("broadcast")[encode_args("broadcast").index("-crf") + 1] == "18"
 
 
 def test_warnings_cover_duration_aspect_and_safe_area():
@@ -32,6 +38,8 @@ def test_warnings_cover_duration_aspect_and_safe_area():
     )
     assert shorts == [{"code": "safe_area", "ids": ["title"]}]
     assert collect_warnings(preset="archive", width=640, height=480, duration=9999) == []
+    assert collect_warnings(preset="apple", width=1080, height=1920, duration=9999) == []
+    assert collect_warnings(preset="broadcast", width=640, height=480, duration=10) == []
 
 
 def _tone(path: Path) -> None:
@@ -56,5 +64,74 @@ def test_two_pass_loudnorm_lands_near_minus_14_lufs(tmp_path: Path):
     command = render_publish(str(source), str(destination), "x", loudnorm=measured)
     assert "loudnorm=I=-14:TP=-1" in " ".join(command)
     assert abs(integrated_lufs(str(destination)) - (-14.0)) <= 1.0
+    report = loudness_report(str(destination), "x")
+    assert report["warning"] is None
+    assert report["true_peak"] <= -1.0
     preview = publish_command(str(source), str(destination), "x", loudnorm=measured)
     assert "-profile:v" in preview and "high" in preview
+
+
+def test_publish_check_names_the_target_and_rejects_an_unknown_preset():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.publish_presets import create_publish_router
+
+    app = FastAPI()
+    app.include_router(create_publish_router(resolve_source=lambda name, _workspace: name, workspace_dir=lambda workspace: workspace))
+    client = TestClient(app)
+    body = {"width": 1920, "height": 1080, "duration": 8}
+    apple = client.post("/api/v1/video-editor/publish-check", json={"preset": "apple", **body})
+    assert apple.status_code == 200
+    assert apple.json()["loudness"] == {"lufs": -16.0, "true_peak": -1.0}
+    assert apple.json()["warnings"] == []
+    archive = client.post("/api/v1/video-editor/publish-check", json={"preset": "archive", **body})
+    assert archive.status_code == 200
+    assert archive.json()["loudness"] is None
+    unknown = client.post("/api/v1/video-editor/publish-check", json={"preset": "cinema", **body})
+    assert unknown.status_code == 422
+
+
+def test_archive_skips_loudness_and_a_miss_only_warns():
+    assert loudness_target("archive") is None
+    command = publish_command("in.mp4", "out.mp4", "archive", loudnorm={"input_i": "-20"})
+    assert "-af" not in command
+    assert loudness_warning({"lufs": -14.4, "true_peak": -1.2}, (-14.0, -1.0)) is None
+    assert loudness_warning({"lufs": -18.0, "true_peak": -4.0}, (-14.0, -1.0))["code"] == "loudness"
+    assert loudness_warning({"lufs": -14.0, "true_peak": -0.2}, (-14.0, -1.0))["code"] == "loudness"
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg required")
+@pytest.mark.parametrize("preset,target", [("youtube", -14.0), ("shorts", -14.0), ("apple", -16.0), ("broadcast", -23.0)])
+def test_each_delivery_preset_hits_its_target(tmp_path: Path, preset: str, target: float):
+    source = tmp_path / "tone.mp4"
+    destination = tmp_path / f"{preset}.mp4"
+    _tone(source)
+    measured = measure_loudnorm(str(source), preset)
+    command = render_publish(str(source), str(destination), preset, loudnorm=measured)
+    joined = " ".join(command)
+    assert f"loudnorm=I={target:g}:TP=-1" in joined
+    report = loudness_report(str(destination), preset)
+    assert report["warning"] is None, report
+    assert abs(report["lufs"] - target) <= 1.0
+    assert report["true_peak"] <= -1.0
+    print(f"{preset} lufs={report['lufs']} true_peak={report['true_peak']} target={target}")
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg required")
+def test_publish_receipt_stores_the_measured_loudness(tmp_path: Path):
+    from routers.publish_presets import publish_file
+
+    source = tmp_path / "tone.mp4"
+    _tone(source)
+    folder = tmp_path / "ws"
+    result = publish_file(
+        {"preset": "youtube", "source": source.name, "workspace": "ws", "width": 320, "height": 180, "duration": 3, "loudnorm": True},
+        resolve_source=lambda _name, _workspace: str(source),
+        workspace_dir=lambda _workspace: str(folder),
+    )
+    assert abs(result["loudness"]["lufs"] - (-14.0)) <= 1.0
+    assert result["loudness"]["true_peak"] <= -1.0
+    stored = json.loads((folder / result["sidecar"]).read_text(encoding="utf-8"))
+    assert stored["loudness"] == result["loudness"]
+    assert stored["warnings"] == []
+    print("receipt", stored["loudness"])
