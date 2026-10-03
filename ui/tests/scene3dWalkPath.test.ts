@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { slotPoseAtTime } from '../src/features/scene3d/performance.ts'
-import { isWalkBaked, motionPathPoints, toModelSpace, walkKey } from '../src/features/scene3d/walkPath.ts'
+import { isWalkBaked, motionPathPoints, toModelPoint, toModelSpace, walkKey } from '../src/features/scene3d/walkPath.ts'
 import type { Scene3DSlot } from '../src/features/scene3d/types.ts'
 
 function walker(): Scene3DSlot {
@@ -69,4 +69,10 @@ test('waypoints and the bake survive a save and reload', () => {
   const cleaned = parseScene3DDocument(broken)!
   assert.equal(cleaned.slots[0].motion?.points, undefined)
   assert.equal(cleaned.slots[0].motion?.walk, undefined)
+})
+
+test('a seat or prop point goes to model space with its height', () => {
+  const placement = { position: [1, 0.5, 1] as [number, number, number], rotationY: Math.PI / 2, scale: 2 }
+  const [x, y, z] = toModelPoint([1, 1.5, 3], placement)
+  assert.ok(Math.abs(x + 1) < 1e-9 && Math.abs(y - 0.5) < 1e-9 && Math.abs(z) < 1e-9, `${x}, ${y}, ${z}`)
 })

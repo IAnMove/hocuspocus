@@ -82,7 +82,9 @@ adds a walk along the points with the feet planted. The points are in the
 model's own metres: the ground under the hips, starting where the walk starts.
 The clip moves the hips, so the Video 3D slot should stay still: set
 `motion.walk`, as described in the [humanoid rig guide](HUMANOID_RIG.md).
-`clips`, `import` and `path` are each optional, but one is required. `import.file` is
+`interactions` (up to 8) adds sit, reach and look clips toward model-space points: a seat's top, a prop or a look
+target (see the [humanoid rig guide](HUMANOID_RIG.md)).
+`clips`, `import`, `path` and `interactions` are each optional, but one is required. `import.file` is
 a `.bvh`, `.glb` or `.gltf` inside the workspace; the UI uploads it with
 `POST /api/v1/model3d/animation-files?workspace=…&filename=…` (raw body, up to
 64 MB), which stores it under `animation-imports/` and out of the gallery.
