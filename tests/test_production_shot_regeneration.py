@@ -64,6 +64,23 @@ def test_guard_cannot_authorize_another_shot_or_generation_mode(tmp_path, endpoi
         assert error.value.detail["code"] == "invalid_request"
 
 
+def test_director_regeneration_uses_the_newest_snapshot(tmp_path):
+    older = {
+        "pipeline_id": "zzz", "production_id": "story-cut", "status": "completed",
+        "updated_at": 100.0, "revision": 2,
+        "clips": [{"shot_id": "c1", "video_filename": "old.mp4"}],
+    }
+    newer = {
+        "pipeline_id": "aaa", "production_id": "story-cut", "status": "completed",
+        "updated_at": 200.0, "revision": 2,
+        "clips": [{"shot_id": "c1", "video_filename": "fresh.mp4"}],
+    }
+    (tmp_path / "_director_pipeline_zzz.json").write_text(json.dumps(older))
+    (tmp_path / "_director_pipeline_aaa.json").write_text(json.dumps(newer))
+    result = regeneration_target(str(tmp_path), "film", "story-cut", "c1", {"expected_revision": 2})
+    assert result["regeneration"]["path"] == "/api/v1/director/pipelines/aaa/clips/0/rerun-video"
+
+
 def test_director_identity_resolves_to_exact_clip_index(tmp_path):
     from services.production_run import adapt_pipeline_record
     state = {"pipeline_id": "abc123", "workspace": "film", "status": "completed", "revision": 2,

@@ -63,6 +63,28 @@ def test_music_shots_keep_the_selected_take_lyric_and_review(tmp_path: Path):
     assert again["shots"][0]["selected_take_id"] == first["selected_take_id"]
 
 
+def test_director_review_shows_only_the_newest_snapshot(tmp_path: Path):
+    root = tmp_path / "film"
+    root.mkdir()
+    _write(root / "_director_pipeline_zzz.json", {
+        "pipeline_id": "zzz", "production_id": "story-cut", "status": "completed",
+        "updated_at": 100.0,
+        "clips": [{"shot_id": "c1", "selected_video_filename": "old.mp4",
+                   "video_attempts": [{"filename": "old.mp4"}]}],
+    })
+    _write(root / "_director_pipeline_aaa.json", {
+        "pipeline_id": "aaa", "production_id": "story-cut", "status": "completed",
+        "updated_at": 200.0,
+        "clips": [{"shot_id": "c1", "selected_video_filename": "fresh.mp4",
+                   "video_attempts": [{"filename": "fresh.mp4"}, {"filename": "pick.mp4"}]}],
+    })
+    view = _view(root, "story-cut")
+    assert view["shot_count"] == 1
+    assert [shot["id"] for shot in view["shots"]] == ["c1"]
+    assert view["shots"][0]["selected_take_id"] == "fresh.mp4"
+    assert [item["file"] for item in view["shots"][0]["takes"]] == ["fresh.mp4", "pick.mp4"]
+
+
 def test_director_clips_do_not_invent_a_lyric_and_keep_stale(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()
