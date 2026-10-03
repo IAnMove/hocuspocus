@@ -188,7 +188,8 @@ Each interaction takes a `duration` (0.8–30 s) and a `name`. Warnings come bac
 
 ## Known limits
 
-- No fingers, face or eyes; the hand moves as one piece.
+- No fingers, face or eyes; the hand moves as one piece. What generated meshes offer for hands, and the proposed next
+  steps, are in `docs/development/HUMANOID_HANDS_RESEARCH.md`.
 - Raising arms that were modeled steep (A pose past ~55°) stretches the
   shoulders a little; the result lists `arms_steep`.
 - Characters with arms modeled down at the sides, robes or fused legs are
