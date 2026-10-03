@@ -89,6 +89,10 @@ turns the landings into scene times with the clock of `performanceClipTime`:
 - it wraps when it loops;
 - when it plays once, a landing counts only while the clip is playing.
 
+For a slot with a clip sequence (`slot.clips`), `cueContactsInScene(cues, catalogOf, shotDuration)`
+(`ui/src/features/scene3d/clipCues.ts`) does the same per cue, with the cue's start, speed, offset and loop. A landing
+counts only while its cue weighs at least half, so the clip fading out drops its steps as the next one takes over.
+
 A slot with the idle performance holds frame 0, so the caller skips it. The inspector above does not validate this key.
 
 ## Buffers and URIs

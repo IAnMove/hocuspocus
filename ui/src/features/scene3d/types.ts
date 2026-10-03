@@ -193,6 +193,8 @@ export type Scene3DSlot = {
   grounded?: boolean
   clip: Scene3DClipRef | null
   clipPlayback?: Scene3DClipPlayback
+  /** A sequence of clips with crossfades. When present it drives the model; `clip` and `clipPlayback` are ignored. */
+  clips?: import('./clipCues').Scene3DClipCue[]
   motion?: Scene3DMotion
   loop?: Scene3DLoop
 }

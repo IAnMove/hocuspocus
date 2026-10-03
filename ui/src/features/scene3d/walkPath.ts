@@ -15,8 +15,10 @@ export function walkKey(slot: Scene3DSlot, duration: number): string {
 /** The slot plays a baked walk of exactly its current path. */
 export function isWalkBaked(slot: Scene3DSlot, duration: number): boolean {
   const walk = slot.motion?.walk
-  return Boolean(walk && walk.key === walkKey(slot, duration) && walk.sourceUrl === slot.sourceUrl
-    && slot.clip && slot.clip.index === walk.clip.index && slot.clip.name === walk.clip.name)
+  if (!walk || walk.key !== walkKey(slot, duration) || walk.sourceUrl !== slot.sourceUrl) return false
+  const same = (clip: Scene3DClipRef | null | undefined) => Boolean(clip && clip.index === walk.clip.index && clip.name === walk.clip.name)
+  // In a clip sequence the walk may be one cue among others.
+  return slot.clips?.length ? slot.clips.some(cue => same(cue.clip)) : same(slot.clip)
 }
 
 /** The path's ground points, start first: the waypoints, or a sampled curve through `via`, or a straight line. */

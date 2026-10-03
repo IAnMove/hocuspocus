@@ -10,6 +10,7 @@ import type { ScreenMediaRuntime } from './screenMediaRuntime'
 import { framingAnchor } from './framingAnchor'
 import {
   AnimationMixer,
+  type AnimationAction,
   BackSide,
   Box3,
   BoxGeometry,
@@ -58,6 +59,7 @@ import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { PixelPalette } from './pixel/pixelPalettes'
 import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
 import { EnvironmentLighting, applyLook } from './environmentLighting'
+import { clipWeightsAt, type Scene3DClipCue } from './clipCues'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -86,6 +88,8 @@ export type SlotGpu = {
   screen?: ScreenMediaRuntime
   screenAbort?: AbortController
   screenError?: Error
+  /** The mixer of a clip sequence (`slot.clips`), keyed by the clips it binds. */
+  cues?: { key: string; mixer: AnimationMixer; actions: (AnimationAction | null)[] }
 }
 
 export type GpuWorld = {
@@ -310,6 +314,7 @@ export function dropSlot(world: GpuWorld, slotId: string) {
   const current = world.slots.get(slotId)
   if (!current) return
   current.mixer?.stopAllAction()
+  current.cues?.mixer.stopAllAction()
   current.appearance?.clear()
   current.speechFace?.dispose()
   current.facePack?.dispose()
@@ -420,13 +425,63 @@ function syncActorSpeech(world: GpuWorld, gpu: SlotGpu, slot: Scene3DSlot, scene
   }
 }
 
-function paintActor(world: GpuWorld, slot: Scene3DSlot, sceneSeconds: number) {
+/** One action per distinct clip of the sequence, rebuilt only when the clips change. */
+function cueActions(gpu: Pick<SlotGpu, 'root' | 'animations' | 'cues'>, cues: readonly Scene3DClipCue[]) {
+  const key = cues.map(cue => clipKeyOf(cue.clip)).join('|')
+  if (gpu.cues?.key !== key) {
+    gpu.cues?.mixer.stopAllAction()
+    const mixer = new AnimationMixer(gpu.root)
+    const actions = cues.map(cue => {
+      const clip = gpu.animations[cue.clip.index]
+      return clip && clip.name === cue.clip.name ? mixer.clipAction(clip) : null
+    })
+    gpu.cues = { key, mixer, actions }
+  }
+  return gpu.cues
+}
+
+/** Pose a model from its clip sequence at `sceneSeconds`: every action is set from scratch, then evaluated once.
+ * Two cues of the same clip share one action, so a fade between them shows the heavier cue (a cut). */
+export function paintClipCues(gpu: Pick<SlotGpu, 'root' | 'animations' | 'cues'>, cues: readonly Scene3DClipCue[], sceneSeconds: number, shotDuration: number) {
+  const bound = cueActions(gpu, cues)
+  const weights = clipWeightsAt(cues, sceneSeconds, shotDuration, clip => gpu.animations[clip.index]?.duration ?? null)
+  const chosen = new Map<AnimationAction, { weight: number; localTime: number }>()
+  for (const entry of weights) {
+    const action = bound.actions[entry.cueIndex]
+    const previous = action && chosen.get(action)
+    if (action && (!previous || entry.weight > previous.weight)) chosen.set(action, { weight: entry.weight, localTime: entry.localTime })
+  }
+  const total = [...chosen.values()].reduce((sum, item) => sum + item.weight, 0)
+  for (const action of new Set(bound.actions)) {
+    if (!action) continue
+    const pick = chosen.get(action)
+    action.enabled = Boolean(pick)
+    action.paused = false
+    action.weight = pick && total > 0 ? pick.weight / total : 0
+    action.time = pick?.localTime ?? 0
+    action.play()
+  }
+  bound.mixer.update(0)
+}
+
+function paintSlotSequence(gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number, shotDuration: number) {
+  if (slot.clips?.length && gpu.kind === 'model') paintClipCues(gpu, slot.clips, sceneSeconds, shotDuration)
+}
+
+/** The slot's single bound clip; a slot with a sequence has none. */
+function singleClip(gpu: SlotGpu, slot: Scene3DSlot) {
+  if (slot.clips?.length) return undefined
+  return gpu.animations.find((_clip: { duration?: number }, index: number) => clipMatches(gpu, index))
+}
+
+function paintActor(world: GpuWorld, slot: Scene3DSlot, sceneSeconds: number, shotDuration: number) {
   const gpu = world.slots.get(slot.id)
   if (!gpu) return
   if (gpu.screen && slot.screen) void gpu.screen.seek(sceneSeconds, slot.screen).catch(() => {})
   poseLoadedSlot(gpu, slot)
   resetTypingPose(gpu.root)
-  const clip = gpu.animations.find((_clip: { duration?: number }, index: number) => clipMatches(gpu, index))
+  paintSlotSequence(gpu, slot, sceneSeconds, shotDuration)
+  const clip = singleClip(gpu, slot)
   const local = performanceClipTime(slot.performance === 'idle' ? 0 : sceneSeconds, clip?.duration ?? null, slot.clipPlayback)
   if (local != null && clip && gpu.mixer) seekBoundMixer(gpu.mixer, clip, local)
   if (slot.performance === 'idle' && clip && gpu.mixer) {
@@ -465,7 +520,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   paintActionSet(world.dressing, sceneSeconds)
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
-  for (const slot of posedSlots) paintActor(world, slot, sceneSeconds)
+  for (const slot of posedSlots) paintActor(world, slot, sceneSeconds, document.duration)
   stabilizeSceneSurfaces(document.slots, world.slots)
   paintPixelLight(world, document, posedSlots, sceneSeconds)
   const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing
