@@ -9,12 +9,14 @@ import { scene3dPlaybackSpeed } from './clock'
 import { paintSceneFx } from '../sceneFx/paint'
 import { ensureTextFonts, paintKineticTexts, paintSceneLyrics } from '../../lib/kineticText'
 import { paintClipNumber } from './performance'
+import { mixSceneSpeech } from './speech/audio'
+import { sceneAudioWavDataUrl } from '../sceneFx/audioExport'
 import { FrameAccumulator, motionBlurOf, renderQualityOf, subframeTimes, type MotionBlur } from './exportQuality'
 import type { Scene3DDocument } from './types'
 
 /** The export plan: output size, plus the supersampling and MSAA of the quality level. */
 type Size = { width: number; height: number; fps?: number; supersample?: number; samples?: number; subframes?: number; shutter?: number }
-type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; dispose: () => void }
+type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; audio: () => Promise<string>; dispose: () => void }
 declare global { interface Window { __world3dExport: Renderer } }
 
 const root = createRoot(document.getElementById('root')!)
@@ -76,6 +78,12 @@ window.__world3dExport = {
     paintSceneLyrics(context, canvas.width, canvas.height, time, snapshot.lyrics)
     paintClipNumber(context, canvas.width, canvas.height, snapshot.clipNumber)
     return canvas.toDataURL('image/png')
+  },
+  /** The same mix as the browser export (voices, soundtrack, sound effects), as a WAV data URL; '' when silent. */
+  async audio() {
+    if (!snapshot) throw new Error('Load a World3D snapshot first')
+    const buffer = await mixSceneSpeech(snapshot)
+    return buffer ? sceneAudioWavDataUrl(buffer) : ''
   },
   dispose() {
     if (stage && snapshot) finishWorld3DExport(stage)

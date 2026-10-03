@@ -84,7 +84,10 @@ Las escenas existentes conservan la mezcla anterior si no activan esta opción.
 
 Para revisar labios pequeños, omite `renderLook: "n64"` y el `pixelWorld` de
 reducción: el filtro N64 usa una altura efectiva de 240 píxeles. El exportador
-3D admite hasta 1920×1080; `production.run` monta a 1080p y 24 fps. Acercar la
+3D admite hasta 1920×1080; `production.run` monta a 1080p y 24 fps. La exportación
+en el servidor (`scenes.world3d.export`) también admite escenas con voz hasta
+180 s de salida, con la misma mezcla que el navegador (ver
+`VIDEO3D_EXPORT_QUALITY.md`). Acercar la
 cámara a plano medio o primer plano conserva detalle de boca que un plano
 general pierde incluso sin filtro. La geometría y texturas del GLB se mantienen.
 
