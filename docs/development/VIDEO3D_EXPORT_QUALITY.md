@@ -3,11 +3,11 @@
 Phase 1.F1 of the local-quality roadmap (`docs/development/calidad-local/01-render-master.md`).
 The server export (`scenes.world3d.export`) takes an optional `quality`:
 
-| Level | Supersampling | Composer MSAA | Encode |
-|---|---|---|---|
-| `draft` (default) | 1× | none | x264 `fast`, crf 18, 1 thread (unchanged) |
-| `final` | 1.5× | 4× | x264 `slow`, crf 14 |
-| `master` | 2× | 4× | x264 `slow`, crf 12 |
+| Level | Supersampling | Composer MSAA | Motion blur | Encode |
+|---|---|---|---|---|
+| `draft` (default) | 1× | none | none | x264 `fast`, crf 18, 1 thread (unchanged) |
+| `final` | 1.5× | 4× | 4 subframes, 180° shutter | x264 `slow`, crf 14 |
+| `master` | 2× | 4× | 8 subframes, 180° shutter | x264 `slow`, crf 12 |
 
 The output size never changes with the level.
 
@@ -62,11 +62,42 @@ Time per frame at 1080p:
 
 On the GPU, PNG transfer dominates.
 
+## Motion blur (1.F2)
+
+- **Sampling.** Each output frame averages `subframes` renders taken while a film-style shutter is open. The shutter
+  opens at the frame time and stays open for `shutter / 360` of a frame, and no subframe goes past the scene's end.
+- **Averaging.** Subframes are averaged in linear light (sRGB to linear, then back through a 4096-step table), at the
+  output size. Effects, texts and lyrics are painted once, after the average, so they stay sharp.
+- **The `shutter` input.** It is optional, in degrees from 0 to 360, and only for `final` and `master`. It overrides the
+  180° default, and 0 turns the blur off. Asking for a shutter with `draft` is refused.
+- **Pixel worlds.** They stay sharp, because their art is drawn on a pixel grid.
+- **Determinism.** Painting is a pure function of scene time: no random state, no frame deltas, and the light is reset
+  on every paint. So subframes at fractional times are reproducible.
+
+Measured on real headless renders (GPU, 640×360, 24 fps):
+
+| Check | Result |
+|---|---|
+| Truly still scene (fixed orbit camera), `master`, blur against sharp | 0 LSB difference |
+| Triangle moving 15.5 px per frame, `final` (4 subframes) | streak of 6 px, expected 5.8 (`(n−1)/n × 180/360 × 15.5`), +3 % |
+| Same, `master` (8 subframes) | streak of 6 px, expected 6.8, −11.5 %; the faintest of the 8 subframes falls under the detection threshold |
+| The same blurred frames rendered twice | byte-identical |
+
+Time per frame at 1080p, blur included:
+
+| Scene | Device | `draft` | `final` | `master` |
+|---|---|---|---|---|
+| Atmosphere clearing | GPU | 0.163 s | 0.296 s | 0.443 s |
+| Pet with environment | GPU | 0.063 s | 0.159 s | 0.242 s |
+| Pet with environment | CPU (SwiftShader) | 0.09 s | 0.58 s | 1.60 s |
+
+A one-minute `master` export at 24 fps takes about 38 minutes on CPU, so the planned estimate before rendering (1.F5) is
+needed.
+
 ## Not in this phase
 
 Owned by other phases of the roadmap:
 
-- motion blur (1.F2);
 - 4K output and the H.264 levels (1.F3);
 - the optional ProRes master, remuxing valid uploads, and lossless editor intermediates (1.F4);
 - voiced scenes on the server render (1.F5);
