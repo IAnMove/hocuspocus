@@ -64,7 +64,11 @@ def command_catalog():
                                                                        "points": {"type": "array", "minItems": 2, "maxItems": 64,
                                                                                   "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}}},
                                                                        "duration": {"type": "number", "minimum": 0.5, "maximum": 120},
-                                                                       "name": {"type": "string", "minLength": 1, "maxLength": 60}}}}}}}}]
+                                                                       "name": {"type": "string", "minLength": 1, "maxLength": 60}}},
+                                                          "interactions": {"type": "array", "minItems": 1, "maxItems": 8,
+                                                                           "description": "Clips that meet the scene, with model-space points: {kind: 'sit', seat: [x,y,z] top of the seat, stand_up?, look?}, {kind: 'reach', target, hand?: left|right|auto, hold?, look?}, {kind: 'look', target}; each takes duration (0.8-30 s) and name.",
+                                                                           "items": {"type": "object", "required": ["kind"],
+                                                                                     "properties": {"kind": {"enum": ["sit", "reach", "look"]}}}}}}}}}]
 
 
 def _envelope(arguments):
@@ -73,7 +77,7 @@ def _envelope(arguments):
     if set(arguments) - {"version", "intent_id", "input"}:
         raise ValueError("Unknown envelope field")
     payload = arguments.get("input")
-    if not isinstance(payload, dict) or set(payload) - {"workspace", "source", "clips", "bpm", "import", "path"}:
+    if not isinstance(payload, dict) or set(payload) - {"workspace", "source", "clips", "bpm", "import", "path", "interactions"}:
         raise ValueError("input needs workspace and source")
     if "workspace" not in payload or "source" not in payload:
         raise ValueError("input needs workspace and source")
@@ -157,6 +161,66 @@ def _path_duration(duration) -> float:
     return float(duration)
 
 
+_INTERACTION_FIELDS = {
+    "sit": ({"seat"}, {"duration", "stand_up", "look", "name"}),
+    "reach": ({"target"}, {"duration", "hand", "hold", "look", "name"}),
+    "look": ({"target"}, {"duration", "name"}),
+}
+
+
+def _interactions(payload: dict) -> list[dict] | None:
+    """Sit, reach and look clips, checked here so a bad request never reaches the worker."""
+    if "interactions" not in payload:
+        return None
+    value = payload["interactions"]
+    if not isinstance(value, list) or not 1 <= len(value) <= 8:
+        raise ValueError("interactions must be a list of 1 to 8 entries")
+    return [_interaction(item) for item in value]
+
+
+def _interaction(item) -> dict:
+    kind = item.get("kind") if isinstance(item, dict) else None
+    if kind not in _INTERACTION_FIELDS:
+        raise ValueError("interaction kind must be sit, reach or look")
+    required, optional = _INTERACTION_FIELDS[kind]
+    if not required <= set(item) or set(item) - required - optional - {"kind"}:
+        raise ValueError(f"{kind} takes {', '.join(sorted(required | optional))}")
+    clean = {"kind": kind, **{name: _point3(item[name], name) for name in required}}
+    if "duration" in item:
+        clean["duration"] = _bounded_number(item["duration"], 0.8, 30.0, "interaction duration")
+    for flag in ("stand_up", "hold"):
+        if flag in item:
+            clean[flag] = _flag(item[flag], flag)
+    if "look" in item:
+        clean["look"] = _flag(item["look"], "look") if kind == "reach" else _point3(item["look"], "look")
+    if "hand" in item:
+        if item["hand"] not in ("left", "right", "auto"):
+            raise ValueError("hand must be left, right or auto")
+        clean["hand"] = item["hand"]
+    if "name" in item:
+        clean["name"] = _text(item, "name", 60)
+    return clean
+
+
+def _point3(value, label: str) -> list[float]:
+    if (not isinstance(value, list) or len(value) != 3
+            or any(isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n) for n in value)):
+        raise ValueError(f"{label} must be [x, y, z] numbers")
+    return [float(n) for n in value]
+
+
+def _bounded_number(value, low: float, high: float, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= value <= high:
+        raise ValueError(f"{label} must be between {low:g} and {high:g}")
+    return float(value)
+
+
+def _flag(value, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{label} must be true or false")
+    return value
+
+
 def _inside(root: Path, name: str) -> Path:
     candidate = (root / name).resolve()
     try:
@@ -219,10 +283,13 @@ def execute_animate(request: dict, output: Path, *, python: Path | None = None) 
     return _worker_payload(completed)
 
 
-def _request(source: Path, clips: list[str], bpm: float, imported: Path | None, path: dict | None = None) -> dict:
+def _request(source: Path, clips: list[str], bpm: float, imported: Path | None, path: dict | None = None,
+             interactions: list[dict] | None = None) -> dict:
     request = {"mode": "animate", "source": str(source), "animations": clips, "animation_bpm": bpm}
     if path is not None:
         request["path"] = path
+    if interactions:
+        request["interactions"] = interactions
     if imported is not None:
         request["import_file"] = str(imported)
         request["import_label"] = _import_label(imported)
@@ -264,12 +331,13 @@ def store_import(root: Path, filename: str, payload: bytes) -> str:
 
 
 def _publish(folder: Path, filename: str, payload: dict, intent: str, clips: list[str], bpm: float, imported: Path | None,
-             path: dict | None = None) -> None:
+             path: dict | None = None, interactions: list[dict] | None = None) -> None:
     publish_generation_sidecar(
         folder / filename,
         {"generation_mode": "model3d", "model_type": "humanoid-animate", "command_id": intent,
          "params": {"workspace": payload["workspace"], "source": payload["source"], "clips": clips,
-                    "bpm": bpm, "import": None if imported is None else imported.name, "path": path}},
+                    "bpm": bpm, "import": None if imported is None else imported.name, "path": path,
+                    "interactions": interactions}},
         output_folder=payload["workspace"], tool="model3d", actor="user", capability=OPERATION,
     )
 
@@ -284,7 +352,8 @@ def command_handlers(workspace_dir, journal_path, runner=None):
         bpm = _bpm(payload.get("bpm"))
         imported_name = _import_name(payload)
         path = _path(payload)
-        if not clips and imported_name is None and path is None:
+        interactions = _interactions(payload)
+        if not clips and imported_name is None and path is None and not interactions:
             raise ValueError("Select at least one animation")
         workspace = _text(payload, "workspace", 120)
         root = Path(workspace_dir(workspace))
@@ -293,7 +362,8 @@ def command_handlers(workspace_dir, journal_path, runner=None):
             raise ValueError("Rigging currently supports GLB sources only")
         imported = _inside(root, imported_name) if imported_name else None
         digest = intent_digest({"workspace": workspace, "source": source.name, "clips": clips, "bpm": bpm,
-                                "import": None if imported is None else imported.name, "path": path})
+                                "import": None if imported is None else imported.name, "path": path,
+                                "interactions": interactions})
         identity = hashlib.sha256(f"{OPERATION}:{workspace}:{intent}".encode()).hexdigest()
         stored = journal.reserve(identity, digest)
         if stored is not None:
@@ -303,7 +373,7 @@ def command_handlers(workspace_dir, journal_path, runner=None):
         filename = f"humanoid-{stem}-{identity[:16]}.glb"
         temporary = root / f".{filename}-{uuid.uuid4().hex}.tmp"
         try:
-            result = run(_request(source, clips, bpm, imported, path), temporary)
+            result = run(_request(source, clips, bpm, imported, path, interactions), temporary)
             if not temporary.is_file():
                 raise RuntimeError("Humanoid animate worker did not write a GLB")
             temporary.replace(root / filename)
@@ -315,7 +385,7 @@ def command_handlers(workspace_dir, journal_path, runner=None):
             return body
         finally:
             temporary.unlink(missing_ok=True)
-        _publish(root, filename, payload, intent, clips, bpm, imported, path)
+        _publish(root, filename, payload, intent, clips, bpm, imported, path, interactions)
         body = {"version": 1, "operation": OPERATION, "status": "completed", "result": {
             "file": filename, "workspace": workspace,
             "url": f"/api/v1/file/{filename}?{urlencode({'workspace': workspace})}",

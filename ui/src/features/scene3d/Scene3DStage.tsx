@@ -39,8 +39,9 @@ import {
   worldAssetsReady,
 } from './gpu.ts'
 import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DSlot, Vec3 } from './types.ts'
-import { toModelSpace } from './walkPath.ts'
+import type { ExportRenderQuality } from './exportQuality.ts'
 import type { GeometrySample } from './geometryChecks.ts'
+import { toModelPoint, toModelSpace } from './walkPath.ts'
 
 type Props = {
   document: Scene3DDocument
@@ -59,7 +60,7 @@ export type Scene3DStageHandle = {
   paint: (seconds: number, document?: Scene3DDocument) => HTMLCanvasElement | null
   ready: (slots: readonly Scene3DSlot[]) => boolean
   setExportSize: (width: number, height: number) => void
-  setExportQuality: (enabled: boolean) => void
+  setExportQuality: (enabled: boolean, render?: ExportRenderQuality) => void
   restoreSize: () => void
   canvas: () => HTMLCanvasElement | null
   beginExport: (document: Scene3DDocument) => void
@@ -69,6 +70,8 @@ export type Scene3DStageHandle = {
   prepareFrame?: (seconds: number, document: Scene3DDocument) => Promise<void>
   /** Scene points in the loaded model's own space (undo position, turn and fit scale), for a walk bake. */
   modelSpacePath?: (slotId: string, points: readonly Vec3[]) => [number, number][] | undefined
+  /** One scene point in the loaded model's own space, for a sit/reach/look bake. */
+  modelSpacePoint?: (slotId: string, point: Vec3) => [number, number, number] | undefined
   /** World boxes of every loaded model and the camera at one scene time, for the geometry checks. */
   geometrySample?: (seconds: number, document: Scene3DDocument) => GeometrySample | undefined
 }
@@ -228,10 +231,10 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       const world = worldRef.current
       if (world) setWorldSize(world, width, height)
     },
-    setExportQuality(enabled) {
+    setExportQuality(enabled, render) {
       const world = worldRef.current
       if (!world) return
-      setWorldExportQuality(world, enabled)
+      setWorldExportQuality(world, enabled, render)
       const doc = documentRef.current
       if (isAtmosDressing(doc.dressing)) syncDressing(world, doc.dressing, undefined, doc.atmos)
     },
@@ -254,6 +257,12 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       const slot = documentRef.current.slots.find(item => item.id === slotId)
       if (!gpu || !slot || gpu.kind !== 'model' || !gpu.loaded) return undefined
       return toModelSpace(points, { position: slot.position, rotationY: slot.rotationY, scale: gpu.baseScale * slot.scale })
+    },
+    modelSpacePoint(slotId, point) {
+      const gpu = worldRef.current?.slots.get(slotId)
+      const slot = documentRef.current.slots.find(item => item.id === slotId)
+      if (!gpu || !slot || gpu.kind !== 'model' || !gpu.loaded) return undefined
+      return toModelPoint(point, { position: slot.position, rotationY: slot.rotationY, scale: gpu.baseScale * slot.scale })
     },
     facePlacement(slotId, profile) {
       const placement = worldRef.current?.slots.get(slotId)?.root.userData.speechPlacements?.[profile] as FacePlacement | undefined

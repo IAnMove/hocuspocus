@@ -1,5 +1,6 @@
 import { scene3dCopy } from './copy.ts'
 import { cloneScene3DDocument } from './document.ts'
+import { DRAFT_RENDER, supersampledSize, type ExportRenderQuality } from './exportQuality.ts'
 import type { Scene3DStageHandle } from './Scene3DStage.tsx'
 import type { Scene3DDocument } from './types.ts'
 
@@ -21,11 +22,14 @@ export function startWorld3DExport(
   handle: Pick<Scene3DStageHandle, 'beginExport' | 'setExportSize' | 'setExportQuality'>,
   document: Scene3DDocument,
   size: { width: number; height: number },
+  render: ExportRenderQuality = DRAFT_RENDER,
 ): Scene3DDocument {
   const snapshot = cloneScene3DDocument(document)
   handle.beginExport(snapshot)
-  handle.setExportSize(size.width, size.height)
-  handle.setExportQuality(true)
+  // Supersampled exports paint larger; the caller scales each frame down to `size`.
+  const painted = supersampledSize(size, render.supersample)
+  handle.setExportSize(painted.width, painted.height)
+  handle.setExportQuality(true, render)
   return snapshot
 }
 

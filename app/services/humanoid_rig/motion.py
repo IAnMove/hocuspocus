@@ -174,6 +174,12 @@ class Pose:
         goal = np.broadcast_to(np.asarray(target, dtype=np.float64), (len(self.u), 3)) * np.array([sign, 1.0, 1.0])
         self.hands[side] = {"target": goal, "pole": np.asarray(pole, dtype=np.float64) * np.array([sign, 1.0, 1.0])}
 
+    def reach_world(self, side: str, target, pole=(0.3, -1.0, -0.5)) -> None:
+        """Wrist target in the model's own space (metres), per frame or fixed; the pole stays in the chest frame."""
+        sign = side_sign(side)
+        goal = np.broadcast_to(np.asarray(target, dtype=np.float64), (len(self.u), 3)).copy()
+        self.hands[side] = {"world": goal, "pole": np.asarray(pole, dtype=np.float64) * np.array([sign, 1.0, 1.0])}
+
     def move_root(self, forward=0.0, up=0.0, side=0.0) -> None:
         """Root offset in leg lengths, before the floor contact is solved."""
         self.root += np.stack((self._vector(side), self._vector(up), self._vector(forward)), axis=1)
@@ -289,7 +295,7 @@ def _solve_hands(pose: Pose, local: np.ndarray, root: np.ndarray) -> None:
         upper, lower = rig.length(f"{side}Arm", f"{side}ForeArm"), rig.length(f"{side}ForeArm", f"{side}Hand")
         positions, worlds = rig.forward(local, root)
         chest = worlds[:, rig.index("Spine2")]
-        goal = positions[:, rig.index("Spine2")] + rot.rotate(chest, target["target"])
+        goal = target["world"] if "world" in target else positions[:, rig.index("Spine2")] + rot.rotate(chest, target["target"])
         pole = rot.rotate(chest, np.broadcast_to(target["pole"], goal.shape))
         upper_world, bend = arm_chain(positions[:, arm], goal, pole, upper, lower, side_sign(side))
         local[:, arm] = rot.multiply(rot.inverse(worlds[:, rig.index(f"{side}Shoulder")]), upper_world)

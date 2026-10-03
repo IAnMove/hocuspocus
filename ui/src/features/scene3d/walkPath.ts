@@ -42,6 +42,12 @@ export function toModelSpace(points: readonly Vec3[], placement: { position: Vec
   })
 }
 
+/** One scene point in the model's own space (x, y, z), for seats, props and look targets. */
+export function toModelPoint(point: Vec3, placement: { position: Vec3; rotationY: number; scale: number }): [number, number, number] {
+  const [[x, z]] = toModelSpace([point], placement)
+  return [x, (point[1] - placement.position[1]) / Math.max(1e-6, placement.scale), z]
+}
+
 /** Centripetal Catmull-Rom through the points, sampled densely, with arc lengths; the same curve the server walks. */
 export function catmullRomPath(points: readonly Vec3[], perSegment = 24) {
   const flat = points.map(point => [point[0], point[2]] as [number, number])

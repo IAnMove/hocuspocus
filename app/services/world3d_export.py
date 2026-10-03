@@ -45,8 +45,19 @@ WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 BLOCKED_URLS = ("blob:", "file:", "javascript:", "filesystem:")
 MEDIA_KINDS = frozenset({"model3d", "image", "screen"})
 COMMAND_KEYS = frozenset({"version", "operation", "intent_id", "input"})
-INPUT_KEYS = frozenset({"workspace", "document", "refs"})
+INPUT_KEYS = frozenset({"workspace", "document", "refs", "quality", "shutter"})
 INTENT_RE = re.compile(r"[A-Za-z0-9._-]{1,160}")
+# Render and encode settings of each export quality level. Draft is the export as it was
+# before levels existed: its plan carries no quality fields, so earlier intents replay.
+# Final and master average subframes for motion blur; the shutter is in degrees of one frame (180 = half a frame).
+QUALITY_PROFILES = {
+    "draft": {"supersample": 1, "samples": 0, "subframes": 1, "shutter": 0, "crf": 18, "preset": "fast", "threads": "1"},
+    "final": {"supersample": 1.5, "samples": 4, "subframes": 4, "shutter": 180, "crf": 14, "preset": "slow", "threads": "0"},
+    "master": {"supersample": 2, "samples": 4, "subframes": 8, "shutter": 180, "crf": 12, "preset": "slow", "threads": "0"},
+}
+QUALITIES = tuple(QUALITY_PROFILES)
+# The page mixes voices in one OfflineAudioContext, bounded like the browser export (mixSceneSpeech).
+MAX_VOICED_SECONDS = 180
 
 
 class World3DExportCancelled(Exception):
@@ -91,14 +102,38 @@ def frame_count(duration: float, fps: int) -> int:
     return max(1, round(float(duration) * int(fps)))
 
 
-def export_plan(document: dict) -> dict:
+def export_plan(document: dict, quality: str = "draft", shutter: float | None = None) -> dict:
     duration = output_duration(document)
     fps = document.get("fps", 30)
     if fps not in (24, 30, 60):
         raise ValueError("Export fps must be 24, 30 or 60")
+    if quality not in QUALITY_PROFILES:
+        raise ValueError(f"Export quality must be one of {', '.join(QUALITIES)}")
     width, height = export_size(document.get("width"), document.get("height"))
-    return {"width": width, "height": height, "fps": fps, "duration": duration,
+    plan = {"width": width, "height": height, "fps": fps, "duration": duration,
             "count": frame_count(duration, fps)}
+    if quality != "draft":
+        profile = QUALITY_PROFILES[quality]
+        plan.update(quality=quality, supersample=profile["supersample"], samples=profile["samples"])
+        plan.update(_motion_blur(document, profile, shutter))
+    elif shutter:
+        raise ValueError("Motion blur needs quality final or master")
+    return plan
+
+
+def _motion_blur(document: dict, profile: dict, shutter: float | None) -> dict:
+    """Subframes and shutter for one plan. Pixel worlds stay sharp: their art is drawn on a pixel grid."""
+    angle = profile["shutter"] if shutter is None else float(shutter)
+    if not 0 <= angle <= 360:
+        raise ValueError("shutter must be between 0 and 360 degrees")
+    if angle == 0 or document.get("pixelWorld"):
+        return {"subframes": 1, "shutter": 0}
+    return {"subframes": profile["subframes"], "shutter": angle}
+
+
+def plan_quality(plan: dict) -> str:
+    quality = plan.get("quality", "draft")
+    return quality if quality in QUALITY_PROFILES else "draft"
 
 
 def playwright_module() -> Path | None:
@@ -167,7 +202,10 @@ try {
     fs.writeFileSync(`${frames}/frame_${name}.png`, Buffer.from(png.split(',')[1], 'base64'));
     fs.writeFileSync(`${staging}/progress.json`, JSON.stringify({ current: index + 1, total: plan.count }));
   }
-  const wav = await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(() => '');
+  const wav = await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(error => {
+    fs.writeFileSync(`${staging}/audio-error.txt`, String(error?.message || error).slice(0, 800));
+    return '';
+  });
   if (typeof wav === 'string' && wav.startsWith('data:audio')) {
     fs.writeFileSync(`${staging}/fx.wav`, Buffer.from(wav.split(',')[1], 'base64'));
   }
@@ -218,7 +256,8 @@ def export_capabilities(app_url: str | None = None) -> dict:
         "realRender": "ready" if ffmpeg and playwright and renderer_available(app_url) else "pending",
         "renderer": "world3d-export-flow",
         "renderDevice": scene_render_device(),
-        "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": 0,
+        "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": MAX_VOICED_SECONDS,
+        "qualities": list(QUALITIES), "motionBlur": {"shutterDegrees": [0, 360], "default": 180},
     }
 
 
@@ -239,18 +278,33 @@ def write_png(path: Path, width: int, height: int, rgb: tuple[int, int, int]) ->
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
 
 
-def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float) -> Path:
+def mux_wav_audio(video: Path, wav: Path, duration: float, *, label: str = "Audio mix") -> Path:
+    """Put the page's WAV mix under the silent render: AAC 192k, video copied, exactly ``duration`` long."""
+    mixed = video.with_name("fx-mixed.mp4")
+    command = ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-i", str(wav), "-filter_complex",
+               f"[1:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:{duration:.4f}[mix]",
+               "-map", "0:v:0", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+               "-t", f"{duration:.4f}", "-movflags", "+faststart", str(mixed)]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=1800, check=False)
+    if result.returncode != 0 or not mixed.is_file():
+        raise RuntimeError((f"{label} failed: " + (result.stderr or "")).strip()[-800:])
+    return mixed
+
+
+def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float,
+                       quality: str = "draft") -> Path:
     if not shutil.which("ffmpeg"):
         raise World3DExportPending("real-render pending: ffmpeg is not available")
     if not frames:
         raise RuntimeError("Export produced no frames")
     temporary = destination.with_name(f".{destination.stem}.{os.getpid()}.partial.mp4")
     destination.parent.mkdir(parents=True, exist_ok=True)
+    profile = QUALITY_PROFILES[quality]
     command = [
         "ffmpeg", "-v", "error", "-y", "-framerate", str(int(fps)),
         "-i", str(frames[0].parent / "frame_%06d.png"),
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
-        "-threads", "1", "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
+        "-c:v", "libx264", "-preset", profile["preset"], "-crf", str(profile["crf"]), "-pix_fmt", "yuv420p",
+        "-threads", profile["threads"], "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
     ]
     try:
         result = subprocess.run(
@@ -301,7 +355,14 @@ def _envelope(command) -> dict:
 
 def _input(value) -> dict:
     if not isinstance(value, dict) or set(value) - INPUT_KEYS:
-        raise http_error(422, "invalid_command", "input may only include workspace, document and refs")
+        raise http_error(422, "invalid_command", "input may only include workspace, document, refs and quality")
+    if value.get("quality", "draft") not in QUALITY_PROFILES:
+        raise http_error(422, "invalid_command", f"quality must be one of {', '.join(QUALITIES)}")
+    shutter = value.get("shutter")
+    if shutter is not None and (isinstance(shutter, bool) or not isinstance(shutter, (int, float)) or not 0 <= shutter <= 360):
+        raise http_error(422, "invalid_command", "shutter must be a number of degrees between 0 and 360")
+    if shutter and value.get("quality", "draft") == "draft":
+        raise http_error(422, "invalid_command", "Motion blur needs quality final or master")
     workspace = value.get("workspace")
     if not isinstance(workspace, str) or not WORKSPACE_RE.fullmatch(workspace):
         raise http_error(422, "invalid_workspace", "Use an explicit valid output workspace")
@@ -352,6 +413,27 @@ def _has_sound(document: dict) -> bool:
     return False
 
 
+def _audio_url(holder) -> str:
+    audio = holder.get("audio") if isinstance(holder, dict) else None
+    return str(audio.get("url") or "").strip() if isinstance(audio, dict) else ""
+
+
+def _audible_clips(slot) -> list:
+    speech = slot.get("speech") if isinstance(slot, dict) else None
+    if not isinstance(speech, dict) or not speech.get("enabled"):
+        return []
+    clips = speech.get("clips") if "clips" in speech else [speech]
+    return [clip for clip in clips or [] if isinstance(clip, dict) and clip.get("audible") is not False]
+
+
+def _audio_urls(document: dict) -> list[tuple[str, str]]:
+    """``(track key, url)`` of the soundtrack and audible speech clips, as ``sceneVoiceTracks`` lists them."""
+    found = [(f"soundtrack/{track.get('id')}", _audio_url(track)) for track in document.get("soundtrack") or []]
+    for slot in document.get("slots") or []:
+        found += [(f"{slot.get('id')}/{clip.get('id', 'voice')}", _audio_url(clip)) for clip in _audible_clips(slot)]
+    return [(key, url) for key, url in found if url]
+
+
 def _blocked_url(value) -> bool:
     return isinstance(value, str) and value.strip().lower().startswith(BLOCKED_URLS)
 
@@ -371,8 +453,8 @@ def unsupported_capabilities(document: dict) -> list[str]:
     reasons = []
     if any(_blocked_url(item) for item in _walk_strings(document)):
         reasons.append("ephemeral_url")
-    if _has_sound(document):
-        reasons.append("voiced_duration" if output_duration(document) > 180 else "voiced_audio")
+    if _has_sound(document) and output_duration(document) > MAX_VOICED_SECONDS:
+        reasons.append("voiced_duration")
     for slot in document.get("slots") or []:
         media = slot.get("media") if isinstance(slot, dict) else None
         if media not in MEDIA_KINDS:
@@ -438,13 +520,26 @@ def _validated_refs(document: dict, refs, workspace: str) -> list[dict]:
         item = _slot_ref(slot, by_slot, workspace)
         if item is not None:
             resolved.append(item)
-    return resolved
+    return resolved + _audio_refs(document, workspace)
 
 
-def build_snapshot(document: dict, refs: list[dict], workspace: str) -> dict:
+def _audio_refs(document: dict, workspace: str) -> list[dict]:
+    """Voice and soundtrack files are frozen like model refs, so admission checks that they exist."""
+    refs = []
+    for key, url in _audio_urls(document):
+        if _blocked_url(url):
+            raise http_error(422, "unsupported_capability", "Ephemeral blob or file URLs cannot be exported")
+        record = _ref_from_url({"id": key, "media": "audio"}, url, workspace)
+        record["audioId"] = record.pop("slotId")
+        refs.append(record)
+    return refs
+
+
+def build_snapshot(document: dict, refs: list[dict], workspace: str, quality: str = "draft",
+                   shutter: float | None = None) -> dict:
     return {
         "workspace": workspace, "document": deepcopy(document), "refs": deepcopy(refs),
-        "plan": export_plan(document),
+        "plan": export_plan(document, quality, shutter),
     }
 
 
@@ -456,7 +551,7 @@ def freeze_export_command(command) -> dict:
     reasons = unsupported_capabilities(document)
     if reasons:
         raise http_error(422, "unsupported_capability", "Unsupported export capability: " + ", ".join(reasons))
-    snapshot = build_snapshot(document, refs, payload["workspace"])
+    snapshot = build_snapshot(document, refs, payload["workspace"], payload.get("quality", "draft"), payload.get("shutter"))
     original = deepcopy(envelope)
     effective = {"version": 1, "operation": OPERATION,
                  "input": {"workspace": payload["workspace"], "snapshot": snapshot}}
@@ -475,7 +570,11 @@ def command_catalog() -> list[dict]:
                      "required": ["workspace", "intent_id"]}
     export_input = {"type": "object", "additionalProperties": False,
                     "properties": {"workspace": workspace, "document": {"type": "object"},
-                                   "refs": {"type": "array", "maxItems": 64}},
+                                   "refs": {"type": "array", "maxItems": 64},
+                                   "quality": {"enum": list(QUALITIES), "default": "draft",
+                                               "description": "draft: as before. final: 1.5x supersampling, 4x MSAA, motion blur of 4 subframes, crf 14. master: 2x supersampling, 4x MSAA, motion blur of 8 subframes, crf 12. Same output size; higher levels take longer."},
+                                   "shutter": {"type": "number", "minimum": 0, "maximum": 360,
+                                               "description": "Motion blur shutter in degrees of one frame for final/master (default 180; 0 = sharp). Pixel worlds stay sharp."}},
                     "required": ["workspace", "document"]}
     return [
         {"name": OPERATION, "version": 1, "supportedVersions": [1], "domain": "scenes", "mutation": True,
@@ -623,7 +722,7 @@ class World3DExportService:
             "backend_job_id": job_id, "current": 0, "total": plan["count"],
             "resource_requirements": [self.resource_lane().key, "local_cpu:ffmpeg"], "cancelable": True,
             "resumable": True, "recoverable": True,
-            "metadata": {"operation": self.operation},
+            "metadata": {"operation": self.operation, "quality": plan_quality(plan)},
         }
 
     def _admit(self, registry, frozen, workspace) -> dict:
@@ -732,7 +831,7 @@ class World3DExportService:
             json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
         frames = self._render_frames(snapshot, staging, token, registry, task_id)
         published = self._publish(snapshot, staging, frames, workspace, registry, task_id, token)
-        metadata = {"operation": self.operation, "output": published}
+        metadata = {"operation": self.operation, "quality": plan_quality(snapshot["plan"]), "output": published}
         geometry = read_geometry_report(staging)
         if geometry is not None:
             metadata["geometry"] = geometry
@@ -766,7 +865,7 @@ class World3DExportService:
         self.check_publish(snapshot)
         plan = snapshot["plan"]
         encoded = staging / "encoded.mp4"
-        mux_frame_sequence(frames, encoded, fps=plan["fps"], duration=plan["duration"])
+        mux_frame_sequence(frames, encoded, fps=plan["fps"], duration=plan["duration"], quality=plan_quality(plan))
         encoded = self.finish_media(snapshot, staging, encoded)
         self._ensure_active(token, registry, task_id)
         name = self.output_name(snapshot)
@@ -790,11 +889,26 @@ class World3DExportService:
                                       workspace_root=Path(self.workspace_dir(snapshot["workspace"])), cancelled=cancelled)
 
     def check_publish(self, snapshot: dict) -> None:
-        if _has_sound(snapshot["document"]):
-            raise RuntimeError("Voiced World3D export cannot publish a silent MP4")
+        if _has_sound(snapshot["document"]) and output_duration(snapshot["document"]) > MAX_VOICED_SECONDS:
+            raise RuntimeError(f"Voiced World3D export supports up to {MAX_VOICED_SECONDS} output seconds")
 
     def finish_media(self, snapshot: dict, staging: Path, encoded: Path) -> Path:
-        return encoded
+        """Mux the page's audio mix. A voiced scene without it is never published as a silent MP4."""
+        if not _has_sound(snapshot["document"]):
+            return encoded
+        wav = staging / "fx.wav"
+        if not wav.is_file() or wav.stat().st_size <= 44:
+            failure = staging / "audio-error.txt"
+            reason = f": {failure.read_text(encoding='utf-8', errors='replace')}" if failure.is_file() else ""
+            raise RuntimeError(f"Voiced World3D export produced no audio{reason}; a silent MP4 is not published")
+        plan = snapshot["plan"]
+        mixed = mux_wav_audio(encoded, wav, plan["duration"], label="World3D audio mix")
+        try:
+            validate_scene_recording_output(mixed, expected_duration=plan["duration"] if plan["duration"] >= 0.5 else None,
+                                            expected_fps=plan["fps"], expected_audio=True)
+        except SceneRecordingTranscodeError as error:
+            raise RuntimeError(str(error)) from error
+        return mixed
 
     def output_name(self, snapshot: dict) -> str:
         template = re.sub(r"[^A-Za-z0-9._-]+", "-", str(snapshot["document"].get("templateId") or "scene")).strip("-._")[:40] or "scene"
@@ -809,7 +923,8 @@ class World3DExportService:
                           "fps": plan["fps"], "duration": plan["duration"], "layers": []},
                 "scene_recipe": {"engine": "world3d", "document": snapshot["document"], "refs": snapshot["refs"]},
                 "width": plan["width"], "height": plan["height"], "fps": plan["fps"],
-                "duration_seconds": plan["duration"],
+                "duration_seconds": plan["duration"], "quality": plan_quality(plan),
+                "shutter": plan.get("shutter", 0),
             },
             "generation_mode": "video", "tool": "world3d-export", "output_filename": name,
         }
@@ -827,9 +942,9 @@ class World3DExportService:
 
 
 __all__ = [
-    "CANCEL_OPERATION", "OPERATION", "RECEIPT_OPERATION", "World3DExportCancelled",
+    "CANCEL_OPERATION", "OPERATION", "QUALITIES", "QUALITY_PROFILES", "RECEIPT_OPERATION", "World3DExportCancelled",
     "World3DExportPending", "World3DExportService", "build_snapshot", "command_catalog",
     "command_handlers", "even_dim", "export_capabilities", "export_plan", "export_size",
-    "freeze_export_command", "http_error", "mux_frame_sequence", "playwright_module",
+    "freeze_export_command", "http_error", "mux_frame_sequence", "mux_wav_audio", "plan_quality", "playwright_module",
     "staging_dir", "unsupported_capabilities", "write_png",
 ]
