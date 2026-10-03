@@ -333,6 +333,7 @@
         "tests/test_music_production.py",
         "tests/test_production_wait.py",
         "tests/test_export_receipts.py",
+        "tests/test_export_qa.py",
         "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",
         "tests/test_safety_scan.py",
@@ -1167,6 +1168,14 @@
         "tests/test_model3d_rig_spawn_cancellation.py",
         "tests/test_model3d_rig_task_identity.py"
       ]
+    },
+    {
+      "prefix": "app/services/export_qa.py",
+      "paths": ["tests/test_export_qa.py"]
+    },
+    {
+      "prefix": "app/services/export_receipts.py",
+      "paths": ["tests/test_export_receipts.py", "tests/test_export_qa.py"]
     }
   ]
 }
