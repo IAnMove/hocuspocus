@@ -1,32 +1,43 @@
 """Write a standard humanoid skin into a GLB. pygltflib stays inside this module.
 
-Video 3D binds the skin with an identity bind matrix and then draws the mesh
-with its own world matrix, so each inverse bind is only the inverse of the
-bone's world matrix. The mesh stays a sibling of Hips; its vertices, colors,
-materials and textures are left as they were.
+Each inverse bind matrix is the inverse of the bone's rest world matrix. The
+skeleton is a new scene root next to the mesh. Meshes under a transformed node
+are baked into world space first (see ``gltf_world``); otherwise vertices,
+colors, materials and textures are left as they were. A skeleton from an earlier
+rig is renamed and detached, so the new one is the only standard skeleton in the
+file. The Hips node carries ``extras.hocuspocus_humanoid`` with the facts later
+clips need.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+from services.humanoid_rig.errors import InvalidInput
+from services.humanoid_rig.gltf_buffers import (
+    ARRAY_BUFFER,
+    FLOAT,
+    UNSIGNED_SHORT,
+    append_accessor,
+    read_floats,
+    read_indices,
+    require_plain_geometry,
+)
 from services.humanoid_rig.names import BONE_BY_NAME, BONE_NAMES, BONE_PARENTS
 from services.humanoid_rig.skeleton import world_matrices
 
-FLOAT = 5126
-UNSIGNED_SHORT = 5123
-ARRAY_BUFFER = 34962
-_INDEX_DTYPE = {5121: np.uint8, 5123: np.uint16, 5125: np.uint32}
+MARKER = "hocuspocus_humanoid"
 
 
 def read_primitives(source: bytes) -> list[dict]:
     """World-space triangles for every triangle primitive, in file order."""
     gltf, blob = _load(source)
+    require_plain_geometry(gltf)
     found = []
     for _node, matrix, primitive in _iter_primitives(gltf):
-        local = _read_vec3(gltf, blob, primitive.attributes.POSITION)
+        local = read_floats(gltf, blob, primitive.attributes.POSITION, 3)
         world = local @ matrix[:3, :3].T + matrix[:3, 3]
-        found.append({"world": world, "indices": _read_indices(gltf, blob, primitive)})
+        found.append({"world": world, "indices": read_indices(gltf, blob, primitive)})
     return found
 
 
@@ -41,23 +52,52 @@ def append_animation_clips(source: bytes, clips: list[dict]) -> tuple[bytes, int
     return _save(gltf, blob), start
 
 
-def hips_scale(source: bytes) -> float:
-    gltf, _blob = _load(source)
-    node = gltf.nodes[standard_joint_nodes(gltf)[0]]
-    return float((node.scale or [1.0, 1.0, 1.0])[0])
-
-
-def write_rigged_glb(source: bytes, skeleton: dict, influences: list[tuple[np.ndarray, np.ndarray]], clips: list[dict] | None = None) -> bytes:
-    """Return a new GLB. ``source`` is not modified."""
+def read_rig(source: bytes) -> dict:
+    """Bones, Hips marker and floor height of a GLB with the standard skeleton."""
     gltf, blob = _load(source)
+    joints = standard_joint_nodes(gltf)
+    bones = []
+    for (name, parent), node_index in zip(BONE_PARENTS, joints):
+        node = gltf.nodes[node_index]
+        if node.matrix:
+            raise InvalidInput("standard humanoid skeleton uses matrices; re-rig the model")
+        bones.append({
+            "name": name,
+            "parent": parent,
+            "translation": np.asarray(node.translation or [0.0, 0.0, 0.0], dtype=np.float64),
+            "rotation": np.asarray(node.rotation or [0.0, 0.0, 0.0, 1.0], dtype=np.float64),
+            "scale": np.asarray(node.scale or [1.0, 1.0, 1.0], dtype=np.float64),
+        })
+    marker = dict((gltf.nodes[joints[0]].extras or {}).get(MARKER) or {})
+    floor = marker.get("floor")
+    if floor is None:
+        floor = min((float(item["world"][:, 1].min()) for item in _primitives_of(gltf, blob)), default=0.0)
+    return {"bones": bones, "marker": marker, "floor": float(floor)}
+
+
+def _primitives_of(gltf, blob) -> list[dict]:
+    found = []
+    for _node, matrix, primitive in _iter_primitives(gltf):
+        local = read_floats(gltf, blob, primitive.attributes.POSITION, 3)
+        found.append({"world": local @ matrix[:3, :3].T + matrix[:3, 3]})
+    return found
+
+
+def write_rigged_glb(source: bytes, skeleton: dict, influences: list[tuple[np.ndarray, np.ndarray]], clips: list[dict] | None = None, marker: dict | None = None) -> bytes:
+    """Return a new GLB. ``source`` is not modified."""
+    from services.humanoid_rig.gltf_world import world_space_primitives
+
+    gltf, blob = _load(source)
+    require_plain_geometry(gltf)
     _clear_previous_skin(gltf)
-    joints = _append_skeleton(gltf, skeleton)
-    primitives = list(_iter_primitives(gltf))
-    if len(primitives) != len(influences):
+    targets = world_space_primitives(gltf, blob, list(_iter_primitives(gltf)))
+    if len(targets) != len(influences):
         raise RuntimeError("weight groups do not match the mesh primitives")
-    bind = world_matrices(skeleton["bones"])
-    skin = _append_skin(gltf, blob, joints, bind)
-    for (node_index, _matrix, primitive), (joint_index, weight) in zip(primitives, influences):
+    joints = _append_skeleton(gltf, skeleton)
+    if marker:
+        gltf.nodes[joints[0]].extras = {MARKER: dict(marker)}
+    skin = _append_skin(gltf, blob, joints, world_matrices(skeleton["bones"]))
+    for (node_index, primitive), (joint_index, weight) in zip(targets, influences):
         gltf.nodes[node_index].skin = skin
         _bind_primitive(gltf, blob, primitive, joint_index, weight)
     if clips:
@@ -81,6 +121,9 @@ def _save(gltf, blob: bytearray) -> bytes:
 
 
 def _clear_previous_skin(gltf) -> None:
+    old = {joint for skin in gltf.skins or [] for joint in skin.joints or []}
+    old |= set(_bone_index(gltf).values())
+    _detach(gltf, old)
     gltf.animations = []
     gltf.skins = []
     for node in gltf.nodes or []:
@@ -89,6 +132,31 @@ def _clear_previous_skin(gltf) -> None:
         for primitive in mesh.primitives or []:
             primitive.attributes.JOINTS_0 = None
             primitive.attributes.WEIGHTS_0 = None
+
+
+def _detach(gltf, joints: set[int]) -> None:
+    """Rename old joints; unhook the ones whose subtree holds no mesh."""
+    for index in joints:
+        node = gltf.nodes[index]
+        node.name = f"previous:{node.name or index}"
+    _unhook(gltf, {index for index in joints if not _holds_mesh(gltf, index)})
+
+
+def _unhook(gltf, loose: set[int]) -> None:
+    for scene in gltf.scenes or []:
+        scene.nodes = [index for index in scene.nodes or [] if index not in loose]
+    for node in gltf.nodes or []:
+        if node.children:
+            node.children = [index for index in node.children if index not in loose] or None
+
+
+def _holds_mesh(gltf, index: int, seen: set[int] | None = None) -> bool:
+    seen = set() if seen is None else seen
+    if index in seen:
+        return False
+    seen.add(index)
+    node = gltf.nodes[index]
+    return node.mesh is not None or any(_holds_mesh(gltf, child, seen) for child in node.children or [])
 
 
 def _append_skeleton(gltf, skeleton: dict) -> list[int]:
@@ -110,6 +178,9 @@ def _bone_node(bone: dict):
     from pygltflib import Node
 
     node = Node(name=bone["name"], translation=[float(value) for value in bone["translation"]])
+    rotation = np.asarray(bone["rotation"], dtype=np.float64)
+    if not np.allclose(rotation, [0.0, 0.0, 0.0, 1.0], atol=1e-9):
+        node.rotation = [float(value) for value in rotation / np.linalg.norm(rotation)]
     if bone["parent"] is None or not np.allclose(bone["scale"], 1.0):
         node.scale = [float(value) for value in bone["scale"]]
     return node
@@ -119,20 +190,20 @@ def _append_skin(gltf, blob, joint_nodes: list[int], bind: list[np.ndarray]) -> 
     from pygltflib import Skin
 
     inverse = np.stack([np.linalg.inv(matrix).T for matrix in bind]).astype(np.float32)
-    accessor = _append_accessor(gltf, blob, inverse, FLOAT, "MAT4")
+    accessor = append_accessor(gltf, blob, inverse, FLOAT, "MAT4")
     gltf.skins.append(Skin(name="Humanoid", inverseBindMatrices=accessor, skeleton=joint_nodes[0], joints=joint_nodes))
     return len(gltf.skins) - 1
 
 
 def _bind_primitive(gltf, blob, primitive, joints: np.ndarray, weights: np.ndarray) -> None:
-    primitive.attributes.JOINTS_0 = _append_accessor(gltf, blob, joints.astype(np.uint16), UNSIGNED_SHORT, "VEC4", ARRAY_BUFFER)
-    primitive.attributes.WEIGHTS_0 = _append_accessor(gltf, blob, weights.astype(np.float32), FLOAT, "VEC4", ARRAY_BUFFER)
+    primitive.attributes.JOINTS_0 = append_accessor(gltf, blob, joints.astype(np.uint16), UNSIGNED_SHORT, "VEC4", ARRAY_BUFFER)
+    primitive.attributes.WEIGHTS_0 = append_accessor(gltf, blob, weights.astype(np.float32), FLOAT, "VEC4", ARRAY_BUFFER)
 
 
 def standard_joint_nodes(gltf) -> list[int]:
     by_name = _bone_index(gltf)
     if len(by_name) != len(BONE_NAMES):
-        raise ValueError("standard humanoid skeleton not found")
+        raise InvalidInput("standard humanoid skeleton not found")
     _require_parents(gltf, by_name, _parent_index(gltf))
     return [by_name[name] for name in BONE_NAMES]
 
@@ -160,12 +231,12 @@ def _require_parents(gltf, by_name: dict[str, int], parents: dict[int, int]) -> 
             _require_root(gltf, parent_id)
             continue
         if parent_id is None or gltf.nodes[parent_id].name != parent:
-            raise ValueError("standard humanoid skeleton not found")
+            raise InvalidInput("standard humanoid skeleton not found")
 
 
 def _require_root(gltf, parent_id: int | None) -> None:
     if parent_id is not None and gltf.nodes[parent_id].name in BONE_BY_NAME:
-        raise ValueError("standard humanoid skeleton not found")
+        raise InvalidInput("standard humanoid skeleton not found")
 
 
 def _append_clips(gltf, blob, joint_nodes: list[int], clips: list[dict]) -> None:
@@ -188,35 +259,13 @@ def _append_clips(gltf, blob, joint_nodes: list[int], clips: list[dict]) -> None
 def _add_channel(gltf, blob, animation, times, values, node: int, path: str) -> None:
     from pygltflib import AnimationChannel, AnimationChannelTarget, AnimationSampler
 
-    time_accessor = _append_accessor(gltf, blob, times, FLOAT, "SCALAR", minmax=True)
-    value_accessor = _append_accessor(gltf, blob, values, FLOAT, "VEC4" if path == "rotation" else "VEC3")
+    time_accessor = append_accessor(gltf, blob, times, FLOAT, "SCALAR", minmax=True)
+    value_accessor = append_accessor(gltf, blob, values, FLOAT, "VEC4" if path == "rotation" else "VEC3")
     animation.samplers.append(AnimationSampler(input=time_accessor, output=value_accessor, interpolation="LINEAR"))
     animation.channels.append(AnimationChannel(
         sampler=len(animation.samplers) - 1,
         target=AnimationChannelTarget(node=node, path=path),
     ))
-
-
-def _append_accessor(gltf, blob, data: np.ndarray, component_type: int, type_str: str, target: int | None = None, minmax: bool = False) -> int:
-    from pygltflib import Accessor, BufferView
-
-    while len(blob) % 4:
-        blob.append(0)
-    payload = np.ascontiguousarray(data).tobytes()
-    view = BufferView(buffer=0, byteOffset=len(blob), byteLength=len(payload))
-    if target is not None:
-        view.target = target
-    blob.extend(payload)
-    gltf.bufferViews.append(view)
-    components = {"SCALAR": 1, "VEC3": 3, "VEC4": 4, "MAT4": 16}[type_str]
-    count = int(data.size // components)
-    accessor = Accessor(bufferView=len(gltf.bufferViews) - 1, componentType=component_type, count=count, type=type_str)
-    if minmax and count:
-        flat = np.ascontiguousarray(data, dtype=np.float64).reshape(count, components)
-        accessor.min = [float(value) for value in flat.min(axis=0)]
-        accessor.max = [float(value) for value in flat.max(axis=0)]
-    gltf.accessors.append(accessor)
-    return len(gltf.accessors) - 1
 
 
 def _iter_primitives(gltf):
@@ -269,31 +318,3 @@ def _quat_matrix(quaternion) -> np.ndarray:
         [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
         [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
     ])
-
-
-def _read_vec3(gltf, blob: bytes, accessor_index: int) -> np.ndarray:
-    accessor = gltf.accessors[accessor_index]
-    view = gltf.bufferViews[accessor.bufferView]
-    offset = (view.byteOffset or 0) + (accessor.byteOffset or 0)
-    stride = view.byteStride or 12
-    count = accessor.count
-    if stride == 12:
-        return np.frombuffer(blob, dtype="<f4", count=count * 3, offset=offset).reshape(-1, 3).astype(np.float64)
-    raw = np.frombuffer(blob, dtype=np.uint8, count=stride * (count - 1) + 12, offset=offset)
-    gather = np.arange(count)[:, None] * stride + np.arange(12)[None, :]
-    return raw[gather].copy().view("<f4").reshape(count, 3).astype(np.float64)
-
-
-def _read_indices(gltf, blob: bytes, primitive):
-    if primitive.indices is None:
-        return None
-    accessor = gltf.accessors[primitive.indices]
-    dtype = _INDEX_DTYPE.get(accessor.componentType)
-    if dtype is None:
-        raise ValueError("triangle indices must be an unsigned integer accessor")
-    view = gltf.bufferViews[accessor.bufferView]
-    offset = (view.byteOffset or 0) + (accessor.byteOffset or 0)
-    values = np.frombuffer(blob, dtype=dtype, count=accessor.count, offset=offset).astype(np.int64)
-    if len(values) % 3:
-        raise ValueError("triangle index count is not a multiple of 3")
-    return values.reshape(-1, 3)

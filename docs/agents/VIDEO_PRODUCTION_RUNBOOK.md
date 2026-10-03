@@ -423,6 +423,13 @@ Results expose `animation_mode`, `humanoid_joints`, `articulated_clips` and
 report body-chain fallback. `engine: "procedural"` remains CPU-only and
 constructs an approximate single chain rather than an anatomical rig.
 
+For a character standing in a T or A pose, prefer `engine: "humanoid"`: it is
+CPU-only (about a second), fits a Mixamo-named skeleton, bakes clips such as
+`idle`, `walk`, `wave`, `talk` or `dance_side` for that body with the feet on
+the floor, and refuses arms-down or legs-together meshes with `not_humanoid`
+and a reason instead of rigging them badly. Add clips or a BVH/glTF animation
+later with `model3d.animate`. See the [humanoid rig guide](HUMANOID_RIG.md).
+
 ### N64-inspired render look
 
 Set `scene3d.renderLook: "n64"` (or `document.renderLook`) to use the native

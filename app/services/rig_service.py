@@ -310,7 +310,7 @@ def capabilities() -> dict[str, Any]:
             {
                 "id": "humanoid",
                 "label": "Humanoid (standard)",
-                "description": "Mixamo-named skeleton and in-place clips for a person in a T or A pose. CPU only. Fails with not_humanoid when the mesh is not a person.",
+                "description": "Mixamo-named skeleton fitted to a character standing in a T or A pose, with clips baked for its proportions. CPU only. Refuses meshes it cannot rig safely (arms against the body, legs together).",
                 "installed": status["installed"],
                 "install_hint": status["install_hint"],
             },
@@ -358,18 +358,10 @@ def _prune_finished_jobs_locked() -> None:
             _jobs.pop(job_id, None)
 
 
-def _humanoid_animation_catalog() -> list[dict[str, str]]:
-    from services.humanoid_rig.names import CLIP_IDS, CLIP_LABELS
+def _humanoid_animation_catalog() -> list[dict[str, Any]]:
+    from services.humanoid_rig.clips import clip_catalog
 
-    return [
-        {
-            "id": clip_id,
-            "label": CLIP_LABELS[clip_id],
-            "description": "In-place clip on the standard humanoid skeleton.",
-            "category": "Humanoid",
-        }
-        for clip_id in CLIP_IDS
-    ]
+    return clip_catalog()
 
 
 def _humanoid_animations(value: Any) -> list[str]:
@@ -395,10 +387,19 @@ def _animation_catalog(engine: str):
     return ANIMATION_IDS
 
 
+def _requested_profile(raw_profile: Any, engine: str) -> tuple[bool, str]:
+    """``(explicit, profile id)``. The humanoid engine fits its own skeleton, so it records ``humanoid``."""
+    explicit = raw_profile is not None and str(raw_profile).strip() != ""
+    if engine == "humanoid":
+        return explicit, "humanoid"
+    return explicit, str(raw_profile).strip().lower() if explicit else DEFAULT_RIG_PROFILE
+
+
 def _humanoid_pose(value: Any) -> str:
-    pose = str(value or "t").strip().lower()
-    if pose not in {"t", "a"}:
-        raise ValueError("pose must be t or a")
+    """The rest pose is detected from the mesh; ``t`` and ``a`` stay accepted as hints."""
+    pose = str(value or "auto").strip().lower()
+    if pose not in {"auto", "t", "a"}:
+        raise ValueError("pose must be auto, t or a")
     return pose
 
 
@@ -429,9 +430,7 @@ def start_job(
         if not unirig_status["installed"]:
             raise RuntimeError(unirig_status["install_hint"])
 
-    raw_profile = body.get("rig_profile")
-    profile_was_explicit = raw_profile is not None and str(raw_profile).strip() != ""
-    rig_profile = str(raw_profile).strip().lower() if profile_was_explicit else DEFAULT_RIG_PROFILE
+    profile_was_explicit, rig_profile = _requested_profile(body.get("rig_profile"), engine)
     profile = RIG_PROFILES_BY_ID.get(rig_profile)
     if profile is None:
         raise ValueError(f"Unknown rig profile: {rig_profile}")
@@ -453,8 +452,9 @@ def start_job(
         )
     if not isinstance(animations, list) or not animations:
         raise ValueError("Select at least one animation")
-    if len(animations) > len(ANIMATION_IDS):
-        raise ValueError(f"Select at most {len(ANIMATION_IDS)} animations")
+    catalog_size = len(_animation_catalog(engine))
+    if len(animations) > catalog_size:
+        raise ValueError(f"Select at most {catalog_size} animations")
     if any(not isinstance(item, str) for item in animations):
         raise ValueError("Animation identifiers must be strings")
     animations = list(dict.fromkeys(item.strip() for item in animations))
@@ -807,7 +807,10 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             return
         if timeout_reason:
             raise RuntimeError(timeout_reason["error"])
-        if exit_code != 0 or not output_path.is_file():
+        if result_summary.get("ok") is False and result_summary.get("error") in _WorkerRefused.CODES:
+            raise _WorkerRefused(result_summary)
+        if exit_code != 0 or not output_path.is_file() or result_summary.get("ok") is False:
+            # A crash: keep the worker's last lines (the traceback) so the failure can be diagnosed.
             detail = "\n".join(lines[-15:]) or f"Rig worker exited with code {exit_code}"
             raise RuntimeError(detail[-4000:])
 
@@ -822,6 +825,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 ) if key in result_summary},
             }
             if engine == "unirig"
+            else _humanoid_metrics(result_summary)
+            if engine == "humanoid"
             else {"spine_joints": result_summary.get("joints", request_data.get("spine_joints", 0))}
         )
         publish_generation_sidecar_best_effort(
@@ -876,7 +881,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         with _lock:
             cancelled = _jobs.get(job_id, {}).get("status") == "cancelled"
         if not cancelled:
-            _update_job(job_id, status="failed", phase="failed", message="Rigging failed", error=str(exc))
+            refusal = exc.fields if isinstance(exc, _WorkerRefused) else {}
+            _update_job(job_id, status="failed", phase="failed", message="Rigging failed", error=str(exc), **refusal)
         if not generation_committed:
             _cleanup_partial_output(output_path)
     finally:
@@ -894,6 +900,37 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 stale_path.unlink(missing_ok=True)
             except Exception:
                 pass
+
+
+class _WorkerRefused(RuntimeError):
+    """The worker declined the mesh or its inputs with a stable code and reason."""
+
+    CODES = ("not_humanoid", "invalid_input")
+
+    def __init__(self, summary: dict[str, Any]) -> None:
+        code = str(summary.get("error") or "rig_failed")
+        reason = str(summary.get("reason") or "")
+        self.fields = {"error_code": code, "error_reason": reason}
+        super().__init__(_REFUSALS.get(reason) or (f"{code}: {reason}" if reason else code))
+
+
+_REFUSALS = {
+    "hands_stuck": "not_humanoid: the arms touch the body or hang straight down. Use a T or A pose with a gap under each arm.",
+    "single_leg": "not_humanoid: no gap between the legs. Use a model standing with its legs apart.",
+    "legs_too_short": "not_humanoid: the legs are too short to rig (or hidden by a dress or robe).",
+    "asymmetry": "not_humanoid: the left and right sides differ too much. Use a symmetric T or A pose.",
+    "not_upright": "not_humanoid: the model does not stand upright (Y up).",
+    "degenerate": "not_humanoid: the mesh is empty or broken.",
+    "arms_raised": "not_humanoid: the arms are raised well above the shoulders. Use a T or A pose.",
+    "turned": "not_humanoid: the model is turned at an angle. Use a model facing the camera straight on.",
+}
+
+
+def _humanoid_metrics(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "joint_count": summary.get("joints", 0),
+        "humanoid": {key: summary[key] for key in ("pose", "arm_drop", "confidence", "warnings", "clips", "height") if key in summary},
+    }
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:

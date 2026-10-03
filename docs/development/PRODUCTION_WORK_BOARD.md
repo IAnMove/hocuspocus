@@ -156,3 +156,17 @@ como `{asset}.rig-descriptor.json` y se reabre con los mismos overrides de
 rol, por índice de nodo. Un override cruzado o duplicado deja `needs_review`
 y borra la verificación. Cambiar el hash o el perfil no reutiliza el análisis.
 `native_playback` sigue en false. No toca `rig_service.py` ni Scene3D.
+
+## Rig humanoide, revisión completa 2026-10-03
+
+Rama `feat/humanoid-rig-polish-20261003`. Los puntos clave salen ahora de la
+silueta frontal y de cortes de la malla: el detector rechaza con motivo los
+modelos con brazos pegados, piernas juntas o patas cortas (antes rigueaba mal
+un oso, un pingüino y un alien con orejas). Esqueleto con marcos canónicos
+(el mismo clip vale para pose T y A), pesos geodésicos con la cabeza aislada,
+20 clips cocinados por cuerpo con IK de piernas y brazos y pies en el suelo,
+e importador BVH/glTF por deltas de mundo (Mixamo, VRM, Unreal, Blender, CMU).
+La UI añade animaciones a un personaje ya rigueado y sube el archivo fuera de
+la galería. Los rigs de la primera versión siguen aceptando clips nuevos. Los
+módulos de compatibilidad de #755–#762 no cambian salvo sus tests del lector
+antiguo, que pasan a comprobar el importador nuevo.

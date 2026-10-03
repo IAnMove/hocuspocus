@@ -5,7 +5,6 @@ A finished parse is ``mapped``. It is not ``retarget_verified``.
 
 from __future__ import annotations
 
-import base64
 import os
 import struct
 
@@ -61,7 +60,7 @@ from services.humanoid_rig.pose_math import (
     trs_matrix,
     world_matrices,
 )
-from services.humanoid_rig.retarget import _floats_at, retarget_gltf
+from services.humanoid_rig.retarget_names import map_source_bones
 from services.humanoid_rig.role_map import is_ancestor, node_parents
 
 IDENTITY = [0.0, 0.0, 0.0, 1.0]
@@ -197,7 +196,9 @@ def test_legacy_profile_matches_a_saved_export():
     assert described["profile_evidence"] == "export_structure"
     assert described["preservation"]["silent_migration"] is False
     assert described["preservation"]["legacy_clip_count"] == 14
-    assert len(CLIP_IDS) == 14
+    # The legacy export's fourteen clips keep their ids and order; newer clips come after them.
+    assert CLIP_IDS[:14] == ("idle", "breathe", "walk", "run", "jump", "wave", "cheer", "dance_bounce", "dance_side",
+                             "dance_arms", "clap", "punch", "sit_down", "victory")
 
 
 def test_metadata_profile_overrides_the_chain():
@@ -334,9 +335,7 @@ def test_stride_is_honored_and_weights_are_not_truncated():
         "accessors": [{"bufferView": 0, "componentType": 5126, "count": 2, "type": "VEC3"}],
     }
     read = read_accessor(document, 0, [blob])
-    tight = _floats_at(blob, 0, 2, 3)
     np.testing.assert_allclose(read, [[1, 2, 3], [4, 5, 6]])
-    assert not np.allclose(read, tight)
     wide = np.full((2, 8), 0.125)
     assert weight_issues(np.zeros((2, 8), dtype=np.int32), wide, 4) == []
     assert "negative_weight" in weight_issues([[0]], [[-0.2]], 1)
@@ -416,69 +415,16 @@ def test_reflection_and_cycles_are_not_silently_fixed():
     assert is_ancestor(parents, 6, 1)
 
 
-def test_legacy_reader_still_defaults_to_clip_zero_and_rejects_step():
-    times = np.array([0.0, 1.0], dtype="<f4").tobytes()
-    first = np.array([IDENTITY, IDENTITY], dtype="<f4").tobytes()
-    second = np.array([IDENTITY, axis_angle_quat([0, 1, 0], np.pi / 2)], dtype="<f4").tobytes()
-    blob = times + first + second
-    uri = "data:application/octet-stream;base64," + base64.b64encode(blob).decode("ascii")
-    document = {
-        "asset": {"version": "2.0"},
-        "buffers": [{"uri": uri, "byteLength": len(blob)}],
-        "bufferViews": [
-            {"buffer": 0, "byteOffset": 0, "byteLength": 8},
-            {"buffer": 0, "byteOffset": 8, "byteLength": 32},
-            {"buffer": 0, "byteOffset": 40, "byteLength": 32},
-        ],
-        "accessors": [
-            {"bufferView": 0, "componentType": 5126, "count": 2, "type": "SCALAR"},
-            {"bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC4"},
-            {"bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC4"},
-        ],
-        "nodes": [{"name": "LeftArm"}],
-        "animations": [
-            {"samplers": [{"input": 0, "output": 1, "interpolation": "LINEAR"}], "channels": [
-                {"sampler": 0, "target": {"node": 0, "path": "rotation"}},
-            ]},
-            {"samplers": [{"input": 0, "output": 2, "interpolation": "LINEAR"}], "channels": [
-                {"sampler": 0, "target": {"node": 0, "path": "rotation"}},
-            ]},
-        ],
-    }
-    default = retarget_gltf(document, 1.0, source_height=1.0)
-    chosen = retarget_gltf(document, 1.0, source_height=1.0, animation_index=1)
-    np.testing.assert_allclose(default["rotations"]["LeftArm"][1], IDENTITY)
-    assert not np.allclose(chosen["rotations"]["LeftArm"][1], IDENTITY)
-    with pytest.raises(ValueError, match="invalid animation_index"):
-        retarget_gltf(document, 1.0, source_height=1.0, animation_index=4)
-    document["animations"][0]["samplers"][0]["interpolation"] = "STEP"
-    with pytest.raises(ValueError, match="unsupported interpolation"):
-        retarget_gltf(document, 1.0, source_height=1.0)
-
-
-def test_old_name_match_misses_the_reference_spine():
-    document = {
-        "asset": {"version": "2.0"},
-        "buffers": [{"uri": "data:application/octet-stream;base64," + base64.b64encode(
-            np.array([0.0, 1.0], dtype="<f4").tobytes() + np.array([IDENTITY, IDENTITY], dtype="<f4").tobytes()
-        ).decode("ascii"), "byteLength": 40}],
-        "bufferViews": [
-            {"buffer": 0, "byteOffset": 0, "byteLength": 8},
-            {"buffer": 0, "byteOffset": 8, "byteLength": 32},
-        ],
-        "accessors": [
-            {"bufferView": 0, "componentType": 5126, "count": 2, "type": "SCALAR"},
-            {"bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC4"},
-        ],
-        "nodes": _body(),
-        "animations": [{"samplers": [{"input": 0, "output": 1, "interpolation": "LINEAR"}], "channels": [
-            {"sampler": 0, "target": {"node": 1, "path": "rotation"}},
-        ]}],
-    }
-    parsed = retarget_gltf(document, 1.0, source_height=1.7)
-    assert "unrecognized joint Spine02" in parsed["warnings"]
-    assert "Spine02" not in parsed["bones"]
-    described = describe(document)
+def test_importer_maps_the_reference_spine_by_hierarchy():
+    nodes = _body()
+    mapping, _warnings = map_source_bones([node["name"] for node in nodes], node_parents(nodes))
+    named = {bone: nodes[index]["name"] for bone, index in mapping.items()}
+    assert named["Spine"] == "Spine02"
+    assert named["Spine1"] == "Spine01"
+    assert named["Spine2"] == "Spine"
+    assert named["Neck"] == "neck"
+    assert named["Head"] == "Head"
+    described = describe({"nodes": nodes})
     assert described["roles"]["spine"]["name"] == "Spine02"
     assert described["roles"]["upperChest"]["name"] == "Spine"
 

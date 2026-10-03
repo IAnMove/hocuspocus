@@ -8,9 +8,19 @@ pytest.importorskip("pygltflib")
 
 from pygltflib import GLTF2
 
-from services.humanoid_rig.animate import animate_humanoid
-from services.humanoid_rig.rig import rig_humanoid
+import numpy as np
+
+from services.humanoid_rig import rotation as rot
+from services.humanoid_rig.animate import animate_humanoid, stored_rig
+from services.humanoid_rig.gltf_export import read_primitives, write_rigged_glb
+from services.humanoid_rig.landmarks import detect_landmarks
+from services.humanoid_rig.names import BONE_NAMES, NORMAL_HEIGHT
+from services.humanoid_rig.rig import _combined, rig_humanoid
+from services.humanoid_rig.skeleton import build_skeleton
+from services.humanoid_rig.weights import compute_weights
 from services.procedural_3d.compose import compose_glb
+from tests.humanoid_bodies import as_glb, body
+from tests.humanoid_skinning import batch_worlds
 
 ROOT = Path(__file__).parents[1] / "tests" / "fixtures" / "humanoid_rig"
 
@@ -27,23 +37,58 @@ def _channels(data: bytes, index: int) -> list[str]:
 
 
 def test_library_clips_append_without_renumbering():
-    rigged, _sidecar = rig_humanoid(_pet())
+    rigged, sidecar = rig_humanoid(_pet())
+    assert [clip["name"] for clip in sidecar["clips"]] == ["Idle"]
     first, listed, warnings = animate_humanoid(rigged, ["walk", "wave"], 120)
     assert warnings == []
     assert [item["name"] for item in listed] == ["Walk", "Wave"]
-    assert [item["index"] for item in listed] == [0, 1]
-    assert _channels(first, 0) == ["rotation"] * len(GLTF2.load_from_bytes(first).animations[0].channels)
+    assert [item["index"] for item in listed] == [1, 2]
+    assert set(_channels(first, 1)) == {"rotation", "translation"}
     second, more, _warnings = animate_humanoid(first, ["dance_side"], 90)
-    assert more == [{"index": 2, "name": "Dance Side", "duration": pytest.approx(2 * 60 / 90)}]
-    assert len(GLTF2.load_from_bytes(second).animations) == 3
+    assert more == [{"index": 3, "name": "Dance Side", "duration": pytest.approx(2 * 60 / 90)}]
+    assert len(GLTF2.load_from_bytes(second).animations) == 4
 
 
 def test_imported_bvh_writes_a_hips_translation_channel():
     rigged, _sidecar = rig_humanoid(_pet())
-    data, listed, warnings = animate_humanoid(rigged, None, 120, (ROOT / "wave.bvh").read_bytes(), ".bvh")
-    assert listed[0]["name"] == "Imported" and listed[0]["index"] == 0
-    assert _channels(data, 0)[-1] == "translation"
-    assert isinstance(warnings, list)
+    data, listed, warnings = animate_humanoid(rigged, None, 120, (ROOT / "wave.bvh").read_bytes(), ".bvh", "wave hello")
+    assert listed[0]["name"] == "wave hello" and listed[0]["index"] == 1
+    assert _channels(data, 1)[-1] == "translation"
+    assert "1 joints were not used (fingers, props or extra bones)" in warnings
+
+
+def _legacy_rig() -> bytes:
+    """A rig as the first humanoid release wrote it: identity rests, no Hips marker."""
+    source = as_glb(body("human_a"))
+    positions, indices, _counts = _combined(read_primitives(source))
+    found = detect_landmarks(positions, indices)
+    skeleton = build_skeleton(found["points"], found["height"], found["y_min"], 1, found["head_region"])
+    scale = found["height"] / NORMAL_HEIGHT
+    for bone in skeleton["bones"]:
+        parent = bone["parent"]
+        bone["rotation"] = rot.IDENTITY.copy()
+        if parent is not None:
+            bone["translation"] = (skeleton["world"][bone["name"]] - skeleton["world"][parent]) / scale
+    joints, weights = compute_weights(positions, indices, skeleton)
+    return write_rigged_glb(source, skeleton, [(joints, weights)])
+
+
+def test_a_legacy_rig_still_gets_arms_down_in_a_walk():
+    legacy = _legacy_rig()
+    data, listed, _warnings = animate_humanoid(legacy, ["walk"], 120)
+    clip = listed[0]
+    assert clip["name"] == "Walk"
+    rig = stored_rig(data)
+    gltf = GLTF2.load_from_bytes(data)
+    assert len(gltf.animations) == 1
+    from services.humanoid_rig.clips import clip_library
+
+    walk = clip_library(120, ["walk"], stored_rig(legacy))[0]
+    local = np.stack([walk["rotations"].get(name, np.tile(rig.bones[index]["rotation"], (len(walk["times"]), 1)))
+                      for index, name in enumerate(BONE_NAMES)], axis=1)
+    worlds = batch_worlds(rig.bones, local, walk["hips_translation"])
+    arm = worlds[:, BONE_NAMES.index("LeftForeArm"), :3, 3] - worlds[:, BONE_NAMES.index("LeftArm"), :3, 3]
+    assert float((arm[:, 1] / np.linalg.norm(arm, axis=1)).max()) < -0.8
 
 
 def test_a_mesh_without_the_standard_skeleton_is_refused():
@@ -87,4 +132,4 @@ def test_worker_animate_mode_matches_the_library(tmp_path):
     )
     assert output.is_file()
     assert result["clips"][0]["name"] == "Walk"
-    assert result["clips"][0]["index"] == 0
+    assert result["clips"][0]["index"] == 1

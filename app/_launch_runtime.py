@@ -36998,7 +36998,7 @@ _model3d_compose_handlers = model3d_compose_handlers(_workspace_dir, os.path.joi
 api.include_router(create_model3d_compose_router(_model3d_compose_handlers))
 from routers.model3d_animate import command_catalog as model3d_animate_catalog, command_handlers as model3d_animate_handlers, create_model3d_animate_router
 _model3d_animate_handlers = model3d_animate_handlers(_workspace_dir, os.path.join(os.getcwd(), "settings", "model3d-animate.sqlite3"))
-api.include_router(create_model3d_animate_router(_model3d_animate_handlers))
+api.include_router(create_model3d_animate_router(_model3d_animate_handlers, _workspace_dir))
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
     handlers={"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,
