@@ -50,7 +50,7 @@ def _collect(workspace_dir: str, workspace_id: str, production_id: str, work: di
     series, series_limits = _series(workspace_dir, work)
     director, director_limits = _director(workspace_dir, workspace_id, production_id)
     montage, montage_limits = _montage(workspace_dir, production_id, _montage_hint(workspace_dir, production_id))
-    primary, extras = _pick(music, series, director, montage)
+    primary, extras = _pick(music, series, director, montage, work)
     return (
         _merge(primary, extras),
         _present(("music", music), ("series", series), ("director", director), ("montage", montage)),
@@ -58,7 +58,12 @@ def _collect(workspace_dir: str, workspace_id: str, production_id: str, work: di
     )
 
 
-def _pick(music, series, director, montage):
+def _pick(music, series, director, montage, work: dict[str, Any] | None = None):
+    # A leftover music-shaped shots.json beside series-{episode} is not the
+    # render. Review then listed those lyrics, and regenerate fired a song redo.
+    episode = isinstance((work or {}).get("project"), dict) and work["project"].get("kind") == "episode"
+    if episode and series is not None:
+        return series, [music, director, montage]
     if music is not None:
         return music, [series, director, montage]
     if series is not None:

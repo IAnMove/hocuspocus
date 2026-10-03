@@ -68,7 +68,7 @@ def _from_files(workspace_dir: str, workspace_id: str, rows: dict[str, dict], wa
         # An episode file still identifies the work for shot review. Its
         # pending status must not replace a stronger link status; ``_merge``
         # keeps that rule when the file timestamp is newer.
-        _merge(rows, _file_row(workspace_id, production_id, body))
+        _merge(rows, _file_row(workspace_id, production_id, body), source="file")
 
 
 def _from_links(workspace_dir: str, workspace_id: str, rows: dict[str, dict]) -> None:
@@ -79,7 +79,7 @@ def _from_links(workspace_dir: str, workspace_id: str, rows: dict[str, dict]) ->
         for production_id in record.get("production_ids") or []:
             if not isinstance(production_id, str) or not production_id:
                 continue
-            _merge(rows, _link_row(workspace_id, production_id, record))
+            _merge(rows, _link_row(workspace_id, production_id, record), source="link")
 
 
 def _from_stories(workspace_dir: str, workspace_id: str, rows: dict[str, dict], warnings: list[dict[str, str]]) -> None:
@@ -95,7 +95,7 @@ def _from_stories(workspace_dir: str, workspace_id: str, rows: dict[str, dict], 
         for item in project.get("productions") or []:
             if not isinstance(item, dict) or not item.get("id"):
                 continue
-            _merge(rows, _story_row(workspace_id, project, item, project_id))
+            _merge(rows, _story_row(workspace_id, project, item, project_id), source="story")
 
 
 def _from_pipelines(workspace_id: str, pipelines: list[dict[str, Any]], rows: dict[str, dict], warnings: list[dict[str, str]]) -> None:
@@ -109,7 +109,7 @@ def _from_pipelines(workspace_id: str, pipelines: list[dict[str, Any]], rows: di
         except ValueError as error:
             warnings.append({"source": "pipeline", "error": type(error).__name__})
             continue
-        _merge(rows, _pipeline_row(workspace_id, adapted["production"]))
+        _merge(rows, _pipeline_row(workspace_id, adapted["production"]), source="director")
 
 
 def _from_director_files(workspace_dir: str, workspace_id: str, rows: dict[str, dict], warnings: list[dict[str, str]]) -> None:
@@ -209,7 +209,7 @@ def _row(**fields: Any) -> dict[str, Any]:
     }
 
 
-def _merge(rows: dict[str, dict], candidate: dict[str, Any]) -> None:
+def _merge(rows: dict[str, dict], candidate: dict[str, Any], *, source: str = "") -> None:
     current = rows.get(candidate["production_id"])
     if current is None:
         rows[candidate["production_id"]] = candidate
@@ -222,15 +222,20 @@ def _merge(rows: dict[str, dict], candidate: dict[str, Any]) -> None:
     # Compare against the timestamp that arrived with this row. Filling an empty
     # updated_at above would otherwise make a later completed link look "the same
     # age" as a pending file and leave the catalog unfinished.
+    episode = _episode_kind(current.get("project")) or _episode_kind(candidate.get("project"))
     if candidate.get("updated_at") and str(candidate.get("updated_at")) > str(previous_at or ""):
         current["updated_at"] = candidate["updated_at"]
-        if candidate.get("status") not in (None, "", "unknown", "draft", "pending"):
+        # Episode status lives on the link. A leftover running music file with a
+        # newer timestamp must not hide completed.
+        if (not episode or source == "link") and candidate.get("status") not in (None, "", "unknown", "draft", "pending"):
             current["status"] = candidate["status"]
-    # Episode status lives on the link. A leftover pending file with a newer
-    # timestamp must not hide running or completed.
-    if _episode_kind(current.get("project")) or _episode_kind(candidate.get("project")):
-        if _weak_status(current.get("status")) and not _weak_status(candidate.get("status")):
+    if episode:
+        if source == "link" and not _weak_status(candidate.get("status")):
             current["status"] = candidate["status"]
+        elif _weak_status(current.get("status")) and not _weak_status(candidate.get("status")):
+            current["status"] = candidate["status"]
+        if source == "link" and candidate.get("format"):
+            current["format"] = candidate["format"]
 
 
 def _project(value: Any) -> dict[str, str] | None:
