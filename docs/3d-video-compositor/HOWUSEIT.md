@@ -219,7 +219,7 @@ Retexture: `"operation": "retexture", "source_model": "existing.glb"`. Do not re
 }
 ```
 
-Profiles: `prop`, `vehicle`, `humanoid`, `quadruped`, `flying`, `serpentine`. Engine: `procedural` (always) or `unirig` (if installed). Output is a new `*_rigged_*.glb`. In the compositor, set `animation.clip` to a baked clip name (`hover`, `spin`, …).
+Profiles: `prop`, `vehicle`, `humanoid`, `quadruped`, `flying`, `serpentine`. Engine: `procedural` (always) or `unirig` (if installed). Output is a new `*_rigged_*.glb`. In the compositor, set `animation.clip` to a baked clip name (`hover`, `spin`, …). A character in a T or A pose can use `engine: "humanoid"` instead: a standard Mixamo-named skeleton and clips such as `Walk`, `Wave` or `Dance Side`, baked for that body ([humanoid rig guide](../agents/HUMANOID_RIG.md)).
 
 ### 5.6 Upload a local file
 

@@ -87,5 +87,5 @@ def test_humanoid_engine_is_a_rig_option_with_pose():
     submit = command_catalog()[0]
     payload = submit["inputSchema"]["properties"]["input"]["properties"]
     assert payload["engine"]["enum"] == ["unirig", "procedural", "humanoid"]
-    assert payload["pose"]["enum"] == ["t", "a"]
+    assert payload["pose"]["enum"] == ["auto", "t", "a"]
     assert "not_humanoid" in submit["description"]

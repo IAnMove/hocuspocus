@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import re
+import struct
 import subprocess
 import tempfile
 import uuid
@@ -14,19 +16,34 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
-from routers.wangp_mcp import RequestJournal
+from routers.wangp_mcp import RequestJournal, UncertainRequest
 from services.asset_manifest import publish_generation_sidecar
 from services.mcp_intent import check_intent_id, intent_digest
 
 OPERATION = "model3d.animate"
 _IMPORT_SUFFIXES = {".bvh", ".glb", ".gltf"}
+IMPORT_FOLDER = "animation-imports"
+_MAX_IMPORT_BYTES = 64 * 1024 * 1024
+_REFUSAL_CODES = ("not_humanoid", "invalid_input")
+logger = logging.getLogger(__name__)
+
+
+class AnimateRefused(ValueError):
+    """The worker declined the source or the animation file; the same request always fails the same way."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def command_catalog():
     return [{"name": OPERATION, "version": 1, "domain": "model3d", "mutation": True,
-             "description": "Add in-place humanoid clips, or one imported BVH/glTF clip, to a GLB that already "
-                            "has the standard Mixamo-named skeleton. CPU only. Returns each clip index, name and duration "
-                            "for a Video 3D slot. Fails when that skeleton is missing.",
+             "description": "Add humanoid clips to a GLB that already has the standard Mixamo-named skeleton (from "
+                            "model3d.rig engine humanoid). Clips are baked for that body. import.file is a .bvh, .glb or "
+                            ".gltf inside the workspace (Mixamo, VRM/VRoid, Unreal, Blender, Daz or CMU bone names); every "
+                            "animation in it is retargeted in place. CPU only. Returns each clip index, name and duration "
+                            "for a Video 3D slot, plus warnings. Unusable inputs (no skeleton, no humanoid in the file, "
+                            "compressed meshes) answer invalid_input; the same intent replays that answer.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
                              "properties": {"version": {"const": 1, "type": "integer"},
                                             "intent_id": {"type": "string", "minLength": 1, "maxLength": 160},
@@ -128,9 +145,14 @@ def _worker_payload(completed: subprocess.CompletedProcess[str]) -> dict:
         detail = (completed.stderr or completed.stdout or "").strip()[:400]
         raise RuntimeError(detail or f"Humanoid animate worker exited {completed.returncode}")
     payload = json.loads(line[len("MAESTRO_RESULT "):])
-    if not payload.get("ok"):
-        raise ValueError(str(payload.get("reason") or payload.get("error") or "rig_failed"))
-    return payload
+    if payload.get("ok"):
+        return payload
+    code = str(payload.get("error") or "rig_failed")
+    reason = str(payload.get("reason") or code)
+    if code in _REFUSAL_CODES:
+        raise AnimateRefused(code, reason if code == "invalid_input" else f"{code}: {reason}")
+    logger.warning("Humanoid animate worker failed: %s\n%s", reason, (completed.stderr or "")[-4000:])
+    raise RuntimeError(f"Humanoid animate worker failed: {reason}")
 
 
 def execute_animate(request: dict, output: Path, *, python: Path | None = None) -> dict:
@@ -163,7 +185,42 @@ def _request(source: Path, clips: list[str], bpm: float, imported: Path | None) 
     request = {"mode": "animate", "source": str(source), "animations": clips, "animation_bpm": bpm}
     if imported is not None:
         request["import_file"] = str(imported)
+        request["import_label"] = _import_label(imported)
     return request
+
+
+def _output_stem(stem: str) -> str:
+    """The source name without earlier ``humanoid-`` prefixes, the rig job's timestamp and ``rigged_`` mark, or hash suffixes."""
+    plain = re.sub(r"[^A-Za-z0-9_-]+", "-", stem).strip("-")
+    plain = re.sub(r"^(humanoid-)+", "", plain)
+    plain = re.sub(r"(-[0-9a-f]{16})+$", "", plain)
+    plain = re.sub(r"^\d{4}-\d{2}-\d{2}-\d{2}h\d{2}m\d{2}s_rigged_(.+)_[0-9a-f]{8}$", r"\1", plain)
+    return plain[:48].strip("-_") or "model"
+
+
+def _import_label(path: Path) -> str:
+    """Clip name from the file name, without the hash ``store_import`` adds to uploads."""
+    stem = re.sub(r"-[0-9a-f]{8}$", "", path.stem) if path.parent.name == IMPORT_FOLDER else path.stem
+    return re.sub(r"[_-]+", " ", stem).strip()[:60] or "Imported"
+
+
+def store_import(root: Path, filename: str, payload: bytes) -> str:
+    """Save an uploaded animation under the workspace; return its workspace path."""
+    suffix = Path(filename).suffix.lower()
+    if suffix not in _IMPORT_SUFFIXES:
+        raise ValueError("import file must be .bvh, .glb or .gltf")
+    if not payload or len(payload) > _MAX_IMPORT_BYTES:
+        raise ValueError("import file must be between 1 byte and 64 MB")
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(filename).stem).strip("-")[:48] or "animation"
+    name = f"{stem}-{hashlib.sha256(payload).hexdigest()[:8]}{suffix}"
+    folder = root / IMPORT_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / name
+    if not target.is_file():
+        temporary = folder / f".{name}-{uuid.uuid4().hex}.tmp"
+        temporary.write_bytes(payload)
+        temporary.replace(target)
+    return f"{IMPORT_FOLDER}/{name}"
 
 
 def _publish(folder: Path, filename: str, payload: dict, intent: str, clips: list[str], bpm: float, imported: Path | None) -> None:
@@ -200,7 +257,7 @@ def command_handlers(workspace_dir, journal_path, runner=None):
         if stored is not None:
             return stored
         root.mkdir(parents=True, exist_ok=True)
-        stem = re.sub(r"[^A-Za-z0-9_-]+", "-", source.stem).strip("-")[:48] or "model"
+        stem = _output_stem(source.stem)
         filename = f"humanoid-{stem}-{identity[:16]}.glb"
         temporary = root / f".{filename}-{uuid.uuid4().hex}.tmp"
         try:
@@ -208,6 +265,12 @@ def command_handlers(workspace_dir, journal_path, runner=None):
             if not temporary.is_file():
                 raise RuntimeError("Humanoid animate worker did not write a GLB")
             temporary.replace(root / filename)
+        except AnimateRefused as refused:
+            # Nothing was written; record the answer so a retry with this intent gets it again.
+            body = {"version": 1, "operation": OPERATION, "status": "failed", "status_code": 422,
+                    "error": {"code": refused.code, "message": str(refused), "retryable": False}}
+            journal.finish(identity, body)
+            return body
         finally:
             temporary.unlink(missing_ok=True)
         _publish(root, filename, payload, intent, clips, bpm, imported)
@@ -226,14 +289,94 @@ def command_handlers(workspace_dir, journal_path, runner=None):
     return {OPERATION: handle}
 
 
-def create_model3d_animate_router(handlers):
+def humanoid_rigs(root: Path) -> list[dict]:
+    """Workspace GLBs that carry the standard skeleton, newest first, with their clip names."""
+    from services.humanoid_rig.names import BONE_NAMES
+
+    found = []
+    for path in root.glob("*.glb"):
+        document = _glb_json(path)
+        nodes = document.get("nodes") if isinstance(document, dict) else None
+        if not isinstance(nodes, list):
+            continue
+        names = {str(node.get("name") or "") for node in nodes if isinstance(node, dict)}
+        if not set(BONE_NAMES) <= names:
+            continue
+        animations = document.get("animations") if isinstance(document.get("animations"), list) else []
+        clips = [str((item.get("name") if isinstance(item, dict) else None) or f"Clip {index + 1}")
+                 for index, item in enumerate(animations)]
+        try:
+            modified = path.stat().st_mtime
+        except OSError:
+            continue  # removed while listing
+        found.append({"name": path.name, "clips": clips, "modified": modified})
+    return sorted(found, key=lambda item: item["modified"], reverse=True)
+
+
+def _glb_json(path: Path) -> dict | None:
+    """The JSON chunk of a GLB, without reading its binary payload."""
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(20)
+            if len(header) < 20:
+                return None
+            magic, _version, _length, size, kind = struct.unpack("<IIIII", header)
+            if magic != 0x46546C67 or kind != 0x4E4F534A or size > 16 * 1024 * 1024:
+                return None
+            return json.loads(handle.read(size))
+    except (OSError, ValueError):
+        return None
+
+
+async def _bounded_body(request: Request) -> bytes:
+    """The request body, refused with 413 as soon as it passes the import limit."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > _MAX_IMPORT_BYTES:
+        raise HTTPException(413, "Animation file exceeds the 64 MB limit")
+    chunks, size = [], 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > _MAX_IMPORT_BYTES:
+            raise HTTPException(413, "Animation file exceeds the 64 MB limit")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def create_model3d_animate_router(handlers, workspace_dir=None):
     router = APIRouter()
 
     @router.post("/api/v1/model3d/animate")
     async def animate(request: Request):
         try:
-            return await handlers[OPERATION](await request.json())
+            body = await handlers[OPERATION](await request.json())
+        except UncertainRequest as error:
+            raise HTTPException(409, {"code": "submission_uncertain", "message": str(error), "retryable": False}) from error
         except ValueError as error:
             raise HTTPException(422, {"code": "invalid_command", "message": str(error), "retryable": False}) from error
+        except RuntimeError as error:
+            raise HTTPException(500, {"code": "animate_failed", "message": f"{error}. Retry with a new intent_id.",
+                                      "retryable": False}) from error
+        if body.get("status") == "failed":
+            raise HTTPException(int(body.get("status_code") or 422), body["error"])
+        return body
+
+    @router.get("/api/v1/model3d/humanoid-rigs")
+    async def rigs(workspace: str):
+        if workspace_dir is None:
+            raise HTTPException(503, "rig listing is not available")
+        return {"rigs": await run_in_threadpool(humanoid_rigs, Path(workspace_dir(workspace)))}
+
+    @router.post("/api/v1/model3d/animation-files")
+    async def upload(request: Request, workspace: str, filename: str):
+        """Raw-body upload of a .bvh/.glb/.gltf for ``import.file``; kept out of the gallery."""
+        if workspace_dir is None:
+            raise HTTPException(503, "uploads are not available")
+        payload = await _bounded_body(request)
+        try:
+            root = Path(workspace_dir(workspace))
+            stored = await run_in_threadpool(store_import, root, filename, payload)
+        except ValueError as error:
+            raise HTTPException(422, {"code": "invalid_upload", "message": str(error), "retryable": False}) from error
+        return {"file": stored, "workspace": workspace, "name": Path(filename).name}
 
     return router

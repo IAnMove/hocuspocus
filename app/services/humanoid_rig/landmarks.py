@@ -1,45 +1,145 @@
-"""Landmarks of a T or A pose humanoid, from horizontal mesh slices.
+"""Landmarks of a T or A pose humanoid, from its front silhouette and depth.
 
-Thresholds are fractions of the mesh height. A mesh that is not a biped with
-arms clear of the torso raises ``NotHumanoid`` instead of guessing a skeleton.
+The silhouette finds the legs (the gap up to the crotch), the neck (the
+narrowest row under the head) and the arms (thin branches off the torso).
+Mesh cross-sections then give each joint its depth. A mesh that is not an
+upright biped with its arms clear of the body raises ``NotHumanoid``.
+Thresholds are fractions of the mesh height, so proportions do not matter.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+from services.humanoid_rig.body_parts import (
+    arm_drop,
+    arm_line,
+    connect_pieces,
+    find_arms,
+    find_legs,
+    find_neck,
+    leg_center,
+    leg_regions,
+    require_arm_angle,
+    torso_half,
+)
 from services.humanoid_rig.errors import NotHumanoid
+from services.humanoid_rig.landmark_depth import Depth
 from services.humanoid_rig.names import LANDMARK_NAMES
+from services.humanoid_rig.silhouette import front_silhouette
 
-_SLICES = 72
-_CLUSTER = 0.012
-_LINK = 0.055
-_LEG_SPAN = 0.12
-_ARM_CLEAR = 0.08
 _ASYMMETRY = 0.25
-_SIDES = ("left", "right")
+_SIDES = (("left", 1.0), ("right", -1.0))
 
 
 def detect_landmarks(positions: np.ndarray, indices: np.ndarray | None = None) -> dict:
-    """Return the 14 construction landmarks for a humanoid mesh.
+    """Return the construction landmarks for a humanoid mesh.
 
-    ``positions`` is (N, 3) in metres, Y up, the character facing +Z.
-    ``indices`` is (M, 3). Without indices, every three positions are a triangle.
+    ``positions`` is (N, 3) in metres, Y up. ``indices`` is (M, 3); without
+    indices, every three positions are a triangle. A body facing -Z is turned
+    for the analysis and the landmarks are turned back.
     """
     triangles = _triangles(positions, indices)
     y_min = float(triangles[:, :, 1].min())
-    y_max = float(triangles[:, :, 1].max())
-    height = y_max - y_min
+    height = float(triangles[:, :, 1].max()) - y_min
     _require_height(height)
+    _require_upright(triangles, height)
     vertices = np.unique(np.round(triangles.reshape(-1, 3), 5), axis=0)
-    slices = _slices(triangles, y_min, y_max, height)
-    legs = _leg_pair(slices, y_min, height)
-    torso_half = _torso_half(slices, legs, height)
-    arms = _arm_pair(slices, legs, torso_half, y_min, height)
-    points = _assemble(legs, arms, vertices, y_min, y_max, height)
+    facing, pivot = _facing(vertices, y_min, height)
+    if facing < 0:
+        triangles, vertices = _turn(triangles, pivot), _turn(vertices, pivot)
+    found = _analyse(triangles, vertices, y_min, height)
+    if facing < 0:
+        found["points"] = {name: _turn(np.asarray(point), pivot) for name, point in found["points"].items()}
+        found["head"]["x"] = 2.0 * float(pivot[0]) - found["head"]["x"]
+        found["warnings"].append("facing_back")
+    return _payload(found, height, y_min, facing)
+
+
+def _analyse(triangles: np.ndarray, vertices: np.ndarray, y_min: float, height: float) -> dict:
+    silhouette = connect_pieces(front_silhouette(triangles, height))
+    mask = silhouette.mask
+    legs = find_legs(mask)
+    neck = find_neck(mask, legs)
+    half = torso_half(neck["widths"], legs, neck)
+    arms = find_arms(mask, legs, neck, half)
+    tall = legs["top"] - legs["floor"] + 1
+    lines = {side: arm_line(mask, arms[side], tall) for side, _sign in _SIDES}
+    drops = {side: arm_drop(lines[side], sign) for side, sign in _SIDES}
+    for drop in drops.values():
+        require_arm_angle(drop)
+    base = _base_top(legs, mask, silhouette, tall)
+    depth = Depth(vertices, silhouette, height, y_min, base)
+    points = _assemble(depth, legs, neck, half, lines, leg_regions(mask, legs))
     _require_symmetry(points, height)
-    _require_names(points)
-    return _payload(points, height, y_min)
+    _require_facing_front(points, height)
+    head = {"y": float(points["neck"][1]), "x": float(points["neck"][0]), "half": neck["head_width"] * 0.5 * silhouette.pixel}
+    warnings = _warnings(neck, drops, points, height) + ([] if base is None else ["on_a_base"])
+    return {"points": points, "warnings": warnings, "arm_drop": float(np.mean(list(drops.values()))), "head": head, "base": base}
+
+
+def _base_top(legs: dict, mask: np.ndarray, silhouette, tall: int) -> float | None:
+    """The top of a pedestal: the feet separate well above the lowest point, over something wider than them."""
+    if legs["feet_row"] - legs["floor"] <= tall * 0.03:
+        return None
+    if _row_span(mask[legs["floor"] + 1]) <= _row_span(mask[legs["feet_row"]]) * 1.25:
+        return None
+    return silhouette.origin[1] + legs["feet_row"] * silhouette.pixel
+
+
+def _row_span(row: np.ndarray) -> int:
+    filled = np.flatnonzero(row)
+    return int(filled[-1] - filled[0] + 1) if len(filled) else 0
+
+
+def _require_facing_front(points: dict, height: float) -> None:
+    """A body turned away from the camera puts one shoulder and one hand far behind the other."""
+    hands = abs(float(points["left_wrist"][2]) - float(points["right_wrist"][2]))
+    shoulders = abs(float(points["left_shoulder"][2]) - float(points["right_shoulder"][2]))
+    if hands > height * 0.12 or shoulders > height * 0.06:
+        raise NotHumanoid("turned")
+
+
+def _assemble(depth: Depth, legs: dict, neck: dict, half: float, lines: dict, regions: dict) -> dict:
+    points = depth.spine(legs, neck, half)
+    for side, _sign in _SIDES:
+        points.update(depth.leg(side, regions[side], legs, points["crotch"], leg_center))
+        points.update(depth.arm(side, lines[side]))
+    _require_finite(points)
+    return points
+
+
+def _warnings(neck: dict, drops: dict, points: dict, height: float) -> list[str]:
+    warnings = []
+    if not neck["found"]:
+        warnings.append("neck_not_found")
+    if max(drops.values()) > 55.0:
+        warnings.append("arms_steep")
+    if float(points["crotch"][1] - points["left_ankle"][1]) < height * 0.2:
+        warnings.append("short_legs")
+    reach = np.linalg.norm(points["left_hand_tip"] - points["left_shoulder"])
+    if float(reach) < height * 0.22:
+        warnings.append("short_arms")
+    return warnings
+
+
+def _payload(found: dict, height: float, y_min: float, facing: float) -> dict:
+    ordered = {name: [float(v) for v in found["points"][name]] for name in LANDMARK_NAMES}
+    floor = y_min if found["base"] is None else float(found["base"])
+    warnings = list(dict.fromkeys(found["warnings"]))
+    drop = float(found["arm_drop"])
+    return {
+        "points": ordered,
+        "height": float(height),
+        "y_min": float(floor),
+        "base": found["base"],
+        "facing": int(facing),
+        "arm_drop": round(drop, 2),
+        "pose": "t" if drop < 20.0 else "a",
+        "confidence": round(max(0.3, 1.0 - 0.15 * len([item for item in warnings if item not in ("facing_back", "on_a_base")])), 2),
+        "warnings": warnings,
+        "head_region": dict(found["head"]),
+    }
 
 
 def _require_height(height: float) -> None:
@@ -47,451 +147,10 @@ def _require_height(height: float) -> None:
         raise NotHumanoid("degenerate")
 
 
-def _require_names(points: dict) -> None:
-    missing = [name for name in LANDMARK_NAMES if name not in points]
-    if missing:
-        raise NotHumanoid("degenerate")
-
-
-def _payload(points: dict, height: float, y_min: float) -> dict:
-    ordered = {name: [float(v) for v in points[name]] for name in LANDMARK_NAMES}
-    return {
-        "points": ordered,
-        "height": float(height),
-        "y_min": float(y_min),
-        "confidence": 1.0,
-        "warnings": [],
-    }
-
-
-def _triangles(positions: np.ndarray, indices: np.ndarray | None) -> np.ndarray:
-    cloud = np.asarray(positions, dtype=np.float64)
-    _require_cloud(cloud)
-    if indices is None:
-        return _soup(cloud)
-    return _indexed(cloud, indices)
-
-
-def _require_cloud(cloud: np.ndarray) -> None:
-    if cloud.ndim != 2 or cloud.shape[1] != 3 or len(cloud) < 9:
-        raise NotHumanoid("degenerate")
-    if not np.all(np.isfinite(cloud)):
-        raise NotHumanoid("degenerate")
-
-
-def _soup(cloud: np.ndarray) -> np.ndarray:
-    if len(cloud) % 3:
-        raise NotHumanoid("degenerate")
-    faces = cloud.reshape(-1, 3, 3)
-    if len(faces) < 4:
-        raise NotHumanoid("degenerate")
-    return faces
-
-
-def _indexed(cloud: np.ndarray, indices: np.ndarray) -> np.ndarray:
-    faces = np.asarray(indices, dtype=np.int64)
-    if faces.ndim != 2 or faces.shape[1] != 3 or len(faces) < 4:
-        raise NotHumanoid("degenerate")
-    if int(faces.min()) < 0 or int(faces.max()) >= len(cloud):
-        raise NotHumanoid("degenerate")
-    return cloud[faces]
-
-
-def _slices(triangles: np.ndarray, y_min: float, y_max: float, height: float) -> list:
-    levels = np.linspace(y_min, y_max, _SLICES + 2)[1:-1]
-    tolerance = max(height * _CLUSTER, 1e-3)
-    return [(float(level), _blobs_at(triangles, float(level), tolerance, height)) for level in levels]
-
-
-def _blobs_at(triangles: np.ndarray, level: float, tolerance: float, height: float) -> list:
-    blobs = _cluster_segments(_segments_at(triangles, level), tolerance)
-    split = []
-    for blob in blobs:
-        split.extend(_split_trunk(blob, height))
-    return split
-
-
-def _segments_at(triangles: np.ndarray, height: float) -> np.ndarray:
-    hits = (
-        _edge_hit(triangles[:, 0], triangles[:, 1], height),
-        _edge_hit(triangles[:, 1], triangles[:, 2], height),
-        _edge_hit(triangles[:, 2], triangles[:, 0], height),
-    )
-    mask = np.stack([item[0] for item in hits], axis=1)
-    coords = np.stack([item[1] for item in hits], axis=1)
-    chosen = np.flatnonzero(mask.sum(axis=1) >= 2)
-    if len(chosen) == 0:
-        return np.zeros((0, 2, 3))
-    segments = np.empty((len(chosen), 2, 3), dtype=np.float64)
-    for row, index in enumerate(chosen):
-        segments[row] = coords[index, mask[index]][:2]
-    return segments
-
-
-def _edge_hit(start: np.ndarray, end: np.ndarray, height: float) -> tuple[np.ndarray, np.ndarray]:
-    delta = end[:, 1] - start[:, 1]
-    low = np.minimum(start[:, 1], end[:, 1])
-    high = np.maximum(start[:, 1], end[:, 1])
-    crosses = (low < height) & (high >= height) & (np.abs(delta) > 1e-8)
-    factor = np.zeros(len(start))
-    factor[crosses] = (height - start[crosses, 1]) / delta[crosses]
-    point = start + (end - start) * factor[:, None]
-    return crosses, point
-
-
-def _cluster_segments(segments: np.ndarray, tolerance: float) -> list:
-    if len(segments) == 0:
-        return []
-    parent = np.arange(len(segments))
-    ends = segments.reshape(-1, 3)
-    owners = np.repeat(np.arange(len(segments)), 2)
-    _union_endpoint_grid(parent, ends, owners, tolerance)
-    return _segment_blobs(segments, parent)
-
-
-def _union_endpoint_grid(parent: np.ndarray, ends: np.ndarray, owners: np.ndarray, tolerance: float) -> None:
-    grid: dict[tuple[int, int], list[int]] = {}
-    coords = np.floor(ends[:, [0, 2]] / tolerance).astype(np.int64)
-    for index, key in enumerate(coords):
-        grid.setdefault((int(key[0]), int(key[1])), []).append(index)
-    tol2 = tolerance * tolerance
-    for members in grid.values():
-        _union_members(parent, owners, ends, members, tol2)
-    _union_adjacent(parent, owners, ends, grid, tol2)
-
-
-def _union_members(parent, owners, ends, members, tol2) -> None:
-    if len(members) > 16:
-        _union_all(parent, owners, members)
-        return
-    for left in range(len(members)):
-        for right in range(left + 1, len(members)):
-            if _xz2(ends[members[left]], ends[members[right]]) <= tol2:
-                _union(parent, owners[members[left]], owners[members[right]])
-
-
-def _union_all(parent, owners, members) -> None:
-    head = int(owners[members[0]])
-    for index in members[1:]:
-        _union(parent, head, int(owners[index]))
-
-
-def _union_adjacent(parent, owners, ends, grid, tol2) -> None:
-    for (ix, iz), members in grid.items():
-        for key in ((ix + 1, iz), (ix, iz + 1), (ix + 1, iz + 1), (ix + 1, iz - 1)):
-            other = grid.get(key)
-            if other is not None and _any_close(ends, members, other, tol2):
-                _union(parent, int(owners[members[0]]), int(owners[other[0]]))
-
-
-def _any_close(ends, left, right, tol2) -> bool:
-    sample_a = _sample_ids(left)
-    sample_b = _sample_ids(right)
-    for a in sample_a:
-        for b in sample_b:
-            if _xz2(ends[a], ends[b]) <= tol2:
-                return True
-    return False
-
-
-def _sample_ids(members: list[int]) -> list[int]:
-    if len(members) <= 12:
-        return members
-    step = max(len(members) // 12, 1)
-    return members[::step]
-
-
-def _xz2(left: np.ndarray, right: np.ndarray) -> float:
-    delta = left[[0, 2]] - right[[0, 2]]
-    return float(delta @ delta)
-
-
-def _find(parent: np.ndarray, index: int) -> int:
-    while parent[index] != index:
-        parent[index] = parent[parent[index]]
-        index = int(parent[index])
-    return index
-
-
-def _union(parent: np.ndarray, left: int, right: int) -> None:
-    a, b = _find(parent, left), _find(parent, right)
-    if a != b:
-        parent[b] = a
-
-
-def _segment_blobs(segments: np.ndarray, parent: np.ndarray) -> list:
-    groups: dict[int, list[int]] = {}
-    for index in range(len(segments)):
-        groups.setdefault(_find(parent, index), []).append(index)
-    return [_blob(segments[indexes].reshape(-1, 3)) for indexes in groups.values()]
-
-
-def _blob(points: np.ndarray) -> dict:
-    return {
-        "centroid": points.mean(axis=0),
-        "min": points.min(axis=0),
-        "max": points.max(axis=0),
-        "points": points,
-    }
-
-
-def _split_trunk(blob: dict, height: float) -> list:
-    points = blob["points"]
-    span = float(points[:, 0].max() - points[:, 0].min())
-    if span < height * 0.34:
-        return [blob]
-    edges = _trunk_edges(points, height)
-    if edges is None:
-        return [blob]
-    parts = _cut_x(points, edges[0], edges[1])
-    if len(parts) < 2:
-        return [blob]
-    return parts
-
-
-def _trunk_edges(points: np.ndarray, height: float):
-    bin_w = max(height * 0.02, 1e-3)
-    x0 = float(points[:, 0].min())
-    count = max(int(np.ceil(float(points[:, 0].max() - x0) / bin_w)), 1)
-    bins = np.clip(((points[:, 0] - x0) / bin_w).astype(np.int32), 0, count - 1)
-    thickness, occupied = _bin_thickness(points, bins, count)
-    centers = x0 + (np.arange(count) + 0.5) * bin_w
-    return _edges_from_profile(centers, thickness, occupied, height, bin_w)
-
-
-def _bin_thickness(points: np.ndarray, bins: np.ndarray, count: int):
-    thickness = np.zeros(count)
-    occupied = np.zeros(count, dtype=bool)
-    for index in range(count):
-        chosen = points[bins == index]
-        if len(chosen) == 0:
-            continue
-        occupied[index] = True
-        thickness[index] = float(chosen[:, 2].max() - chosen[:, 2].min())
-    return thickness, occupied
-
-
-def _edges_from_profile(centers, thickness, occupied, height, bin_w):
-    central = np.abs(centers) <= height * 0.20
-    if not np.any(central & occupied):
-        return None
-    peak = float(thickness[central].max())
-    if peak < 1e-8:
-        return None
-    near = np.abs(centers) <= height * 0.24
-    thick = occupied & (thickness >= peak * 0.78) & near
-    chosen = np.flatnonzero(thick)
-    if len(chosen) == 0:
-        return None
-    left = float(centers[chosen[0]] - bin_w)
-    right = float(centers[chosen[-1]] + bin_w)
-    outside = (centers < left) | (centers > right)
-    if not np.any(outside & occupied):
-        return None
-    return left, right
-
-
-def _cut_x(points: np.ndarray, left: float, right: float) -> list:
-    masks = (
-        points[:, 0] < left,
-        (points[:, 0] >= left) & (points[:, 0] <= right),
-        points[:, 0] > right,
-    )
-    return [_blob(points[mask]) for mask in masks if int(mask.sum()) >= 2]
-
-
-def _link(slices: list, height: float) -> list:
-    gap = height * _LINK
-    chains: list[dict] = []
-    for level, blobs in slices:
-        claimed = _attach(chains, blobs, level, gap)
-        _start(chains, blobs, claimed, level)
-    return [chain for chain in chains if len(chain["samples"]) >= 2]
-
-
-def _attach(chains, blobs, level, gap) -> set:
-    claimed: set[int] = set()
-    for chain in chains:
-        _attach_one(chain, blobs, claimed, level, gap)
-    return claimed
-
-
-def _attach_one(chain, blobs, claimed, level, gap) -> None:
-    if chain["closed"]:
-        return
-    last = chain["samples"][-1]
-    if level - last["y"] > gap:
-        chain["closed"] = True
-        return
-    index = _closest(blobs, claimed, last, gap)
-    if index is None:
-        return
-    claimed.add(index)
-    chain["samples"].append(_sample(level, blobs[index]))
-
-
-def _closest(blobs, claimed, last, gap):
-    best_index, best = None, gap
-    for index, blob in enumerate(blobs):
-        if index in claimed:
-            continue
-        distance = abs(float(blob["centroid"][0]) - last["x"]) + abs(float(blob["centroid"][2]) - last["z"])
-        if distance < best:
-            best_index, best = index, distance
-    return best_index
-
-
-def _start(chains, blobs, claimed, level) -> None:
-    for index, blob in enumerate(blobs):
-        if index in claimed:
-            continue
-        chains.append({"closed": False, "samples": [_sample(level, blob)]})
-
-
-def _sample(level: float, blob: dict) -> dict:
-    return {
-        "y": float(level),
-        "x": float(blob["centroid"][0]),
-        "z": float(blob["centroid"][2]),
-        "min": blob["min"],
-        "max": blob["max"],
-    }
-
-
-def _span_y(chain: dict) -> float:
-    ys = [sample["y"] for sample in chain["samples"]]
-    return max(ys) - min(ys)
-
-
-def _mean_x(chain: dict) -> float:
-    return float(np.mean([sample["x"] for sample in chain["samples"]]))
-
-
-def _mean_y(chain: dict) -> float:
-    return float(np.mean([sample["y"] for sample in chain["samples"]]))
-
-
-def _is_leg(chain: dict, y_min: float, height: float) -> bool:
-    if _span_y(chain) < height * _LEG_SPAN:
-        return False
-    if _mean_y(chain) > y_min + height * 0.60:
-        return False
-    lateral = abs(_mean_x(chain))
-    if lateral < height * 0.025:
-        return False
-    if lateral > height * 0.25:
-        return False
-    return True
-
-
-def _leg_pair(slices, y_min: float, height: float) -> dict:
-    legs = [chain for chain in _link(slices, height) if _is_leg(chain, y_min, height)]
-    left = [chain for chain in legs if _mean_x(chain) > 0]
-    right = [chain for chain in legs if _mean_x(chain) < 0]
-    if not left or not right:
-        raise NotHumanoid("single_leg")
-    return {"left": max(left, key=_span_y), "right": max(right, key=_span_y)}
-
-
-def _top_y(chain: dict) -> float:
-    sample = max(chain["samples"], key=lambda item: item["y"])
-    return float(sample["max"][1])
-
-
-def _torso_half(slices, legs: dict, height: float) -> float:
-    crotch = min(_top_y(legs["left"]), _top_y(legs["right"]))
-    widths = _waist_widths(slices, crotch, crotch + height * 0.16, height)
-    if not widths:
-        return height * 0.12
-    return float(np.median(widths))
-
-
-def _waist_widths(slices, low: float, high: float, height: float) -> list:
-    widths = []
-    for level, blobs in slices:
-        width = _central_width(level, blobs, low, high, height)
-        if width is not None:
-            widths.append(width)
-    return widths
-
-
-def _central_width(level, blobs, low, high, height):
-    if level < low or level > high:
-        return None
-    central = [blob for blob in blobs if abs(float(blob["centroid"][0])) <= height * 0.08]
-    if len(central) != 1:
-        return None
-    return float(central[0]["max"][0] - central[0]["min"][0]) * 0.5
-
-
-def _arm_pair(slices, legs, torso_half: float, y_min: float, height: float) -> dict:
-    low = min(_top_y(legs["left"]), _top_y(legs["right"])) + height * 0.04
-    high = y_min + height * 0.90
-    found = {}
-    for side, sign in (("left", 1.0), ("right", -1.0)):
-        found[side] = _side_arm(slices, low, high, torso_half, height, sign)
-        if found[side] is None:
-            raise NotHumanoid("hands_stuck")
-    return found
-
-
-def _side_arm(slices, low, high, torso_half, height, sign):
-    blobs = _lateral(slices, low, high, torso_half, sign)
-    if not blobs:
-        return None
-    shoulder, hand = _arm_ends(blobs, sign)
-    reach = float(sign * hand[0])
-    if reach < torso_half + height * _ARM_CLEAR:
-        return None
-    return {"shoulder": shoulder, "hand": hand, "blobs": blobs}
-
-
-def _lateral(slices, low, high, torso_half, sign) -> list:
-    found = []
-    gate = torso_half * 0.82
-    for level, blobs in slices:
-        if level < low or level > high:
-            continue
-        for blob in blobs:
-            if sign * float(blob["centroid"][0]) > gate:
-                found.append((level, blob))
-    return found
-
-
-def _arm_ends(blobs, sign: float):
-    if sign > 0:
-        inner = min(blobs, key=lambda item: float(item[1]["min"][0]))
-        outer = max(blobs, key=lambda item: float(item[1]["max"][0]))
-        shoulder = _end_point(inner, "min")
-        hand = _end_point(outer, "max")
-    else:
-        inner = min(blobs, key=lambda item: -float(item[1]["max"][0]))
-        outer = max(blobs, key=lambda item: -float(item[1]["min"][0]))
-        shoulder = _end_point(inner, "max")
-        hand = _end_point(outer, "min")
-    return shoulder, hand
-
-
-def _end_point(item, which: str) -> np.ndarray:
-    level, blob = item
-    return np.array([float(blob[which][0]), float(level), float(blob["centroid"][2])])
-
-
-def _assemble(legs, arms, vertices, y_min, y_max, height) -> dict:
-    points = {"crown": _crown(vertices, y_max, height)}
-    for side in _SIDES:
-        hip = _hip_point(vertices, legs[side], height)
-        foot = _sole(vertices, _mean_x(legs[side]), y_min, height)
-        points[f"{side}_hip"] = hip
-        points[f"{side}_foot"] = foot
-        points[f"{side}_knee"] = _knee_point(legs[side], hip, foot, height)
-        shoulder, hand = _refine_ends(vertices, arms[side]["shoulder"], arms[side]["hand"], height)
-        points[f"{side}_shoulder"] = shoulder
-        points[f"{side}_hand"] = hand
-        points[f"{side}_elbow"] = _elbow_point(arms[side]["blobs"], shoulder, hand, height)
-    points["crotch"] = (points["left_hip"] + points["right_hip"]) * 0.5
-    _require_finite(points)
-    return points
+def _require_upright(triangles: np.ndarray, height: float) -> None:
+    extent = triangles.reshape(-1, 3).max(axis=0) - triangles.reshape(-1, 3).min(axis=0)
+    if float(extent[2]) > height * 1.0 or float(extent[0]) > height * 2.4:
+        raise NotHumanoid("not_upright")
 
 
 def _require_finite(points: dict) -> None:
@@ -500,151 +159,54 @@ def _require_finite(points: dict) -> None:
             raise NotHumanoid("degenerate")
 
 
-def _hip_point(vertices: np.ndarray, chain: dict, height: float) -> np.ndarray:
-    sample = max(chain["samples"], key=lambda item: item["y"])
-    band = _near_column(vertices, float(sample["x"]), float(sample["y"]), height)
-    if len(band) == 0:
-        return np.array([float(sample["x"]), float(sample["y"]), float(sample["z"])])
-    peak = float(band[:, 1].max())
-    top = band[band[:, 1] >= peak - height * 0.008]
-    return top.mean(axis=0)
+def _facing(vertices: np.ndarray, y_min: float, height: float) -> tuple[float, np.ndarray]:
+    """-1 when the feet clearly point to -Z. Turned bodies keep their place."""
+    low = vertices[:, [0, 2]].min(axis=0)
+    high = vertices[:, [0, 2]].max(axis=0)
+    pivot = (low + high) * 0.5
+    shins = vertices[(vertices[:, 1] > y_min + height * 0.08) & (vertices[:, 1] < y_min + height * 0.16)]
+    feet = vertices[vertices[:, 1] < y_min + height * 0.035]
+    if len(shins) < 8 or len(feet) < 8:
+        return 1.0, pivot
+    middle = float(np.median(shins[:, 2]))
+    forward = float(np.percentile(feet[:, 2], 98)) - middle
+    backward = middle - float(np.percentile(feet[:, 2], 2))
+    if backward > forward * 1.35 and backward - forward > height * 0.02:
+        return -1.0, pivot
+    return 1.0, pivot
 
 
-def _near_column(vertices, x, y, height) -> np.ndarray:
-    column = vertices[np.abs(vertices[:, 0] - x) <= height * 0.07]
-    return column[np.abs(column[:, 1] - y) <= height * 0.02]
+def _turn(points: np.ndarray, pivot: np.ndarray) -> np.ndarray:
+    turned = np.array(points, dtype=np.float64, copy=True)
+    turned[..., 0] = 2.0 * pivot[0] - turned[..., 0]
+    turned[..., 2] = 2.0 * pivot[1] - turned[..., 2]
+    return turned
 
 
-def _sole(vertices: np.ndarray, leg_x: float, y_min: float, height: float) -> np.ndarray:
-    band = vertices[vertices[:, 1] <= y_min + height * 0.012]
-    column = band[np.abs(band[:, 0] - leg_x) <= height * 0.08]
-    if len(column) == 0:
-        return np.array([leg_x, y_min, 0.0])
-    mean = column.mean(axis=0)
-    mean[1] = y_min
-    return mean
-
-
-def _refine_ends(vertices, shoulder, hand, height):
-    direction = hand - shoulder
-    length = float(np.linalg.norm(direction))
-    if length < 1e-5:
-        return shoulder, hand
-    axis = direction / length
-    delta = vertices - shoulder
-    along = delta @ axis
-    radial = np.linalg.norm(delta - along[:, None] * axis, axis=1)
-    mask = (radial <= height * 0.08) & (along >= -height * 0.02) & (along <= length + height * 0.02)
-    if int(mask.sum()) < 4:
-        return shoulder, hand
-    chosen, along_c = _outside_torso(vertices[mask], along[mask], shoulder, height)
-    if len(chosen) < 4:
-        return shoulder, hand
-    return _cap(chosen, along_c, height), _cap_outer(chosen, along_c, height)
-
-
-def _outside_torso(vertices, along, shoulder, height):
-    if float(shoulder[0]) >= 0:
-        keep = vertices[:, 0] >= float(shoulder[0]) - height * 0.015
+def _triangles(positions: np.ndarray, indices: np.ndarray | None) -> np.ndarray:
+    cloud = np.asarray(positions, dtype=np.float64)
+    if cloud.ndim != 2 or cloud.shape[1] != 3 or len(cloud) < 9 or not np.all(np.isfinite(cloud)):
+        raise NotHumanoid("degenerate")
+    if indices is None:
+        if len(cloud) % 3:
+            raise NotHumanoid("degenerate")
+        faces = cloud.reshape(-1, 3, 3)
     else:
-        keep = vertices[:, 0] <= float(shoulder[0]) + height * 0.015
-    return vertices[keep], along[keep]
-
-
-def _cap(vertices, along, height) -> np.ndarray:
-    limit = float(along.min())
-    band = vertices[np.abs(along - limit) <= height * 0.015]
-    if len(band) == 0:
-        return vertices[np.argmin(along)]
-    return band.mean(axis=0)
-
-
-def _cap_outer(vertices, along, height) -> np.ndarray:
-    limit = float(along.max())
-    band = vertices[np.abs(along - limit) <= height * 0.015]
-    if len(band) == 0:
-        return vertices[np.argmax(along)]
-    return band.mean(axis=0)
-
-
-def _crown(vertices: np.ndarray, y_max: float, height: float) -> np.ndarray:
-    top = vertices[vertices[:, 1] >= y_max - max(height * 0.012, 1e-4)]
-    if len(top) == 0:
-        return np.array([0.0, y_max, 0.0])
-    mean = top.mean(axis=0)
-    mean[1] = y_max
-    return mean
-
-
-def _knee_point(chain: dict, hip: np.ndarray, foot: np.ndarray, height: float) -> np.ndarray:
-    values = sorted(float(sample["y"]) for sample in chain["samples"])
-    low, high = float(min(hip[1], foot[1])), float(max(hip[1], foot[1]))
-    center = _value_gap(values, low, high, height / _SLICES * 1.5)
-    if center is None:
-        return (hip + foot) * 0.5
-    return np.array([float(hip[0]), center, float(hip[2])])
-
-
-def _elbow_point(blobs, shoulder: np.ndarray, hand: np.ndarray, height: float) -> np.ndarray:
-    direction = hand - shoulder
-    length = float(np.linalg.norm(direction))
-    if length < 1e-5:
-        return (shoulder + hand) * 0.5
-    axis = direction / length
-    spans = [_projection_span(blob, shoulder, axis) for _level, blob in blobs]
-    center = _span_gap(_merge_spans(spans, height * 0.012), length)
-    if center is None:
-        return (shoulder + hand) * 0.5
-    return shoulder + axis * center
-
-
-def _projection_span(blob: dict, origin: np.ndarray, axis: np.ndarray) -> tuple[float, float]:
-    projection = (blob["points"] - origin) @ axis
-    return float(projection.min()), float(projection.max())
-
-
-def _merge_spans(spans, join: float) -> list:
-    ordered = sorted(spans)
-    merged = [[ordered[0][0], ordered[0][1]]]
-    for low, high in ordered[1:]:
-        if low <= merged[-1][1] + join:
-            merged[-1][1] = max(merged[-1][1], high)
-            continue
-        merged.append([low, high])
-    return merged
-
-
-def _value_gap(values, low: float, high: float, join: float):
-    if len(values) < 2:
-        return None
-    return _span_gap(_merge_spans([(value, value) for value in values], join), high - low, low)
-
-
-def _span_gap(merged, length: float, origin: float = 0.0):
-    if len(merged) < 2:
-        return None
-    midpoint = origin + length * 0.5
-    best, best_distance = None, None
-    for left, right in zip(merged, merged[1:]):
-        center = (left[1] + right[0]) * 0.5
-        if center < origin + length * 0.2 or center > origin + length * 0.8:
-            continue
-        distance = abs(center - midpoint)
-        if best_distance is None or distance < best_distance:
-            best, best_distance = center, distance
-    return best
+        index = np.asarray(indices, dtype=np.int64)
+        if index.ndim != 2 or index.shape[1] != 3 or not index.size or int(index.min()) < 0 or int(index.max()) >= len(cloud):
+            raise NotHumanoid("degenerate")
+        faces = cloud[index]
+    if len(faces) < 4:
+        raise NotHumanoid("degenerate")
+    return faces
 
 
 def _require_symmetry(points: dict, height: float) -> None:
     limit = height * _ASYMMETRY
-    for name in ("hip", "knee", "foot", "shoulder", "elbow", "hand"):
-        _pair_ok(points[f"left_{name}"], points[f"right_{name}"], limit)
-
-
-def _pair_ok(left: np.ndarray, right: np.ndarray, limit: float) -> None:
-    if left[0] <= 0 or right[0] >= 0:
-        raise NotHumanoid("asymmetry")
-    if abs(abs(float(left[0])) - abs(float(right[0]))) > limit:
-        raise NotHumanoid("asymmetry")
-    if abs(float(left[1]) - float(right[1])) > limit:
-        raise NotHumanoid("asymmetry")
+    center = float(points["crotch"][0])
+    for name in ("hip", "knee", "ankle", "shoulder", "elbow", "wrist"):
+        left, right = points[f"left_{name}"], points[f"right_{name}"]
+        if left[0] <= center or right[0] >= center:
+            raise NotHumanoid("asymmetry")
+        if abs((float(left[0]) - center) - (center - float(right[0]))) > limit or abs(float(left[1]) - float(right[1])) > limit:
+            raise NotHumanoid("asymmetry")

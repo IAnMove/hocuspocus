@@ -100,6 +100,28 @@ def test_music_list_is_not_duplicated_by_a_director_snapshot(tmp_path: Path):
     assert "director" in view["sources"] and "music" in view["sources"]
 
 
+def test_leftover_music_shots_do_not_hide_series_episode_takes(tmp_path: Path):
+    """production.run used to write series-{episode}.shots.json. Review then
+    listed those lyrics as the cut, so regenerate fired a song redo."""
+    root = tmp_path / "film"
+    root.mkdir()
+    production_id = "series-ep1"
+    _production(root, production_id, project={"kind": "episode", "id": "ep1"}, format="music_video", status="running")
+    _write(root / f"{production_id}.shots.json", {"shots": [
+        {"key": "s1", "lyric": "night bus", "clip": "take-b.mp4"},
+    ]})
+    _write(root / ".series-library-v1.json", {"seriesById": {"show": {"episodesById": {"ep1": {"shots": [{
+        "id": "sh1", "order": 1, "durationSeconds": 8, "action": "walks",
+        "approvedAttemptId": "a1",
+        "attempts": [{"id": "a1", "status": "completed", "outputAssetIds": ["ep.mp4"]}],
+    }]}}}}})
+    view = _view(root, production_id)
+    assert [shot["id"] for shot in view["shots"]] == ["sh1"]
+    assert view["shots"][0]["provenance"]["source"] == "series"
+    assert view["shots"][0]["text"] == "walks"
+    assert "series" in view["sources"]
+
+
 def test_series_episode_shots_do_not_create_a_story(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()

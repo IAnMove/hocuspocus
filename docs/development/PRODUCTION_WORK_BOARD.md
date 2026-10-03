@@ -157,6 +157,20 @@ rol, por índice de nodo. Un override cruzado o duplicado deja `needs_review`
 y borra la verificación. Cambiar el hash o el perfil no reutiliza el análisis.
 `native_playback` sigue en false. No toca `rig_service.py` ni Scene3D.
 
+## Rig humanoide, revisión completa 2026-10-03
+
+Rama `feat/humanoid-rig-polish-20261003`. Los puntos clave salen ahora de la
+silueta frontal y de cortes de la malla: el detector rechaza con motivo los
+modelos con brazos pegados, piernas juntas o patas cortas (antes rigueaba mal
+un oso, un pingüino y un alien con orejas). Esqueleto con marcos canónicos
+(el mismo clip vale para pose T y A), pesos geodésicos con la cabeza aislada,
+20 clips cocinados por cuerpo con IK de piernas y brazos y pies en el suelo,
+e importador BVH/glTF por deltas de mundo (Mixamo, VRM, Unreal, Blender, CMU).
+La UI añade animaciones a un personaje ya rigueado y sube el archivo fuera de
+la galería. Los rigs de la primera versión siguen aceptando clips nuevos. Los
+módulos de compatibilidad de #755–#762 no cambian salvo sus tests del lector
+antiguo, que pasan a comprobar el importador nuevo.
+
 ## Calidad local 2026-10-03
 
 Hoja de ruta para mejorar los vídeos deterministas (sin IA) con recursos locales:
@@ -176,31 +190,31 @@ abriendo el borrador el primer día y actualizando la fila en el mismo PR.
 | Fase | Dueño | Puede empezar |
 |---|---|---|
 | 1.F0 Medidas base | Grok | Ya |
-| 1.F1 Niveles de calidad, supersampling y antialiasing | Claude | Ya |
-| 1.F2 Motion blur determinista | Claude | Tras 1.F1 |
+| 1.F1 Niveles de calidad, supersampling y antialiasing | Claude (#771) | Ya |
+| 1.F2 Motion blur determinista | Claude (#773) | Tras 1.F1 |
 | 1.F3 4K y niveles H.264 | Grok | Tras 1.F1 |
 | 1.F4 Máster y fin de las recodificaciones | Grok | Ya, el remux y el editor sin pérdidas; tras 1.F1, el ProRes |
-| 1.F5 Voz en el render del servidor | Claude | Tras 1.F1 |
+| 1.F5 Voz en el render del servidor | Claude (#777) | Tras 1.F1 |
 | 1.F5 UI y estimación | Grok | Tras 1.F1 |
-| 2.F1 Contrato de color y entorno | Claude | Ya |
+| 2.F1 Contrato de color y entorno | Claude (#776) | Ya |
 | 2.F2-F5 HDRI, LUT, valores por set y sol | Grok | Tras 2.F1 |
-| 3.F1 Contrato, licencias y descargador seguro | Claude | Ya |
+| 3.F1 Contrato, licencias y descargador seguro | Claude (#770) | Ya |
 | 3.F2-F5 Curación, navegador, consumidores y créditos | Grok | Tras 3.F1 (3.F4 también tras el PR #765) |
 | 3.F6 Poly Haven en vivo | Grok | Solo si el usuario lo aprueba |
-| 4.F1 Recorridos sin patinar | Claude | Tras el PR #765 |
-| 4.F2 Núcleo de fundidos | Claude | Tras el PR #765 |
+| 4.F1 Recorridos sin patinar | Claude (#778) | Tras el PR #765 |
+| 4.F2 Núcleo de fundidos | Claude (#781) | Tras el PR #765 |
 | 4.F2 UI de secuencias | Grok | Tras el núcleo |
-| 4.F3 IK de objetos | Claude | Tras 4.F1 |
+| 4.F3 IK de objetos | Claude (#780) | Tras 4.F1 |
 | 4.F3 Emparentar en el cliente | Grok | Tras 4.F1 |
 | 4.F4 Parpadeo, mirada y cabeza | Grok | Ya |
-| 4.F5 Manos | Claude | Tras 4.F3 |
+| 4.F5 Manos | Claude (#783) | Tras 4.F3 |
 | 5.F1 Ducking en Video 3D | Grok | Ya |
 | 5.F2 Volumen por plataforma | Grok | Ya |
-| 5.F3 Contactos de pie | Claude | Tras el PR #765 |
+| 5.F3 Contactos de pie | Claude (#775) | Tras el PR #765 |
 | 5.F4 Pasos | Grok | Tras 5.F3 |
 | 5.F5-F7 Ambientes, editor y reverb | Grok | Ya |
 | 6.F1 Sondas de ffmpeg | Grok | Ya |
-| 6.F2 Geometría antes del render | Claude | Tras 4.F1 |
+| 6.F2 Geometría antes del render | Claude (#782) | Tras 4.F1 |
 | 6.F3 Avisos en 2D y en el editor | Grok | Ya |
 | 6.F4 Panel de revisión | Grok | Tras 6.F1 |
 | 6.F5 Ajuste de umbrales | Grok | Tras 6.F4 |
