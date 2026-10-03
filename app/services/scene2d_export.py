@@ -34,6 +34,7 @@ from services.world3d_export import (
     _tool_ids,
     export_plan,
     http_error,
+    mux_wav_audio,
     playwright_module,
 )
 
@@ -175,15 +176,7 @@ def renderer_available(app_url: str | None, module) -> bool:
 
 
 def _mix_wav(video: Path, wav: Path, duration: float) -> Path:
-    mixed = video.with_name("fx-mixed.mp4")
-    command = ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-i", str(wav), "-filter_complex",
-               f"[1:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:{duration:.4f}[mix]",
-               "-map", "0:v:0", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-               "-t", f"{duration:.4f}", "-movflags", "+faststart", str(mixed)]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=1800, check=False)
-    if result.returncode != 0 or not mixed.is_file():
-        raise RuntimeError(("Screen FX mix failed: " + (result.stderr or "")).strip()[-800:])
-    return mixed
+    return mux_wav_audio(video, wav, duration, label="Screen FX mix")
 
 
 def mix_audio_tracks(video: Path, tracks: list[dict], workspace_root: Path, duration: float,

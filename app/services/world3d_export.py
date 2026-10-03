@@ -56,6 +56,8 @@ QUALITY_PROFILES = {
     "master": {"supersample": 2, "samples": 4, "subframes": 8, "shutter": 180, "crf": 12, "preset": "slow", "threads": "0"},
 }
 QUALITIES = tuple(QUALITY_PROFILES)
+# The page mixes voices in one OfflineAudioContext, bounded like the browser export (mixSceneSpeech).
+MAX_VOICED_SECONDS = 180
 
 
 class World3DExportCancelled(Exception):
@@ -197,7 +199,10 @@ try {
     fs.writeFileSync(`${frames}/frame_${name}.png`, Buffer.from(png.split(',')[1], 'base64'));
     fs.writeFileSync(`${staging}/progress.json`, JSON.stringify({ current: index + 1, total: plan.count }));
   }
-  const wav = await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(() => '');
+  const wav = await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(error => {
+    fs.writeFileSync(`${staging}/audio-error.txt`, String(error?.message || error).slice(0, 800));
+    return '';
+  });
   if (typeof wav === 'string' && wav.startsWith('data:audio')) {
     fs.writeFileSync(`${staging}/fx.wav`, Buffer.from(wav.split(',')[1], 'base64'));
   }
@@ -248,7 +253,7 @@ def export_capabilities(app_url: str | None = None) -> dict:
         "realRender": "ready" if ffmpeg and playwright and renderer_available(app_url) else "pending",
         "renderer": "world3d-export-flow",
         "renderDevice": scene_render_device(),
-        "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": 0,
+        "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": MAX_VOICED_SECONDS,
         "qualities": list(QUALITIES), "motionBlur": {"shutterDegrees": [0, 360], "default": 180},
     }
 
@@ -268,6 +273,19 @@ def write_png(path: Path, width: int, height: int, rgb: tuple[int, int, int]) ->
     path.parent.mkdir(parents=True, exist_ok=True)
     header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+
+def mux_wav_audio(video: Path, wav: Path, duration: float, *, label: str = "Audio mix") -> Path:
+    """Put the page's WAV mix under the silent render: AAC 192k, video copied, exactly ``duration`` long."""
+    mixed = video.with_name("fx-mixed.mp4")
+    command = ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-i", str(wav), "-filter_complex",
+               f"[1:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:{duration:.4f}[mix]",
+               "-map", "0:v:0", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+               "-t", f"{duration:.4f}", "-movflags", "+faststart", str(mixed)]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=1800, check=False)
+    if result.returncode != 0 or not mixed.is_file():
+        raise RuntimeError((f"{label} failed: " + (result.stderr or "")).strip()[-800:])
+    return mixed
 
 
 def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float,
@@ -379,6 +397,27 @@ def _has_sound(document: dict) -> bool:
     return False
 
 
+def _audio_url(holder) -> str:
+    audio = holder.get("audio") if isinstance(holder, dict) else None
+    return str(audio.get("url") or "").strip() if isinstance(audio, dict) else ""
+
+
+def _audible_clips(slot) -> list:
+    speech = slot.get("speech") if isinstance(slot, dict) else None
+    if not isinstance(speech, dict) or not speech.get("enabled"):
+        return []
+    clips = speech.get("clips") if "clips" in speech else [speech]
+    return [clip for clip in clips or [] if isinstance(clip, dict) and clip.get("audible") is not False]
+
+
+def _audio_urls(document: dict) -> list[tuple[str, str]]:
+    """``(track key, url)`` of the soundtrack and audible speech clips, as ``sceneVoiceTracks`` lists them."""
+    found = [(f"soundtrack/{track.get('id')}", _audio_url(track)) for track in document.get("soundtrack") or []]
+    for slot in document.get("slots") or []:
+        found += [(f"{slot.get('id')}/{clip.get('id', 'voice')}", _audio_url(clip)) for clip in _audible_clips(slot)]
+    return [(key, url) for key, url in found if url]
+
+
 def _blocked_url(value) -> bool:
     return isinstance(value, str) and value.strip().lower().startswith(BLOCKED_URLS)
 
@@ -398,8 +437,8 @@ def unsupported_capabilities(document: dict) -> list[str]:
     reasons = []
     if any(_blocked_url(item) for item in _walk_strings(document)):
         reasons.append("ephemeral_url")
-    if _has_sound(document):
-        reasons.append("voiced_duration" if output_duration(document) > 180 else "voiced_audio")
+    if _has_sound(document) and output_duration(document) > MAX_VOICED_SECONDS:
+        reasons.append("voiced_duration")
     for slot in document.get("slots") or []:
         media = slot.get("media") if isinstance(slot, dict) else None
         if media not in MEDIA_KINDS:
@@ -465,7 +504,19 @@ def _validated_refs(document: dict, refs, workspace: str) -> list[dict]:
         item = _slot_ref(slot, by_slot, workspace)
         if item is not None:
             resolved.append(item)
-    return resolved
+    return resolved + _audio_refs(document, workspace)
+
+
+def _audio_refs(document: dict, workspace: str) -> list[dict]:
+    """Voice and soundtrack files are frozen like model refs, so admission checks that they exist."""
+    refs = []
+    for key, url in _audio_urls(document):
+        if _blocked_url(url):
+            raise http_error(422, "unsupported_capability", "Ephemeral blob or file URLs cannot be exported")
+        record = _ref_from_url({"id": key, "media": "audio"}, url, workspace)
+        record["audioId"] = record.pop("slotId")
+        refs.append(record)
+    return refs
 
 
 def build_snapshot(document: dict, refs: list[dict], workspace: str, quality: str = "draft",
@@ -820,11 +871,26 @@ class World3DExportService:
                                       workspace_root=Path(self.workspace_dir(snapshot["workspace"])), cancelled=cancelled)
 
     def check_publish(self, snapshot: dict) -> None:
-        if _has_sound(snapshot["document"]):
-            raise RuntimeError("Voiced World3D export cannot publish a silent MP4")
+        if _has_sound(snapshot["document"]) and output_duration(snapshot["document"]) > MAX_VOICED_SECONDS:
+            raise RuntimeError(f"Voiced World3D export supports up to {MAX_VOICED_SECONDS} output seconds")
 
     def finish_media(self, snapshot: dict, staging: Path, encoded: Path) -> Path:
-        return encoded
+        """Mux the page's audio mix. A voiced scene without it is never published as a silent MP4."""
+        if not _has_sound(snapshot["document"]):
+            return encoded
+        wav = staging / "fx.wav"
+        if not wav.is_file() or wav.stat().st_size <= 44:
+            failure = staging / "audio-error.txt"
+            reason = f": {failure.read_text(encoding='utf-8', errors='replace')}" if failure.is_file() else ""
+            raise RuntimeError(f"Voiced World3D export produced no audio{reason}; a silent MP4 is not published")
+        plan = snapshot["plan"]
+        mixed = mux_wav_audio(encoded, wav, plan["duration"], label="World3D audio mix")
+        try:
+            validate_scene_recording_output(mixed, expected_duration=plan["duration"] if plan["duration"] >= 0.5 else None,
+                                            expected_fps=plan["fps"], expected_audio=True)
+        except SceneRecordingTranscodeError as error:
+            raise RuntimeError(str(error)) from error
+        return mixed
 
     def output_name(self, snapshot: dict) -> str:
         template = re.sub(r"[^A-Za-z0-9._-]+", "-", str(snapshot["document"].get("templateId") or "scene")).strip("-._")[:40] or "scene"
@@ -861,6 +927,6 @@ __all__ = [
     "CANCEL_OPERATION", "OPERATION", "QUALITIES", "QUALITY_PROFILES", "RECEIPT_OPERATION", "World3DExportCancelled",
     "World3DExportPending", "World3DExportService", "build_snapshot", "command_catalog",
     "command_handlers", "even_dim", "export_capabilities", "export_plan", "export_size",
-    "freeze_export_command", "http_error", "mux_frame_sequence", "plan_quality", "playwright_module",
+    "freeze_export_command", "http_error", "mux_frame_sequence", "mux_wav_audio", "plan_quality", "playwright_module",
     "staging_dir", "unsupported_capabilities", "write_png",
 ]
