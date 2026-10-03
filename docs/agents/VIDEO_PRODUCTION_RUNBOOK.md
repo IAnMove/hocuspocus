@@ -358,6 +358,10 @@ Each export covers its actual cut duration, defaults to 1280×720 at 24 fps, and
 uses `scenes.world3d.export` followed by `scenes.world3d.export.receipt`. Durable
 intents recover an uncertain admission. A failed or lost export is retried once;
 a second failure stops the production without substituting a still or H3 clip.
+The receipt's `geometry` lists warnings found before the frames: characters
+under the floor or floating, bodies through props, the camera inside a model,
+characters out of frame. They never block the export; read them before
+publishing (see `docs/development/VIDEO3D_GEOMETRY_CHECKS.md`).
 The exported MP4 enters Video 2D as a video layer for captions/finishing and the
 montage adds the song normally. Empty `cast` and all-3D shots request no cast
 images, start frames or H3 generation. Both template and full-document shots

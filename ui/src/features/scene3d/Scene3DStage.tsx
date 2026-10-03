@@ -6,7 +6,7 @@ import { worldSfxAtTime } from '../sceneFx/worldMotion'
 import { namedSceneMeshes, namedSceneNodes } from './screenPlane'
 import { slotMountKey } from './backdrop'
 import { createTransformGizmo, type TransformMode, type TransformPatch } from './transformGizmo.ts'
-import { TextureLoader } from 'three'
+import { Box3, Frustum, Matrix4, TextureLoader } from 'three'
 import { estimateFace, manualFace, FACE_PROFILES, type PlacementMode } from './speech/calibration'
 import type { FacePlacement } from './speech/types'
 import { pickFace } from './speech/pickFace'
@@ -39,8 +39,9 @@ import {
   worldAssetsReady,
 } from './gpu.ts'
 import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DSlot, Vec3 } from './types.ts'
-import { toModelPoint, toModelSpace } from './walkPath.ts'
 import type { ExportRenderQuality } from './exportQuality.ts'
+import type { GeometrySample } from './geometryChecks.ts'
+import { toModelPoint, toModelSpace } from './walkPath.ts'
 
 type Props = {
   document: Scene3DDocument
@@ -71,6 +72,30 @@ export type Scene3DStageHandle = {
   modelSpacePath?: (slotId: string, points: readonly Vec3[]) => [number, number][] | undefined
   /** One scene point in the loaded model's own space, for a sit/reach/look bake. */
   modelSpacePoint?: (slotId: string, point: Vec3) => [number, number, number] | undefined
+  /** World boxes of every loaded model and the camera at one scene time, for the geometry checks. */
+  geometrySample?: (seconds: number, document: Scene3DDocument) => GeometrySample | undefined
+}
+
+/** Boxes of the loaded models after a paint. Skinned meshes are measured in their current pose. */
+function sampleWorldGeometry(world: GpuWorld, document: Scene3DDocument, seconds: number): GeometrySample {
+  world.camera.updateMatrixWorld()
+  const frustum = new Frustum().setFromProjectionMatrix(new Matrix4().multiplyMatrices(world.camera.projectionMatrix, world.camera.matrixWorldInverse))
+  const slots: GeometrySample['slots'] = []
+  for (const slot of document.slots) {
+    const gpu = world.slots.get(slot.id)
+    if (!gpu || gpu.kind !== 'model' || !gpu.loaded || !gpu.root.visible) continue
+    gpu.root.updateMatrixWorld(true)
+    const box = new Box3().setFromObject(gpu.root, true)
+    if (box.isEmpty()) continue
+    slots.push({
+      // A grounded slot stands on its own height; a character placed near the world floor is meant to stand on it
+      // (one placed high up is taken as flying on purpose).
+      id: slot.id, character: gpu.animations.length > 0, ground: slot.grounded ? slot.position[1] : 0,
+      onFloor: Boolean(slot.grounded) || (slot.position[1] >= -1 && slot.position[1] <= 0.25),
+      min: box.min.toArray() as Vec3, max: box.max.toArray() as Vec3, visible: frustum.intersectsBox(box),
+    })
+  }
+  return { t: seconds, camera: world.camera.position.toArray() as Vec3, slots }
 }
 
 function loadScreen(world: GpuWorld, slot: Scene3DSlot, onError: (message: string) => void, onReady: () => void) {
@@ -220,6 +245,12 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     },
     canvas() {
       return worldRef.current?.renderer.domElement ?? null
+    },
+    geometrySample(seconds, frozen) {
+      const world = worldRef.current
+      if (!world) return undefined
+      paintWorld(world, frozen, seconds)
+      return sampleWorldGeometry(world, frozen, seconds)
     },
     modelSpacePath(slotId, points) {
       const gpu = worldRef.current?.slots.get(slotId)

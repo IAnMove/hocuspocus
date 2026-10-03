@@ -59,7 +59,7 @@ import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { PixelPalette } from './pixel/pixelPalettes'
 import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
 import { EnvironmentLighting, applyLook } from './environmentLighting'
-import { clipWeightsAt, type Scene3DClipCue } from './clipCues'
+import { clipWeightsAt, parseClipCues, type Scene3DClipCue } from './clipCues'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -476,12 +476,13 @@ export function paintClipCues(gpu: Pick<SlotGpu, 'root' | 'animations' | 'cues'>
 }
 
 function paintSlotSequence(gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number, shotDuration: number) {
-  if (gpu.kind === 'model') paintClipCues(gpu, slot.clips ?? [], sceneSeconds, shotDuration)
+  // Invalid or missing cues release a previous sequence, so the single clip drives the model again.
+  if (gpu.kind === 'model') paintClipCues(gpu, parseClipCues(slot.clips) ?? [], sceneSeconds, shotDuration)
 }
 
 /** The slot's single bound clip; a slot with a sequence has none. */
 function singleClip(gpu: SlotGpu, slot: Scene3DSlot) {
-  if (slot.clips?.length) return undefined
+  if (parseClipCues(slot.clips)) return undefined
   return gpu.animations.find((_clip: { duration?: number }, index: number) => clipMatches(gpu, index))
 }
 
@@ -557,17 +558,18 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
       root: world.slots.get(slot.id)?.root,
     })), { width: world.renderer.domElement?.width ?? document.width, height: world.renderer.domElement?.height ?? document.height })
   }
+  const cinematic = Boolean(document.environment || document.worldSfx?.length || isAtmosDressing(document.dressing))
   if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment') || isAtmosDressing(document.dressing)) {
     world.cinema ??= new CinematicRuntime(world)
     world.cinema.sync(document, sceneSeconds)
     if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, document.renderLook === 'n64')
-    applyLook(world.renderer, document)
+    applyLook(world.renderer, document, cinematic)
     world.cinema.render(document)
   } else {
     if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, false)
-    applyLook(world.renderer, document)
+    applyLook(world.renderer, document, cinematic)
     world.renderer.render(world.scene, world.camera)
   }
 }

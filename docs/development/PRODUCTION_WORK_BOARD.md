@@ -208,12 +208,12 @@ abriendo el borrador el primer día y actualizando la fila en el mismo PR.
 | 4.F3 Emparentar en el cliente | Grok | Tras 4.F1 |
 | 4.F4 Parpadeo, mirada y cabeza | Grok | Ya |
 | 4.F5 Manos | Claude (#783) | Tras 4.F3 |
-| 5.F1 Ducking en Video 3D | Grok | Ya |
-| 5.F2 Volumen por plataforma | Grok | Ya |
+| 5.F1 Ducking en Video 3D | Grok (#772) | Ya |
+| 5.F2 Volumen por plataforma | Grok (#774) | Ya |
 | 5.F3 Contactos de pie | Claude (#775) | Tras el PR #765 |
 | 5.F4 Pasos | Grok | Tras 5.F3 |
 | 5.F5-F7 Ambientes, editor y reverb | Grok | Ya |
-| 6.F1 Sondas de ffmpeg | Grok | Ya |
+| 6.F1 Sondas de ffmpeg | Grok (#769) | Ya |
 | 6.F2 Geometría antes del render | Claude (#782) | Tras 4.F1 |
 | 6.F3 Avisos en 2D y en el editor | Grok | Ya |
 | 6.F4 Panel de revisión | Grok | Tras 6.F1 |

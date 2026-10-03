@@ -38,7 +38,7 @@ test('unusable blocks are dropped instead of guessing', () => {
   assert.equal(parseLighting({ environment: { source: 'hdri', asset: 'file:///etc/x.hdr' } })?.environment.asset, undefined)
 })
 
-test('the look sets tone mapping and exposure; pixel worlds and old scenes are left alone', () => {
+test('the look sets tone mapping and exposure; pixel worlds and old scenes restore the previous grade', () => {
   const renderer = { toneMapping: NoToneMapping, toneMappingExposure: 1 }
   const doc = createDefaultScene3DDocument()
   applyLook(renderer as never, doc)
@@ -46,10 +46,12 @@ test('the look sets tone mapping and exposure; pixel worlds and old scenes are l
   assert.equal(renderer.toneMappingExposure, exposureFactor(NEW_SCENE_LOOK))
   applyLook(renderer as never, { ...doc, look: { toneMapping: 'neutral', exposure: 1 } })
   assert.deepEqual([renderer.toneMapping, renderer.toneMappingExposure], [NeutralToneMapping, 2])
-  const untouched = { toneMapping: NoToneMapping, toneMappingExposure: 1 }
-  applyLook(untouched as never, { ...doc, look: undefined })
-  applyLook(untouched as never, { ...doc, pixelWorld: { pixelSize: 4, levels: 16 } as never })
-  assert.deepEqual(untouched, { toneMapping: NoToneMapping, toneMappingExposure: 1 })
+  applyLook(renderer as never, { ...doc, look: undefined })
+  assert.deepEqual([renderer.toneMapping, renderer.toneMappingExposure], [NoToneMapping, 1], 'an old scene must not keep the previous look')
+  applyLook(renderer as never, { ...doc, look: undefined }, true)
+  assert.deepEqual([renderer.toneMapping, renderer.toneMappingExposure], [ACESFilmicToneMapping, 1], 'old cinematic scenes stay ACES at 0 EV')
+  applyLook(renderer as never, { ...doc, pixelWorld: { pixelSize: 4, levels: 16 } as never }, true)
+  assert.deepEqual([renderer.toneMapping, renderer.toneMappingExposure], [NoToneMapping, 1])
 })
 
 test('environment light needs a real renderer; without lighting the scene keeps no environment', () => {

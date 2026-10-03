@@ -39,6 +39,38 @@ def test_permitted_media_path_accepts_upload_and_current_workspace(tmp_path):
     ) == str(output.resolve())
 
 
+def test_file_api_url_requires_the_workspace_query(tmp_path):
+    uploads = tmp_path / "uploads"
+    workspace = tmp_path / "workspace"
+    uploads.mkdir()
+    workspace.mkdir()
+    clip = workspace / "clip.mp4"
+    clip.write_bytes(b"ftyp")
+
+    with pytest.raises(MediaPathNotAllowed, match="workspace"):
+        resolve_permitted_media_path(
+            "/api/v1/file/clip.mp4",
+            uploads_root=str(uploads),
+            workspace_root=str(workspace),
+            kinds=("video",),
+            workspace_name="workspace",
+        )
+    assert resolve_permitted_media_path(
+        "/api/v1/file/clip.mp4?workspace=workspace",
+        uploads_root=str(uploads),
+        workspace_root=str(workspace),
+        kinds=("video",),
+        workspace_name="workspace",
+    ) == str(clip.resolve())
+    assert resolve_permitted_media_path(
+        "clip.mp4",
+        uploads_root=str(uploads),
+        workspace_root=str(workspace),
+        kinds=("video",),
+        workspace_name="workspace",
+    ) == str(clip.resolve())
+
+
 def test_permitted_media_path_rejects_external_and_other_workspace_files(tmp_path):
     uploads = tmp_path / "uploads"
     workspace = tmp_path / "workspace"
