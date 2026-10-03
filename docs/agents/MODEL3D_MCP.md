@@ -52,7 +52,7 @@ ids such as `spin` are rejected. The job is CPU-only and takes about a second.
 The clips are baked for that body: feet stay on the floor, arms stay clear of
 a big head or belly, and an A-pose character plays the same motion as a T-pose
 one. A finished job lists `humanoid: {pose, arm_drop, confidence, warnings,
-clips}`, where `clips` is `[{index, name, duration}]`. A mesh the engine cannot
+clips}`, where `clips` is `[{index, name, duration, contacts}]` (`contacts`: foot landings, see the [humanoid rig guide](HUMANOID_RIG.md)). A mesh the engine cannot
 rig safely fails with `error_code: "not_humanoid"` and `error_reason` one of
 `hands_stuck` (arms against the body or straight down), `arms_raised` (arms
 well above the shoulders), `turned` (the body is at an angle to the front
@@ -77,7 +77,14 @@ Nothing is written in either case.
 }
 ```
 
-`clips` and `import` are each optional, but one is required. `import.file` is
+`path` (`{points: [[x, z], ...], duration, name?}`, 2–64 points, 0.5–120 s)
+adds a walk along the points with the feet planted. The points are in the
+model's own metres: the ground under the hips, starting where the walk starts.
+The clip moves the hips, so the Video 3D slot should stay still: set
+`motion.walk`, as described in the [humanoid rig guide](HUMANOID_RIG.md).
+`interactions` (up to 8) adds sit, reach and look clips toward model-space points: a seat's top, a prop or a look
+target (see the [humanoid rig guide](HUMANOID_RIG.md)).
+`clips`, `import`, `path` and `interactions` are each optional, but one is required. `import.file` is
 a `.bvh`, `.glb` or `.gltf` inside the workspace; the UI uploads it with
 `POST /api/v1/model3d/animation-files?workspace=…&filename=…` (raw body, up to
 64 MB), which stores it under `animation-imports/` and out of the gallery.
@@ -88,7 +95,7 @@ hips' forward drift is removed so the clip plays in place, and unknown bones
 `GET /api/v1/model3d/humanoid-rigs?workspace=…` lists the GLBs that carry the
 skeleton, newest first, with their clip names.
 
-The reply's `result.clips` is `[{index, name, duration}]`. Video 3D plays one
+The reply's `result.clips` is `[{index, name, duration, contacts}]`. Video 3D plays one
 of those by `clip: {index, name}` on a model slot. Same intent and body
 replays the published file. A request the worker refuses answers HTTP 422 with
 `detail.code` `invalid_input` (a file without the 25 standard bones reports

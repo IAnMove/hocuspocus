@@ -8,7 +8,7 @@ import { normalizeScene2D } from '../../lib/scene2d/normalize'
 import { ensureTextFonts } from '../../lib/kineticText'
 import { sequenceFrame } from '../../lib/scene2d/motion'
 import { mixFxAudio } from '../sceneFx/mix'
-import { sceneAudioWav } from '../sceneFx/audioExport'
+import { sceneAudioWavDataUrl } from '../sceneFx/audioExport'
 import { paintScene2D, type SceneMedia } from '../../lib/scene2d/paint'
 import type { AnimatorLayer, AnimatorScene } from '../../lib/scene2d/types'
 import { sceneProgressFromSeconds, sceneTimeToLayerTime } from '../../lib/sceneTimeline'
@@ -117,11 +117,7 @@ window.__scene2dExport = {
   async audio() {
     if (!scene?.sfx?.some(cue => cue.sound && cue.volume > 0)) return ''
     const buffer = await mixFxAudio(scene.sfx, scene.duration)
-    if (!buffer) return ''
-    const bytes = new Uint8Array(await sceneAudioWav(buffer).arrayBuffer())
-    let binary = ''
-    for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
-    return `data:audio/wav;base64,${btoa(binary)}`
+    return buffer ? sceneAudioWavDataUrl(buffer) : ''
   },
   dispose() {
     media.forEach(element => { if (element instanceof HTMLVideoElement) element.removeAttribute('src') })

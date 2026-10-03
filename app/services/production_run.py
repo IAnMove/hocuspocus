@@ -70,6 +70,26 @@ def _project_ref(value: Mapping[str, Any]) -> dict[str, str] | None:
     return None
 
 
+def pipeline_matches_production(
+    value: Mapping[str, Any], production_id: str, workspace_id: str = "default",
+) -> bool:
+    """True when a Director snapshot is the work ``production_id`` names.
+
+    New files store ``production_id``. Older snapshots omit it; the catalog
+    then lists ``production_legacy_…`` from ``adapt_pipeline_record``. Shot
+    review and catalog writes must use the same rule, or select/reexport
+    look at a file the list just showed.
+    """
+    if not production_id or not isinstance(value, Mapping):
+        return False
+    if str(value.get("production_id") or "") == production_id:
+        return True
+    try:
+        return adapt_pipeline_record(value, workspace_id)["production"]["id"] == production_id
+    except ValueError:
+        return False
+
+
 def adapt_pipeline_record(value: Mapping[str, Any], workspace_id: str = "default") -> dict[str, Any]:
     """Split one legacy pipeline snapshot into a production and one run."""
     if not isinstance(value, Mapping):
@@ -162,5 +182,5 @@ def build_production_run_catalog(
 
 __all__ = [
     "PRODUCTION_SCHEMA", "RUN_SCHEMA", "SCHEMA_VERSION",
-    "adapt_pipeline_record", "build_production_run_catalog",
+    "adapt_pipeline_record", "build_production_run_catalog", "pipeline_matches_production",
 ]

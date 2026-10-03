@@ -160,16 +160,25 @@ class Pose:
         self._set(f"{side}Shoulder", 2, sign * self._vector(shrug))
         self._set(f"{side}Shoulder", 1, -sign * self._vector(forward))
 
-    def plant(self, side: str, forward=0.0, up=0.0, out=0.0, pitch=0.0) -> None:
-        """Ankle target as an offset from the rest ankle, in leg lengths. IK solves the leg."""
+    def plant(self, side: str, forward=0.0, up=0.0, out=0.0, pitch=0.0, yaw=0.0) -> None:
+        """Ankle target as an offset from the rest ankle, in leg lengths. IK solves the leg.
+
+        ``yaw`` turns the planted foot about the vertical, in degrees (> 0 toward the character's left).
+        """
         offset = np.stack((side_sign(side) * self._vector(out), self._vector(up), self._vector(forward)), axis=1)
-        self.feet[side] = {"offset": offset, "pitch": self._vector(pitch).copy()}
+        self.feet[side] = {"offset": offset, "pitch": self._vector(pitch).copy(), "yaw": self._vector(yaw).copy()}
 
     def reach(self, side: str, target, pole=(0.3, -1.0, -0.5)) -> None:
         """Wrist target in metres from the chest joint, in the chest frame (x mirrored for the right)."""
         sign = side_sign(side)
         goal = np.broadcast_to(np.asarray(target, dtype=np.float64), (len(self.u), 3)) * np.array([sign, 1.0, 1.0])
         self.hands[side] = {"target": goal, "pole": np.asarray(pole, dtype=np.float64) * np.array([sign, 1.0, 1.0])}
+
+    def reach_world(self, side: str, target, pole=(0.3, -1.0, -0.5)) -> None:
+        """Wrist target in the model's own space (metres), per frame or fixed; the pole stays in the chest frame."""
+        sign = side_sign(side)
+        goal = np.broadcast_to(np.asarray(target, dtype=np.float64), (len(self.u), 3)).copy()
+        self.hands[side] = {"world": goal, "pole": np.asarray(pole, dtype=np.float64) * np.array([sign, 1.0, 1.0])}
 
     def move_root(self, forward=0.0, up=0.0, side=0.0) -> None:
         """Root offset in leg lengths, before the floor contact is solved."""
@@ -178,6 +187,12 @@ class Pose:
 
 def bake(pose: Pose) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(local rotations (F, B, 4), root translations (F, 3))`` for the stored rig."""
+    local, root, _positions, _worlds = bake_with_frames(pose)
+    return local, root
+
+
+def bake_with_frames(pose: Pose) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """``bake`` plus the canonical joint positions and world rotations of every frame."""
     rig = pose.rig
     root = rig.root[None] + rot.rotate(rig.facing, pose.root * rig.leg)
     local = _euler_locals(pose)
@@ -187,8 +202,8 @@ def bake(pose: Pose) -> tuple[np.ndarray, np.ndarray]:
         positions, worlds = rig.forward(local, root)
         root = root.copy()
         root[:, 1] += rig.floor - lowest_contact(rig, positions, worlds)
-    _positions, worlds = rig.forward(local, root)
-    return rig.to_actual(worlds), root
+    positions, worlds = rig.forward(local, root)
+    return rig.to_actual(worlds), root, positions, worlds
 
 
 def lowest_contact(rig: Rig, positions: np.ndarray, worlds: np.ndarray) -> np.ndarray:
@@ -226,7 +241,7 @@ def _solve_feet(pose: Pose, local: np.ndarray, root: np.ndarray) -> None:
         local[:, hip] = rot.multiply(rot.inverse(pelvis), thigh)
         local[:, knee] = rot.axis_angle(np.broadcast_to(hinge, goal.shape), bend)
         _positions, worlds = rig.forward(local, root)
-        local[:, ankle] = rot.multiply(rot.inverse(worlds[:, knee]), _planted(rig, ankle, target["pitch"]))
+        local[:, ankle] = rot.multiply(rot.inverse(worlds[:, knee]), _planted(rig, ankle, target["pitch"], target.get("yaw")))
 
 
 def _leg_chain(rig: Rig, side: str, hip: np.ndarray, goal: np.ndarray, pole: np.ndarray):
@@ -253,10 +268,12 @@ def _leg_chain(rig: Rig, side: str, hip: np.ndarray, goal: np.ndarray, pole: np.
     return thigh, bend, hinge
 
 
-def _planted(rig: Rig, ankle: int, pitch: np.ndarray) -> np.ndarray:
-    """The foot's rest orientation in the world, toes lifted by ``pitch`` degrees."""
+def _planted(rig: Rig, ankle: int, pitch: np.ndarray, yaw: np.ndarray | None = None) -> np.ndarray:
+    """The foot's rest orientation in the world, toes lifted by ``pitch`` degrees, then turned by ``yaw``."""
     axis = rot.rotate(rig.facing, _X)
     turn = rot.axis_angle(np.broadcast_to(axis, (len(pitch), 3)), -np.asarray(pitch, dtype=np.float64))
+    if yaw is not None and np.any(yaw):
+        turn = rot.multiply(rot.axis_angle(np.broadcast_to(_Y, (len(pitch), 3)), np.asarray(yaw, dtype=np.float64)), turn)
     return rot.multiply(turn, np.broadcast_to(rig.rest_worlds[ankle], turn.shape))
 
 
@@ -278,7 +295,7 @@ def _solve_hands(pose: Pose, local: np.ndarray, root: np.ndarray) -> None:
         upper, lower = rig.length(f"{side}Arm", f"{side}ForeArm"), rig.length(f"{side}ForeArm", f"{side}Hand")
         positions, worlds = rig.forward(local, root)
         chest = worlds[:, rig.index("Spine2")]
-        goal = positions[:, rig.index("Spine2")] + rot.rotate(chest, target["target"])
+        goal = target["world"] if "world" in target else positions[:, rig.index("Spine2")] + rot.rotate(chest, target["target"])
         pole = rot.rotate(chest, np.broadcast_to(target["pole"], goal.shape))
         upper_world, bend = arm_chain(positions[:, arm], goal, pole, upper, lower, side_sign(side))
         local[:, arm] = rot.multiply(rot.inverse(worlds[:, rig.index(f"{side}Shoulder")]), upper_world)

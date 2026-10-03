@@ -27,6 +27,8 @@ from services.humanoid_rig.names import BONE_BY_NAME, BONE_NAMES, BONE_PARENTS
 from services.humanoid_rig.skeleton import world_matrices
 
 MARKER = "hocuspocus_humanoid"
+# Each animation's foot landings, ``[{t, foot, strength}]`` (see ``contacts``), so footsteps can follow it.
+CONTACTS = "hocuspocus_contacts"
 
 
 def read_primitives(source: bytes) -> list[dict]:
@@ -253,6 +255,8 @@ def _append_clips(gltf, blob, joint_nodes: list[int], clips: list[dict]) -> None
         translation = clip.get("hips_translation")
         if translation is not None:
             _add_channel(gltf, blob, animation, times, np.asarray(translation, dtype=np.float32), joint_nodes[0], "translation")
+        if "contacts" in clip:
+            animation.extras = {CONTACTS: [dict(item) for item in clip["contacts"]]}
         gltf.animations.append(animation)
 
 

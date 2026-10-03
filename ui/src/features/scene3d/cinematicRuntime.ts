@@ -1,5 +1,5 @@
 import { EndlessRoad } from './endlessRoad'
-import { Color, CylinderGeometry, Group, Mesh, MeshStandardMaterial, PlaneGeometry, PointLight, ShaderMaterial, TorusGeometry, UniformsUtils, Vector2, type IUniform, type Texture } from 'three'
+import { Color, CylinderGeometry, DepthTexture, Group, HalfFloatType, Mesh, MeshStandardMaterial, PlaneGeometry, PointLight, ShaderMaterial, TorusGeometry, UniformsUtils, Vector2, WebGLRenderTarget, type IUniform, type Texture } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
@@ -13,10 +13,21 @@ import type { Scene3DDocument } from './types'
 import { cinematicReflectorVisible } from './cinematicSettings'
 import { BackdropFloor } from './backdropFloor'
 import { createPixelPass, syncPixelPass } from './pixel/pixelPass'
-import type { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import type { Pass } from 'three/addons/postprocessing/Pass.js'
 import { bindAtmosPasses, ensureComposerDepth, publishAtmosStats } from './atmos/composerBind.ts'
 import { atmosHandle, isAtmosDressing } from './atmos/index.ts'
+import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality.ts'
+
+/** A resolved multisample can turn a very bright sample into NaN or Inf; the bloom blur
+ * would then spread it over the whole frame. Exports above draft clear those values first. */
+const FINITE_SHADER = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main() { vec4 c = texture2D(tDiffuse, vUv);
+      gl_FragColor = (any(isnan(c)) || any(isinf(c))) ? vec4(0.0, 0.0, 0.0, 1.0) : min(c, vec4(1024.0)); }`,
+}
 
 /** Shared preview/export pipeline. No frame delta, random state or private assets. */
 export class CinematicRuntime {
@@ -38,7 +49,22 @@ export class CinematicRuntime {
   private document?: Scene3DDocument
   private world: GpuWorld
   private backdropFloor: BackdropFloor
-  constructor(world: GpuWorld) { this.world = world; this.backdropFloor = new BackdropFloor(world) }
+  private quality: ExportRenderQuality = DRAFT_RENDER
+  constructor(world: GpuWorld) {
+    this.world = world; this.backdropFloor = new BackdropFloor(world)
+    this.setRenderQuality(world.exportRender)
+  }
+
+  /** Export quality: MSAA on the composer targets, bloom kept at the output size. Draft keeps today's composer. */
+  setRenderQuality(render: ExportRenderQuality = DRAFT_RENDER) {
+    const rebuild = this.composer !== undefined && render.samples !== this.quality.samples
+    this.quality = { ...render }
+    this.size.set(0, 0)
+    if (!rebuild || !this.composer) return
+    this.atmosPasses = bindAtmosPasses(this.composer, this.atmosPasses, undefined)
+    this.composer.passes.forEach(pass => pass.dispose()); this.composer.dispose()
+    this.composer = undefined; this.bloom = undefined; this.pixel = undefined
+  }
 
   private createMirror() {
     const reflectorShader = (Reflector as unknown as { ReflectorShader: { uniforms: Record<string, IUniform>; vertexShader: string } }).ReflectorShader
@@ -116,14 +142,17 @@ export class CinematicRuntime {
   private ensureComposer() {
     if (this.composer) return
     const { world } = this
-    this.composer = new EffectComposer(world.renderer)
+    const { samples } = this.quality
+    // Composer targets do not inherit the canvas antialias; exports above draft multisample them.
+    this.composer = new EffectComposer(world.renderer, samples ? new WebGLRenderTarget(2, 2, { type: HalfFloatType, samples, depthTexture: new DepthTexture(2, 2) }) : undefined)
     this.composer.addPass(new RenderPass(world.scene, world.camera))
+    if (samples) this.composer.addPass(new ShaderPass(FINITE_SHADER))
     this.bloom = new UnrealBloomPass(new Vector2(1280, 720), .48, .55, 1.15)
     this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass())
     this.lut = new LUTPass({}); this.composer.addPass(this.lut); this.applyLut()
     this.pixel = createPixelPass(); this.composer.addPass(this.pixel)
     // Fixed pool: many overlapping cues cannot create unbounded shader/light work.
-    for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
+    if (!this.lights.length) for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
   }
   private syncRoad(doc: Scene3DDocument, seconds: number) {
     const road = doc.environment?.floorStyle === 'road'
@@ -192,15 +221,19 @@ export class CinematicRuntime {
       }
     })
   }
+  private fitComposer(composer: EffectComposer, size: Vector2) {
+    if (size.equals(this.size)) return
+    this.size.copy(size); composer.setPixelRatio(1); composer.setSize(size.x, size.y)
+    // A supersampled frame keeps the bloom spread of the output size, so the look does not change.
+    const supersample = this.quality.supersample
+    if (supersample > 1) this.bloom?.setSize(Math.round(size.x / supersample), Math.round(size.y / supersample))
+    ensureComposerDepth(composer)
+    this.mirror?.getRenderTarget().setSize(Math.min(1280, size.x), Math.min(720, size.y))
+  }
   render(doc = this.document) {
     const { renderer, scene, camera } = this.world
     if (this.composer && (doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld || isAtmosDressing(doc?.dressing))) {
-      const size = renderer.getDrawingBufferSize(new Vector2())
-      if (!size.equals(this.size)) {
-        this.size.copy(size); this.composer.setPixelRatio(1); this.composer.setSize(size.x, size.y)
-        ensureComposerDepth(this.composer)
-        this.mirror?.getRenderTarget().setSize(Math.min(1280, size.x), Math.min(720, size.y))
-      }
+      this.fitComposer(this.composer, renderer.getDrawingBufferSize(new Vector2()))
       this.composer.render(0)
       const handle = atmosHandle(this.world)
       if (handle) publishAtmosStats({
