@@ -328,6 +328,40 @@ def test_first_resolve_cannot_claim_a_series_episode_id_as_a_story(tmp_path):
     assert again["project"] == resolved["project"]
 
 
+def test_leftover_running_stub_with_newer_timestamp_stays_completed(tmp_path):
+    """A crashed production.run left series-{episode}.production.json running.
+
+    Listing used the newer file timestamp and hid the completed link, so an
+    agent started another GPU render of a finished episode.
+    """
+    from services.production_project_link import note_production_status
+    from services.production_work_commands import run_command
+    series = create_series_project("film", title="Series")
+    episode = create_series_episode(series)
+    series["episodesById"][episode["id"]] = episode
+    write_series_library(str(tmp_path), {"workspaceId": "film", "seriesById": {series["id"]: series},
+                                      "seriesOrder": [series["id"]]}, "film")
+    bound = attach_episode(str(tmp_path), "film", episode, {})
+    production_id = f"series-{episode['id']}"
+    note_production_status(str(tmp_path), production_id, "completed")
+    (tmp_path / f"{production_id}.production.json").write_text(json.dumps({
+        "status": "running",
+        "project": {"kind": "episode", "id": episode["id"]},
+        "intent_id": bound["intent_id"],
+        "origin": "mcp",
+        "spec": {"title": "Night bus"},
+        "format": "music_video",
+        "updated_at": "2099-01-01T00:00:00+00:00",
+    }), encoding="utf-8")
+    listed = run_command(str(tmp_path), {
+        "operation": "production.works.list", "version": 1, "input": {"workspace": "film"},
+    })
+    work = next(item for item in listed["works"] if item["production_id"] == production_id)
+    assert work["status"] == "completed"
+    assert work["format"] == "full_story"
+    assert read_link_store(str(tmp_path))["links"][bound["intent_id"]]["status"] == "completed"
+
+
 def test_leftover_pending_stub_with_newer_timestamp_stays_completed(tmp_path):
     from services.production_project_link import note_production_status
     from services.production_work_commands import run_command
