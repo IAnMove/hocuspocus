@@ -214,7 +214,7 @@ abriendo el borrador el primer día y actualizando la fila en el mismo PR.
 | 5.F3 Contactos de pie | Claude | Tras el PR #765 | |
 | 5.F4 Pasos | Grok | Tras 5.F3 | |
 | 5.F5-F7 Ambientes, editor y reverb | Grok | Ya | |
-| 6.F1 Sondas de ffmpeg | Grok | Ya | Borrador `feat/calidad-6-f1-sondas-ffmpeg` |
+| 6.F1 Sondas de ffmpeg | Grok | Ya | Borrador https://github.com/IAnMove/hocuspocus/pull/769 |
 | 6.F2 Geometría antes del render | Claude | Tras 4.F1 | |
 | 6.F3 Avisos en 2D y en el editor | Grok | Ya | |
 | 6.F4 Panel de revisión | Grok | Tras 6.F1 | |
