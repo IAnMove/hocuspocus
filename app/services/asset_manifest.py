@@ -15,13 +15,15 @@ from typing import Any, Mapping, Sequence
 from app_identity import manifest_app_ref
 
 from .generation_provenance import resolve_generation_location
+from .media_kinds import MANIFEST_KIND_BY_EXTENSION, MANIFEST_KINDS
 
 
 SCHEMA_NAME = "hocuspocus.asset-manifest"
 SCHEMA_VERSION = 1
 ASSET_KINDS = frozenset({
     "image", "audio", "video", "scene", "model3d", "document", "other",
-})
+}) | MANIFEST_KINDS
+LICENSE_FIELDS = ("spdx", "source", "source_url", "author", "retrieved_at")
 EXECUTION_STATUSES = frozenset({
     "prepared", "queued", "running", "completed", "partial", "failed", "cancelled",
 })
@@ -42,6 +44,7 @@ _KIND_BY_EXTENSION = {
     ".mkv": "video", ".mov": "video", ".mp4": "video", ".webm": "video",
     ".glb": "model3d", ".gltf": "model3d", ".obj": "model3d", ".fbx": "model3d",
     ".json": "document", ".md": "document", ".pdf": "document", ".txt": "document",
+    **MANIFEST_KIND_BY_EXTENSION,
 }
 
 
@@ -153,6 +156,18 @@ def _artifact_refs(values: Sequence[Mapping[str, Any]] | None) -> list[dict[str,
     return result
 
 
+def license_ref(value: Any) -> dict[str, str]:
+    """The license block of an imported asset; ``spdx`` and an https ``source_url`` are required."""
+    if not isinstance(value, Mapping):
+        raise AssetManifestError("origin.license must be an object")
+    found = {key: _clean_text(value.get(key)) for key in LICENSE_FIELDS}
+    if not found["spdx"]:
+        raise AssetManifestError("origin.license needs an SPDX id")
+    if not str(found["source_url"] or "").startswith("https://"):
+        raise AssetManifestError("origin.license needs an https source_url")
+    return {key: text for key, text in found.items() if text}
+
+
 def sidecar_path(output_path: str | os.PathLike[str]) -> Path:
     return Path(output_path).with_suffix(".meta.json")
 
@@ -182,8 +197,13 @@ def build_asset_manifest(
     media: Mapping[str, Any] | None = None,
     technical: Mapping[str, Any] | None = None,
     error: Mapping[str, Any] | None = None,
+    license: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build one JSON-safe manifest without exposing absolute local paths."""
+    """Build one JSON-safe manifest without exposing absolute local paths.
+
+    ``license`` records where an imported file comes from and under which terms
+    (``spdx``, ``source``, ``source_url``, ``author``, ``retrieved_at``).
+    """
     output = Path(output_path)
     filename = output.name
     resolved_kind = str(kind or infer_asset_kind(filename)).casefold()
@@ -252,6 +272,8 @@ def build_asset_manifest(
         origin.pop("workspace_id", None)
     if origin["output_folder"] is None:
         origin.pop("output_folder", None)
+    if license is not None:
+        origin["license"] = license_ref(license)
     manifest = {
         "schema": SCHEMA_NAME,
         "schema_version": SCHEMA_VERSION,
@@ -305,6 +327,8 @@ def validate_asset_manifest(value: Mapping[str, Any]) -> dict[str, Any]:
         raise AssetManifestError("Asset manifest has an invalid asset kind")
     if not isinstance(origin, Mapping) or not _clean_text(origin.get("tool")):
         raise AssetManifestError("Asset manifest has no origin.tool")
+    if "license" in origin:
+        license_ref(origin["license"])
     if not isinstance(execution, Mapping) or execution.get("status") not in EXECUTION_STATUSES:
         raise AssetManifestError("Asset manifest has an invalid execution status")
     if execution.get("mode") not in EXECUTION_MODES:
