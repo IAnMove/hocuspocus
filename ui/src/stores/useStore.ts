@@ -25,6 +25,7 @@ import i18n from '../i18n'
 import { type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
+import { installedPreferredModel } from '../lib/preferredModels'
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
 import { createActivityPublicationGate } from '../lib/activityPublication'
 import { isGenerationJobActive } from '../lib/generationJobState'
@@ -1103,6 +1104,8 @@ const DEFAULT_RECAST_MAPPING: RecastCharacterMapping = {
 }
 
 function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], models: ModelDef[]): string {
+  const installedFirst = installedPreferredModel(mode, models)
+  if (installedFirst) return installedFirst
   // Try the preferred default first
   const preferred = modeDefaultModel[mode]
   if (preferred && models.some(m => m.model_type === preferred)) {

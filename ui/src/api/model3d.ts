@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid'
 import { BASE } from './http'
 
 // --- Native Hunyuan3D ---
@@ -141,6 +142,8 @@ export interface RigAnimation {
   label: string
   description: string
   category?: string
+  /** Humanoid clips: loop length in beats at the chosen BPM. */
+  beats?: number
 }
 
 export type RigProfileId = 'prop' | 'vehicle' | 'humanoid' | 'quadruped' | 'flying' | 'serpentine'
@@ -159,6 +162,8 @@ export interface RigProfile {
 export interface RigCapabilities {
   engines: RigEngine[]
   animations: RigAnimation[]
+  /** Standard Mixamo-named clips. Present when the humanoid engine is installed. */
+  humanoid_animations?: RigAnimation[]
   /** Optional during rolling upgrades from backends predating rig profiles. */
   rig_profiles?: RigProfile[]
   default_rig_profile?: RigProfileId
@@ -179,8 +184,27 @@ export interface RigJob {
   rig_profile?: RigProfileId
   source_file: string
   animations?: string[]
+  /** Set when the worker refused the mesh, e.g. ``not_humanoid`` with reason ``hands_stuck``. */
+  error_code?: string
+  error_reason?: string
+  /** Humanoid engine: what was detected and which clips the GLB holds. */
+  humanoid?: HumanoidRigSummary
   created_at: number
   updated_at: number
+}
+
+export interface HumanoidClip {
+  index: number
+  name: string
+  duration: number
+}
+
+export interface HumanoidRigSummary {
+  pose?: 't' | 'a'
+  arm_drop?: number
+  confidence?: number
+  warnings?: string[]
+  clips?: HumanoidClip[]
 }
 
 export async function fetchRigCapabilities(): Promise<RigCapabilities> {
@@ -194,6 +218,7 @@ export async function startRigJob(params: {
   engine?: string
   rig_profile?: RigProfileId
   animations?: string[]
+  animation_bpm?: number
   spine_joints?: number
   axis_mode?: 'auto' | 'x' | 'y' | 'z'
   weight_falloff?: number
@@ -225,4 +250,61 @@ export async function cancelRigJob(jobId: string): Promise<RigJob> {
   const res = await fetch(`${BASE}/api/v1/rig/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
   if (!res.ok) throw new Error('Failed to cancel rig job')
   return res.json()
+}
+
+// --- Humanoid clips on an already rigged model ---
+
+export interface HumanoidRig {
+  name: string
+  clips: string[]
+  modified: number
+}
+
+export interface HumanoidAnimateResult {
+  file: string
+  workspace: string
+  url: string
+  clips: HumanoidClip[]
+  warnings: string[]
+  bytes: number
+}
+
+async function commandError(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => null) as { detail?: string | { message?: string } } | null
+  const detail = body?.detail
+  return new Error(typeof detail === 'string' ? detail : detail?.message || fallback)
+}
+
+/** GLBs in a workspace that carry the standard humanoid skeleton. */
+export async function fetchHumanoidRigs(workspace: string): Promise<HumanoidRig[]> {
+  const res = await fetch(`${BASE}/api/v1/model3d/humanoid-rigs?workspace=${encodeURIComponent(workspace)}`, { cache: 'no-store' })
+  if (!res.ok) throw await commandError(res, 'Could not list rigged characters')
+  return (await res.json()).rigs
+}
+
+/** Stores a .bvh/.glb/.gltf in the workspace (out of the gallery) and returns its workspace path. */
+export async function uploadAnimationFile(workspace: string, file: File): Promise<string> {
+  const query = new URLSearchParams({ workspace, filename: file.name })
+  const res = await fetch(`${BASE}/api/v1/model3d/animation-files?${query}`, { method: 'POST', body: file })
+  if (!res.ok) throw await commandError(res, 'Could not upload the animation file')
+  return (await res.json()).file
+}
+
+export async function animateHumanoid(params: {
+  workspace: string
+  source: string
+  clips: string[]
+  bpm: number
+  importFile?: string | null
+}): Promise<HumanoidAnimateResult> {
+  const input: Record<string, unknown> = { workspace: params.workspace, source: params.source, bpm: params.bpm }
+  if (params.clips.length) input.clips = params.clips
+  if (params.importFile) input.import = { file: params.importFile }
+  const res = await fetch(`${BASE}/api/v1/model3d/animate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version: 1, intent_id: `ui-animate-${randomUuid()}`, input }),
+  })
+  if (!res.ok) throw await commandError(res, 'Could not add the animations')
+  return (await res.json()).result
 }

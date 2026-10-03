@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
+from services.mcp_intent import IntentConflict, check_intent_id, intent_digest, load_intent, store_intent
+from services.scene2d_schema import document_schema
 from services.scene_commands import DocumentInput, command_error
 from services.scene_library import preview_png, save_world3d
 
@@ -25,11 +27,12 @@ _PLACEHOLDER_SIZE = (320, 180)
 
 OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "scenes.document.save": (
-        {"workspace": WORKSPACE, "document": {"type": "object"}, "name": {"type": "string", "maxLength": 120},
+        {"workspace": WORKSPACE, "document": document_schema(), "name": {"type": "string", "maxLength": 120},
          "preview": {"type": "string", "description": "Optional data:image/png;base64 preview (Video 3D library)."}},
         ["workspace", "document"], True,
         "Save a version 1 Video 2D (layers) or Video 3D (slots) scene as a new immutable revision in the workspace so "
-        "it opens in the matching editor. Media must already be durable workspace/example URLs. No render or export.",
+        "it opens in the matching editor. Media must already be durable workspace/example URLs. No render or export. "
+        "Optional intent_id replays the stored revision and does not write another file.",
     ),
     "scenes.document.get": (
         {"workspace": WORKSPACE, "file": {"type": "string", "pattern": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.scene\.json$"}},
@@ -129,15 +132,24 @@ def get_document(workspace: str, file: str, *, workspace_dir: Callable[[str], st
             "editor": "video3d" if isinstance(document, dict) and "slots" in document else "video2d"}
 
 
-def command_catalog() -> list[dict[str, Any]]:
-    return [{
+def _operation_schema(name: str, properties: dict[str, Any], required: list[str], mutation: bool, description: str) -> dict[str, Any]:
+    envelope: dict[str, Any] = {
+        "version": {"type": "integer", "const": 1},
+        "input": {"type": "object", "additionalProperties": False, "properties": properties, "required": required},
+    }
+    if name == "scenes.document.save":
+        envelope["intent_id"] = {"type": "string", "minLength": 1, "maxLength": 160}
+    return {
         "name": name, "version": 1, "domain": "scenes", "mutation": mutation, "description": description,
-        "inputSchema": {"type": "object", "additionalProperties": False,
-                        "properties": {"version": {"type": "integer", "const": 1},
-                                       "input": {"type": "object", "additionalProperties": False,
-                                                 "properties": properties, "required": required}},
-                        "required": ["version", "input"]},
-    } for name, (properties, required, mutation, description) in OPERATIONS.items()]
+        "inputSchema": {"type": "object", "additionalProperties": False, "properties": envelope, "required": ["version", "input"]},
+    }
+
+
+def command_catalog() -> list[dict[str, Any]]:
+    return [
+        _operation_schema(name, properties, required, mutation, description)
+        for name, (properties, required, mutation, description) in OPERATIONS.items()
+    ]
 
 
 def command_handlers(workspace_dir: Callable[[str], str]) -> dict[str, Callable[[Any], Any]]:
@@ -148,11 +160,36 @@ def command_handlers(workspace_dir: Callable[[str], str]) -> dict[str, Callable[
             raise SceneDocumentError(f"Use version 1 with input fields: {', '.join(required)}")
         return data
 
+    def _save_once(data: dict[str, Any], arguments: Any) -> dict[str, Any]:
+        intent = arguments.get("intent_id") if isinstance(arguments, dict) else None
+        if intent is None:
+            return save_document(data["workspace"], data["document"], name=data.get("name"),
+                                 preview=data.get("preview"), workspace_dir=workspace_dir)
+        try:
+            intent_id = check_intent_id(intent)
+            digest = intent_digest({
+                "workspace": data["workspace"],
+                "document": data["document"],
+                "name": data.get("name"),
+                "preview": data.get("preview"),
+            })
+            root = Path(workspace_dir(data["workspace"]))
+            previous = load_intent(root, "scenes.document.save", intent_id, digest)
+        except IntentConflict as error:
+            raise SceneDocumentError(str(error), status=409) from error
+        except (OSError, json.JSONDecodeError) as error:
+            raise SceneDocumentError("Stored intention is unreadable", status=409) from error
+        if previous is not None:
+            return {**previous, "replayed": True}
+        result = save_document(data["workspace"], data["document"], name=data.get("name"),
+                               preview=data.get("preview"), workspace_dir=workspace_dir)
+        store_intent(root, "scenes.document.save", intent_id, digest, result)
+        return result
+
     def run(name: str, arguments: Any) -> dict[str, Any]:
         data = payload(arguments, name)
         if name == "scenes.document.save":
-            result = save_document(data["workspace"], data["document"], name=data.get("name"),
-                                   preview=data.get("preview"), workspace_dir=workspace_dir)
+            result = _save_once(data, arguments)
         else:
             result = get_document(data["workspace"], data["file"], workspace_dir=workspace_dir)
         return {"version": 1, "status": "completed", "operation": name, "result": result}

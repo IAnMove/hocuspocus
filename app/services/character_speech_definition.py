@@ -92,12 +92,12 @@ def _face_placement(face):
 def _face_style(value):
     if "atlas" in value:
         source_ref(value["atlas"])
-    for key in ("clean", "blink", "eyes"):
+    for key in ("clean", "blink", "eyes", "morph"):
         if key in value and type(value[key]) is not bool:
             raise ValueError("Invalid face switch.")
     if "strength" in value and (type(value["strength"]) not in (int, float) or not 0 <= value["strength"] <= 1.5):
         raise ValueError("Invalid face strength.")
-    for key, choices in (("style", {"soft", "toon", "pixel"}), ("expression", {"neutral", "happy", "angry", "worried", "surprised", "sleepy"})):
+    for key, choices in (("style", {"soft", "toon", "toon-bold", "pixel"}), ("expression", {"neutral", "happy", "angry", "worried", "surprised", "sleepy"})):
         if key in value and (not isinstance(value[key], str) or value[key] not in choices):
             raise ValueError("Invalid face style.")
     if "lip" in value and not re.fullmatch(r"#[0-9a-fA-F]{6}", str(value["lip"])):
@@ -105,7 +105,7 @@ def _face_style(value):
 
 
 def face_settings(value):
-    allowed = {"face", "atlas", "strength", "clean", "style", "lip", "expression", "blink", "eyes"}
+    allowed = {"face", "atlas", "strength", "clean", "morph", "style", "lip", "expression", "blink", "eyes"}
     if not isinstance(value, dict) or not isinstance(value.get("face"), dict) or not set(value).issubset(allowed):
         raise ValueError("Only face settings may be stored.")
     _face_placement(value["face"])

@@ -13,6 +13,9 @@ import { cinematicReflectorVisible } from './cinematicSettings'
 import { BackdropFloor } from './backdropFloor'
 import { createPixelPass, syncPixelPass } from './pixel/pixelPass'
 import type { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
+import type { Pass } from 'three/addons/postprocessing/Pass.js'
+import { bindAtmosPasses, ensureComposerDepth, publishAtmosStats } from './atmos/composerBind.ts'
+import { atmosHandle, isAtmosDressing } from './atmos/index.ts'
 
 /** Shared preview/export pipeline. No frame delta, random state or private assets. */
 export class CinematicRuntime {
@@ -22,6 +25,7 @@ export class CinematicRuntime {
   private composer?: EffectComposer
   private bloom?: UnrealBloomPass
   private pixel?: ShaderPass
+  private atmosPasses: Pass[] = []
   private lights: PointLight[] = []
   private background?: Texture
   private source?: Texture
@@ -124,7 +128,7 @@ export class CinematicRuntime {
   sync(doc: Scene3DDocument, seconds: number) {
     this.document = doc
     this.syncBackground(doc); this.syncStage(doc)
-    const active = Boolean(doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld)
+    const active = Boolean(doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld || isAtmosDressing(doc?.dressing))
     // Pixel worlds show their palette as painted; filmic curves would shift it.
     this.world.renderer.toneMapping = active && !doc.pixelWorld ? ACESFilmicToneMapping : NoToneMapping
     if (!active) { this.road?.sync(false, undefined, seconds); return }
@@ -134,6 +138,27 @@ export class CinematicRuntime {
     syncPixelPass(this.pixel!, doc.pixelWorld, frame.x, frame.y)
     this.syncRoad(doc, seconds)
     this.syncLights(doc, seconds)
+    this.syncAtmos(doc, seconds)
+  }
+  private syncAtmos(doc: Scene3DDocument, seconds: number) {
+    const handle = atmosHandle(this.world)
+    if (!this.composer || !handle) {
+      if (this.composer) this.atmosPasses = bindAtmosPasses(this.composer, this.atmosPasses, undefined)
+      return
+    }
+    this.world.camera.updateMatrixWorld()
+    ensureComposerDepth(this.composer)
+    this.atmosPasses = bindAtmosPasses(this.composer, this.atmosPasses, handle)
+    const slot = doc.slots.find(item => item.slot === 'subject_1')
+    const distance = slot
+      ? Math.hypot(this.world.camera.position.x - slot.position[0], this.world.camera.position.y - slot.position[1], this.world.camera.position.z - slot.position[2])
+      : 3.5
+    const high = this.world.renderer.shadowMap.enabled && this.world.dir.shadow.mapSize.x >= 2048
+    handle.sync(seconds, this.world.camera, this.world.dir, high ? 'high' : 'low', distance > 0.4 ? distance : 3.5, doc.atmos)
+  }
+  detachAtmos() {
+    if (!this.composer) { this.atmosPasses = []; return }
+    this.atmosPasses = bindAtmosPasses(this.composer, this.atmosPasses, undefined)
   }
   private syncLights(doc: Scene3DDocument, seconds: number) {
     const { world } = this
@@ -153,13 +178,21 @@ export class CinematicRuntime {
   }
   render(doc = this.document) {
     const { renderer, scene, camera } = this.world
-    if (this.composer && (doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld)) {
+    if (this.composer && (doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld || isAtmosDressing(doc?.dressing))) {
       const size = renderer.getDrawingBufferSize(new Vector2())
       if (!size.equals(this.size)) {
         this.size.copy(size); this.composer.setPixelRatio(1); this.composer.setSize(size.x, size.y)
+        ensureComposerDepth(this.composer)
         this.mirror?.getRenderTarget().setSize(Math.min(1280, size.x), Math.min(720, size.y))
       }
       this.composer.render(0)
+      const handle = atmosHandle(this.world)
+      if (handle) publishAtmosStats({
+        calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
+        geometries: renderer.info.memory.geometries,
+        textures: renderer.info.memory.textures,
+      }, handle.ms)
     } else { this.lights.forEach(light => { light.intensity = 0 }); renderer.render(scene, camera) }
   }
   dispose() {

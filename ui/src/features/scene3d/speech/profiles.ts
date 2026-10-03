@@ -2,10 +2,10 @@ import type { Scene3DSpeech } from './types'
 import { defaultSpeech } from './types'
 import { parseSpeech, safeMediaUrl } from './track'
 
-export type FaceSettings = Pick<Scene3DSpeech, 'face' | 'atlas' | 'strength' | 'clean' | 'style' | 'lip' | 'expression' | 'blink' | 'eyes'>
+export type FaceSettings = Pick<Scene3DSpeech, 'face' | 'atlas' | 'strength' | 'clean' | 'morph' | 'style' | 'lip' | 'expression' | 'blink' | 'eyes'>
 export function faceSettings(speech: Scene3DSpeech): FaceSettings {
-  const { face, atlas, strength, clean, style, lip, expression, blink, eyes } = speech
-  return { face, atlas, strength, clean, style, lip, expression, blink, eyes }
+  const { face, atlas, strength, clean, morph, style, lip, expression, blink, eyes } = speech
+  return { face, atlas, strength, clean, ...(morph !== undefined ? { morph } : {}), style, lip, expression, blink, eyes }
 }
 
 export const MAX_MODEL_BYTES = 64 * 1024 * 1024

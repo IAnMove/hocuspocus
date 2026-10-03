@@ -29,11 +29,13 @@ from pydantic import ValidationError
 from services.asset_manifest import publish_generation_sidecar
 from services import resource_scheduler
 from services.world3d_media_cache import prepare_media_snapshot
+from services.world3d_renderer_support import scene_render_device
 from services.media_refs import parse_media_ref
 from services.scene_commands import DocumentInput, command_error as scene_error
 from services.scene_recording import SceneRecordingTranscodeError, validate_scene_recording_output
 from services.task_command_admission import TaskCommandConflict
 from services.task_manager import get_cancellation_token, new_task_id
+from services.export_receipts import project_export_receipt
 
 
 OPERATION = "scenes.world3d.export"
@@ -117,6 +119,12 @@ if (!appUrl) process.exit(2);
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
 async function launchRenderer() {
+  if (process.env.HOCUS_SCENE_RENDER_DEVICE === 'cpu') {
+    console.log('World3D CPU software renderer');
+    return chromium.launch({ headless: true, args: [
+      '--disable-gpu', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+    ] });
+  }
   if (process.platform === 'linux') {
     let accelerated;
     try {
@@ -184,7 +192,8 @@ def run_owned_browser(snapshot: dict, staging: Path, cancelled, *, app_url: str,
     proc = subprocess.Popen(
         ["node", str(script), str(staging / "snapshot.json"), str(staging)],
         env={**os.environ, "HOCUS_APP_URL": app_url, "PLAYWRIGHT_MODULE": str(module),
-             "HOCUS_RENDER_PAGE": page, "HOCUS_RENDER_BRIDGE": bridge},
+             "HOCUS_RENDER_PAGE": page, "HOCUS_RENDER_BRIDGE": bridge,
+             "HOCUS_SCENE_RENDER_DEVICE": scene_render_device()},
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     stderr = _wait_owned_browser(proc, cancelled)
@@ -205,6 +214,7 @@ def export_capabilities(app_url: str | None = None) -> dict:
         "ffmpeg": ffmpeg, "playwright": playwright,
         "realRender": "ready" if ffmpeg and playwright and renderer_available(app_url) else "pending",
         "renderer": "world3d-export-flow",
+        "renderDevice": scene_render_device(),
         "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": 0,
     }
 
@@ -314,7 +324,16 @@ def _has_sound(document: dict) -> bool:
         return True
     if document.get("soundtrack"):
         return True
-    return any(isinstance(slot, dict) and slot.get("speech") for slot in document.get("slots") or [])
+    # Match sceneVoiceTracks: painted, muted visemes need no audio encoder.
+    for slot in document.get("slots") or []:
+        speech = slot.get("speech") if isinstance(slot, dict) else None
+        if not isinstance(speech, dict) or not speech.get("enabled"):
+            continue
+        clips = speech.get("clips") if "clips" in speech else [speech]
+        if any(isinstance(clip, dict) and clip.get("audio") and clip.get("audible") is not False
+               for clip in clips or []):
+            return True
+    return False
 
 
 def _blocked_url(value) -> bool:
@@ -354,14 +373,22 @@ def _ref_from_url(slot: dict, url: str, workspace: str) -> dict:
         if ".." in path.split("/") or "\\" in path or "\x00" in path:
             raise http_error(422, "missing_ref", "Use a valid bundled example URL")
         return {"slotId": slot["id"], "url": url, "kind": slot.get("media") or "model3d"}
-    path, ref_workspace = parse_media_ref(url, workspace)
+    # Honor the URL's own workspace. Passing the export workspace into
+    # parse_media_ref would hide gallery Uploads (`?workspace=__uploads__`)
+    # and media picked from another workspace folder.
+    path, scoped = parse_media_ref(url)
     filename = os.path.basename((path or "").replace("\\", "/"))
     if not filename:
         raise http_error(422, "missing_ref", "Each used slot needs a durable media ref")
-    return {
+    record = {
         "slotId": slot["id"], "url": url, "kind": slot.get("media") or "model3d",
-        "filename": filename, "workspace": ref_workspace or workspace,
+        "filename": filename,
     }
+    if url.lower().startswith("/api/v1/uploads/") or scoped == "__uploads__":
+        record["root"] = "uploads"
+    else:
+        record["workspace"] = scoped or workspace
+    return record
 
 
 def _index_refs(refs) -> dict:
@@ -505,11 +532,12 @@ class World3DExportService:
     render_page = "/world3d-render.html"
     render_bridge = "__world3dExport"
 
-    def __init__(self, *, workspace_dir, registry_for, renderer=None, app_url=None):
+    def __init__(self, *, workspace_dir, registry_for, renderer=None, app_url=None, uploads_dir=None):
         self.workspace_dir = workspace_dir
         self.registry_for = registry_for
         self.renderer = renderer
         self.app_url = app_url if app_url is not None else os.environ.get("HOCUS_APP_URL", "")
+        self.uploads_dir = uploads_dir or (lambda: os.path.join(os.getcwd(), "uploads"))
         self.owner = uuid.uuid4().hex
         self._lock = threading.RLock()
         self._workers: dict[str, threading.Thread] = {}
@@ -523,10 +551,20 @@ class World3DExportService:
         return self.registry_for(workspace)
 
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
-        root = Path(self.workspace_dir(workspace))
+        workspace_root = Path(self.workspace_dir(workspace))
+        uploads_root = Path(self.uploads_dir())
         for ref in refs:
             name = ref.get("filename")
             if not name:
+                continue
+            named = ref.get("workspace", workspace)
+            if ref.get("root") == "uploads" or named == "__uploads__":
+                root = uploads_root
+            elif named == workspace:
+                root = workspace_root
+            elif isinstance(named, str) and WORKSPACE_RE.fullmatch(named):
+                root = Path(self.workspace_dir(named))
+            else:
                 continue
             if not (root / str(name)).is_file():
                 raise http_error(409, "missing_ref", "Upload local scene resources before exporting")
@@ -612,7 +650,7 @@ class World3DExportService:
             if entry is None:
                 raise http_error(404, "receipt_not_found", "No admission exists for this intention in this workspace")
             task = registry.get(entry["task_id"])
-            return {"receipt": entry["receipt"], "task": task, "capabilities": self.capabilities()}
+            return {"receipt": project_export_receipt(entry["receipt"], task), "task": task, "capabilities": self.capabilities()}
         except (OSError, sqlite3.Error) as error:
             raise http_error(503, "storage_unavailable", "Command storage is unavailable") from error
 
@@ -724,6 +762,8 @@ class World3DExportService:
         return freeze_export_command(command)
 
     def resource_lane(self):
+        if scene_render_device() == "cpu":
+            return resource_scheduler.cpu_lane("world3d-render")
         return resource_scheduler.local_gpu_lane(0)
 
     def prepare_snapshot(self, snapshot: dict, cancelled) -> dict:

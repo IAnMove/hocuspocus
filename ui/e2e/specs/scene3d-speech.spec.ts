@@ -36,7 +36,7 @@ test('new talking shots are reachable in the existing 3D video editor', async ({
     await expect(toggle).toHaveAttribute('aria-expanded', 'true')
     await expect(workspace.getByTestId('scene3d-speech')).toContainText('Voice and lip-sync')
     await expect(workspace.getByRole('button', { name: 'Import Taberna kit (.zip)', exact: true })).toBeHidden()
-    await expect(workspace.getByRole('button', { name: 'Calculate gestures with Rhubarb (local)', exact: true })).toBeDisabled()
+    await expect(workspace.getByRole('button', { name: 'Analyze lip-sync (local)', exact: true })).toBeDisabled()
     await expect(workspace.getByTestId('scene3d-roundtrip')).toHaveText('ok')
   }
   await closeApp(page, session)
@@ -48,7 +48,7 @@ test('one 3D character speaks, rests and seeks; exports real H.264 + AAC or repo
   await page.getByLabel('Dialogue or lyrics (literal reference)').fill('Hello, this is a speaking character.')
   const controls = page.getByTestId('scene3d-speech')
   await controls.getByTestId('asset-input-file').first().setInputFiles({ name: 'speech-test.wav', mimeType: 'audio/wav', buffer: speechTestWav() })
-  await controls.getByRole('button', { name: 'Calculate gestures with Rhubarb (local)', exact: true }).click()
+  await controls.getByRole('button', { name: 'Analyze lip-sync (local)', exact: true }).click()
   await expect(controls).toContainText('Rhubarb')
   await seekSpeech(page, .4)
   await expect(page.getByTestId('speech-state')).toHaveAttribute('data-viseme', 'A')
@@ -60,7 +60,7 @@ test('one 3D character speaks, rests and seeks; exports real H.264 + AAC or repo
   await seekSpeech(page, .4) // Backward seek must recover the same mouth.
   await expect(page.getByTestId('speech-state')).toHaveAttribute('data-viseme', 'A')
   await page.getByRole('button', { name: 'Play', exact: true }).click()
-  await expect(controls.getByRole('button', { name: 'Calculate gestures with Rhubarb (local)', exact: true })).toBeDisabled()
+  await expect(controls.getByRole('button', { name: 'Analyze lip-sync (local)', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: 'Pause', exact: true }).click()
   const saved = await saveSpeech(page, info, 'single')
   expect(saved.slots[0].speech?.clips?.[0].driver).toBe('rhubarb')
@@ -82,8 +82,8 @@ test('A → B → A: only the intended mouth moves, pauses remain and soundtrack
   for (const [speaker, intervention] of [['subject_1', '0'], ['subject_2', '0'], ['subject_1', '1']]) {
     await page.getByLabel('Character', { exact: true }).selectOption(speaker)
     await page.getByLabel('Intervention', { exact: true }).selectOption(intervention)
-    await page.getByRole('button', { name: 'Calculate gestures with Rhubarb (local)', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Calculate gestures with Rhubarb (local)', exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: 'Analyze lip-sync (local)', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Analyze lip-sync (local)', exact: true })).toBeEnabled()
   }
   for (const [time, a, b] of [[.4, 'A', 'rest'], [1.0, 'rest', 'rest'], [1.6, 'rest', 'A'], [2.2, 'rest', 'rest'], [2.8, 'A', 'rest']] as const) {
     await seekSpeech(page, time)

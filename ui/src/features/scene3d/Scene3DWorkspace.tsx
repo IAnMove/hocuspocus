@@ -25,6 +25,7 @@ import { SceneSpeechAudio } from './speech/preview'
 import { Scene3DScreenControls } from './Scene3DScreenControls'
 import { defaultMediaScreen } from './mediaScreen'
 import { Scene3DFramingControls } from './Scene3DFramingControls'
+import { AtmosClearingControls } from './AtmosClearingControls.tsx'
 import { KineticTextControls } from '../../components/common/KineticTextControls'
 import { KineticTextOverlay } from '../../components/common/KineticTextOverlay'
 import type { TFunction } from 'i18next'
@@ -56,7 +57,7 @@ import { Scene3DImageLookControls } from './Scene3DImageLookControls'
 import { Scene3DWindowControls } from './Scene3DWindowControls'
 import { commitSlotSourceChoice, pickerOutputFromSlot, type SlotSourceCapture, type SlotSourceLive } from './slotSource.ts'
 import type { Scene3DCameraFamily, Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLoop, Scene3DSlot } from './types.ts'
-import { documentFromWorld3DRequest, listenForWorld3DWorkflow } from './world3dAgent.ts'
+import { documentFromWorld3DRequest, listenForWorld3DDocument, listenForWorld3DWorkflow } from './world3dAgent.ts'
 
 const FAMILIES = ['fixed', 'establishment', 'orbit', 'follow', 'pursuit', 'side', 'front', 'chase', 'hood', 'wing', 'product', 'reveal', 'encounter', 'musical'] as const satisfies readonly Scene3DCameraFamily[]
 
@@ -169,6 +170,17 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     return () => { if (host.__world3dDocument === sceneDoc) delete host.__world3dDocument }
   }, [sceneDoc])
 
+  useEffect(() => {
+    const host = window as Window & { __world3dApplyDocument?: (raw: unknown) => boolean }
+    host.__world3dApplyDocument = raw => {
+      const next = parseScene3DDocument(raw)
+      if (!next) return false
+      applyScene(next)
+      return true
+    }
+    return () => { delete host.__world3dApplyDocument }
+  }, [applyScene])
+
   const setExportingFlag = (value: boolean) => {
     exportingRef.current = value
     setExporting(value)
@@ -197,6 +209,16 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     applyScene(next)
     setFrame(0)
     return { message: next.templateId, templateId: request.templateId, slotIds: next.slots.map(slot => slot.id) }
+  }), [applyScene, bumpGeneration])
+
+  useEffect(() => listenForWorld3DDocument(async request => {
+    if (!canMutateWorld3DScene(exportingRef.current)) throw new Error('world3d-export-in-progress')
+    const next = parseScene3DDocument(request.document)
+    if (!next) throw new Error('invalid_world3d_document')
+    bumpGeneration()
+    applyScene(next)
+    setFrame(0)
+    return { message: next.templateId, templateId: next.templateId, slotIds: next.slots.map(slot => slot.id) }
   }), [applyScene, bumpGeneration])
 
   const clipIssue = useMemo(() => {
@@ -348,7 +370,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       <Scene3DSoundtrackControls tracks={sceneDoc.soundtrack} disabled={editingLocked}
         onChange={soundtrack => applyScene(current => ({ ...current, soundtrack }))} />
       <Scene3DShotLibraryCard document={sceneDoc} userTemplateId={selectedUserTemplateId} applyDisabled={exporting} editingLocked={editingLocked}
-        keepAssets={keepAssets} onKeepAssets={setKeepAssets} onTemplate={mountTemplate} onUserTemplate={mountUserTemplate} />
+        keepAssets={keepAssets} onKeepAssets={setKeepAssets} onTemplate={mountTemplate} onUserTemplate={mountUserTemplate}
+        workspace={workspace} preview={() => stageRef.current?.paint(seconds, sceneDoc)?.toDataURL('image/png')} />
       <Scene3DDocumentControls document={sceneDoc} disabled={editingLocked}
         workspace={workspace} identity={session.identity} preview={() => stageRef.current?.paint(seconds, sceneDoc)?.toDataURL('image/png')}
         onChange={next => { applyScene(next); setFrame(0) }}
@@ -417,6 +440,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         applyScene={applyScene}
       />
       {sceneDoc.dressing === 'workshop' && <label className="flex items-center gap-2 text-xs">{editorT('travel.screen')}<select disabled={exporting} value={sceneDoc.workshopScreen ?? 'code'} onChange={event => applyScene(current => ({ ...current, workshopScreen: event.target.value as 'code' | 'error' | 'success' }))} className="min-h-10 rounded border border-border bg-bg-tertiary px-2">{(['code', 'error', 'success'] as const).map(state => <option key={state} value={state}>{editorT(`travel.${state}`)}</option>)}</select></label>}
+      <AtmosClearingControls document={sceneDoc} disabled={exporting} label={key => editorT(key as 'atmos.time')} onChange={atmos => applyScene(current => ({ ...current, atmos }))} />
       <Scene3DFramingControls framing={sceneDoc.camera.framing} slots={sceneDoc.slots} disabled={editingLocked || sceneDoc.camera.family === 'fixed'} onChange={framing => applyScene(current => ({ ...current, camera: { ...current.camera, framing } }))} />
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-text-primary">{editorT('camera')}

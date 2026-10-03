@@ -23,6 +23,7 @@ from services.scene2d_export import (
     command_catalog,
     command_handlers,
     freeze_export_command,
+    project_export_receipt,
 )
 from services.scene_documents import SceneDocumentError, command_catalog as document_catalog, get_document, save_document
 from services.task_manager import TaskRegistry
@@ -168,9 +169,48 @@ def test_freeze_accepts_screen_fx_sound_and_sequence_refs():
     assert error.value.detail["code"] == "missing_ref"
 
 
-def test_catalog_and_lane_do_not_use_the_gpu():
+def _queued_receipt():
+    return {
+        "version": 1, "commandId": "scene2d-1", "operation": OPERATION, "status": "queued",
+        "entities": [], "artifacts": [], "taskIds": ["task-1"], "pipelineIds": [],
+        "result": {"job_id": "job-1", "task_id": "task-1", "workspace": WORKSPACE, "status": "queued"},
+    }
+
+
+def test_receipt_follows_the_completed_task_and_lists_the_mp4(tmp_path, monkeypatch):
+    stored = _queued_receipt()
+    published = {"name": "clip.mp4", "url": "/api/v1/file/clip.mp4", "workspace": WORKSPACE}
+    task = {"id": "task-1", "status": "completed", "workspace": WORKSPACE, "metadata": {"output": published}, "result_refs": ["clip.mp4"]}
+
+    class Registry:
+        def command_admission(self, intent_id):
+            assert intent_id == "scene2d-1"
+            return {"receipt": stored, "task_id": "task-1"}
+
+        def get(self, task_id):
+            assert task_id == "task-1"
+            return task
+
+    service = _service(tmp_path)
+    monkeypatch.setattr(service, "_registry", lambda _workspace: Registry())
+    viewed = service.receipt(WORKSPACE, "scene2d-1")
+    assert viewed["receipt"]["status"] == "completed"
+    assert viewed["receipt"]["result"]["status"] == "completed"
+    assert viewed["receipt"]["artifacts"] == [published]
+    assert stored["status"] == "queued"
+    assert stored["artifacts"] == []
+    refs_only = {**task, "metadata": {}, "result_refs": ["only.mp4"]}
+    fallback = project_export_receipt(stored, refs_only)
+    assert fallback["artifacts"] == [{"name": "only.mp4", "url": "/api/v1/file/only.mp4", "workspace": WORKSPACE}]
+    running = project_export_receipt(stored, {"status": "running", "workspace": WORKSPACE, "metadata": {}, "result_refs": []})
+    assert running["status"] == "running"
+    assert running["artifacts"] == []
+
+
+def test_catalog_and_lane_do_not_use_the_gpu(monkeypatch):
+    monkeypatch.delenv("HOCUS_SCENE_EXPORT_CONCURRENCY", raising=False)
     assert [item["name"] for item in command_catalog()] == [OPERATION, OPERATION + ".receipt", OPERATION + ".cancel"]
-    assert Scene2DExportService.resource_lane(None) == resource_scheduler.cpu_lane("scene2d-render")
+    assert Scene2DExportService.resource_lane(None) == resource_scheduler.cpu_lane("scene2d-render", capacity=2)
 
 
 def test_missing_workspace_media_is_refused_before_admission(tmp_path):
@@ -200,6 +240,38 @@ def test_missing_upload_media_is_refused_before_admission(tmp_path):
     document = _document(layers=[_layer(source="/api/v1/uploads/local-hero.png")])
     with pytest.raises(Exception) as error:
         service.submit(_command(intent="scene2d-upload-missing", document=document))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+
+
+def test_freeze_marks_uploads_gallery_file_urls():
+    document = _document(layers=[_layer(source="/api/v1/file/gallery-hero.png?workspace=__uploads__")])
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["refs"] == [{"layerId": "bg", "url": "/api/v1/file/gallery-hero.png?workspace=__uploads__",
+                                 "kind": "image", "filename": "gallery-hero.png", "root": "uploads"}]
+
+
+def test_uploads_gallery_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.uploads_dir()) / "gallery-hero.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source="/api/v1/file/gallery-hero.png?workspace=__uploads__")])
+    receipt = service.submit(_command(intent="scene2d-uploads-gallery", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_scoped_workspace_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.workspace_dir("assets")) / "shared.png", 8, 8, (40, 50, 60))
+    document = _document(layers=[_layer(source="/api/v1/file/shared.png?workspace=assets")])
+    receipt = service.submit(_command(intent="scene2d-scoped", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_missing_scoped_workspace_file_is_refused(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.workspace_dir(WORKSPACE)) / "shared.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source="/api/v1/file/shared.png?workspace=assets")])
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent="scene2d-scoped-missing", document=document))
     assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
 
 

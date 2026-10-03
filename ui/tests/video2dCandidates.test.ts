@@ -24,4 +24,14 @@ test('the four video 2D candidates stay unapproved and normalize', () => {
   assert.equal(trailer.finish?.letterbox?.ratio, 2.39)
   const history = normalizeScene2D(compileVideo2dCandidate('documentary-history'))
   assert.ok(history.texts?.some(cue => cue.template === 'year-counter'))
+  const bound = compileVideo2dCandidate('documentary-history', { duration: 4 }, {
+    hero: '/api/v1/file/hero.png',
+    plate: '/api/v1/file/plate.png',
+  })
+  assert.ok(bound)
+  const layers = Object.fromEntries((bound?.layers ?? []).map(layer => [layer.id, layer]))
+  assert.equal(bound?.duration, 4)
+  assert.equal(layers.hero?.source, '/api/v1/file/hero.png')
+  assert.equal(layers.plate?.source, '/api/v1/file/plate.png')
+  assert.equal(layers['atmosphere-plate']?.type, 'effect')
 })

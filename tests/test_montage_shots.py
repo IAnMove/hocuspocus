@@ -83,6 +83,29 @@ def test_timeline_slots_overlap_crossfades():
     assert timeline_slots(clips, lambda clip: 0) == [(0, 2), (1.5, 3)]
 
 
+def test_production_file_urls_do_not_leak_the_query_into_the_preview(board):
+    """production.montage writes /api/v1/file/<file>?workspace=<ws>. Path().name
+    used to keep the query, so the shot board preview 404'd and select probed
+    a file that does not exist."""
+    shots, store, root, _ = board
+    montage = store.get(WS, "Bird.montage.json")["montage"]
+    montage["clips"][0]["source"] = f"/api/v1/file/shot1.mp4?workspace={WS}"
+    montage["clips"][0]["takes"] = [{"id": "was", "source": f"/api/v1/file/shot2.mp4?workspace={WS}",
+                                     "origin": {"kind": "generation"}}]
+    store.save(WS, {key: value for key, value in montage.items() if key not in ("revision", "updatedAt", "kind")},
+               file="Bird.montage.json", expected_revision=montage["revision"])
+    view = shots.shots(WS, "Bird.montage.json")
+    first = view["shots"][0]
+    assert first["url"] == f"/api/v1/file/shot1.mp4?workspace={WS}"
+    assert first["start"] == 0 and first["end"] == 2
+    take = first["takes"][0]
+    assert take["url"] == f"/api/v1/file/shot2.mp4?workspace={WS}" and take["duration"] == 1.0
+    # Restoring the previous take must write a workspace basename, not the query URL.
+    shots.select(WS, "Bird.montage.json", "s1", "was", expected_revision=view["revision"], retime=False)
+    clip = store.get(WS, "Bird.montage.json")["montage"]["clips"][0]
+    assert clip["source"] == "shot2.mp4" and clip["takes"][0]["source"] == "shot1.mp4"
+
+
 def test_shots_read_provenance_from_sidecars(board):
     shots, *_ = board
     view = shots.shots(WS, "Bird.montage.json")

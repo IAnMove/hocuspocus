@@ -11,6 +11,7 @@
   "clearHistoryAria": "Borrar el historial de actividad",
   "clearHistoryTitle": "Oculta el historial de tareas terminadas en esta interfaz. Los vídeos y los datos de las tareas se conservan.",
   "ready": "Listo — no hay trabajos activos",
+  "memoryDegraded": "Más lento que el tiempo de paso habitual de este modelo",
   "eta": "ETA {{value}}",
   "etaTitle": "Estimación basada en los pasos completados. La decodificación y el guardado pueden añadir tiempo.",
   "subtask": "Subtarea {{phase}}",

@@ -160,6 +160,10 @@ def create_core_labs_router() -> APIRouter:
     )
     router.include_router(create_story_library_router())
 
+    from routers.production_projects import create_production_projects_router
+
+    router.include_router(create_production_projects_router(workspace_dir=core.workspace_dir))
+
     from routers.character_kit_library import (
         _bind_character_kit_library_runtime,
         create_character_kit_library_router,

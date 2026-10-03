@@ -4,7 +4,7 @@ export interface ModelFamily {
   order: number
 }
 
-export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story'
+export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story' | 'comic_movie'
 export type DirectorShotImageGuidance = 'auto' | 'prompt_only' | 'generate'
 export type DirectorShotImagePolicy = 'generate' | 'prompt_only' | 'direct_references'
 
@@ -410,6 +410,7 @@ export interface SceneFaceBinding {
   poseLayerId: string
   role: SceneFaceBindingRole
   state?: SceneFaceBindingState
+  mouthMapping?: import('../lib/characterMouthStates').CharacterMouthMapping
 }
 export type SceneAtmosphereKind =
   | 'rain'
@@ -468,6 +469,12 @@ export interface SceneLayer {
   missingAsset?: boolean
   /** Image/video is cropped to cover the complete scene frame. */
   fill?: boolean
+  /** Image or video stays over the whole frame during zoom, pan, and focus.
+   *  Applied at draw time; saved motion is unchanged. Omitted or false matches older scenes. */
+  cover?: boolean
+  /** Layer-frame point, 0–100, that stays on the anchor while scale changes.
+   *  Absent or 50,50 keeps scaling around the center. Camera and effect layers ignore it. */
+  focus?: { x: number; y: number }
   /** Deterministic full-frame procedural particles, shared by preview,
    * scene JSON and browser capture. Only used by effect layers. */
   atmosphere?: {
@@ -692,7 +699,7 @@ export interface SceneCatalogAssetReference {
 }
 
 export type VideoResultKind = 'music_video' | 'trailer' | 'series_episode' | 'chapter'
-export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'world3d' | 'animate3d' | 'character-replacement' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces' | 'characters' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
+export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'world3d' | 'animate3d' | 'character-replacement' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces' | 'characters' | 'lips' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
 export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
 export type ScailResolutionProfile = '480p' | '512p' | '704p'

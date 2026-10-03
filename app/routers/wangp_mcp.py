@@ -26,7 +26,7 @@ REQUEST_TOOLS = MUTATIONS | {'analyze'}
 # separate /api/v1/model3d/generate contract and is intentionally not routed
 # through this MCP tool.
 GENERATION_MODES = ('image', 'video', 'audio', 'avatar')
-LEGACY_TOOLS = REQUEST_TOOLS | {'models', 'processors', 'status', 'assets', 'collections'}
+LEGACY_TOOLS = REQUEST_TOOLS | {'models', 'models.list', 'processors', 'status', 'assets', 'collections'}
 
 
 def _selected_operations(command_operations):
@@ -47,17 +47,19 @@ def _command_tool(operation):
               'required': [key for key in schema['required'] if key != 'operation']}
     guidance = 'Versioned command. Follow inputSchema for workspace and exact resource IDs.'
     if operation['mutation']:
-        guidance += ' Reuse intent_id on transport retries; inspect commands.receipt after an uncertain response.'
+        receipt_tool = operation.get('receipt_tool', 'commands.receipt')
+        guidance += f' Reuse intent_id on transport retries; inspect {receipt_tool} after an uncertain response.'
     return {
         'name': operation['name'], 'description': f"{operation['description']} {guidance}", 'inputSchema': schema,
-        'annotations': {'readOnlyHint': not operation['mutation'], 'destructiveHint': False, 'idempotentHint': True},
+        'annotations': {'readOnlyHint': not operation['mutation'], 'destructiveHint': bool(operation.get('destructive', False)), 'idempotentHint': True},
     }
 
 
 def tool_definitions(available=None, command_operations=None):
     tools = []
     for name, description in [
-        ('models', 'Discover exact model identifiers and capabilities.'),
+        ('models', 'List model summaries (id, name, one-line description, counts). Pass detail true for the full catalog, or model_type for one model\'s options, including allowed selector values.'),
+        ('models.list', 'Same summary list as models. Pass detail true for the full catalog, or model_type for one model\'s options, including allowed selector values.'),
         ('processors', 'Discover available postprocessors and hardware restrictions.'),
         ('status', 'Read the canonical status of a previously submitted job.'),
         ('assets', 'Find existing canonical media IDs and URLs. Paginate with limit and offset; never invent filenames.'),
@@ -102,8 +104,11 @@ def tool_definitions(available=None, command_operations=None):
         elif name == 'assets':
             properties = {key: {'type': 'string'} for key in ('search', 'kind', 'workspace')}
             properties.update(limit={'type': 'integer', 'minimum': 1, 'maximum': 500}, offset={'type': 'integer', 'minimum': 0})
-        elif name == 'models':
-            properties = {'model_type': {'type': 'string', 'description': 'Optional exact ID to get input/options instead of the catalog.'}}
+        elif name in {'models', 'models.list'}:
+            properties = {
+                'model_type': {'type': 'string', 'description': 'Optional exact ID. Returns that model\'s input and options instead of the summary list.'},
+                'detail': {'type': 'boolean', 'description': 'When true, return the full model catalog. Default is a short summary.'},
+            }
         tools.append({'name': name, 'description': description,
                       'inputSchema': {'type': 'object', 'properties': properties, 'required': required, 'additionalProperties': False},
                       'annotations': {'readOnlyHint': name not in MUTATIONS, 'destructiveHint': False, 'idempotentHint': True}})
@@ -251,7 +256,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
             return result
         if name == 'status':
             result = handlers[name](arguments['job_id'])
-        elif name in {'assets', 'models'}:
+        elif name in {'assets', 'models', 'models.list'}:
             result = handlers[name](arguments)
         else:
             result = handlers[name]()
@@ -278,7 +283,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
                     raise ValueError('Tool call params must be an object')
                 value = await call_tool(params.get('name'), params.get('arguments') or {})
                 result = {
-                    'content': [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}],
+                    'content': _tool_content(value),
                     'isError': _tool_result_is_error(value),
                 }
                 if params.get('name') in operation_names and isinstance(value, dict):
@@ -321,6 +326,20 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         return Response(status_code=405, headers={'Allow': 'POST'})
 
     return router
+
+
+def _tool_content(value):
+    """Keep the JSON summary first. Image blocks follow so a vision client can see the preview."""
+    content = [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}]
+    images = value.get('images') if isinstance(value, dict) else None
+    if not isinstance(images, list):
+        return content
+    for image in images:
+        if not isinstance(image, dict) or not isinstance(image.get('data'), str) or not image['data']:
+            continue
+        mime = image.get('mimeType')
+        content.append({'type': 'image', 'mimeType': mime if isinstance(mime, str) and mime else 'image/png', 'data': image['data']})
+    return content
 
 
 def _tool_result_is_error(value):

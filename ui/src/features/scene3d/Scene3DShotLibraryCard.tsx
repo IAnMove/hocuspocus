@@ -2,7 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { Scene3DTemplateThumb } from './Scene3DTemplateThumb'
 import type { ShotLibraryProps } from './Scene3DShotLibrary'
-import { readStoredUserTemplates } from './userTemplates.ts'
+import { userTemplateTitle } from './templateLibraryModel'
 
 const Scene3DShotLibraryDialog = lazy(() => import('./Scene3DShotLibrary').then(module => ({ default: module.Scene3DShotLibraryDialog })))
 
@@ -11,7 +11,7 @@ const Scene3DShotLibraryDialog = lazy(() => import('./Scene3DShotLibrary').then(
 export function Scene3DShotLibraryCard(props: Omit<ShotLibraryProps, 'onClose'>) {
   const { t } = useUiTranslation('scene3dEditor')
   const [open, setOpen] = useState(false)
-  const userTitle = props.userTemplateId ? readStoredUserTemplates().find(pack => pack.id === props.userTemplateId)?.title : undefined
+  const userTitle = userTemplateTitle(props.userTemplateId)
   const title = userTitle ?? t(`template.${props.document.templateId}.title`)
   return <section className="flex items-center gap-3 rounded-xl border border-border bg-bg-secondary p-2" aria-label={t('templates')} data-testid="world3d-shot-card">
     <div className="w-28 shrink-0"><Scene3DTemplateThumb id={props.document.templateId} fill /></div>

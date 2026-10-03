@@ -23,7 +23,11 @@ import {
   bindStoryWorkflowAction,
   type ConfiguredStorySongIdentity,
 } from './storyWorkflowIdentity'
+import type { AgentProductionWorksAction } from './productionWorkCapabilities'
+import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
 import type {
+  AgentLipsCreatorAction,
+  AgentGenerateLipsAction,
   AgentApplyCharacterKitPresetAction,
   AgentAttachCharacterKitReferencesAction,
   AgentBuildCharacterKitAction,
@@ -620,7 +624,14 @@ export interface AgentUpdateWorkspaceCollectionAction {
   productionIds?: string[]
 }
 
+export interface AgentSpeechAnalysisEngineAction { type: 'speech_analysis_engine'; install: boolean }
+
 export type AgentAction = AgentOpenTabAction
+  | AgentSpeechAnalysisEngineAction
+  | AgentLipsCreatorAction
+  | AgentGenerateLipsAction
+  | AgentWorld3DTemplatesAction
+  | AgentProductionWorksAction
   | AgentPrepareProgrammaticVideoAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
@@ -3016,6 +3027,7 @@ const TAB_LABELS: Record<AgentTab, string> = {
   animate_3d: 'Animate 3D',
   character_creator: 'Character Creator',
   character_kit: 'CharacterKit',
+  lips_creator: 'Lips Creator',
   workspaces: 'Workspaces',
   settings: 'Settings',
 }

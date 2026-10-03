@@ -905,3 +905,20 @@ In the UI use **Studio → Tools → Remove background**, select/upload a video 
 run. For a separate actor in Video 3D, assign the result under **Animate this layer**
 and enable **Preserve transparency**. Background video has its own clock and depth.
 Exported MP4 compositions are opaque; the source WebM remains reusable with alpha.
+
+## Green-screen key
+
+`studio.key` is a versioned MCP command, not a queued Tools job. It does not
+use the GPU and does not download a model.
+
+```json
+{ "version": 1, "input": { "workspace": "default", "source": "/api/v1/file/plate.png?workspace=default", "mode": "green" } }
+```
+
+`mode` is `green` (default) or `isnet-anime`. Green despills the foreground
+and keys each frame. Interior mattes use weights 0.15, 0.7, and 0.15; stronger
+smoothing leaves halos, so the weights are not a caller choice. `isnet-anime`
+runs on CPU only when `isnet-anime.onnx` is already installed, and otherwise
+fails with `model_not_installed`. A still becomes one RGBA PNG. A video becomes
+a VP9 WebM with alpha. The completed result is `file`, `url`, `sha256`, and
+`frames`. Pixel bytes are not included.

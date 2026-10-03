@@ -106,7 +106,11 @@ export async function startVideoEditorExport(payload: {
     trim_end: number
     volume: number
     muted: boolean
-    fit: 'fit' | 'fill'
+    fit: 'fit' | 'fill' | 'blur'
+    focus_x?: number
+    focus_y?: number
+    blur_amount?: number
+    background_dim?: number
     transition:
       | 'none'
       | 'crossfade'

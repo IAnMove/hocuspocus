@@ -145,3 +145,28 @@ outputs. These checks are deliberately conservative heuristics, not a
 perceptual-quality oracle; the required human review remains part of the gate.
 A failed clip stays recoverable and is not silently accepted into the final
 film.
+
+## Comic film pass, 2026-10-01
+
+A comic film keeps every panel as its own shot when the selected engine has a
+minimum shot length. A short panel is lengthened to that minimum. It is not
+merged with the next panel, and a panel that must be split above the maximum
+repeats its own image so the prepared frames still match the shot list.
+
+The engine list follows the catalog entry for a comic film. A model that the
+catalog marks compatible is offered even when its image-to-video class flag is
+off. The resolution control for an H3-family engine lists that engine's
+published canvases. The chosen canvas, for example the 720p 1280×704 entry, is
+sent with the preset and aspect and is the size PRE prepares and the renderer
+writes.
+
+A PRE saved as ready is reopened from disk with the same status and the same
+approval. Restarting the lab does not relabel that checkpoint as a dead worker
+and does not start video from the status read.
+
+A failed deterministic render shows the end of the ffmpeg log in the pipeline
+error and stores the full log on the checkpoint.
+
+Accepting the representative test stores who requested the acceptance, the
+channel, and the attestation note. The checkbox is marked by hand. The accept
+control stays disabled until that name is filled in.

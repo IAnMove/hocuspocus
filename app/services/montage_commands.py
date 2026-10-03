@@ -38,6 +38,16 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "montages.export": ({"workspace": WORKSPACE, "file": FILE}, ["workspace", "file"], True,
                         "Queue the ordinary Video Editor FFmpeg export of a saved montage (overlays and audio cues "
                         "included). Returns job_id; poll montages.export.status."),
+    "montages.derive": ({"workspace": WORKSPACE, "file": FILE,
+                         "format": {"type": "string", "enum": ["9:16", "1:1", "4:5"]},
+                         "fit": {"type": "string", "enum": ["blur", "fill"]},
+                         "output_file": FILE,
+                         "expected_revision": {"type": "integer", "minimum": 0}},
+                        ["workspace", "file", "format", "fit"], True,
+                        "Save a new montage at 9:16 (1080x1920), 1:1 or 4:5. Clips use the chosen fit and keep any "
+                        "crop focus. Overlays move into the vertical safe area. The source file is not modified. "
+                        "Creating the same name again returns 409 exists unless output_file and expected_revision "
+                        "regenerate that copy."),
     "montages.shots.get": ({"workspace": WORKSPACE, "file": FILE}, ["workspace", "file"], False,
                            "Shot board of a montage: each clip's slot on the timeline, its provenance (prompt, seed, start "
                            "image and model read from the generation sidecar, or the scene it was rendered from) and its takes. "
@@ -55,8 +65,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
                              ["workspace", "file", "clip_id", "take_id", "expected_revision"], True,
                              "Use a finished take for a clip. The previous media stays as a take. A take shorter than "
                              "the clip's slot is slowed to cover it unless retime is false. Export again afterwards."),
-    "montages.export.status": ({"job_id": {"type": "string", "minLength": 1, "maxLength": 80}}, ["job_id"], False,
-                               "Read a montage export job: status, progress, filename and url when completed."),
+    "montages.export.status": ({"job_id": {"type": "string", "minLength": 1, "maxLength": 80}, "workspace": WORKSPACE},
+                               ["job_id"], False,
+                               "Read a montage export job: status, progress, filename and url when completed. "
+                               "workspace is optional, same string as the other montage commands; job_id still selects the job."),
 }
 
 
@@ -130,6 +142,9 @@ class MontageCommands:
         elif name == "montages.export":
             saved = self.store.get(payload["workspace"], payload["file"])
             result = {"file": saved["file"], "job": self.start_export(export_body(saved["montage"], payload["workspace"]))}
+        elif name == "montages.derive":
+            from services.montage_derive import derive_saved
+            result = derive_saved(self.store, payload)
         else:
             result = {"job": self.get_export(payload["job_id"])}
         return {"version": 1, "status": "completed", "operation": name, "result": result}

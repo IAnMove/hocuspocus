@@ -51,6 +51,47 @@ export function listenForWorld3DWorkflow(
   return () => { active = false; window.removeEventListener(EVENT, handler) }
 }
 
+const DOCUMENT_EVENT = 'hocuspocus:world3d-document-request'
+
+export type World3DDocumentRequest = {
+  document: unknown
+  sceneId: string
+}
+
+type DocumentPending = {
+  request: World3DDocumentRequest
+  resolve: (result: World3DWizardResult) => void
+  reject: (error: Error) => void
+}
+
+const documentPending: DocumentPending[] = []
+
+export function requestWorld3DDocument(request: World3DDocumentRequest): Promise<World3DWizardResult> {
+  return new Promise((resolve, reject) => {
+    documentPending.push({ request, resolve, reject })
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(DOCUMENT_EVENT))
+  })
+}
+
+export function listenForWorld3DDocument(
+  listener: (request: World3DDocumentRequest) => Promise<World3DWizardResult>,
+): () => void {
+  let active = true
+  const drain = async () => {
+    while (active && documentPending.length) {
+      const item = documentPending.shift()
+      if (!item) continue
+      try { item.resolve(await listener(item.request)) }
+      catch (error) { item.reject(error instanceof Error ? error : new Error(String(error))) }
+    }
+  }
+  const handler = () => { void drain() }
+  if (typeof window === 'undefined') return () => { active = false }
+  window.addEventListener(DOCUMENT_EVENT, handler)
+  void drain()
+  return () => { active = false; window.removeEventListener(DOCUMENT_EVENT, handler) }
+}
+
 export function documentFromWorld3DRequest(request: World3DWizardRequest): Scene3DDocument {
   const document = applyScene3DTemplate(request.templateId)
   if (request.cameraFamily) document.camera = { ...document.camera, family: request.cameraFamily, framing: undefined }

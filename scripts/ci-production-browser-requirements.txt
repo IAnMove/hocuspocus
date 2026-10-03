@@ -1,0 +1,7 @@
+# CPU-only imports for the isolated production API used by Playwright.
+# No GPU framework, model weights or runtime server is required.
+fastapi==0.115.12
+starlette==0.46.1
+numpy==2.2.6
+Pillow==11.3.0
+uvicorn==0.52.4

@@ -32,9 +32,14 @@ export async function speechApp(page: Page) {
   await page.route('**/api/v1/file/tts-test.wav*', route => route.fulfill({ contentType: 'audio/wav', body: speechTestWav(1) }))
   await page.route('**/api/v1/upload', route => route.fulfill({ json: { filename: 'speech-test.wav', url: '/api/v1/file/speech-test.wav?workspace=default', path: 'speech-test.wav' } }))
   await page.route('**/api/v1/upload-audio', route => route.fulfill({ json: { filename: 'speech-test.wav', url: '/api/v1/file/speech-test.wav?workspace=default', path: 'speech-test.wav' } }))
-  await page.route('**/api/v1/character-kits/speech/analyze', route => {
+  await page.route('**/api/v1/character-kits/speech/capabilities', route => route.fulfill({ json: {
+    rhubarb: true, phonemes: { installed: false, dependencies_available: true }, vocalIsolation: { available: false },
+  } }))
+  await page.route('**/api/v1/character-kits/speech/analyze*', route => {
     // Simulated phonetic recognizer, real WAV from browser resampling/trimming.
-    const data = route.request().postDataBuffer()!, samples = (data.length - 44) / 2, rate = data.readUInt32LE(24)
+    const data = route.request().headers()['content-type'] === 'application/json'
+      ? Buffer.from(route.request().postDataJSON().wavBase64, 'base64') : route.request().postDataBuffer()!
+    const samples = (data.length - 44) / 2, rate = data.readUInt32LE(24)
     const cues: { start: number; end: number; value: string }[] = []
     for (let i = 0; i < samples; i += 320) {
       let peak = 0
@@ -43,7 +48,8 @@ export async function speechApp(page: Page) {
       if (cues.at(-1)?.value === value) cues[cues.length - 1].end = end
       else cues.push({ start: i / rate, end, value })
     }
-    return route.fulfill({ json: { mouthCues: cues, duration: samples / rate, recognizer: 'phonetic' } })
+    return route.fulfill({ json: { mouthCues: cues, duration: samples / rate, recognizer: 'phonetic',
+      engine: 'rhubarb', requestedEngine: 'auto', driver: 'rhubarb', fallbackReason: 'phoneme_not_installed' } })
   })
   await page.route('**/api/v1/generate', route => {
     requests.push(route.request().postDataJSON())

@@ -18,6 +18,7 @@ import { seriesAssetUrl } from './referenceImages'
 import { releaseStoredSceneCopy } from '../../lib/sceneRecovery'
 import i18n from '../../i18n'
 import { withCharacterPoseDimensions } from '../../lib/characterPoseDimensions'
+import { registerEpisodeProduction, noteEpisodeProductionStatus } from './productionRegistration'
 
 export { nativeDraftCandidates } from './nativeGenerationPlan'
 
@@ -135,6 +136,7 @@ export async function generateNativeDrafts(workspace: string, seriesId: string, 
   mode: NativeGenerationMode = 'missing', shotIds?: string[]) {
   if (useSeriesNativeBatch.getState().running) return
   useSeriesNativeBatch.setState({ running: true, stopping: false, workspace, seriesId, episodeId, completed: 0, total: 0, order: 0, phase: 'preparing', error: '' })
+  let productionId: string | null = null
   try {
     await useSeriesStore.getState().saveNow()
     const { series, episode } = source(workspace, seriesId, episodeId)
@@ -142,6 +144,15 @@ export async function generateNativeDrafts(workspace: string, seriesId: string, 
     const plan = nativeGenerationPlan(workspace, series, episode, kits, mode, shotIds)
     if (!plan.ready.length) assertLipSyncReady(workspace, series, plan.blocked, kits, mode === 'missing' ? 'approved' : 'saved-draft')
     const shots = plan.ready
+    if (shots.length) {
+      productionId = await registerEpisodeProduction(workspace, episode)
+      const registeredId = productionId
+      source(workspace, seriesId, episodeId)
+      useSeriesStore.getState().updateEpisode(episodeId, current => ({ ...current,
+        productionIds: [...new Set([...current.productionIds, registeredId])] }))
+      await useSeriesStore.getState().saveNow()
+      await noteEpisodeProductionStatus(workspace, productionId, 'running')
+    }
     useSeriesNativeBatch.setState({ total: shots.length })
     for (const shot of shots) {
       if (useSeriesNativeBatch.getState().stopping) break
@@ -152,6 +163,11 @@ export async function generateNativeDrafts(workspace: string, seriesId: string, 
     }
   } catch (reason) { useSeriesNativeBatch.setState({ error: (reason as Error).message }) }
   finally {
+    if (productionId) {
+      const state = useSeriesNativeBatch.getState()
+      await noteEpisodeProductionStatus(workspace, productionId, state.error ? 'failed' : state.stopping ? 'cancelled' : 'completed')
+        .catch(reason => useSeriesNativeBatch.setState({ error: (reason as Error).message }))
+    }
     useSeriesNativeBatch.setState({ running: false })
     if (useStore.getState().activeWorkspace === workspace) {
       useStore.getState().setMediaFilter('series')

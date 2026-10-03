@@ -148,6 +148,14 @@ class TestJobLifecycleWiring(unittest.TestCase):
             "_observe_generation_job_state",
         )
 
+    def test_generate_and_submit_accept_optional_queue_priority(self):
+        generate = _function(self.launch, "generate")
+        self.assertIn("ensure_generation_priority", _called_names(generate))
+        commands = _parse("app/services/image_generation_commands.py")
+        submit = _function(commands, "submit")
+        self.assertIn("take_submission_priority", _called_names(submit))
+        self.assertIn("priority_fields", _called_names(submit))
+
     def test_generation_jobs_reserve_fifo_position_before_worker_start(self):
         new_job = _function(self.launch, "_new_generation_job")
         self.assertIn("register_generation_job", _called_names(new_job))

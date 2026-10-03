@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "description": "Parameterized Video 2D graphics. Each drawing is an id plus a few numbers, colors, or enums, timed in beats. There is no custom code.",
+  "entries": [
+    {
+      "id": "chart",
+      "name": "Animated chart",
+      "description": "A curve, candle, or exponential series that draws in across the beat span.",
+      "beats": { "span": 8, "reveal": 6 },
+      "params": [
+        { "key": "series", "type": "enum", "values": ["curve", "candles", "exponential"], "default": "curve" },
+        { "key": "color", "type": "color", "default": "#3DDC97" },
+        { "key": "points", "type": "number", "min": 4, "max": 24, "integer": true, "default": 12 },
+        { "key": "amplitude", "type": "number", "min": 0.4, "max": 2.5, "default": 1 }
+      ]
+    },
+    {
+      "id": "odometer",
+      "name": "Odometer",
+      "description": "A digit counter that rolls from one value to another over beats.",
+      "beats": { "span": 4, "roll": 4 },
+      "params": [
+        { "key": "from", "type": "number", "min": 0, "max": 999999, "default": 0 },
+        { "key": "to", "type": "number", "min": 0, "max": 999999, "default": 100 },
+        { "key": "digits", "type": "number", "min": 2, "max": 8, "integer": true, "default": 4 },
+        { "key": "color", "type": "color", "default": "#F4E7CF" }
+      ]
+    },
+    {
+      "id": "orbit",
+      "name": "Orbit",
+      "description": "Bodies circling a point, one revolution per period of beats.",
+      "beats": { "span": 8, "period": 4 },
+      "params": [
+        { "key": "count", "type": "number", "min": 2, "max": 16, "integer": true, "default": 6 },
+        { "key": "radius", "type": "number", "min": 0.2, "max": 0.8, "default": 0.55 },
+        { "key": "speed", "type": "number", "min": 0.25, "max": 4, "default": 1 },
+        { "key": "color", "type": "color", "default": "#7EB6FF" }
+      ]
+    },
+    {
+      "id": "silhouette",
+      "name": "Particle silhouette",
+      "description": "Particles gather into a built-in person, heart, or star silhouette.",
+      "beats": { "span": 8, "form": 6 },
+      "params": [
+        { "key": "shape", "type": "enum", "values": ["person", "heart", "star"], "default": "person" },
+        { "key": "count", "type": "number", "min": 8, "max": 80, "integer": true, "default": 36 },
+        { "key": "color", "type": "color", "default": "#F2F4F8" },
+        { "key": "gather", "type": "number", "min": 0, "max": 1, "default": 1 }
+      ]
+    },
+    {
+      "id": "shatter",
+      "name": "Shatter",
+      "description": "Breaks this cue plate into fragments that fly apart over a beat burst.",
+      "beats": { "span": 4, "burst": 2 },
+      "params": [
+        { "key": "pieces", "type": "number", "min": 4, "max": 36, "integer": true, "default": 16 },
+        { "key": "color", "type": "color", "default": "#E8E4DC" },
+        { "key": "spread", "type": "number", "min": 0, "max": 2, "default": 1.2 },
+        { "key": "spin", "type": "number", "min": 0, "max": 6, "default": 2.4 }
+      ]
+    },
+    {
+      "id": "countdown",
+      "name": "Countdown",
+      "description": "A numbered countdown that steps once per beat.",
+      "beats": { "span": 8, "step": 1 },
+      "params": [
+        { "key": "from", "type": "number", "min": 1, "max": 60, "integer": true, "default": 8 },
+        { "key": "color", "type": "color", "default": "#FF5A36" },
+        { "key": "rings", "type": "number", "min": 0, "max": 1, "integer": true, "default": 1 },
+        { "key": "ticks", "type": "number", "min": 4, "max": 16, "integer": true, "default": 8 }
+      ]
+    },
+    {
+      "id": "tiling",
+      "name": "Tiling desktop",
+      "description": "A dark tiling-window-manager desktop (top bar, gapped windows with thin borders, terminal, editor, monitor) painted full frame in a colour theme. Windows open one after another.",
+      "beats": { "span": 8, "stagger": 0.5, "type": 3 },
+      "params": [
+        { "key": "theme", "type": "enum", "values": ["tokyo-night", "catppuccin", "gruvbox", "nord", "rose-pine", "kanagawa"], "default": "tokyo-night" },
+        { "key": "layout", "type": "enum", "values": ["single", "split", "triple", "quad", "master"], "default": "triple" },
+        { "key": "apps", "type": "enum", "values": ["dev", "system", "mixed"], "default": "mixed" },
+        { "key": "focus", "type": "number", "min": 0, "max": 3, "integer": true, "default": 0},
+        { "key": "workspace", "type": "number", "min": 1, "max": 9, "integer": true, "default": 1 },
+        { "key": "switch", "type": "enum", "values": ["none", "left", "right"], "default": "none" }
+      ]
+    }
+  ]
+}

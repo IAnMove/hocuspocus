@@ -1,0 +1,60 @@
+{
+  "manifest": {
+    "kind": "hocuspocus.template",
+    "version": 1,
+    "id": "hocuspocus/ps1-backplates",
+    "editor": "video3d",
+    "title": "Escena estilo PS1",
+    "description": "Escena estilo PS1 (PS1-style scene): fondos prerenderizados de Qwen Image 2.1 y personajes 3D (GLB) animados, con cámara fija. PS1-style scene with pre-rendered Qwen Image 2.1 backgrounds and animated 3D characters, fixed camera. Cambia lugar, personaje, recorrido, duración y luz. Revisa pies y perspectiva antes de exportar. El fondo no aporta colisiones ni oclusión; cada nueva combinación necesita revisión visual.",
+    "author": {"name": "HocusPocus"},
+    "license": "all-rights-reserved",
+    "templateVersion": "1.0.1",
+    "tags": ["ps1", "backplate", "qwen-image-2-1", "fixed-camera"],
+    "slots": [
+      {"id": "background", "label": "Fondo Qwen", "target": "background", "accepts": ["image"], "required": true, "hint": "Prompt: Estación vacía estilo fondo prerenderizado PS1, cámara fija elevada a tres cuartos, suelo libre en el tercio inferior, luz cálida desde arriba a la izquierda, sin personas, texto ni obstáculos. Qwen Image 2.1."},
+      {"id": "actor", "label": "Personaje 3D", "target": "subject_1", "accepts": ["model3d"], "required": true, "hint": "GLB animado. Selecciona un clip que exista en este modelo; Walking es sólo el ejemplo."}
+    ],
+    "controls": [
+      {"id": "duration", "label": "Duración (s)", "type": "number", "pointer": "/duration", "min": 0.5, "max": 60},
+      {"id": "camera_x", "label": "Cámara fija X", "type": "number", "pointer": "/camera/eye/0", "min": -50, "max": 50},
+      {"id": "camera_y", "label": "Cámara fija Y", "type": "number", "pointer": "/camera/eye/1", "min": -50, "max": 50},
+      {"id": "camera_z", "label": "Cámara fija Z", "type": "number", "pointer": "/camera/eye/2", "min": -50, "max": 50},
+      {"id": "look_x", "label": "Punto de mirada X", "type": "number", "pointer": "/camera/look/0", "min": -50, "max": 50},
+      {"id": "look_y", "label": "Punto de mirada Y", "type": "number", "pointer": "/camera/look/1", "min": -50, "max": 50},
+      {"id": "look_z", "label": "Punto de mirada Z", "type": "number", "pointer": "/camera/look/2", "min": -50, "max": 50},
+      {"id": "camera_fov", "label": "Campo de visión (grados)", "type": "number", "pointer": "/camera/fov", "min": 5, "max": 100},
+      {"id": "start_x", "label": "Inicio X", "type": "number", "pointer": "/slots/1/position/0", "min": -20, "max": 20},
+      {"id": "start_y", "label": "Inicio Y", "type": "number", "pointer": "/slots/1/position/1", "min": -20, "max": 20},
+      {"id": "start_z", "label": "Inicio Z", "type": "number", "pointer": "/slots/1/position/2", "min": -20, "max": 20},
+      {"id": "end_x", "label": "Final X", "type": "number", "pointer": "/slots/1/motion/to/0", "min": -20, "max": 20},
+      {"id": "end_y", "label": "Final Y", "type": "number", "pointer": "/slots/1/motion/to/1", "min": -20, "max": 20},
+      {"id": "end_z", "label": "Final Z", "type": "number", "pointer": "/slots/1/motion/to/2", "min": -20, "max": 20},
+      {"id": "actor_scale", "label": "Escala del personaje", "type": "number", "pointer": "/slots/1/scale", "min": 0.05, "max": 20},
+      {"id": "clip_index", "label": "Índice entero del clip GLB", "type": "number", "pointer": "/slots/1/clip/index", "min": 0, "max": 255},
+      {"id": "clip_name", "label": "Nombre del clip GLB", "type": "text", "pointer": "/slots/1/clip/name"},
+      {"id": "clip_speed", "label": "Velocidad de animación", "type": "number", "pointer": "/slots/1/clipPlayback/speed", "min": 0.1, "max": 4},
+      {"id": "face_travel", "label": "Mirar hacia el recorrido", "type": "boolean", "pointer": "/slots/1/motion/faceTravel"},
+      {"id": "light_color", "label": "Color de luz", "type": "color", "pointer": "/light/color"},
+      {"id": "light_intensity", "label": "Intensidad de luz", "type": "number", "pointer": "/light/intensity", "min": 0, "max": 5},
+      {"id": "light_x", "label": "Dirección de luz X", "type": "number", "pointer": "/light/direction/0", "min": -5, "max": 5},
+      {"id": "light_z", "label": "Dirección de luz Z", "type": "number", "pointer": "/light/direction/2", "min": -5, "max": 5}
+    ],
+    "media": []
+  },
+  "document": {
+    "version": 1, "units": "meters", "up": "y", "templateId": "two-shot",
+    "width": 1280, "height": 720, "fps": 24, "duration": 8,
+    "dressing": "none",
+    "camera": {"family": "fixed", "eye": [0, 3.2, 7.8], "look": [0, 0.8, 0], "fov": 45},
+    "light": {"kind": "directional", "direction": [-0.6, -1, 0.5], "intensity": 1.5, "color": "#ffdbad"},
+    "environment": {"reflectiveFloor": false, "platform": false, "bloom": 0, "floorStyle": "none"},
+    "slots": [
+      {"id": "background", "slot": "background", "media": "image", "sourceUrl": "", "surface": "environment", "position": [0, 0, -8], "rotationY": 0, "scale": 1, "clip": null},
+      {"id": "subject_1", "slot": "subject_1", "media": "model3d", "sourceUrl": "", "position": [-1.4, 0, 0.2], "rotationY": 0, "scale": 1, "grounded": true,
+        "clip": {"index": 0, "name": "Walking"}, "clipPlayback": {"speed": 0.8, "loop": true},
+        "motion": {"to": [1, 0, -0.5], "faceTravel": true, "easing": "linear"}}
+    ]
+  },
+  "imageDefaults": {"model_type": "qwen_image_21", "num_inference_steps": 40},
+  "backgroundPrompt": "Empty architectural environment, no people, no characters, no animals, no silhouettes, no statues shaped like people. A prerendered background for a late-1990s PlayStation adventure: [PLACE], [PALETTE], [TIME OF DAY]. Single fixed elevated three-quarter camera, natural perspective matching a 45-degree field of view, visible flat walkable foreground across the lower third, clear unobstructed route from left to right. Light comes from [LIGHT DIRECTION]; keep its color and shadows consistent. Rich painted textures, restrained cinematic detail, crisp readable architecture, 16:9 composition. No foreground obstacles covering the route, no text, no logos, no HUD, no border. Background only; the animated 3D character will be added separately."
+}

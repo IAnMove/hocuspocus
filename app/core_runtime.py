@@ -1,4 +1,4 @@
-"""Apple Silicon core/remote server: editors, projects and remote APIs without Torch."""
+"""Core/remote server (Apple Silicon and machines without a local AI recipe): editors, projects and remote APIs without Torch."""
 from __future__ import annotations
 
 import json
@@ -24,6 +24,7 @@ from routers.lan_auth import create_lan_auth_router
 from routers.llm import create_llm_prompt_router, create_llm_router
 from routers.mcp_access import create_mcp_access_router
 from routers.projects import create_projects_router
+from routers.music_productions import create_music_productions_router
 from routers.productions import create_productions_router
 from routers.recipes import create_recipes_router
 from routers.scene_commands import create_scene_commands_router
@@ -93,6 +94,10 @@ api.include_router(create_productions_router(
     list_workspaces=core.list_workspaces,
     list_pipelines=lambda _workspace: [],
 ))
+api.include_router(create_music_productions_router(
+    workspace_dir=core.workspace_dir,
+    uploads_dir=core.uploads_dir,
+))
 api.include_router(create_workspace_collections_router(
     registry=lambda: WorkspaceRegistry(os.path.join(str(core.outputs_root()), "_hocuspocus", "workspaces-v1.json")),
 ))
@@ -114,6 +119,7 @@ _world3d_export = World3DExportService(
     workspace_dir=core.workspace_dir,
     registry_for=core_generation_commands.registry_for,
     app_url=os.environ.get("HOCUS_APP_URL", ""),
+    uploads_dir=core.uploads_dir,
 )
 bind_world3d_renderer_origin(api, _world3d_export)
 api.include_router(create_world3d_export_router(_world3d_export))
@@ -163,7 +169,6 @@ api.include_router(create_canonical_tasks_router(
 BLOCKED = (
     ("POST", "/api/v1/recast", "wangp_local"),
     ("POST", "/api/v1/tools/upscale", "wangp_local"),
-    ("POST", "/api/v1/rig/generate", "unirig_ai"),
     ("POST", "/api/v1/tools/remove-background", "sam_inpaint"),
     ("POST", "/api/v1/tools/revoice", "local_audio_ai"),
     ("POST", "/api/v1/retake", "wangp_local"),
@@ -233,7 +238,15 @@ async def generate(request: Request):
     if core_remote_image.is_minimax_image_request(body):
         workspace = str(body.get("workspace") or core.active_workspace() or "default")
         try:
-            return core_remote_image.start_job(body, workspace=workspace)
+            from services.generation_output_name import OutputNameError, apply_output_name
+            output_name = apply_output_name(body)
+        except OutputNameError as error:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": error.code, "message": str(error), "retryable": False},
+            ) from error
+        try:
+            return core_remote_image.start_job(body, workspace=workspace, output_name=output_name)
         except Exception as error:
             from services.minimax_image_service import MiniMaxImageError
             if isinstance(error, MiniMaxImageError):
@@ -500,7 +513,56 @@ def wangp_capabilities():
 
 @api.get("/api/v1/rig/capabilities")
 def rig_capabilities():
-    return {"engines": [{"id": "procedural", "label": "Procedural (fast)"}]}
+    from services import rig_service
+    payload = rig_service.capabilities()
+    # The procedural rig is CPU-only; UniRig needs a local NVIDIA engine.
+    payload["engines"] = [engine for engine in payload["engines"] if engine["id"] in {"procedural", "humanoid"}]
+    return payload
+
+
+@api.post("/api/v1/rig/generate")
+async def generate_rig(request: Request):
+    from services import rig_service
+    body = await request.json()
+    if str(body.get("engine") or "procedural") not in {"procedural", "humanoid"}:
+        require_capability_http("unirig_ai")
+    try:
+        workspace = body.get("workspace") or core.active_workspace()
+        folder = core.workspace_dir(workspace)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    source_name = str(body.get("source") or "").strip()
+    if not source_name:
+        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
+    if not source_name.lower().endswith(".glb"):
+        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
+    source_path = core.safe_join(folder, source_name)
+    if not source_path or not os.path.isfile(source_path):
+        raise HTTPException(status_code=400, detail="Source 3D model not found")
+    try:
+        return rig_service.start_job(body=body, source_path=source_path, output_dir=folder, workspace=workspace)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+
+@api.get("/api/v1/rig/status/{job_id}")
+def rig_job_status(job_id: str):
+    from services import rig_service
+    job = rig_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Rig job not found")
+    return job
+
+
+@api.post("/api/v1/rig/jobs/{job_id}/cancel")
+def cancel_rig_job(job_id: str):
+    from services import rig_service
+    job = rig_service.cancel_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Rig job not found")
+    return job
 
 
 @api.post("/api/v1/scenes/recordings")

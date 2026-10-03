@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 1574,
+      "weight": 1575,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -19,6 +19,7 @@
         "tests/test_architecture_contracts.py",
         "tests/test_architecture_factory.py",
         "tests/test_asset_catalog.py",
+        "tests/test_assets_upload.py",
         "tests/test_audio_analysis_cleanup.py",
         "tests/test_audio_analysis_jobs.py",
         "tests/test_audio_word_timestamps.py",
@@ -47,7 +48,10 @@
         "tests/test_director_stop_endpoint.py",
         "tests/test_director_v2_story_refs.py",
         "tests/test_execution_mode.py",
+        "tests/test_generation_memory.py",
+        "tests/test_generation_output_name.py",
         "tests/test_generation_provenance_submission.py",
+        "tests/test_generation_queue_priority.py",
         "tests/test_generation_record.py",
         "tests/test_generation_runtime.py",
         "tests/test_example_assets.py",
@@ -69,6 +73,8 @@
         "tests/test_integration_audit_regressions.py",
         "tests/test_job_lifecycle.py",
         "tests/test_job_lifecycle_wiring.py",
+        "tests/test_job_leftovers.py",
+        "tests/test_jobs_wait.py",
         "tests/test_labs_wizard_action_matrix.py",
         "tests/test_lan_auth.py",
         "tests/test_language_intent.py",
@@ -79,14 +85,20 @@
         "tests/test_media_gallery_listing.py",
         "tests/test_media_path_security.py",
         "tests/test_media_thumbnails.py",
+        "tests/test_mcp_compact_responses.py",
         "tests/test_minimax_h3_duration.py",
         "tests/test_minimax_h3_fused_turbo.py",
         "tests/test_minimax_h3_pdd.py",
         "tests/test_minimax_h3_prompting.py",
         "tests/test_minimax_song_writer_prompt.py",
         "tests/test_model3d_external.py",
+        "tests/test_model3d_commands.py",
+        "tests/test_model3d_rig_commands.py",
+        "tests/test_model3d_compose.py",
         "tests/test_model_cache_job_guards.py",
         "tests/test_model_selection_persistence.py",
+        "tests/test_production_profile_defaults.py",
+        "tests/test_model_selector_errors.py",
         "tests/test_music_model_contract.py",
         "tests/test_operation_logging.py",
         "tests/test_output_completion_time.py",
@@ -104,6 +116,7 @@
         "tests/test_qa_provenance.py",
         "tests/test_quick_video_batches.py",
         "tests/test_rembg_adapter.py",
+        "tests/test_runtime_bpy_metadata.py",
         "tests/test_runtime_profiles.py",
         "tests/test_scail2_dedicated_model.py",
         "tests/test_scene3d_profiles.py",
@@ -123,6 +136,7 @@
         "tests/test_series_reference_router.py",
         "tests/test_series_render.py",
         "tests/test_sex_act_leet_strip.py",
+        "tests/test_song_shorten.py",
         "tests/test_spoken_language_contract.py",
         "tests/test_story_lab_id_repair.py",
         "tests/test_story_lab_music_plan.py",
@@ -146,6 +160,11 @@
         "tests/test_tools_command_runtime.py",
         "tests/test_ui_distribution.py",
         "tests/test_validate_local_wrapper.py",
+        "tests/test_video2d_catalog_query.py",
+        "tests/test_video2d_compile.py",
+        "tests/test_video2d_mcp_guide.py",
+        "tests/test_video2d_title_parity.py",
+        "tests/test_video2d_preview.py",
         "tests/test_video_decode_metadata.py",
         "tests/test_video_editor_replacement_ui.py",
         "tests/test_video_editor_scheduler_jobs.py",
@@ -153,6 +172,8 @@
         "tests/test_video_editor_time_cards.py",
         "tests/test_video_generation_commands.py",
         "tests/test_video_generation_spec.py",
+        "tests/test_video_generation_v3.py",
+        "tests/test_video_production_runbook.py",
         "tests/test_voice_reference_settings.py",
         "tests/test_wangp1272_runtime.py",
         "tests/test_wangp1300_audio.py",
@@ -162,14 +183,44 @@
         "tests/test_workspace_collections_router.py",
         "tests/test_workspace_commands.py",
         "tests/test_workspace_registry.py",
-        "tests/test_world3d_owned_render_smoke.py"
+        "tests/test_world3d_owned_render_smoke.py",
+        "tests/test_world3d_templates.py",
+        "tests/test_production_review.py",
+        "tests/test_lipsync_span.py",
+        "tests/test_production_disk.py",
+        "tests/test_production_resume.py",
+        "tests/test_production_held.py",
+        "tests/test_production_timing.py",
+        "tests/test_production_shot_plan.py",
+        "tests/test_production_dry_run.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_song_switch.py",
+        "tests/test_production_publication.py",
+        "tests/test_production_phase.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_project_link.py",
+        "tests/test_production_work_commands.py",
+        "tests/test_production_journey.py",
+        "tests/test_production_producer_link.py",
+        "tests/test_production_shot_actions.py",
+        "tests/test_production_shot_view.py",
+        "tests/test_production_smoothness.py",
+        "tests/test_humanoid_animate.py",
+        "tests/test_humanoid_clips.py",
+        "tests/test_humanoid_compatibility.py",
+        "tests/test_humanoid_glb.py",
+        "tests/test_humanoid_landmarks.py",
+        "tests/test_humanoid_retarget.py",
+        "tests/test_humanoid_rig_api.py",
+        "tests/test_production_generation_link.py",
+        "tests/test_production_shot_regeneration.py"
       ]
     },
     {
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 1573,
+      "weight": 1586,
       "paths": [
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
@@ -184,6 +235,7 @@
         "tests/test_character_speech_definition.py",
         "tests/test_ci_shards.py",
         "tests/test_code_health.py",
+        "tests/test_comic_film_pass_addendum.py",
         "tests/test_core_mcp.py",
         "tests/test_core_runtime.py",
         "tests/test_core_series_assembly.py",
@@ -195,6 +247,7 @@
         "tests/test_director_i2v_preparation.py",
         "tests/test_director_minimax_h3.py",
         "tests/test_director_model_compat.py",
+        "tests/test_director_silent_audio_plan.py",
         "tests/test_director_pipeline_state.py",
         "tests/test_director_pipeline_status.py",
         "tests/test_director_resume_endpoint.py",
@@ -212,6 +265,7 @@
         "tests/test_h3_window_planner.py",
         "tests/test_hunyuan_dit_cache.py",
         "tests/test_hunyuan3d_windows_patch.py",
+        "tests/test_humanoid_animation.py",
         "tests/test_image_command_restart_boundaries.py",
         "tests/test_image_generation_spec.py",
         "tests/test_krea2_features.py",
@@ -221,6 +275,8 @@
         "tests/test_llm_router.py",
         "tests/test_lyrics_language.py",
         "tests/test_mcp_access.py",
+        "tests/test_mcp_coverage.py",
+        "tests/test_mcp_video2d_smoke.py",
         "tests/test_media_refs.py",
         "tests/test_merge_eligibility.py",
         "tests/test_minimax_h3.py",
@@ -252,6 +308,18 @@
         "tests/test_procedural_3d_assets_router.py",
         "tests/test_procedural_glb_inspector.py",
         "tests/test_production_run.py",
+        "tests/test_production_review_checks.py",
+        "tests/test_production_scene_retry.py",
+        "tests/test_production_scene3d.py",
+        "tests/test_production_resource_gate.py",
+        "tests/test_production_style_presets.py",
+        "tests/test_production_takes.py",
+        "tests/test_production_package.py",
+        "tests/test_production_sheets.py",
+        "tests/test_production_structure.py",
+        "tests/test_production_treatment.py",
+        "tests/test_production_plan.py",
+        "tests/test_production_usage.py",
         "tests/test_productions_router.py",
         "tests/test_project_catalog.py",
         "tests/test_projects_router.py",
@@ -259,11 +327,24 @@
         "tests/test_provenance_3d_director.py",
         "tests/test_recipes_router.py",
         "tests/test_remove_background_tool.py",
+        "tests/test_video2d_catalogs.py",
+        "tests/test_video2d_edit.py",
+        "tests/test_video2d_graphics.py",
+        "tests/test_music_production.py",
+        "tests/test_production_wait.py",
+        "tests/test_export_receipts.py",
         "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",
         "tests/test_safety_scan.py",
         "tests/test_scail2_workflows.py",
         "tests/test_scene3d_speech.py",
+        "tests/test_speech_alignment_parity.py",
+        "tests/test_speech_file_commands.py",
+        "tests/test_phoneme_commands.py",
+        "tests/test_phoneme_ctc.py",
+        "tests/test_phoneme_runtime.py",
+        "tests/test_phoneme_worker.py",
+        "tests/test_scene_asset_facts.py",
         "tests/test_scene_effect_commands.py",
         "tests/test_series_assembly_router.py",
         "tests/test_series_jobs.py",
@@ -282,6 +363,7 @@
         "tests/test_story_montage_clip_history_ui.py",
         "tests/test_storyboard_camera_name_strip.py",
         "tests/test_studio_image_preparation.py",
+        "tests/test_studio_key.py",
         "tests/test_studio_music_commands.py",
         "tests/test_studio_music_spec.py",
         "tests/test_studio_sfx_commands.py",
@@ -309,6 +391,7 @@
         "tests/test_video_editor_provenance.py",
         "tests/test_video_editor_router.py",
         "tests/test_video_extra_info.py",
+        "tests/test_video_layout.py",
         "tests/test_vocal_isolation.py",
         "tests/test_wangp_analysis.py",
         "tests/test_wangp_frame_extraction.py",
@@ -318,18 +401,143 @@
         "tests/test_workspace_command_failures.py",
         "tests/test_world3d_export.py",
         "tests/test_world3d_media_cache.py",
+        "tests/test_montage_derive.py",
         "tests/test_montage_documents.py",
+        "tests/test_montage_preview.py",
         "tests/test_scene2d_export.py",
+        "tests/test_scene2d_validate.py",
+        "tests/test_publish_presets.py",
         "tests/test_video_editor_layers.py",
-        "tests/test_montage_shots.py"
+        "tests/test_montage_shots.py",
+        "tests/test_template_library.py",
+        "tests/test_media_options.py",
+        "tests/test_template_search.py",
+        "tests/test_qa_people.py",
+        "tests/test_clip_align.py",
+        "tests/test_production_cancel.py",
+        "tests/test_music_productions_router.py",
+        "tests/test_production_clip_qa.py",
+        "tests/test_production_cast_portrait.py",
+        "tests/test_production_subject_count.py",
+        "tests/test_humanoid_rig_fixtures.py",
+        "tests/test_humanoid_skeleton.py",
+        "tests/test_humanoid_weights.py",
+        "tests/test_model3d_animate.py",
+        "tests/test_lips_creator.py",
+        "tests/test_lips_creator_commands.py"
       ]
     }
   ],
   "path_rules": [
     {
+      "prefix": "app/services/speech_alignment.py",
+      "paths": ["tests/test_speech_alignment_parity.py"]
+    },
+    {
+      "prefix": "app/services/production_generation_link.py",
+      "paths": ["tests/test_production_generation_link.py"]
+    },
+    {
+      "prefix": "app/services/production_shot_regeneration.py",
+      "paths": ["tests/test_production_shot_regeneration.py"]
+    },
+    {
+      "prefix": "app/services/production_project_link.py",
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_generation_link.py", "tests/test_production_work_commands.py", "tests/test_production_journey.py", "tests/test_production_producer_link.py"]
+    },
+    {
+      "prefix": "app/services/production_producer_link.py",
+      "paths": ["tests/test_production_producer_link.py"]
+    },
+    {
+      "prefix": "app/services/production_work_commands.py",
+      "paths": ["tests/test_production_work_commands.py", "tests/test_production_journey.py"]
+    },
+    {
+      "prefix": "app/services/production_work_catalog.py",
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_generation_link.py"]
+    },
+    {
+      "prefix": "app/routers/production_projects.py",
+      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py", "tests/test_production_shot_view.py", "tests/test_production_shot_actions.py"]
+    },
+    {
+      "prefix": "app/services/production_shot_view.py",
+      "paths": ["tests/test_production_shot_view.py"]
+    },
+    {
+      "prefix": "app/services/production_shot_actions.py",
+      "paths": ["tests/test_production_shot_actions.py", "tests/test_production_shot_view.py", "tests/test_production_journey.py"]
+    },
+    {
+      "prefix": "app/services/world3d_template_catalog.py",
+      "paths": [
+        "tests/test_world3d_templates.py",
+        "tests/test_mcp_coverage.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_template_commands.py",
+      "paths": [
+        "tests/test_world3d_templates.py",
+        "tests/test_mcp_coverage.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_scenes.py",
+      "paths": [
+        "tests/test_world3d_templates.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/world3d_templates.py",
+      "paths": [
+        "tests/test_world3d_templates.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/world3d_templates.json",
+      "paths": [
+        "tests/test_world3d_templates.py",
+        "tests/test_mcp_coverage.py"
+      ]
+    },
+    {
+      "prefix": "app/services/lips_creator_commands.py",
+      "paths": [
+        "tests/test_lips_creator_commands.py",
+        "tests/test_lips_creator.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/lips_creator.py",
+      "paths": [
+        "tests/test_lips_creator.py",
+        "tests/test_lips_creator_commands.py"
+      ]
+    },
+    {
+      "prefix": "app/services/character_kit_library.py",
+      "paths": [
+        "tests/test_character_kit_library.py",
+        "tests/test_character_kit_library_router.py",
+        "tests/test_lips_creator.py",
+        "tests/test_lips_creator_commands.py"
+      ]
+    },
+    {
       "prefix": "app/services/user_diagnostics.py",
       "paths": [
         "tests/test_user_diagnostics.py"
+      ]
+    },
+    {
+      "prefix": "app/services/phoneme",
+      "paths": [
+        "tests/test_phoneme_commands.py",
+        "tests/test_phoneme_ctc.py",
+        "tests/test_phoneme_runtime.py",
+        "tests/test_phoneme_worker.py"
       ]
     },
     {
@@ -403,9 +611,16 @@
       ]
     },
     {
+      "prefix": "app/services/montage_preview.py",
+      "paths": [
+        "tests/test_montage_preview.py"
+      ]
+    },
+    {
       "prefix": "app/services/montage_",
       "paths": [
-        "tests/test_montage_documents.py"
+        "tests/test_montage_documents.py",
+        "tests/test_montage_preview.py"
       ]
     },
     {
@@ -417,7 +632,8 @@
     {
       "prefix": "app/services/scene2d_export.py",
       "paths": [
-        "tests/test_scene2d_export.py"
+        "tests/test_scene2d_export.py",
+        "tests/test_production_phase.py"
       ]
     },
     {
@@ -450,6 +666,506 @@
       "prefix": "app/routers/about.py",
       "paths": [
         "tests/test_about.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_format.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_search.py",
+      "paths": [
+        "tests/test_template_search.py",
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_library.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_commands.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/templates.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_community.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "scripts/community_index.py",
+      "paths": [
+        "tests/test_template_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/clip_align.py",
+      "paths": [
+        "tests/test_clip_align.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_scene_retry.py",
+      "paths": [
+        "tests/test_production_scene_retry.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_style_presets.py",
+      "paths": [
+        "tests/test_production_style_presets.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_takes.py",
+      "paths": [
+        "tests/test_production_takes.py",
+        "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/music_production.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_producer_link.py",
+        "tests/test_production_takes.py",
+        "tests/test_production_timing.py",
+        "tests/test_production_dry_run.py",
+        "tests/test_production_shot_plan.py",
+        "tests/test_production_plan.py",
+        "tests/test_production_package.py",
+        "tests/test_production_usage.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_song_switch.py",
+        "tests/test_production_cancel.py",
+        "tests/test_music_productions_router.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_scene_retry.py",
+        "tests/test_production_clip_qa.py",
+        "tests/test_production_cast_portrait.py",
+        "tests/test_production_subject_count.py",
+        "tests/test_production_smoothness.py",
+        "tests/test_production_phase.py",
+        "tests/test_production_wait.py",
+        "tests/test_production_publication.py",
+        "tests/test_production_disk.py",
+        "tests/test_production_review_checks.py",
+        "tests/test_video_production_runbook.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_windows.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_shot_plan.py",
+        "tests/test_production_plan.py",
+        "tests/test_production_structure.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_lipsync_span.py",
+        "tests/test_video_production_runbook.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_stage_frames.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_cast_portrait.py",
+        "tests/test_production_subject_count.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_stage_clips.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_takes.py",
+        "tests/test_production_clip_qa.py",
+        "tests/test_lipsync_span.py",
+        "tests/test_production_cancel.py",
+        "tests/test_production_smoothness.py",
+        "tests/test_production_subject_count.py",
+        "tests/test_production_song_switch.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_stage_scenes.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_package.py",
+        "tests/test_production_scene_retry.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_smoothness.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_stage_run.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_phase.py",
+        "tests/test_production_dry_run.py",
+        "tests/test_production_cancel.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_disk.py",
+        "tests/test_production_scene3d.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_edit.py",
+      "paths": [
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_song_switch.py",
+      "paths": [
+        "tests/test_production_song_switch.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_control.py",
+      "paths": [
+        "tests/test_production_cancel.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_commands.py",
+      "paths": [
+        "tests/test_production_cancel.py",
+        "tests/test_production_shot_edit.py",
+        "tests/test_production_song_switch.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/music_productions.py",
+      "paths": [
+        "tests/test_music_productions_router.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_sheets.py",
+      "paths": [
+        "tests/test_production_sheets.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_treatment.py",
+      "paths": [
+        "tests/test_production_treatment.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_structure.py",
+      "paths": [
+        "tests/test_production_structure.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_trailer_audio.py",
+      "paths": [
+        "tests/test_production_structure.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_package.py",
+      "paths": [
+        "tests/test_production_package.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_plan.py",
+      "paths": [
+        "tests/test_production_plan.py",
+        "tests/test_world3d_templates.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_usage.py",
+      "paths": [
+        "tests/test_production_usage.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_timing.py",
+      "paths": [
+        "tests/test_production_timing.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_plan.py",
+      "paths": [
+        "tests/test_production_shot_plan.py",
+        "tests/test_production_preview.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_dry_run.py",
+      "paths": [
+        "tests/test_production_dry_run.py",
+        "tests/test_production_preview.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_preview.py",
+      "paths": [
+        "tests/test_production_preview.py",
+        "tests/test_production_dry_run.py",
+        "tests/test_music_production.py",
+        "tests/test_production_shot_plan.py",
+        "tests/test_production_scene_retry.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_clip_qa.py",
+      "paths": [
+        "tests/test_production_clip_qa.py",
+        "tests/test_production_takes.py",
+        "tests/test_lipsync_span.py",
+        "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_cast_portrait.py",
+      "paths": [
+        "tests/test_production_cast_portrait.py",
+        "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_subject_count.py",
+      "paths": [
+        "tests/test_production_subject_count.py",
+        "tests/test_music_production.py",
+        "tests/test_qa_people.py",
+        "tests/test_production_timing.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_smoothness.py",
+      "paths": [
+        "tests/test_production_smoothness.py",
+        "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_review_checks.py",
+      "paths": [
+        "tests/test_production_review_checks.py",
+        "tests/test_production_timing.py",
+        "tests/test_video_production_runbook.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_review_layers.py",
+      "paths": [
+        "tests/test_production_review_checks.py",
+        "tests/test_production_timing.py",
+        "tests/test_video_production_runbook.py"
+      ]
+    },
+    {
+      "prefix": "app/services/qa_people.py",
+      "paths": [
+        "tests/test_qa_people.py",
+        "tests/test_production_subject_count.py"
+      ]
+    },
+    {
+      "prefix": "app/services/scene_export_lane.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_scene2d_export.py",
+        "tests/test_video2d_preview.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_state.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_production_usage.py",
+        "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_progress.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_production_timing.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_estimate.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_production_dry_run.py",
+        "tests/test_production_disk.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_close.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_production_disk.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_perf.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_production_timing.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_resolution.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_production_dry_run.py",
+        "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_enhance.py",
+      "paths": [
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_review.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_production_timing.py",
+        "tests/test_production_publication.py",
+        "tests/test_music_productions_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_request.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_music_productions_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_redo.py",
+      "paths": [
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_scene_ops.py",
+      "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_song.py",
+      "paths": [
+        "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_shot_commands.py",
+      "paths": [
+        "tests/test_production_phase.py",
+        "tests/test_production_wait.py",
+        "tests/test_video_production_runbook.py",
+        "tests/test_music_productions_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_wait.py",
+      "paths": [
+        "tests/test_production_wait.py",
+        "tests/test_production_phase.py",
+        "tests/test_video_production_runbook.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_publication.py",
+      "paths": [
+        "tests/test_production_publication.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/resource_scheduler.py",
+      "paths": [
+        "tests/test_resource_scheduler.py",
+        "tests/test_scene2d_export.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/video2d_preview.py",
+      "paths": [
+        "tests/test_video2d_preview.py",
+        "tests/test_scene2d_export.py"
+      ]
+    },
+    {
+      "prefix": "docs/agents/VIDEO_PRODUCTION_RUNBOOK.md",
+      "paths": [
+        "tests/test_video_production_runbook.py",
+        "tests/test_production_wait.py",
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "docs/development/PRODUCTION_WORK_BOARD.md",
+      "paths": [
+        "tests/test_production_phase.py"
+      ]
+    },
+    {
+      "prefix": "app/services/humanoid_rig/",
+      "paths": [
+        "tests/test_humanoid_animate.py",
+        "tests/test_humanoid_clips.py",
+        "tests/test_humanoid_compatibility.py",
+        "tests/test_humanoid_glb.py",
+        "tests/test_humanoid_landmarks.py",
+        "tests/test_humanoid_retarget.py",
+        "tests/test_humanoid_rig_api.py",
+        "tests/test_humanoid_rig_fixtures.py",
+        "tests/test_humanoid_skeleton.py",
+        "tests/test_humanoid_weights.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/model3d_animate.py",
+      "paths": [
+        "tests/test_model3d_animate.py",
+        "tests/test_humanoid_animate.py"
+      ]
+    },
+    {
+      "prefix": "app/services/rig_service.py",
+      "paths": [
+        "tests/test_humanoid_rig_api.py",
+        "tests/test_model3d_rig_commands.py",
+        "tests/test_model3d_rig_spawn_cancellation.py",
+        "tests/test_model3d_rig_task_identity.py"
       ]
     }
   ]

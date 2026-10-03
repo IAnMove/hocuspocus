@@ -441,6 +441,7 @@ from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
     acknowledge_cancel,
     collect_job_outputs,
+    ensure_generation_priority,
     finish_job,
     generation_queue_position,
     generation_slot,
@@ -1323,8 +1324,12 @@ def _check_model_downloaded(model_type: str) -> bool:
 
 
 @api.get("/api/v1/models")
-def list_models():
-    """List available model families and model types."""
+def list_models(detail: bool = True):
+    """List available model families and model types.
+
+    HTTP defaults to the full catalog so the Studio UI keeps working.
+    Pass detail=false for the short MCP summary.
+    """
     from services.director_model_compat import assess_director_model
 
     # Families
@@ -1424,7 +1429,21 @@ def list_models():
         "tool_only": True,
     })
 
-    return {"families": families, "models": models}
+    payload = {"families": families, "models": models}
+    if detail:
+        return payload
+    from services.mcp_compact import summarize_model_catalog
+    return summarize_model_catalog(payload)
+
+
+def mcp_model_list(args):
+    """models and models.list: summaries unless detail is true or one id is named."""
+    if not isinstance(args, dict):
+        args = {}
+    model_type = args.get("model_type")
+    if isinstance(model_type, str) and model_type.strip():
+        return get_model_options(model_type)
+    return list_models(detail=args.get("detail") is True)
 
 
 _MODEL_VISIBILITY_CONFIG_KEY = "maestro_model_visibility"
@@ -1727,12 +1746,19 @@ def _normalize_production_profile(value) -> dict:
     }
 
 
+def _default_production_profile() -> dict:
+    """The unsaved profile: local Qwen Image 2.1 when installed, else the static default."""
+    from services import production_profile_defaults
+
+    return production_profile_defaults.default_profile(_DEFAULT_PRODUCTION_PROFILE, _check_model_downloaded)
+
+
 def _active_production_profile() -> dict:
     raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
     try:
         return _normalize_production_profile(raw)
     except ValueError:
-        return copy.deepcopy(_DEFAULT_PRODUCTION_PROFILE)
+        return _default_production_profile()
 
 
 def _effective_llm_routing(services: dict | None = None) -> tuple[str, str, str]:
@@ -1783,7 +1809,7 @@ def _production_profile_response() -> dict:
         profile = _normalize_production_profile(raw)
         configured = True
     except ValueError:
-        profile = copy.deepcopy(_DEFAULT_PRODUCTION_PROFILE)
+        profile = _default_production_profile()
         configured = False
     return {"configured": configured, "profile": profile}
 
@@ -6498,6 +6524,7 @@ def _minimax_h3_runtime_advisory(model_def: dict) -> dict | None:
 def get_model_options(model_type: str):
     """Return UI-relevant model options for dynamic rendering."""
     from services.image_edit_workflow import image_edit_capabilities
+    from services.model_selectors import selector_catalog
     if _is_legacy_h3_model(model_type):
         return dict(minimax_h3_service.MODEL_OPTIONS)
     if model_type in model3d_service.MODEL_BY_ID:
@@ -6728,6 +6755,7 @@ def get_model_options(model_type: str):
         # Max voice slots the model accepts. UI caps the "Add Voice" button
         # at this number. Defaults to 6 (Kugel); Scenema sets 2.
         "max_voice_count": md.get("max_voice_count"),
+        "selectors": selector_catalog(md),
     }
 
 
@@ -9775,6 +9803,7 @@ async def director_pipeline_start(request: Request):
     except execution_mode.ExecutionModeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
+        body["workspace"] = workspace
         pid = start_pipeline(body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -9898,6 +9927,9 @@ async def director_pipeline_update_preview(pid: str, request: Request):
         quality_waiver=bool(body.get("quality_waiver", False)),
         waiver_reason=str(body.get("waiver_reason") or ""),
         accept_quality_test=bool(body.get("accept_quality_test", False)),
+        accepted_via=str(body.get("accepted_via") or ""),
+        accepted_by=str(body.get("accepted_by") or ""),
+        acceptance_note=str(body.get("acceptance_note") or ""),
     )
     if not ok:
         raise HTTPException(status_code=400, detail=message)
@@ -10160,7 +10192,10 @@ async def rerun_pipeline_clip_video(pid: str, clip_index: int, request: Request)
         rerun_clip_video,
     )
     body = await request.json()
-    base = wgp.server_config.get("save_path", "outputs")
+    base = _workspace_dir(body["workspace"]) if body.get("workspace") else wgp.server_config.get("save_path", "outputs")
+    from services.production_shot_regeneration import guard_shared_regeneration
+    guard_shared_regeneration(base, body.get("workspace") or "default", body,
+                              f"/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-video")
     try:
         result = await asyncio.to_thread(
             rerun_clip_video,
@@ -10885,7 +10920,20 @@ async def generate(request: Request):
     from services.generation_provenance import normalize_submission_provenance
 
     body = await request.json()
+    if isinstance(body, dict):
+        try:
+            ensure_generation_priority(body)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
     provenance = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
+    try:
+        from services.generation_output_name import OutputNameError, apply_output_name
+        apply_output_name(body)
+    except OutputNameError as error:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": error.code, "message": str(error), "retryable": False},
+        ) from error
     collection_id = provenance.get("workspace_id")
     if collection_id and not _workspace_collection_registry.get(collection_id):
         raise HTTPException(status_code=400, detail="Unknown Workspace collection")
@@ -10917,6 +10965,11 @@ async def generate(request: Request):
     except Exception:
         _base_model_type = body.get("model_type")
     _generation_model_def = wgp.get_model_def(body["model_type"]) or {}
+    from services.model_selectors import InvalidSelector, validate_submitted_selectors
+    try:
+        validate_submitted_selectors(body, _generation_model_def)
+    except InvalidSelector as error:
+        raise HTTPException(status_code=400, detail=error.detail) from error
     from services.wangp_submission import prepare_generation_inputs
     try:
         prepare_generation_inputs(body, _generation_model_def, requested_workspace,
@@ -11365,6 +11418,13 @@ async def generate(request: Request):
 
     # Capture workspace at submission time — NOT at execution time
     workspace = body.pop("workspace", None) or _get_active_workspace()
+    leftovers = globals().get("_job_leftovers")
+    if leftovers is not None:
+        duplicate = leftovers.duplicate_for_submit(body, workspace)
+        if duplicate is not None:
+            if callable(getattr(request, "admit_generation_command", None)):
+                raise HTTPException(status_code=409, detail=duplicate)
+            return duplicate
     admission = getattr(request, "admit_generation_command", None)
     if callable(admission):
         return admission(body, workspace, provenance)
@@ -24571,6 +24631,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                             # their byte-progress loop to this exact job's
                             # durable abort state so Cancel works before the
                             # model has finished downloading or loading.
+                            from services.generation_memory import prepare_queued_params
+                            prepare_queued_params(params)
                             with safe_download.cancellable_downloads(
                                 lambda: is_cancel_requested(job)
                                 or bool(gen.get("abort")),
@@ -24669,7 +24731,11 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                                 total = 0
                                 progress_updates.update(step=0, total_steps=0)
                             from shared.utils.generation_timing import inference_progress_clock
+                            from services.generation_memory import note_inference_step
                             progress_updates.update(inference_progress_clock(job, msg, step, time.time()))
+                            progress_updates.update(note_inference_step(
+                                job, step=step, now=time.time(), message=msg,
+                            ))
                             progress_updates.update(message=msg, phase=msg, last_progress_at=time.time())
                             if not update_job(job, **progress_updates):
                                 continue
@@ -26254,6 +26320,11 @@ def _run_outpaint_shot_generation(job_id):
 def get_status(job_id: str):
     """Get generation job status."""
     if job_id not in _jobs:
+        leftovers = globals().get("_job_leftovers")
+        if leftovers is not None:
+            found = leftovers.status_for(job_id)
+            if found is not None:
+                return found
         raise HTTPException(status_code=404, detail="Job not found")
     j = snapshot_job(_jobs[job_id])
     started_at = j.get("started_at")
@@ -26262,7 +26333,7 @@ def get_status(job_id: str):
         max(0.0, float(finished_at or time.time()) - float(started_at))
         if started_at else None
     )
-    return {
+    payload = {
         "job_id": j["id"],
         "task_id": j.get("task_id"),
         "root_task_id": j.get("root_task_id") or j.get("task_id"),
@@ -26295,6 +26366,14 @@ def get_status(job_id: str):
         # renders the OOM recovery banner when this is non-null.
         "oom_info": j.get("oom_info"),
     }
+    from services.generation_output_name import status_output_fields
+    from services.generation_memory import include_performance
+    payload.update(status_output_fields(
+        payload.get("output_files"),
+        workspace=str(j.get("workspace") or ""),
+        workspace_dir=str(j.get("out_dir") or ""),
+    ))
+    return include_performance(payload, j)
 
 
 @api.post("/api/v1/cancel/{job_id}")
@@ -26392,6 +26471,43 @@ def get_generation_queue_recovery():
     return {"jobs": [_recovery_job_summary(record) for record in candidates]}
 
 
+def _queue_recovered_generation(record: dict):
+    """Put one durable leftover back on the live queue without starting it.
+
+    Returns ``(job, created)``. ``created`` is false when that id is already
+    live, so resume cannot start a second worker for the same leftover.
+    """
+    job_id = str(record.get("id") or "").strip()
+    params = record.get("params")
+    if not job_id or not isinstance(params, dict) or not params.get("model_type"):
+        if job_id:
+            _durable_generation_queue.remove(job_id)
+        return None, False
+    existing = _jobs.get(job_id)
+    if existing is not None:
+        return existing, False
+    workspace = str(record.get("workspace") or "default")
+    _reset_canonical_task_for_resume(
+        workspace,
+        f"task-generation-{job_id}",
+    )
+    job = _new_generation_job(
+        params,
+        workspace,
+        job_id=job_id,
+        created_at=float(record.get("created_at") or time.time()),
+        recovered=True,
+        reserve_generation=not isinstance(
+            params.get("_h3_window_plan_pending"), dict,
+        ),
+        provenance=record.get("provenance") if isinstance(record.get("provenance"), dict) else None,
+    )
+    _jobs[job_id] = job
+    _persist_generation_job(job)
+    _cancel_h3_idle_release()
+    return job, True
+
+
 @api.post("/api/v1/jobs/recovery/resume")
 def resume_generation_queue():
     """Requeue persisted requests in their original submission order.
@@ -26406,35 +26522,13 @@ def resume_generation_queue():
         candidates = _image_generation_commands.filter_recovery(
             _durable_generation_queue.list(exclude_ids=_jobs.keys()))
         for record in candidates:
-            job_id = str(record.get("id") or "").strip()
-            params = record.get("params")
-            if not job_id or not isinstance(params, dict) or not params.get("model_type"):
-                if job_id:
-                    _durable_generation_queue.remove(job_id)
+            job, created = _queue_recovered_generation(record)
+            if not created or job is None:
                 continue
-            workspace = str(record.get("workspace") or "default")
-            _reset_canonical_task_for_resume(
-                workspace,
-                f"task-generation-{job_id}",
-            )
-            job = _new_generation_job(
-                params,
-                workspace,
-                job_id=job_id,
-                created_at=float(record.get("created_at") or time.time()),
-                recovered=True,
-                reserve_generation=not isinstance(
-                    params.get("_h3_window_plan_pending"), dict,
-                ),
-                provenance=record.get("provenance") if isinstance(record.get("provenance"), dict) else None,
-            )
-            _jobs[job_id] = job
-            _persist_generation_job(job)
-            _cancel_h3_idle_release()
             threads.append(threading.Thread(
                 target=_run_generation_with_preparation,
-                args=(job_id,),
-                name=f"recovered-generation-{job_id}",
+                args=(job["id"],),
+                name=f"recovered-generation-{job['id']}",
                 daemon=False,
             ))
             resumed.append(_recovery_job_summary(record))
@@ -29673,6 +29767,9 @@ def _series_render_update(job_id: str, **patch) -> dict | None:
         job["updatedAt"] = time.time()
         snapshot = copy.deepcopy(job)
         _series_render_store(str(job["workspace"])).save(snapshot)
+        if snapshot.get("productionId") and "status" in patch:
+            from services.production_project_link import note_production_status
+            note_production_status(_workspace_dir(snapshot["workspace"]), snapshot["productionId"], snapshot["status"])
         publisher = globals().get("_publish_series_task")
         if callable(publisher):
             try:
@@ -30081,6 +30178,10 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
     )
 
     workspace = _series_library_workspace(body.get("workspace"))
+    from services.production_shot_regeneration import guard_shared_regeneration
+    if body.get("shared_review") is not None:
+        guard_shared_regeneration(_workspace_dir(workspace), workspace, body,
+                                  f"/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
     with _series_library_lock:
         library = _read_series_workspace(workspace)
         series = copy.deepcopy(_series_project_or_404(library, series_id))
@@ -30193,6 +30294,12 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
                 "createdAt": time.time(), "updatedAt": time.time(), "error": None,
             })
         now_iso = _series_iso_now()
+        from services.production_generation_link import attach_episode
+        from services.production_project_link import LinkError
+        try:
+            registered = attach_episode(_workspace_dir(workspace), workspace, episode, body)
+        except LinkError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         episode["status"] = "rendering"
         episode["updatedAt"] = now_iso
         series["episodesById"][episode_id] = episode
@@ -30208,6 +30315,7 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         now = time.time()
         job = {
             "jobId": job_id, "kind": "render", "workspace": workspace,
+            "productionId": registered["production_id"],
             "seriesId": series_id, "episodeId": episode_id, "status": "queued",
             "stage": "queued", "current": 0, "total": len(items), "items": items,
             "activeShotId": None, "message": "Series shot render queued.",
@@ -35000,6 +35108,10 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                                 "volume",
                                 "muted",
                                 "fit",
+                                "focus_x",
+                                "focus_y",
+                                "blur_amount",
+                                "background_dim",
                                 "transition",
                                 "transition_duration",
                                 "transition_text",
@@ -35116,6 +35228,7 @@ def start_video_editor_export(body: dict):
         "later-tropical",
         "later-cinematic",
     }
+    from services.video_layout import stamp_layout
     clean_clips = []
     for index, clip in enumerate(clips):
         if not isinstance(clip, dict):
@@ -35140,6 +35253,7 @@ def start_video_editor_export(body: dict):
             "transition_text": transition_text,
             "transition_text_size": transition_text_size,
         })
+        stamp_layout(clean_clip)
         clean_clips.append(clean_clip)
 
     soundtrack = body.get("soundtrack")
@@ -35994,6 +36108,7 @@ def _generation_task_fields(job: dict) -> dict:
     provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
     command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
     from services.generation_provenance import task_fields_from_provenance
+    from services.generation_memory import performance_fields
 
     task_identity = task_fields_from_provenance(
         provenance,
@@ -36015,6 +36130,7 @@ def _generation_task_fields(job: dict) -> dict:
         "run_id": command.get("run_id"),
     }
     task_metadata.update(task_identity.pop("metadata", {}))
+    task_metadata.update(performance_fields(job.get("performance")))
     if owner_id.startswith("series:"):
         series_job_id = owner_id.split(":", 1)[1]
         parent_task_id = f"task-series-render-{series_job_id}"
@@ -36637,6 +36753,10 @@ api.include_router(create_productions_router(
     list_pipelines=_list_canonical_production_pipelines,
 ))
 
+from routers.production_projects import create_production_projects_router
+
+api.include_router(create_production_projects_router(workspace_dir=_workspace_dir))
+
 from routers.workspace_collections import create_workspace_collections_router
 from services.workspace_registry import WorkspaceRegistry
 
@@ -36679,6 +36799,7 @@ except Exception as e:
 
 # Optional external agents use exactly the same admission endpoints and task IDs.
 from routers.wangp_mcp import create_wangp_mcp_router
+from services.lips_creator_commands import command_catalog as lips_creator_catalog, command_handlers as lips_creator_handlers
 from services.wangp_agent_adapters import application_handlers as wangp_agent_handlers
 from services.image_generation_runtime import create_image_generation_commands
 from routers.image_generation_commands import (
@@ -36692,13 +36813,17 @@ _scene_commands = SceneCommands(_workspace_dir)
 api.include_router(create_scene_commands_router(_scene_commands))
 from routers.world3d_export import create_world3d_export_router, bind_world3d_renderer_origin
 from services.world3d_export import World3DExportService, command_catalog as world3d_export_catalog, command_handlers as world3d_export_handlers
+from routers.world3d_templates import create_world3d_templates_router
+from services.world3d_template_commands import command_catalog as world3d_template_catalog, command_handlers as world3d_template_handlers
 _world3d_export = World3DExportService(
     workspace_dir=_workspace_dir,
     registry_for=_task_registry,
     app_url=os.environ.get("HOCUS_APP_URL", ""),
+    uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
 )
 bind_world3d_renderer_origin(api, _world3d_export)
 api.include_router(create_world3d_export_router(_world3d_export))
+api.include_router(create_world3d_templates_router(_workspace_dir))
 from services.scene2d_export import Scene2DExportService, command_catalog as scene2d_export_catalog, command_handlers as scene2d_export_handlers
 from routers.scene2d_export import create_scene2d_export_router
 _scene2d_export = Scene2DExportService(workspace_dir=_workspace_dir, registry_for=_task_registry,
@@ -36727,12 +36852,47 @@ _montage_commands = MontageCommands(_montage_store, start_export=start_video_edi
                                     shots=ShotBoard(_montage_store, workspace_dir=_workspace_dir,
                                                     submit=_submit_shot_generation, job_status=_shot_job_status))
 api.include_router(create_montages_router(_montage_commands))
+from services.scene_packages import make_workspace_reader as _template_reader
+from services.template_library import TemplateLibrary, resolve_template_library_root
+from services.template_commands import TemplateCommands, command_catalog as template_command_catalog
+from routers.templates import create_templates_router
+from services.media_options import command_catalog as media_options_catalog, command_handlers as media_options_handlers
+
+
+def _media_options_sources():
+    return list_models(detail=True)["models"], get_services_config(), _production_profile_response()
+
+
+from services.template_community import CommunityIndex
+_template_library = TemplateLibrary(
+    resolve_template_library_root(_app_dir), workspace_dir=_workspace_dir,
+    reader=_template_reader(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")))
+_template_commands = TemplateCommands(_template_library, CommunityIndex(_template_library))
+api.include_router(create_templates_router(_template_commands))
 from services.scene_documents import command_catalog as scene_document_catalog, command_handlers as scene_document_handlers
+from services.scene2d_validate import command_catalog as scene2d_validate_catalog, command_handlers as scene2d_validate_handlers
+from services.video2d_catalogs import command_catalog as video2d_catalog, command_handlers as video2d_catalog_handlers
+from services.video2d_catalogs import query_operation as video2d_query_operation, query_handlers as video2d_query_handlers
+from routers.video2d_catalog import create_video2d_catalog_router
+api.include_router(create_video2d_catalog_router())
+from services.video2d_compile import command_catalog as video2d_compile_catalog, command_handlers as video2d_compile_handlers
+from services.video2d_preview import command_catalog as video2d_preview_catalog, command_handlers as video2d_preview_handlers
+from services.video2d_edit import command_catalog as video2d_edit_catalog, command_handlers as video2d_edit_handlers
+from routers.video2d_edit import create_video2d_edit_router
+api.include_router(create_video2d_edit_router())
+from services.scene_asset_facts import command_catalog as scene_asset_facts_catalog, command_handlers as scene_asset_facts_handlers
 
 from services.mcp_access import McpAccess
 from routers.mcp_access import create_mcp_access_router
 _mcp_access = McpAccess(os.path.join(os.path.dirname(__file__), 'settings', 'mcp-access.json'))
 api.include_router(create_mcp_access_router(_mcp_access))
+from routers.music_productions import create_music_productions_router
+api.include_router(create_music_productions_router(
+    workspace_dir=_workspace_dir,
+    uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
+    app_url=lambda: _scene2d_export.app_url or "",
+    token=_mcp_access.token,
+))
 
 _image_generation_commands = create_image_generation_commands(globals())
 api.include_router(create_image_generation_commands_router(_image_generation_commands))
@@ -36745,14 +36905,109 @@ _wizard_workflow_executor = WizardWorkflowExecutor(
     get_task=lambda workspace, task_id: _task_registry(workspace).get(task_id),
 )
 api.include_router(create_wizard_workflow_executor_router(_wizard_workflow_executor, list_workspaces=_list_workspaces))
+from routers.audio_shorten import (
+    command_catalog as audio_shorten_catalog,
+    command_handlers as audio_shorten_handlers,
+    create_audio_shorten_router,
+)
+from services.job_leftovers import (
+    JobLeftovers,
+    command_catalog as job_leftover_catalog,
+    command_handlers as job_leftover_handlers,
+)
+
+def _resolve_shorten_source(source: str, workspace: str) -> str:
+    return _resolve_request_media_path(source, workspace=workspace, kinds=("audio",))
+
+_audio_shorten_handlers = audio_shorten_handlers(_resolve_shorten_source, _workspace_dir)
+api.include_router(create_audio_shorten_router(
+    resolve_source=_resolve_shorten_source,
+    workspace_dir=_workspace_dir,
+))
+from services.assets_upload import command_catalog as assets_upload_catalog
+from services.assets_upload import command_handlers as assets_upload_handlers
+
+_assets_upload_handlers = assets_upload_handlers(
+    _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"),
+)
+from routers.publish_presets import create_publish_router
+api.include_router(create_publish_router(
+    resolve_source=lambda source, workspace: _resolve_request_media_path(source, workspace=workspace, kinds=("video", "audio")),
+    workspace_dir=_workspace_dir,
+))
+from services.jobs_wait import command_catalog as jobs_wait_catalog, command_handlers as jobs_wait_handlers
+from services.song_analysis import command_catalog as audio_analysis_catalog, command_handlers as audio_analysis_handlers
+from services.lipsync_qa import command_catalog as lipsync_qa_catalog, command_handlers as lipsync_qa_handlers
+from services.music_production import command_catalog as music_production_catalog, command_handlers as music_production_handlers
+from services.production_review import command_catalog as production_review_catalog, command_handlers as production_review_handlers
+_jobs_wait_handlers = jobs_wait_handlers(get_status, lambda job_id: _jobs.get(job_id))
+from services.studio_key import command_catalog as studio_key_catalog, command_handlers as studio_key_handlers
+_studio_key_handlers = studio_key_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
+from services.clip_align import command_catalog as clip_align_catalog, command_handlers as clip_align_handlers
+_clip_align_handlers = clip_align_handlers(_workspace_dir)
+from services.montage_preview import command_catalog as montage_preview_catalog
+from services.montage_preview import command_handlers as montage_preview_handlers
+_montage_preview_handlers = montage_preview_handlers(_montage_store, lambda: _scene2d_export.app_url)
+
+
+def _prepare_generation_leftovers(records):
+    _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
+    return _image_generation_commands.filter_recovery(records)
+
+
+def _start_recovered_generation(job):
+    threading.Thread(
+        target=_run_generation_with_preparation,
+        args=(job["id"],),
+        name=f"recovered-generation-{job['id']}",
+        daemon=False,
+    ).start()
+
+
+def _discard_generation_leftover(record):
+    _image_generation_commands.discard_recovery([record])
+    _durable_generation_queue.remove(str(record.get("id") or ""))
+
+
+_job_leftovers = JobLeftovers(
+    queue=_durable_generation_queue,
+    jobs=_jobs,
+    lock=_queue_recovery_lock,
+    prepare=_prepare_generation_leftovers,
+    rehydrate=_queue_recovered_generation,
+    start=_start_recovered_generation,
+    discard_record=_discard_generation_leftover,
+)
+_image_generation_commands.leftover_receipt_lookup = _job_leftovers.receipt_for
+_job_leftover_handlers = job_leftover_handlers(_job_leftovers)
+# qa.people C3 duplicate-person flag: register beside the MCP router (feat/qa-people).
+from services.qa_people import command_catalog as qa_people_catalog, command_handlers as qa_people_handlers
+_qa_people_handlers = qa_people_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
+from routers.model3d_commands import command_catalog as model3d_command_catalog, command_handlers as model3d_command_handlers
+_model3d_command_handlers = model3d_command_handlers(
+    generate=generate_model3d, status=model3d_job_status,
+    journal_path=os.path.join(os.getcwd(), "settings", "model3d-mcp-requests.sqlite3"),
+)
+from routers.model3d_rig_commands import command_catalog as model3d_rig_catalog, command_handlers as model3d_rig_handlers
+_model3d_rig_handlers = model3d_rig_handlers(
+    generate=generate_rig, status=rig_job_status,
+    journal_path=os.path.join(os.getcwd(), "settings", "model3d-rig-mcp-requests.sqlite3"),
+)
+from routers.model3d_compose import command_catalog as model3d_compose_catalog, command_handlers as model3d_compose_handlers, create_model3d_compose_router
+_model3d_compose_handlers = model3d_compose_handlers(_workspace_dir, os.path.join(os.getcwd(), "settings", "model3d-compose.sqlite3"))
+api.include_router(create_model3d_compose_router(_model3d_compose_handlers))
+from routers.model3d_animate import command_catalog as model3d_animate_catalog, command_handlers as model3d_animate_handlers, create_model3d_animate_router
+_model3d_animate_handlers = model3d_animate_handlers(_workspace_dir, os.path.join(os.getcwd(), "settings", "model3d-animate.sqlite3"))
+api.include_router(create_model3d_animate_router(_model3d_animate_handlers, _workspace_dir))
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
-    handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
+    handlers={"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers(), **_montage_commands.handlers(), **scene_document_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export)},
+              **wangp_agent_handlers(api), **lips_creator_handlers(_workspace_dir), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **world3d_template_handlers(_workspace_dir), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **media_options_handlers(_media_options_sources), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers, **_qa_people_handlers, **_studio_key_handlers, **_clip_align_handlers, **_montage_preview_handlers, **audio_analysis_handlers(_workspace_dir), **lipsync_qa_handlers(_workspace_dir),
+              **music_production_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or "", _mcp_access.token), **production_review_handlers(_workspace_dir), **_model3d_command_handlers, **_model3d_rig_handlers, **_model3d_compose_handlers, **_model3d_animate_handlers},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
-    command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *montage_command_catalog(), *scene_document_catalog(), *scene2d_export_catalog()],
+    command_operations=[*lips_creator_catalog(), *scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *world3d_template_catalog(), *montage_command_catalog(), *template_command_catalog(), *media_options_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog(), *qa_people_catalog(), *studio_key_catalog(), *clip_align_catalog(), *montage_preview_catalog(), *audio_analysis_catalog(), *lipsync_qa_catalog(), *music_production_catalog(), *production_review_catalog(), *model3d_command_catalog(), *model3d_rig_catalog(), *model3d_compose_catalog(), *model3d_animate_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
@@ -36890,6 +37145,8 @@ def run_server():
 
     # Confirm the polling filter immediately before Uvicorn configures logging.
     install_quiet_access_filter()
+    from services.production_resume import resume_on_startup
+    resume_on_startup(_list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token)
 
     try:
         from services.server_lifecycle import run_until_stopped

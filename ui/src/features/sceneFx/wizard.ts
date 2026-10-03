@@ -27,7 +27,9 @@ export async function prepareWizardScene(command: ScenePreparationCommand) {
   const state = useStore.getState()
   state.setSettingsOpen(false); state.setDashboardOpen(false); state.setMediaFilter(world ? 'world3d' : 'scene3d')
   await presentSceneDocument(world ? '3d' : '2d', document, current)
+  const speechDrivers = world ? [...new Set(world.slots.flatMap(slot => slot.speech?.clips?.map(clip => clip.driver) ?? (slot.speech ? [slot.speech.driver] : [])))] : []
+  const speechFallback = world?.slots.some(slot => slot.speech?.analysisFallback || slot.speech?.clips?.some(clip => clip.analysisFallback)) ?? false
   return { message: 'Scene prepared and opened in the editor. Save or export it there; no video has been exported.',
     target: { kind: 'video_3d_scene' as const, id: receipt.result.sha256, title: world ? world.templateId : 'Scene SFX' },
-    metadata: { prepared: true, exported: false, documentDigest: receipt.result.sha256 } }
+    metadata: { prepared: true, exported: false, documentDigest: receipt.result.sha256, speechDrivers, speechFallback } }
 }

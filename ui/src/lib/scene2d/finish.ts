@@ -1,4 +1,7 @@
 // Optional full-frame finish. Missing `finish` leaves the frame untouched.
+import finishCatalog from '../../../../app/shared/finish_presets.json' with { type: 'json' }
+import { paintRisoPress, takeRiso, type RisoCutLayer, type SceneRiso } from './risoPress'
+
 export type SceneFinish = {
   grade?: { exposure: number; contrast: number; saturation: number; temperature: number; tint: number; fade: number; beatFlash?: number }
   bloom?: { amount: number; threshold: number; radius: number; beat?: number }
@@ -8,6 +11,8 @@ export type SceneFinish = {
   texture?: { kind: 'none' | 'paper' | 'film-dust' | 'scratches'; amount: number }
   letterbox?: { ratio: 1.85 | 2 | 2.39; color: string }
   applyToTexts?: boolean
+  /** Opt-in risograph reprint. Absent on every preset that is not `risoPress`. */
+  riso?: SceneRiso
 }
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -49,6 +54,7 @@ function takeLetterbox(bars: SceneFinish['letterbox']): SceneFinish['letterbox']
 export function parseFinish(raw: unknown): SceneFinish | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as SceneFinish
+  const riso = takeRiso(value.riso)
   const finish: SceneFinish = {
     ...(takeGrade(value.grade) ? { grade: takeGrade(value.grade) } : {}),
     ...(takeBloom(value.bloom) ? { bloom: takeBloom(value.bloom) } : {}),
@@ -58,16 +64,17 @@ export function parseFinish(raw: unknown): SceneFinish | undefined {
     ...(takeTexture(value.texture) ? { texture: takeTexture(value.texture) } : {}),
     ...(takeLetterbox(value.letterbox) ? { letterbox: takeLetterbox(value.letterbox) } : {}),
     ...(value.applyToTexts === true ? { applyToTexts: true } : {}),
+    ...(riso ? { riso } : {}),
   }
   return Object.keys(finish).length ? finish : undefined
 }
 
-export const FINISH_PRESETS: Record<string, SceneFinish> = {
-  warmCinema: { grade: { exposure: 0.05, contrast: 0.12, saturation: 0.08, temperature: 0.25, tint: 0.04, fade: 0.08 }, vignette: { amount: 0.35, softness: 0.6 }, letterbox: { ratio: 2.39, color: '#000000' } },
-  oldDoc: { grade: { exposure: -0.04, contrast: 0.18, saturation: -0.35, temperature: 0.2, tint: 0.08, fade: 0.16 }, grain: { amount: 0.28, size: 1.4 }, texture: { kind: 'scratches', amount: 0.2 } },
-  nightNeon: { grade: { exposure: 0.02, contrast: 0.2, saturation: 0.25, temperature: -0.15, tint: 0.2, fade: 0 }, bloom: { amount: 0.45, threshold: 0.55, radius: 0.5 } },
-  paperComic: { grade: { exposure: 0.04, contrast: 0.08, saturation: -0.1, temperature: 0.12, tint: 0, fade: 0.05 }, texture: { kind: 'paper', amount: 0.45 } },
-}
+export const FINISH_PRESETS: Record<string, SceneFinish> = Object.fromEntries(
+  finishCatalog.entries.map(entry => {
+    const { id, ...preset } = entry
+    return [id, preset]
+  }),
+) as Record<string, SceneFinish>
 
 const scratch = new Map<string, HTMLCanvasElement>()
 function canvas(key: string, width: number, height: number) {
@@ -96,7 +103,7 @@ export function grainSeed(seconds: number) {
   return Math.round(seconds * 30)
 }
 
-export function paintSceneFinish(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, finish?: SceneFinish, envelope = 0) {
+export function paintSceneFinish(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, finish?: SceneFinish, envelope = 0, layers?: readonly RisoCutLayer[], duration = 0) {
   if (!finish) return
   paintGrade(ctx, width, height, finish.grade, envelope)
   const bloom = finish.bloom
@@ -106,6 +113,7 @@ export function paintSceneFinish(ctx: CanvasRenderingContext2D, width: number, h
   paintRays(ctx, width, height, finish.rays)
   paintVignette(ctx, width, height, finish.vignette)
   paintNoise(ctx, width, height, seconds, finish)
+  if (finish.riso) paintRisoPress(ctx, width, height, seconds, finish.riso, envelope, layers, duration)
   paintLetterbox(ctx, width, height, finish.letterbox)
 }
 

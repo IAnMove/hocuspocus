@@ -69,6 +69,8 @@
     "characterReplacement": "Replace a character in a video using an edited frame with Viggle.",
     "animate3d": "Animate characters and objects inside a 3D scene.",
     "productions": "Review prepared productions and their progress.",
+    "musicProductions": "Shots, takes and the montage of a music video.",
+    "works": "Every work in this workspace, with Review shots.",
     "characters": "Build reusable characters and references.",
     "projects": "Durable creative documents you can reopen and edit.",
     "assets": "Reusable source files and generated results.",
@@ -79,7 +81,8 @@
     "directAudio": "Create speech, music, effects or a mix.",
     "direct3d": "Generate a standalone 3D asset.",
     "directEdit": "Edit, restyle, inpaint or recast an existing result.",
-    "directTools": "Run post-processing tools on an existing asset."
+    "directTools": "Run post-processing tools on an existing asset.",
+    "lips": "Create mouths and link them to sounds."
   },
   "search": {
     "placeholder": "Search...",
@@ -108,6 +111,8 @@
     "comics": "Comics",
     "videoEditor": "Video Editor",
     "productions": "Productions",
+    "musicProductions": "Music productions",
+    "works": "Works",
     "scene3d": "Video 2.5D",
     "world3d": "Video 3D",
     "characterReplacement": "Replace character",
@@ -115,7 +120,8 @@
     "edits": "Edits",
     "multiclip": "Multi-clip",
     "auditDev": "Internal dev audit",
-    "favorites": "Favorites"
+    "favorites": "Favorites",
+    "lips": "Lips Creator"
   },
   "short": {
     "all": "All",
@@ -142,7 +148,8 @@
     "animate3d": "Anim",
     "edits": "Edit",
     "multiclip": "MC",
-    "auditDev": "Audit"
+    "auditDev": "Audit",
+    "lips": "Lips"
   },
   "filters": {
     "allWorkspaces": "All Workspaces"
@@ -161,12 +168,68 @@
     "scene3d": "Video 2.5D editor",
     "world3d": "Video 3D editor",
     "animate3d": "Rig & Animate",
-    "auditDev": "Internal audit"
+    "auditDev": "Internal audit",
+    "lips": "Lips Creator"
   },
   "outputFolder": {
     "option": "Output",
     "switch": "Switch output folder",
     "list": "Output folders",
     "uploads": "Uploads"
+  },
+  "musicProductions": {
+    "title": "Music productions",
+    "empty": "No music productions in this workspace.",
+    "loading": "Loading…",
+    "open": "Open",
+    "close": "Close",
+    "back": "Back",
+    "status": "Status",
+    "duration": "Duration",
+    "sung": "Sung",
+    "notSung": "Not sung",
+    "lyric": "Lyric",
+    "takes": "Takes",
+    "noTakes": "No takes",
+    "openScene": "Open scene",
+    "anotherTake": "Another take",
+    "useTake": "Use this take",
+    "openMontage": "Open montage",
+    "clip": "Clip",
+    "scene": "Scene",
+    "failed": "Could not complete that",
+    "reviewPending": "Review pending",
+    "reviewApproved": "Shot approved",
+    "reviewChanges": "Changes requested",
+    "approveShot": "Approve shot",
+    "requestChanges": "Request changes",
+    "lockShot": "Lock shot",
+    "unlockShot": "Unlock shot",
+    "review": "Review",
+    "reviewTitle": "Review shots",
+    "approve": "Approve",
+    "requestChange": "Request change",
+    "instruction": "What should change",
+    "applyPlan": "Apply",
+    "undo": "Undo",
+    "lock": "Lock",
+    "unlock": "Unlock",
+    "pendingOnly": "Pending only",
+    "allShots": "All shots",
+    "progress": "{{approved}}/{{total}} approved",
+    "closeReview": "Close review",
+    "noPending": "No pending shots",
+    "planSummary": "Plan",
+    "diff": "Diff",
+    "cost": "Cost",
+    "sceneVideo": "Scene video",
+    "prompts": "Prompts",
+    "framePrompt": "Frame prompt",
+    "action": "Action",
+    "locked": "Locked",
+    "statusPending": "Pending",
+    "statusApproved": "Approved",
+    "statusChanges": "Changes requested",
+    "otherTake": "Other take"
   }
 }

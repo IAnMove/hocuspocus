@@ -213,5 +213,73 @@
       "video": "video",
       "installer and launcher": "installer and launcher"
     }
+  },
+  "templateLibrary": {
+    "title": "My templates",
+    "help": "Your template library in this HocusPocus: save the scene as a reusable template, use it elsewhere, download it as .hptemplate to share it or import someone else’s.",
+    "saveTitle": "Save this scene as a template",
+    "name": "Name",
+    "description": "Description (optional)",
+    "tags": "Tags",
+    "tagsHint": "space, launch",
+    "author": "Author",
+    "authorX": "X handle",
+    "license": "License",
+    "licenses": {
+      "CC0-1.0": "CC0 (public domain)",
+      "CC-BY-4.0": "CC BY 4.0 (credit the author)",
+      "CC-BY-SA-4.0": "CC BY-SA 4.0",
+      "CC-BY-NC-4.0": "CC BY-NC 4.0 (non-commercial)",
+      "MIT": "MIT",
+      "all-rights-reserved": "All rights reserved"
+    },
+    "includeMedia": "Include the files (models, images, audio) as samples",
+    "durationControl": "Adjustable duration",
+    "includeMediaWarning": "Your files will be packed: only share what you have the right to share (mind faces of real people).",
+    "slotsHint": "Without files: each slot (characters, backgrounds, images) is left empty for whoever uses it to add their own.",
+    "save": "Save template",
+    "saved": "Template saved to the library.",
+    "import": "Import",
+    "replace": "Replace the existing one",
+    "cancel": "Cancel",
+    "chooseFile": ".hptemplate file",
+    "reviewTitle": "Review template before importing",
+    "reviewMeta": "Author {{author}} · license {{license}} · {{editor}}",
+    "reviewContents": "{{slots}} slots · {{controls}} controls · {{media}} sample files",
+    "reviewExists": "You already have a template with this id: importing replaces it.",
+    "imported": "Template imported. Click it to use it.",
+    "removed": "Template deleted from the library.",
+    "confirmRemove": "Delete “{{title}}” from the library?",
+    "empty": "No templates yet. Save this scene as a template or import a .hptemplate file.",
+    "noDescription": "Template without a description.",
+    "remove": "Delete",
+    "download": "Download",
+    "needTitle": "Give the template a name.",
+    "invalid": "Could not use it: the file is not a valid HocusPocus template.",
+    "missingSlots": "Template applied. Still to fill: {{slots}}.",
+    "slotCount": "{{count}} slots",
+    "source": {
+      "user": "mine",
+      "imported": "imported",
+      "community": "community"
+    },
+    "confirmImport": "Import this template",
+    "tabs": {
+      "mine": "My library",
+      "community": "Community"
+    },
+    "community": {
+      "title": "Community templates",
+      "help": "Templates shared by the HocusPocus community. Downloads are checked against their SHA-256 and land in your library.",
+      "refresh": "Refresh",
+      "loading": "Loading the community index…",
+      "empty": "The community index has no templates for this editor yet.",
+      "install": "Install",
+      "update": "Update",
+      "replace": "Replace mine",
+      "installed": "Installed",
+      "conflictHint": "You already have your own template with this id.",
+      "done": "“{{title}}” installed in your library."
+    }
   }
 }

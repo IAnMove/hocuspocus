@@ -28,9 +28,11 @@ class TestPinokioGpuCompatibility(unittest.TestCase):
 
         self.assertIn("...runtime.preflight()", installer)
         from services.runtime_profiles import select_profiles
-        rejected = select_profiles("win32", "x64", "amd")
-        self.assertFalse(rejected["supported"])
-        self.assertIn("NVIDIA", rejected["engines"]["wangp"]["reason"])
+        amd = select_profiles("win32", "x64", "amd")
+        self.assertTrue(amd["supported"])
+        self.assertTrue(amd["engines"]["core"]["supported"])
+        self.assertFalse(amd["engines"]["wangp"]["supported"])
+        self.assertIn("NVIDIA", amd["engines"]["wangp"]["reason"])
         apple = select_profiles("darwin", "arm64", "apple")
         self.assertTrue(apple["supported"])
         self.assertTrue(apple["engines"]["core"]["supported"])

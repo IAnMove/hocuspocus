@@ -8,6 +8,8 @@ import { pixelTemplateDocument, PIXEL_TEMPLATES, PIXEL_CATEGORIES } from './pixe
 import { campaignTemplateDocument, CAMPAIGN_TEMPLATES, CAMPAIGN_CATEGORIES } from './campaignTemplates'
 import { adaptAuthoredCameraToFrame } from './frameFormat.ts'
 import { actionTemplateDocument, ACTION_TEMPLATES, ACTION_CATEGORIES } from './actionTemplates'
+import { atmosTemplateDocument, ATMOS_TEMPLATES, ATMOS_CATEGORIES } from './atmos/templates.ts'
+import { techniqueDocument, TECHNIQUE_TEMPLATES, TECHNIQUE_CATEGORIES } from './techniqueTemplates'
 import { createDefaultScene3DDocument, parseScene3DDocument } from './document.ts'
 import topdownCliffScene from './topdownCliffScene.json' with { type: 'json' }
 import topdownDragonPortalsScene from './topdownDragonPortalsScene.json' with { type: 'json' }
@@ -38,6 +40,8 @@ export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCateg
   ...PIXEL_CATEGORIES,
   ...CAMPAIGN_CATEGORIES,
   ...ACTION_CATEGORIES,
+  ...ATMOS_CATEGORIES,
+  ...TECHNIQUE_CATEGORIES,
   'reflective-stage': 'cinema',
   'character-materialization': 'cinema',
   'blast-stage': 'cinema',
@@ -181,6 +185,8 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   ...EFFECTS_TEMPLATES,
   ...CAMPAIGN_TEMPLATES,
   ...ACTION_TEMPLATES,
+  ...ATMOS_TEMPLATES,
+  ...TECHNIQUE_TEMPLATES,
 ]
 
 const LAYOUTS: Partial<Record<Scene3DTemplateId, Partial<Record<Scene3DSlotId, Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale'>>>>> = {
@@ -399,7 +405,12 @@ export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
   if (media) return media
   const cinematic = cinematicDocument(id)
   if (cinematic) return cinematic
-  const template = SCENE3D_TEMPLATES.find(item => item.id === id) ?? SCENE3D_TEMPLATES[0]
+  const atmos = atmosTemplateDocument(id)
+  if (atmos) return atmos
+  const technique = techniqueDocument(id)
+  if (technique) return technique
+  const template = SCENE3D_TEMPLATES.find(item => item.id === id)
+  if (!template) throw new Error(`unknown_template:${id}`)
   const layout = LAYOUTS[template.id] ?? {}
   const document = createDefaultScene3DDocument()
   document.templateId = template.id
@@ -501,7 +512,7 @@ const DRESSING_BY_TEMPLATE: Partial<Record<Scene3DTemplateId, Scene3DDocument['d
 export function patchScene3DSlot(
   document: Scene3DDocument,
   slotId: string,
-  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook'>>,
+  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook' | 'rhythm'>>,
 ): Scene3DDocument {
   return {
     ...document,
@@ -552,6 +563,7 @@ export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefi
     sourceRef: old.sourceRef,
     clip: old.clip,
     clipPlayback: old.clipPlayback,
+    rhythm: old.rhythm ? structuredClone(old.rhythm) : undefined,
     speech: old.speech ? structuredClone(old.speech) : undefined,
     screen,
   }
@@ -564,6 +576,7 @@ export function remountScene3DTemplate(id: Scene3DTemplateId, previous: Scene3DD
   next.clipNumber = previous.clipNumber
   next.production = previous.production ? structuredClone(previous.production) : undefined
   next.soundtrack = previous.soundtrack ? structuredClone(previous.soundtrack) : undefined
+  next.rhythm = previous.rhythm ? structuredClone(previous.rhythm) : undefined
   if (previous.production) next.duration = previous.duration
   next.texts = previous.texts ? structuredClone(previous.texts) : undefined
   if (!SCENE3D_TEMPLATES.find(template => template.id === id)?.frameFormat) {

@@ -18,7 +18,7 @@ The same clip inside the running studio (gallery, Wizard, Spanish UI):
 
 ![HocusPocus gallery playing the Gandalf Video 3D export](docs/images/readme/studio-gallery.jpg)
 
-Install with [Pinokio](https://pinokio.computer) from [`https://github.com/IAnMove/hocuspocus`](https://github.com/IAnMove/hocuspocus). NVIDIA GPU required.
+Install with [Pinokio](https://pinokio.computer) from [`https://github.com/IAnMove/hocuspocus`](https://github.com/IAnMove/hocuspocus). Local AI generation needs an NVIDIA GPU; other computers install the editing studio with remote providers.
 
 ---
 
@@ -49,6 +49,118 @@ Selected images (single inputs, batch inputs and image references) show a small 
 The initial installation does not include example media. **Video 3D → Shot library** keeps all advanced shot types and all 57 Pixel worlds in the main catalog (243 templates). Only 45 additional looks from eight repeated example families live under **Examples and variants**. Template availability is independent of whether its optional media is installed. Choose a collection and press **Download** after checking its size. Browsing does not download media. Downloads support progress, cancellation and offline reuse in `app/cache/examples/`; saved projects keep their existing example references. You can remove this cache while HocusPocus is stopped to reclaim space. See [optional collections](docs/development/OPTIONAL_EXAMPLES.md) for details.
 
 See [example distribution](docs/development/OPTIONAL_EXAMPLES.md) for the pinned source, integrity checks and lightweight installation options.
+
+### Create reusable mouth collections
+
+Open **Studios → Lips Creator**, next to **Character Creator**. The first card,
+**New**, creates a collection. Existing cards preview their mouths; hovering or
+focusing a card animates its images without generating a video. You can also
+import the mouths of an existing character.
+
+**Description only** starts without a character or image: describe the lips and
+style, and use an installed text-to-image model such as Qwen Image 2.1.
+**With a reference** lets you choose a character, upload an image, or pick one
+from the library; Qwen Image Edit is available in this mode.
+Choose a mouth to upload an image or generate a replacement. Compare
+the candidate with the current mouth, remove its background if needed, then
+accept it. Saved candidates remain available after a page reload, alongside the
+approved mouth. Other mouths stay intact. **Sounds and vowels** starts with the nine
+standard assignments; each can point to a different mouth, and several sounds
+can share a drawing. Save the collection and explicitly apply it to a character.
+Audio-driven previews and saved 2D scenes use the same assignments.
+
+You can also select a collection directly in **Character Creator → Prepare 2D
+speech → Use my Lips Creator mouths** (or in a character's Face Rig). Apply it,
+place the overlay, **Apply placement to all mouths**, then **Save speech character**. The
+character keeps its identity, voice and existing placement; collection anchors
+transfer only when the reference is the exact same pose image. Review each
+assigned mouth first. Saved assignments also drive resting poses, Series 2D
+dialogue and video export; editing assignments invalidates outdated lip-sync takes.
+
+**Create missing mouths** runs the whole remaining collection sequentially: one
+image finishes and is saved before the next starts. Progress shows the current
+mouth and count. Switching studio tabs keeps the sequence running. Each completed
+mouth is saved as a pending candidate, preserving approved drawings. Confirmed
+model failures are reported per mouth and the sequence continues; pressing the
+button again retries only the missing drawings. A failed save or lost job
+connection pauses the sequence and keeps completed results.
+
+The built-in English and Spanish recordings work offline. **Try another phrase
+or audio** uses local TTS and Rhubarb, or analyzes an uploaded clip up to 90
+seconds. Collections are stored separately from characters in each workspace,
+using revision checks to protect edits made in other tabs.
+
+In **Speech preview**, **Deform between mouths · experimental** enables an optional
+contour-mesh preview with an adjustable 40–240 ms transition. Both mouth images
+warp toward the same intermediate outline; their interior colors blend. Short
+phonemes shorten the transition, and interrupted transitions continue from the
+currently displayed shape without changing the audio timing. **Compare two mouths
+without audio** selects a pair and scrubs through the intermediate shapes.
+The mode starts off and applies only inside Lips Creator: saved PNGs, linked
+characters and rendered scenes keep their existing behavior. Transparent isolated
+mouths work best; opaque or unreadable images fall back to direct display.
+Automatic contours do not identify teeth or tongue, so inspect those transitions
+for artifacts before choosing this approach for production.
+
+To create the character itself, open **Studios → Character Creator** and use
+**Create a character from a description** at the top. Enter its name and
+appearance, generate an image, then **Save character**. The saved character is
+available in Lips Creator's reference and linking selectors. **Use for 360 views**
+also puts the generated image into the existing turnaround workflow.
+
+API: `GET /api/v1/character-kits/lips-creator/library?workspace=NAME` returns
+`{version, revision, activeId, kits}`. `PATCH /api/v1/character-kits/lips-creator/packs/ID`
+accepts `{workspace, baseRevision, kit}`; the kit follows the Character Kit schema,
+with optional `mouthMapping`, `mouthPrompts` and `mouthGenerationMode`
+(`description` or `reference`). `DELETE` at the same path accepts
+`{workspace, baseRevision}`. Conflicting revisions return HTTP 409. Example reads:
+
+```javascript
+const collection = await fetch('/api/v1/character-kits/lips-creator/library?workspace=default').then(r => r.json())
+```
+
+```python
+collection = requests.get(f'{base_url}/api/v1/character-kits/lips-creator/library', params={'workspace': 'default'}).json()
+```
+
+```bash
+curl "$HOCUSPOCUS_URL/api/v1/character-kits/lips-creator/library?workspace=default"
+```
+
+**Ask to the Wizard** can open `lips_creator` and use the `lips_creator` action
+to list, create, edit, capture, approve or apply collections. `generate_lips`
+generates missing mouths; an explicit `states: ["bite"]` regenerates only F/V.
+It uses the same native image path as the editor, saves each candidate before
+starting the next job, and never approves generated drawings automatically.
+For example: “Create a collection of burgundy cartoon lips from a description
+and generate its mouths”, then “Redo only the F mouth in that collection”.
+If another client changes the collection, reload before saving; the header's
+reload button discards unfinished edits in the open collection.
+
+**MCP** exposes `lips.list`, `lips.create`, `lips.update`,
+`lips.generation.plan`, `lips.capture`, `lips.accept`, `lips.apply`,
+`lips.delete` and `lips.receipt`. These operations are also available through
+`GET/POST /api/v1/character-kits/lips-creator/commands`. The POST envelope is
+`{version: 1, operation, input: {workspace, ...}, intent_id}`; MCP uses the same
+arguments without `operation`. Mutations require a stable `intent_id`: reuse
+it for transport retries and recover its result using `lips.receipt` with
+`input: {workspace, operation, intent_id}`. Edits require `base_revision` from
+`lips.list`; applying a collection requires the **character** library revision.
+
+For MCP image generation, call `lips.generation.plan` with an exact `pack_id`
+and optional `states`. Select an installed model, submit each prompt through
+`generation.image`, wait for its canonical terminal status, and use
+`lips.capture` with the completed persistent image asset and latest revision.
+Reference plans use `generation.image` version 2 with `image_refs`. A plan
+does not start GPU work. Stop if a job's status is uncertain and recover its
+generation receipt before submitting another job. Review transparency and
+drawings, then explicitly call `lips.accept` before `lips.apply`.
+
+```bash
+curl "$HOCUSPOCUS_URL/api/v1/character-kits/lips-creator/commands" \
+  -H 'Content-Type: application/json' \
+  -d '{"version":1,"operation":"lips.create","intent_id":"ruby-create-1","input":{"workspace":"default","pack_id":"ruby-lips","name":"Ruby lips","description":"Burgundy cartoon lips"}}'
+```
 
 ### Build a world once, reuse it everywhere
 
@@ -90,7 +202,7 @@ The gallery loads bounded 320/640 px previews; opening the details dialog loads 
 
 ### Make 3D, then shoot it like a set
 
-**3D** runs [Hunyuan3D](https://github.com/Tencent-Hunyuan/Hunyuan3D-2) in an isolated env: text, one image, or front/left/right/back views → GLB. **Retexture GLB** paints a new copy; the source file stays untouched.
+**3D** runs [Hunyuan3D](https://github.com/Tencent-Hunyuan/Hunyuan3D-2) in an isolated env, installed on demand from Pinokio's **Advanced > Install 3D Generation (Hunyuan3D)**: text, one image, or front/left/right/back views → GLB. Procedural rigging runs on every computer without it. **Retexture GLB** paints a new copy; the source file stays untouched.
 
 **Character Creator:** one photo → H3 360° turntable → pick front/left/back/right → Hunyuan multi-view mesh.
 
@@ -186,7 +298,7 @@ Every step can also start from an existing image, video, audio file or GLB.
 | | Minimum | Recommended |
 |---|---|---|
 | **OS** | Windows 10/11 or Linux | Windows 11 or Linux |
-| **GPU** | NVIDIA, 6 GB VRAM | RTX 3090 / 4090 / 5090, 24 GB+ |
+| **GPU** (local AI) | NVIDIA, 6 GB VRAM | RTX 3090 / 4090 / 5090, 24 GB+ |
 | **RAM** | 16 GB | 32 GB+ |
 | **Disk** | 150 GB free | 500 GB free for a full model shelf |
 | **Python** | Installed by Pinokio | — |
@@ -197,7 +309,7 @@ Every step can also start from an existing image, video, audio file or GLB.
 | 12–16 GB | auto-tune offloads; slower |
 | 6–8 GB | works with heavy offload; keep clips short |
 
-AMD GPUs and macOS are **not** supported (CUDA kernels). First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Install/Update selects a compatible MSVC toolset, or skips this optional engine with setup instructions while installing the main app. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
+Local AI engines use CUDA kernels, so they install only on NVIDIA x64 Windows/Linux. Install checks each computer and installs only what it can run: on AMD, Intel or CPU-only PCs, Apple Silicon, Linux ARM, or NVIDIA drivers older than the recipe minimum, it installs the core studio (projects, editors, 3D worlds, comics, remote LLM/image/music/3D providers) without Torch, and the studio hides the local engines. Intel Macs are not supported. First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D is optional and not part of the main Install, because it compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Its installer (Advanced menu) selects a compatible MSVC toolset or stops with setup instructions; Update refreshes it only where it is installed. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
 
 For Windows Hunyuan3D, use **CUDA Toolkit 12.8** and a compatible x64 MSVC
 toolset: VS 2022 v143 (14.3x/14.4x) or VS 2019 v142, with a Windows SDK.
@@ -207,10 +319,10 @@ with this CUDA recipe. A preflight reports missing build prerequisites before
 large downloads. Both NVIDIA and Pinokio/conda CUDA library layouts work.
 The Hunyuan3D 2.1 Windows build also applies its required 64-bit integer fixes
 in a temporary source copy, leaving the vendor checkout unchanged.
-After correcting prerequisites, retry **Install** without Reset.
+After correcting prerequisites, retry **Advanced > Install 3D Generation (Hunyuan3D)** without Reset.
 Optional SAM/UniRig launcher entries are hidden for known unsupported hardware
 or operating systems; unknown hardware detection does not hide existing Start.
-This does not add macOS/MPS support or hide features inside the studio UI.
+Local AMD ROCm, Intel and Apple MPS engines are not available yet.
 
 ## Install
 

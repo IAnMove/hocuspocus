@@ -23,7 +23,9 @@ from pydantic import ValidationError
 
 from services import resource_scheduler
 from services.media_refs import parse_media_ref
+from services.scene2d_schema import document_schema
 from services.scene_commands import DocumentInput, command_error as scene_error
+from services.export_receipts import project_export_receipt
 from services.world3d_export import (
     World3DExportPending,
     World3DExportService,
@@ -37,6 +39,8 @@ from services.world3d_export import (
 
 OPERATION = "scenes.video2d.export"
 RECEIPT_OPERATION = "scenes.video2d.export.receipt"
+
+
 CANCEL_OPERATION = "scenes.video2d.export.cancel"
 WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 LAYER_TYPES = frozenset({"image", "video", "overlay", "effect", "camera"})
@@ -112,9 +116,12 @@ def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequen
             raise http_error(422, "missing_ref", "Use a valid bundled example URL")
         refs.append(record)
         return
-    path, scoped = parse_media_ref(url, workspace)
+    # Honor the URL's own workspace. Passing the export workspace into
+    # parse_media_ref would hide gallery Uploads (`?workspace=__uploads__`)
+    # and media picked from another workspace folder.
+    path, scoped = parse_media_ref(url)
     record["filename"] = os.path.basename((path or "").replace("\\", "/"))
-    if url.lower().startswith("/api/v1/uploads/"):
+    if url.lower().startswith("/api/v1/uploads/") or scoped == "__uploads__":
         record["root"] = "uploads"
     else:
         record["workspace"] = scoped or workspace
@@ -218,8 +225,8 @@ class Scene2DExportService(World3DExportService):
     render_bridge = "__scene2dExport"
 
     def __init__(self, *, workspace_dir, registry_for, renderer=None, app_url=None, uploads_dir=None):
-        super().__init__(workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer, app_url=app_url)
-        self.uploads_dir = uploads_dir or (lambda: os.path.join(os.getcwd(), "uploads"))
+        super().__init__(workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer,
+                         app_url=app_url, uploads_dir=uploads_dir)
 
     def capabilities(self) -> dict:
         module = playwright_module()
@@ -232,7 +239,8 @@ class Scene2DExportService(World3DExportService):
         return freeze_export_command(command)
 
     def resource_lane(self):
-        return resource_scheduler.cpu_lane("scene2d-render")
+        from services.scene_export_lane import scene2d_render_lane
+        return scene2d_render_lane()
 
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
         workspace_root = Path(self.workspace_dir(workspace))
@@ -241,10 +249,13 @@ class Scene2DExportService(World3DExportService):
             name = ref.get("filename")
             if not name:
                 continue
-            if ref.get("root") == "uploads":
+            named = ref.get("workspace", workspace)
+            if ref.get("root") == "uploads" or named == "__uploads__":
                 root = uploads_root
-            elif ref.get("workspace", workspace) == workspace:
+            elif named == workspace:
                 root = workspace_root
+            elif isinstance(named, str) and WORKSPACE_RE.fullmatch(named):
+                root = Path(self.workspace_dir(named))
             else:
                 continue
             if not (root / str(name)).is_file():
@@ -294,7 +305,7 @@ def command_catalog() -> list[dict]:
     ids = {"type": "object", "additionalProperties": False, "properties": {"workspace": workspace, "intent_id": intent},
            "required": ["workspace", "intent_id"]}
     export_input = {"type": "object", "additionalProperties": False,
-                    "properties": {"workspace": workspace, "document": {"type": "object"}}, "required": ["workspace", "document"]}
+                    "properties": {"workspace": workspace, "document": document_schema()}, "required": ["workspace", "document"]}
 
     def entry(name, mutation, description, properties, required):
         return {"name": name, "version": 1, "domain": "scenes", "mutation": mutation, "description": description,
@@ -306,7 +317,10 @@ def command_catalog() -> list[dict]:
               "texts and audioTracks) to MP4 on the server with the Scene Animator's own painter, on a CPU lane. Media must be "
               "durable workspace/example URLs. Returns a receipt; poll the receipt for the published MP4.",
               {"intent_id": intent, "input": export_input}, ["intent_id", "input"]),
-        entry(RECEIPT_OPERATION, False, "Read a Video 2D export admission and its current canonical task.", {"input": ids}, ["input"]),
+        entry(RECEIPT_OPERATION, False,
+              "Read a Video 2D export admission and its current canonical task. The returned receipt status follows "
+              "that task. When the MP4 is published, artifacts is one {name, url, workspace}. The stored admission stays queued.",
+              {"input": ids}, ["input"]),
         entry(CANCEL_OPERATION, True, "Cancel a Video 2D export by exact workspace and intent_id.", {"input": ids}, ["input"]),
     ]
 
@@ -329,4 +343,5 @@ def command_handlers(service: Scene2DExportService) -> dict:
 
 
 __all__ = ["CANCEL_OPERATION", "OPERATION", "RECEIPT_OPERATION", "Scene2DExportService", "command_catalog",
-           "command_handlers", "freeze_export_command", "media_refs", "mix_audio_tracks", "validated_document"]
+           "command_handlers", "freeze_export_command", "media_refs", "mix_audio_tracks", "project_export_receipt",
+           "validated_document"]

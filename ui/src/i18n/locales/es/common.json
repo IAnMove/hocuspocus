@@ -213,5 +213,73 @@
       "video": "vídeo",
       "installer and launcher": "instalación y arranque"
     }
+  },
+  "templateLibrary": {
+    "title": "Mis plantillas",
+    "help": "Tu biblioteca de plantillas en este HocusPocus: guarda la escena como plantilla reutilizable, úsala en otras, descárgala como .hptemplate para compartirla o importa la de otra persona.",
+    "saveTitle": "Guardar esta escena como plantilla",
+    "name": "Nombre",
+    "description": "Descripción (opcional)",
+    "tags": "Etiquetas",
+    "tagsHint": "espacio, lanzamiento",
+    "author": "Autor",
+    "authorX": "Usuario de X",
+    "license": "Licencia",
+    "licenses": {
+      "CC0-1.0": "CC0 (dominio público)",
+      "CC-BY-4.0": "CC BY 4.0 (citar autor)",
+      "CC-BY-SA-4.0": "CC BY-SA 4.0",
+      "CC-BY-NC-4.0": "CC BY-NC 4.0 (no comercial)",
+      "MIT": "MIT",
+      "all-rights-reserved": "Todos los derechos reservados"
+    },
+    "includeMedia": "Incluir los archivos (modelos, imágenes, audio) como ejemplo",
+    "durationControl": "Duración ajustable",
+    "includeMediaWarning": "Se empaquetarán tus archivos: comparte solo lo que tengas derecho a compartir (ojo con caras de personas reales).",
+    "slotsHint": "Sin archivos: cada hueco (personajes, fondos, imágenes) queda vacío para que quien la use ponga los suyos.",
+    "save": "Guardar plantilla",
+    "saved": "Plantilla guardada en la biblioteca.",
+    "import": "Importar",
+    "replace": "Reemplazar la existente",
+    "cancel": "Cancelar",
+    "chooseFile": "Archivo .hptemplate",
+    "reviewTitle": "Revisar plantilla antes de importar",
+    "reviewMeta": "Autor {{author}} · licencia {{license}} · {{editor}}",
+    "reviewContents": "{{slots}} huecos · {{controls}} controles · {{media}} archivos de ejemplo",
+    "reviewExists": "Ya tienes una plantilla con este id: importarla la reemplazará.",
+    "imported": "Plantilla importada. Púlsala para usarla.",
+    "removed": "Plantilla eliminada de la biblioteca.",
+    "confirmRemove": "¿Eliminar «{{title}}» de la biblioteca?",
+    "empty": "Aún no hay plantillas. Guarda esta escena como plantilla o importa un archivo .hptemplate.",
+    "noDescription": "Plantilla sin descripción.",
+    "remove": "Eliminar",
+    "download": "Descargar",
+    "needTitle": "Pon un nombre a la plantilla.",
+    "invalid": "No se pudo usar: el archivo no es una plantilla válida de HocusPocus.",
+    "missingSlots": "Plantilla aplicada. Faltan por rellenar: {{slots}}.",
+    "slotCount": "{{count}} huecos",
+    "source": {
+      "user": "mía",
+      "imported": "importada",
+      "community": "comunidad"
+    },
+    "confirmImport": "Importar esta plantilla",
+    "tabs": {
+      "mine": "Mi biblioteca",
+      "community": "Comunidad"
+    },
+    "community": {
+      "title": "Plantillas de la comunidad",
+      "help": "Plantillas compartidas por la comunidad de HocusPocus. Se descargan comprobadas con su huella SHA-256 y quedan en tu biblioteca.",
+      "refresh": "Actualizar",
+      "loading": "Cargando el índice de la comunidad…",
+      "empty": "El índice de la comunidad aún no tiene plantillas para este editor.",
+      "install": "Instalar",
+      "update": "Actualizar",
+      "replace": "Reemplazar la mía",
+      "installed": "Instalada",
+      "conflictHint": "Ya tienes una plantilla propia con este id.",
+      "done": "«{{title}}» instalada en tu biblioteca."
+    }
   }
 }

@@ -27,3 +27,7 @@ Benchmark launcher reference: existing project start.js lines 12–47; mochi/sta
 Core implementation commit: cffe855. Runtime follow-up restores `single_block_prompt` for H3 so Context-IR sound fields are never split into separate generations. Local LLM responses that preserve literal words but omit speaker IDs are repaired from the canonical script before validation; the original generated scene is retained. The diagnostics contain real raw LLM responses and the initial fallback attempts.
 
 Validation through core implementation: 1,849 Python tests passed in the second full run; subsequent policy extraction was covered by 94 targeted tests and 26 repeated planner/policy checks. 652 UI tests, lint, build, bundle budget and PR-base complexity ratchet passed. Initial concurrent run had four Quick Video timeout failures, all passed separately (16 tests). Final whole-branch validation remains due after optional changes.
+
+## Driving audio
+
+Finding, not a new control: driving audio syncs better from the full mix than from an isolated vocal (pilot r 0.41 vs 0.16).

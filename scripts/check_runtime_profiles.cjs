@@ -34,9 +34,11 @@ for (const platform of ['linux', 'win32']) {
     }
   }
   const all = JSON.stringify(steps)
-  const preflight = runtime.preflight().filter(step => step.method === 'shell.run' &&
-    (!step.when || render(step.when, ctx) === 'true'))
-  assert.equal(JSON.stringify(preflight).includes('windows_toolchain.py'), platform === 'win32')
+  // Only the optional Hunyuan3D installer needs the Windows compiler; Install never asks for it.
+  const toolchain = engine => JSON.stringify(runtime.preflight(engine).filter(step => step.method === 'shell.run' &&
+    (!step.when || render(step.when, ctx) === 'true'))).includes('windows_toolchain.py')
+  assert.equal(toolchain('hunyuan3d'), platform === 'win32')
+  assert(!toolchain() && !toolchain('sam'), 'Main Install must not require Visual Studio')
   if (platform === 'win32') {
     assert(all.includes('uninstall torchcodec flash-attn'), 'Repair must remove incompatible external attention')
     assert(!all.includes('targets/x86_64-linux'))
@@ -46,6 +48,36 @@ for (const platform of ['linux', 'win32']) {
   }
 }
 
+// Machines without a local AI recipe (AMD, Intel, CPU, old drivers) install core only.
+for (const platform of ['linux', 'win32', 'darwin']) {
+  const ctx = {...context(platform), which: name => name === 'ffmpeg' ? null : '/usr/bin/' + name}
+  const coreOnly = {runtime: {engines: {core: {supported: true, installed: false}, wangp: {supported: false}}}}
+  const steps = runtime.installEngines(['core', 'wangp']).filter(step => render(step.when, {
+    ...ctx, local: coreOnly,
+  }) === 'true')
+  // Pinokio pins FFmpeg in its shared base; core installs it only when it is missing.
+  const withFfmpeg = runtime.installEngines(['core']).filter(step => render(step.when, {
+    ...ctx, which: name => '/usr/bin/' + name, local: coreOnly,
+  }) === 'true')
+  assert(!JSON.stringify(withFfmpeg).includes('conda install'), `${platform}: shared FFmpeg must not be replaced`)
+  const commands = steps.filter(s => s.method === 'shell.run').map(s => render(s.params.message, ctx))
+  assert(commands.length, `${platform}: core must install`)
+  assert(commands.every(c => c.includes('runtime_failed.py')), 'Every core shell failure must propagate')
+  assert(commands.some(c => c.includes(`app/runtime/locks/${platform}-core.txt`)), `${platform}: core lock unused`)
+  assert(commands.some(c => c.includes('ffmpeg')), `${platform}: core editors need FFmpeg`)
+  assert(!JSON.stringify(steps).match(/torch|\+cu\d|torch\.js|wangp/), `${platform}: core must not install CUDA engines`)
+}
+
+// Hub login keeps its code, link and outcome in the terminal, and core skips it.
+const login = require('../install').run.filter(step => JSON.stringify(step).includes('HuggingFace') || step.method === 'hf.login')
+const hf = login.find(step => step.method === 'hf.login')
+assert.equal(hf.params.modal, false, 'A modal closes before the device code is entered')
+assert.notEqual(hf.params.wait, false, 'Install must report whether login finished')
+for (const step of login) {
+  assert.equal(render(step.when, {local: {runtime: {engines: {wangp: {supported: false}}}}}), 'false')
+}
+assert.equal(require('../hf_login').run.at(-1).params.success, true)
+
 // A child aborts with undefined in Pinokio; the parent must stop, not publish success.
 const guard = runtime.call('torch.js')[1]
 for (const input of [undefined, null, {}, {success: false}]) {
@@ -53,7 +85,7 @@ for (const input of [undefined, null, {}, {success: false}]) {
   assert.equal(guard.next, null)
 }
 assert.equal(render(guard.when, {input: {success: true}}), 'false')
-for (const filename of ['torch', 'runtime_setup', 'sam_install', 'rigging_install', 'ui_build']) {
+for (const filename of ['torch', 'runtime_setup', 'hunyuan3d_install', 'sam_install', 'rigging_install', 'ui_build', 'hf_login']) {
   const final = require(`../${filename}.js`).run.at(-1)
   assert.equal(final.method, 'script.return')
   assert.equal(final.params.success, true)
@@ -103,6 +135,19 @@ async function checkUiLaunchers() {
   assert(pending.some(item => item.href === 'sam_install.js'))
   const amd = flatten(await menu({platform: 'linux', gpu: 'amd'}, info))
   assert(!amd.some(item => item.href === 'rigging_install.js'))
+  // A core install hides WanGP-only entries and CUDA installers, even before GPU inventory loads.
+  const coreInfo = {...info, exists: name => name !== 'app/.runtime/wangp.managed'}
+  const core = flatten(await menu({}, coreInfo))
+  assert(core.some(item => item.href === 'start.js' && !item.params), 'Core must keep Start')
+  assert(!core.some(item => item.text === 'LoRAs' || item.params?.compile), 'Core has no WanGP models')
+  assert(!core.some(item => ['hunyuan3d_install.js', 'sam_install.js', 'rigging_install.js', 'hf_login.js'].includes(item.href)))
+  const nvidia = flatten(await menu({platform: 'win32', arch: 'x64', gpu: 'nvidia'}, info))
+  assert(nvidia.some(item => item.href === 'hunyuan3d_install.js'), '3D generation must be installable on demand')
+  // Setup installs only default engines; Hunyuan3D is refreshed only where it is present.
+  const setupPlan = JSON.stringify(require('../runtime_setup').run)
+  assert(setupPlan.includes("exists('app/services/hunyuan3d/env')"))
+  assert(!runtime.installEngines(['core', 'wangp', 'minimax_h3']).some(step => JSON.stringify(step).includes('hunyuan3d/env')))
+  assert(flatten(await menu({}, info)).some(item => item.href === 'hf_login.js'), 'Login must be retryable')
   console.log('React repair/start/menu contract: PASS')
 }
 checkUiLaunchers().catch(error => { console.error(error); process.exitCode = 1 })

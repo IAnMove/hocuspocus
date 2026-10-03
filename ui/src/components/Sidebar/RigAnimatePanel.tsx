@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import type { ParseKeys } from 'i18next'
 import { Bone, Box, Download, Loader2, PersonStanding, Play, RefreshCw, Square } from 'lucide-react'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useUiTranslation } from '../../i18n'
@@ -16,6 +17,9 @@ import {
   type RigProfile,
   type RigProfileId,
 } from '../../api/client'
+import { DEFAULT_BPM, clipIsRecommended, clipsForEngine, humanoidClipSelection, isRigSource, previewAsset, recommendedClipIds, rigFooterKey, rigHelpKey, rigJobBody } from './humanoidRig'
+import { useClipText } from './humanoidClipText'
+import { HumanoidAnimateSlot, HumanoidClipGroups, HumanoidEngineIntro, HumanoidJobNotes } from './HumanoidRigParts'
 
 type RigSource = { name: string; thumbnail_url?: string | null }
 
@@ -61,21 +65,60 @@ function RigProfilePreview({ profile, selected, onSelect }: { profile: RigProfil
   )
 }
 
-function RigAnimationPreview({ animation, selected, recommended, onSelect }: { animation: RigAnimation; selected: boolean; recommended: boolean; onSelect: () => void }) {
+function RigAnimationPreview({ animation, engineId, selected, recommended, onSelect }: { animation: RigAnimation; engineId: string; selected: boolean; recommended: boolean; onSelect: () => void }) {
   const { t } = useUiTranslation('scene3d')
+  const text = useClipText()(animation, engineId)
   return (
-    <RigPreviewCard asset={`animation-${animation.id}`} title={animation.label} selected={selected} onSelect={onSelect}>
+    <RigPreviewCard asset={previewAsset(engineId, animation.id)} title={text.label} selected={selected} onSelect={onSelect}>
       <div className="space-y-1 px-1.5 py-1.5">
         <div className="flex items-start justify-between gap-1">
-          <span className="line-clamp-2 text-[9px] font-medium leading-tight text-text-secondary">{animation.label}</span>
+          <span className="line-clamp-2 text-[9px] font-medium leading-tight text-text-secondary">{text.label}</span>
           {recommended && <span className="shrink-0 rounded bg-accent-green/10 px-1 py-0.5 text-[6px] uppercase text-accent-green">{t('rig.recommended')}</span>}
         </div>
         <div className="flex items-center justify-between gap-1">
-          <span className="line-clamp-2 text-[8px] leading-tight text-text-muted">{animation.description}</span>
-          {animation.category && <span className="shrink-0 rounded bg-accent-blue/10 px-1 py-0.5 text-[6px] uppercase text-accent-blue">{animation.category}</span>}
+          <span className="line-clamp-2 text-[8px] leading-tight text-text-muted">{text.description}</span>
+          {animation.category && <span className="shrink-0 rounded bg-accent-blue/10 px-1 py-0.5 text-[6px] uppercase text-accent-blue">{t(`rig.clipCategory.${animation.category}` as ParseKeys<'scene3d'>, { defaultValue: animation.category })}</span>}
         </div>
       </div>
     </RigPreviewCard>
+  )
+}
+
+function ProfileSection({ engineId, profiles, rigProfileId, selectedProfile, onChoose }: { engineId: string; profiles: RigProfile[] | undefined; rigProfileId: RigProfileId; selectedProfile: RigProfile | undefined; onChoose: (id: RigProfileId) => void }) {
+  const { t } = useUiTranslation('scene3d')
+  if (engineId === 'humanoid') return null
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-2"><label className="text-[10px] text-text-muted uppercase tracking-wider">{t('rig.profile')}</label><span className="text-[8px] text-text-muted">{t('rig.hoverFocus')}</span></div>
+      {profiles?.length ? <div className="grid grid-cols-2 gap-1.5">{profiles.map(profile => <RigProfilePreview key={profile.id} profile={profile} selected={rigProfileId === profile.id} onSelect={() => onChoose(profile.id)} />)}</div> : <select value={rigProfileId} disabled className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary opacity-60"><option value="prop">{t('rig.legacyBackend')}</option></select>}
+      {selectedProfile && (
+        <div className="mt-1.5 rounded-lg border border-border bg-bg-tertiary p-2.5">
+          <p className="text-[9px] leading-relaxed text-text-muted">{selectedProfile.description}</p>
+          <p className="mt-1 text-[9px] text-text-muted/80">{t(rigHelpKey(engineId))}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ClipSection({ engineId, profileLabel, animations, renderClip, onRecommended, onAll }: { engineId: string; profileLabel: string | undefined; animations: RigAnimation[]; renderClip: (animation: RigAnimation) => ReactNode; onRecommended: () => void; onAll: () => void }) {
+  const { t } = useUiTranslation('scene3d')
+  const humanoid = engineId === 'humanoid'
+  const title = humanoid ? t('rig.humanoidAnimations') : profileLabel ? t('rig.animations', { name: profileLabel }) : t('rig.animationsDefault')
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <label className="text-[10px] text-text-muted uppercase tracking-wider">{title}</label>
+        <div className="flex gap-1">
+          <button type="button" onClick={onRecommended} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">{t('rig.recommendedAction')}</button>
+          <button type="button" onClick={onAll} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">{t('rig.all')}</button>
+        </div>
+      </div>
+      {humanoid
+        ? <HumanoidClipGroups animations={animations} renderClip={renderClip} />
+        : <div className="grid max-h-[620px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{animations.map(renderClip)}</div>}
+      <p className="mt-1.5 text-[8px] leading-relaxed text-text-muted">{t(humanoid ? 'rig.humanoidPreviewsHelp' : 'rig.previewsHelp')}</p>
+    </div>
   )
 }
 
@@ -96,6 +139,7 @@ export function RigAnimatePanel() {
   const [spineJoints, setSpineJoints] = useState(5)
   const [axisMode, setAxisMode] = useState<'auto' | 'x' | 'y' | 'z'>('auto')
   const [weightFalloff, setWeightFalloff] = useState(2)
+  const [bpm, setBpm] = useState(DEFAULT_BPM)
   const [job, setJob] = useState<RigJob | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -133,7 +177,7 @@ export function RigAnimatePanel() {
     try {
       const { outputs: files } = await fetchOutputs(0, 0, { search: '.glb', workspace: activeWorkspace })
       setSources(files
-        .filter(file => file.type === 'model3d' && /\.glb$/i.test(file.name) && !file.name.includes('_rigged_'))
+        .filter(file => file.type === 'model3d' && isRigSource(file.name))
         .map(file => ({ name: file.name, thumbnail_url: file.thumbnail_url })))
     } catch {
       setSources([])
@@ -149,8 +193,8 @@ export function RigAnimatePanel() {
   const installedEngines = capabilities?.engines.filter(item => item.installed) ?? []
   const selectedEngine = capabilities?.engines.find(item => item.id === engineId)
   const selectedProfile = capabilities?.rig_profiles?.find(item => item.id === rigProfileId)
-  const profileAnimations = capabilities?.animations.filter(animation => !selectedProfile || selectedProfile.allowed_animations.includes(animation.id)) ?? []
-  const recommendedAnimationIds = selectedProfile?.recommended_animations ?? profileAnimations.map(animation => animation.id)
+  const profileAnimations = clipsForEngine(engineId, capabilities, selectedProfile)
+  const recommendedAnimationIds = recommendedClipIds(engineId, capabilities, selectedProfile, profileAnimations)
   const isRunning = job?.status === 'queued' || job?.status === 'running'
   const activeJobId = isRunning ? job?.job_id ?? null : null
   const canRun = !!selectedEngine?.installed && !!source && selectedClips.size > 0 && !isRunning
@@ -204,8 +248,20 @@ export function RigAnimatePanel() {
     setSpineJoints(profile.default_spine_joints)
     setAxisMode(profile.default_axis_mode)
     setWeightFalloff(profile.default_weight_falloff)
-    setSelectedClips(new Set(profile.recommended_animations))
+    if (engineId !== 'humanoid') setSelectedClips(new Set(profile.recommended_animations))
     setError(null)
+  }
+
+  const chooseEngine = (id: string) => {
+    setEngineId(id)
+    setError(null)
+    if (id === 'humanoid') {
+      const ids = (capabilities?.humanoid_animations ?? []).map(item => item.id)
+      setSelectedClips(new Set(humanoidClipSelection(ids)))
+      return
+    }
+    const profile = capabilities?.rig_profiles?.find(item => item.id === rigProfileId)
+    if (profile) setSelectedClips(new Set(profile.recommended_animations))
   }
 
   const run = async () => {
@@ -214,19 +270,22 @@ export function RigAnimatePanel() {
     setExportError(null)
     setExportStatus(null)
     try {
-      setJob(await startRigJob({
+      setJob(await startRigJob(rigJobBody({
         source,
-        engine: engineId,
-        rig_profile: rigProfileId,
-        animations: Array.from(selectedClips),
-        spine_joints: spineJoints,
-        axis_mode: axisMode,
-        weight_falloff: weightFalloff,
-      }))
+        engineId,
+        rigProfileId,
+        clips: Array.from(selectedClips),
+        bpm,
+        spineJoints,
+        axisMode,
+        weightFalloff,
+      })))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('rig.startFailed'))
     }
   }
+
+  const renderClip = (animation: RigAnimation) => <RigAnimationPreview key={animation.id} animation={animation} engineId={engineId} selected={selectedClips.has(animation.id)} recommended={clipIsRecommended(engineId, animation.id, selectedProfile, recommendedAnimationIds)} onSelect={() => toggleClip(animation.id)} />
 
   const cancel = async () => {
     if (!job) return
@@ -336,23 +395,14 @@ export function RigAnimatePanel() {
             )}
           </div>
 
-          <div>
-            <div className="mb-1.5 flex items-center justify-between gap-2"><label className="text-[10px] text-text-muted uppercase tracking-wider">{t('rig.profile')}</label><span className="text-[8px] text-text-muted">{t('rig.hoverFocus')}</span></div>
-            {capabilities.rig_profiles?.length ? <div className="grid grid-cols-2 gap-1.5">{capabilities.rig_profiles.map(profile => <RigProfilePreview key={profile.id} profile={profile} selected={rigProfileId === profile.id} onSelect={() => chooseRigProfile(profile.id)} />)}</div> : <select value={rigProfileId} disabled className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary opacity-60"><option value="prop">{t('rig.legacyBackend')}</option></select>}
-            {selectedProfile && (
-              <div className="mt-1.5 rounded-lg border border-border bg-bg-tertiary p-2.5">
-                <p className="text-[9px] leading-relaxed text-text-muted">{selectedProfile.description}</p>
-                <p className="mt-1 text-[9px] text-text-muted/80">{engineId === 'procedural' ? t('rig.proceduralHelp') : t('rig.unirigHelp')}</p>
-              </div>
-            )}
-          </div>
+          <ProfileSection engineId={engineId} profiles={capabilities.rig_profiles} rigProfileId={rigProfileId} selectedProfile={selectedProfile} onChoose={chooseRigProfile} />
 
           <div>
             <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('rig.engine')}</label>
             <div className="space-y-1">
               {capabilities.engines.map(item => (
                 <label key={item.id} className={`flex items-start gap-2 rounded-lg border px-2.5 py-1.5 ${item.installed ? 'border-border bg-bg-tertiary cursor-pointer hover:border-border-light' : 'border-border/60 bg-bg-tertiary/50 cursor-not-allowed opacity-70'}`}>
-                  <input type="radio" name="rig-engine" checked={engineId === item.id} disabled={!item.installed} onChange={() => setEngineId(item.id)} className="mt-0.5" />
+                  <input type="radio" name="rig-engine" checked={engineId === item.id} disabled={!item.installed} onChange={() => chooseEngine(item.id)} className="mt-0.5" />
                   <span>
                     <span className="block text-[11px] text-text-primary">{item.label}</span>
                     <span className="block text-[9px] text-text-muted">{item.description}</span>
@@ -363,17 +413,10 @@ export function RigAnimatePanel() {
             </div>
           </div>
 
-          <div>
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">{selectedProfile?.label ? t('rig.animations', { name: selectedProfile.label }) : t('rig.animationsDefault')}</label>
-              <div className="flex gap-1">
-                <button type="button" onClick={() => setSelectedClips(new Set(recommendedAnimationIds))} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">{t('rig.recommendedAction')}</button>
-                <button type="button" onClick={() => setSelectedClips(new Set(profileAnimations.map(animation => animation.id)))} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">{t('rig.all')}</button>
-              </div>
-            </div>
-            <div className="grid max-h-[620px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{profileAnimations.map(animation => <RigAnimationPreview key={animation.id} animation={animation} selected={selectedClips.has(animation.id)} recommended={Boolean(selectedProfile?.recommended_animations.includes(animation.id))} onSelect={() => toggleClip(animation.id)} />)}</div>
-            <p className="mt-1.5 text-[8px] leading-relaxed text-text-muted">{t('rig.previewsHelp')}</p>
-          </div>
+          <HumanoidEngineIntro engineId={engineId} bpm={bpm} onBpm={setBpm} />
+
+          <ClipSection engineId={engineId} profileLabel={selectedProfile?.label} animations={profileAnimations} renderClip={renderClip}
+            onRecommended={() => setSelectedClips(new Set(recommendedAnimationIds))} onAll={() => setSelectedClips(new Set(profileAnimations.map(animation => animation.id)))} />
 
           {engineId === 'procedural' && (
             <div className="rounded-lg border border-border bg-bg-tertiary p-2.5 space-y-2.5">
@@ -405,7 +448,7 @@ export function RigAnimatePanel() {
             <div className={`rounded-lg border p-3 ${job.status === 'failed' ? 'border-red-500/30 bg-red-500/10' : 'border-border bg-bg-tertiary'}`}>
               <div className="flex items-center justify-between text-[10px]"><span className="text-text-secondary">{job.message}</span><span className="text-text-muted">{Math.round(job.progress * 100)}%</span></div>
               <div className="h-1.5 bg-bg-primary rounded-full overflow-hidden mt-2"><div className="h-full bg-accent-green transition-all" style={{ width: `${Math.max(2, job.progress * 100)}%` }} /></div>
-              {job.error && <p className="text-[10px] text-red-300 mt-2 whitespace-pre-wrap max-h-24 overflow-y-auto">{job.error}</p>}
+              <HumanoidJobNotes job={job} />
               {job.status === 'completed' && (
                 <div className="mt-3 border-t border-border pt-3 space-y-1.5">
                   <button
@@ -430,7 +473,8 @@ export function RigAnimatePanel() {
           ) : (
             <button disabled={!canRun} onClick={() => void run()} className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${canRun ? 'bg-cta hover:brightness-110 shadow-accent-glow text-white' : 'bg-bg-tertiary border border-border text-text-muted cursor-not-allowed'}`}><Play size={13} fill={canRun ? 'currentColor' : 'none'} /> {t('rig.run')}</button>
           )}
-          <p className="text-[9px] text-text-muted text-center">{engineId === 'unirig' ? t('rig.unirigFooter') : t('rig.proceduralFooter')}</p>
+          <p className="text-[9px] text-text-muted text-center">{t(rigFooterKey(engineId))}</p>
+          <HumanoidAnimateSlot capabilities={capabilities} job={job} />
         </>
       )}
     </div>

@@ -1165,6 +1165,7 @@ These IDs are in `AGENT_ACTION_TYPES`. They are listed so L0 can prove every Wiz
 | `other.update_workspace_collection` | `update_workspace_collection` | `updateCollection` | `ui/src/features/agent/navigationQueueCapabilities.ts` | `workspace.updateCollection` |
 | `other.prepare_video` | `prepare_video` | `prepareVideo` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareVideo` |
 | `other.prepare_programmatic_video` | `prepare_programmatic_video` | `prepareProgrammaticVideo` | `ui/src/features/agent/programmaticVideo.ts` | `video3d.prepareProgrammaticVideo` |
+| `other.speech_analysis_engine` | other | condicional | out_of_scope | `speech_analysis_engine` | disponible | `setupSpeechAnalysis` | `ui/tests/speechAnalysisParity.test.tsx` |
 | `other.prepare_image` | `prepare_image` | `prepareImage` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareImage` |
 | `other.prepare_audio` | `prepare_audio` | `prepareAudio` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareAudio` |
 | `other.download_model` | `download_model` | `downloadModel` | `ui/src/features/agent/studioCapabilities.ts` | `studio.downloadModel` |
@@ -1309,3 +1310,41 @@ Executable coverage lives in `ui/tests/labsWizardL12.test.mjs`, plus the L7–L1
 | Invalid provider action/fields | Unknown types and invalid `render_mode` parse to no actions. |
 
 Historical gap IDs above have fixes in #183/#197/#201; they are not all open defects. Remaining validation: real mobile browser navigation and bounded audiovisual/UI-to-Wizard checks. No real audiovisual generation was repeated here.
+
+## Lips Creator
+
+`characters.lips_creator` exposes the workspace mouth collection commands through
+`lipsCreator.command`, backed by `manageLipsCollection` in
+`ui/src/features/characters/lipsActions.ts`. It lists, creates, updates, captures,
+reviews and applies collections using the same HTTP/MCP command service. Edits
+need exact collection IDs and revisions; applying mouths uses the character
+library revision and preserves identity, voice and existing placement.
+
+`characters.generate_lips` uses `lipsCreator.generate` and
+`generateLipsCollection`. An explicit generation request creates missing mouths
+sequentially; `states` addresses individual replacements. Each output is saved
+as a pending candidate before the next native image job. Confirmed failed jobs
+allow the sequence to continue; uncertain job status or save failure stops it.
+Approval remains explicit. Coverage is in `ui/tests/lipsCreatorWizard.test.ts`
+and `tests/test_lips_creator_commands.py`; the browser character-linking path is
+covered by `ui/e2e/specs/lips-creator.spec.ts`.
+
+## Video 3D shots
+
+`video3d.templates.apply` searches the editor's shot library and applies an exact
+id through `world3dTemplates.command`, registered by
+`registerWorld3DTemplateCapabilities` in
+`ui/src/features/agent/world3dTemplateCapabilities.ts`. The same cards serve MCP
+and the production planner. A tied or unknown query does not create a scene.
+Coverage is in `ui/tests/world3dTemplatesWizard.test.ts`.
+
+## Productions
+
+`production.works.review` lists works in one workspace, opens one production, or
+links a light Story through `productionWorks.command`, registered by
+`registerProductionWorkCapabilities` in
+`ui/src/features/agent/productionWorkCapabilities.ts`. List and open do not
+start a generator. The same intent reuses the production. `production.works.link`
+attaches one existing production id to an existing project and does not match
+titles. `production.review` stays the vision QA tool. Coverage is in
+`ui/tests/productionWorksWizard.test.ts` and `tests/test_production_journey.py`.

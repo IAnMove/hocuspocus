@@ -15,6 +15,8 @@ from collections.abc import Callable
 from fractions import Fraction
 from typing import Any
 
+from services.video_layout import layout_filter, read_layout
+
 ProgressCallback = Callable[[int, str], None]
 AbortCallback = Callable[[], bool]
 
@@ -395,18 +397,8 @@ def _run(
         )
 
 
-def _layout_filter(width: int, height: int, fit: str) -> str:
-    if fit == "fill":
-        sizing = (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height}"
-        )
-    else:
-        sizing = (
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black"
-        )
-    return f"{sizing},setsar=1,format=yuv420p"
+def _layout_filter(width: int, height: int, fit: str, **layout: float) -> str:
+    return layout_filter(width, height, fit, **layout)
 
 
 def _normalise_clip(
@@ -431,13 +423,13 @@ def _normalise_clip(
         trim_end=trim_end,
     )
     volume = 0.0 if clip.get("muted") else max(0.0, min(float(clip.get("volume", 1)), 2.0))
-    fit = "fill" if clip.get("fit") == "fill" else "fit"
+    fit, focus_x, focus_y, blur_amount, background_dim = read_layout(clip)
     video_span = _seconds_for_ffmpeg(output_frames, fps)
     source_rate = float(media["fps"])
     audio_start = start_frame / source_rate
     audio_end = end_frame / source_rate
     video_graph = (
-        f"{_layout_filter(width, height, fit)},"
+        f"{_layout_filter(width, height, fit, focus_x=focus_x, focus_y=focus_y, blur_amount=blur_amount, background_dim=background_dim)},"
         f"trim=start_frame={start_frame}:end_frame={end_frame},setpts=PTS-STARTPTS,"
         f"fps={fps},tpad=stop_mode=clone:stop=2,"
         f"trim=end_frame={output_frames},setpts=N/{fps}/TB"

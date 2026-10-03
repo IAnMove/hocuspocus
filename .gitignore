@@ -150,3 +150,6 @@ app/services/rigging/env/
 
 # Example media is fetched on demand; never bundle developer-generated copies.
 /ui/public/examples/
+
+# Per-workspace medians written when a production completes. Not a measurement to commit.
+.production-timings.json

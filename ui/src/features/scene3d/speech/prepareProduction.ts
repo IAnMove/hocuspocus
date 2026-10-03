@@ -1,10 +1,9 @@
-import { analyzeSceneSpeech } from '../../../api/scene3dSpeech'
 import { useStore } from '../../../stores/useStore'
 import { getPlayableFileUrl } from '../../../api/client'
 import type { Scene } from '../../../types'
 import { buildSpeechProduction, queueSpeechProduction, type SpeechProductionInput } from './production'
-import { decodeVoice, voiceWav } from './audio'
-import { amplitudeCues } from './track'
+import { decodeVoice } from './audio'
+import { analyzeProductionTrack } from './analyzeProduction'
 import { fetchCharacterKitLibrary } from '../../../api/characters'
 import { characterSlotPatch } from './characterBinding'
 import { faceSettings, modelDigest } from './profiles'
@@ -16,12 +15,9 @@ export async function prepareSpeechProduction(input: SpeechProductionInput, phon
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
   if (input.offset + input.duration > buffer.duration + .01) throw new Error('The selected fragment extends beyond the audio file.')
   // Analyze the complete shot once, so gaps and repeated speakers share timing.
-  const cues = phonetic
-    ? (await analyzeSceneSpeech(await voiceWav(buffer, input.offset, input.duration), signal)).map(c => ({ ...c, start: c.start + input.offset, end: c.end + input.offset }))
-    : amplitudeCues(buffer, input.offset, input.duration)
+  const track = await analyzeProductionTrack(input, buffer, phonetic, signal)
   for (const slot of doc.slots) if (slot.speech?.clips) for (const clip of slot.speech.clips) {
-    clip.cues = cues.filter(c => c.end > clip.offset && c.start < clip.offset + (clip.end! - clip.start))
-    clip.driver = phonetic ? 'rhubarb' : 'amplitude'
+    Object.assign(clip, track, { cues: track.cues.filter(c => c.end > clip.offset && c.start < clip.offset + (clip.end! - clip.start)) })
   }
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
   return doc

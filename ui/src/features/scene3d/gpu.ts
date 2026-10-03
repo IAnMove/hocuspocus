@@ -1,7 +1,8 @@
+import { applyN64Look, withN64Look } from './n64Look'
 import { imageCutoutMesh, poseImageCutout } from './imageCutout'
 import { CinematicRuntime } from './cinematicRuntime'
 import { MaterializationRuntime } from './materialization'
-import { framingPose } from './framing'
+import { framingFov, framingPose } from './framing'
 import { SpeechFaceRuntime } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
 import { screenGeometry } from './screenGeometry'
@@ -37,8 +38,11 @@ import {
   type Texture,
 } from 'three'
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
+import { atmosEye, isAtmosDressing, prepareAtmosShadows, releaseAtmosShadows, resolveAtmos } from './atmos/index.ts'
 import { cameraEyeAtTime, cameraLookAtTime } from './camera.ts'
 import { performanceClipTime, slotPoseAtTime } from './performance.ts'
+import { rhythmicCameraEye, rhythmicLightIntensity, rhythmicSlotPose } from './rhythm'
+import { stabilizeGroundDepth, stabilizeSceneSurfaces } from './depthStability'
 import { cylinderUvOffset, isCylinderBackdrop, slotMountKey } from './backdrop.ts'
 import { scene3dSlotColor } from './document.ts'
 import { paintDrive } from './driveMotion.ts'
@@ -46,7 +50,7 @@ import { applyTypingPose, resetTypingPose } from './typingPose.ts'
 import { paintWorkshop } from './workshopSet.ts'
 import { paintCitadel } from './citadelSet.ts'
 import { paintActionSet } from './actionSets.ts'
-import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLight, Scene3DSlot } from './types.ts'
+import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLight, Scene3DSlot, Vec3 } from './types.ts'
 import { syncWorldSfx, type WorldSfxGpu } from '../sceneFx/worldRuntime'
 import { paintPixelWorld } from './pixel/pixelWorldSet'
 import { syncScreenGlow } from './pixel/screenGlow'
@@ -143,6 +147,29 @@ export function viewSize(host: HTMLElement) {
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
+  }
+}
+
+function poseAtmos(world: GpuWorld, document: Scene3DDocument, seconds: number, eye: Vec3): Vec3 {
+  if (!isAtmosDressing(document.dressing)) {
+    releaseAtmosShadows(world)
+    return eye
+  }
+  const high = world.renderer.shadowMap.enabled && world.dir.shadow.mapSize.x >= 2048
+  const resolved = resolveAtmos(document.atmos, high ? 'high' : 'low', document.dressing)
+  applyLight(world.dir, { kind: 'directional', direction: resolved.sun, intensity: document.light.intensity, color: resolved.sunColor })
+  prepareAtmosShadows(world)
+  hideEmptyAtmosSlots(world, document)
+  return atmosEye(eye, seconds, document.duration, document.camera.family)
+}
+
+function hideEmptyAtmosSlots(world: GpuWorld, document: Scene3DDocument) {
+  for (const slot of document.slots) {
+    if (slot.media !== 'model3d' || slot.sourceUrl) continue
+    const gpu = world.slots.get(slot.id)
+    if (!gpu) continue
+    gpu.root.visible = false
+    if (gpu.contactShadow) gpu.contactShadow.visible = false
   }
 }
 
@@ -418,7 +445,9 @@ function paintPixelLight(world: GpuWorld, document: Scene3DDocument, slots: read
 }
 
 export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
-  const posedSlots = document.slots.map(slot => ({ ...slot, ...slotPoseAtTime(slot, sceneSeconds, document.duration) }))
+  document = withN64Look(document)
+  if (world.dir) applyLight(world.dir, document.light)
+  const posedSlots = document.slots.map(slot => ({ ...slot, ...rhythmicSlotPose(slot, slotPoseAtTime(slot, sceneSeconds, document.duration), sceneSeconds, document.rhythm) }))
   applyLoopOffset(world, sceneSeconds)
   paintCitadel(world.dressing, sceneSeconds)
   paintWorkshop(world.dressing, sceneSeconds, document.workshopScreen)
@@ -426,18 +455,21 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds)
+  stabilizeSceneSurfaces(document.slots, world.slots)
   paintPixelLight(world, document, posedSlots, sceneSeconds)
   const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing
   const target = posedSlots.find(slot => slot.id === framing?.targetSlot)
   const root = target && world.slots.get(target.id)?.root
   const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor), target, sceneSeconds, document.duration) : null
-  const eye = shot?.eye ?? cameraEyeAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
+  const rawEye = shot?.eye ?? cameraEyeAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const look = shot?.look ?? cameraLookAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
-  world.camera.fov = document.camera.fov
+  const eye = poseAtmos(world, document, sceneSeconds, rhythmicCameraEye(rawEye, look, sceneSeconds, document.rhythm))
+  world.camera.fov = framingFov(framing, document.camera.fov, sceneSeconds, document.duration)
   world.camera.position.set(...eye)
   world.camera.lookAt(...look)
   if (shot) world.camera.rotateZ(shot.roll)
   world.camera.updateProjectionMatrix()
+  world.camera.updateMatrixWorld()
   world.worldSfx ??= new Map()
   if (world.scene) {
     syncWorldSfx(world.scene, world.worldSfx, document.worldSfx, sceneSeconds, posedSlots.map(slot => ({
@@ -448,11 +480,17 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
       root: world.slots.get(slot.id)?.root,
     })), { width: world.renderer.domElement?.width ?? document.width, height: world.renderer.domElement?.height ?? document.height })
   }
-  if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment')) {
+  if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment') || isAtmosDressing(document.dressing)) {
     world.cinema ??= new CinematicRuntime(world)
     world.cinema.sync(document, sceneSeconds)
+    if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
+    applyN64Look(world.scene, document.renderLook === 'n64')
     world.cinema.render(document)
-  } else world.renderer.render(world.scene, world.camera)
+  } else {
+    if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
+    applyN64Look(world.scene, false)
+    world.renderer.render(world.scene, world.camera)
+  }
 }
 
 export function setWorldSize(world: GpuWorld, width: number, height: number) {
@@ -551,6 +589,7 @@ export function createWorld(host: HTMLDivElement, light: Scene3DLight, fov: numb
   )
   floor.rotation.x = -Math.PI / 2
   floor.name = 'world-floor'
+  stabilizeGroundDepth(floor)
   scene.add(floor)
   return {
     renderer, scene, camera, dir, floor, dressing: null, dressingReady: true,

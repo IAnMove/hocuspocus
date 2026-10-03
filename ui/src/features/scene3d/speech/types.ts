@@ -6,6 +6,14 @@ export type MouthCue = { start: number; end: number; viseme: Viseme; manual?: tr
 export const EXPRESSIONS = ['neutral', 'happy', 'angry', 'worried', 'surprised', 'sleepy'] as const
 export type Expression = typeof EXPRESSIONS[number]
 export type ExpressionCue = { start: number; end: number; expression: Expression; manual?: true }
+export const SPEECH_ENGINES = ['auto', 'phoneme', 'rhubarb'] as const
+export type SpeechEngine = typeof SPEECH_ENGINES[number]
+export type SpeechAnalysisSettings = {
+  analysisEngine?: SpeechEngine
+  analysisFallback?: 'phoneme_not_installed' | null
+  language?: string
+  text?: string
+}
 /** Coordinates belong to the ORIGINAL mesh position attribute, before skinning. */
 export type FacePlacement = {
   meshIndex: number
@@ -14,7 +22,7 @@ export type FacePlacement = {
   skin: Vec3
   eyes: { left: Vec3; right: Vec3; size: readonly [number, number]; skinLeft: Vec3; skinRight: Vec3 }
 }
-export type Scene3DSpeech = {
+export type Scene3DSpeech = SpeechAnalysisSettings & {
   /** Optional repeated interventions. Face calibration remains shared by this model. */
   clips?: SpeechClip[]
   end?: number
@@ -28,19 +36,21 @@ export type Scene3DSpeech = {
   facePack?: Scene3DSourceRef
   cues: MouthCue[]
   expressionCues?: ExpressionCue[]
-  driver: 'rhubarb' | 'rhubarb-vocals' | 'amplitude' | 'imported'
+  driver: 'rhubarb' | 'rhubarb-vocals' | 'phoneme' | 'phoneme-vocals' | 'amplitude' | 'imported'
   start: number
   offset: number
   gain: number
   strength: number
   clean: boolean
-  style: 'soft' | 'toon' | 'pixel'
+  /** Deform lip contours with the Lips Creator adapter instead of crossfading sprites. */
+  morph?: boolean
+  style: 'soft' | 'toon' | 'toon-bold' | 'pixel'
   lip: string
   expression: Expression
   blink: boolean
   eyes: boolean
 }
-export type SpeechClip = {
+export type SpeechClip = SpeechAnalysisSettings & {
   id: string
   text?: string
   audio?: Scene3DSourceRef

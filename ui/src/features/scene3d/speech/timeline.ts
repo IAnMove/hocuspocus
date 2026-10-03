@@ -3,7 +3,8 @@ import type { Scene3DSpeech, SpeechClip } from './types'
 
 export function speechClips(speech: Scene3DSpeech): SpeechClip[] {
   return speech.clips ?? [{ id: 'voice', audio: speech.audio, cues: speech.cues, driver: speech.driver,
-    start: speech.start, offset: speech.offset, gain: speech.gain, end: speech.end, audible: speech.audible }]
+    start: speech.start, offset: speech.offset, gain: speech.gain, end: speech.end, audible: speech.audible,
+    analysisEngine: speech.analysisEngine, analysisFallback: speech.analysisFallback, language: speech.language, text: speech.text }]
 }
 export function sceneVoiceTracks(document: Scene3DDocument) {
   return [

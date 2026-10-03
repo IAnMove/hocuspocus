@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "revision": "runtime-profiles-v1-macos-core",
+  "revision": "runtime-profiles-v1-core-fallback",
   "platforms": [
     "linux",
     "win32"
@@ -39,9 +39,24 @@
       "environment": "venv",
       "python": "3.10",
       "required": true,
+      "fallbackFor": "wangp",
       "platforms": [
-        "darwin"
+        "darwin",
+        "linux",
+        "win32"
       ],
+      "architectures": {
+        "darwin": [
+          "arm64"
+        ],
+        "linux": [
+          "x64",
+          "arm64"
+        ],
+        "win32": [
+          "x64"
+        ]
+      },
       "requirements": "app/runtime/requirements-core.txt",
       "constraints": {
         "fastapi": "0.141.1",
@@ -134,7 +149,7 @@
       "windows": {
         "installStepsVersion": 1
       },
-      "defaultInstall": true
+      "defaultInstall": false
     },
     "minimax_h3": {
       "label": "MiniMax H3 Legacy / ComfyUI",
@@ -202,7 +217,7 @@
     },
     "rigging": {
       "label": "UniRig",
-      "installStepsVersion": 1,
+      "installStepsVersion": 2,
       "env": "app/services/rigging/env",
       "environment": "conda",
       "python": "3.11",
@@ -218,8 +233,10 @@
       "constraints": {
         "numpy": "1.26.4",
         "transformers": "4.51.3",
-        "flash-attn": "2.7.4.post1"
+        "flash-attn": "2.7.4.post1",
+        "bpy": "4.2.22"
       },
+      "verificationImports": ["bpy", "flash_attn", "torch_scatter", "torch_cluster", "spconv.pytorch"],
       "vendors": [
         "unirig"
       ],
