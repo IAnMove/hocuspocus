@@ -1,4 +1,5 @@
 import type { Scene3DClipPlayback, Scene3DFootContact, Scene3DMotion, Scene3DSlot, Vec3 } from './types.ts'
+import { catmullRomPath, isWalkBaked, motionPathPoints, parseMotionPoints, parseMotionWalk, pathAt } from './walkPath.ts'
 
 export function parseClipPlayback(raw: unknown): Scene3DClipPlayback | undefined {
   if (!raw || typeof raw !== 'object') return undefined
@@ -30,13 +31,21 @@ export function parseMotion(raw: unknown): Scene3DMotion | undefined {
     faceTravel: value.faceTravel === true,
     turnTo: typeof value.turnTo === 'number' && Number.isFinite(value.turnTo) ? value.turnTo : undefined,
     easing: value.easing === 'smooth' ? 'smooth' : 'linear',
+    ...optionalField('points', parseMotionPoints(value.points)),
+    ...optionalField('walk', parseMotionWalk(value.walk)),
   }
 }
 
+function optionalField<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+  return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V }
+}
+
 export function slotPoseAtTime(slot: Scene3DSlot, seconds: number, duration: number) {
-  if (!slot.motion) return { position: slot.position, rotationY: slot.rotationY }
+  // A baked walk moves the hips itself; the slot stays at its start.
+  if (!slot.motion || isWalkBaked(slot, duration)) return { position: slot.position, rotationY: slot.rotationY }
   const progress = Math.max(0, Math.min(1, seconds / Math.max(0.001, duration)))
   const t = slot.motion.easing === 'smooth' ? progress * progress * (3 - 2 * progress) : progress
+  if (slot.motion.points?.length) return waypointPose(slot, t)
   const via = slot.motion.via
   const position = slot.position.map((v, i) => via
     ? (1 - t) ** 2 * v + 2 * (1 - t) * t * via[i] + t * t * slot.motion!.to[i]
@@ -50,6 +59,14 @@ export function slotPoseAtTime(slot: Scene3DSlot, seconds: number, duration: num
     position,
     rotationY: facing,
   }
+}
+
+function waypointPose(slot: Scene3DSlot, t: number) {
+  const motion = slot.motion!
+  const at = pathAt(catmullRomPath(motionPathPoints(slot)), t)
+  const height = slot.position[1] + (motion.to[1] - slot.position[1]) * t
+  const rotationY = motion.faceTravel ? at.heading : slot.rotationY + ((motion.turnTo ?? slot.rotationY) - slot.rotationY) * t
+  return { position: [at.x, height, at.z] as unknown as Vec3, rotationY }
 }
 
 /** Start is a source-clip seek, independent of the scene's clock and speed. */

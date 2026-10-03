@@ -139,6 +139,34 @@ rig does not have (fingers, props) are skipped and listed.
 Rigs made by the first humanoid release (identity rest rotations, no `extras`
 marker) still accept new clips: each bone is corrected to the canonical frame.
 
+## Walk a path without sliding
+
+Video 3D used to move a model along its path while the clip walked in place,
+so the soles skated. **Video 3D → Travel → Walk without sliding** (or
+`model3d.animate` with `path`) bakes a new clip, «Path Walk», on the rigged
+character:
+
+- **Footprints.** The hips follow the path (a centripetal Catmull-Rom curve
+  through the points). Every footprint stays fixed in the world while its foot
+  carries the body, and each swing goes from one footprint to the next, turning
+  with the path.
+- **Steps.** Steps lengthen with speed, between 0.35 and 0.85 leg lengths. A
+  path faster than a natural walk (2.6 leg lengths per second) is still baked,
+  and the result lists `path_too_fast`.
+- **Start and stop.** The walk starts and ends standing, with the feet side by
+  side.
+- **Measured.** A planted foot slips less than 0.2 % of the leg on straight,
+  90° and S-shaped paths. The body faces the path, except for the walk's own
+  5° hip twist.
+
+The clip moves the hips, so the slot stays at its start: the scene records
+`motion.walk = {sourceUrl, clip, key}`. If the path, the slot's position, turn
+or scale, or the shot length change, the bake is stale. The slot then slides
+again until the walk is baked anew. A new GLB is saved; the original stays.
+
+`motion.points` adds waypoints between the start and `to`. Video 3D walks them
+on the same curve the bake uses.
+
 ## Known limits
 
 - No fingers, face or eyes; the hand moves as one piece. What generated meshes offer for hands, and the proposed next
