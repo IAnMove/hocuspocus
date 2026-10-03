@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
-import { checkPublishPreset, publishVideo, type PublishPreset, type PublishWarning } from '../../api/publish'
+import { checkPublishPreset, publishMediaSource, publishVideo, type PublishPreset, type PublishWarning } from '../../api/publish'
 
 const PRESETS: PublishPreset[] = ['x', 'youtube', 'shorts', 'apple', 'broadcast', 'archive']
 
@@ -62,7 +62,7 @@ export function PublishPresetBar({
           disabled={busy}
           onClick={() => {
             setBusy(true)
-            publish({ workspace, source, preset, premium, width, height, duration, overlays, loudnorm: preset !== 'archive' })
+            publish({ workspace, source: publishMediaSource(source, workspace), preset, premium, width, height, duration, overlays, loudnorm: preset !== 'archive' })
               .then(result => {
                 setWarnings(result.warnings || [])
                 setMeasured(result.loudness
