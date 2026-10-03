@@ -57,6 +57,7 @@ import { syncScreenGlow } from './pixel/screenGlow'
 import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { PixelPalette } from './pixel/pixelPalettes'
 import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
+import { EnvironmentLighting, applyLook } from './environmentLighting'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -106,6 +107,8 @@ export type GpuWorld = {
   pixelPalette?: PixelPalette | null
   /** Supersampling and composer MSAA of a server export; absent in preview and draft. */
   exportRender?: ExportRenderQuality
+  /** Environment light of scenes that ask for it (`document.lighting`). */
+  lighting?: EnvironmentLighting
 }
 
 export function clipKeyOf(clip: Scene3DSlot['clip']): string {
@@ -454,6 +457,7 @@ function paintPixelLight(world: GpuWorld, document: Scene3DDocument, slots: read
 export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
   document = withN64Look(document)
   if (world.dir) applyLight(world.dir, document.light)
+  syncEnvironmentLighting(world, document)
   const posedSlots = document.slots.map(slot => ({ ...slot, ...rhythmicSlotPose(slot, slotPoseAtTime(slot, sceneSeconds, document.duration), sceneSeconds, document.rhythm) }))
   applyLoopOffset(world, sceneSeconds)
   paintCitadel(world.dressing, sceneSeconds)
@@ -492,12 +496,21 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
     world.cinema.sync(document, sceneSeconds)
     if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, document.renderLook === 'n64')
+    applyLook(world.renderer, document)
     world.cinema.render(document)
   } else {
     if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, false)
+    applyLook(world.renderer, document)
     world.renderer.render(world.scene, world.camera)
   }
+}
+
+/** Created on the first scene that asks for environment light, then kept so it can clear it again. */
+function syncEnvironmentLighting(world: GpuWorld, document: Scene3DDocument) {
+  if (!document.lighting && !world.lighting) return
+  world.lighting ??= new EnvironmentLighting()
+  world.lighting.sync(world.renderer, world.scene, document)
 }
 
 export function setWorldSize(world: GpuWorld, width: number, height: number) {
@@ -580,6 +593,7 @@ export function createWorld(host: HTMLDivElement, light: Scene3DLight, fov: numb
     preserveDrawingBuffer: true,
   })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
+  renderer.outputColorSpace = SRGBColorSpace
   renderer.shadowMap.enabled = false
   renderer.domElement.style.display = 'block'
   renderer.domElement.style.width = '100%'
@@ -610,6 +624,7 @@ export function createWorld(host: HTMLDivElement, light: Scene3DLight, fov: numb
 
 export function disposeWorld(world: GpuWorld) {
   world.cinema?.dispose()
+  world.lighting?.dispose()
   for (const id of [...world.slots.keys()]) dropSlot(world, id)
   if (world.scene && world.worldSfx) syncWorldSfx(world.scene, world.worldSfx, [], 0, [])
   disposeObject(world.scene)
