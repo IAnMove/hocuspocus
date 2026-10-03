@@ -1,209 +1,235 @@
-"""Capsule skin weights for the standard humanoid, at most four influences.
+"""Skin weights from distances measured along the surface, at most four influences.
 
-Arm vertices cannot weight a leg, and a vertex cannot weight the arm on the
-other side of the torso. Split compose vertices are welded by position before
-the adjacency smooth, then the side mask is applied again.
+Each bone seeds the surface it clearly owns (the middle of its segment, near
+the bone). Distances then grow along the mesh, not through the air, so the
+bottom of a big head never follows the arm under it and the inner thigh never
+follows the other leg. Pieces without seeds (eyes, buttons, loose boxes) copy
+the weights of the nearest seeded surface. Joints blend over a width that
+follows the limb thickness.
 """
 
 from __future__ import annotations
 
 import numpy as np
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import dijkstra
+from scipy.spatial import cKDTree
 
-from services.humanoid_rig.names import (
-    BONE_BY_NAME,
-    BONE_NAMES,
-    BONE_PARENTS,
-    LEFT_ARM_BONES,
-    LEFT_LEG_BONES,
-    RIGHT_ARM_BONES,
-    RIGHT_LEG_BONES,
-)
+from services.humanoid_rig.names import BONE_BY_NAME, BONE_NAMES, BONE_PARENTS
 
-_SMOOTH = 4
 _INFLUENCES = 4
+_CELL = 1.0 / 240.0
+_SMOOTH = 3
+_DEFORM = tuple(name for name in BONE_NAMES if not name.endswith("_End"))
+_SEED_SPAN = {"Hand": (0.1, 1.0), "Head": (0.15, 1.0), "ToeBase": (0.0, 1.0), "Foot": (0.0, 1.0), "Hips": (0.0, 0.7)}
 
 
 def compute_weights(vertices: np.ndarray, indices: np.ndarray | None, skeleton: dict) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(joints, weights)`` with shapes (N, 4). Weights sum to 1."""
     points = np.asarray(vertices, dtype=np.float64)
-    distances = _distances(points, skeleton["world"])
-    allowed = _allowed(points, distances, skeleton)
-    score = _masked_score(distances, allowed, skeleton["height"])
-    joints, weights = _top_influences(score)
-    joints, weights = _smooth(points, indices, joints, weights, allowed, distances, skeleton["height"])
-    return joints, weights
+    height = float(skeleton["height"])
+    cells, owner = _cluster(points, height * _CELL, float(skeleton["world"]["Hips"][0]))
+    graph = _graph(cells, owner, indices, len(points))
+    segments = _segments(skeleton)
+    capsule, along = _capsules(cells, segments)
+    head = _head_region(cells, skeleton)
+    seeds = _seeds(capsule, along, head)
+    table = _table(graph, seeds, capsule, height, cells)
+    base = _base_region(cells, skeleton)
+    table = _only(_head_mask(_side_mask(table, cells, skeleton), head), base, "Hips")
+    table = _only(_head_mask(_side_mask(_smooth(table, graph), cells, skeleton), head), base, "Hips")
+    return _top(table[owner])
 
 
 def dominant_distance(vertices: np.ndarray, joints: np.ndarray, weights: np.ndarray, skeleton: dict) -> np.ndarray:
-    """Distance from each vertex to the capsule of its strongest bone."""
-    distances = _distances(np.asarray(vertices, dtype=np.float64), skeleton["world"])
+    """Distance from each vertex to the segment of its strongest bone."""
+    capsule, _along = _capsules(np.asarray(vertices, dtype=np.float64), _segments(skeleton))
     dominant = joints[np.arange(len(joints)), np.argmax(weights, axis=1)]
-    return distances[np.arange(len(distances)), dominant]
+    columns = np.array([_DEFORM.index(BONE_NAMES[index]) if BONE_NAMES[index] in _DEFORM else 0 for index in range(len(BONE_NAMES))])
+    return capsule[np.arange(len(capsule)), columns[dominant]]
 
 
-def _distances(points: np.ndarray, world: dict) -> np.ndarray:
-    """Each bone owns the segment that runs out to its chain child, not back to its parent."""
-    columns = [_capsule(points, start, end) for start, end in _chain_segments(world)]
-    return np.stack(columns, axis=1)
+def _cluster(points: np.ndarray, cell: float, center_x: float) -> tuple[np.ndarray, np.ndarray]:
+    """Weld vertices on a grid centred on the body axis, so mirrored vertices weld alike."""
+    centred = points - np.array([center_x, 0.0, 0.0])
+    keys = np.round(centred / cell).astype(np.int64)
+    _unique, owner = np.unique(keys, axis=0, return_inverse=True)
+    owner = owner.reshape(-1)
+    counts = np.bincount(owner).astype(np.float64)
+    cells = np.zeros((len(counts), 3))
+    np.add.at(cells, owner, points)
+    return cells / counts[:, None], owner
 
 
-def _chain_segments(world: dict):
+def _graph(cells: np.ndarray, owner: np.ndarray, indices: np.ndarray | None, count: int):
+    faces = np.arange(count, dtype=np.int64).reshape(-1, 3) if indices is None else np.asarray(indices, dtype=np.int64)
+    welded = owner[faces]
+    pairs = np.concatenate((welded[:, [0, 1]], welded[:, [1, 2]], welded[:, [2, 0]]), axis=0)
+    pairs = pairs[pairs[:, 0] != pairs[:, 1]]
+    pairs = np.unique(np.sort(pairs, axis=1), axis=0)
+    length = np.linalg.norm(cells[pairs[:, 0]] - cells[pairs[:, 1]], axis=1) + 1e-9
+    size = len(cells)
+    return coo_matrix((length, (pairs[:, 0], pairs[:, 1])), shape=(size, size)).tocsr()
+
+
+def _segments(skeleton: dict) -> list[tuple[np.ndarray, np.ndarray]]:
+    world = skeleton["world"]
     child = {}
     for name, parent in BONE_PARENTS:
         if parent is not None and parent not in child:
             child[parent] = name
-    segments = []
-    for name in BONE_NAMES:
-        start = world[name]
-        segments.append((start, world[child[name]] if name in child else start))
-    return segments
+    ends = dict(skeleton.get("tips") or {})
+    ends["Hips"] = world["Spine"]
+    found = []
+    for name in _DEFORM:
+        end = ends.get(name, world[child[name]] if name in child else world[name])
+        found.append((np.asarray(world[name], dtype=np.float64), np.asarray(end, dtype=np.float64)))
+    return found
 
 
-def _capsule(points: np.ndarray, start: np.ndarray, end: np.ndarray) -> np.ndarray:
-    segment = end - start
-    length_sq = float(segment @ segment)
-    if length_sq < 1e-12:
-        return np.linalg.norm(points - start, axis=1)
-    factor = np.clip(((points - start) @ segment) / length_sq, 0.0, 1.0)
-    closest = start + factor[:, None] * segment
-    return np.linalg.norm(points - closest, axis=1)
+def _capsules(points: np.ndarray, segments: list) -> tuple[np.ndarray, np.ndarray]:
+    distance = np.zeros((len(points), len(segments)))
+    along = np.zeros((len(points), len(segments)))
+    for column, (start, end) in enumerate(segments):
+        segment = end - start
+        length_sq = max(float(segment @ segment), 1e-12)
+        factor = ((points - start) @ segment) / length_sq
+        clipped = np.clip(factor, 0.0, 1.0)
+        distance[:, column] = np.linalg.norm(points - (start + clipped[:, None] * segment), axis=1)
+        along[:, column] = factor
+    return distance, along
 
 
-def _allowed(points: np.ndarray, distances: np.ndarray, skeleton: dict) -> np.ndarray:
-    height = skeleton["height"]
-    allowed = np.ones(distances.shape, dtype=bool)
-    center = float(skeleton["world"]["Hips"][0])
-    side = points[:, 0] - center
-    band = height * 0.02
-    _forbid(allowed, side > band, RIGHT_ARM_BONES)
-    _forbid(allowed, side < -band, LEFT_ARM_BONES)
-    _forbid(allowed, np.abs(side) <= band, LEFT_ARM_BONES + RIGHT_ARM_BONES)
-    _forbid(allowed, side > band, RIGHT_LEG_BONES)
-    _forbid(allowed, side < -band, LEFT_LEG_BONES)
-    _separate_limbs(allowed, distances, height)
-    _keep_legs_below_hips(allowed, points, skeleton)
-    _keep_arms_outside_chest(allowed, points, skeleton)
-    return allowed
+def _head_region(cells: np.ndarray, skeleton: dict) -> np.ndarray:
+    """Everything above the neck notch and within the head's width is head."""
+    region = skeleton.get("head_region")
+    if not region:
+        return np.zeros(len(cells), dtype=bool)
+    return (cells[:, 1] > float(region["y"])) & (np.abs(cells[:, 0] - float(region["x"])) <= float(region["half"]) * 1.05)
 
 
-def _keep_legs_below_hips(allowed: np.ndarray, points: np.ndarray, skeleton: dict) -> None:
-    """The pelvis sits above the hip joint. A knee bend must not carry it."""
-    hip_y = float(skeleton["world"]["Hips"][1])
-    above = points[:, 1] > hip_y + skeleton["height"] * 0.015
-    _forbid(allowed, above, LEFT_LEG_BONES + RIGHT_LEG_BONES)
+def _seeds(capsule: np.ndarray, along: np.ndarray, head: np.ndarray) -> list[np.ndarray]:
+    nearest = np.argmin(capsule, axis=1)
+    seeds = []
+    for column, name in enumerate(_DEFORM):
+        low, high = _span(name)
+        own = (nearest == column) & (along[:, column] >= low) & (along[:, column] <= high)
+        own = (own | head) if name == "Head" else (own & ~head)
+        if np.any(own):
+            radius = float(np.median(capsule[own, column]))
+            own &= capsule[:, column] <= radius * 1.6 + 1e-9
+        if not np.any(own):
+            own = np.zeros(len(capsule), dtype=bool)
+            own[int(np.argmin(capsule[:, column] + np.abs(along[:, column] - 0.5) * 1e-3))] = True
+        seeds.append(np.flatnonzero(own))
+    return seeds
 
 
-def _keep_arms_outside_chest(allowed: np.ndarray, points: np.ndarray, skeleton: dict) -> None:
-    """Clavicles run across the chest. Only vertices outboard of the shoulder may use an arm."""
-    center = float(skeleton["world"]["Hips"][0])
-    reach = min(
-        abs(float(skeleton["world"]["LeftArm"][0]) - center),
-        abs(float(skeleton["world"]["RightArm"][0]) - center),
-    )
-    inside = np.abs(points[:, 0] - center) < reach * 0.82
-    _forbid(allowed, inside, LEFT_ARM_BONES + RIGHT_ARM_BONES)
+def _span(name: str) -> tuple[float, float]:
+    for suffix, span in _SEED_SPAN.items():
+        if name.endswith(suffix):
+            return span
+    return (0.15, 0.85)
 
 
-def _forbid(allowed: np.ndarray, mask: np.ndarray, names: tuple) -> None:
-    if not np.any(mask):
+def _table(graph, seeds: list, capsule: np.ndarray, height: float, cells: np.ndarray) -> np.ndarray:
+    limit = height * 0.6
+    geodesic = np.full(capsule.shape, np.inf)
+    for column, chosen in enumerate(seeds):
+        geodesic[:, column] = dijkstra(graph, directed=False, indices=chosen, min_only=True, limit=limit)
+    reached = np.isfinite(geodesic).any(axis=1)
+    radius = np.array([float(np.median(capsule[chosen, column])) for column, chosen in enumerate(seeds)])
+    table = _blend(geodesic, radius, height)
+    _borrow(table, reached, cells, capsule)
+    return table
+
+
+def _blend(geodesic: np.ndarray, radius: np.ndarray, height: float) -> np.ndarray:
+    nearest = np.min(geodesic, axis=1, keepdims=True)
+    owner = np.argmin(geodesic, axis=1)
+    width = np.maximum(np.maximum(radius[owner][:, None], radius[None, :]) * 0.9, height * 0.012)
+    excess = np.where(np.isfinite(geodesic), (geodesic - np.where(np.isfinite(nearest), nearest, 0.0)) / width, np.inf)
+    value = np.clip(1.0 - excess, 0.0, 1.0)
+    return value * value * (3.0 - 2.0 * value)
+
+
+def _borrow(table: np.ndarray, reached: np.ndarray, cells: np.ndarray, capsule: np.ndarray) -> None:
+    """Unseeded pieces copy the nearest seeded surface, else their nearest bone."""
+    missing = np.flatnonzero(~reached)
+    if len(missing) == 0:
         return
-    columns = [BONE_BY_NAME[name] for name in names]
-    allowed[np.ix_(mask, columns)] = False
+    if np.any(reached):
+        donors = np.flatnonzero(reached)
+        _distance, nearest = cKDTree(cells[donors]).query(cells[missing])
+        table[missing] = table[donors[nearest]]
+        return
+    table[missing, np.argmin(capsule[missing], axis=1)] = 1.0
 
 
-def _separate_limbs(allowed: np.ndarray, distances: np.ndarray, height: float) -> None:
-    arms = [BONE_BY_NAME[name] for name in LEFT_ARM_BONES + RIGHT_ARM_BONES]
-    legs = [BONE_BY_NAME[name] for name in LEFT_LEG_BONES + RIGHT_LEG_BONES]
-    arm_distance = distances[:, arms].min(axis=1)
-    leg_distance = distances[:, legs].min(axis=1)
-    margin = height * 0.01
-    _forbid(allowed, arm_distance + margin < leg_distance, LEFT_LEG_BONES + RIGHT_LEG_BONES)
-    _forbid(allowed, leg_distance + margin < arm_distance, LEFT_ARM_BONES + RIGHT_ARM_BONES)
+def _side_mask(table: np.ndarray, cells: np.ndarray, skeleton: dict) -> np.ndarray:
+    """No weight on the far side of the body for a limb, whatever the surface did."""
+    facing = float(skeleton.get("facing", 1))
+    center = float(skeleton["world"]["Hips"][0])
+    side = (cells[:, 0] - center) * facing
+    band = float(skeleton["height"]) * 0.02
+    out = table.copy()
+    for name in _DEFORM:
+        if name.startswith("Left") and name != "LeftShoulder":
+            out[side < -band, _DEFORM.index(name)] = 0.0
+        if name.startswith("Right") and name != "RightShoulder":
+            out[side > band, _DEFORM.index(name)] = 0.0
+    empty = out.sum(axis=1) <= 0
+    out[empty] = table[empty]
+    return out
 
 
-def _masked_score(distances: np.ndarray, allowed: np.ndarray, height: float) -> np.ndarray:
-    score = 1.0 / (distances * distances + (height * 0.02) ** 2)
-    score = np.where(allowed, score, 0.0)
-    empty = score.sum(axis=1) <= 0
-    if np.any(empty):
-        nearest = np.argmin(np.where(allowed, distances, 1e6), axis=1)
-        score[empty, nearest[empty]] = 1.0
-    return score
+def _base_region(cells: np.ndarray, skeleton: dict) -> np.ndarray:
+    """A pedestal under the feet rides with the hips instead of stretching with a foot."""
+    base = skeleton.get("base")
+    if base is None:
+        return np.zeros(len(cells), dtype=bool)
+    return cells[:, 1] < float(base) - float(skeleton["height"]) * 0.005
 
 
-def _top_influences(score: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    order = np.argsort(-score, axis=1)[:, :_INFLUENCES]
-    picked = np.take_along_axis(score, order, axis=1)
-    total = picked.sum(axis=1, keepdims=True)
-    total[total <= 0] = 1.0
-    weights = np.zeros(score.shape[0:1] + (_INFLUENCES,), dtype=np.float64)
-    weights[:] = picked / total
-    return order.astype(np.uint16), weights
-
-
-def _smooth(points, indices, joints, weights, allowed, distances, height):
-    welded, inverse = _weld(points)
-    table = np.zeros((len(welded), len(BONE_NAMES)))
-    _scatter_mean(table, inverse, joints, weights)
-    edges = _edges(inverse, indices, len(points))
-    for _iteration in range(_SMOOTH):
-        table = _average(table, edges)
-    _apply_allowed(table, inverse, allowed)
-    scores = _cut_far(table[inverse], distances, height)
-    return _top_influences(np.maximum(scores, 0.0))
-
-
-def _cut_far(scores: np.ndarray, distances: np.ndarray, height: float) -> np.ndarray:
-    """Smoothing walks a whole box in four hops. Drop bones far from the nearest one."""
-    nearest = np.min(np.where(scores > 0, distances, 1e6), axis=1)
-    keep = distances <= (nearest + height * 0.08)[:, None]
-    return np.where(keep, scores, 0.0)
-
-
-def _weld(points: np.ndarray):
-    rounded = np.round(points, 4)
-    _unique, inverse = np.unique(rounded, axis=0, return_inverse=True)
-    return _unique, inverse
-
-
-def _scatter_mean(table, inverse, joints, weights) -> None:
-    flat_joint = joints.reshape(-1)
-    flat_weight = weights.reshape(-1)
-    flat_inverse = np.repeat(inverse, _INFLUENCES)
-    np.add.at(table, (flat_inverse, flat_joint), flat_weight)
-    counts = np.bincount(inverse, minlength=len(table))
-    counts[counts == 0] = 1
-    table /= counts[:, None]
-
-
-def _edges(inverse: np.ndarray, indices: np.ndarray | None, count: int) -> np.ndarray:
-    welded = inverse[_faces(indices, count)]
-    pairs = np.stack((welded[:, [0, 1]], welded[:, [1, 2]], welded[:, [2, 0]]), axis=1).reshape(-1, 2)
-    pairs = pairs[pairs[:, 0] != pairs[:, 1]]
-    if len(pairs) == 0:
-        return pairs
-    return np.unique(np.concatenate((pairs, pairs[:, ::-1]), axis=0), axis=0)
-
-
-def _faces(indices: np.ndarray | None, count: int) -> np.ndarray:
-    if indices is None:
-        return np.arange(count, dtype=np.int64).reshape(-1, 3)
-    return np.asarray(indices, dtype=np.int64)
-
-
-def _average(table: np.ndarray, edges: np.ndarray) -> np.ndarray:
-    if len(edges) == 0:
+def _only(table: np.ndarray, region: np.ndarray, bone: str) -> np.ndarray:
+    if not np.any(region):
         return table
-    accumulated = np.zeros_like(table)
-    np.add.at(accumulated, edges[:, 1], table[edges[:, 0]])
-    degree = np.bincount(edges[:, 1], minlength=len(table)).astype(np.float64)
-    touched = degree > 0
-    updated = table.copy()
-    updated[touched] = (table[touched] + accumulated[touched]) / (degree[touched, None] + 1.0)
-    return updated
+    out = table.copy()
+    out[region] = 0.0
+    out[region, _DEFORM.index(bone)] = 1.0
+    return out
 
 
-def _apply_allowed(table: np.ndarray, inverse: np.ndarray, allowed: np.ndarray) -> None:
-    collapsed = np.ones((len(table), allowed.shape[1]), dtype=np.uint8)
-    np.minimum.at(collapsed, inverse, allowed.astype(np.uint8))
-    table *= collapsed.astype(bool)
+def _head_mask(table: np.ndarray, head: np.ndarray) -> np.ndarray:
+    """Inside the head region only the head and neck may pull."""
+    if not np.any(head):
+        return table
+    out = table.copy()
+    keep = [_DEFORM.index("Head"), _DEFORM.index("Neck")]
+    others = np.ones(len(_DEFORM), dtype=bool)
+    others[keep] = False
+    out[np.ix_(head, others)] = 0.0
+    empty = out.sum(axis=1) <= 0
+    out[empty & head, _DEFORM.index("Head")] = 1.0
+    return out
+
+
+def _smooth(table: np.ndarray, graph) -> np.ndarray:
+    adjacency = graph.copy()
+    adjacency.data[:] = 1.0
+    adjacency = adjacency + adjacency.T
+    degree = np.asarray(adjacency.sum(axis=1)).reshape(-1)
+    smoothed = table / np.maximum(table.sum(axis=1, keepdims=True), 1e-12)
+    for _index in range(_SMOOTH):
+        smoothed = (smoothed + adjacency @ smoothed) / (degree[:, None] + 1.0)
+    return smoothed
+
+
+def _top(table: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    order = np.argsort(-table, axis=1, kind="stable")[:, :_INFLUENCES]
+    picked = np.take_along_axis(table, order, axis=1)
+    picked = np.where(picked < picked[:, :1] * 0.02, 0.0, picked)
+    total = picked.sum(axis=1, keepdims=True)
+    weights = picked / np.where(total > 0, total, 1.0)
+    columns = np.array([BONE_BY_NAME[name] for name in _DEFORM], dtype=np.uint16)
+    return columns[order], weights

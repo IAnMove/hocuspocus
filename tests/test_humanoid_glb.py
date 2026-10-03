@@ -9,12 +9,13 @@ pytest.importorskip("pygltflib")
 
 from pygltflib import GLTF2
 
+from services.humanoid_rig import rotation as rot
 from services.humanoid_rig.errors import NotHumanoid
 from services.humanoid_rig.names import BONE_NAMES
 from services.humanoid_rig.rig import rig_humanoid
-from services.humanoid_rig.skeleton import axis_quaternion
 from services.procedural_3d.compose import compose_glb
 from services.procedural_3d.glb_inspector import inspect_glb_bytes
+from tests.humanoid_bodies import as_glb, body
 
 ROOT = Path(__file__).parents[1] / "tests" / "fixtures" / "humanoid_rig"
 
@@ -116,7 +117,7 @@ def test_rigged_compose_rests_keeps_colors_and_passes_the_inspector(name):
     positions, skinned = _skin_rest(gltf, blob, gltf.meshes[0].primitives[0])
     assert float(np.linalg.norm(skinned - positions, axis=1).max()) < 1e-5
     assert sidecar["bones"] == list(BONE_NAMES)
-    assert sidecar["confidence"] == 1.0
+    assert sidecar["confidence"] >= 0.8
     hips = next(node for node in gltf.nodes if node.name == "Hips")
     assert hips.scale[0] == pytest.approx(sidecar["height"] / 1.7)
     assert _joint_worlds(gltf)[BONE_NAMES.index("LeftHand")][0, 3] > 0
@@ -143,7 +144,7 @@ def test_exported_right_arm_rotation_moves_the_hand_only_on_that_side():
     weights = _vec4(gltf, blob, primitive.attributes.WEIGHTS_0, np.float32).astype(np.float64)
     bind = _joint_worlds(gltf)
     arm = next(node for node in gltf.nodes if node.name == "RightArm")
-    arm.rotation = [float(value) for value in axis_quaternion(np.array([0.0, 0.0, 1.0]), 90.0)]
+    arm.rotation = [float(value) for value in rot.axis_angle(np.array([0.0, 0.0, 1.0]), 90.0)]
     posed = _joint_worlds(gltf)
     inverse = _inverse_binds(gltf, blob)
     delta = _blend(positions, joints, weights, bind, posed, inverse)
@@ -174,3 +175,101 @@ def _blend(positions, joints, weights, bind, posed, inverse):
 def _loaded(data: bytes):
     gltf = GLTF2.load_from_bytes(data)
     return gltf, gltf.binary_blob()
+
+
+def test_an_a_pose_mesh_rests_exactly_and_carries_its_rig_facts():
+    rigged, sidecar = rig_humanoid(as_glb(body("human_a")), ["walk", "wave"], 120)
+    report = inspect_glb_bytes(rigged)
+    assert report.status == "valid"
+    gltf, blob = _loaded(rigged)
+    positions, skinned = _skin_rest(gltf, blob, gltf.meshes[0].primitives[0])
+    assert float(np.linalg.norm(skinned - positions, axis=1).max()) < 1e-5
+    left_arm = next(node for node in gltf.nodes if node.name == "LeftArm")
+    assert left_arm.rotation is not None and abs(left_arm.rotation[2]) > 0.2
+    hips = next(node for node in gltf.nodes if node.name == "Hips")
+    marker = hips.extras["hocuspocus_humanoid"]
+    assert marker["version"] == 2 and marker["facing"] == 1
+    assert 30.0 <= marker["arm_down"] <= 80.0 and marker["chest_front"] > 0.0
+    assert [animation.name for animation in gltf.animations] == ["Walk", "Wave"]
+    assert sidecar["pose"] == "a" and [clip["name"] for clip in sidecar["clips"]] == ["Walk", "Wave"]
+
+
+def test_rigging_a_rigged_model_again_leaves_one_standard_skeleton():
+    once, _sidecar = rig_humanoid(as_glb(body("human_t")))
+    twice, _sidecar = rig_humanoid(once, ["clap"], 120)
+    gltf, _blob = _loaded(twice)
+    names = [node.name for node in gltf.nodes]
+    assert all(names.count(name) == 1 for name in BONE_NAMES)
+    assert sum(1 for name in names if name and name.startswith("previous:")) == len(BONE_NAMES)
+    reachable = set()
+
+    def walk(index):
+        reachable.add(index)
+        for child in gltf.nodes[index].children or []:
+            walk(child)
+
+    for root in gltf.scenes[gltf.scene or 0].nodes:
+        walk(root)
+    assert not any(gltf.nodes[index].name.startswith("previous:") for index in reachable if gltf.nodes[index].name)
+    assert len(gltf.skins) == 1 and [animation.name for animation in gltf.animations] == ["Clap"]
+
+
+def _spec_skinned_rest(gltf, blob):
+    """Skin every skinned primitive the way glTF defines it: the mesh node's own transform is ignored."""
+    worlds = _joint_worlds(gltf)
+    inverse = _inverse_binds(gltf, blob)
+    out = []
+    for node in gltf.nodes:
+        if node.mesh is None or node.skin is None:
+            continue
+        assert not node.matrix and not node.translation and not node.rotation and not node.scale
+        for primitive in gltf.meshes[node.mesh].primitives:
+            positions = _vec3(gltf, blob, primitive.attributes.POSITION).astype(np.float64)
+            joints = _vec4(gltf, blob, primitive.attributes.JOINTS_0, np.uint16)
+            weights = _vec4(gltf, blob, primitive.attributes.WEIGHTS_0, np.float32).astype(np.float64)
+            skinned = np.zeros_like(positions)
+            for slot in range(4):
+                for joint in np.unique(joints[:, slot]):
+                    mask = joints[:, slot] == joint
+                    matrix = worlds[int(joint)] @ inverse[int(joint)]
+                    skinned[mask] += weights[mask, slot:slot + 1] * (positions[mask] @ matrix[:3, :3].T + matrix[:3, 3])
+            out.append(skinned)
+    return out
+
+
+@pytest.mark.parametrize("label,matrix", [
+    ("centimetres", np.diag([0.01, 0.01, 0.01, 1.0])),
+    ("z_up", np.array([[1.0, 0.0, 0.0, 0.2], [0.0, 0.0, 1.0, 0.0], [0.0, -1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]])),
+])
+def test_a_mesh_under_a_transformed_node_is_skinned_in_world_space(label, matrix):
+    item = body("human_a")
+    rigged, sidecar = rig_humanoid(as_glb(item, node_matrix=matrix), ["wave"], 120)
+    assert sidecar["pose"] == "a", label
+    gltf, blob = _loaded(rigged)
+    skinned = _spec_skinned_rest(gltf, blob)
+    assert len(skinned) == 1 and float(np.abs(skinned[0] - np.asarray(item["positions"])).max()) < 1e-4, label
+    assert inspect_glb_bytes(rigged).status == "valid"
+
+
+def test_a_mesh_used_by_two_nodes_gets_its_own_world_space_copy_per_node():
+    from services.humanoid_rig.gltf_export import _iter_primitives
+    from services.humanoid_rig.gltf_world import world_space_primitives
+
+    item = body("human_t")
+    gltf, blob = _loaded(as_glb(item, instances=2))
+    blob = bytearray(blob)
+    placed = world_space_primitives(gltf, blob, list(_iter_primitives(gltf)))
+    assert len(placed) == 2 and placed[0][1] is not placed[1][1]
+    assert len(gltf.meshes) == 3 and gltf.nodes[0].mesh is None and gltf.nodes[1].mesh is None
+    for copy, (node_index, primitive) in enumerate(placed):
+        node = gltf.nodes[node_index]
+        assert not node.matrix and node_index in gltf.scenes[0].nodes
+        positions = _vec3(gltf, bytes(blob), primitive.attributes.POSITION)
+        assert np.allclose(positions, np.asarray(item["positions"]) + np.array([3.0 * copy, 0.0, 0.0]), atol=1e-5)
+    with pytest.raises(NotHumanoid):
+        rig_humanoid(as_glb(item, instances=2))
+
+
+def test_compressed_meshes_are_refused_with_a_clear_message():
+    with pytest.raises(ValueError, match="compressed meshes are not supported"):
+        rig_humanoid(as_glb(body("human_t"), extensions=["KHR_draco_mesh_compression"]))

@@ -1,10 +1,13 @@
-"""Add reusable clips to a GLB that already has the standard skeleton."""
+"""Add clips to a GLB that already has the standard skeleton.
+
+The clips are baked for that exact body: its proportions, floor and comfort
+limits come from the file. Rigs made before canonical frames (identity rest
+rotations) get the same motion through a per-bone correction.
+"""
 
 from __future__ import annotations
 
-import json
-
-from services.humanoid_rig.names import NORMAL_HEIGHT
+from services.humanoid_rig.errors import InvalidInput
 
 
 def animate_humanoid(
@@ -13,13 +16,15 @@ def animate_humanoid(
     bpm: float,
     import_file: bytes | None = None,
     import_suffix: str = "",
+    import_label: str = "Imported",
 ) -> tuple[bytes, list[dict], list[str]]:
     """Return ``(glb, clips, warnings)``. ``clips`` is ``[{index, name, duration}]``."""
-    from services.humanoid_rig.gltf_export import append_animation_clips, hips_scale
+    from services.humanoid_rig.gltf_export import append_animation_clips
 
-    clips, warnings = _clips(source, clip_ids, bpm, import_file, import_suffix)
+    rig = stored_rig(bytes(source))
+    clips, warnings = _clips(rig, clip_ids, bpm, import_file, import_suffix, import_label)
     if not clips:
-        raise ValueError("Select at least one animation")
+        raise InvalidInput("Select at least one animation")
     data, start = append_animation_clips(bytes(source), clips)
     listed = [
         {"index": start + index, "name": str(clip["name"]), "duration": float(clip["duration"])}
@@ -28,36 +33,31 @@ def animate_humanoid(
     return data, listed, warnings
 
 
-def _clips(source: bytes, clip_ids: list[str] | None, bpm: float, import_file: bytes | None, import_suffix: str):
-    from services.humanoid_rig.clips import clip_library
-    from services.humanoid_rig.gltf_export import hips_scale
+def stored_rig(source: bytes):
+    """The motion rig of a GLB rigged with the standard skeleton."""
+    from services.humanoid_rig.gltf_export import read_rig
+    from services.humanoid_rig.motion import Rig
+    from services.humanoid_rig.skeleton import canonical_frames, joint_positions
 
-    built = clip_library(float(bpm), list(clip_ids)) if clip_ids else []
+    stored = read_rig(source)
+    marker = stored["marker"]
+    facing = int(marker.get("facing", 1))
+    bones = stored["bones"]
+    frames = canonical_frames(joint_positions(bones), facing)
+    limits = {name: float(marker[name]) for name in ("arm_down", "arm_up", "swing_up", "chest_front") if name in marker}
+    return Rig(bones, frames, facing=facing, floor=stored["floor"], scale=float(bones[0]["scale"][0]), limits=limits)
+
+
+def _clips(rig, clip_ids: list[str] | None, bpm: float, import_file: bytes | None, import_suffix: str, import_label: str):
+    from services.humanoid_rig.clips import clip_library
+    from services.humanoid_rig.retarget import retarget_file
+
+    built = clip_library(float(bpm), list(clip_ids), rig) if clip_ids else []
     warnings: list[str] = []
     if import_file:
-        imported, notes = _imported(import_file, import_suffix, float(hips_scale(source)) * NORMAL_HEIGHT)
-        built.append(imported)
-        warnings.extend(notes)
+        if import_suffix.lower() not in (".bvh", ".glb", ".gltf"):
+            raise InvalidInput("import file must be .bvh, .glb or .gltf")
+        for clip in retarget_file(import_file, import_suffix, rig, import_label):
+            warnings.extend(item for item in clip.pop("warnings") if item not in warnings)
+            built.append(clip)
     return built, warnings
-
-
-def _imported(payload: bytes, suffix: str, target_height: float) -> tuple[dict, list[str]]:
-    from services.humanoid_rig.retarget import retarget_bvh, retarget_glb, retarget_gltf
-
-    kind = suffix.lower()
-    if kind == ".bvh":
-        result = retarget_bvh(payload.decode("utf-8"), target_height)
-    elif kind == ".glb":
-        result = retarget_glb(payload, target_height)
-    elif kind == ".gltf":
-        result = retarget_gltf(json.loads(payload.decode("utf-8")), target_height)
-    else:
-        raise ValueError("import file must be .bvh, .glb or .gltf")
-    clip = {
-        "name": "Imported",
-        "times": result["times"],
-        "duration": result["duration"],
-        "rotations": result["rotations"],
-        "hips_translation": result["hips_translation"],
-    }
-    return clip, list(result["warnings"])
