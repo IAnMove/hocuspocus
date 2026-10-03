@@ -3,7 +3,7 @@ import test from 'node:test'
 import { clipWeightsAt } from '../src/features/scene3d/clipCues.ts'
 import { appendClipCue, removeClipCue, replaceClipCue, singleClipFromSequence, startClipSequence } from '../src/features/scene3d/clipSequenceEdit.ts'
 import { createDefaultScene3DDocument } from '../src/features/scene3d/document.ts'
-import { patchScene3DSlot } from '../src/features/scene3d/templates.ts'
+import { patchScene3DSlot, remountScene3DTemplate } from '../src/features/scene3d/templates.ts'
 import type { Scene3DSlot } from '../src/features/scene3d/types.ts'
 
 const walk = { index: 0, name: 'Walk' }
@@ -50,4 +50,26 @@ test('the slot patch stores a sequence and a document without one stays on clip'
   const cleared = patchScene3DSlot(patched, model.id, singleClipFromSequence(cues))
   assert.equal(cleared.slots.find(item => item.id === model.id)?.clips, undefined)
   assert.equal(document.slots.find(item => item.id === model.id)?.clips, undefined)
+})
+
+test('changing the shot keeps a sequence, and a later single-clip write drops it', () => {
+  const document = createDefaultScene3DDocument()
+  const model = document.slots.find(item => item.media === 'model3d')
+  assert.ok(model)
+  const cues = appendClipCue(startClipSequence({ ...slot, clip: walk })!, wave, 8)!
+  document.slots = document.slots.map(item => item.id === model.id
+    ? { ...item, sourceUrl: '/api/v1/file/hero.glb?workspace=test', clip: walk, clips: cues }
+    : item)
+  const remounted = remountScene3DTemplate('duo-diagonal', document)
+  const kept = remounted.slots.find(item => item.id === model.id)
+  assert.equal(kept?.clips?.length, 2)
+  assert.equal(kept?.clips?.[1].clip.name, 'Wave')
+  assert.equal(kept?.clip?.name, 'Walk')
+  const baked = patchScene3DSlot(remounted, model.id, {
+    clip: { index: 4, name: 'Path Walk' },
+    clipPlayback: { speed: 1, start: 0, loop: false },
+    clips: undefined,
+  })
+  assert.equal(baked.slots.find(item => item.id === model.id)?.clips, undefined)
+  assert.equal(baked.slots.find(item => item.id === model.id)?.clip?.name, 'Path Walk')
 })
