@@ -127,6 +127,8 @@ silla real o sostenga un objeto, parpadee y mire de forma natural, y mueva algo 
 - Si los recorridos se hornean siempre en el servidor (más preciso) o se acepta la aproximación en el cliente para la
   vista previa.
 - Si la investigación de dedos (fase 5b) merece la pena para mallas generadas, que suelen tener los dedos fundidos.
+  **Decidido el 2026-10-03:** la mano queda entera; no habrá huesos de dedos ni bloque de dedos, porque las mallas
+  generadas aún no tienen ese nivel. El informe está en `docs/development/HUMANOID_HANDS_RESEARCH.md` (PR #783).
 - La prioridad entre las fases 3 (objetos) y 4 (cara). Se propone primero la 4: es más barata y se nota en todos los planos
   con diálogo.
 

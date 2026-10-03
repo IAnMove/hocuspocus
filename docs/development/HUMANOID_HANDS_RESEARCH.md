@@ -7,7 +7,14 @@ It had two parts:
 - **(b)** Research a thumb and a finger block for our own rig. The research comes with captures on three real meshes and
   goes before any integration.
 
-No rig code changes in this phase. The decision on what to integrate is the user's.
+No rig code changes in this phase.
+
+**Decision (user, 2026-10-03): the hand stays one piece.**
+
+- No finger bones, and no thumb and finger block either.
+- The user's reason: generated 3D models are not yet good enough at that level.
+- Point 3 of the recommendation is therefore shelved.
+- Point 2 (wrist and elbow from the mesh's shape) is still only a proposal.
 
 ## Short answer
 
