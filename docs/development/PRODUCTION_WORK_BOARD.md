@@ -208,7 +208,7 @@ abriendo el borrador el primer día y actualizando la fila en el mismo PR.
 | 4.F3 Emparentar en el cliente | Grok | Tras 4.F1 |
 | 4.F4 Parpadeo, mirada y cabeza | Grok | Ya |
 | 4.F5 Manos | Claude (#783) | Tras 4.F3 |
-| 5.F1 Ducking en Video 3D | Grok | Ya |
+| 5.F1 Ducking en Video 3D | Grok (#772) | Ya |
 | 5.F2 Volumen por plataforma | Grok | Ya |
 | 5.F3 Contactos de pie | Claude (#775) | Tras el PR #765 |
 | 5.F4 Pasos | Grok | Tras 5.F3 |
