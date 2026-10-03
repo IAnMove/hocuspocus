@@ -55,6 +55,36 @@ test('shot changes preserve asset identity and clip choices without mutating the
   assert.equal(remountScene3DTemplate('duo-diagonal', original, false).slots[0].sourceUrl, '')
 })
 
+test('keep-objects replaces a shipped plate or example GLB, not another user-template file', () => {
+  const chase = applyScene3DTemplate('drive-chase')
+  const background = chase.slots.find(slot => slot.slot === 'background')
+  assert.equal(background.sourceUrl, '/scene3d/drive-city.jpg')
+  Object.assign(background, {
+    sourceUrl: '/api/v1/file/my-city.jpg?workspace=film',
+    sourceRef: { workspaceId: 'film', filename: 'my-city.jpg', url: '/api/v1/file/my-city.jpg?workspace=film' },
+  })
+  const hood = remountScene3DTemplate('drive-hood', chase)
+  const keptPlate = hood.slots.find(slot => slot.slot === 'background')
+  assert.equal(keptPlate.sourceUrl, '/api/v1/file/my-city.jpg?workspace=film')
+  assert.equal(keptPlate.sourceRef.filename, 'my-city.jpg')
+  assert.equal(keptPlate.loop.cylinder, true)
+
+  const stock = remountScene3DTemplate('drive-wing', applyScene3DTemplate('drive-chase'))
+  assert.equal(stock.slots.find(slot => slot.slot === 'background').sourceUrl, '/scene3d/drive-coast.jpg')
+
+  const hero = applyScene3DTemplate('two-shot')
+  Object.assign(hero.slots[0], {
+    sourceUrl: '/api/v1/file/hero.glb?workspace=film',
+    sourceRef: { workspaceId: 'film', filename: 'hero.glb', url: '/api/v1/file/hero.glb?workspace=film' },
+    clip: { index: 2, name: 'Walk exact' },
+    clips: [{ clip: { index: 2, name: 'Walk exact' }, start: 0, fade: 0 }, { clip: { index: 3, name: 'Wave' }, start: 2, fade: 0.3 }],
+  })
+  const tv = remountScene3DTemplate('tv-head-walk', hero)
+  assert.equal(tv.slots[0].sourceUrl, '/api/v1/file/hero.glb?workspace=film')
+  assert.equal(tv.slots[0].clips[1].clip.name, 'Wave')
+  assert.notEqual(tv.slots[0].sourceUrl, '/examples/tv-head-humanoid.glb')
+})
+
 test('rate changes output duration and preserves complete timeline coverage and metadata', () => {
   for (const speed of [0.25, 0.5, 1, 2, 4]) {
     const scene = { ...applyScene3DTemplate('two-shot'), playbackSpeed: speed }

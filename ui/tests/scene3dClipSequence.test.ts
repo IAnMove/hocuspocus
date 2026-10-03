@@ -65,6 +65,10 @@ test('changing the shot keeps a sequence, and a later single-clip write drops it
   assert.equal(kept?.clips?.length, 2)
   assert.equal(kept?.clips?.[1].clip.name, 'Wave')
   assert.equal(kept?.clip?.name, 'Walk')
+  const ontoExample = remountScene3DTemplate('tv-head-walk', document).slots[0]
+  assert.equal(ontoExample.sourceUrl, '/api/v1/file/hero.glb?workspace=test')
+  assert.equal(ontoExample.clips?.length, 2)
+  assert.equal(ontoExample.clips?.[1].clip.name, 'Wave')
   const baked = patchScene3DSlot(remounted, model.id, {
     clip: { index: 4, name: 'Path Walk' },
     clipPlayback: { speed: 1, start: 0, loop: false },
