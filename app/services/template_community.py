@@ -11,10 +11,10 @@ import hashlib
 import json
 import os
 import time
-import urllib.request
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from services.secure_download import DownloadRefused, fetch_limited
 from services.template_format import ID_RE, TemplateError
 from services.template_library import MAX_ZIP_BYTES, TemplateLibrary
 
@@ -30,12 +30,14 @@ Fetcher = Callable[[str, int], bytes]
 
 
 def http_fetch(url: str, limit: int) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "HocusPocus-templates/1"})
-    with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - https-only, host-checked by the caller
-        data = response.read(limit + 1)
-    if len(data) > limit:
-        raise TemplateError("Remote file is larger than allowed", code="too_large")
-    return data
+    """The caller already checked the host; redirects may only stay on that host or the raw-files host."""
+    hosts = {urlparse(url).hostname or "", *RAW_HOSTS}
+    try:
+        return fetch_limited(url, limit, hosts=hosts, timeout=20, user_agent="HocusPocus-templates/1")
+    except DownloadRefused as refused:
+        if refused.code == "too_large":
+            raise TemplateError("Remote file is larger than allowed", code="too_large") from refused
+        raise TemplateError(str(refused), status=502, code=refused.code) from refused
 
 
 def _https(url: Any) -> str:

@@ -40,7 +40,7 @@ import {
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import { atmosEye, isAtmosDressing, prepareAtmosShadows, releaseAtmosShadows, resolveAtmos } from './atmos/index.ts'
 import { cameraEyeAtTime, cameraLookAtTime } from './camera.ts'
-import { performanceClipTime, slotPoseAtTime } from './performance.ts'
+import { parseFootContacts, performanceClipTime, slotPoseAtTime } from './performance.ts'
 import { rhythmicCameraEye, rhythmicLightIntensity, rhythmicSlotPose } from './rhythm'
 import { stabilizeGroundDepth, stabilizeSceneSurfaces } from './depthStability'
 import { cylinderUvOffset, isCylinderBackdrop, slotMountKey } from './backdrop.ts'
@@ -56,6 +56,7 @@ import { paintPixelWorld } from './pixel/pixelWorldSet'
 import { syncScreenGlow } from './pixel/screenGlow'
 import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { PixelPalette } from './pixel/pixelPalettes'
+import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
 import { EnvironmentLighting, applyLook } from './environmentLighting'
 
 export const CYLINDER_RADIUS = 12
@@ -104,6 +105,8 @@ export type GpuWorld = {
   worldSfx?: Map<string, WorldSfxGpu>
   /** The pixel-world mood of the frame being painted, if any. */
   pixelPalette?: PixelPalette | null
+  /** Supersampling and composer MSAA of a server export; absent in preview and draft. */
+  exportRender?: ExportRenderQuality
   /** Environment light of scenes that ask for it (`document.lighting`). */
   lighting?: EnvironmentLighting
 }
@@ -113,11 +116,15 @@ export function clipKeyOf(clip: Scene3DSlot['clip']): string {
 }
 
 export function catalogFromClips(animations: GLTF['animations']): Scene3DClipCatalogEntry[] {
-  return animations.map((clip: { name: string; duration: number }, index: number) => ({
-    index,
-    name: clip.name,
-    durationSeconds: Number.isFinite(clip.duration) && clip.duration > 0 ? clip.duration : null,
-  }))
+  return animations.map((clip: { name: string; duration: number; userData?: Record<string, unknown> }, index: number) => {
+    const contacts = parseFootContacts(clip.userData?.hocuspocus_contacts)
+    return {
+      index,
+      name: clip.name,
+      durationSeconds: Number.isFinite(clip.duration) && clip.duration > 0 ? clip.duration : null,
+      ...(contacts.length ? { contacts } : {}),
+    }
+  })
 }
 
 function isTexture(value: unknown): value is Texture {
@@ -550,7 +557,9 @@ function applyMeshShadows(root: Object3D, enabled: boolean, cast: boolean) {
   })
 }
 
-export function setWorldExportQuality(world: GpuWorld, enabled: boolean) {
+export function setWorldExportQuality(world: GpuWorld, enabled: boolean, render: ExportRenderQuality = DRAFT_RENDER) {
+  world.exportRender = enabled && (render.samples > 0 || render.supersample > 1) ? { ...render } : undefined
+  world.cinema?.setRenderQuality(world.exportRender)
   world.renderer.shadowMap.enabled = enabled
   world.renderer.shadowMap.type = PCFSoftShadowMap
   world.dir.castShadow = enabled

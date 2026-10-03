@@ -1,4 +1,6 @@
-from app.services.production_run import adapt_pipeline_record, build_production_run_catalog
+from app.services.production_run import (
+    adapt_pipeline_record, build_production_run_catalog, pipeline_matches_production,
+)
 
 
 def test_legacy_pipeline_splits_stable_production_and_run_identities():
@@ -39,6 +41,16 @@ def test_project_relationship_and_terminal_timing_are_preserved():
     assert adapted["production"]["project"] == {"kind": "comic", "id": "comic-1"}
     assert adapted["run"]["completed_at"] == "2023-11-14T22:15:20Z"
     assert adapted["run"]["output_count"] == 1
+
+
+def test_pipeline_matches_the_catalog_id_when_production_id_is_missing():
+    pipeline = {"pipeline_id": "bus", "status": "completed", "title": "Bus"}
+    catalog_id = adapt_pipeline_record(pipeline, "film")["production"]["id"]
+    assert catalog_id.startswith("production_legacy_")
+    assert pipeline_matches_production(pipeline, catalog_id, "film")
+    assert pipeline_matches_production(pipeline, "bus", "film") is False
+    assert pipeline_matches_production({"pipeline_id": "bus", "production_id": "p-hash"}, "p-hash")
+    assert pipeline_matches_production({}, "production_legacy_x") is False
 
 
 def test_pipeline_without_identity_is_rejected():

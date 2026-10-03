@@ -74,6 +74,23 @@ action from channel count, duration, or skeleton layout. A clip named
 `Hip_Hop_Dance_1` is reported with that string; that is not visual validation
 that the clip is a dance.
 
+## Foot landings written by the humanoid rig
+
+Animations that the humanoid rig writes carry `extras.hocuspocus_contacts`: `[{t, foot: "left"|"right", strength}]`,
+sorted by time, with `t` in clip seconds. The key is absent when the clip has no landing.
+
+three.js `GLTFLoader` copies animation extras to `clip.userData`, and Video 3D reads them in `catalogFromClips` into
+`Scene3DClipCatalogEntry.contacts`.
+
+`footContactsInScene(contacts, clipDuration, sceneDuration, clipPlayback)` (`ui/src/features/scene3d/performance.ts`)
+turns the landings into scene times with the clock of `performanceClipTime`:
+
+- the clip plays from `start` at `speed`;
+- it wraps when it loops;
+- when it plays once, a landing counts only while the clip is playing.
+
+A slot with the idle performance holds frame 0, so the caller skips it. The inspector above does not validate this key.
+
 ## Buffers and URIs
 
 Only these payloads are decoded, under size limits:

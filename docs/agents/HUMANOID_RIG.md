@@ -98,6 +98,32 @@ the landmarks, detected pose, confidence and warnings.
 
 Clip names are what Video 3D plays: a model slot uses `clip: {index, name}`.
 
+### Foot landings
+
+Each clip records when a foot touches down, for footsteps that follow the animation. The landings are stored on the
+animation as `extras.hocuspocus_contacts`:
+
+```json
+[{"t": 0.4667, "foot": "right", "strength": 0.261}, {"t": 0.9667, "foot": "left", "strength": 0.261}]
+```
+
+- `t` is in clip seconds.
+- `strength` (0–1) is the downward speed of the foot just before it lands. A jump landing is around 0.76; a walk step is
+  around 0.26.
+
+How a landing is detected:
+
+- A landing is the first frame a foot is back within 1.2 % of the leg length above the floor, after rising above 3.5 %.
+  A clip that keeps both feet down (Idle, Wave, Clap) records none.
+- Heights are measured against the floor, so in-place walks count like real steps.
+- Library clips and imported animations get the same detection. A looping library clip is scanned once around its loop.
+- Walk lands within one frame of the frame where its recipe puts the foot back down.
+- Run lands about two frames after the start of its stance phase, because the body is still coming down from the
+  flight phase.
+
+The rig sidecar, the `model3d.rig` result and the `model3d.animate` result list the same `contacts` for each clip.
+pygltflib drops empty lists when it saves, so a clip without landings has no key.
+
 ## Add animations later
 
 **Studios → Animate → Add animations to a rigged character** lists the GLBs in
@@ -115,7 +141,8 @@ marker) still accept new clips: each bone is corrected to the canonical frame.
 
 ## Known limits
 
-- No fingers, face or eyes; the hand moves as one piece.
+- No fingers, face or eyes; the hand moves as one piece. What generated meshes offer for hands, and the proposed next
+  steps, are in `docs/development/HUMANOID_HANDS_RESEARCH.md`.
 - Raising arms that were modeled steep (A pose past ~55°) stretches the
   shoulders a little; the result lists `arms_steep`.
 - Characters with arms modeled down at the sides, robes or fused legs are

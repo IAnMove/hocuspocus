@@ -301,6 +301,86 @@ def test_catalog_director_writes_refuse_while_the_pipeline_is_live(tmp_path: Pat
     assert clip["selected_video_filename"] == "new.mp4" and clip["video_stale"] is True
 
 
+def test_legacy_director_select_uses_the_catalog_id(tmp_path: Path):
+    """Older snapshots omit production_id. The catalog lists production_legacy_…
+    from adapt_pipeline_record; review shows the takes. Select used to miss
+    the file (raw production_id only) and raise origin_unsupported."""
+    from services.production_run import adapt_pipeline_record
+
+    root = tmp_path / "film"
+    root.mkdir()
+    snapshot = {
+        "pipeline_id": "bus", "status": "completed", "title": "Bus",
+        "clips": [{
+            "shot_id": "c1", "video_filename": "old.mp4", "selected_video_filename": "old.mp4",
+            "video_attempts": [{"filename": "old.mp4"}, {"filename": "new.mp4"}],
+        }],
+    }
+    _write(root / "_director_pipeline_bus.json", snapshot)
+    production_id = adapt_pipeline_record(snapshot, "film")["production"]["id"]
+    assert production_id.startswith("production_legacy_")
+    view = shot_view(str(root), "film", production_id)
+    assert view["shots"][0]["id"] == "c1"
+    assert view["shots"][0]["selected_take_id"] == "old.mp4"
+    select = next(action for action in view["shots"][0]["actions"] if action["action"] == "select")
+    assert select["enabled"] is True
+    selected = perform(str(root), "film", production_id, "c1", {
+        "action": "select", "take": "new.mp4", "expected_revision": view["revision"],
+    })
+    assert selected["applied"] is True
+    clip = json.loads((root / "_director_pipeline_bus.json").read_text(encoding="utf-8"))["clips"][0]
+    assert clip["selected_video_filename"] == "new.mp4" and clip["video_stale"] is True
+    again = shot_view(str(root), "film", production_id)
+    assert again["shots"][0]["selected_take_id"] == "new.mp4"
+
+
+def test_legacy_director_writes_refuse_while_the_pipeline_is_live(tmp_path: Path):
+    """After select can find a leftover-id pipeline, the live-worker hold
+    must recognize that same adapted id or the next Director save wipes the take."""
+    import threading
+
+    from services import director_pipeline
+    from services.director.pipeline_locks import director_holds_production
+    from services.production_run import adapt_pipeline_record
+
+    root = tmp_path / "film"
+    root.mkdir()
+    snapshot = {
+        "pipeline_id": "pid-legacy", "status": "running", "title": "Bus",
+        "clips": [{
+            "shot_id": "c1", "video_filename": "old.mp4", "selected_video_filename": "old.mp4",
+            "video_attempts": [{"filename": "old.mp4"}, {"filename": "new.mp4"}],
+        }],
+    }
+    path = root / "_director_pipeline_pid-legacy.json"
+    _write(path, snapshot)
+    production_id = adapt_pipeline_record(snapshot, "film")["production"]["id"]
+    before = path.read_text(encoding="utf-8")
+    hold = threading.Event()
+    thread = threading.Thread(target=hold.wait, name="director-pid-legacy", daemon=True)
+    thread.start()
+    director_pipeline._pipelines["pid-legacy"] = {
+        "id": "pid-legacy", "pipeline_id": "pid-legacy", "status": "running",
+    }
+    director_pipeline._pipeline_threads["pid-legacy"] = thread
+    try:
+        assert director_holds_production(production_id) is True
+        try:
+            perform(str(root), "film", production_id, "c1", {
+                "action": "select", "take": "new.mp4", "expected_revision": 0,
+            })
+        except ActionError as error:
+            assert error.code == "already_running"
+        else:
+            raise AssertionError("select")
+        assert path.read_text(encoding="utf-8") == before
+    finally:
+        hold.set()
+        thread.join(timeout=2)
+        director_pipeline._pipeline_threads.pop("pid-legacy", None)
+        director_pipeline._pipelines.pop("pid-legacy", None)
+
+
 def test_director_selection_marks_stale_without_dropping_attempts(tmp_path: Path):
     root = tmp_path / "film"
     root.mkdir()

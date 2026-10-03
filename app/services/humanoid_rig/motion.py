@@ -178,6 +178,12 @@ class Pose:
 
 def bake(pose: Pose) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(local rotations (F, B, 4), root translations (F, 3))`` for the stored rig."""
+    local, root, _positions, _worlds = bake_with_frames(pose)
+    return local, root
+
+
+def bake_with_frames(pose: Pose) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """``bake`` plus the canonical joint positions and world rotations of every frame."""
     rig = pose.rig
     root = rig.root[None] + rot.rotate(rig.facing, pose.root * rig.leg)
     local = _euler_locals(pose)
@@ -187,8 +193,8 @@ def bake(pose: Pose) -> tuple[np.ndarray, np.ndarray]:
         positions, worlds = rig.forward(local, root)
         root = root.copy()
         root[:, 1] += rig.floor - lowest_contact(rig, positions, worlds)
-    _positions, worlds = rig.forward(local, root)
-    return rig.to_actual(worlds), root
+    positions, worlds = rig.forward(local, root)
+    return rig.to_actual(worlds), root, positions, worlds
 
 
 def lowest_contact(rig: Rig, positions: np.ndarray, worlds: np.ndarray) -> np.ndarray:
