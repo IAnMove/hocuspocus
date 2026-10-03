@@ -42,12 +42,13 @@ test('new layouts are distinct and existing shots get different camera compositi
 
 test('shot changes preserve asset identity and clip choices without mutating the previous scene', () => {
   const original = applyScene3DTemplate('two-shot')
-  Object.assign(original.slots[0], { sourceUrl: '/api/v1/file/hero.glb?workspace=test', sourceRef: { workspaceId: 'test', filename: 'hero.glb', url: '/api/v1/file/hero.glb?workspace=test', assetId: 'canonical-hero' }, clip: { index: 2, name: 'Walk exact' } })
+  Object.assign(original.slots[0], { sourceUrl: '/api/v1/file/hero.glb?workspace=test', sourceRef: { workspaceId: 'test', filename: 'hero.glb', url: '/api/v1/file/hero.glb?workspace=test', assetId: 'canonical-hero' }, clip: { index: 2, name: 'Walk exact' }, clips: [{ clip: { index: 2, name: 'Walk exact' }, start: 0, fade: 0 }, { clip: { index: 3, name: 'Wave' }, start: 2, fade: 0.3 }] })
   original.playbackSpeed = 2
   const before = JSON.stringify(original)
   const next = remountScene3DTemplate('duo-diagonal', original)
   assert.deepEqual(next.slots[0].sourceRef, original.slots[0].sourceRef)
   assert.deepEqual(next.slots[0].clip, original.slots[0].clip)
+  assert.deepEqual(next.slots[0].clips, original.slots[0].clips)
   assert.notDeepEqual(next.slots[0].position, original.slots[0].position)
   assert.equal(next.playbackSpeed, 2)
   assert.equal(JSON.stringify(original), before)

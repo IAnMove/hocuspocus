@@ -563,6 +563,7 @@ export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefi
     sourceRef: old.sourceRef,
     clip: old.clip,
     clipPlayback: old.clipPlayback,
+    clips: old.clips ? structuredClone(old.clips) : undefined,
     rhythm: old.rhythm ? structuredClone(old.rhythm) : undefined,
     speech: old.speech ? structuredClone(old.speech) : undefined,
     screen,

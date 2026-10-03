@@ -42,6 +42,7 @@ function stripSlot(slot: Scene3DSlot, includeAssets: boolean): Scene3DSlot {
     sourceRef: keep ? slot.sourceRef : undefined,
     clip: keep ? slot.clip : null,
     clipPlayback: keep ? slot.clipPlayback : undefined,
+    clips: keep ? slot.clips : undefined,
     speech: keep ? slot.speech : undefined,
     character: keep ? slot.character : undefined,
     screen: stripScreen(slot.screen, includeAssets),
