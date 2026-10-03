@@ -91,6 +91,7 @@ def test_full_scale_sine_is_clipping_and_quiet_sine_is_too_quiet(tmp_path: Path)
     quiet_report = probe(str(quiet), target_lufs=-14)
     assert "too_quiet" in _codes(quiet, target_lufs=-14)
     assert quiet_report["measured"]["lufs"] <= -30
+    assert "fps" not in quiet_report["measured"]
 
 
 def test_hard_cut_inside_one_shot_is_a_camera_jump(tmp_path: Path):

@@ -84,13 +84,16 @@ def probe(
     except (OSError, subprocess.TimeoutExpired, ValueError):
         return _unreliable("probe_failed")
     duration = float(media.get("duration") or 0.0)
-    fps = float(media.get("fps") or expected_fps or 25.0)
+    reported_fps = media.get("fps")
+    window_fps = float(reported_fps if isinstance(reported_fps, (int, float)) else expected_fps or 25.0)
     windows = _shots(shots, duration)
     warnings: list[dict[str, Any]] = []
-    measured: dict[str, Any] = {"duration": round(duration, 3), "fps": round(fps, 3)}
+    measured: dict[str, Any] = {"duration": round(duration, 3)}
+    if isinstance(reported_fps, (int, float)):
+        measured["fps"] = round(float(reported_fps), 3)
     if media.get("video"):
         try:
-            warnings.extend(_video_warnings(path, ffmpeg, windows, fps))
+            warnings.extend(_video_warnings(path, ffmpeg, windows, window_fps))
         except (OSError, subprocess.TimeoutExpired):
             return _unreliable("probe_failed")
     if media.get("audio"):
