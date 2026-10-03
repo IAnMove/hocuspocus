@@ -40,7 +40,7 @@ import {
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import { atmosEye, isAtmosDressing, prepareAtmosShadows, releaseAtmosShadows, resolveAtmos } from './atmos/index.ts'
 import { cameraEyeAtTime, cameraLookAtTime } from './camera.ts'
-import { performanceClipTime, slotPoseAtTime } from './performance.ts'
+import { parseFootContacts, performanceClipTime, slotPoseAtTime } from './performance.ts'
 import { rhythmicCameraEye, rhythmicLightIntensity, rhythmicSlotPose } from './rhythm'
 import { stabilizeGroundDepth, stabilizeSceneSurfaces } from './depthStability'
 import { cylinderUvOffset, isCylinderBackdrop, slotMountKey } from './backdrop.ts'
@@ -110,11 +110,15 @@ export function clipKeyOf(clip: Scene3DSlot['clip']): string {
 }
 
 export function catalogFromClips(animations: GLTF['animations']): Scene3DClipCatalogEntry[] {
-  return animations.map((clip: { name: string; duration: number }, index: number) => ({
-    index,
-    name: clip.name,
-    durationSeconds: Number.isFinite(clip.duration) && clip.duration > 0 ? clip.duration : null,
-  }))
+  return animations.map((clip: { name: string; duration: number; userData?: Record<string, unknown> }, index: number) => {
+    const contacts = parseFootContacts(clip.userData?.hocuspocus_contacts)
+    return {
+      index,
+      name: clip.name,
+      durationSeconds: Number.isFinite(clip.duration) && clip.duration > 0 ? clip.duration : null,
+      ...(contacts.length ? { contacts } : {}),
+    }
+  })
 }
 
 function isTexture(value: unknown): value is Texture {
