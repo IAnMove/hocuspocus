@@ -37,12 +37,16 @@ def _pipeline_is_busy_locked(pid: str) -> bool:
 
 
 def _same_production(pid: str, pipeline: dict, production_id: str) -> bool:
-    return production_id in {
+    if production_id in {
         pid,
         pipeline.get("id"),
         pipeline.get("pipeline_id"),
         pipeline.get("production_id"),
-    }
+    }:
+        return True
+    from services.production_run import pipeline_matches_production
+
+    return pipeline_matches_production(pipeline, production_id)
 
 
 def director_holds_production(production_id: str) -> bool:
