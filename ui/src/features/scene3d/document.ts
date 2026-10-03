@@ -10,6 +10,7 @@ import { parseRhythm } from './rhythm'
 import { normalizeScene3DSlot, parseDressing } from './documentSlot.ts'
 import { parsePixelWorld } from './pixel/pixelWorld'
 import { parseAtmosSettings } from './atmos/params.ts'
+import { NEW_SCENE_LIGHTING, NEW_SCENE_LOOK, lightingField, lookField } from './look.ts'
 import { SCENE3D_TEMPLATE_IDS, type Scene3DDocument, type Scene3DSlot, type Scene3DTemplateId } from './types.ts'
 
 const SLOT_COLORS: Record<string, [number, number, number]> = {
@@ -25,6 +26,9 @@ export function scene3dSlotColor(slot: Scene3DSlot['slot']): [number, number, nu
 
 export function createDefaultScene3DDocument(): Scene3DDocument {
   return {
+    // New scenes are lit by the environment; scenes saved before keep their look (no fields).
+    lighting: structuredClone(NEW_SCENE_LIGHTING),
+    look: { ...NEW_SCENE_LOOK },
     version: 1,
     units: 'meters',
     up: 'y',
@@ -119,7 +123,7 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const dressing = parseDressing(value.dressing)
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
-  const { pixelWorld, atmos: rawAtmos, ...fields } = value
+  const { pixelWorld, atmos: rawAtmos, lighting, look, ...fields } = value
   fields.rhythm = rhythm
-  return { ...fields, ...pixelWorldField(pixelWorld), ...atmosField(rawAtmos, dressing), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
+  return { ...fields, ...pixelWorldField(pixelWorld), ...atmosField(rawAtmos, dressing), ...lightingField(lighting), ...lookField(look), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }

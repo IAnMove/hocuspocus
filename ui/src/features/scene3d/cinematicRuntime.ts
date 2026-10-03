@@ -5,6 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
+import { LUTPass } from 'three/addons/postprocessing/LUTPass.js'
 import { ENERGY_NOISE } from '../sceneFx/energyShaders'
 import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { GpuWorld } from './gpu'
@@ -25,6 +26,10 @@ export class CinematicRuntime {
   private composer?: EffectComposer
   private bloom?: UnrealBloomPass
   private pixel?: ShaderPass
+  /** The look's LUT, applied to the display-referred frame after OutputPass. 2.F3 loads the texture. */
+  private lut?: LUTPass
+  private lutTexture: LUTPass['lut'] = undefined
+  private lutStrength = 1
   private atmosPasses: Pass[] = []
   private lights: PointLight[] = []
   private background?: Texture
@@ -115,6 +120,7 @@ export class CinematicRuntime {
     this.composer.addPass(new RenderPass(world.scene, world.camera))
     this.bloom = new UnrealBloomPass(new Vector2(1280, 720), .48, .55, 1.15)
     this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass())
+    this.lut = new LUTPass({}); this.composer.addPass(this.lut); this.applyLut()
     this.pixel = createPixelPass(); this.composer.addPass(this.pixel)
     // Fixed pool: many overlapping cues cannot create unbounded shader/light work.
     for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
@@ -129,8 +135,9 @@ export class CinematicRuntime {
     this.document = doc
     this.syncBackground(doc); this.syncStage(doc)
     const active = Boolean(doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld || isAtmosDressing(doc?.dressing))
-    // Pixel worlds show their palette as painted; filmic curves would shift it.
-    this.world.renderer.toneMapping = active && !doc.pixelWorld ? ACESFilmicToneMapping : NoToneMapping
+    // Pixel worlds show their palette as painted; filmic curves would shift it. A scene with its own
+    // look sets tone mapping in applyLook; setting it here too would flip programs every frame.
+    if (!doc.look || doc.pixelWorld) this.world.renderer.toneMapping = active && !doc.pixelWorld ? ACESFilmicToneMapping : NoToneMapping
     if (!active) { this.road?.sync(false, undefined, seconds); return }
     this.ensureComposer()
     this.bloom!.strength = doc.environment?.bloom ?? .48
@@ -155,6 +162,17 @@ export class CinematicRuntime {
       : 3.5
     const high = this.world.renderer.shadowMap.enabled && this.world.dir.shadow.mapSize.x >= 2048
     handle.sync(seconds, this.world.camera, this.world.dir, high ? 'high' : 'low', distance > 0.4 ? distance : 3.5, doc.atmos)
+  }
+  /** Set or clear the look's 3D LUT; a disabled pass costs nothing and leaves the frame unchanged. */
+  setLut(texture: LUTPass['lut'], strength = 1) {
+    this.lutTexture = texture; this.lutStrength = Math.min(1, Math.max(0, strength))
+    this.applyLut()
+  }
+  private applyLut() {
+    if (!this.lut) return
+    this.lut.lut = this.lutTexture
+    this.lut.intensity = this.lutStrength
+    this.lut.enabled = Boolean(this.lutTexture) && this.lutStrength > 0
   }
   detachAtmos() {
     if (!this.composer) { this.atmosPasses = []; return }
