@@ -1,5 +1,5 @@
 import { EndlessRoad } from './endlessRoad'
-import { ACESFilmicToneMapping, Color, CylinderGeometry, Group, Mesh, MeshStandardMaterial, NoToneMapping, PlaneGeometry, PointLight, ShaderMaterial, TorusGeometry, UniformsUtils, Vector2, type IUniform, type Texture } from 'three'
+import { Color, CylinderGeometry, Group, Mesh, MeshStandardMaterial, PlaneGeometry, PointLight, ShaderMaterial, TorusGeometry, UniformsUtils, Vector2, type IUniform, type Texture } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
@@ -135,9 +135,7 @@ export class CinematicRuntime {
     this.document = doc
     this.syncBackground(doc); this.syncStage(doc)
     const active = Boolean(doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld || isAtmosDressing(doc?.dressing))
-    // Pixel worlds show their palette as painted; filmic curves would shift it. A scene with its own
-    // look sets tone mapping in applyLook; setting it here too would flip programs every frame.
-    if (!doc.look || doc.pixelWorld) this.world.renderer.toneMapping = active && !doc.pixelWorld ? ACESFilmicToneMapping : NoToneMapping
+    // Tone mapping lives in applyLook so a previous scene's look cannot stick on this renderer.
     if (!active) { this.road?.sync(false, undefined, seconds); return }
     this.ensureComposer()
     this.bloom!.strength = doc.environment?.bloom ?? .48
