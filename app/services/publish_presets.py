@@ -6,6 +6,7 @@ The pass stays on FFmpeg. It does not enter the generation queue.
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 from typing import Any
@@ -113,6 +114,28 @@ def measure_loudnorm(source: str, preset: str = "x") -> dict[str, str]:
     return {key: str(measured[key]) for key in ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")}
 
 
+def loudnorm_usable(measured: dict[str, str] | None) -> bool:
+    """Two-pass loudnorm rejects non-finite measured_* (digital silence is -inf)."""
+    if not measured:
+        return False
+    try:
+        values = {
+            key: float(measured[key])
+            for key in ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
+        }
+    except (KeyError, TypeError, ValueError):
+        return False
+    if not all(math.isfinite(value) for value in values.values()):
+        return False
+    return -99.0 <= values["input_i"] <= 0.0 and -99.0 <= values["target_offset"] <= 99.0
+
+
+def _json_loudness(value: float) -> float | None:
+    if not math.isfinite(value):
+        return None
+    return round(value, 1)
+
+
 def loudnorm_filter(measured: dict[str, str], preset: str = "x") -> str:
     target = loudness_target(preset)
     if target is None:
@@ -147,12 +170,16 @@ def integrated_lufs(path: str) -> float:
 
 def loudness_warning(reading: dict[str, float], target: tuple[float, float]) -> dict[str, Any] | None:
     lufs, peak = target
-    if abs(reading["lufs"] - lufs) <= 1.0 and reading["true_peak"] <= peak + 0.05:
+    measured_lufs = reading["lufs"]
+    measured_peak = reading["true_peak"]
+    lufs_ok = math.isfinite(measured_lufs) and abs(measured_lufs - lufs) <= 1.0
+    peak_ok = not math.isfinite(measured_peak) or measured_peak <= peak + 0.05
+    if lufs_ok and peak_ok:
         return None
     return {
         "code": "loudness",
-        "lufs": round(reading["lufs"], 1),
-        "true_peak": round(reading["true_peak"], 1),
+        "lufs": _json_loudness(measured_lufs),
+        "true_peak": _json_loudness(measured_peak),
         "target_lufs": lufs,
         "target_true_peak": peak,
     }
@@ -163,11 +190,26 @@ def loudness_report(path: str, preset: str) -> dict[str, Any] | None:
     target = loudness_target(preset)
     if target is None:
         return None
-    reading = _program(path)
+    try:
+        reading = _program(path)
+    except (PublishPresetError, ValueError, subprocess.TimeoutExpired):
+        return {
+            "lufs": None,
+            "true_peak": None,
+            "target_lufs": target[0],
+            "target_true_peak": target[1],
+            "warning": {
+                "code": "loudness",
+                "lufs": None,
+                "true_peak": None,
+                "target_lufs": target[0],
+                "target_true_peak": target[1],
+            },
+        }
     lufs, peak = target
     return {
-        "lufs": round(reading["lufs"], 1),
-        "true_peak": round(reading["true_peak"], 1),
+        "lufs": _json_loudness(reading["lufs"]),
+        "true_peak": _json_loudness(reading["true_peak"]),
         "target_lufs": lufs,
         "target_true_peak": peak,
         "warning": loudness_warning(reading, target),
@@ -182,7 +224,7 @@ def render_publish(source: str, destination: str, preset: str, *, premium: bool 
 
 def publish_command(source: str, destination: str, preset: str, *, premium: bool = False, loudnorm: dict[str, str] | None = None) -> list[str]:
     command = ["ffmpeg", "-y", "-i", source]
-    if loudnorm and loudness_target(preset) is not None:
+    if loudnorm_usable(loudnorm) and loudness_target(preset) is not None:
         command += ["-af", loudnorm_filter(loudnorm, preset)]
     command += encode_args(preset, premium=premium)
     command += ["-movflags", "+faststart", destination]

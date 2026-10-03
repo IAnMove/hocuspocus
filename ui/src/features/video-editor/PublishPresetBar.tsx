@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
-import { checkPublishPreset, publishMediaSource, publishVideo, type PublishPreset, type PublishWarning } from '../../api/publish'
+import { checkPublishPreset, formatPublishNumber, publishMediaSource, publishVideo, type PublishPreset, type PublishWarning } from '../../api/publish'
 
 const PRESETS: PublishPreset[] = ['x', 'youtube', 'shorts', 'apple', 'broadcast', 'archive']
 
@@ -66,7 +66,7 @@ export function PublishPresetBar({
               .then(result => {
                 setWarnings(result.warnings || [])
                 setMeasured(result.loudness
-                  ? t('toolbar.publishMeasured', { lufs: result.loudness.lufs.toFixed(1), peak: result.loudness.true_peak.toFixed(1) })
+                  ? t('toolbar.publishMeasured', { lufs: formatPublishNumber(result.loudness.lufs), peak: formatPublishNumber(result.loudness.true_peak) })
                   : '')
               })
               .catch(reason => onError(reason instanceof Error ? reason.message : String(reason)))
