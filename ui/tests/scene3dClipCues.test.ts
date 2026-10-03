@@ -63,6 +63,19 @@ test('a stored sequence is bounded, sorted and survives a reload; without clips 
   assert.equal('clips' in plain.slots[0], false)
 })
 
+test('all-invalid clips are stripped so the single clip still drives the model', () => {
+  const doc = createDefaultScene3DDocument()
+  doc.slots[0] = {
+    ...doc.slots[0],
+    clip: walk,
+    clips: [{ start: 0 }, null, { clip: { index: -1, name: 'x' }, start: 1 }, {}] as never,
+  }
+  const parsed = parseScene3DDocument(JSON.parse(JSON.stringify(doc)))!
+  assert.equal('clips' in parsed.slots[0], false)
+  assert.deepEqual(parsed.slots[0].clip, walk)
+  assert.equal(parseClipCues(doc.slots[0].clips), undefined)
+})
+
 test('foot landings follow each cue clock and only count while the cue weighs half or more', () => {
   const cues: Scene3DClipCue[] = [{ clip: walk, start: 0 }, { clip: wave, start: 2, fade: 0.4 }]
   const catalog = (clip: { index: number }) => clip.index === 0
