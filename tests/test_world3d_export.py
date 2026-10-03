@@ -544,3 +544,69 @@ def test_mux_validates_before_replacing_destination(tmp_path):
     video = next(item for item in probe_scene_recording_output(destination)["streams"]
                  if item.get("codec_type") == "video")
     assert video["codec_name"] == "h264"
+
+
+def test_draft_plan_is_unchanged_so_earlier_intents_still_replay():
+    document = _document()
+    assert export_plan(document) == export_plan(document, "draft")
+    assert set(export_plan(document)) == {"width", "height", "fps", "duration", "count"}
+    draft = freeze_export_command(_command())
+    explicit = freeze_export_command(_command(quality="draft"))
+    assert draft["effective"] == explicit["effective"]
+
+
+def test_final_and_master_plans_carry_supersampling_and_msaa():
+    final = export_plan(_document(), "final")
+    master = export_plan(_document(), "master")
+    assert (final["quality"], final["supersample"], final["samples"]) == ("final", 1.5, 4)
+    assert (master["quality"], master["supersample"], master["samples"]) == ("master", 2, 4)
+    assert (final["width"], final["height"]) == (64, 64), "the output size never changes with the level"
+    assert freeze_export_command(_command(quality="final"))["fingerprint"] != freeze_export_command(_command())["fingerprint"]
+
+
+def test_unknown_quality_is_refused_before_admission(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
+    with pytest.raises(Exception) as caught:
+        service.submit(_command(quality="ultra"))
+    assert caught.value.status_code == 422
+    assert "quality" in caught.value.detail["message"]
+    with pytest.raises(ValueError):
+        export_plan(_document(), "ultra")
+
+
+def test_quality_is_offered_in_the_catalog_and_capabilities():
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["quality"]
+    assert schema["enum"] == ["draft", "final", "master"] and schema["default"] == "draft"
+    assert export_capabilities()["qualities"] == ["draft", "final", "master"]
+
+
+def test_each_level_encodes_with_its_profile(tmp_path, monkeypatch):
+    import services.world3d_export as module
+
+    commands = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(command)
+        Path(command[-1]).write_bytes(b"mp4")
+        return type("Done", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(module.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module, "validate_scene_recording_output", lambda *_args, **_kwargs: None)
+    frame = tmp_path / "frames" / "frame_000001.png"
+    write_png(frame, 4, 4, (1, 2, 3))
+    for quality in ("draft", "final", "master"):
+        mux_frame_sequence([frame], tmp_path / f"{quality}.mp4", fps=30, duration=1 / 30, quality=quality)
+    settings = [(c[c.index("-preset") + 1], c[c.index("-crf") + 1], c[c.index("-threads") + 1]) for c in commands]
+    assert settings == [("fast", "18", "1"), ("slow", "14", "0"), ("slow", "12", "0")]
+
+
+def test_receipt_reports_the_quality_level(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
+    receipt = service.submit(_command(intent_id="world3d-final-1", quality="final"))["receipt"]
+    registry = service._registry(WORKSPACE)
+    _wait(registry, receipt["taskIds"][0], {"completed", "failed"})
+    viewed = service.receipt(WORKSPACE, "world3d-final-1")
+    assert viewed["receipt"]["quality"] == "final"
+    assert viewed["task"]["metadata"]["quality"] == "final"
+    forget_task_registry(registry.workspace_dir)

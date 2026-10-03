@@ -45,8 +45,16 @@ WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 BLOCKED_URLS = ("blob:", "file:", "javascript:", "filesystem:")
 MEDIA_KINDS = frozenset({"model3d", "image", "screen"})
 COMMAND_KEYS = frozenset({"version", "operation", "intent_id", "input"})
-INPUT_KEYS = frozenset({"workspace", "document", "refs"})
+INPUT_KEYS = frozenset({"workspace", "document", "refs", "quality"})
 INTENT_RE = re.compile(r"[A-Za-z0-9._-]{1,160}")
+# Render and encode settings of each export quality level. Draft is the export as it was
+# before levels existed: its plan carries no quality fields, so earlier intents replay.
+QUALITY_PROFILES = {
+    "draft": {"supersample": 1, "samples": 0, "crf": 18, "preset": "fast", "threads": "1"},
+    "final": {"supersample": 1.5, "samples": 4, "crf": 14, "preset": "slow", "threads": "0"},
+    "master": {"supersample": 2, "samples": 4, "crf": 12, "preset": "slow", "threads": "0"},
+}
+QUALITIES = tuple(QUALITY_PROFILES)
 
 
 class World3DExportCancelled(Exception):
@@ -91,14 +99,25 @@ def frame_count(duration: float, fps: int) -> int:
     return max(1, round(float(duration) * int(fps)))
 
 
-def export_plan(document: dict) -> dict:
+def export_plan(document: dict, quality: str = "draft") -> dict:
     duration = output_duration(document)
     fps = document.get("fps", 30)
     if fps not in (24, 30, 60):
         raise ValueError("Export fps must be 24, 30 or 60")
+    if quality not in QUALITY_PROFILES:
+        raise ValueError(f"Export quality must be one of {', '.join(QUALITIES)}")
     width, height = export_size(document.get("width"), document.get("height"))
-    return {"width": width, "height": height, "fps": fps, "duration": duration,
+    plan = {"width": width, "height": height, "fps": fps, "duration": duration,
             "count": frame_count(duration, fps)}
+    if quality != "draft":
+        profile = QUALITY_PROFILES[quality]
+        plan.update(quality=quality, supersample=profile["supersample"], samples=profile["samples"])
+    return plan
+
+
+def plan_quality(plan: dict) -> str:
+    quality = plan.get("quality", "draft")
+    return quality if quality in QUALITY_PROFILES else "draft"
 
 
 def playwright_module() -> Path | None:
@@ -216,6 +235,7 @@ def export_capabilities(app_url: str | None = None) -> dict:
         "renderer": "world3d-export-flow",
         "renderDevice": scene_render_device(),
         "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": 0,
+        "qualities": list(QUALITIES),
     }
 
 
@@ -236,18 +256,20 @@ def write_png(path: Path, width: int, height: int, rgb: tuple[int, int, int]) ->
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
 
 
-def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float) -> Path:
+def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float,
+                       quality: str = "draft") -> Path:
     if not shutil.which("ffmpeg"):
         raise World3DExportPending("real-render pending: ffmpeg is not available")
     if not frames:
         raise RuntimeError("Export produced no frames")
     temporary = destination.with_name(f".{destination.stem}.{os.getpid()}.partial.mp4")
     destination.parent.mkdir(parents=True, exist_ok=True)
+    profile = QUALITY_PROFILES[quality]
     command = [
         "ffmpeg", "-v", "error", "-y", "-framerate", str(int(fps)),
         "-i", str(frames[0].parent / "frame_%06d.png"),
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
-        "-threads", "1", "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
+        "-c:v", "libx264", "-preset", profile["preset"], "-crf", str(profile["crf"]), "-pix_fmt", "yuv420p",
+        "-threads", profile["threads"], "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
     ]
     try:
         result = subprocess.run(
@@ -285,7 +307,9 @@ def _envelope(command) -> dict:
 
 def _input(value) -> dict:
     if not isinstance(value, dict) or set(value) - INPUT_KEYS:
-        raise http_error(422, "invalid_command", "input may only include workspace, document and refs")
+        raise http_error(422, "invalid_command", "input may only include workspace, document, refs and quality")
+    if value.get("quality", "draft") not in QUALITY_PROFILES:
+        raise http_error(422, "invalid_command", f"quality must be one of {', '.join(QUALITIES)}")
     workspace = value.get("workspace")
     if not isinstance(workspace, str) or not WORKSPACE_RE.fullmatch(workspace):
         raise http_error(422, "invalid_workspace", "Use an explicit valid output workspace")
@@ -425,10 +449,10 @@ def _validated_refs(document: dict, refs, workspace: str) -> list[dict]:
     return resolved
 
 
-def build_snapshot(document: dict, refs: list[dict], workspace: str) -> dict:
+def build_snapshot(document: dict, refs: list[dict], workspace: str, quality: str = "draft") -> dict:
     return {
         "workspace": workspace, "document": deepcopy(document), "refs": deepcopy(refs),
-        "plan": export_plan(document),
+        "plan": export_plan(document, quality),
     }
 
 
@@ -440,7 +464,7 @@ def freeze_export_command(command) -> dict:
     reasons = unsupported_capabilities(document)
     if reasons:
         raise http_error(422, "unsupported_capability", "Unsupported export capability: " + ", ".join(reasons))
-    snapshot = build_snapshot(document, refs, payload["workspace"])
+    snapshot = build_snapshot(document, refs, payload["workspace"], payload.get("quality", "draft"))
     original = deepcopy(envelope)
     effective = {"version": 1, "operation": OPERATION,
                  "input": {"workspace": payload["workspace"], "snapshot": snapshot}}
@@ -459,7 +483,9 @@ def command_catalog() -> list[dict]:
                      "required": ["workspace", "intent_id"]}
     export_input = {"type": "object", "additionalProperties": False,
                     "properties": {"workspace": workspace, "document": {"type": "object"},
-                                   "refs": {"type": "array", "maxItems": 64}},
+                                   "refs": {"type": "array", "maxItems": 64},
+                                   "quality": {"enum": list(QUALITIES), "default": "draft",
+                                               "description": "draft: as before. final: 1.5x supersampling, 4x MSAA, crf 14. master: 2x supersampling, 4x MSAA, crf 12. Same output size; higher levels take longer."}},
                     "required": ["workspace", "document"]}
     return [
         {"name": OPERATION, "version": 1, "supportedVersions": [1], "domain": "scenes", "mutation": True,
@@ -607,7 +633,7 @@ class World3DExportService:
             "backend_job_id": job_id, "current": 0, "total": plan["count"],
             "resource_requirements": [self.resource_lane().key, "local_cpu:ffmpeg"], "cancelable": True,
             "resumable": True, "recoverable": True,
-            "metadata": {"operation": self.operation},
+            "metadata": {"operation": self.operation, "quality": plan_quality(plan)},
         }
 
     def _admit(self, registry, frozen, workspace) -> dict:
@@ -718,7 +744,8 @@ class World3DExportService:
         published = self._publish(snapshot, staging, frames, workspace, registry, task_id, token)
         self._finish(registry, task_id, "completed", phase="completed",
                      message=f"Published {self.title} MP4", result_refs=[published["name"]],
-                     metadata={"operation": self.operation, "output": published})
+                     metadata={"operation": self.operation, "quality": plan_quality(snapshot["plan"]),
+                               "output": published})
 
     def _owned_browser(self, snapshot, staging, progress, cancelled) -> list[Path]:
         module = playwright_module()
@@ -747,7 +774,7 @@ class World3DExportService:
         self.check_publish(snapshot)
         plan = snapshot["plan"]
         encoded = staging / "encoded.mp4"
-        mux_frame_sequence(frames, encoded, fps=plan["fps"], duration=plan["duration"])
+        mux_frame_sequence(frames, encoded, fps=plan["fps"], duration=plan["duration"], quality=plan_quality(plan))
         encoded = self.finish_media(snapshot, staging, encoded)
         self._ensure_active(token, registry, task_id)
         name = self.output_name(snapshot)
@@ -790,7 +817,7 @@ class World3DExportService:
                           "fps": plan["fps"], "duration": plan["duration"], "layers": []},
                 "scene_recipe": {"engine": "world3d", "document": snapshot["document"], "refs": snapshot["refs"]},
                 "width": plan["width"], "height": plan["height"], "fps": plan["fps"],
-                "duration_seconds": plan["duration"],
+                "duration_seconds": plan["duration"], "quality": plan_quality(plan),
             },
             "generation_mode": "video", "tool": "world3d-export", "output_filename": name,
         }
@@ -808,9 +835,9 @@ class World3DExportService:
 
 
 __all__ = [
-    "CANCEL_OPERATION", "OPERATION", "RECEIPT_OPERATION", "World3DExportCancelled",
+    "CANCEL_OPERATION", "OPERATION", "QUALITIES", "QUALITY_PROFILES", "RECEIPT_OPERATION", "World3DExportCancelled",
     "World3DExportPending", "World3DExportService", "build_snapshot", "command_catalog",
     "command_handlers", "even_dim", "export_capabilities", "export_plan", "export_size",
-    "freeze_export_command", "http_error", "mux_frame_sequence", "playwright_module",
+    "freeze_export_command", "http_error", "mux_frame_sequence", "plan_quality", "playwright_module",
     "staging_dir", "unsupported_capabilities", "write_png",
 ]

@@ -56,6 +56,7 @@ import { paintPixelWorld } from './pixel/pixelWorldSet'
 import { syncScreenGlow } from './pixel/screenGlow'
 import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { PixelPalette } from './pixel/pixelPalettes'
+import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -103,6 +104,8 @@ export type GpuWorld = {
   worldSfx?: Map<string, WorldSfxGpu>
   /** The pixel-world mood of the frame being painted, if any. */
   pixelPalette?: PixelPalette | null
+  /** Supersampling and composer MSAA of a server export; absent in preview and draft. */
+  exportRender?: ExportRenderQuality
 }
 
 export function clipKeyOf(clip: Scene3DSlot['clip']): string {
@@ -537,7 +540,9 @@ function applyMeshShadows(root: Object3D, enabled: boolean, cast: boolean) {
   })
 }
 
-export function setWorldExportQuality(world: GpuWorld, enabled: boolean) {
+export function setWorldExportQuality(world: GpuWorld, enabled: boolean, render: ExportRenderQuality = DRAFT_RENDER) {
+  world.exportRender = enabled && (render.samples > 0 || render.supersample > 1) ? { ...render } : undefined
+  world.cinema?.setRenderQuality(world.exportRender)
   world.renderer.shadowMap.enabled = enabled
   world.renderer.shadowMap.type = PCFSoftShadowMap
   world.dir.castShadow = enabled
