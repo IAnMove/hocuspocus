@@ -45,8 +45,12 @@ def test_library_clips_append_without_renumbering():
     assert [item["index"] for item in listed] == [1, 2]
     assert set(_channels(first, 1)) == {"rotation", "translation"}
     second, more, _warnings = animate_humanoid(first, ["dance_side"], 90)
-    assert more == [{"index": 3, "name": "Dance Side", "duration": pytest.approx(2 * 60 / 90)}]
-    assert len(GLTF2.load_from_bytes(second).animations) == 4
+    assert [(item["index"], item["name"]) for item in more] == [(3, "Dance Side")]
+    assert more[0]["duration"] == pytest.approx(2 * 60 / 90)
+    assert [item["foot"] for item in more[0]["contacts"]] == ["right", "left"]
+    animations = GLTF2.load_from_bytes(second).animations
+    assert len(animations) == 4
+    assert animations[1].extras["hocuspocus_contacts"] == listed[0]["contacts"], "appending keeps earlier contacts"
 
 
 def test_imported_bvh_writes_a_hips_translation_channel():

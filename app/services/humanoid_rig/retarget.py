@@ -19,6 +19,7 @@ import math
 import numpy as np
 
 from services.humanoid_rig import rotation as rot
+from services.humanoid_rig.contacts import foot_contacts
 from services.humanoid_rig.errors import InvalidInput
 from services.humanoid_rig.gltf_accessors import AccessorError, read_accessor, split_glb
 from services.humanoid_rig.motion import Pose, Rig, _euler_locals, lowest_contact
@@ -169,7 +170,7 @@ def _retarget(source: dict, animation: dict, mapping: dict, rig: Rig) -> dict:
     root = _root_track(mapping, world_p, rest_p[0], frame, rig, warnings)
     positions, worlds = rig.forward(local, root)
     _keep_feet_height(mapping, world_p, rest_p[0], frame, rig, root, positions, worlds)
-    _positions, worlds = rig.forward(local, root)
+    positions, worlds = rig.forward(local, root)
     rotations = rig.to_actual(worlds)
     return {
         "name": animation["name"],
@@ -177,6 +178,7 @@ def _retarget(source: dict, animation: dict, mapping: dict, rig: Rig) -> dict:
         "duration": float(times[-1] - times[0]) if len(times) > 1 else 0.0,
         "rotations": {name: rotations[:, index] for index, name in enumerate(BONE_NAMES) if not name.endswith("_End")},
         "hips_translation": root,
+        "contacts": foot_contacts(rig, times, positions, worlds, loop=False),
         "warnings": warnings,
     }
 
