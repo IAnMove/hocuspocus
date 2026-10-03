@@ -399,9 +399,15 @@ def _director_path(workspace_dir: str, production_id: str) -> str | None:
             continue
         path = os.path.join(workspace_dir, name)
         body, problem = _read(path)
-        if not problem and isinstance(body, dict) and str(body.get("production_id") or "") == production_id:
+        if not problem and isinstance(body, dict) and _director_matches(body, production_id):
             return path
     return None
+
+
+def _director_matches(body: dict, production_id: str) -> bool:
+    from services.production_run import pipeline_matches_production
+
+    return pipeline_matches_production(body, production_id)
 
 
 def _montage_path(workspace_dir: str, production_id: str) -> str | None:

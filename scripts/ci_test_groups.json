@@ -55,6 +55,8 @@
         "tests/test_generation_record.py",
         "tests/test_generation_runtime.py",
         "tests/test_example_assets.py",
+        "tests/test_secure_download.py",
+        "tests/test_asset_library.py",
         "tests/test_inpaint_preparation.py",
         "tests/test_h3_benchmark_client.py",
         "tests/test_h3_director_dialogue.py",
@@ -431,6 +433,48 @@
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/secure_download.py",
+      "paths": [
+        "tests/test_secure_download.py",
+        "tests/test_example_assets.py",
+        "tests/test_template_library.py",
+        "tests/test_asset_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/asset_library.py",
+      "paths": [
+        "tests/test_asset_library.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/asset_library.py",
+      "paths": [
+        "tests/test_asset_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/media_kinds.py",
+      "paths": [
+        "tests/test_asset_library.py",
+        "tests/test_asset_manifest.py"
+      ]
+    },
+    {
+      "prefix": "app/services/example_collections.py",
+      "paths": [
+        "tests/test_example_assets.py",
+        "tests/test_secure_download.py"
+      ]
+    },
+    {
+      "prefix": "app/services/template_community.py",
+      "paths": [
+        "tests/test_template_library.py",
+        "tests/test_secure_download.py"
+      ]
+    },
     {
       "prefix": "app/services/speech_alignment.py",
       "paths": ["tests/test_speech_alignment_parity.py"]
