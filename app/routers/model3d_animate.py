@@ -41,7 +41,8 @@ def command_catalog():
              "description": "Add humanoid clips to a GLB that already has the standard Mixamo-named skeleton (from "
                             "model3d.rig engine humanoid). Clips are baked for that body. import.file is a .bvh, .glb or "
                             ".gltf inside the workspace (Mixamo, VRM/VRoid, Unreal, Blender, Daz or CMU bone names); every "
-                            "animation in it is retargeted in place. CPU only. Returns each clip index, name, duration and foot landings "
+                            "animation in it is retargeted in place. path adds a walk along points with the feet planted "
+                            "(the clip moves the hips; play it with the slot still). CPU only. Returns each clip index, name, duration and foot landings "
                             "for a Video 3D slot, plus warnings. Unusable inputs (no skeleton, no humanoid in the file, "
                             "compressed meshes) answer invalid_input; the same intent replays that answer.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
@@ -55,7 +56,15 @@ def command_catalog():
                                                           "bpm": {"type": "number", "minimum": 60, "maximum": 180},
                                                           "import": {"type": "object", "additionalProperties": False,
                                                                      "required": ["file"], "properties": {
-                                                                         "file": {"type": "string", "minLength": 1, "maxLength": 240}}}}}}}}]
+                                                                         "file": {"type": "string", "minLength": 1, "maxLength": 240}}},
+                                                          "path": {"type": "object", "additionalProperties": False,
+                                                                   "required": ["points", "duration"],
+                                                                   "description": "Walk along these points (model-space metres, ground under the hips; the first is the start) with the feet planted: the clip moves the hips, so play it with the slot standing still.",
+                                                                   "properties": {
+                                                                       "points": {"type": "array", "minItems": 2, "maxItems": 64,
+                                                                                  "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}}},
+                                                                       "duration": {"type": "number", "minimum": 0.5, "maximum": 120},
+                                                                       "name": {"type": "string", "minLength": 1, "maxLength": 60}}}}}}}}]
 
 
 def _envelope(arguments):
@@ -64,7 +73,7 @@ def _envelope(arguments):
     if set(arguments) - {"version", "intent_id", "input"}:
         raise ValueError("Unknown envelope field")
     payload = arguments.get("input")
-    if not isinstance(payload, dict) or set(payload) - {"workspace", "source", "clips", "bpm", "import"}:
+    if not isinstance(payload, dict) or set(payload) - {"workspace", "source", "clips", "bpm", "import", "path"}:
         raise ValueError("input needs workspace and source")
     if "workspace" not in payload or "source" not in payload:
         raise ValueError("input needs workspace and source")
@@ -117,6 +126,35 @@ def _import_name(payload: dict) -> str | None:
     if Path(name.strip()).suffix.lower() not in _IMPORT_SUFFIXES:
         raise ValueError("import file must be .bvh, .glb or .gltf")
     return name.strip()
+
+
+def _path(payload: dict) -> dict | None:
+    """The walk path, checked here so a bad request never reaches the worker."""
+    if "path" not in payload:
+        return None
+    value = payload["path"]
+    if not isinstance(value, dict) or set(value) - {"points", "duration", "name"} or not {"points", "duration"} <= set(value):
+        raise ValueError("path needs points and duration")
+    path = {"points": _path_points(value["points"]), "duration": _path_duration(value["duration"])}
+    if "name" in value:
+        path["name"] = _text(value, "name", 60)
+    return path
+
+
+def _path_points(points) -> list[list[float]]:
+    def number(item) -> bool:
+        return not isinstance(item, bool) and isinstance(item, (int, float)) and math.isfinite(item)
+
+    if (not isinstance(points, list) or not 2 <= len(points) <= 64
+            or any(not isinstance(item, list) or len(item) != 2 or not all(map(number, item)) for item in points)):
+        raise ValueError("path points must be 2 to 64 [x, z] number pairs")
+    return [[float(x), float(z)] for x, z in points]
+
+
+def _path_duration(duration) -> float:
+    if isinstance(duration, bool) or not isinstance(duration, (int, float)) or not 0.5 <= duration <= 120:
+        raise ValueError("path duration must be between 0.5 and 120 seconds")
+    return float(duration)
 
 
 def _inside(root: Path, name: str) -> Path:
@@ -181,8 +219,10 @@ def execute_animate(request: dict, output: Path, *, python: Path | None = None) 
     return _worker_payload(completed)
 
 
-def _request(source: Path, clips: list[str], bpm: float, imported: Path | None) -> dict:
+def _request(source: Path, clips: list[str], bpm: float, imported: Path | None, path: dict | None = None) -> dict:
     request = {"mode": "animate", "source": str(source), "animations": clips, "animation_bpm": bpm}
+    if path is not None:
+        request["path"] = path
     if imported is not None:
         request["import_file"] = str(imported)
         request["import_label"] = _import_label(imported)
@@ -223,12 +263,13 @@ def store_import(root: Path, filename: str, payload: bytes) -> str:
     return f"{IMPORT_FOLDER}/{name}"
 
 
-def _publish(folder: Path, filename: str, payload: dict, intent: str, clips: list[str], bpm: float, imported: Path | None) -> None:
+def _publish(folder: Path, filename: str, payload: dict, intent: str, clips: list[str], bpm: float, imported: Path | None,
+             path: dict | None = None) -> None:
     publish_generation_sidecar(
         folder / filename,
         {"generation_mode": "model3d", "model_type": "humanoid-animate", "command_id": intent,
          "params": {"workspace": payload["workspace"], "source": payload["source"], "clips": clips,
-                    "bpm": bpm, "import": None if imported is None else imported.name}},
+                    "bpm": bpm, "import": None if imported is None else imported.name, "path": path}},
         output_folder=payload["workspace"], tool="model3d", actor="user", capability=OPERATION,
     )
 
@@ -242,7 +283,8 @@ def command_handlers(workspace_dir, journal_path, runner=None):
         clips = _clip_ids(payload.get("clips"))
         bpm = _bpm(payload.get("bpm"))
         imported_name = _import_name(payload)
-        if not clips and imported_name is None:
+        path = _path(payload)
+        if not clips and imported_name is None and path is None:
             raise ValueError("Select at least one animation")
         workspace = _text(payload, "workspace", 120)
         root = Path(workspace_dir(workspace))
@@ -251,7 +293,7 @@ def command_handlers(workspace_dir, journal_path, runner=None):
             raise ValueError("Rigging currently supports GLB sources only")
         imported = _inside(root, imported_name) if imported_name else None
         digest = intent_digest({"workspace": workspace, "source": source.name, "clips": clips, "bpm": bpm,
-                                "import": None if imported is None else imported.name})
+                                "import": None if imported is None else imported.name, "path": path})
         identity = hashlib.sha256(f"{OPERATION}:{workspace}:{intent}".encode()).hexdigest()
         stored = journal.reserve(identity, digest)
         if stored is not None:
@@ -261,7 +303,7 @@ def command_handlers(workspace_dir, journal_path, runner=None):
         filename = f"humanoid-{stem}-{identity[:16]}.glb"
         temporary = root / f".{filename}-{uuid.uuid4().hex}.tmp"
         try:
-            result = run(_request(source, clips, bpm, imported), temporary)
+            result = run(_request(source, clips, bpm, imported, path), temporary)
             if not temporary.is_file():
                 raise RuntimeError("Humanoid animate worker did not write a GLB")
             temporary.replace(root / filename)
@@ -273,7 +315,7 @@ def command_handlers(workspace_dir, journal_path, runner=None):
             return body
         finally:
             temporary.unlink(missing_ok=True)
-        _publish(root, filename, payload, intent, clips, bpm, imported)
+        _publish(root, filename, payload, intent, clips, bpm, imported, path)
         body = {"version": 1, "operation": OPERATION, "status": "completed", "result": {
             "file": filename, "workspace": workspace,
             "url": f"/api/v1/file/{filename}?{urlencode({'workspace': workspace})}",

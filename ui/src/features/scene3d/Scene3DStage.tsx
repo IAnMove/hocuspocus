@@ -38,7 +38,8 @@ import {
   syncSlotClip,
   worldAssetsReady,
 } from './gpu.ts'
-import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DSlot } from './types.ts'
+import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DSlot, Vec3 } from './types.ts'
+import { toModelSpace } from './walkPath.ts'
 
 type Props = {
   document: Scene3DDocument
@@ -65,6 +66,8 @@ export type Scene3DStageHandle = {
   facePlacement?: (slotId: string, profile: PlacementMode) => FacePlacement | undefined
   pickFace?: (slotId: string, x: number, y: number, previous?: FacePlacement) => FacePlacement | undefined
   prepareFrame?: (seconds: number, document: Scene3DDocument) => Promise<void>
+  /** Scene points in the loaded model's own space (undo position, turn and fit scale), for a walk bake. */
+  modelSpacePath?: (slotId: string, points: readonly Vec3[]) => [number, number][] | undefined
 }
 
 function loadScreen(world: GpuWorld, slot: Scene3DSlot, onError: (message: string) => void, onReady: () => void) {
@@ -214,6 +217,12 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     },
     canvas() {
       return worldRef.current?.renderer.domElement ?? null
+    },
+    modelSpacePath(slotId, points) {
+      const gpu = worldRef.current?.slots.get(slotId)
+      const slot = documentRef.current.slots.find(item => item.id === slotId)
+      if (!gpu || !slot || gpu.kind !== 'model' || !gpu.loaded) return undefined
+      return toModelSpace(points, { position: slot.position, rotationY: slot.rotationY, scale: gpu.baseScale * slot.scale })
     },
     facePlacement(slotId, profile) {
       const placement = worldRef.current?.slots.get(slotId)?.root.userData.speechPlacements?.[profile] as FacePlacement | undefined

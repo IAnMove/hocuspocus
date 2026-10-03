@@ -70,6 +70,7 @@ def _animate(request: dict, output: Path) -> None:
         payload,
         suffix,
         str(request.get("import_label") or "Imported"),
+        request.get("path"),
     )
     output.write_bytes(data)
     print("MAESTRO_RESULT " + json.dumps({"ok": True, "output": str(output), "clips": clips, "warnings": warnings}), flush=True)
