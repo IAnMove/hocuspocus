@@ -15,7 +15,7 @@ import uuid
 from typing import Any
 
 from .character_face_patch import normalize_character_face_patch
-from .character_speech_definition import normalize_speech3d, normalize_character_voice
+from .character_speech_definition import normalize_speech3d, normalize_character_voice, normalize_character_voices_by_language
 
 
 CHARACTER_KIT_LIBRARY_FILENAME = ".character-kit-library-v1.json"
@@ -229,6 +229,10 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
         result["speech3d"] = normalize_speech3d(value["speech3d"])
     if value.get("voice") is not None:
         result["voice"] = normalize_character_voice(value["voice"])
+    if value.get("voicesByLanguage"):
+        voices = normalize_character_voices_by_language(value["voicesByLanguage"])
+        if voices:
+            result["voicesByLanguage"] = voices
     if value.get("lookNotes"):
         result["lookNotes"] = _text(value["lookNotes"], "Character look notes", 4000)
     if value.get("restPose") is not None:

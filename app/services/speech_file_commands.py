@@ -97,7 +97,7 @@ def analyze_window(window, source, root, prefix="mouth-cues"):
 
 
 def command_catalog():
-    return [{"name": OPERATION, "description": "Shared UI/Wizard/MCP lip sync: engine=auto prefers installed CPU phonemes, otherwise explicitly reports Rhubarb fallback. Select phoneme or rhubarb, provide exact dialogue/language and optional isolate_vocals. Up to 90 seconds; native cues and phonemes use the source clock. No downloads or synthetic voice.",
+    return [{"name": OPERATION, "mutation": False, "description": "Shared UI/Wizard/MCP lip sync: engine=auto prefers installed CPU phonemes, otherwise explicitly reports Rhubarb fallback. Select phoneme or rhubarb, provide exact dialogue/language and optional isolate_vocals. Up to 90 seconds; native cues and phonemes use the source clock. No downloads or synthetic voice.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "input"],
                              "properties": {"version": {"type": "integer", "const": 1}, "input": VoiceWindow.model_json_schema()}}}]
 

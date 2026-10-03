@@ -3,7 +3,7 @@ import { parseImageLook } from './imageLook'
 import { parseClipPlayback, parseMotion } from './performance.ts'
 import { parseSlotRhythm } from './rhythm'
 import { parseSpeech } from './speech/track'
-import { parseCharacterKitRef, parseCharacterVoice } from '../../lib/characterVoice'
+import { parseCharacterKitRef, parseCharacterVoice, parseCharacterVoicesByLanguage } from '../../lib/characterVoice'
 import { parseMediaScreen } from './mediaScreen.ts'
 import { parseScene3DLoop } from './backdrop.ts'
 import { durableScene3DSourceUrl, parseScene3DSourceRef } from './slotSource.ts'
@@ -45,6 +45,7 @@ function normalizeCharacter(character: Scene3DSlot['character']) {
   return { id: character.id, name: character.name,
     ...(character.kitRef !== undefined ? { kitRef: parseCharacterKitRef(character.kitRef) } : {}),
     ...(character.voice !== undefined ? { voice: parseCharacterVoice(character.voice) } : {}),
+    ...(character.voicesByLanguage !== undefined ? { voicesByLanguage: parseCharacterVoicesByLanguage(character.voicesByLanguage) } : {}),
     ...(character.libraryRevision !== undefined ? { libraryRevision: character.libraryRevision } : {}) }
 }
 export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {

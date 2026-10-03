@@ -296,6 +296,14 @@
       "transcriptHint": "Incluye solo las palabras audibles en el fragmento analizado. Déjalo vacío para reconocer los sonidos directamente. Revisa las vocales cantadas antes de exportar.",
       "language": "Idioma de la voz",
       "fallback": "Este análisis utilizó Rhubarb porque el motor de fonemas no está instalado."
+    },
+    "languageVoices": {
+      "title": "Voces por idioma",
+      "hint": "Opcional. Da a este personaje una voz propia para cada idioma que hable. Las series, las previsualizaciones y las pruebas eligen la voz del idioma hablado; la voz de arriba habla el resto de idiomas.",
+      "add": "Añadir una voz para",
+      "choose": "Elige un idioma",
+      "addButton": "Añadir voz",
+      "remove": "Quitar"
     }
   },
   "title": "Estudio de escenas 3D",

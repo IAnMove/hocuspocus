@@ -182,7 +182,7 @@ export function LipsPackEditor({ initialDraft, workspace, characters, onDraftCha
           onReferenceCharacter={id => {
             setReferenceCharacter(id)
             const kit = characters.find(item => item.id === id)
-            if (kit?.base) updateKit({ ...draft.kit, base: { ...kit.base, reviewState: 'approved' }, anchors: kit.anchors, voice: kit.voice, style: kit.style, lookNotes: draft.kit.lookNotes || kit.lookNotes })
+            if (kit?.base) updateKit({ ...draft.kit, base: { ...kit.base, reviewState: 'approved' }, anchors: kit.anchors, voice: kit.voice, voicesByLanguage: kit.voicesByLanguage, style: kit.style, lookNotes: draft.kit.lookNotes || kit.lookNotes })
           }} />
         <button type="button" disabled={isWorking || !canGenerate || !missing.length || !draft.kit.name.trim()} onClick={() => void generate(missing, true)} className={`${control} w-full`}>{t('lips.generateMissing', { count: missing.length })}</button>
         <p className="text-xs text-text-muted">{t('lips.sequenceHint')}</p>

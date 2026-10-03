@@ -5,6 +5,7 @@ from typing import Literal
 import uuid
 
 from services import phoneme_analysis, phoneme_runtime, resource_scheduler, scene3d_speech
+from services.speech_language import speech_language_code
 from services.scene3d_speech import SpeechAnalysisError, SpeechAnalysisUnavailable, validate_voice_wav
 
 SpeechEngine = Literal["auto", "phoneme", "rhubarb"]
@@ -36,6 +37,8 @@ def analyze_voice(data, isolate_vocals=False, dialogue="", language="", engine: 
         raise SpeechAnalysisError("Use up to 4000 exact dialogue characters.")
     if not isinstance(language, str) or len(language) > 16:
         raise SpeechAnalysisError("Use a language code up to 16 characters.")
+    # Series/Story labels ("Español", "English") would otherwise reach eSpeak verbatim.
+    language = speech_language_code(language)
     installed = phoneme_runtime.capabilities()["installed"] if engine != "rhubarb" else False
     selected = "phoneme" if engine == "phoneme" or engine == "auto" and installed else "rhubarb"
     if selected == "phoneme" and not installed:

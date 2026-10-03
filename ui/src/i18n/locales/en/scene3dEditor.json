@@ -296,6 +296,14 @@
       "transcriptHint": "Use only the words audible in the analyzed fragment. Leave empty to recognize sounds directly. Review sung vowels before export.",
       "language": "Voice language",
       "fallback": "This analysis used Rhubarb because the phoneme engine is not installed."
+    },
+    "languageVoices": {
+      "title": "Voices by language",
+      "hint": "Optional. Give this character a dedicated voice for each language it speaks. Series, previews and auditions pick the voice that matches the spoken language; the voice above speaks every other language.",
+      "add": "Add a voice for",
+      "choose": "Choose a language",
+      "addButton": "Add voice",
+      "remove": "Remove"
     }
   },
   "title": "3D scene studio",

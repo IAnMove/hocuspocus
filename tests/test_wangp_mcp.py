@@ -372,3 +372,16 @@ def test_canonical_and_legacy_urls_share_tools_and_request_journal(tmp_path):
         assert not replies[0]['isError']
         assert json.loads(replies[0]['content'][0]['text']) == {'job_id': 'task-a'}
         assert len(calls) == 1
+
+
+def test_a_catalog_without_a_mutation_flag_still_lists_every_tool():
+    # tools/list once failed for every client because three catalogs omitted the flag.
+    from routers.wangp_mcp import tool_definitions
+    from services.lipsync_qa import command_catalog as lipsync_catalog
+    from services.music_production import command_catalog as production_catalog
+    from services.song_analysis import command_catalog as audio_catalog
+    operations = [*audio_catalog(), *lipsync_catalog(), *production_catalog()]
+    tools = tool_definitions({operation['name'] for operation in operations}, operations)
+    assert [tool['name'] for tool in tools] == [operation['name'] for operation in operations]
+    unflagged = [tool for tool, operation in zip(tools, operations) if 'mutation' not in operation]
+    assert unflagged and all(tool['annotations']['readOnlyHint'] is False for tool in unflagged)

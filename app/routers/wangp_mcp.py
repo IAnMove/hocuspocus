@@ -46,12 +46,15 @@ def _command_tool(operation):
     schema = {**schema, 'properties': {key: value for key, value in schema['properties'].items() if key != 'operation'},
               'required': [key for key in schema['required'] if key != 'operation']}
     guidance = 'Versioned command. Follow inputSchema for workspace and exact resource IDs.'
-    if operation['mutation']:
+    # A catalog that forgets the flag must not take tools/list down for every
+    # client; treat it as a mutation, the conservative reading.
+    mutation = operation.get('mutation', True)
+    if mutation:
         receipt_tool = operation.get('receipt_tool', 'commands.receipt')
         guidance += f' Reuse intent_id on transport retries; inspect {receipt_tool} after an uncertain response.'
     return {
         'name': operation['name'], 'description': f"{operation['description']} {guidance}", 'inputSchema': schema,
-        'annotations': {'readOnlyHint': not operation['mutation'], 'destructiveHint': bool(operation.get('destructive', False)), 'idempotentHint': True},
+        'annotations': {'readOnlyHint': not mutation, 'destructiveHint': bool(operation.get('destructive', False)), 'idempotentHint': True},
     }
 
 

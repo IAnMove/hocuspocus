@@ -150,6 +150,7 @@ def measure(clip: str, audio: str, offset: float = 0.0,
 def command_catalog() -> list[dict[str, Any]]:
     return [{
         "name": OPERATION,
+        "mutation": False,
         "description": ("Check lip-sync of a workspace video against the audio that drove it: DWPose mouth opening vs vocal "
                         "envelope, ±8 frames of lag. Returns verdict ok|retake|unreliable, best_r, best_lag_s and "
                         "suggested_sync_s (seconds to shift the clip). audio is a workspace file (the song or its "
