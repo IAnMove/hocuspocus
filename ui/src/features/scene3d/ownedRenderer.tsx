@@ -9,10 +9,11 @@ import { scene3dPlaybackSpeed } from './clock'
 import { paintSceneFx } from '../sceneFx/paint'
 import { ensureTextFonts, paintKineticTexts, paintSceneLyrics } from '../../lib/kineticText'
 import { paintClipNumber } from './performance'
+import { checkGeometry, geometrySampleTimes, type GeometryReport, type GeometrySample } from './geometryChecks'
 import type { Scene3DDocument } from './types'
 
 type Size = { width: number; height: number }
-type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; dispose: () => void }
+type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; checkGeometry: () => Promise<GeometryReport>; dispose: () => void }
 declare global { interface Window { __world3dExport: Renderer } }
 
 const root = createRoot(document.getElementById('root')!)
@@ -49,6 +50,18 @@ window.__world3dExport = {
     paintSceneLyrics(context, canvas.width, canvas.height, time, snapshot.lyrics)
     paintClipNumber(context, canvas.width, canvas.height, snapshot.clipNumber)
     return canvas.toDataURL('image/png')
+  },
+  /** Geometry warnings over the shot, before any frame is rendered. The stage is a pure function of time,
+   * so sampling here does not change the frames that follow. */
+  async checkGeometry() {
+    if (!stage || !snapshot) throw new Error('Load a World3D snapshot first')
+    const samples: GeometrySample[] = []
+    for (const time of geometrySampleTimes(snapshot.duration)) {
+      await stage.prepareFrame?.(time, snapshot)
+      const sample = stage.geometrySample?.(time, snapshot)
+      if (sample) samples.push(sample)
+    }
+    return checkGeometry(samples)
   },
   dispose() {
     if (stage && snapshot) finishWorld3DExport(stage)

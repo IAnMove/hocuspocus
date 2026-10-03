@@ -60,6 +60,9 @@ def project_export_receipt(receipt: dict, task: dict | None) -> dict:
     if not isinstance(task, dict):
         return deepcopy(receipt)
     projected = _with_task_status(deepcopy(receipt), task)
+    metadata = task.get("metadata")
+    if isinstance(metadata, dict) and isinstance(metadata.get("geometry"), dict):
+        projected["geometry"] = deepcopy(metadata["geometry"])
     artifact = _published_artifact(task)
     if artifact is not None:
         projected["artifacts"] = [artifact]
