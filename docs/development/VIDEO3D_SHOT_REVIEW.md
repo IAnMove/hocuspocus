@@ -36,6 +36,9 @@ saved JSON roundtrip before checking assets, so consecutive unnumbered shots
 with the same sources still apply their own animations, cameras and lights.
 
 `clipPlayback` stores `speed`, `start` (source animation seconds), and `loop`.
+`clips` (optional) sequences several clips on one model slot with crossfades. When
+it is present it drives the model and `clip`/`clipPlayback` are ignored; see
+[sequence clips on a slot](../agents/HUMANOID_RIG.md#sequence-clips-on-a-slot).
 `motion` stores a world-space destination, optional quadratic control point
 (`via`), target yaw or tangent-facing (`faceTravel`), and linear/smooth timing.
 The selected-model movement panel edits these fields; the transform panel sets
