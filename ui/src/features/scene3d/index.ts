@@ -5,6 +5,7 @@ export type {
   Scene3DClipError,
   Scene3DClipRef,
   Scene3DDocument,
+  Scene3DFootContact,
   Scene3DLight,
   Scene3DLoop,
   Scene3DSlot,

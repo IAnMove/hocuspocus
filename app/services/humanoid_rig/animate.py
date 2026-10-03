@@ -18,7 +18,7 @@ def animate_humanoid(
     import_suffix: str = "",
     import_label: str = "Imported",
 ) -> tuple[bytes, list[dict], list[str]]:
-    """Return ``(glb, clips, warnings)``. ``clips`` is ``[{index, name, duration}]``."""
+    """Return ``(glb, clips, warnings)``. ``clips`` is ``[{index, name, duration, contacts}]``."""
     from services.humanoid_rig.gltf_export import append_animation_clips
 
     rig = stored_rig(bytes(source))
@@ -27,7 +27,8 @@ def animate_humanoid(
         raise InvalidInput("Select at least one animation")
     data, start = append_animation_clips(bytes(source), clips)
     listed = [
-        {"index": start + index, "name": str(clip["name"]), "duration": float(clip["duration"])}
+        {"index": start + index, "name": str(clip["name"]), "duration": float(clip["duration"]),
+         "contacts": list(clip.get("contacts", []))}
         for index, clip in enumerate(clips)
     ]
     return data, listed, warnings
