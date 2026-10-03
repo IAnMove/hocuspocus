@@ -6,18 +6,33 @@ import os
 from pathlib import Path
 import tempfile
 from threading import Event, Lock, Thread
-from urllib.request import urlopen
 from uuid import uuid4
 import zipfile
 
 from services.example_assets import ExampleAssets, ExampleUnavailable
+from services.secure_download import DownloadCancelled, DownloadRefused, copy_verified, opener_for
+
+# Release archives live on GitHub, which redirects to its asset storage hosts.
+ARCHIVE_HOSTS = ("github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com")
+urlopen = opener_for(ARCHIVE_HOSTS)
+_ARCHIVE_ERRORS = {'too_large': 'Archive exceeds its declared size', 'integrity': 'Archive failed integrity verification'}
+
+__all__ = ['ARCHIVE_HOSTS', 'CollectionDownloads', 'DownloadCancelled', 'install_collection']
 
 
-class DownloadCancelled(Exception):
-    pass
+def _download_archive(url: str, archive: Path, pack: dict, cancelled, progress, opener) -> None:
+    try:
+        with (opener or urlopen)(url, timeout=30) as response, archive.open('wb') as output:
+            copy_verified(response, output, size=pack['archive']['size'], sha256=pack['archive']['sha256'],
+                          cancelled=cancelled, progress=progress)
+    except DownloadRefused as refused:
+        if refused.code in _ARCHIVE_ERRORS:
+            raise ExampleUnavailable(_ARCHIVE_ERRORS[refused.code]) from refused
+        raise
 
 
-def install_collection(assets: ExampleAssets, collection: str, cancelled, progress):
+def install_collection(assets: ExampleAssets, collection: str, cancelled, progress, opener=None):
+    """``opener`` defaults to the module's ``urlopen`` (GitHub release hosts only)."""
     pack = assets.collections[collection]
     if assets.installed(collection):
         return
@@ -26,19 +41,7 @@ def install_collection(assets: ExampleAssets, collection: str, cancelled, progre
         with tempfile.TemporaryDirectory(prefix='.install-', dir=assets.cache) as directory:
             staging = Path(directory)
             archive = staging / 'download.zip'
-            digest, received = hashlib.sha256(), 0
-            with urlopen(pack['archive']['url'], timeout=30) as response, archive.open('wb') as output:
-                while chunk := response.read(1024 * 1024):
-                    if cancelled():
-                        raise DownloadCancelled()
-                    received += len(chunk)
-                    if received > pack['archive']['size']:
-                        raise ExampleUnavailable('Archive exceeds its declared size')
-                    output.write(chunk)
-                    digest.update(chunk)
-                    progress(len(chunk))
-            if received != pack['archive']['size'] or digest.hexdigest() != pack['archive']['sha256']:
-                raise ExampleUnavailable('Archive failed integrity verification')
+            _download_archive(pack['archive']['url'], archive, pack, cancelled, progress, opener)
             with zipfile.ZipFile(archive) as bundle:
                 names = bundle.namelist()
                 if len(names) != len(set(names)) or set(names) != set(pack['files']):
@@ -76,8 +79,10 @@ def install_collection(assets: ExampleAssets, collection: str, cancelled, progre
 
 
 class CollectionDownloads:
-    def __init__(self, assets: ExampleAssets):
+    def __init__(self, assets: ExampleAssets, opener=None, busy_message: str = 'Another example download is already running'):
         self.assets = assets
+        self.opener = opener
+        self.busy_message = busy_message
         self.lock = Lock()
         self.cancelled = Event()
         self.job = None
@@ -101,7 +106,7 @@ class CollectionDownloads:
         pending = [name for name in required if not self.assets.installed(name)]
         with self.lock:
             if self.job and self.job['status'] == 'running':
-                raise RuntimeError('Another example download is already running')
+                raise RuntimeError(self.busy_message)
             self.cancelled = Event()
             self.job = {'id': uuid4().hex, 'collections': required, 'status': 'running', 'received': 0,
                         'total': sum(self.assets.collections[n]['archive']['size'] for n in pending), 'error': None}
@@ -124,7 +129,7 @@ class CollectionDownloads:
             for name in pending:
                 if cancelled.is_set():
                     raise DownloadCancelled()
-                install_collection(self.assets, name, cancelled.is_set, progress)
+                install_collection(self.assets, name, cancelled.is_set, progress, self.opener)
             if cancelled.is_set():
                 raise DownloadCancelled()
         except DownloadCancelled:

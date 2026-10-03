@@ -12,7 +12,7 @@
       "required": ["id", "kind", "filename"],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["image", "audio", "video", "scene", "model3d", "document", "other"] },
+        "kind": { "enum": ["image", "audio", "video", "scene", "model3d", "document", "other", "hdri", "material", "lut"] },
         "filename": { "type": "string", "minLength": 1 },
         "uri": { "type": "string" },
         "media": { "type": "object" }
@@ -29,7 +29,20 @@
         "workspace_id": { "type": ["string", "null"], "description": "Workspace collection ID, never an absolute path." },
         "output_folder": { "type": ["string", "null"], "description": "Physical output-folder name, never an absolute path." },
         "project": { "$ref": "#/$defs/entityRef" },
-        "production": { "$ref": "#/$defs/entityRef" }
+        "production": { "$ref": "#/$defs/entityRef" },
+        "license": {
+          "type": "object",
+          "description": "Terms and source of an imported asset, such as a CC0 file from the asset library.",
+          "required": ["spdx", "source_url"],
+          "properties": {
+            "spdx": { "type": "string", "minLength": 1, "description": "SPDX license id, e.g. CC0-1.0." },
+            "source": { "type": "string" },
+            "source_url": { "type": "string", "pattern": "^https://" },
+            "author": { "type": "string" },
+            "retrieved_at": { "type": "string", "description": "Date the file was taken from the source (YYYY-MM-DD)." }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": true
     },

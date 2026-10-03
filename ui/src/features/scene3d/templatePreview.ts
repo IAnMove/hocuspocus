@@ -94,7 +94,9 @@ function tick(now: number) {
     if (!pack.slots.has(slot.id)) placeSlot(pack, slot, placeholderMesh(slot), [], 1, true)
   }
   const seconds = (now / 1000) % Math.max(0.5, doc.duration)
-  paintWorld(pack, { ...doc, slots: [...slots] }, seconds)
+  // Thumbnails draw placeholder boxes in a shared background loop; environment light and the look
+  // would only make every background frame dearer.
+  paintWorld(pack, { ...doc, slots: [...slots], lighting: undefined, look: undefined }, seconds)
   const ctx = watcher.canvas.getContext('2d')
   if (ctx) ctx.drawImage(pack.renderer.domElement, 0, 0, watcher.canvas.width, watcher.canvas.height)
   raf = requestAnimationFrame(tick)

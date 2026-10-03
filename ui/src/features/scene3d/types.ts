@@ -267,6 +267,10 @@ export type Scene3DDocument = {
   environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road'; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number }
   dressing?: Scene3DDressing
   atmos?: AtmosSettings
+  /** Light from the environment (reflections, soft fill). New scenes get a generated room. */
+  lighting?: import('./look').Scene3DLighting
+  /** Tone mapping, exposure and an optional LUT. Absent: the renderer's previous behaviour. */
+  look?: import('./look').Scene3DLook
   workshopScreen?: 'code' | 'error' | 'success'
   slots: Scene3DSlot[]
 }
