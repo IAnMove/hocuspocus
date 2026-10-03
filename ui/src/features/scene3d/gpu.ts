@@ -440,9 +440,20 @@ function cueActions(gpu: Pick<SlotGpu, 'root' | 'animations' | 'cues'>, cues: re
   return gpu.cues
 }
 
+/** Drop the sequence mixer so a later single-clip mixer can own the skeleton again.
+ * Two mixers on the same root leave the last cue pose in place: PropertyBindings do not overwrite each other. */
+function releaseClipCues(gpu: Pick<SlotGpu, 'cues'>) {
+  if (!gpu.cues) return
+  gpu.cues.mixer.stopAllAction()
+  gpu.cues.mixer.update(0)
+  gpu.cues = undefined
+}
+
 /** Pose a model from its clip sequence at `sceneSeconds`: every action is set from scratch, then evaluated once.
- * Two cues of the same clip share one action, so a fade between them shows the heavier cue (a cut). */
+ * Two cues of the same clip share one action, so a fade between them shows the heavier cue (a cut).
+ * An empty list releases a previous sequence so a single `clip` can drive the model again. */
 export function paintClipCues(gpu: Pick<SlotGpu, 'root' | 'animations' | 'cues'>, cues: readonly Scene3DClipCue[], sceneSeconds: number, shotDuration: number) {
+  if (!cues.length) { releaseClipCues(gpu); return }
   const bound = cueActions(gpu, cues)
   const weights = clipWeightsAt(cues, sceneSeconds, shotDuration, clip => gpu.animations[clip.index]?.duration ?? null)
   const chosen = new Map<AnimationAction, { weight: number; localTime: number }>()
@@ -465,8 +476,8 @@ export function paintClipCues(gpu: Pick<SlotGpu, 'root' | 'animations' | 'cues'>
 }
 
 function paintSlotSequence(gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number, shotDuration: number) {
-  const cues = parseClipCues(slot.clips)
-  if (cues && gpu.kind === 'model') paintClipCues(gpu, cues, sceneSeconds, shotDuration)
+  // Invalid or missing cues release a previous sequence, so the single clip drives the model again.
+  if (gpu.kind === 'model') paintClipCues(gpu, parseClipCues(slot.clips) ?? [], sceneSeconds, shotDuration)
 }
 
 /** The slot's single bound clip; a slot with a sequence has none. */
