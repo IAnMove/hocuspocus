@@ -1,5 +1,7 @@
 import { useUiTranslation } from '../../i18n'
+import { parseClipCues } from './clipCues.ts'
 import { fitClipPlayback, parseClipPlayback } from './performance.ts'
+import { Scene3DClipSequenceControls } from './Scene3DClipSequenceControls.tsx'
 import type { Scene3DClipCatalogEntry, Scene3DSlot } from './types.ts'
 
 export function Scene3DAnimationControls({ slot, clips, duration, disabled, onChange }: {
@@ -17,6 +19,10 @@ export function Scene3DAnimationControls({ slot, clips, duration, disabled, onCh
   const playback = parseClipPlayback(slot.clipPlayback) ?? { speed: 1, start: 0, loop: true }
   const selected = clips.find(clip => clip.index === slot.clip?.index && clip.name === slot.clip.name)
   const fitted = fitClipPlayback(selected?.durationSeconds, duration, playback)
+  const sequence = parseClipCues(slot.clips)
+  if (sequence) return <div className="mt-3 space-y-2">
+    <Scene3DClipSequenceControls slot={slot} clips={clips} duration={duration} disabled={disabled} onChange={onChange} />
+  </div>
   return <div className="mt-3 space-y-2">
     <label className="block text-xs font-medium">{t('animation')}
       <select aria-label={`${t('animation')} ${slot.id}`} disabled={disabled}
@@ -49,5 +55,6 @@ export function Scene3DAnimationControls({ slot, clips, duration, disabled, onCh
         className="min-h-10 rounded border border-border px-3 text-xs disabled:opacity-40"
         onClick={() => { if (fitted) onChange({ clipPlayback: fitted }) }}>{t('animationFit')}</button>
     </div>}
+    <Scene3DClipSequenceControls slot={slot} clips={clips} duration={duration} disabled={disabled} onChange={onChange} />
   </div>
 }
