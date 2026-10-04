@@ -579,16 +579,24 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   if (shot) world.camera.rotateZ(shot.roll)
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
+  paintWorldSfx(world, document, sceneSeconds, posedSlots)
+  renderFrame(world, document, sceneSeconds)
+}
+
+function paintWorldSfx(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number, posedSlots: readonly Scene3DSlot[]) {
   world.worldSfx ??= new Map()
-  if (world.scene) {
-    syncWorldSfx(world.scene, world.worldSfx, document.worldSfx, sceneSeconds, posedSlots.map(slot => ({
-      id: slot.id,
-      position: slot.position,
-      rotationY: slot.rotationY,
-      scale: slot.scale,
-      root: world.slots.get(slot.id)?.root,
-    })), { width: world.renderer.domElement?.width ?? document.width, height: world.renderer.domElement?.height ?? document.height })
-  }
+  if (!world.scene) return
+  syncWorldSfx(world.scene, world.worldSfx, document.worldSfx, sceneSeconds, posedSlots.map(slot => ({
+    id: slot.id,
+    position: slot.position,
+    rotationY: slot.rotationY,
+    scale: slot.scale,
+    root: world.slots.get(slot.id)?.root,
+  })), { width: world.renderer.domElement?.width ?? document.width, height: world.renderer.domElement?.height ?? document.height })
+}
+
+/** The cinematic runtime once a scene needs it (environment, world effects, pixel world, atmos), else a plain render. */
+function renderFrame(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
   const cinematic = Boolean(document.environment || document.worldSfx?.length || isAtmosDressing(document.dressing))
   if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment') || isAtmosDressing(document.dressing)) {
     world.cinema ??= new CinematicRuntime(world)
