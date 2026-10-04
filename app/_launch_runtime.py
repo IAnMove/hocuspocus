@@ -37281,29 +37281,13 @@ def run_server():
 
     # Port resolution: Pinokio hands us a free port via SERVER_PORT, but a
     # stale prior instance or another app can still be holding it by the time
-    # we bind — and an uncaught bind failure makes the launcher report a
-    # blank "server failed to start" with no clue. Probe the requested port
-    # and fall forward to the next free one, printing what happened so the
-    # captured URL (below) matches the actual bind.
-    def _first_bindable_port(bind_host: str, preferred: int, span: int = 20):
-        import socket as _socket
-        probe_host = "127.0.0.1" if bind_host == "0.0.0.0" else bind_host
-        for candidate in [preferred] + [preferred + i for i in range(1, span + 1)]:
-            s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-            try:
-                # No SO_REUSEADDR — a plain bind fails iff the port is truly
-                # in use right now, which is exactly the check we want (and
-                # avoids the Windows REUSEADDR hijack-a-live-port behavior).
-                s.bind((probe_host, candidate))
-                return candidate
-            except OSError:
-                continue
-            finally:
-                s.close()
-        return None
-
-    resolved_port = _first_bindable_port(host, port)
-    if resolved_port is None:
+    # we bind. Bind now (falling forward to the next free port) and hand the
+    # socket to Uvicorn: the URL printed below is then already ours, so the
+    # LAN proxy Pinokio starts on reading it cannot take the port first.
+    from services.server_lifecycle import bind_listener
+    try:
+        listener, resolved_port = bind_listener(host, port)
+    except OSError:
         print(
             f"\n[HocusPocus Lab] ERROR: could not find a free port in "
             f"{port}-{port + 20}. Another app (or a stale HocusPocus Lab instance) "
@@ -37353,7 +37337,7 @@ def run_server():
 
     try:
         from services.server_lifecycle import run_until_stopped
-        run_until_stopped(api, host=host, port=port)
+        run_until_stopped(api, host=host, port=port, sockets=[listener])
     except OSError as e:
         # The probe above narrows this to a genuine race (port taken in the
         # window between probe and uvicorn's own bind). Still fail loudly and
