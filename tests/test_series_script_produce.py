@@ -122,23 +122,25 @@ def test_check_only_and_rewriting_an_existing_episode():
 class Production:
     """render_native and assembly as the produce job sees them; the first English render fails a shot once."""
 
-    def __init__(self, fail_english=1):
-        self.calls, self.fail_english, self.jobs = [], fail_english, {}
+    def __init__(self, fail_english=1, stopped=()):
+        self.calls, self.fail_english, self.jobs, self.stopped = [], fail_english, {}, set(stopped)
 
     def __call__(self, tool, arguments):
         data = arguments["input"]
         self.calls.append((tool, data))
         if tool == "series.episode.render_native":
-            job_id = f"native-{data.get('language', 'spanish')}"
-            self.jobs[job_id] = "failed" if data.get("language") == "english" and self.fail_english else "completed"
+            language = data.get("language", "spanish")
+            job_id = f"native-{language}"
+            self.jobs[job_id] = "cancelled" if language in self.stopped else "failed" if language == "english" and self.fail_english else "completed"
             return {"result": {"job": {"jobId": job_id, "status": "queued"}}}
         if tool == "series.episode.render_native.status":
             status = self.jobs[data["job_id"]]
             items = [{"shotId": "e2s01", "status": "failed", "error": "export crashed"}] if status == "failed" else []
             return {"result": {"job": {"jobId": data["job_id"], "status": status, "items": items, "message": status}}}
         if tool == "series.episode.render_native.resume":
-            self.fail_english -= 1
-            self.jobs[data["job_id"]] = "failed" if self.fail_english else "completed"
+            if data["job_id"] == "native-english":
+                self.fail_english = max(0, self.fail_english - 1)
+            self.jobs[data["job_id"]] = "failed" if data["job_id"] == "native-english" and self.fail_english else "completed"
             return {"result": {"job": {"status": "queued"}}}
         if tool == "series.assembly.start":
             return {"result": {"job": {"jobId": f"cut-{data.get('language', 'spanish')}", "status": "queued"}}}
@@ -195,6 +197,14 @@ def test_a_render_that_keeps_failing_stops_before_cutting_and_resumes(tmp_path):
     resumed = finished(service, service.resume("cast", failed["jobId"])["jobId"])
     assert resumed["status"] == "completed" and sorted(resumed["chapters"]) == ["english", "spanish"]
     assert [tool for tool, _ in tools.calls].count("series.episode.render_native") == 2, "resume reuses the render job"
+
+
+def test_resuming_a_cancelled_production_resumes_its_stopped_render(tmp_path):
+    tools = Production(fail_english=0, stopped={"spanish"})
+    service = producer(tmp_path, tools)
+    done = finished(service, service.start("cast", "uv", "ep2", languages=["spanish"])["jobId"])
+    assert done["status"] == "completed", done
+    assert [tool for tool, _ in tools.calls].count("series.episode.render_native.resume") == 1, "the stopped render goes on"
 
 
 def test_produce_refuses_a_language_without_a_version(tmp_path):

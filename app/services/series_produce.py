@@ -186,7 +186,8 @@ class SeriesProduce:
             if render["status"] == "completed":
                 return
             failed = [f"{item['shotId']}: {item.get('error')}" for item in render.get("items") or [] if item.get("status") == "failed"]
-            if render["status"] == "cancelled" or step.get("retries", 0) >= RENDER_RETRIES:
+            # A failed or stopped render is resumed (once per run): resuming a production resumes its render.
+            if self._cancelled(job["jobId"]) or step.get("retries", 0) >= RENDER_RETRIES:
                 raise ProduceError("render_failed", "; ".join(failed[:4]) or render.get("message") or render["status"])
             step["retries"] = step.get("retries", 0) + 1
             _result(self.deps.call("series.episode.render_native.resume", self._args(job, job_id=step["jobId"])), "resume render")
