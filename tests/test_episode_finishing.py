@@ -130,3 +130,29 @@ def test_a_joined_episode_is_evened_to_minus_16_lufs_with_subtitles_on_the_joine
     assert loudness["after"]["lufs"] == pytest.approx(-16.0, abs=1.0)
     assert measure_loudness(str(joined), "ffmpeg")["input_i"]
     assert not list(workspace.glob("*loudnorm-tmp*"))
+
+
+def test_the_subtitles_filter_escapes_paths_twice():
+    from services.episode_finishing import _subtitles_filter
+    built = _subtitles_filter("C:/eps/it's, here.srt", "FontSize=20,Outline=2")
+    assert built == "subtitles=filename=C\\\\:/eps/it\\\\\\'s\\, here.srt:force_style=FontSize=20\\,Outline=2"
+
+
+def _has_libass() -> bool:
+    if not HAS_FFMPEG:
+        return False
+    listed = subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+    return " subtitles " in listed
+
+
+@pytest.mark.skipif(not _has_libass(), reason="ffmpeg with libass required")
+def test_burned_subtitles_are_a_second_file_and_the_clean_one_stays(tmp_path):
+    from services.episode_finishing import burn_subtitles
+
+    folder = tmp_path / "odd:name, it's"
+    folder.mkdir()
+    _clip(folder / "episode.mp4", 2.0, 0.05)
+    (folder / "episode.srt").write_text("1\n00:00:00,200 --> 00:00:01,800\nHello there.\n", encoding="utf-8")
+    result = burn_subtitles(str(folder / "episode.mp4"), "episode.srt", ffmpeg="ffmpeg")
+    assert result == {"burned": True, "file": "episode_subtitled.mp4"}
+    assert (folder / "episode_subtitled.mp4").stat().st_size > 0 and (folder / "episode.mp4").is_file()

@@ -240,11 +240,41 @@ def normalize_loudness(path: str, *, ffmpeg: str, abort_callback: Callable[[], b
     return result
 
 
-# Both steps -----------------------------------------------------------------
+# Burned-in subtitles ---------------------------------------------------------
+
+def _subtitles_filter(path: str, style: str) -> str:
+    """ffmpeg escapes twice: inside an option value, then for the filter graph."""
+    def value(text: str) -> str:
+        return text.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+    described = f"subtitles=filename={value(path)}:force_style={value(style)}"
+    return "".join(f"\\{char}" if char in "\\'[],;" else char for char in described)
+
+
+def burn_subtitles(output_path: str, srt_name: str, *, ffmpeg: str,
+                   abort_callback: Callable[[], bool] | None = None) -> dict[str, Any]:
+    """Write ``<episode>_subtitled.mp4`` with the subtitles drawn on the picture; the clean file stays."""
+    source = os.path.abspath(output_path)
+    target = f"{os.path.splitext(source)[0]}_subtitled.mp4"
+    srt = os.path.join(os.path.dirname(source), srt_name).replace("\\", "/")
+    style = "FontName=DejaVu Sans,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=28"
+    command = [
+        ffmpeg, "-y", "-hide_banner", "-i", source,
+        "-vf", _subtitles_filter(srt, style),
+        "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-c:a", "copy",
+        "-movflags", "+faststart", target,
+    ]
+    # Never chdir in the server: the escaped absolute path keeps drive colons out of the filter syntax.
+    done = _run_ffmpeg_command(command, target, abort_callback=abort_callback)
+    if not done:
+        return {"burned": False, "reason": "ffmpeg could not draw the subtitles"}
+    return {"burned": True, "file": os.path.basename(target)}
+
+
+# All steps -------------------------------------------------------------------
 
 def finish_episode(
     output_path: str, clip_paths: Sequence[str], scene_filenames: Sequence[Any], *, workspace_dir: str,
-    abort_callback: Callable[[], bool] | None = None,
+    abort_callback: Callable[[], bool] | None = None, burn: bool = False,
 ) -> dict[str, Any]:
     ffmpeg = ffmpeg_binary()
     if not ffmpeg:
@@ -260,6 +290,12 @@ def finish_episode(
             finished[key] = step()
         except Exception as error:  # A finishing step never costs the joined episode.
             finished[key] = {"applied" if key == "loudness" else "written": False, "reason": str(error)}
+    subtitles = finished["subtitles"]
+    if burn and subtitles.get("written"):
+        try:
+            subtitles.update(burn_subtitles(output_path, subtitles["srt"], ffmpeg=ffmpeg, abort_callback=abort_callback))
+        except Exception as error:
+            subtitles.update({"burned": False, "reason": str(error)})
     return finished
 
 
@@ -278,7 +314,7 @@ def finishing_note(finished: dict[str, Any]) -> str:
 
 def remove_episode_subtitles(output_path: str) -> None:
     stem = os.path.splitext(output_path)[0]
-    for suffix in SUBTITLE_SUFFIXES:
+    for suffix in (*SUBTITLE_SUFFIXES, "_subtitled.mp4"):
         try:
             os.remove(f"{stem}{suffix}")
         except OSError:
