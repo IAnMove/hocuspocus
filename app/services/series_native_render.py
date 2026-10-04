@@ -101,7 +101,9 @@ def _output_file(status: dict, suffixes: tuple[str, ...]) -> str | None:
 def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) -> dict[str, Any]:
     """Generation params for one line in one character voice (reference clone or preset)."""
     seconds = min(30, max(4, round(len(text.split()) * 0.6 + 3)))
-    params: dict[str, Any] = {"prompt": text, "model_type": voice["model"], "seed": seed, "duration_seconds": seconds, "priority": 10}
+    # The speech schema requires a resolution even for audio; it does not change the output.
+    params: dict[str, Any] = {"prompt": text, "model_type": voice["model"], "seed": seed, "duration_seconds": seconds, "priority": 10,
+                              "resolution": "1280x720"}
     if voice.get("model") == "qwen3_tts_base":
         params.update({"model_mode": voice.get("language") or language, "audio_prompt_type": "A",
                        "audio_guide": voice["referenceAudio"], "alt_prompt": voice.get("transcript") or ""})
