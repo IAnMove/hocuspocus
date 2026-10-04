@@ -740,5 +740,40 @@
       "import": "take",
       "done": "done"
     }
+  },
+  "languages": {
+    "title": "Language versions",
+    "hint": "Dub this episode: the same shots with their own lines, voices, takes and cut. The original is {{original}}.",
+    "add": "Add",
+    "choose": "Choose a language",
+    "translate": "Translate with AI",
+    "empty": "Start empty",
+    "lineLabel": "Translation of {{id}}",
+    "missing": "{{count}} lines still need text",
+    "save": "Save lines",
+    "assemble": "Assemble this version",
+    "remove": "Remove version",
+    "created": "Version created. {{missing}} lines still need text.",
+    "saved": "Lines saved. {{missing}} still need text.",
+    "assembling": "Assembling the version with subtitles…",
+    "names": {
+      "english": "English",
+      "spanish": "Spanish",
+      "french": "French",
+      "german": "German",
+      "italian": "Italian",
+      "portuguese": "Portuguese",
+      "japanese": "Japanese",
+      "korean": "Korean",
+      "chinese": "Chinese",
+      "russian": "Russian"
+    },
+    "busy": {
+      "translate": "Translating with the language model…",
+      "create": "Creating the version…",
+      "save": "Saving…",
+      "assemble": "Starting the assembly…",
+      "remove": "Removing…"
+    }
   }
 }

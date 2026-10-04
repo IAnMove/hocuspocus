@@ -256,7 +256,19 @@ export interface SeriesCanonDeltaItem extends CanonFact {
   decidedAt?: string
 }
 
+export interface SeriesLanguageVersion {
+  title?: string
+  /** Text of each line by its beat id; the shots and line ids are shared with the original. */
+  dialogue: Record<string, string>
+  cards: Record<string, { title: string; body: string }>
+  approvedAttemptIds: Record<string, string>
+  assemblyAssetIds: string[]
+  latestAssemblyAssetId?: string
+}
+
 export interface SeriesEpisode {
+  /** Dubbed versions by spoken language (english, spanish...); the series language is the original. */
+  languageVersions?: Record<string, SeriesLanguageVersion>
   latestAssemblyAssetId?: string
   assemblyAssetIds?: string[]
   id: string

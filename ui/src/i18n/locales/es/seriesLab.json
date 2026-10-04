@@ -740,5 +740,40 @@
       "import": "toma",
       "done": "hecho"
     }
+  },
+  "languages": {
+    "title": "Versiones de idioma",
+    "hint": "Dobla este capítulo: los mismos planos con sus propias líneas, voces, tomas y montaje. El original está en {{original}}.",
+    "add": "Añadir",
+    "choose": "Elige un idioma",
+    "translate": "Traducir con IA",
+    "empty": "Empezar vacía",
+    "lineLabel": "Traducción de {{id}}",
+    "missing": "Faltan {{count}} líneas por escribir",
+    "save": "Guardar líneas",
+    "assemble": "Montar esta versión",
+    "remove": "Quitar versión",
+    "created": "Versión creada. Faltan {{missing}} líneas.",
+    "saved": "Líneas guardadas. Faltan {{missing}}.",
+    "assembling": "Montando la versión con subtítulos…",
+    "names": {
+      "english": "inglés",
+      "spanish": "español",
+      "french": "francés",
+      "german": "alemán",
+      "italian": "italiano",
+      "portuguese": "portugués",
+      "japanese": "japonés",
+      "korean": "coreano",
+      "chinese": "chino",
+      "russian": "ruso"
+    },
+    "busy": {
+      "translate": "Traduciendo con el modelo de lenguaje…",
+      "create": "Creando la versión…",
+      "save": "Guardando…",
+      "assemble": "Iniciando el montaje…",
+      "remove": "Quitando…"
+    }
   }
 }

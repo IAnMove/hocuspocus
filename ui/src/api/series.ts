@@ -398,9 +398,9 @@ export async function approveSeriesAttemptsBulk(
 }
 
 export async function startSeriesEpisodeAssembly(
-  workspace: string, seriesId: string, episodeId: string,
+  workspace: string, seriesId: string, episodeId: string, options: { language?: string; burnSubtitles?: boolean } = {},
 ): Promise<SeriesAssemblyJob> {
-  const payload: SeriesAssemblyStartRequest = { workspace }
+  const payload: SeriesAssemblyStartRequest = { workspace, ...options }
   return seriesResponse(fetch(
     `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/assembly/start`,
     {
@@ -488,12 +488,14 @@ export type SeriesServerRenderItem = {
 export type SeriesServerRenderJob = {
   jobId: string; seriesId: string; episodeId: string; current: number; total: number; message?: string; activeShotId?: string | null
   status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'; items: SeriesServerRenderItem[]; createdAt?: number
+  language?: string
 }
 
 /** Voices, scene, headless export and take for every 2D shot of an episode, on the server. */
-export async function startSeriesServerRender(workspace: string, seriesId: string, episodeId: string, approve: boolean): Promise<SeriesServerRenderJob> {
+export async function startSeriesServerRender(workspace: string, seriesId: string, episodeId: string, approve: boolean,
+  language?: string): Promise<SeriesServerRenderJob> {
   return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/native-render`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, approve }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, approve, ...(language ? { language } : {}) }),
   }), 'Could not start the server render')
 }
 
@@ -512,4 +514,34 @@ export async function fetchSeriesServerRenders(workspace: string): Promise<Serie
   const body = await seriesResponse<{ jobs: SeriesServerRenderJob[] }>(
     fetch(`${BASE}/api/v1/series/native-render/recovery?workspace=${encodeURIComponent(workspace)}`), 'Could not list server renders')
   return body.jobs
+}
+
+export type SeriesLanguageVersionReply = {
+  revision: number; language: string; missingLines: string[]
+  version: import('../features/series/types').SeriesLanguageVersion | null
+}
+
+function versionPath(seriesId: string, episodeId: string, language: string) {
+  return `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/language-versions/${encodeURIComponent(language)}`
+}
+
+/** Write a version's title, lines ({beatId: text}) or cards. Its takes and cuts are kept. */
+export async function saveSeriesLanguageVersion(workspace: string, seriesId: string, episodeId: string, language: string,
+  version: { title?: string; dialogue?: Record<string, string>; cards?: Record<string, { title: string; body: string }> }): Promise<SeriesLanguageVersionReply> {
+  return seriesResponse(fetch(versionPath(seriesId, episodeId, language), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, version }),
+  }), 'Could not save the language version')
+}
+
+/** Translate every line and card of the episode with the configured LLM. */
+export async function translateSeriesLanguageVersion(workspace: string, seriesId: string, episodeId: string, language: string): Promise<SeriesLanguageVersionReply> {
+  return seriesResponse(fetch(`${versionPath(seriesId, episodeId, language)}/translate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+  }), 'Could not translate the episode')
+}
+
+export async function deleteSeriesLanguageVersion(workspace: string, seriesId: string, episodeId: string, language: string): Promise<void> {
+  await seriesResponse(fetch(versionPath(seriesId, episodeId, language), {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+  }), 'Could not remove the language version')
 }
