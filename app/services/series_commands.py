@@ -149,6 +149,161 @@ def _series_summary(series: dict[str, Any]) -> dict[str, Any]:
                          for episode_id in order if episode_id in episodes]}
 
 
+def _list_characters(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    library = request("GET", "/api/v1/character-kits/library", query={"workspace": data["workspace"]})
+    kits = (library.get("kits") or {}).values()
+    return {"revision": library.get("revision"), "characters": [_kit_summary(kit) for kit in kits]}
+
+
+def _get_character(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    library = request("GET", "/api/v1/character-kits/library", query={"workspace": data["workspace"]})
+    kit = (library.get("kits") or {}).get(data["character_id"])
+    if kit is None:
+        raise SeriesCommandError("Character not found", status=404)
+    return {"revision": library.get("revision"), "character": kit}
+
+
+def _save_character(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    character = data["character"]
+    if not isinstance(character.get("id"), str) or not character["id"]:
+        raise SeriesCommandError("The character needs an id")
+    library = request(
+        "PATCH", f"/api/v1/character-kits/library/kits/{_quote(character['id'])}",
+        body={"workspace": data["workspace"], "kit": character, "baseRevision": data["base_revision"]},
+    )
+    return {"revision": library.get("revision"), "character": _kit_summary(library["kits"][character["id"]])}
+
+
+def _list_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    listed = request("GET", "/api/v1/series", query={"workspace": data["workspace"]})
+    return {"series": [_series_summary(item) for item in listed.get("series") or []]}
+
+
+def _get_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    series = request("GET", f"/api/v1/series/{_quote(data['series_id'])}", query={"workspace": data["workspace"]})
+    return {"series": series}
+
+
+def _create_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    created = request("POST", "/api/v1/series", body={"workspace": data["workspace"], "series": data["series"]})
+    return {"series": _series_summary(created)}
+
+
+def _update_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    updated = request(
+        "PUT", f"/api/v1/series/{_quote(data['series_id'])}",
+        body={"workspace": data["workspace"], "series": data["series"], "baseRevision": data["base_revision"]},
+    )
+    return {"series": _series_summary(updated)}
+
+
+def _approve_canon(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    approved = request(
+        "POST", f"/api/v1/series/{_quote(data['series_id'])}/canon/approve",
+        body={"workspace": data["workspace"], "baseRevision": data["base_revision"]},
+    )
+    return {"series": _series_summary(approved)}
+
+
+def _create_episode(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {"workspace": data["workspace"], "episode": data.get("episode") or {}}
+    if data.get("season_id"):
+        body["seasonId"] = data["season_id"]
+    episode = request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes", body=body)
+    return {"episode": episode}
+
+
+def _update_episode(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "workspace": data["workspace"], "episode": data["episode"], "baseSeriesRevision": data["base_revision"],
+    }
+    if data.get("sync_shot_dialogue"):
+        body["syncShotDialogueFromScript"] = True
+    path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}"
+    return {"episode": request("PUT", path, body=body)}
+
+
+def _matching_take(series: dict[str, Any], owner_id: str, asset_id: str) -> Any:
+    episodes = (series.get("episodesById") or {}).values()
+    for episode in episodes:
+        for shot in episode.get("shots") or []:
+            if shot.get("id") != owner_id:
+                continue
+            for item in reversed(shot.get("attempts") or []):
+                if asset_id in (item.get("outputAssetIds") or []):
+                    return item
+    return None
+
+
+def _import_asset(data: dict[str, Any], request: Callable[..., Any], *, workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str]) -> dict[str, Any]:
+    source = workspace_file(data["workspace"], data["file"])
+    target_dir = Path(uploads_dir()) / "series-imports"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    upload = target_dir / f"{uuid.uuid4().hex[:12]}-{source.name}"
+    shutil.copy2(source, upload)
+    body: dict[str, Any] = {
+        "workspace": data["workspace"], "uploadPath": str(upload), "ownerType": data["owner_type"],
+        "ownerId": data["owner_id"], "kind": data["kind"], "asTake": data.get("as_take") is True,
+        "name": data.get("name") or source.name, "metadata": data.get("metadata") or {},
+    }
+    if data.get("reference_role"):
+        body["referenceRole"] = data["reference_role"]
+    try:
+        imported = request("POST", f"/api/v1/series/{_quote(data['series_id'])}/assets/import", body=body)
+    finally:
+        upload.unlink(missing_ok=True)
+    series = imported.get("series") or {}
+    attempt = None
+    if data.get("as_take"):
+        attempt = _matching_take(series, data["owner_id"], imported["asset"]["id"])
+    return {"asset": imported.get("asset"), "attempt": attempt, "revision": series.get("revision")}
+
+
+def _approve_take(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    path = (
+        f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}"
+        f"/shots/{_quote(data['shot_id'])}/attempts/{_quote(data['attempt_id'])}/approve"
+    )
+    shot = request("POST", path, body={"workspace": data["workspace"]})
+    return {"shot": {"id": shot.get("id"), "approvedAttemptId": shot.get("approvedAttemptId")}}
+
+
+def _start_assembly(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/assembly/start"
+    return {"job": request("POST", path, body={"workspace": data["workspace"]})}
+
+
+def _assembly_status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    job = request("GET", f"/api/v1/series/assembly/jobs/{_quote(data['job_id'])}", query={"workspace": data["workspace"]})
+    return {"job": job}
+
+
+_RUNNERS: dict[str, Callable[..., Any]] = {
+    "characters.list": _list_characters,
+    "characters.get": _get_character,
+    "characters.save": _save_character,
+    "series.list": _list_series,
+    "series.get": _get_series,
+    "series.create": _create_series,
+    "series.update": _update_series,
+    "series.canon.approve": _approve_canon,
+    "series.episode.create": _create_episode,
+    "series.episode.update": _update_episode,
+    "series.take.approve": _approve_take,
+    "series.assembly.start": _start_assembly,
+    "series.assembly.status": _assembly_status,
+}
+
+
+def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str]) -> Any:
+    if name == "series.asset.import":
+        return _import_asset(data, request, workspace_file=workspace_file, uploads_dir=uploads_dir)
+    runner = _RUNNERS.get(name)
+    if runner is None:
+        raise SeriesCommandError("Unknown operation")
+    return runner(data, request)
+
+
 def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], str],
                      uploads_dir: Callable[[], str], *, opener: Callable[..., Any] = urllib.request.urlopen) -> dict[str, Callable[[Any], Any]]:
     def request(method: str, path: str, *, query: dict[str, str] | None = None, body: dict[str, Any] | None = None) -> Any:
@@ -176,85 +331,7 @@ def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], 
         return candidate
 
     def run(name: str, data: dict[str, Any]) -> Any:
-        ws = data["workspace"]
-        if name == "characters.list":
-            library = request("GET", "/api/v1/character-kits/library", query={"workspace": ws})
-            return {"revision": library.get("revision"), "characters": [_kit_summary(kit) for kit in (library.get("kits") or {}).values()]}
-        if name == "characters.get":
-            library = request("GET", "/api/v1/character-kits/library", query={"workspace": ws})
-            kit = (library.get("kits") or {}).get(data["character_id"])
-            if kit is None:
-                raise SeriesCommandError("Character not found", status=404)
-            return {"revision": library.get("revision"), "character": kit}
-        if name == "characters.save":
-            character = data["character"]
-            if not isinstance(character.get("id"), str) or not character["id"]:
-                raise SeriesCommandError("The character needs an id")
-            library = request("PATCH", f"/api/v1/character-kits/library/kits/{_quote(character['id'])}",
-                              body={"workspace": ws, "kit": character, "baseRevision": data["base_revision"]})
-            return {"revision": library.get("revision"), "character": _kit_summary(library["kits"][character["id"]])}
-        if name == "series.list":
-            listed = request("GET", "/api/v1/series", query={"workspace": ws})
-            return {"series": [_series_summary(item) for item in listed.get("series") or []]}
-        if name == "series.get":
-            return {"series": request("GET", f"/api/v1/series/{_quote(data['series_id'])}", query={"workspace": ws})}
-        if name == "series.create":
-            created = request("POST", "/api/v1/series", body={"workspace": ws, "series": data["series"]})
-            return {"series": _series_summary(created)}
-        if name == "series.update":
-            updated = request("PUT", f"/api/v1/series/{_quote(data['series_id'])}",
-                              body={"workspace": ws, "series": data["series"], "baseRevision": data["base_revision"]})
-            return {"series": _series_summary(updated)}
-        if name == "series.canon.approve":
-            approved = request("POST", f"/api/v1/series/{_quote(data['series_id'])}/canon/approve",
-                               body={"workspace": ws, "baseRevision": data["base_revision"]})
-            return {"series": _series_summary(approved)}
-        if name == "series.episode.create":
-            body = {"workspace": ws, "episode": data.get("episode") or {}}
-            if data.get("season_id"):
-                body["seasonId"] = data["season_id"]
-            episode = request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes", body=body)
-            return {"episode": episode}
-        if name == "series.episode.update":
-            body = {"workspace": ws, "episode": data["episode"], "baseSeriesRevision": data["base_revision"]}
-            if data.get("sync_shot_dialogue"):
-                body["syncShotDialogueFromScript"] = True
-            episode = request("PUT", f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}", body=body)
-            return {"episode": episode}
-        if name == "series.asset.import":
-            source = workspace_file(ws, data["file"])
-            target_dir = Path(uploads_dir()) / "series-imports"
-            target_dir.mkdir(parents=True, exist_ok=True)
-            upload = target_dir / f"{uuid.uuid4().hex[:12]}-{source.name}"
-            shutil.copy2(source, upload)
-            body = {"workspace": ws, "uploadPath": str(upload), "ownerType": data["owner_type"], "ownerId": data["owner_id"],
-                    "kind": data["kind"], "asTake": data.get("as_take") is True, "name": data.get("name") or source.name,
-                    "metadata": data.get("metadata") or {}}
-            if data.get("reference_role"):
-                body["referenceRole"] = data["reference_role"]
-            try:
-                imported = request("POST", f"/api/v1/series/{_quote(data['series_id'])}/assets/import", body=body)
-            finally:
-                upload.unlink(missing_ok=True)
-            series = imported.get("series") or {}
-            attempt = None
-            if data.get("as_take"):
-                for episode in (series.get("episodesById") or {}).values():
-                    for shot in episode.get("shots") or []:
-                        if shot.get("id") == data["owner_id"]:
-                            attempt = next((item for item in reversed(shot.get("attempts") or [])
-                                            if imported["asset"]["id"] in (item.get("outputAssetIds") or [])), None)
-            return {"asset": imported.get("asset"), "attempt": attempt, "revision": series.get("revision")}
-        if name == "series.take.approve":
-            shot = request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}"
-                                   f"/shots/{_quote(data['shot_id'])}/attempts/{_quote(data['attempt_id'])}/approve", body={"workspace": ws})
-            return {"shot": {"id": shot.get("id"), "approvedAttemptId": shot.get("approvedAttemptId")}}
-        if name == "series.assembly.start":
-            return {"job": request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/assembly/start",
-                                   body={"workspace": ws})}
-        if name == "series.assembly.status":
-            return {"job": request("GET", f"/api/v1/series/assembly/jobs/{_quote(data['job_id'])}", query={"workspace": ws})}
-        raise SeriesCommandError("Unknown operation")
+        return _run_operation(name, data, request, workspace_file, uploads_dir)
 
     def handler(name: str) -> Callable[[Any], Any]:
         properties, required, _, _ = OPERATIONS[name]
