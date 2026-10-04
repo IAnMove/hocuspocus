@@ -15,7 +15,7 @@ from typing import Any
 GUIDE_PATH = Path(__file__).resolve().parents[1] / "shared" / "series_agent_guide.md"
 AUDIO = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 SHOT_FIELDS = ("id", "order", "sceneId", "locationId", "locationVariantId", "productionMethod", "durationSeconds",
-               "visibleCharacterIds", "speakingCharacterIds", "layout2d", "approvedAttemptId")
+               "visibleCharacterIds", "speakingCharacterIds", "layout2d", "scene3d", "approvedAttemptId")
 
 
 def guide_text() -> str:

@@ -586,6 +586,14 @@ def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any],
     return runner(data, request)
 
 
+def _error_detail(error: SeriesCommandError) -> dict[str, Any]:
+    """The tool error an agent reads: the route's own code, message and fields (a script's problems) when it gave them."""
+    fallback = "conflict" if error.status == 409 else "not_found" if error.status == 404 else "invalid_command"
+    route = error.detail if isinstance(error.detail, dict) and isinstance(error.detail.get("message"), str) else {}
+    return {**route, "code": route.get("code") or fallback, "message": route.get("message") or str(error.detail),
+            "retryable": error.status in (409, 503)}
+
+
 def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], str],
                      uploads_dir: Callable[[], str], *, opener: Callable[..., Any] = urllib.request.urlopen) -> dict[str, Callable[[Any], Any]]:
     def request(method: str, path: str, *, query: dict[str, str] | None = None, body: dict[str, Any] | None = None) -> Any:
@@ -627,9 +635,7 @@ def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], 
             try:
                 result = await run_in_threadpool(run, name, data)
             except SeriesCommandError as error:
-                code = "conflict" if error.status == 409 else "not_found" if error.status == 404 else "invalid_command"
-                raise HTTPException(error.status if error.status < 500 else 502,
-                                    {"code": code, "message": str(error.detail), "retryable": error.status in (409, 503)}) from error
+                raise HTTPException(error.status if error.status < 500 else 502, _error_detail(error)) from error
             return {"version": 1, "status": "completed", "operation": name, "result": result}
         return handle
 
