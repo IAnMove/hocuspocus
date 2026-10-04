@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from app.services import video_editor
+from app.services import video_editor_frames
 
 
 pytestmark = pytest.mark.skipif(
@@ -156,6 +157,36 @@ def test_render_matches_decoded_frames_at_supported_rates(tmp_path: Path, fps: i
     assert result["frames"] == expected
     assert decoded_video_frames(output) == expected
     assert video_editor.count_decoded_video_frames(str(output)) == expected
+
+
+def test_export_uses_one_lossy_encode(tmp_path: Path, monkeypatch):
+    clips = []
+    for index, frames in enumerate((8, 8)):
+        path = tmp_path / f"clip_{index}.mp4"
+        write_color_clip(path, frames, fps=30, color=("red", "green")[index], audio=True)
+        clips.append({"resolved_path": str(path), "transition": "none"})
+    calls = []
+    real_run = video_editor_frames.subprocess.run
+
+    def spy(command, **kwargs):
+        calls.append(list(command))
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(video_editor_frames.subprocess, "run", spy)
+    output = tmp_path / "delivery.mp4"
+    result = video_editor.render_project(clips, str(output), width=320, height=240, fps=30)
+    lossy = []
+    for command in calls:
+        if "-c:v" not in command or command[command.index("-c:v") + 1] != "libx264":
+            continue
+        crf = command[command.index("-crf") + 1] if "-crf" in command else None
+        if crf != "0":
+            lossy.append(command)
+    assert len(lossy) == 1
+    assert lossy[0][lossy[0].index("-crf") + 1] == "14"
+    assert lossy[0][lossy[0].index("-preset") + 1] == "slow"
+    assert result["frames"] == 16
+    assert decoded_video_frames(output) == 16
 
 
 def test_non_integer_trim_uses_nearest_frames_not_container_duration(tmp_path: Path):

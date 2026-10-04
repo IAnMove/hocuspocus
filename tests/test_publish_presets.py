@@ -19,10 +19,18 @@ def test_encode_args_follow_the_preset():
     assert x_args[x_args.index("-profile:v") + 1] == "high"
     assert x_args[x_args.index("-b:a") + 1] == "128k"
     assert encode_args("youtube")[encode_args("youtube").index("-b:a") + 1] == "192k"
-    assert encode_args("archive")[encode_args("archive").index("-crf") + 1] == "12"
+    archive = encode_args("archive")
+    assert archive[archive.index("-crf") + 1] == "12"
+    assert archive[archive.index("-preset") + 1] == "slow"
     assert encode_args("shorts")[encode_args("shorts").index("-b:a") + 1] == "128k"
     assert encode_args("apple")[encode_args("apple").index("-b:a") + 1] == "192k"
-    assert encode_args("broadcast")[encode_args("broadcast").index("-crf") + 1] == "18"
+    broadcast = encode_args("broadcast")
+    assert broadcast[broadcast.index("-crf") + 1] == "14"
+    assert broadcast[broadcast.index("-preset") + 1] == "slow"
+    assert x_args[x_args.index("-crf") + 1] == "14"
+    youtube = encode_args("youtube")
+    assert youtube[youtube.index("-crf") + 1] == "14"
+    assert youtube[youtube.index("-preset") + 1] == "slow"
 
 
 def test_warnings_cover_duration_aspect_and_safe_area():

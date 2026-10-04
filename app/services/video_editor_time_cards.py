@@ -358,7 +358,7 @@ def _render_time_card_segment(
             ),
             "-frames:v", str(frames),
             "-fps_mode", "cfr", "-r", str(fps),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
             destination,
         ],

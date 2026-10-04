@@ -35,7 +35,7 @@ def encode_args(preset: str, *, premium: bool = False) -> list[str]:
     if preset == "archive":
         video += ["-preset", "slow", "-crf", "12"]
     else:
-        video += ["-preset", "medium", "-crf", "18"]
+        video += ["-preset", "slow", "-crf", "14"]
     return [*video, "-c:a", "aac", "-b:a", spec["audio_bitrate"]]
 
 
