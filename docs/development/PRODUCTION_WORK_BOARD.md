@@ -215,7 +215,7 @@ abriendo el borrador el primer día y actualizando la fila en el mismo PR.
 | 5.F5-F7 Ambientes, editor y reverb | Grok | Ya |
 | 6.F1 Sondas de ffmpeg | Grok (#769) | Ya |
 | 6.F2 Geometría antes del render | Claude (#782) | Tras 4.F1 |
-| 6.F3 Avisos en 2D y en el editor | Grok (`feat/calidad-6-f3-avisos`) | En revisión |
+| 6.F3 Avisos en 2D y en el editor | Grok (#797) | En revisión |
 | 6.F4 Panel de revisión | Grok | Tras 6.F1 |
 | 6.F5 Ajuste de umbrales | Grok | Tras 6.F4 |
 
