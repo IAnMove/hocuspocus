@@ -73,9 +73,13 @@ cd ui && npm run build
 ```
 
 The canonical backend test command is run from the repository root, so the
-`pytest.ini` `pythonpath` setting resolves imports from `app/` consistently:
+`pytest.ini` `pythonpath` setting resolves imports from `app/` consistently.
+`pytest` is a development dependency (pinned in
+`scripts/ci-python-requirements.txt`), not part of the installed app, so add
+it to the managed environment once:
 
 ```bash
+app/env/bin/python -m pip install pytest==8.3.5
 app/env/bin/python -m pytest -q
 ```
 
