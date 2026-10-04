@@ -1,10 +1,10 @@
 """Video 3D shots with dialogue in the server render (``animation_3d`` + ``shot.scene3d``).
 
-1x02's talking Elon on Mars took seven tools per language by hand. A shot now says
+A talking character in a 3D set used to take seven tools per language by hand. A shot now says
 where and who::
 
-    shot.scene3d = {"template": "user-uv-mars-elon",          # or "scene": "<saved>.world3d.scene.json"
-                    "cast": [{"characterId": "elon", "objectId": "elon", "poseId": "phone"}],
+    shot.scene3d = {"template": "user-moon-base",             # or "scene": "<saved>.world3d.scene.json"
+                    "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}],
                     "quality": "final"}
 
 and the render records its lines like any 2D shot, instantiates the scene,

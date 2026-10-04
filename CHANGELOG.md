@@ -6,6 +6,52 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-04
+
+Animated series end to end. Series Lab makes a whole episode locally:
+characters in one click (style presets, a flat rig with nine paper mouths and a
+blink, a designed voice per language checked with speech QA), an episode
+written as one compact bilingual script (`series.episode.from_script`, checked
+against the series before anything is written) and made with one call
+(`series.episode.produce`): every shot rendered on the server with its voices,
+phonetic lip-sync and an editable Video 2D or Video 3D scene, takes approved,
+and each language cut at -16 LUFS with SRT/VTT and burned-in subtitles. A
+language version lives inside the episode with its own lines, cards, music,
+takes and cut. Shots declare their rhythm (pauses, intro, tail), timed sound
+and screen effects, props on background anchors, characters seated on their
+prop, and 3D dialogue shots; locations can use a looping Video 3D plate. Audio
+is balanced: lines are levelled, music and effects follow their own loudness,
+and both dip under the dialogue in 2D and 3D. Series templates start a new
+show with its cast, places and pilot.
+
+Agents and chat assistants: the `/api/v1/mcp/series` profile serves only the
+series tools, `series.guide` returns the working guide and the live series
+bible, and a single-user OAuth 2.1 sign-in lets connectors such as ChatGPT
+connect with their own revocable token. Video 2D is fully authorable over MCP
+(published schema and catalogs, small edit operations, templates, lyrics,
+contact-sheet previews), and MCP gains asset upload, `media.options`, Video 3D
+shot search, Model3D generation and UniRig rigging jobs.
+
+Productions and music videos: a music video from one spec over MCP, with
+resume, retakes, review split into execution, technical and artistic checks,
+cheap animatic previews and dry runs, quality profiles, shot-by-shot editing
+of a finished video and publishing to local pages; comic to film and trailer
+structure; many fixes that keep finished cuts, locked takes and project
+identity intact across resumes.
+
+Video 3D: new atmosphere sets (waterfall, lunar, desert oasis, sunset beach,
+crystal cave, Mars, snow, silicon and more), an N64 look and PS1 backplates,
+beat-synced performances, environment lighting, a humanoid rig for real meshes
+(walk paths without sliding, IK sit/reach/look, foot contacts, held props),
+clip sequences with fades, and cartoon lips with Lips Creator.
+
+Export quality: draft, final and master levels with supersampling, MSAA and
+deterministic motion blur, 4K, an optional ProRes master with a single final
+encode, geometry and audio warnings before a render, ffmpeg probes and a
+review panel on the receipt, and per-platform loudness when publishing. Assets
+gain a CC0 library contract with a safe downloader and GLB import; Qwen Image
+2.1 is the default image model when installed.
+
 Install on any computer: AMD, Intel and CPU-only PCs, Linux ARM and NVIDIA
 drivers below the CUDA minimum now install the core studio (projects, editors,
 3D worlds, comics and remote providers) without Torch instead of stopping at
