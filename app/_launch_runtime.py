@@ -37044,6 +37044,15 @@ def _set_series_shot_duration(workspace: str, series_id: str, episode_id: str, s
         _write_series_workspace(resolved, library)
 
 
+def _character_kit_for_scene(workspace: str, kit_id: str) -> dict | None:
+    from services.series_shot_bridge import with_pose_sizes
+    kit = (_read_kit_library(_workspace_dir(workspace)).get("kits") or {}).get(kit_id)
+    return with_pose_sizes(kit, _workspace_dir(workspace)) if kit else None
+
+
+from services.video2d_character_ops import bind_kit_reader as _bind_scene_kit_reader
+_bind_scene_kit_reader(_character_kit_for_scene)
+
 # Server jobs call the same tool handlers as MCP clients, in process (no token needed).
 _local_mcp = LocalMcp(lambda: _mcp_handlers)
 _series_native_render = SeriesNativeRender(NativeRenderDeps(

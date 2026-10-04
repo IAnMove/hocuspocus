@@ -1101,10 +1101,15 @@ _HANDLERS = {
 }
 
 
+def _character_handlers() -> dict:
+    from services.video2d_character_ops import HANDLERS
+    return HANDLERS
+
+
 def _apply(document: dict, operation, warnings: list) -> None:
     if not isinstance(operation, dict) or not isinstance(operation.get("op"), str):
         _fail("invalid_operation", "Unknown operation")
-    handler = _HANDLERS.get(operation["op"])
+    handler = _HANDLERS.get(operation["op"]) or _character_handlers().get(operation["op"])
     if handler is None:
         _fail("invalid_operation", "Unknown operation")
     handler(document, operation, warnings)
@@ -1133,6 +1138,7 @@ def _op_schema(op: str, required: list[str], properties: dict) -> dict:
 
 
 def command_catalog() -> list[dict]:
+    from services import video2d_character_ops as character_ops
     preset = {"type": "string", "enum": list(camera_presets())}
     identity = _schema_string(160)
     description = (
@@ -1149,7 +1155,7 @@ def command_catalog() -> list[dict]:
         "Omit it, or use 50,50, and scenes keep scaling around the center. "
         "cover true on add_layer or update_layer keeps an image or video over the frame during zoom, pan, and focus. "
         "An unknown op fails with invalid_operation."
-    )
+    ) + character_ops.DESCRIPTION
     operations = {"type": "array", "maxItems": MAX_OPERATIONS, "items": {"oneOf": [
         _op_schema("add_layer", ["id", "source"], {"id": identity, "source": _schema_string(2000), "preset": preset, "name": _schema_string(120), "type": {"enum": sorted(_LAYER_TYPES)}, "z": {"type": "number"}, "cover": {"type": "boolean"}}),
         _op_schema("update_layer", ["id", "patch"], {"id": identity, "patch": {"type": "object"}}),
@@ -1164,6 +1170,7 @@ def command_catalog() -> list[dict]:
         _op_schema("add_audio_track", ["track"], {"track": {"type": "object"}}),
         _op_schema("set_duration", ["duration"], {"duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 600}}),
         _op_schema("set_format", ["width", "height"], {"width": {"type": "integer", "minimum": 240, "maximum": 3840}, "height": {"type": "integer", "minimum": 240, "maximum": 3840}}),
+        *character_ops.schemas(_op_schema, identity),
     ]}}
     envelope = {"type": "object", "additionalProperties": False, "properties": {"version": {"type": "integer", "const": 1}, "input": {"type": "object", "additionalProperties": False, "properties": {"document": {"type": "object"}, "operations": operations, "full": {"type": "boolean"}}, "required": ["document", "operations"]}}, "required": ["version", "input"]}
     return [{"name": OPERATION, "version": 1, "domain": "scenes", "mutation": False, "description": description, "inputSchema": envelope}]
