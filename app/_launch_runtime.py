@@ -552,7 +552,12 @@ def _coordinated_generation_slot(
             )
         else:
             description = "HocusPocus Lab GPU generation"
-    with generation_slot(_gen_lock, job) as acquired:
+    # Stand aside for a Video 3D export or another coordinator ticket that has
+    # waited longer than this job, or past HOCUS_GPU_WAITER_MAX_WAIT_SECONDS.
+    def owed_turn(waited: float) -> bool:
+        return resource_scheduler.coordinator.has_waiter_owed_turn(_local_gpu_lane, waited=waited)
+
+    with generation_slot(_gen_lock, job, yield_to=owed_turn) as acquired:
         if not acquired:
             yield False
             return

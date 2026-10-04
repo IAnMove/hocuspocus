@@ -757,7 +757,7 @@ def _insert_generation_waiter(
     """
     sequence, _token, job = entry
     now = time.monotonic()
-    job.setdefault("_queue_entered_at", now)
+    job["_queue_entered_at"] = now
     limit = queue_max_wait_seconds()
     floor = 0
     for position, (_, _, queued_job) in enumerate(queue):
@@ -856,8 +856,14 @@ def acquire_generation_slot(
     job: MutableMapping[str, Any],
     *,
     poll_interval: float = 0.1,
+    yield_to: Callable[[float], bool] | None = None,
 ) -> bool:
-    """Acquire the single GPU lock in scheduled pending order."""
+    """Acquire the single GPU lock in scheduled pending order.
+
+    ``yield_to(waited)`` receives how long this job has waited. While it
+    returns true, the queue head leaves the free lock to another waiter on the
+    same device (see ``ResourceCoordinator.has_waiter_owed_turn``).
+    """
     register_generation_job(generation_lock, job)
     lock_key = id(generation_lock)
     token = job.get("_generation_queue_token")
@@ -875,6 +881,10 @@ def acquire_generation_slot(
                 _remove_generation_waiter(lock_key, cancelled_token, cancelled_job)
             is_head = bool(queue and queue[0][1] is token)
             if not is_head:
+                _generation_queue_condition.wait(timeout=poll_interval)
+                continue
+            waited = time.monotonic() - float(job.get("_queue_entered_at") or time.monotonic())
+            if yield_to is not None and yield_to(waited):
                 _generation_queue_condition.wait(timeout=poll_interval)
                 continue
 
@@ -903,10 +913,11 @@ def generation_slot(
     job: MutableMapping[str, Any],
     *,
     poll_interval: float = 0.1,
+    yield_to: Callable[[float], bool] | None = None,
 ) -> Iterator[bool]:
     """Context manager form of :func:`acquire_generation_slot`."""
     acquired = acquire_generation_slot(
-        generation_lock, job, poll_interval=poll_interval,
+        generation_lock, job, poll_interval=poll_interval, yield_to=yield_to,
     )
     try:
         yield acquired
