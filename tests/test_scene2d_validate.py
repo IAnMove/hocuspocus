@@ -285,6 +285,25 @@ def test_left_align_uses_the_text_edge_and_outside_frame_uses_that_box(tmp_path)
     assert list(Draft202012Validator(document_schema()).iter_errors(_document(layers=[_layer(cover="yes")])))
 
 
+def test_hot_audio_and_a_floating_cutout_warn_without_blocking(tmp_path):
+    (tmp_path / WORKSPACE).mkdir()
+    (tmp_path / WORKSPACE / "vo.wav").write_bytes(b"RIFF")
+    track = {"id": "vo", "filename": "vo.wav", "name": "vo", "kind": "speech", "startTime": 0, "volume": 1.4}
+    hot = _validate(_document(audioTracks=[track]), tmp_path)
+    assert "audio_hot" in _codes(hot["warnings"])
+    assert hot["errors"] == []
+    quiet = dict(track)
+    quiet["volume"] = 1
+    assert "audio_hot" not in _codes(_validate(_document(audioTracks=[quiet]), tmp_path)["warnings"])
+    floating = _validate(_document(layers=[_layer(footprint={"bottom": 0.2, "center": 0.5, "width": 0.4})]), tmp_path)
+    assert "cutout_floating" in _codes(floating["warnings"])
+    assert floating["errors"] == []
+    grounded = _layer(grounded=True, footprint={"bottom": 0.2, "center": 0.5, "width": 0.4})
+    seated = _layer(footprint={"bottom": 0.02, "center": 0.5, "width": 0.4})
+    assert "cutout_floating" not in _codes(_validate(_document(layers=[grounded]), tmp_path)["warnings"])
+    assert "cutout_floating" not in _codes(_validate(_document(layers=[seated]), tmp_path)["warnings"])
+
+
 def test_empty_timespan_warns_only_for_gaps_over_two_seconds(tmp_path):
     short = _layer()
     short["animation"]["duration"] = 2

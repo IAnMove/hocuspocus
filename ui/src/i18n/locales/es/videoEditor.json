@@ -128,6 +128,13 @@
     "replacingClip": "Reemplazando clip {{n}}: {{name}}",
     "download": "Descargar {{filename}}"
   },
+  "preflight": {
+    "hint": "Estos avisos no impiden exportar.",
+    "timeline_gap": "Hueco desde {{time}} s.",
+    "mixed_fps": "Los clips usan fotogramas por segundo distintos (desde {{time}} s).",
+    "mixed_resolution": "Los clips usan resoluciones distintas (desde {{time}} s).",
+    "mix_hot": "La mezcla pasa de la unidad y puede saturar."
+  },
   "errors": {
     "chooseVideos": "Elige uno o más archivos de vídeo.",
     "selectVideos": "Selecciona uno o más vídeos.",

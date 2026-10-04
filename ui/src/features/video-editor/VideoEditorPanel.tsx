@@ -31,6 +31,7 @@ import { useOpenProductionMontage } from '../music-productions/useOpenProduction
 import { DeriveVerticalButton } from './DeriveVerticalButton'
 import { ShortenSongPanel } from './ShortenSongPanel'
 import { PublishPresetBar } from './PublishPresetBar'
+import { EditorPreflightNotices } from './EditorPreflightNotices'
 import { ShotBoard } from './ShotBoard'
 import { exportLayerFields, loadMontageState, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
@@ -2632,6 +2633,7 @@ export function VideoEditorPanel() {
                   )}
                 </div>
               )}
+              <EditorPreflightNotices clips={clips} soundtrack={soundtrack} />
               {error && (
                 <div className="space-y-2">
                   <div className="whitespace-pre-wrap text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2">

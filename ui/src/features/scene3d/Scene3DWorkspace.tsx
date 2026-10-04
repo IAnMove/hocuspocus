@@ -54,6 +54,7 @@ import { SceneObjectInspector } from './SceneObjectInspector.tsx'
 import { canMutateWorld3DScene } from './exportLock.ts'
 import { applyAssignedSlotSource, exportWorkspaceDocument } from './workspaceMutations.ts'
 import { Scene3DStage, type Scene3DStageHandle } from './Scene3DStage.tsx'
+import { Scene3DGeometryReview } from './Scene3DGeometryReview.tsx'
 import { applyScene3DTemplate, patchScene3DSlot, remountScene3DTemplate, type Scene3DTemplateId } from './templates.ts'
 import { Scene3DImageLookControls } from './Scene3DImageLookControls'
 import { Scene3DWindowControls } from './Scene3DWindowControls'
@@ -469,6 +470,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         >{t('stage.exportCancel')}</button>}
       </div>
       <p className="text-xs text-text-muted">{t('stage.exportQualityHint')}</p>
+      <Scene3DGeometryReview stageRef={stageRef} document={sceneDoc} seconds={seconds} disabled={exporting}
+        onSeek={time => { if (exportingRef.current) return; setPlaying(false); setFrame(Math.min(count - 1, Math.max(0, Math.round(time * fps)))) }} />
       {selected && (selected.media !== 'image' || selected.surface === 'cutout') && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
         walk={walkBake.control(selected)} />}
       <button type="button" disabled={editingLocked || sceneDoc.slots.length >= 64} className="min-h-11 self-start rounded-lg border border-cyan-400/50 px-4 text-sm text-text-primary" onClick={() => {
