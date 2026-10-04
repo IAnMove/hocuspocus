@@ -359,6 +359,7 @@
         "tests/test_series_assembly_router.py",
         "tests/test_series_commands.py",
         "tests/test_flat_rig.py",
+        "tests/test_speech_qa.py",
         "tests/test_series_jobs.py",
         "tests/test_series_planning.py",
         "tests/test_series_production.py",
