@@ -134,10 +134,21 @@ def find_eyes(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float = 0.55):
     white[int(height * top_fraction):] = False
     labels, parts = _components(_open(white, 2))
     parts = sorted((part for part in parts if part["size"] > width * height * 0.0015), key=lambda part: -part["size"])
+    if len(parts) < 2 and parts and parts[0]["size"] > width * height * 0.05:
+        raise FlatRigError("face_too_light", "The face is as light as the eyes; give the character a skin colour")
     if len(parts) < 2:
         raise FlatRigError("eyes_not_found", "Two light eyes were not found in the top half of the pose")
     left, right = sorted(_eye_pair(parts), key=lambda part: part["x0"])
     mask = (labels == left["label"]) | (labels == right["label"])
+    grow = max(4, int((left["y1"] - left["y0"]) * 0.3))
+    around = _dilate(mask, grow * 2) & ~_dilate(mask, grow)
+    if around.any() and (alpha[around] <= 200).mean() > 0.4:
+        # The screen colour leaked into the skin and the key removed the face with the background.
+        raise FlatRigError("face_keyed_out", "The face was removed with the background: its colour is too close to the screen colour. "
+                                             "Choose another option or generate again")
+    ring = _dilate(mask, grow) & ~_dilate(mask, max(1, grow // 3)) & (alpha > 200)
+    if ring.any() and np.median(rgb[ring], axis=0).min() > 205:
+        raise FlatRigError("face_too_light", "The face is as light as the eyes; give the character a skin colour")
     box = (min(left["x0"], right["x0"]), min(left["y0"], right["y0"]),
            max(left["x1"], right["x1"]), max(left["y1"], right["y1"]))
     return box, mask
@@ -332,9 +343,10 @@ def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
     except FlatRigError as error:
         if error.code != "mouth_not_found":
             raise
-        # Under the eyes, where a cutout mouth usually sits; nothing painted to wipe.
+        # Under the eyes, where a cutout mouth sits: 0.19–0.31 of the eye-pair width on the six
+        # production characters, so its median; nothing painted to wipe.
         rigged, wiped, mouth_box = figure, False, None
-        mx, my = (ex0 + ex1) / 2, ey1 + (ey1 - ey0) * 0.75
+        mx, my = (ex0 + ex1) / 2, ey1 + (ex1 - ex0) * 0.28
         ring = alpha[ey1:min(alpha.shape[0], ey1 + (ey1 - ey0)), ex0:ex1] > 200
         background = np.median(rgb[ey1:min(alpha.shape[0], ey1 + (ey1 - ey0)), ex0:ex1][ring], axis=0) if ring.any() else np.array([200, 160, 130])
     width, height = rigged.size

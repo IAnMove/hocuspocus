@@ -45,6 +45,44 @@ function Candidates({ candidates, picked, onPick, disabled }: {
   </div>
 }
 
+function RigReview({ workspace, kit, review, unwiped, blocked, onUseVoice }: {
+  workspace: string; kit: CharacterKit; review: string; unwiped: string[]; blocked: boolean
+  onUseVoice: (language: SpokenLanguage, voice: CustomCharacterVoice) => Promise<void>
+}) {
+  const { t } = useUiTranslation('characters')
+  const [designing, setDesigning] = useState(false)
+  return <div className="space-y-2" data-testid="character-rig-review">
+    <img src={review} alt={t('styleCreator.reviewAlt')} className="max-h-72 rounded-lg border border-border bg-white object-contain" />
+    {unwiped.length > 0 && <p className="text-xs text-amber-200">{t('styleCreator.unwiped', { poses: unwiped.join(', ') })}</p>}
+    <button type="button" disabled={blocked} aria-expanded={designing} onClick={() => setDesigning(open => !open)} className={`${control} inline-flex items-center gap-2`}><Mic size={15} />{t('styleCreator.designVoice')}</button>
+    {designing && <CharacterVoiceDesigner workspace={workspace} characterName={kit.name} disabled={blocked} onUse={onUseVoice} />}
+  </div>
+}
+
+function NewPose({ pose, onPose, candidates, picked, onPick, blocked, onCreate, onAdd }: {
+  pose: string; onPose: (value: string) => void; candidates: KeyedCandidate[]; picked?: string
+  onPick: (id: string) => void; blocked: boolean; onCreate: () => void; onAdd: () => void
+}) {
+  const { t } = useUiTranslation('characters')
+  return <div className="space-y-2 rounded-lg border border-border p-3" data-testid="character-new-pose">
+    <label className="block text-xs text-text-secondary">{t('styleCreator.newPose')}<input value={pose} maxLength={200} disabled={blocked} onChange={event => onPose(event.target.value)} placeholder={t('styleCreator.posePlaceholder')} className={`${control} mt-1 w-full`} /></label>
+    <div className="flex flex-wrap gap-2">
+      <button type="button" disabled={blocked || !pose.trim()} onClick={onCreate} className={`${control} inline-flex items-center gap-2`}><Plus size={15} />{t('styleCreator.createPose')}</button>
+      {picked && <button type="button" disabled={blocked} onClick={onAdd} className={`${control} text-emerald-200`}>{t('styleCreator.addPose')}</button>}
+    </div>
+    {candidates.length > 0 && <Candidates candidates={candidates} picked={picked} onPick={item => onPick(item.id)} disabled={blocked} />}
+  </div>
+}
+
+function Status({ busy, message, error }: { busy: '' | Step; message: string; error: string }) {
+  const { t } = useUiTranslation('characters')
+  return <>
+    {busy && <p role="status" className="text-sm text-text-muted">{t(`styleCreator.busy.${busy}`)}</p>}
+    {message && <p role="status" className="text-sm text-emerald-200">{message}</p>}
+    {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+  </>
+}
+
 /** Description → three keyed options → pick → saved kit that already talks (flat rig) → more poses. */
 export function CharacterStyleCreator({ workspace, style, model, disabled }: {
   workspace: string; style: CharacterStyle; model: string; disabled?: boolean
@@ -55,8 +93,9 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
   const [kit, setKit] = useState<CharacterKit>(), [review, setReview] = useState(''), [unwiped, setUnwiped] = useState<string[]>([])
   const [pose, setPose] = useState(''), [poseCandidates, setPoseCandidates] = useState<KeyedCandidate[]>([]), [pickedPose, setPickedPose] = useState<string>()
   const [busy, setBusy] = useState<'' | Step>(''), [error, setError] = useState(''), [message, setMessage] = useState('')
-  const [designing, setDesigning] = useState(false)
   const operation = useRef<AbortController | null>(null), jobs = useRef<string[]>([])
+  // A failed rig keeps the saved draft; trying another option updates that same kit.
+  const draftId = useRef(`character-${randomUuid()}`)
   useEffect(() => () => { operation.current?.abort(); jobs.current.forEach(id => void cancelJob(id).catch(() => {})) }, [])
 
   const run = async (label: Step, task: (signal: AbortSignal) => Promise<void>) => {
@@ -85,7 +124,7 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
   const saveAndRig = () => run('rig', async signal => {
     const chosen = candidates.find(candidate => candidate.id === picked)
     if (!chosen?.keyed) return
-    const draft = createCharacterKit(name.trim()); draft.id = `character-${randomUuid()}`
+    const draft = createCharacterKit(name.trim()); draft.id = draftId.current
     draft.style = style.kitStyle as CharacterKit['style']
     draft.base = keyedAsset(`${draft.id}-base`, draft.name, chosen.keyed, workspace, description.trim(), model)
     draft.identityReference = { ...draft.base, id: `${draft.id}-identity` }
@@ -144,22 +183,9 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
       {candidates.length ? <Candidates candidates={candidates} picked={picked} onPick={item => setPicked(item.id)} disabled={blocked || Boolean(kit)} />
         : <div className="flex min-h-36 items-center justify-center rounded-lg border border-dashed border-border p-4 text-center text-xs text-text-muted">{t('styleCreator.empty')}</div>}
     </div>
-    {kit && review && <div className="space-y-2" data-testid="character-rig-review">
-      <img src={review} alt={t('styleCreator.reviewAlt')} className="max-h-72 rounded-lg border border-border bg-white object-contain" />
-      {unwiped.length > 0 && <p className="text-xs text-amber-200">{t('styleCreator.unwiped', { poses: unwiped.join(', ') })}</p>}
-      <button type="button" disabled={blocked} aria-expanded={designing} onClick={() => setDesigning(open => !open)} className={`${control} inline-flex items-center gap-2`}><Mic size={15} />{t('styleCreator.designVoice')}</button>
-      {designing && <CharacterVoiceDesigner workspace={workspace} characterName={kit.name} disabled={blocked} onUse={saveVoice} />}
-    </div>}
-    {kit && <div className="space-y-2 rounded-lg border border-border p-3" data-testid="character-new-pose">
-      <label className="block text-xs text-text-secondary">{t('styleCreator.newPose')}<input value={pose} maxLength={200} disabled={blocked} onChange={event => setPose(event.target.value)} placeholder={t('styleCreator.posePlaceholder')} className={`${control} mt-1 w-full`} /></label>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={blocked || !pose.trim()} onClick={() => void createPoseOptions()} className={`${control} inline-flex items-center gap-2`}><Plus size={15} />{t('styleCreator.createPose')}</button>
-        {pickedPose && <button type="button" disabled={blocked} onClick={() => void addPose()} className={`${control} text-emerald-200`}>{t('styleCreator.addPose')}</button>}
-      </div>
-      {poseCandidates.length > 0 && <Candidates candidates={poseCandidates} picked={pickedPose} onPick={item => setPickedPose(item.id)} disabled={blocked} />}
-    </div>}
-    {busy && <p role="status" className="text-sm text-text-muted">{t(`styleCreator.busy.${busy}`)}</p>}
-    {message && <p role="status" className="text-sm text-emerald-200">{message}</p>}
-    {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+    {kit && review && <RigReview workspace={workspace} kit={kit} review={review} unwiped={unwiped} blocked={blocked} onUseVoice={saveVoice} />}
+    {kit && <NewPose pose={pose} onPose={setPose} candidates={poseCandidates} picked={pickedPose} onPick={setPickedPose} blocked={blocked}
+      onCreate={() => void createPoseOptions()} onAdd={() => void addPose()} />}
+    <Status busy={busy} message={message} error={error} />
   </div>
 }

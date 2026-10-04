@@ -14,12 +14,12 @@ SKIN = (246, 214, 170, 255)
 WORKSPACE = "cast"
 
 
-def _cutout(mouth=True, eyes=True, size=(420, 760)) -> Image.Image:
+def _cutout(mouth=True, eyes=True, size=(420, 760), skin=SKIN) -> Image.Image:
     """A paper-cutout figure on a transparent background: round head, white eyes, a painted mouth, a body."""
     image = Image.new("RGBA", size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     draw.rectangle((110, 360, 310, 740), fill=(40, 90, 200, 255))
-    draw.ellipse((60, 40, 360, 380), fill=SKIN)
+    draw.ellipse((60, 40, 360, 380), fill=skin)
     if eyes:
         for x in (120, 220):
             draw.ellipse((x, 120, x + 80, 220), fill=(255, 255, 255, 255))
@@ -45,12 +45,16 @@ def test_a_pose_gets_its_mouth_wiped_and_anchors_under_the_eyes():
 def test_a_face_without_a_painted_mouth_gets_one_placed_and_nothing_wiped():
     rig = rig_pose(_cutout(mouth=False), rig_style(None))
     assert rig["wiped"] is False and rig["mouth_box"] is None
-    assert rig["mouth"]["offsetY"] > rig["eyes"]["offsetY"]
+    painted = rig_pose(_cutout(), rig_style(None))
+    # Placed where the painted one would be, within a few percent of the figure.
+    assert abs(rig["mouth"]["offsetY"] - painted["mouth"]["offsetY"]) < 3
 
 
 @pytest.mark.parametrize("image, code", [
     (Image.new("RGBA", (200, 200), (0, 0, 0, 0)), "not_keyed"),
     (_cutout(eyes=False), "eyes_not_found"),
+    (_cutout(skin=(250, 250, 248, 255)), "face_too_light"),
+    (_cutout(skin=(0, 0, 0, 0)), "face_keyed_out"),
 ])
 def test_unusable_poses_say_why(image, code):
     with pytest.raises(FlatRigError) as error:
