@@ -3,7 +3,7 @@ import test from 'node:test'
 import { clipWeightsAt } from '../src/features/scene3d/clipCues.ts'
 import { appendClipCue, removeClipCue, replaceClipCue, singleClipFromSequence, startClipSequence } from '../src/features/scene3d/clipSequenceEdit.ts'
 import { createDefaultScene3DDocument } from '../src/features/scene3d/document.ts'
-import { patchScene3DSlot, remountScene3DTemplate } from '../src/features/scene3d/templates.ts'
+import { applyScene3DTemplate, patchScene3DSlot, remountScene3DTemplate } from '../src/features/scene3d/templates.ts'
 import type { Scene3DSlot } from '../src/features/scene3d/types.ts'
 
 const walk = { index: 0, name: 'Walk' }
@@ -76,4 +76,29 @@ test('changing the shot keeps a sequence, and a later single-clip write drops it
   })
   assert.equal(baked.slots.find(item => item.id === model.id)?.clips, undefined)
   assert.equal(baked.slots.find(item => item.id === model.id)?.clip?.name, 'Path Walk')
+})
+
+test('reselecting a shot that already ships that GLB keeps the sequence', () => {
+  const document = applyScene3DTemplate('tv-head-walk')
+  const cues = appendClipCue(startClipSequence({
+    clip: document.slots[0].clip,
+    clipPlayback: { speed: 1.5, start: 0.2, loop: false },
+  })!, wave, 8)!
+  document.slots[0] = {
+    ...document.slots[0],
+    clipPlayback: { speed: 1.5, start: 0.2, loop: false },
+    clips: cues,
+    speech: { enabled: true } as Scene3DSlot['speech'],
+  }
+  const again = remountScene3DTemplate('tv-head-walk', document)
+  assert.equal(again.slots[0].sourceUrl, '/examples/tv-head-humanoid.glb')
+  assert.equal(again.slots[0].clips?.length, 2)
+  assert.equal(again.slots[0].clips?.[1].clip.name, 'Wave')
+  assert.equal(again.slots[0].clipPlayback?.speed, 1.5)
+  assert.equal(again.slots[0].speech?.enabled, true)
+  const roundTrip = remountScene3DTemplate('tv-head-walk', remountScene3DTemplate('duo-diagonal', document))
+  assert.equal(roundTrip.slots[0].clips?.length, 2)
+  assert.equal(roundTrip.slots[0].speech?.enabled, true)
+  const stockPlate = remountScene3DTemplate('drive-wing', applyScene3DTemplate('drive-chase'))
+  assert.equal(stockPlate.slots.find(item => item.slot === 'background')?.sourceUrl, '/scene3d/drive-coast.jpg')
 })
