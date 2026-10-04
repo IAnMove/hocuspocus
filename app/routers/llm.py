@@ -313,6 +313,7 @@ def create_llm_router(
     async def llm_load(request: Request):
         """Load the LLM model."""
         from services import llm_service
+        from services.provider_profile import client_remote_url
         body = {}
         if request.headers.get("content-type", "").startswith("application/json"):
             body = await request.json()
@@ -322,7 +323,7 @@ def create_llm_router(
         model_id = body.get("model_id", profile_model or default_llm_repo)
         device = body.get("device", services.get("llm_device", llm_default_device()))
         provider = body.get("provider", profile_provider)
-        remote_url = body.get("remote_url", profile_remote_url)
+        remote_url = client_remote_url(provider, str(body.get("remote_url") or ""), profile_remote_url)
         api_key, remote_url = llm_provider_credentials(provider, services, remote_url)
 
         try:
@@ -343,10 +344,11 @@ def create_llm_router(
     def list_llm_models(provider: str = "", url: str = ""):
         """Return available LLM model options. Pass provider and optional url to query that server (Ollama / OpenAI-compatible) without waiting for a saved profile."""
         from services import llm_service
+        from services.provider_profile import client_remote_url
         services = get_services_config()
         profile_provider, _profile_model, profile_remote_url = effective_llm_routing(services)
         p = provider or profile_provider
-        api_key, remote_url = llm_provider_credentials(p, services, url.strip() or profile_remote_url)
+        api_key, remote_url = llm_provider_credentials(p, services, client_remote_url(p, url, profile_remote_url))
         return {"models": llm_service.get_available_models(provider=p, remote_url=remote_url, api_key=api_key)}
 
     @router.get("/api/v1/llm/stream-status")
