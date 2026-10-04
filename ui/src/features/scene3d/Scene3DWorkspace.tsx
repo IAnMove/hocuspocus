@@ -39,6 +39,8 @@ import { Scene3DShotLibraryCard } from './Scene3DShotLibraryCard'
 import { remountUserTemplate, type World3DUserTemplate } from './userTemplates.ts'
 import { Scene3DAnimationControls } from './Scene3DAnimationControls'
 import { Scene3DHoldControls } from './Scene3DHoldControls'
+import { RenderQualityPicker } from '../render/RenderQualityPicker'
+import type { RenderChoice } from '../render/renderEstimate.ts'
 import { Scene3DDocumentControls } from './Scene3DDocumentControls'
 import { Scene3DTransport } from './Scene3DTransport'
 import { Scene3DTransformPanel } from './Scene3DTransformPanel'
@@ -142,6 +144,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   const stageRef = useRef<Scene3DStageHandle>(null)
   const walkBake = useWalkBake(stageRef, sceneDoc, applyScene, { needsSaved: editorT('travel.walkNeedsSaved'), failed: editorT('travel.walkFailed') })
   const exportAbortRef = useRef<AbortController | null>(null)
+  const renderChoiceRef = useRef<RenderChoice>({ level: 'draft', shutter: 0 })
   const fps = sceneDoc.fps
   const speed = scene3dPlaybackSpeed(sceneDoc.playbackSpeed)
   const count = scene3dFrameCount(sceneDoc.duration, fps)
@@ -348,6 +351,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       setExportNote,
       setExportingFlag,
       abort => { exportAbortRef.current = abort },
+      renderChoiceRef.current,
     )
   }
 
@@ -446,6 +450,15 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       {sceneDoc.dressing === 'workshop' && <label className="flex items-center gap-2 text-xs">{editorT('travel.screen')}<select disabled={exporting} value={sceneDoc.workshopScreen ?? 'code'} onChange={event => applyScene(current => ({ ...current, workshopScreen: event.target.value as 'code' | 'error' | 'success' }))} className="min-h-10 rounded border border-border bg-bg-tertiary px-2">{(['code', 'error', 'success'] as const).map(state => <option key={state} value={state}>{editorT(`travel.${state}`)}</option>)}</select></label>}
       <AtmosClearingControls document={sceneDoc} disabled={exporting} label={key => editorT(key as 'atmos.time')} onChange={atmos => applyScene(current => ({ ...current, atmos }))} />
       <Scene3DFramingControls framing={sceneDoc.camera.framing} slots={sceneDoc.slots} disabled={editingLocked || sceneDoc.camera.family === 'fixed'} onChange={framing => applyScene(current => ({ ...current, camera: { ...current.camera, framing } }))} />
+      <RenderQualityPicker
+        width={sceneDoc.width}
+        height={sceneDoc.height}
+        fps={fps}
+        duration={sceneDoc.duration}
+        disabled={exporting}
+        capabilitiesUrl="/api/v1/scenes/world3d/export/capabilities"
+        onChange={choice => { renderChoiceRef.current = choice }}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-text-primary">{editorT('camera')}
           <select disabled={exporting} value={sceneDoc.camera.family} onChange={event => applyScene(current => ({ ...current, camera: { ...current.camera, family: event.target.value as Scene3DCameraFamily, framing: undefined } }))}

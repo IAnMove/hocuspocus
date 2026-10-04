@@ -126,4 +126,4 @@ Owned by other phases of the roadmap:
 
 - 4K output and the H.264 levels (1.F3);
 - the optional ProRes master, remuxing valid uploads, and lossless editor intermediates (1.F4);
-- the level picker and the time estimate in the UI (1.F5, Grok).
+- 4K output and the H.264 level fix stay in 1.F3. The level picker and the time estimate are the Video 3D and Scene Animator controls (1.F5): draft stays in the browser, and final or master go to the server.
