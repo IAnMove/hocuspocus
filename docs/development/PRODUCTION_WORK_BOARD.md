@@ -195,7 +195,7 @@ abriendo el borrador el primer día y actualizando la fila en el mismo PR.
 | 1.F3 4K y niveles H.264 | Grok | Tras 1.F1 |
 | 1.F4 Máster y fin de las recodificaciones | Grok | Ya, el remux y el editor sin pérdidas; tras 1.F1, el ProRes |
 | 1.F5 Voz en el render del servidor | Claude (#777) | Tras 1.F1 |
-| 1.F5 UI y estimación | Grok (`feat/calidad-1-f5-ui`) | En revisión |
+| 1.F5 UI y estimación | Grok (#798) | En revisión |
 | 2.F1 Contrato de color y entorno | Claude (#776) | Ya |
 | 2.F2-F5 HDRI, LUT, valores por set y sol | Grok | Tras 2.F1 |
 | 3.F1 Contrato, licencias y descargador seguro | Claude (#770) | Ya |
