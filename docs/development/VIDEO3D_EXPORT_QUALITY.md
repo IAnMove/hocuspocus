@@ -124,5 +124,4 @@ Real headless render (GPU, 320×180, 24 fps, 2 s): a soundtrack at gain 0.3 plus
 
 Owned by other phases of the roadmap:
 
-- the optional ProRes master, remuxing valid uploads, and lossless editor intermediates (1.F4);
-- 4K output and the H.264 level fix stay in 1.F3. The level picker and the time estimate are the Video 3D and Scene Animator controls (1.F5): draft stays in the browser, and final or master go to the server.
+- the optional ProRes master, remuxing valid uploads, and lossless editor intermediates (1.F4).
