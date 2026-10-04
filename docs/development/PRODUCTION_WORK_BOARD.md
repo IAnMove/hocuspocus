@@ -205,7 +205,7 @@ abriendo el borrador el primer día y actualizando la fila en el mismo PR.
 | 4.F2 Núcleo de fundidos | Claude (#781) | Tras el PR #765 |
 | 4.F2 UI de secuencias | Grok (#790) | En revisión |
 | 4.F3 IK de objetos | Claude (#780) | Tras 4.F1 |
-| 4.F3 Emparentar en el cliente | Grok (`feat/calidad-4-f3-mano`) | En revisión |
+| 4.F3 Emparentar en el cliente | Grok (#794) | En revisión |
 | 4.F4 Parpadeo, mirada y cabeza | Grok | Ya |
 | 4.F5 Manos | Claude (#783) | Tras 4.F3 |
 | 5.F1 Ducking en Video 3D | Grok (#772) | Ya |
