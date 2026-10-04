@@ -125,3 +125,17 @@ def test_the_bridge_compiles_a_planned_shot_with_the_editor_code(tmp_path):
     document = run_series_shot({"mode": "shot", "kits": {"kit-kevin": sized}, "shot": spec})
     assert document["dialogueBeats"][0]["lipSync"]["cues"] and len(document["dialogueBeats"][0]["mouthLayerIds"]) == 9
     assert any(layer.get("characterKitRef", {}).get("id") == "kit-kevin" for layer in document["layers"])
+
+
+def test_props_stand_on_background_anchors_and_follow_the_framing_zoom():
+    from services.series_shot_plan import background_point, plan_props
+    value = series()
+    value["locations"][0]["layout2d"]["anchors"] = {"desk": {"u": 0.7, "v": 0.8}}
+    value["assets"]["asset_lamp"] = {"kind": "image", "uri": "lamp.png"}
+    shot = {"locationId": "garage", "layout2d": normalize_layout2d({"props": [
+        {"assetId": "asset_lamp", "anchor": "desk", "scale": 0.2}, {"file": "mug.png", "x": 30, "y": 70}, {"assetId": "missing"}, {"x": 1}]})}
+    wide, close = plan_props(value, shot, "wide", 50, "cast"), plan_props(value, shot, "close", 50, "cast")
+    assert [prop["source"] for prop in wide] == ["/api/v1/file/lamp.png?workspace=cast", "/api/v1/file/mug.png?workspace=cast"]
+    assert (wide[0]["x"], wide[0]["y"], wide[0]["scale"]) == (70.0, 80.0 - 10.0, 0.2)
+    assert close[0]["scale"] == 0.3 and close[0]["x"] == background_point("close", 50, 0.7, 0.8)[0]
+    assert (wide[1]["x"], wide[1]["y"]) == (30.0, 70.0)

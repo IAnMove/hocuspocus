@@ -66,6 +66,24 @@ def _cast_entry(value: Any) -> dict[str, Any] | None:
     return entry
 
 
+def _prop_entry(value: Any) -> dict[str, Any] | None:
+    """A prop on the set: a series asset or a workspace file, at a background anchor or at x/y %."""
+    if not isinstance(value, dict):
+        return None
+    source = {key: value[key][:300] for key in ("assetId", "file") if isinstance(value.get(key), str) and value[key]}
+    if len(source) != 1:
+        return None
+    entry: dict[str, Any] = {**source, "scale": _number(value.get("scale"), 0.01, 4) or 0.3}
+    if isinstance(value.get("anchor"), str) and value["anchor"]:
+        entry["anchor"] = value["anchor"][:80]
+    for key in ("x", "y"):
+        if _number(value.get(key), -50, 150) is not None:
+            entry[key] = float(value[key])
+    if _number(value.get("z"), 0, 100) is not None:
+        entry["z"] = float(value["z"])
+    return entry
+
+
 def normalize_layout2d(value: Any) -> dict[str, Any] | None:
     """The editable 2D plan of a shot; unknown keys and bad values are dropped."""
     if not isinstance(value, dict):
@@ -81,6 +99,9 @@ def normalize_layout2d(value: Any) -> dict[str, Any] | None:
     card = value.get("card")
     if isinstance(card, dict) and card.get("kind") in ("title", "disclaimer", "end"):
         layout["card"] = {"kind": card["kind"], "title": str(card.get("title") or "")[:200], "body": str(card.get("body") or "")[:1200]}
+    props = [prop for prop in (_prop_entry(item) for item in (value.get("props") or [])[:12]) if prop]
+    if props:
+        layout["props"] = props
     music = value.get("music")
     if isinstance(music, dict) and isinstance(music.get("file"), str) and music["file"]:
         layout["music"] = {"file": music["file"][:300], "volume": _number(music.get("volume"), 0, 1) or 0.5,
@@ -210,6 +231,43 @@ def _text(tid: str, value: str, start: float, end: float, y: float, size: float,
     return base
 
 
+BACKGROUND_ZOOM = {"wide": 1.0, "two": 1.12, "medium": 1.28, "close": 1.5, "insert": 1.0, "title": 1.0}
+
+
+def background_point(framing: str, focus: float, u: float, v: float) -> tuple[float, float]:
+    """Frame position (%) of a point (u, v) of a full-frame background, zoomed and panned like the compiler does."""
+    zoom = BACKGROUND_ZOOM.get(framing, 1.0)
+    span = 50 * (zoom - 1)
+    x = max(50 - span, min(50 + span, 50 - (focus / 100 - 0.5) * 100 * zoom))
+    return round(x + (u - 0.5) * 100 * zoom, 3), round(50 + (v - 0.5) * 100 * zoom, 3)
+
+
+def plan_props(series: dict[str, Any], shot: dict[str, Any], framing: str, focus: float, workspace: str) -> list[dict[str, Any]]:
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), {})
+    anchors = (location.get("layout2d") or {}).get("anchors") if isinstance(location.get("layout2d"), dict) else None
+    zoom = BACKGROUND_ZOOM.get(framing, 1.0)
+    props = []
+    for index, prop in enumerate(layout.get("props") or []):
+        if prop.get("assetId"):
+            found = _asset_url(series, prop["assetId"], workspace)
+            if not found:
+                continue
+            source = found[0]
+        else:
+            source = f"/api/v1/file/{quote(prop['file'])}?workspace={quote(workspace)}"
+        scale = round(prop.get("scale", 0.3) * zoom, 4)
+        anchor = (anchors or {}).get(prop.get("anchor", "")) if prop.get("anchor") else None
+        if isinstance(anchor, dict) and all(isinstance(anchor.get(key), (int, float)) for key in ("u", "v")):
+            x, y = background_point(framing, focus, float(anchor["u"]), float(anchor["v"]))
+            y -= scale * 50  # the prop stands on its anchor
+        else:
+            x, y = prop.get("x", 50.0), prop.get("y", 60.0)
+        props.append({"id": f"prop-{index + 1}", "name": prop.get("anchor") or f"Prop {index + 1}", "source": source,
+                      "x": round(x, 3), "y": round(y, 3), "scale": scale, "z": prop.get("z", 8)})
+    return props
+
+
 def card_texts(card: dict[str, Any], duration: float) -> list[dict[str, Any]]:
     """Title, disclaimer and end cards in the production's lettering."""
     kind, title, body = card.get("kind"), str(card.get("title") or ""), str(card.get("body") or "")
@@ -289,6 +347,9 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     }
     if background:
         spec["background"] = {**background, "focusX": focus}
+    props = plan_props(series, shot, framing, focus, workspace)
+    if props:
+        spec["props"] = props
     return spec
 
 
