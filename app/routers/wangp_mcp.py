@@ -39,6 +39,28 @@ def _selected_operations(command_operations):
     return entries, frozenset(names)
 
 
+def _supported_versions(operation):
+    declared = ((operation.get('inputSchema') or {}).get('properties') or {}).get('version')
+    if not isinstance(declared, dict):
+        return None
+    if 'const' in declared:
+        return [declared['const']]
+    values = declared.get('enum')
+    return list(values) if isinstance(values, list) else None
+
+
+def _check_version(operation, arguments):
+    """Name the accepted versions before the operation schema lists every field of the other version."""
+    supported = _supported_versions(operation)
+    if supported is None or 'version' not in arguments or arguments['version'] in supported:
+        return
+    accepted = ' or '.join(str(value) for value in supported)
+    raise HTTPException(status_code=422, detail={
+        'code': 'unsupported_version', 'retryable': False, 'supported_versions': supported,
+        'message': f"{operation['name']} accepts version {accepted}; got {arguments['version']!r}",
+    })
+
+
 def _command_tool(operation):
     # HTTP carries its operation explicitly; MCP carries it as the tool name.
     # Derive the transport projection from the same source schema.
@@ -204,12 +226,14 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
     token_getter = token_getter or (lambda: os.environ.get('HOCUS_MCP_TOKEN', ''))
 
     operations, operation_names = _selected_operations(command_operations)
+    operations_by_name = {operation['name']: operation for operation in operations}
     callable_names = LEGACY_TOOLS | operation_names
 
     async def call_tool(name, arguments):
         if not isinstance(name, str) or name not in callable_names or not callable(handlers.get(name)) or not isinstance(arguments, dict):
             raise ValueError('Unknown tool or invalid arguments')
         if name in operation_names:
+            _check_version(operations_by_name[name], arguments)
             result = handlers[name](arguments)
             return await result if inspect.isawaitable(result) else result
         if name in REQUEST_TOOLS:

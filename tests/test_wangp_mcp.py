@@ -385,3 +385,33 @@ def test_a_catalog_without_a_mutation_flag_still_lists_every_tool():
     assert [tool['name'] for tool in tools] == [operation['name'] for operation in operations]
     unflagged = [tool for tool, operation in zip(tools, operations) if 'mutation' not in operation]
     assert unflagged and all(tool['annotations']['readOnlyHint'] is False for tool in unflagged)
+
+
+def test_an_unsupported_version_names_the_versions_the_tool_accepts(tmp_path):
+    # generation.speech only takes version 2; a version 1 call used to list every v2 field as missing.
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    operation = {'name': 'demo.speak', 'version': 2, 'domain': 'demo', 'mutation': False, 'description': 'Demo.',
+                 'inputSchema': {'type': 'object', 'required': ['version', 'input'], 'properties': {
+                     'version': {'type': 'integer', 'const': 2}, 'input': {'type': 'object'}}}}
+    calls = []
+    app = FastAPI()
+    app.include_router(create_wangp_mcp_router(
+        handlers={'demo.speak': lambda arguments: calls.append(arguments) or {'version': 2, 'ok': True}},
+        command_operations=[operation], journal_path=tmp_path / 'journal.sqlite', token_getter=lambda: 'test-token'))
+    client = TestClient(app)
+
+    def call(arguments):
+        reply = client.post('/api/v1/mcp', headers={'Authorization': 'Bearer test-token'}, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'demo.speak', 'arguments': arguments}})
+        return reply.json()['result']
+
+    rejected = call({'version': 1, 'input': {}})
+    assert rejected['isError'] is True
+    error = rejected['structuredContent']['error']
+    assert error['code'] == 'unsupported_version'
+    assert error['supported_versions'] == [2]
+    assert error['message'] == 'demo.speak accepts version 2; got 1'
+    assert calls == []
+    assert call({'version': 2, 'input': {}})['isError'] is False
+    assert len(calls) == 1
