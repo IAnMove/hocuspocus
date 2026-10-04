@@ -788,5 +788,11 @@
     "rendering": "Rendering the 3D background… {{progress}}%",
     "done": "3D background ready: 2D shots in this location use it.",
     "failed": "The 3D background failed: {{error}}"
+  },
+  "templates": {
+    "title": "Start from a template",
+    "language": "Language",
+    "contents": "Cast: {{characters}} · pilot of {{shots}} 2D shots",
+    "create": "Create “{{title}}”"
   }
 }

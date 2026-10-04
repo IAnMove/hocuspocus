@@ -1,0 +1,1134 @@
+{
+ "version": 1,
+ "templates": [
+  {
+   "id": "cutout-satire",
+   "title": {
+    "es": "Sátira de recortables",
+    "en": "Cutout satire"
+   },
+   "description": {
+    "es": "Comedia animada de papel recortado al estilo de las sátiras de televisión: dos protagonistas, un rival, un presentador de noticias y frases cortas que golpean.",
+    "en": "Paper-cutout animated comedy in the style of TV satire: two leads, a rival, a news anchor and short lines that land."
+   },
+   "series": {
+    "logline": {
+     "es": "Dos vecinos normales sobreviven a la última moda absurda que ha invadido su ciudad.",
+     "en": "Two ordinary neighbours survive the latest absurd craze that has taken over their town."
+    },
+    "premise": {
+     "es": "Cada episodio una novedad (una app, un gurú, un robot) lo cambia todo en el pueblo; los protagonistas lo viven, el rival lo explota y el presentador lo cuenta como si fuera normal.",
+     "en": "Each episode a novelty (an app, a guru, a robot) changes the whole town; the leads live through it, the rival cashes in and the anchor reports it as if it were normal."
+    },
+    "genre": {
+     "es": "Comedia satírica",
+     "en": "Satirical comedy"
+    },
+    "tone": {
+     "es": "Satírico, rápido, absurdo",
+     "en": "Satirical, fast, absurd"
+    },
+    "audience": {
+     "es": "Adultos",
+     "en": "Adults"
+    },
+    "visualStyle": {
+     "es": "Papel recortado plano, contornos negros gruesos, colores primarios, fondos dibujados sencillos",
+     "en": "Flat paper cutout, thick black outlines, primary colours, simple drawn backgrounds"
+    },
+    "characterVisualStyle": {
+     "es": "Cabezas grandes, cuerpos pequeños, ojos ovalados, bocas recortables",
+     "en": "Big heads, small bodies, oval eyes, cut-out mouths"
+    },
+    "cameraLanguage": {
+     "es": "Planos frontales y estáticos; cortes secos; empujes lentos para el remate",
+     "en": "Frontal static shots; hard cuts; slow push-ins for the punchline"
+    },
+    "defaultEpisodeDurationSeconds": 90,
+    "canon": {
+     "worldSummary": {
+      "es": "Un pueblo pequeño donde cada moda llega exagerada y se va igual de rápido.",
+      "en": "A small town where every craze arrives exaggerated and leaves just as fast."
+     },
+     "immutableRules": [
+      {
+       "id": "rule_lines",
+       "description": {
+        "es": "Frases de diálogo cortas: una idea por frase.",
+        "en": "Short dialogue lines: one idea per line."
+       },
+       "status": "approved"
+      },
+      {
+       "id": "rule_anchor",
+       "description": {
+        "es": "El presentador nunca se sorprende.",
+        "en": "The anchor is never surprised."
+       },
+       "status": "approved"
+      }
+     ],
+     "themes": [
+      "tecnologia",
+      "modas"
+     ]
+    },
+    "characters": [
+     {
+      "id": "lead_a",
+      "name": {
+       "es": "Ana",
+       "en": "Ana"
+      },
+      "role": {
+       "es": "Protagonista escéptica",
+       "en": "Sceptical lead"
+      },
+      "personality": {
+       "es": "Lista, seca, harta",
+       "en": "Sharp, dry, fed up"
+      },
+      "voiceAndDialogue": {
+       "es": "Frases cortas e irónicas",
+       "en": "Short ironic lines"
+      },
+      "appearance": {
+       "es": "Gorro rojo, abrigo verde, pelo castaño",
+       "en": "Red beanie, green coat, brown hair"
+      }
+     },
+     {
+      "id": "lead_b",
+      "name": {
+       "es": "Leo",
+       "en": "Leo"
+      },
+      "role": {
+       "es": "Protagonista entusiasta",
+       "en": "Enthusiastic lead"
+      },
+      "personality": {
+       "es": "Ingenuo, se apunta a todo",
+       "en": "Naive, joins every trend"
+      },
+      "voiceAndDialogue": {
+       "es": "Habla rápido y exclama mucho",
+       "en": "Talks fast and exclaims a lot"
+      },
+      "appearance": {
+       "es": "Gorra azul, sudadera naranja, pecas",
+       "en": "Blue cap, orange hoodie, freckles"
+      }
+     },
+     {
+      "id": "rival",
+      "name": {
+       "es": "Don Pío",
+       "en": "Mr Pike"
+      },
+      "role": {
+       "es": "Empresario oportunista",
+       "en": "Opportunist businessman"
+      },
+      "personality": {
+       "es": "Sonrisa falsa, siempre vende algo",
+       "en": "Fake smile, always selling"
+      },
+      "voiceAndDialogue": {
+       "es": "Tono de anuncio",
+       "en": "Commercial voice"
+      },
+      "appearance": {
+       "es": "Traje morado, bigote, maletín",
+       "en": "Purple suit, moustache, briefcase"
+      },
+      "layout2d": {
+       "scale": 1.1
+      }
+     },
+     {
+      "id": "anchor",
+      "name": {
+       "es": "Presentador",
+       "en": "Anchor"
+      },
+      "role": {
+       "es": "Presentador de noticias",
+       "en": "News anchor"
+      },
+      "personality": {
+       "es": "Imperturbable",
+       "en": "Unflappable"
+      },
+      "voiceAndDialogue": {
+       "es": "Voz de telediario, sin emoción",
+       "en": "Newsreader voice, no emotion"
+      },
+      "appearance": {
+       "es": "Traje gris, corbata, tupé",
+       "en": "Grey suit, tie, quiff"
+      }
+     }
+    ],
+    "locations": [
+     {
+      "id": "street",
+      "name": {
+       "es": "Calle mayor",
+       "en": "Main street"
+      },
+      "description": {
+       "es": "Calle del pueblo con tiendas, una farola y nieve sucia",
+       "en": "Town street with shops, a lamp post and dirty snow"
+      },
+      "layout2d": {
+       "homes": {
+        "lead_a": 34,
+        "lead_b": 66,
+        "rival": 50
+       }
+      }
+     },
+     {
+      "id": "office",
+      "name": {
+       "es": "Despacho de Don Pío",
+       "en": "Mr Pike's office"
+      },
+      "description": {
+       "es": "Despacho con carteles de la moda del día y una planta de plástico",
+       "en": "Office with posters of the craze of the day and a plastic plant"
+      }
+     },
+     {
+      "id": "newsroom",
+      "name": {
+       "es": "Plató de noticias",
+       "en": "Newsroom"
+      },
+      "description": {
+       "es": "Mesa de noticias con pantalla detrás",
+       "en": "News desk with a screen behind"
+      },
+      "layout2d": {
+       "homes": {
+        "anchor": 50
+       }
+      }
+     }
+    ],
+    "pilot": {
+     "title": {
+      "es": "Piloto: la novedad",
+      "en": "Pilot: the novelty"
+     },
+     "premise": {
+      "es": "Llega al pueblo la gran novedad y nadie sabe qué hace.",
+      "en": "The big novelty arrives in town and nobody knows what it does."
+     },
+     "script": [
+      {
+       "id": "scene_1",
+       "locationId": "newsroom",
+       "purpose": {
+        "es": "Presentar la novedad",
+        "en": "Introduce the novelty"
+       }
+      },
+      {
+       "id": "scene_2",
+       "locationId": "street",
+       "purpose": {
+        "es": "Los protagonistas reaccionan",
+        "en": "The leads react"
+       }
+      }
+     ],
+     "shots": [
+      {
+       "id": "s01",
+       "order": 1,
+       "sceneId": "scene_1",
+       "locationId": "newsroom",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 4,
+       "visibleCharacterIds": [],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [],
+       "layout2d": {
+        "framing": "title",
+        "camera": "static",
+        "card": {
+         "kind": "title",
+         "title": {
+          "es": "TU SERIE",
+          "en": "YOUR SERIES"
+         },
+         "body": {
+          "es": "Episodio 1",
+          "en": "Episode 1"
+         }
+        }
+       }
+      },
+      {
+       "id": "s02",
+       "order": 2,
+       "sceneId": "scene_1",
+       "locationId": "newsroom",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 5,
+       "visibleCharacterIds": [
+        "anchor"
+       ],
+       "action": {
+        "es": "El presentador mira a cámara",
+        "en": "The anchor looks into the lens"
+       },
+       "dialogueBeats": [
+        {
+         "id": "b1",
+         "characterId": "anchor",
+         "text": {
+          "es": "Última hora: la novedad ya está aquí.",
+          "en": "Breaking news: the novelty is here."
+         },
+         "emotion": "",
+         "delivery": ""
+        }
+       ],
+       "layout2d": {
+        "framing": "medium",
+        "camera": "static",
+        "cast": [
+         {
+          "characterId": "anchor"
+         }
+        ]
+       }
+      },
+      {
+       "id": "s03",
+       "order": 3,
+       "sceneId": "scene_2",
+       "locationId": "street",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 5,
+       "visibleCharacterIds": [
+        "lead_a",
+        "lead_b"
+       ],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [
+        {
+         "id": "b2",
+         "characterId": "lead_b",
+         "text": {
+          "es": "¡Tenemos que probarla ya!",
+          "en": "We have to try it now!"
+         },
+         "emotion": "excited",
+         "delivery": ""
+        },
+        {
+         "id": "b3",
+         "characterId": "lead_a",
+         "text": {
+          "es": "No.",
+          "en": "No."
+         },
+         "emotion": "dry",
+         "delivery": ""
+        }
+       ],
+       "layout2d": {
+        "framing": "two",
+        "camera": "static",
+        "cast": [
+         {
+          "characterId": "lead_a"
+         },
+         {
+          "characterId": "lead_b"
+         }
+        ]
+       }
+      },
+      {
+       "id": "s04",
+       "order": 4,
+       "sceneId": "scene_2",
+       "locationId": "street",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 5,
+       "visibleCharacterIds": [
+        "lead_a",
+        "lead_b",
+        "rival"
+       ],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [
+        {
+         "id": "b4",
+         "characterId": "rival",
+         "text": {
+          "es": "Por solo diez euros al mes.",
+          "en": "For just ten dollars a month."
+         },
+         "emotion": "",
+         "delivery": ""
+        }
+       ],
+       "layout2d": {
+        "framing": "wide",
+        "camera": "push",
+        "cast": [
+         {
+          "characterId": "lead_a"
+         },
+         {
+          "characterId": "lead_b"
+         },
+         {
+          "characterId": "rival"
+         }
+        ]
+       }
+      },
+      {
+       "id": "s05",
+       "order": 5,
+       "sceneId": "scene_2",
+       "locationId": "street",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 3,
+       "visibleCharacterIds": [],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [],
+       "layout2d": {
+        "framing": "title",
+        "camera": "static",
+        "card": {
+         "kind": "end",
+         "title": {
+          "es": "CONTINUARÁ",
+          "en": "TO BE CONTINUED"
+         },
+         "body": ""
+        }
+       }
+      }
+     ]
+    },
+    "soundDesign": {}
+   }
+  },
+  {
+   "id": "explainer",
+   "title": {
+    "es": "Explicador con presentador",
+    "en": "Host explainer"
+   },
+   "description": {
+    "es": "Un presentador y un invitado curioso explican un tema en capítulos cortos, con tarjetas entre secciones.",
+    "en": "A host and a curious guest explain a topic in short chapters, with cards between sections."
+   },
+   "series": {
+    "logline": {
+     "es": "Cada episodio responde una pregunta en menos de dos minutos.",
+     "en": "Each episode answers one question in under two minutes."
+    },
+    "premise": {
+     "es": "La presentadora explica, el invitado pregunta lo que pensaría el público y una tarjeta resume cada idea.",
+     "en": "The host explains, the guest asks what the audience would think and a card sums up each idea."
+    },
+    "genre": {
+     "es": "Divulgación",
+     "en": "Explainer"
+    },
+    "tone": {
+     "es": "Claro, cercano, con humor suave",
+     "en": "Clear, friendly, gently funny"
+    },
+    "audience": {
+     "es": "General",
+     "en": "General"
+    },
+    "visualStyle": {
+     "es": "Ilustración plana con colores pastel y fondos limpios",
+     "en": "Flat illustration, pastel colours, clean backgrounds"
+    },
+    "characterVisualStyle": {
+     "es": "Personajes simpáticos de líneas redondeadas",
+     "en": "Friendly characters with rounded lines"
+    },
+    "cameraLanguage": {
+     "es": "Plano medio para explicar, plano a dos para preguntar, tarjetas a pantalla completa",
+     "en": "Medium shot to explain, two-shot to ask, full-screen cards"
+    },
+    "defaultEpisodeDurationSeconds": 100,
+    "canon": {
+     "worldSummary": {
+      "es": "Un plató sencillo donde se explican ideas grandes con palabras pequeñas.",
+      "en": "A simple set where big ideas are explained in small words."
+     },
+     "immutableRules": [
+      {
+       "id": "rule_simple",
+       "description": {
+        "es": "Nada de jerga sin explicarla.",
+        "en": "No jargon without explaining it."
+       },
+       "status": "approved"
+      }
+     ],
+     "themes": [
+      "ciencia",
+      "curiosidad"
+     ]
+    },
+    "characters": [
+     {
+      "id": "host",
+      "name": {
+       "es": "Marta",
+       "en": "Marta"
+      },
+      "role": {
+       "es": "Presentadora",
+       "en": "Host"
+      },
+      "personality": {
+       "es": "Paciente y precisa",
+       "en": "Patient and precise"
+      },
+      "voiceAndDialogue": {
+       "es": "Frases claras, ejemplos cotidianos",
+       "en": "Clear sentences, everyday examples"
+      },
+      "appearance": {
+       "es": "Gafas redondas, jersey amarillo",
+       "en": "Round glasses, yellow jumper"
+      }
+     },
+     {
+      "id": "guest",
+      "name": {
+       "es": "Tito",
+       "en": "Tito"
+      },
+      "role": {
+       "es": "Invitado curioso",
+       "en": "Curious guest"
+      },
+      "personality": {
+       "es": "Pregunta lo obvio sin vergüenza",
+       "en": "Asks the obvious without shame"
+      },
+      "voiceAndDialogue": {
+       "es": "Preguntas cortas",
+       "en": "Short questions"
+      },
+      "appearance": {
+       "es": "Pelo rizado, camiseta de rayas",
+       "en": "Curly hair, striped T-shirt"
+      }
+     }
+    ],
+    "locations": [
+     {
+      "id": "studio",
+      "name": {
+       "es": "Plató",
+       "en": "Studio"
+      },
+      "description": {
+       "es": "Plató luminoso con pizarra y dos taburetes",
+       "en": "Bright set with a board and two stools"
+      },
+      "layout2d": {
+       "homes": {
+        "host": 36,
+        "guest": 66
+       }
+      }
+     }
+    ],
+    "pilot": {
+     "title": {
+      "es": "¿Por qué el cielo es azul?",
+      "en": "Why is the sky blue?"
+     },
+     "premise": {
+      "es": "Primera pregunta del programa.",
+      "en": "The show's first question."
+     },
+     "script": [
+      {
+       "id": "scene_1",
+       "locationId": "studio",
+       "purpose": {
+        "es": "Pregunta y respuesta",
+        "en": "Question and answer"
+       }
+      }
+     ],
+     "shots": [
+      {
+       "id": "s01",
+       "order": 1,
+       "sceneId": "scene_1",
+       "locationId": "studio",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 4,
+       "visibleCharacterIds": [],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [],
+       "layout2d": {
+        "framing": "title",
+        "camera": "static",
+        "card": {
+         "kind": "title",
+         "title": {
+          "es": "¿POR QUÉ?",
+          "en": "WHY?"
+         },
+         "body": {
+          "es": "El cielo azul",
+          "en": "The blue sky"
+         }
+        }
+       }
+      },
+      {
+       "id": "s02",
+       "order": 2,
+       "sceneId": "scene_1",
+       "locationId": "studio",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 5,
+       "visibleCharacterIds": [
+        "host",
+        "guest"
+       ],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [
+        {
+         "id": "b1",
+         "characterId": "guest",
+         "text": {
+          "es": "¿Por qué el cielo es azul?",
+          "en": "Why is the sky blue?"
+         },
+         "emotion": "",
+         "delivery": ""
+        },
+        {
+         "id": "b2",
+         "characterId": "host",
+         "text": {
+          "es": "Por cómo la luz rebota en el aire.",
+          "en": "Because of how light bounces off the air."
+         },
+         "emotion": "",
+         "delivery": ""
+        }
+       ],
+       "layout2d": {
+        "framing": "two",
+        "camera": "static",
+        "cast": [
+         {
+          "characterId": "host"
+         },
+         {
+          "characterId": "guest"
+         }
+        ]
+       }
+      },
+      {
+       "id": "s03",
+       "order": 3,
+       "sceneId": "scene_1",
+       "locationId": "studio",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 5,
+       "visibleCharacterIds": [],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [],
+       "layout2d": {
+        "framing": "title",
+        "camera": "static",
+        "card": {
+         "kind": "disclaimer",
+         "title": {
+          "es": "IDEA 1",
+          "en": "IDEA 1"
+         },
+         "body": {
+          "es": "La luz azul se dispersa más que la roja.",
+          "en": "Blue light scatters more than red light."
+         }
+        }
+       }
+      },
+      {
+       "id": "s04",
+       "order": 4,
+       "sceneId": "scene_1",
+       "locationId": "studio",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 5,
+       "visibleCharacterIds": [
+        "host"
+       ],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [
+        {
+         "id": "b3",
+         "characterId": "host",
+         "text": {
+          "es": "Por eso al atardecer vemos naranjas.",
+          "en": "That is why sunsets look orange."
+         },
+         "emotion": "",
+         "delivery": ""
+        }
+       ],
+       "layout2d": {
+        "framing": "medium",
+        "camera": "push",
+        "cast": [
+         {
+          "characterId": "host"
+         }
+        ]
+       }
+      },
+      {
+       "id": "s05",
+       "order": 5,
+       "sceneId": "scene_1",
+       "locationId": "studio",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 3,
+       "visibleCharacterIds": [],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [],
+       "layout2d": {
+        "framing": "title",
+        "camera": "static",
+        "card": {
+         "kind": "end",
+         "title": {
+          "es": "PRÓXIMA PREGUNTA",
+          "en": "NEXT QUESTION"
+         },
+         "body": {
+          "es": "Mándanos la tuya",
+          "en": "Send us yours"
+         }
+        }
+       }
+      }
+     ]
+    },
+    "soundDesign": {}
+   }
+  },
+  {
+   "id": "office-sitcom",
+   "title": {
+    "es": "Sitcom de oficina",
+    "en": "Office sitcom"
+   },
+   "description": {
+    "es": "Una oficina pequeña, una jefa imposible y dos compañeros que solo quieren llegar al viernes.",
+    "en": "A small office, an impossible boss and two coworkers who just want to make it to Friday."
+   },
+   "series": {
+    "logline": {
+     "es": "En una oficina donde nada funciona, cada lunes trae un nuevo plan de la jefa.",
+     "en": "In an office where nothing works, every Monday brings a new plan from the boss."
+    },
+    "premise": {
+     "es": "La jefa anuncia una idea, los compañeros intentan sobrevivirla y todo vuelve a la normalidad al final del episodio.",
+     "en": "The boss announces an idea, the coworkers try to survive it and everything is back to normal by the end."
+    },
+    "genre": {
+     "es": "Sitcom",
+     "en": "Sitcom"
+    },
+    "tone": {
+     "es": "Cómico, cotidiano, cálido",
+     "en": "Comic, everyday, warm"
+    },
+    "audience": {
+     "es": "General",
+     "en": "General"
+    },
+    "visualStyle": {
+     "es": "Recortables de colores suaves, oficina con fluorescentes",
+     "en": "Soft-coloured cutouts, office under fluorescent lights"
+    },
+    "characterVisualStyle": {
+     "es": "Siluetas simples y expresivas",
+     "en": "Simple expressive silhouettes"
+    },
+    "cameraLanguage": {
+     "es": "Planos a dos en las mesas, primeros planos para las miradas a cámara",
+     "en": "Two-shots at the desks, close-ups for looks to camera"
+    },
+    "defaultEpisodeDurationSeconds": 90,
+    "canon": {
+     "worldSummary": {
+      "es": "Oficina de una empresa que nadie sabe a qué se dedica.",
+      "en": "The office of a company nobody knows what it does."
+     },
+     "immutableRules": [
+      {
+       "id": "rule_reset",
+       "description": {
+        "es": "Todo vuelve a la normalidad al final.",
+        "en": "Everything resets by the end."
+       },
+       "status": "approved"
+      }
+     ],
+     "themes": [
+      "trabajo",
+      "rutina"
+     ]
+    },
+    "characters": [
+     {
+      "id": "boss",
+      "name": {
+       "es": "Carmen",
+       "en": "Carmen"
+      },
+      "role": {
+       "es": "Jefa",
+       "en": "Boss"
+      },
+      "personality": {
+       "es": "Optimista sin límites",
+       "en": "Boundlessly optimistic"
+      },
+      "voiceAndDialogue": {
+       "es": "Palabras de moda en cada frase",
+       "en": "Buzzwords in every sentence"
+      },
+      "appearance": {
+       "es": "Traje rojo, carpeta, sonrisa enorme",
+       "en": "Red suit, folder, huge smile"
+      }
+     },
+     {
+      "id": "worker_a",
+      "name": {
+       "es": "Raúl",
+       "en": "Raul"
+      },
+      "role": {
+       "es": "Compañero cansado",
+       "en": "Tired coworker"
+      },
+      "personality": {
+       "es": "Mira a cámara cuando algo es absurdo",
+       "en": "Looks at the camera when things get absurd"
+      },
+      "voiceAndDialogue": {
+       "es": "Monosílabos",
+       "en": "One-word answers"
+      },
+      "appearance": {
+       "es": "Camisa arrugada, taza de café",
+       "en": "Wrinkled shirt, coffee mug"
+      }
+     },
+     {
+      "id": "worker_b",
+      "name": {
+       "es": "Sofía",
+       "en": "Sofia"
+      },
+      "role": {
+       "es": "Compañera lista",
+       "en": "Clever coworker"
+      },
+      "personality": {
+       "es": "Siempre tiene un plan B",
+       "en": "Always has a plan B"
+      },
+      "voiceAndDialogue": {
+       "es": "Ironía amable",
+       "en": "Kind irony"
+      },
+      "appearance": {
+       "es": "Coleta, chaqueta azul, portátil",
+       "en": "Ponytail, blue jacket, laptop"
+      }
+     }
+    ],
+    "locations": [
+     {
+      "id": "office",
+      "name": {
+       "es": "Oficina",
+       "en": "Office"
+      },
+      "description": {
+       "es": "Mesas juntas, fotocopiadora rota, ventana a un aparcamiento",
+       "en": "Desks together, broken copier, window onto a car park"
+      },
+      "layout2d": {
+       "homes": {
+        "worker_a": 30,
+        "worker_b": 70,
+        "boss": 50
+       }
+      }
+     },
+     {
+      "id": "kitchen",
+      "name": {
+       "es": "Cocina",
+       "en": "Kitchen"
+      },
+      "description": {
+       "es": "Cocina pequeña con cafetera y nevera llena de notas",
+       "en": "Small kitchen with a coffee maker and a fridge full of notes"
+      }
+     }
+    ],
+    "pilot": {
+     "title": {
+      "es": "El gran plan del lunes",
+      "en": "Monday's big plan"
+     },
+     "premise": {
+      "es": "La jefa anuncia que la oficina será 'disruptiva'.",
+      "en": "The boss announces the office will be 'disruptive'."
+     },
+     "script": [
+      {
+       "id": "scene_1",
+       "locationId": "office",
+       "purpose": {
+        "es": "El anuncio",
+        "en": "The announcement"
+       }
+      }
+     ],
+     "shots": [
+      {
+       "id": "s01",
+       "order": 1,
+       "sceneId": "scene_1",
+       "locationId": "office",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 4,
+       "visibleCharacterIds": [],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [],
+       "layout2d": {
+        "framing": "title",
+        "camera": "static",
+        "card": {
+         "kind": "title",
+         "title": {
+          "es": "LUNES",
+          "en": "MONDAY"
+         },
+         "body": {
+          "es": "Episodio 1",
+          "en": "Episode 1"
+         }
+        }
+       }
+      },
+      {
+       "id": "s02",
+       "order": 2,
+       "sceneId": "scene_1",
+       "locationId": "office",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 5,
+       "visibleCharacterIds": [
+        "worker_a",
+        "boss",
+        "worker_b"
+       ],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [
+        {
+         "id": "b1",
+         "characterId": "boss",
+         "text": {
+          "es": "¡Equipo! Desde hoy somos disruptivos.",
+          "en": "Team! From today we are disruptive."
+         },
+         "emotion": "excited",
+         "delivery": ""
+        }
+       ],
+       "layout2d": {
+        "framing": "wide",
+        "camera": "static",
+        "cast": [
+         {
+          "characterId": "worker_a"
+         },
+         {
+          "characterId": "boss"
+         },
+         {
+          "characterId": "worker_b"
+         }
+        ]
+       }
+      },
+      {
+       "id": "s03",
+       "order": 3,
+       "sceneId": "scene_1",
+       "locationId": "office",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 3,
+       "visibleCharacterIds": [
+        "worker_a"
+       ],
+       "action": {
+        "es": "Raúl mira a cámara",
+        "en": "Raul looks at the camera"
+       },
+       "dialogueBeats": [
+        {
+         "id": "b2",
+         "characterId": "worker_a",
+         "text": {
+          "es": "Vale.",
+          "en": "Okay."
+         },
+         "emotion": "deadpan",
+         "delivery": ""
+        }
+       ],
+       "layout2d": {
+        "framing": "close",
+        "camera": "static",
+        "cast": [
+         {
+          "characterId": "worker_a"
+         }
+        ]
+       }
+      },
+      {
+       "id": "s04",
+       "order": 4,
+       "sceneId": "scene_1",
+       "locationId": "office",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 5,
+       "visibleCharacterIds": [
+        "worker_a",
+        "worker_b"
+       ],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [
+        {
+         "id": "b3",
+         "characterId": "worker_b",
+         "text": {
+          "es": "Tranquilo, el viernes se le olvida.",
+          "en": "Relax, she'll forget by Friday."
+         },
+         "emotion": "",
+         "delivery": ""
+        }
+       ],
+       "layout2d": {
+        "framing": "two",
+        "camera": "static",
+        "cast": [
+         {
+          "characterId": "worker_a"
+         },
+         {
+          "characterId": "worker_b"
+         }
+        ]
+       }
+      },
+      {
+       "id": "s05",
+       "order": 5,
+       "sceneId": "scene_1",
+       "locationId": "office",
+       "productionMethod": "animation_2d",
+       "durationSeconds": 3,
+       "visibleCharacterIds": [],
+       "action": {
+        "es": "",
+        "en": ""
+       },
+       "dialogueBeats": [],
+       "layout2d": {
+        "framing": "title",
+        "camera": "static",
+        "card": {
+         "kind": "end",
+         "title": {
+          "es": "FIN",
+          "en": "THE END"
+         },
+         "body": ""
+        }
+       }
+      }
+     ]
+    },
+    "soundDesign": {}
+   }
+  }
+ ]
+}

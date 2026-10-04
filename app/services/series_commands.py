@@ -97,6 +97,16 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Status of a location's 3D plate (rendering, done, failed). When the export has finished it imports the video "
         "and sets it as the location plate (idempotent).",
     ),
+    "series.templates": (
+        {"language": {"enum": ["es", "en"]}}, [], False,
+        "List series templates (cutout satire, host explainer, office sitcom...): cast, locations and a five-shot 2D pilot.",
+    ),
+    "series.create_from_template": (
+        {"workspace": WORKSPACE, "template_id": ID, "title": {"type": "string", "maxLength": 300}, "language": {"enum": ["es", "en"]}},
+        ["workspace", "template_id"], True,
+        "Create a series from a template in Spanish or English: characters with descriptions (make their kits next), locations "
+        "with 2D layout, canon and a pilot episode of 2D shots with title and end cards, ready for series.episode.render_native.",
+    ),
     "series.list": (
         {"workspace": WORKSPACE}, ["workspace"], False,
         "List Series Lab projects with their revision, language and episodes (id, number, title, shot count, status).",
@@ -319,6 +329,16 @@ def _plate_status(data: dict[str, Any], request: Callable[..., Any], **_extra: A
     return {"plate": request("GET", _plate_path(data), query={"workspace": data["workspace"]})}
 
 
+def _list_templates(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return request("GET", "/api/v1/series/templates", query={"language": data["language"]} if data.get("language") else None)
+
+
+def _create_from_template(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body = {"workspace": data["workspace"], **{key: data[key] for key in ("title", "language") if data.get(key)}}
+    created = request("POST", f"/api/v1/series/templates/{_quote(data['template_id'])}", body=body)
+    return {"series": _series_summary(created)}
+
+
 def _list_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     listed = request("GET", "/api/v1/series", query={"workspace": data["workspace"]})
     return {"series": [_series_summary(item) for item in listed.get("series") or []]}
@@ -454,6 +474,8 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.episode.render_native.resume": _native_job("resume"),
     "series.location.plate3d": _start_plate,
     "series.location.plate3d.status": _plate_status,
+    "series.templates": _list_templates,
+    "series.create_from_template": _create_from_template,
     "series.list": _list_series,
     "series.get": _get_series,
     "series.create": _create_series,

@@ -234,6 +234,7 @@
       "name": "Python tests B",
       "weight": 1586,
       "paths": [
+        "tests/test_series_templates.py",
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
         "tests/test_api_workspace_security.py",

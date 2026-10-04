@@ -152,5 +152,9 @@ def test_refusals_and_speech_params():
     with pytest.raises(NativeRenderError):
         SeriesNativeRender(NativeRenderDeps(call=lambda *_: {}, workspace_dir=lambda _: "/tmp", read_library=lambda _: library(),
                                             read_kits=lambda _: {})).start("cast", "uv", "ep1", shot_ids=["s02"])
+    with pytest.raises(NativeRenderError) as no_kits:
+        SeriesNativeRender(NativeRenderDeps(call=lambda *_: {}, workspace_dir=lambda _: "/tmp", read_library=lambda _: library(),
+                                            read_kits=lambda _: {"kit-kevin": {}})).start("cast", "uv", "ep1")
+    assert no_kits.value.code == "missing_kits" and "gary" in str(no_kits.value) and "kevin" not in str(no_kits.value)
     preset = speech_params(GARY, "one two three", "english", 7)
     assert preset["model_mode"] == "ryan" and preset["priority"] == 10 and preset["duration_seconds"] == 5

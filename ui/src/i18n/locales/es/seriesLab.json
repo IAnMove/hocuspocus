@@ -788,5 +788,11 @@
     "rendering": "Renderizando el fondo 3D… {{progress}}%",
     "done": "Fondo 3D listo: los planos 2D de esta localización lo usan.",
     "failed": "El fondo 3D ha fallado: {{error}}"
+  },
+  "templates": {
+    "title": "Empezar con una plantilla",
+    "language": "Idioma",
+    "contents": "Reparto: {{characters}} · piloto de {{shots}} planos 2D",
+    "create": "Crear «{{title}}»"
   }
 }

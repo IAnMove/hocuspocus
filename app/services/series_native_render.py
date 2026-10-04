@@ -160,6 +160,9 @@ class SeriesNativeRender:
         language = self._check_language(raw_series, raw_episode, language, wanted)
         series, episode = self._episode(workspace, series_id, episode_id, language)
         shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
+        missing = self._missing_kits(workspace, series, shots)
+        if missing:
+            raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
         store = self._store(workspace)
         for job in store.list():
             if job.get("episodeId") == episode_id and job.get("language") == language and job.get("status") in ("queued", "running"):
@@ -173,6 +176,14 @@ class SeriesNativeRender:
         store.save(job)
         self._launch(workspace, job_id)
         return job
+
+    def _missing_kits(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]]) -> list[str]:
+        """Names of characters seen or heard in ``shots`` without a Character Kit in the workspace (a new template's cast)."""
+        kits = self.deps.read_kits(workspace)
+        names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
+        ids = dict.fromkeys(cid for shot in shots for cid in [*(shot.get("visibleCharacterIds") or []),
+                                                              *(beat.get("characterId") for beat in shot.get("dialogueBeats") or [])] if cid)
+        return [str(names.get(cid, cid)) for cid in ids if (kit_ref(series, cid) or {}).get("id") not in kits]
 
     def _launch(self, workspace: str, job_id: str) -> None:
         with self._lock:

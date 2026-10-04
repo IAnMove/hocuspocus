@@ -566,3 +566,17 @@ export async function startSeriesLocationPlate(workspace: string, seriesId: stri
 export async function fetchSeriesLocationPlate(workspace: string, seriesId: string, locationId: string): Promise<SeriesLocationPlate> {
   return seriesResponse(fetch(`${platePath(seriesId, locationId)}?workspace=${encodeURIComponent(workspace)}`), 'Could not read the 3D background')
 }
+
+export type SeriesTemplateCard = { id: string; title: string; description: string; characters: string[]; locations: string[]; pilotShots: number }
+
+/** Series templates: cast, locations, canon and a five-shot 2D pilot. */
+export async function fetchSeriesTemplates(language: 'es' | 'en'): Promise<SeriesTemplateCard[]> {
+  const reply = await seriesResponse<{ templates: SeriesTemplateCard[] }>(fetch(`${BASE}/api/v1/series/templates?language=${language}`), 'Could not load series templates')
+  return reply.templates
+}
+
+export async function createSeriesFromTemplate(workspace: string, templateId: string, language: 'es' | 'en', title = ''): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/templates/${encodeURIComponent(templateId)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, language, ...(title ? { title } : {}) }),
+  }), 'Could not create the series from the template')
+}
