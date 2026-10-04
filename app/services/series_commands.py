@@ -37,7 +37,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "character": OBJECT, "base_revision": REVISION}, ["workspace", "character", "base_revision"], True,
         "Create or update one Character Kit with the library revision from characters.list/get. Assets must be "
         "durable workspace URLs. voice is the default voice; voicesByLanguage {english, spanish, ...} gives a "
-        "language its own voice. Unknown fields are dropped by the server.",
+        "language its own voice. The server drops fields it does not know and lists their paths in ignoredFields.",
     ),
     "series.list": (
         {"workspace": WORKSPACE}, ["workspace"], False,
@@ -163,6 +163,22 @@ def _get_character(data: dict[str, Any], request: Callable[..., Any], **_extra: 
     return {"revision": library.get("revision"), "character": kit}
 
 
+def _ignored_fields(sent: Any, stored: Any, prefix: str = "") -> list[str]:
+    """Paths the server dropped while normalizing. Lists are compared as whole values."""
+    if not isinstance(sent, dict) or not isinstance(stored, dict):
+        return []
+    ignored: list[str] = []
+    for key, value in sent.items():
+        path = f"{prefix}{key}"
+        if value is None:
+            continue
+        if key not in stored:
+            ignored.append(path)
+        else:
+            ignored.extend(_ignored_fields(value, stored[key], f"{path}."))
+    return ignored
+
+
 def _save_character(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     character = data["character"]
     if not isinstance(character.get("id"), str) or not character["id"]:
@@ -171,7 +187,9 @@ def _save_character(data: dict[str, Any], request: Callable[..., Any], **_extra:
         "PATCH", f"/api/v1/character-kits/library/kits/{_quote(character['id'])}",
         body={"workspace": data["workspace"], "kit": character, "baseRevision": data["base_revision"]},
     )
-    return {"revision": library.get("revision"), "character": _kit_summary(library["kits"][character["id"]])}
+    stored = library["kits"][character["id"]]
+    return {"revision": library.get("revision"), "character": _kit_summary(stored),
+            "ignoredFields": _ignored_fields(character, stored)}
 
 
 def _list_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:

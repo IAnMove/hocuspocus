@@ -60,6 +60,17 @@ def test_saving_a_character_patches_the_library_at_its_revision(tmp_path):
     assert body == {"workspace": "series", "kit": kit, "baseRevision": 3}
     assert result["result"]["revision"] == 4
     assert result["result"]["character"]["voicesByLanguage"] == {"spanish": "Kevin ES"}
+    assert result["result"]["ignoredFields"] == []
+
+
+def test_saving_a_character_lists_the_fields_the_server_dropped(tmp_path):
+    # An older server drops voicesByLanguage; the agent must hear about it.
+    kit = {"id": "kevin", "name": "Kevin", "notes": None, "voice": {"model": "qwen3_tts_customvoice", "pitch": 2},
+           "voicesByLanguage": {"spanish": {"model": "qwen3_tts_base"}}, "poses": [{"id": "front", "extra": 1}]}
+    stored = {"id": "kevin", "name": "Kevin", "voice": {"model": "qwen3_tts_customvoice"}, "poses": [{"id": "front"}]}
+    handlers, _, _, _ = harness(tmp_path, [{"revision": 4, "kits": {"kevin": stored}}])
+    result = call(handlers, "characters.save", {"workspace": "series", "character": kit, "base_revision": 3})
+    assert result["result"]["ignoredFields"] == ["voice.pitch", "voicesByLanguage"]
 
 
 def test_a_workspace_take_is_imported_through_uploads_and_its_attempt_returned(tmp_path):
