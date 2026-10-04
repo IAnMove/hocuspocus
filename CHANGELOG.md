@@ -6,6 +6,17 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Intermediate files are released when their job is done. A Video 2D/3D export
+drops its frames and audio mix when the MP4 is published, a completed
+production drops the copies it put in uploads, the series render drops each raw
+voice take once trimmed, and the speech analysis no longer leaves a copy of
+the audio in the system temp folder. At startup the app releases what a restart
+or an older version left behind (export staging of finished exports, old raw
+takes, stale temp folders) and keeps only the last ten revisions of the kit
+library history. One installation held 28 GB of frames from published exports,
+another 122 GB. Results are never touched; `HOCUS_KEEP_EXPORT_STAGING=1` keeps
+export staging for debugging. See `docs/development/STORAGE_CLEANUP.md`.
+
 ## [0.10.0] - 2026-10-04
 
 Animated series end to end. Series Lab makes a whole episode locally:

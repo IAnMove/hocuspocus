@@ -348,6 +348,8 @@ class Production:
         target = self.uploads / f"{uuid.uuid4().hex}{src.suffix.lower()}"
         self.uploads.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, target)
+        # Remembered so release_uploads can drop the copy once the run is complete and nothing refers to it.
+        self.state.setdefault("uploads", []).append(target.name)
         return str(target), f"/api/v1/uploads/{target.name}"
 
     def wait(self, jobs: dict[str, str | None], poll: float = 6) -> dict[str, str | None]:

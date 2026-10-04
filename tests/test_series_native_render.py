@@ -28,17 +28,20 @@ def library():
 
 
 class Tools:
-    def __init__(self, tmp_path, bad_first_take=False, fail_export_once=False, wait_errors=()):
+    def __init__(self, tmp_path, bad_first_take=False, fail_export_once=False, wait_errors=(), fail_speech_at=0):
         self.root, self.calls, self.jobs = tmp_path, [], 0
         self.bad_first_take, self.fail_export_once = bad_first_take, fail_export_once
-        self.exports, self.wait_errors = {}, list(wait_errors)
+        self.exports, self.wait_errors, self.fail_speech_at = {}, list(wait_errors), fail_speech_at
 
     def __call__(self, tool, arguments):
         self.calls.append((tool, arguments))
         data = arguments.get("input") or {}
         if tool == "generation.speech":
             self.jobs += 1
+            if self.jobs == self.fail_speech_at:
+                return {"_is_error": True, "error": {"code": "failed", "message": "tts down"}}
             name = f"{data['output_name']}.wav"
+            (self.root / f"{data['output_name']}.meta.json").write_text("{}")
             (self.root / name).write_bytes(b"raw speech")
             return {"receipt": {"result": {"job_id": f"job-{self.jobs}"}}, "_name": name}
         if tool == "jobs.wait":
@@ -133,6 +136,18 @@ def test_a_drifting_take_is_spoken_again_and_the_best_one_kept(tmp_path):
     assert (line["attempt"], line["wer"]) == (1, 0.05)
     assert [tool for tool, _ in tools.calls].count("generation.speech") == 2
     assert (tmp_path / line["filename"]).is_file() and not list(tmp_path.glob("*.best.wav"))
+    assert not list(tmp_path.glob("*-raw*")), "raw takes and their sidecars are intermediates"
+
+
+def test_a_speech_failure_after_a_first_take_keeps_that_take_as_the_recording(tmp_path):
+    tools, compiled = Tools(tmp_path, bad_first_take=True, fail_speech_at=2), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "failed" and "tts down" in done["items"][0]["error"]
+    recordings = [path for path in tmp_path.glob("ln-ep1-s03_d0-*.wav") if ".best." not in path.name and "-raw" not in path.name]
+    assert len(recordings) == 1 and not list(tmp_path.glob("*.best.wav")) and not list(tmp_path.glob("*-raw*"))
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert again["status"] == "completed" and again["items"][0]["lines"]["s03_d0"]["reused"], "a resume reuses the kept take"
 
 
 def test_a_failed_export_resumes_at_that_shot_and_reuses_its_recordings(tmp_path):

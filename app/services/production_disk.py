@@ -8,6 +8,8 @@ editing a shot), scene exports and the final video stay. A failed run deletes no
 """
 from __future__ import annotations
 
+import json
+
 import os
 import shutil
 from pathlib import Path
@@ -65,6 +67,28 @@ def discard(state: dict, name: object) -> None:
 
 def _owned_slice(path: Path, production_id: str) -> bool:
     return bool(production_id) and path.name.startswith(f"{production_id}-slice-") and path.suffix.lower() == ".wav"
+
+
+def release_uploads(uploads_dir: str | Path, state: dict) -> int:
+    """Delete the copies a completed run put in uploads/ unless its state still refers to them (a clip URL the package uses)."""
+    names = [name for name in (state.get("uploads") or []) if isinstance(name, str) and name and os.sep not in name]
+    if state.get("status") != "completed" or not names:
+        return 0
+    referenced_in = json.dumps({key: value for key, value in state.items() if key != "uploads"}, ensure_ascii=False)
+    kept, removed = [], 0
+    for name in names:
+        if name in referenced_in:
+            kept.append(name)
+            continue
+        try:
+            Path(uploads_dir, name).unlink()
+            removed += 1
+        except FileNotFoundError:
+            pass
+        except OSError:
+            kept.append(name)
+    state["uploads"] = kept
+    return removed
 
 
 def release_completed(root: str | Path, state: dict, production_id: str = "") -> None:
