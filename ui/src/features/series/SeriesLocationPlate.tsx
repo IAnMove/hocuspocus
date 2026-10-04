@@ -58,9 +58,15 @@ export function SeriesLocationPlate({ workspace, series, location, pollMs = POLL
           onChange={event => setSeconds(Math.min(20, Math.max(2, Number(event.target.value) || 6)))} /></label>
       <button className={secondaryButton} disabled={!scene || rendering} onClick={() => void start()}>{t('plates.render')}</button>
     </div>
-    {rendering && <p role="status" className="text-[10px]">{t('plates.rendering', { progress: Math.round((plate?.progress ?? 0) * 100) })}</p>}
-    {plate?.status === 'done' && <p role="status" className="text-[10px] text-emerald-200">{t('plates.done')}</p>}
-    {plate?.status === 'failed' && <p role="alert" className="text-[10px] text-red-300">{t('plates.failed', { error: plate.error ?? '' })}</p>}
+    {plate && <PlateStatus plate={plate} />}
     {error && <p role="alert" className="text-[10px] text-red-300">{error}</p>}
   </div>
+}
+
+function PlateStatus({ plate }: { plate: Plate }) {
+  const { t } = useUiTranslation('seriesLab')
+  if (plate.status === 'rendering') return <p role="status" className="text-[10px]">{t('plates.rendering', { progress: Math.round((plate.progress ?? 0) * 100) })}</p>
+  if (plate.status === 'done') return <p role="status" className="text-[10px] text-emerald-200">{t('plates.done')}</p>
+  if (plate.status === 'failed') return <p role="alert" className="text-[10px] text-red-300">{t('plates.failed', { error: plate.error ?? '' })}</p>
+  return null
 }

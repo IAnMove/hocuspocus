@@ -40,6 +40,27 @@ def _remove_assembly_artifacts(output_path: str | None) -> None:
     remove_episode_subtitles(output_path)
 
 
+def _publish_cut(series: dict[str, Any], episode: dict[str, Any], job: dict[str, Any], asset_id: str, thumbnail: dict[str, Any]) -> None:
+    """Record the cut (and its thumbnail) on the episode, or on the language version it was made for."""
+    holder = episode
+    if job.get("language"):
+        holder = (episode.get("languageVersions") or {}).get(job["language"])
+        if not isinstance(holder, dict):
+            raise ValueError("The language version no longer exists")
+    assembly_ids = [str(value) for value in holder.get("assemblyAssetIds", []) if isinstance(value, str) and value]
+    holder["assemblyAssetIds"] = list(dict.fromkeys([*assembly_ids, asset_id]))
+    holder["latestAssemblyAssetId"] = asset_id
+    if not thumbnail.get("written"):
+        return
+    thumbnail_id = f"asset_thumb_{uuid.uuid4().hex}"
+    series["assets"][thumbnail_id] = {
+        "id": thumbnail_id, "workspaceId": job["workspace"], "kind": "image",
+        "uri": f"outputs/{thumbnail['file']}", "ownerType": "episode", "ownerId": job["episodeId"], "isDerivedThumbnail": True,
+        "metadata": {"assemblyAssetId": asset_id, "time": thumbnail.get("time"), **({"language": job["language"]} if job.get("language") else {})},
+    }
+    holder["thumbnailAssetId"] = thumbnail_id
+
+
 def _write_assembly_sidecar(output_path: str, job: dict[str, Any]) -> None:
     workspace = job.get("workspace")
     publish_generation_sidecar(
@@ -434,31 +455,7 @@ def create_series_assembly_router(
                         "createdAt": completed_at,
                     },
                 }
-                # A language version keeps its own cut; the original stays on the episode.
-                holder = episode
-                if job.get("language"):
-                    holder = (episode.get("languageVersions") or {}).get(job["language"])
-                    if not isinstance(holder, dict):
-                        raise ValueError("The language version no longer exists")
-                assembly_ids = [
-                    str(value)
-                    for value in holder.get("assemblyAssetIds", [])
-                    if isinstance(value, str) and value
-                ]
-                assembly_ids.append(asset_id)
-                holder["assemblyAssetIds"] = list(dict.fromkeys(assembly_ids))
-                holder["latestAssemblyAssetId"] = asset_id
-                thumbnail = finishing.get("thumbnail") or {}
-                if thumbnail.get("written"):
-                    thumbnail_id = f"asset_thumb_{uuid.uuid4().hex}"
-                    series["assets"][thumbnail_id] = {
-                        "id": thumbnail_id, "workspaceId": job["workspace"], "kind": "image",
-                        "uri": f"outputs/{thumbnail['file']}", "ownerType": "episode", "ownerId": job["episodeId"],
-                        "isDerivedThumbnail": True,
-                        "metadata": {"assemblyAssetId": asset_id, "time": thumbnail.get("time"),
-                                     **({"language": job["language"]} if job.get("language") else {})},
-                    }
-                    holder["thumbnailAssetId"] = thumbnail_id
+                _publish_cut(series, episode, job, asset_id, finishing.get("thumbnail") or {})
                 episode["updatedAt"] = completed_at
                 series["episodesById"][episode["id"]] = episode
                 series["revision"] = int(series.get("revision") or 1) + 1

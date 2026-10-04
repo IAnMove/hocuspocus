@@ -152,17 +152,7 @@ class SeriesNativeRender:
 
     def start(self, workspace: str, series_id: str, episode_id: str, *, shot_ids: list[str] | None = None,
               approve: bool = False, language: str | None = None) -> dict[str, Any]:
-        raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
-        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if shot.get("productionMethod") == "animation_2d"
-                  and (not shot_ids or shot["id"] in shot_ids)}
-        if not wanted:
-            raise NativeRenderError("no_2d_shots", "The episode has no 2D animation shots to render", 400)
-        language = self._check_language(raw_series, raw_episode, language, wanted)
-        series, episode = self._episode(workspace, series_id, episode_id, language)
-        shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
-        missing = self._missing_kits(workspace, series, shots)
-        if missing:
-            raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
+        raw_series, language, shots = self._preflight(workspace, series_id, episode_id, shot_ids, language)
         store = self._store(workspace)
         for job in store.list():
             if job.get("episodeId") == episode_id and job.get("language") == language and job.get("status") in ("queued", "running"):
@@ -176,6 +166,22 @@ class SeriesNativeRender:
         store.save(job)
         self._launch(workspace, job_id)
         return job
+
+    def _preflight(self, workspace: str, series_id: str, episode_id: str, shot_ids: list[str] | None,
+                   language: str | None) -> tuple[dict[str, Any], str, list[dict[str, Any]]]:
+        """The series, the language and the 2D shots to render; refuses what would fail later."""
+        raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
+        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if shot.get("productionMethod") == "animation_2d"
+                  and (not shot_ids or shot["id"] in shot_ids)}
+        if not wanted:
+            raise NativeRenderError("no_2d_shots", "The episode has no 2D animation shots to render", 400)
+        language = self._check_language(raw_series, raw_episode, language, wanted)
+        series, episode = self._episode(workspace, series_id, episode_id, language)
+        shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
+        missing = self._missing_kits(workspace, series, shots)
+        if missing:
+            raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
+        return raw_series, language, shots
 
     def _missing_kits(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]]) -> list[str]:
         """Names of characters seen or heard in ``shots`` without a Character Kit in the workspace (a new template's cast)."""

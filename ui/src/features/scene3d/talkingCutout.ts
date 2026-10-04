@@ -28,27 +28,44 @@ function parseAnchor(raw: unknown): CutoutAnchor | undefined {
   return { offsetX: value.offsetX, offsetY: value.offsetY, scale: value.scale, rotation: finite(value.rotation, -360, 360) ? value.rotation : 0 }
 }
 
+function parseMouths(raw: unknown): Record<string, string> {
+  return Object.fromEntries(Object.entries((raw ?? {}) as Record<string, unknown>)
+    .map(([state, url]) => [state, durableScene3DSourceUrl(String(url ?? ''))] as const).filter(([, url]) => Boolean(url)))
+}
+
+function parseMouthAnchors(raw: unknown, mouths: Record<string, string>): Record<string, CutoutAnchor> {
+  return Object.fromEntries(Object.entries((raw ?? {}) as Record<string, unknown>)
+    .filter(([state]) => Boolean(mouths[state])).map(([state, anchor]) => [state, parseAnchor(anchor)] as const)
+    .filter((entry): entry is readonly [string, CutoutAnchor] => Boolean(entry[1])))
+}
+
+function parseCues(raw: unknown, mouths: Record<string, string>): TalkCue[] {
+  return (Array.isArray(raw) ? raw.slice(0, MAX_CUES) : [])
+    .filter((cue): cue is TalkCue => Boolean(cue) && finite(cue.start, 0, 3600) && finite(cue.end, 0, 3600) && cue.end > cue.start
+      && typeof cue.state === 'string' && Boolean(mouths[cue.state]))
+    .map(cue => ({ start: cue.start, end: cue.end, state: cue.state })).sort((a, b) => a.start - b.start)
+}
+
+function parseBlink(raw: unknown, times: unknown): Pick<TalkingCutout, 'blink' | 'blinks'> {
+  const value = raw as { source?: unknown; anchor?: unknown } | undefined
+  const source = value ? durableScene3DSourceUrl(String(value.source ?? '')) : ''
+  const anchor = value ? parseAnchor(value.anchor) : undefined
+  if (!source || !anchor) return {}
+  const blinks = Array.isArray(times) ? times.filter(time => finite(time, 0, 3600)).slice(0, 2000) as number[] : []
+  return { blink: { source, anchor }, blinks }
+}
+
 export function parseTalkingCutout(raw: unknown): TalkingCutout | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as Record<string, unknown>
   const base = durableScene3DSourceUrl(String(value.base ?? ''))
   const mouth = parseAnchor(value.mouth)
-  const mouths = Object.fromEntries(Object.entries((value.mouths ?? {}) as Record<string, unknown>)
-    .map(([state, url]) => [state, durableScene3DSourceUrl(String(url ?? ''))] as const).filter(([, url]) => Boolean(url)))
+  const mouths = parseMouths(value.mouths)
   if (!base || !mouth || !Object.keys(mouths).length) return undefined
   const rest = typeof value.rest === 'string' && mouths[value.rest] ? value.rest : Object.keys(mouths)[0]
-  const cues = (Array.isArray(value.cues) ? value.cues.slice(0, MAX_CUES) : [])
-    .filter((cue): cue is TalkCue => Boolean(cue) && finite(cue.start, 0, 3600) && finite(cue.end, 0, 3600) && cue.end > cue.start
-      && typeof cue.state === 'string' && Boolean(mouths[cue.state]))
-    .map(cue => ({ start: cue.start, end: cue.end, state: cue.state })).sort((a, b) => a.start - b.start)
-  const blinkValue = value.blink as { source?: unknown; anchor?: unknown } | undefined
-  const blinkSource = blinkValue ? durableScene3DSourceUrl(String(blinkValue.source ?? '')) : ''
-  const blinkAnchor = blinkValue ? parseAnchor(blinkValue.anchor) : undefined
-  const mouthAnchors = Object.fromEntries(Object.entries((value.mouthAnchors ?? {}) as Record<string, unknown>)
-    .filter(([state]) => Boolean(mouths[state])).map(([state, anchor]) => [state, parseAnchor(anchor)] as const)
-    .filter((entry): entry is readonly [string, CutoutAnchor] => Boolean(entry[1])))
-  const blinks = Array.isArray(value.blinks) ? value.blinks.filter(time => finite(time, 0, 3600)).slice(0, 2000) as number[] : []
-  return { base, mouths, mouth, ...(Object.keys(mouthAnchors).length ? { mouthAnchors } : {}), rest, cues, ...(blinkSource && blinkAnchor ? { blink: { source: blinkSource, anchor: blinkAnchor }, blinks } : {}) }
+  const mouthAnchors = parseMouthAnchors(value.mouthAnchors, mouths)
+  return { base, mouths, mouth, ...(Object.keys(mouthAnchors).length ? { mouthAnchors } : {}), rest,
+    cues: parseCues(value.cues, mouths), ...parseBlink(value.blink, value.blinks) }
 }
 
 /** The mouth state at a scene time: the cue that holds it, else the rest mouth. */

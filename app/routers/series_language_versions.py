@@ -40,7 +40,6 @@ def _reply(series: dict, episode_id: str, language: str) -> dict[str, Any]:
 def create_series_language_versions_router(*, change_episode: EpisodeChange, read_episode: Callable[[str, str, str], tuple[dict, dict]],
                                            translate: Callable[[str, str, dict], Any]) -> APIRouter:
     router = APIRouter()
-    base = "/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}"
 
     def check(series: dict, language: str) -> None:
         if language not in LANGUAGES:
@@ -58,7 +57,7 @@ def create_series_language_versions_router(*, change_episode: EpisodeChange, rea
         except KeyError as error:
             raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Series episode not found"}) from error
 
-    @router.put(base)
+    @router.put("/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}")
     def put_language_version(series_id: str, episode_id: str, language: str, body: VersionWrite):
         """Set a version's title, lines ({beatId: text}) or cards; takes and cuts are kept."""
         def merge(current: dict, _episode: dict) -> dict:
@@ -68,7 +67,7 @@ def create_series_language_versions_router(*, change_episode: EpisodeChange, rea
                     "cards": {**current.get("cards", {}), **(update.get("cards") or {})}}
         return write(body.workspace, series_id, episode_id, language, merge)
 
-    @router.post(f"{base}/translate")
+    @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}/translate")
     async def translate_language_version(series_id: str, episode_id: str, language: str, body: VersionAction):
         """Translate every line and card from the original with the configured LLM."""
         try:
@@ -84,7 +83,7 @@ def create_series_language_versions_router(*, change_episode: EpisodeChange, rea
         return await run_in_threadpool(write, body.workspace, series_id, episode_id, language,
                                        lambda current, current_episode: version_from_translation(result, current_episode, current))
 
-    @router.delete(base)
+    @router.delete("/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}")
     def delete_language_version(series_id: str, episode_id: str, language: str, body: VersionAction):
         def apply(series: dict, episode: dict) -> None:
             (episode.get("languageVersions") or {}).pop(language, None)

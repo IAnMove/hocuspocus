@@ -64,16 +64,7 @@ export function SeriesLanguageVersions({ workspace, series, episode }: { workspa
     <div className="flex flex-wrap items-end gap-2">
       {languageKeys(versions).map(language => <button key={language} className={language === selected ? primaryButton : secondaryButton}
         aria-pressed={language === selected} onClick={() => { setSelected(language); setDrafts({}) }}>{t(`languages.names.${language}`)}</button>)}
-      {available.length > 0 && <>
-        <label className="text-xs">{t('languages.add')}
-          <select className="ml-1 min-h-10 rounded border border-border bg-bg-primary px-2" value={adding} disabled={blocked}
-            onChange={event => setAdding(event.target.value as SpokenLanguage | '')}>
-            <option value="">{t('languages.choose')}</option>
-            {available.map(language => <option key={language} value={language}>{t(`languages.names.${language}`)}</option>)}
-          </select></label>
-        <button className={secondaryButton} disabled={!adding || blocked} onClick={() => void create(true)}>{t('languages.translate')}</button>
-        <button className={secondaryButton} disabled={!adding || blocked} onClick={() => void create(false)}>{t('languages.empty')}</button>
-      </>}
+      {available.length > 0 && <AddLanguage available={available} adding={adding} blocked={blocked} onChoose={setAdding} onCreate={translate => void create(translate)} />}
     </div>
     {version && <div className="space-y-2">
       <table className="w-full text-xs"><tbody>
@@ -97,4 +88,21 @@ export function SeriesLanguageVersions({ workspace, series, episode }: { workspa
     {message && <p role="status" className="text-xs text-emerald-200">{message}</p>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
   </section>
+}
+
+function AddLanguage({ available, adding, blocked, onChoose, onCreate }: {
+  available: SpokenLanguage[]; adding: SpokenLanguage | ''; blocked: boolean
+  onChoose: (language: SpokenLanguage | '') => void; onCreate: (translate: boolean) => void
+}) {
+  const { t } = useUiTranslation('seriesLab')
+  return <>
+    <label className="text-xs">{t('languages.add')}
+      <select className="ml-1 min-h-10 rounded border border-border bg-bg-primary px-2" value={adding} disabled={blocked}
+        onChange={event => onChoose(event.target.value as SpokenLanguage | '')}>
+        <option value="">{t('languages.choose')}</option>
+        {available.map(language => <option key={language} value={language}>{t(`languages.names.${language}`)}</option>)}
+      </select></label>
+    <button className={secondaryButton} disabled={!adding || blocked} onClick={() => onCreate(true)}>{t('languages.translate')}</button>
+    <button className={secondaryButton} disabled={!adding || blocked} onClick={() => onCreate(false)}>{t('languages.empty')}</button>
+  </>
 }

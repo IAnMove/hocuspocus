@@ -79,31 +79,43 @@ def blink_times(seed: str, duration: float) -> list[float]:
     return times
 
 
-def talk_block(kit: dict, lines: list[dict], *, pose: str = "base", duration: float = 10.0, blink: bool = True) -> dict:
-    """``screen.talk`` for ``kit`` in ``pose`` saying ``lines``; only approved drawings are used."""
+def _ready_art(kit: dict, pose: str) -> tuple[dict, dict[str, str]]:
+    """The approved pose asset and the approved mouth drawings by state."""
     asset = kit.get("base") if pose == "base" else (kit.get("poses") or {}).get(pose)
     if not _approved(asset):
         raise TalkError("pose_not_ready", f"Character Kit {kit.get('name') or kit.get('id')} has no approved {pose} pose")
     mouths = {state: item["source"] for state, item in (kit.get("mouth") or {}).items() if _approved(item)}
     if not mouths:
         raise TalkError("mouths_not_ready", "Approve the kit's mouth drawings in the Face Rig before making it talk")
+    return asset, mouths
+
+
+def _cues(lines: list[dict], mapping: dict | None, mouths: dict[str, str]) -> list[dict]:
     if not isinstance(lines, list) or len(lines) > MAX_LINES:
         raise TalkError("invalid_line", f"lines must be a list of at most {MAX_LINES}")
+    found = (cue for index, line in enumerate(lines) if isinstance(line, dict) for cue in _line_cues(line, index, mapping, mouths))
+    return sorted(found, key=lambda cue: cue["start"])
+
+
+def _blink(kit: dict, anchors: dict, duration: float) -> dict:
+    eyes = (kit.get("eyes") or {}).get("blink")
+    if not _approved(eyes):
+        return {}
+    return {"blink": {"source": eyes["source"], "anchor": dict(anchors.get("eyes") or DEFAULT_BLINK)},
+            "blinks": blink_times(str(kit.get("id") or ""), duration)}
+
+
+def talk_block(kit: dict, lines: list[dict], *, pose: str = "base", duration: float = 10.0, blink: bool = True) -> dict:
+    """``screen.talk`` for ``kit`` in ``pose`` saying ``lines``; only approved drawings are used."""
+    asset, mouths = _ready_art(kit, pose)
     mapping = kit.get("mouthMapping") if isinstance(kit.get("mouthMapping"), dict) else None
     anchors = (kit.get("anchors") or {}).get(pose) or (kit.get("anchors") or {}).get("base") or {}
-    cues = sorted((cue for index, line in enumerate(lines) if isinstance(line, dict) for cue in _line_cues(line, index, mapping, mouths)),
-                  key=lambda cue: cue["start"])
-    rest = kit_state("rest", mapping, mouths) or next(iter(mouths))
     talk: dict[str, Any] = {"base": asset["source"], "mouths": mouths, "mouth": dict(anchors.get("mouth") or DEFAULT_MOUTH),
-                            "rest": rest, "cues": cues}
+                            "rest": kit_state("rest", mapping, mouths) or next(iter(mouths)), "cues": _cues(lines, mapping, mouths)}
     per_state = {state: dict(anchor) for state, anchor in (anchors.get("mouthStates") or {}).items() if state in mouths}
     if per_state:
         talk["mouthAnchors"] = per_state
-    eyes = (kit.get("eyes") or {}).get("blink")
-    if blink and _approved(eyes):
-        talk["blink"] = {"source": eyes["source"], "anchor": dict(anchors.get("eyes") or DEFAULT_BLINK)}
-        talk["blinks"] = blink_times(str(kit.get("id") or ""), duration)
-    return talk
+    return {**talk, **(_blink(kit, anchors, duration) if blink else {})}
 
 
 def _audio(line: dict, index: int, workspace: str) -> dict | None:
@@ -119,30 +131,38 @@ def _audio(line: dict, index: int, workspace: str) -> dict | None:
     return {"workspaceId": str(audio.get("workspaceId") or workspace), "filename": filename, "url": url}
 
 
+def _bind_screen(slot: dict, kit: dict, talk: dict) -> None:
+    slot["sourceUrl"] = talk["base"]
+    slot.pop("sourceRef", None)
+    screen = slot.get("screen") if isinstance(slot.get("screen"), dict) else {}
+    kept = {key: value for key, value in screen.items() if key not in {"poseSequence", "media", "sourceRef"}}
+    slot["screen"] = {**kept, "media": "image", "sourceUrl": talk["base"], "talk": talk}
+    character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
+    slot["character"] = {**character, "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
+
+
+def _replace_tracks(document: dict, prefix: str, lines: list[dict], workspace: str) -> list[str]:
+    """This object's line audio replaces its previous tracks; other tracks stay."""
+    tracks = [track for track in document.get("soundtrack") or [] if not str(track.get("id", "")).startswith(prefix)]
+    added = []
+    for index, line in enumerate(lines):
+        audio = _audio(line, index, workspace)
+        if audio:
+            added.append({"id": f"{prefix}{index}", "audio": audio, "start": round(float(line.get("start") or 0), 3),
+                          "offset": 0, "gain": _number(line.get("gain", 1), "gain", 0, 1)})
+    if len(tracks) + len(added) > 32:
+        raise TalkError("too_many_tracks", "A Video 3D scene holds at most 32 soundtrack tracks")
+    if tracks or added or document.get("soundtrack") is not None:
+        document["soundtrack"] = tracks + added
+    return [track["id"] for track in added]
+
+
 def apply_talk(document: dict, slot: dict, kit: dict, lines: list[dict], *, workspace: str, pose: str = "base", blink: bool = True) -> dict:
     """Make an image object talk: its screen paints the kit, the soundtrack plays each line's audio."""
     if slot.get("media") != "image":
         raise TalkError("not_a_cutout", f"Object {slot.get('id')} is {slot.get('media')}; a talking cutout needs an image object")
-    duration = float(document.get("duration") or 10)
-    talk = talk_block(kit, lines, pose=pose, duration=duration, blink=blink)
-    slot["sourceUrl"] = talk["base"]
-    slot.pop("sourceRef", None)
-    screen = slot.get("screen") if isinstance(slot.get("screen"), dict) else {}
-    screen = {key: value for key, value in screen.items() if key not in {"poseSequence", "media", "sourceRef"}}
-    slot["screen"] = {**screen, "media": "image", "sourceUrl": talk["base"], "talk": talk}
-    slot["character"] = {**(slot.get("character") if isinstance(slot.get("character"), dict) else {}),
-                         "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
-    prefix = f"{TRACK_PREFIX}{slot.get('id')}-"
-    tracks = [track for track in document.get("soundtrack") or [] if not str(track.get("id", "")).startswith(prefix)]
-    for index, line in enumerate(lines):
-        audio = _audio(line, index, workspace)
-        if audio:
-            tracks.append({"id": f"{prefix}{index}", "audio": audio, "start": round(float(line.get("start") or 0), 3),
-                           "offset": 0, "gain": _number(line.get("gain", 1), "gain", 0, 1)})
-    if len(tracks) > 32:
-        raise TalkError("too_many_tracks", "A Video 3D scene holds at most 32 soundtrack tracks")
-    if tracks or document.get("soundtrack") is not None:
-        document["soundtrack"] = tracks
+    talk = talk_block(kit, lines, pose=pose, duration=float(document.get("duration") or 10), blink=blink)
+    tracks = _replace_tracks(document, f"{TRACK_PREFIX}{slot.get('id')}-", lines, workspace)
+    _bind_screen(slot, kit, talk)
     return {"objectId": slot.get("id"), "cues": len(talk["cues"]), "mouths": sorted(talk["mouths"]),
-            "blinks": len(talk.get("blinks") or []), "tracks": [track["id"] for track in tracks if track["id"].startswith(prefix)],
-            "talk": deepcopy(talk)}
+            "blinks": len(talk.get("blinks") or []), "tracks": tracks, "talk": deepcopy(talk)}

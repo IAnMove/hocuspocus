@@ -126,17 +126,25 @@ def translation_request(series: dict[str, Any], episode: dict[str, Any], languag
     return prompt, system, schema
 
 
+def _merge_lines(dialogue: dict[str, str], lines: Any, beats: set[str]) -> None:
+    for line in lines if isinstance(lines, list) else []:
+        text = str(line.get("text") or "").strip() if isinstance(line, dict) else ""
+        if text and line.get("id") in beats:
+            dialogue[line["id"]] = text[:_TEXT]
+
+
+def _merge_cards(cards: dict[str, dict[str, str]], found: Any, shots: set[str]) -> None:
+    for card in found if isinstance(found, list) else []:
+        if isinstance(card, dict) and card.get("shotId") in shots:
+            cards[card["shotId"]] = {"title": str(card.get("title") or "")[:200], "body": str(card.get("body") or "")[:1200]}
+
+
 def version_from_translation(result: Any, episode: dict[str, Any], previous: dict[str, Any] | None = None) -> dict[str, Any]:
     """Merge an LLM translation into a version; ids the episode does not have are ignored."""
     version = copy.deepcopy(previous or {"title": "", "dialogue": {}, "cards": {}, "approvedAttemptIds": {}, "assemblyAssetIds": []})
     data = result if isinstance(result, dict) else {}
-    beats = {beat["id"] for shot in episode.get("shots") or [] for beat in shot.get("dialogueBeats") or []}
-    shots = {shot["id"] for shot in episode.get("shots") or []}
+    shots = episode.get("shots") or []
     version["title"] = str(data.get("title") or version.get("title") or "")[:300]
-    for line in data.get("lines") or []:
-        if isinstance(line, dict) and line.get("id") in beats and str(line.get("text") or "").strip():
-            version["dialogue"][line["id"]] = str(line["text"]).strip()[:_TEXT]
-    for card in data.get("cards") or []:
-        if isinstance(card, dict) and card.get("shotId") in shots:
-            version["cards"][card["shotId"]] = {"title": str(card.get("title") or "")[:200], "body": str(card.get("body") or "")[:1200]}
+    _merge_lines(version["dialogue"], data.get("lines"), {beat["id"] for shot in shots for beat in shot.get("dialogueBeats") or []})
+    _merge_cards(version["cards"], data.get("cards"), {shot["id"] for shot in shots})
     return version
