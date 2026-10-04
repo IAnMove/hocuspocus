@@ -55,11 +55,17 @@ def main_push_source(base: str, head: str, development: str) -> str | None:
     return source
 
 
+# npm runs these by itself on install; they can change the dependencies ESLint measures with.
+LIFECYCLE_SCRIPTS = frozenset({"preinstall", "install", "postinstall", "prepublish", "preprepare", "prepare",
+                               "postprepare", "dependencies"})
+
+
 def measurement_manifest(source: str) -> str:
     manifest = json.loads(source)
-    # The directly invoked ESLint scanner does not run the test command.
-    # Lifecycle/install hooks remain inputs because they can modify dependencies.
-    manifest.get("scripts", {}).pop("test", None)
+    # ESLint is invoked directly, so a script only matters when npm runs it on install
+    # (an added `atmos:capture` or a changed `test` command measures nothing differently).
+    scripts = manifest.get("scripts") if isinstance(manifest.get("scripts"), dict) else {}
+    manifest["scripts"] = {name: value for name, value in scripts.items() if name in LIFECYCLE_SCRIPTS}
     return json.dumps(manifest, sort_keys=True)
 
 
