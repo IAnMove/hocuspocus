@@ -717,5 +717,28 @@
     "productionSettings": "Production settings",
     "editShot": "Edit shot",
     "analyzing": "Synchronizing mouths with the recording…"
+  },
+  "serverRender": {
+    "hint": "Or render them on the server: voices, scenes, lip-sync, video and takes, without keeping this tab open. A stopped render resumes where it left off.",
+    "approve": "Approve each take when it is ready",
+    "start": "Render on the server",
+    "stop": "Stop after this step",
+    "resume": "Resume",
+    "progress": "{{done}} of {{total}} shots · {{status}}",
+    "status": {
+      "queued": "queued",
+      "running": "rendering",
+      "cancelling": "stopping",
+      "completed": "done",
+      "failed": "some shots failed",
+      "cancelled": "stopped"
+    },
+    "stage": {
+      "voices": "voices",
+      "scene": "scene",
+      "export": "video",
+      "import": "take",
+      "done": "done"
+    }
   }
 }

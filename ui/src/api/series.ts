@@ -480,3 +480,36 @@ export async function commitSeriesCanon(
     },
   ), 'Could not commit Series canon')
 }
+
+export type SeriesServerRenderItem = {
+  shotId: string; stage: 'voices' | 'scene' | 'export' | 'import' | 'done'; status: 'queued' | 'running' | 'done' | 'failed'
+  error?: string | null; attemptId?: string; approved?: boolean
+}
+export type SeriesServerRenderJob = {
+  jobId: string; seriesId: string; episodeId: string; current: number; total: number; message?: string; activeShotId?: string | null
+  status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'; items: SeriesServerRenderItem[]; createdAt?: number
+}
+
+/** Voices, scene, headless export and take for every 2D shot of an episode, on the server. */
+export async function startSeriesServerRender(workspace: string, seriesId: string, episodeId: string, approve: boolean): Promise<SeriesServerRenderJob> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/native-render`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, approve }),
+  }), 'Could not start the server render')
+}
+
+export async function fetchSeriesServerRender(workspace: string, jobId: string): Promise<SeriesServerRenderJob> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/native-render/jobs/${encodeURIComponent(jobId)}?workspace=${encodeURIComponent(workspace)}`),
+    'Could not read the server render')
+}
+
+export async function controlSeriesServerRender(workspace: string, jobId: string, action: 'cancel' | 'resume'): Promise<SeriesServerRenderJob> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/native-render/jobs/${encodeURIComponent(jobId)}/${action}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+  }), 'Could not update the server render')
+}
+
+export async function fetchSeriesServerRenders(workspace: string): Promise<SeriesServerRenderJob[]> {
+  const body = await seriesResponse<{ jobs: SeriesServerRenderJob[] }>(
+    fetch(`${BASE}/api/v1/series/native-render/recovery?workspace=${encodeURIComponent(workspace)}`), 'Could not list server renders')
+  return body.jobs
+}
