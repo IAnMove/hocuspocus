@@ -9,7 +9,7 @@ The server export (`scenes.world3d.export`) takes an optional `quality`:
 | `final` | 1.5× | 4× | 4 subframes, 180° shutter | x264 `slow`, crf 14 |
 | `master` | 2× | 4× | 8 subframes, 180° shutter | x264 `slow`, crf 12 |
 
-The output size never changes with the level.
+A picture that already fits in 1080p keeps that size at every level, and nothing is upscaled. Draft still clamps to 1920×1080 (or 1080×1920). Final and master keep the document size up to 4K (3840×2160 or 2160×3840) and clamp anything larger. The browser export stays on the draft cap. A 4K picture uses H.264 level 5.1 at 24 or 30 fps and level 5.2 at 60 fps. 1080p encodes keep level 4.0 or 4.2 and the same ffmpeg command.
 
 - **Supersampling.** The stage paints at k× the output size. The owned renderer scales each frame down with
   `imageSmoothingQuality = 'high'`, then paints the overlays (effects, texts and lyrics) at the output size.
@@ -120,10 +120,9 @@ Real headless render (GPU, 320×180, 24 fps, 2 s): a soundtrack at gain 0.3 plus
 | Frames | 48 | 48 |
 | 50 ms RMS envelope against the sources (correlation, mean error) | 1.000, 0.0006 | 1.000, 0.0001 |
 
-## Not in this phase
+## Master and a single delivery encode (1.F4)
 
-Owned by other phases of the roadmap:
-
-- 4K output and the H.264 levels (1.F3);
-- the optional ProRes master, remuxing valid uploads, and lossless editor intermediates (1.F4);
-- the level picker and the time estimate in the UI (1.F5, Grok).
+- **ProRes stays off.** A master export writes the H.264 delivery (still x264 `slow`, crf 12) and, only when the request sets `prores: true`, a ProRes 422 HQ `.mov` from the same PNGs. Draft and final reject that flag. A plan without it is unchanged, so older intents keep their fingerprint.
+- **Valid uploads are remuxed.** Scene Animator keeps a browser upload that is already H.264, yuv420p, at the requested fps, and AAC when its embedded audio is kept. The video bitstream is copied (`-c copy`). WebM, a wrong frame rate, or extra audio tracks still go through the existing transcode.
+- **The editor encodes with loss once.** Clip preparation, transitions, time cards and overlays use x264 crf 0 `ultrafast`. The export then writes one H.264 delivery at crf 14 `slow`. The comic storyboard preview stays a fast crf 18 preview and is not that delivery.
+- **1080p commands stay as they are.** Full HD does not gain an H.264 `-level`, and master H.264 is not lowered to crf 14.

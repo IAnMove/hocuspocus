@@ -52,8 +52,9 @@ def _document(**overrides):
     return document
 
 
-def _command(intent="scene2d-1", document=None):
-    return {"version": 1, "operation": OPERATION, "intent_id": intent, "input": {"workspace": WORKSPACE, "document": document or _document()}}
+def _command(intent="scene2d-1", document=None, **extra):
+    return {"version": 1, "operation": OPERATION, "intent_id": intent,
+            "input": {"workspace": WORKSPACE, "document": document or _document(), **extra}}
 
 
 def _workspace_dir(tmp_path):
@@ -98,6 +99,16 @@ def _tone_energy(media, frequency, sample_rate=48000):
         real += sample * math.cos(angle)
         imag += sample * math.sin(angle)
     return (real * real + imag * imag) / max(1, len(samples))
+
+
+def test_freeze_keeps_draft_and_accepts_a_final_shutter():
+    draft = freeze_export_command(_command())["effective"]["input"]["snapshot"]["plan"]
+    assert "quality" not in draft and "shutter" not in draft
+    final = freeze_export_command(_command(quality="final", shutter=90))["effective"]["input"]["snapshot"]["plan"]
+    assert final["quality"] == "final" and final["shutter"] == 90 and final["subframes"] == 4 and final["supersample"] == 1.5
+    with pytest.raises(Exception) as caught:
+        freeze_export_command(_command(quality="draft", shutter=180))
+    assert caught.value.status_code == 422
 
 
 def test_freeze_validates_2d_documents_and_collects_refs():

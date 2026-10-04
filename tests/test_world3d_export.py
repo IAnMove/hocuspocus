@@ -26,6 +26,7 @@ from services.world3d_export import (
     World3DExportCancelled,
     World3DExportService,
     _OWNED_BROWSER_JS,
+    build_snapshot,
     command_catalog,
     command_handlers,
     export_capabilities,
@@ -35,6 +36,7 @@ from services.world3d_export import (
     staging_dir,
     unsupported_capabilities,
     write_png,
+    write_prores_master,
 )
 
 
@@ -620,6 +622,118 @@ def test_each_level_encodes_with_its_profile(tmp_path, monkeypatch):
         mux_frame_sequence([frame], tmp_path / f"{quality}.mp4", fps=30, duration=1 / 30, quality=quality)
     settings = [(c[c.index("-preset") + 1], c[c.index("-crf") + 1], c[c.index("-threads") + 1]) for c in commands]
     assert settings == [("fast", "18", "1"), ("slow", "14", "0"), ("slow", "12", "0")]
+    assert all("-level" not in command for command in commands)
+
+
+def test_final_and_master_keep_four_k_and_draft_stays_full_hd():
+    ultra = _document(width=3840, height=2160)
+    assert (export_plan(ultra)["width"], export_plan(ultra)["height"]) == (1920, 1080)
+    assert (export_plan(ultra, "final")["width"], export_plan(ultra, "final")["height"]) == (3840, 2160)
+    assert (export_plan(ultra, "master")["width"], export_plan(ultra, "master")["height"]) == (3840, 2160)
+    portrait = _document(width=2160, height=3840)
+    assert (export_plan(portrait)["width"], export_plan(portrait)["height"]) == (1080, 1920)
+    assert (export_plan(portrait, "final")["width"], export_plan(portrait, "final")["height"]) == (2160, 3840)
+    square = _document(width=2160, height=2160)
+    assert (export_plan(square)["width"], export_plan(square)["height"]) == (1080, 1080)
+    assert (export_plan(square, "master")["width"], export_plan(square, "master")["height"]) == (2160, 2160)
+    huge = _document(width=7680, height=4320)
+    assert (export_plan(huge, "master")["width"], export_plan(huge, "master")["height"]) == (3840, 2160)
+    hd = _document(width=1280, height=720)
+    assert (export_plan(hd, "master")["width"], export_plan(hd, "master")["height"]) == (1280, 720)
+
+
+def test_four_k_mux_asks_for_level_5_and_full_hd_does_not(tmp_path, monkeypatch):
+    import services.world3d_export as module
+
+    commands = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(command)
+        Path(command[-1]).write_bytes(b"mp4")
+        return type("Done", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(module.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module, "validate_scene_recording_output", lambda *_args, **_kwargs: None)
+    frame = tmp_path / "frames" / "frame_000001.png"
+    write_png(frame, 4, 4, (1, 2, 3))
+    mux_frame_sequence([frame], tmp_path / "uhd30.mp4", fps=30, duration=1 / 30, width=3840, height=2160)
+    mux_frame_sequence([frame], tmp_path / "uhd60.mp4", fps=60, duration=1 / 60, width=3840, height=2160)
+    mux_frame_sequence([frame], tmp_path / "uhd24.mp4", fps=24, duration=1 / 24, width=2160, height=3840)
+    mux_frame_sequence([frame], tmp_path / "fhd.mp4", fps=60, duration=1 / 60, width=1920, height=1080)
+    assert commands[0][commands[0].index("-level") + 1] == "5.1"
+    assert commands[1][commands[1].index("-level") + 1] == "5.2"
+    assert commands[2][commands[2].index("-level") + 1] == "5.1"
+    assert "-level" not in commands[3]
+
+
+def test_prores_stays_off_unless_master_asks_for_it():
+    assert "prores" not in export_plan(_document(), "master")
+    plain = freeze_export_command(_command(quality="master"))
+    asked = freeze_export_command(_command(intent_id="world3d-prores", quality="master", prores=True))
+    off = freeze_export_command(_command(intent_id="world3d-prores-off", quality="master", prores=False))
+    assert "prores" not in plain["effective"]["input"]["snapshot"]["plan"]
+    assert asked["effective"]["input"]["snapshot"]["plan"]["prores"] is True
+    assert off["fingerprint"] == plain["fingerprint"]
+    assert asked["fingerprint"] != plain["fingerprint"]
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["prores"]
+    assert schema["default"] is False
+    snapshot = build_snapshot(_document(), [], WORKSPACE, "master", prores=True)
+    assert snapshot["plan"]["prores"] is True
+
+
+@pytest.mark.parametrize("patch", [
+    {"prores": True},
+    {"prores": "yes", "quality": "master"},
+    {"prores": 1, "quality": "master"},
+])
+def test_prores_is_refused_unless_it_is_a_master_flag(tmp_path, patch):
+    service = _service(tmp_path, renderer=_paint)
+    with pytest.raises(Exception) as caught:
+        service.submit(_command(intent_id="world3d-prores-bad", **patch))
+    assert caught.value.status_code == 422
+    assert "prores" in caught.value.detail["message"].lower() or "ProRes" in caught.value.detail["message"]
+
+
+def test_prores_master_matches_the_h264_delivery(tmp_path):
+    import re
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg is required to compare ProRes with the delivery")
+    encoders = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, check=False)
+    if "prores_ks" not in (encoders.stdout or ""):
+        pytest.skip("prores_ks is not available")
+    frames = []
+    colors = ((20, 40, 80), (200, 30, 30), (30, 180, 40), (20, 20, 220))
+    for index, color in enumerate(colors, start=1):
+        path = tmp_path / "frames" / f"frame_{index:06d}.png"
+        write_png(path, 64, 64, color)
+        frames.append(path)
+    delivery = tmp_path / "delivery.mp4"
+    master = tmp_path / "master.mov"
+    mux_frame_sequence(frames, delivery, fps=24, duration=4 / 24, quality="master", width=64, height=64)
+    write_prores_master(frames, master, fps=24, duration=4 / 24)
+    compared = subprocess.run(
+        ["ffmpeg", "-i", str(delivery), "-i", str(master), "-lavfi", "ssim", "-f", "null", "-"],
+        capture_output=True, text=True, check=False,
+    )
+    match = re.search(r"All:([0-9.]+)", compared.stderr)
+    assert match, compared.stderr[-500:]
+    assert float(match.group(1)) >= 0.99
+    assert "prores" not in export_plan(_document(), "draft")
+
+
+def test_one_four_k_frame_probes_as_3840_with_level_51(tmp_path):
+    if not export_capabilities()["ffmpeg"]:
+        pytest.skip("ffmpeg is required to probe a 4K frame")
+    frame = tmp_path / "frames" / "frame_000001.png"
+    write_png(frame, 3840, 2160, (12, 24, 36))
+    destination = tmp_path / "uhd.mp4"
+    mux_frame_sequence([frame], destination, fps=30, duration=1 / 30, width=3840, height=2160)
+    video = next(item for item in probe_scene_recording_output(destination)["streams"]
+                 if item.get("codec_type") == "video")
+    assert (video["width"], video["height"], int(video["level"])) == (3840, 2160, 51)
 
 
 def test_receipt_reports_the_quality_level(tmp_path):

@@ -512,7 +512,7 @@ const DRESSING_BY_TEMPLATE: Partial<Record<Scene3DTemplateId, Scene3DDocument['d
 export function patchScene3DSlot(
   document: Scene3DDocument,
   slotId: string,
-  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'clips' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook' | 'rhythm'>>,
+  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'clips' | 'hold' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook' | 'rhythm'>>,
 ): Scene3DDocument {
   return {
     ...document,
@@ -564,13 +564,13 @@ export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefi
     : (old.speech?.facePack && old.screen ? structuredClone(old.screen) : slot.screen)
   // A user-template file already on the destination stays. An empty slot still
   // inherits the previous object, including shipped examples. A shipped default
-  // only yields when the previous slot is a user-assigned file.
-  if (slotHasUserSource(slot) || (slot.sourceUrl && !slotHasUserSource(old))) return { ...slot, screen }
-  return {
-    ...slot,
+  // only yields when the previous slot is a user-assigned file. The same URL
+  // still carries clip sequences and speech — reselecting tv-head-walk, or
+  // applying a pack that already embeds that GLB, is not a new object.
+  const destinationKeepsItsFile = slotHasUserSource(slot) || Boolean(slot.sourceUrl && !slotHasUserSource(old))
+  if (destinationKeepsItsFile && old.sourceUrl !== slot.sourceUrl) return { ...slot, screen }
+  const performance = {
     character: old.character,
-    sourceUrl: old.sourceUrl,
-    sourceRef: old.sourceRef,
     clip: old.clip,
     clipPlayback: old.clipPlayback,
     clips: old.clips ? structuredClone(old.clips) : undefined,
@@ -578,6 +578,8 @@ export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefi
     speech: old.speech ? structuredClone(old.speech) : undefined,
     screen,
   }
+  if (destinationKeepsItsFile) return { ...slot, ...performance, sourceRef: old.sourceRef || slot.sourceRef }
+  return { ...slot, ...performance, sourceUrl: old.sourceUrl, sourceRef: old.sourceRef }
 }
 
 /** Carry durable identity and clip choice, but use the new shot's placement. */

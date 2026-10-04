@@ -2,6 +2,7 @@ import { Object3D, Raycaster, Vector2 } from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { worldAnchorOffsetFromSlotRoot, worldSfxIdFromObject } from '../sceneFx/worldRuntime'
 import { renderWorld, type GpuWorld } from './gpu'
+import { parseHold } from './handHold'
 import type { Scene3DSlot } from './types'
 import type { WorldSfx } from '../sceneFx/world'
 
@@ -21,6 +22,13 @@ export function transformPatch(proxy: Object3D, mode: TransformMode, axis: strin
   }
   const value = axis === 'Y' ? proxy.scale.y : axis === 'Z' ? proxy.scale.z : proxy.scale.x
   return { scale: Math.max(0.05, Math.min(worldAxes ? 20 : 100, value)) }
+}
+
+/** The gizmo rests for an empty selection, a locked backdrop, or a prop parented to a hand. */
+function gizmoRests(slot: Scene3DSlot | undefined, worldCue: WorldSfx | undefined, enabled: boolean) {
+  if (!enabled || (!slot && !worldCue)) return true
+  if (slot?.media === 'image' && (slot.surface === 'environment' || slot.loop?.cylinder === true)) return true
+  return Boolean(slot && parseHold(slot.hold, slot.id))
 }
 
 /** A document-space proxy keeps GLB normalization and animation bones separate
@@ -81,7 +89,7 @@ export function createTransformGizmo(world: GpuWorld, onChange: (id: string, pat
       allowed = enabled
       mode = nextMode
       controls.enabled = enabled
-      if ((!slot && !worldCue) || (slot?.media === 'image' && (slot.surface === 'environment' || slot.loop?.cylinder === true)) || !enabled) { controls.pointerUp(null); controls.detach(); return }
+      if (gizmoRests(slot, worldCue, enabled)) { controls.pointerUp(null); controls.detach(); return }
       worldAxes = Boolean(worldCue)
       attachedAnchorSlotId = worldCue?.anchor?.slotId
       const id = worldCue ? WORLD_SFX_SELECT_PREFIX + worldCue.id : slot!.id

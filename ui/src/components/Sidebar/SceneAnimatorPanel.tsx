@@ -3,6 +3,7 @@ import { sceneAudioWav, supportsSceneAac } from '../../features/sceneFx/audioExp
 import { waitForSceneImages } from '../../lib/sceneMediaReady'
 import { mixFxAudio } from '../../features/sceneFx/mix'
 import { encodeSpeechAudio } from '../../features/scene3d/speech/encodeAudio'
+import { h264LevelCodec } from '../../features/scene3d/exportMp4'
 import { presentSceneDocument, useSceneDocumentHandoff } from '../../features/sceneFx/handoff'
 import { galleryWorkspaceEpoch, galleryWorkspaceName } from '../../stores/gallerySlice'
 import { SceneFxControls } from '../../features/sceneFx/SceneFxControls'
@@ -11,6 +12,9 @@ import { isRetroLook } from '../../features/sceneFx/retroPaint'
 import { adoptPreparedSceneDocument, withFxShowcase } from '../../features/sceneFx/showcase'
 import { KineticTextControls } from '../common/KineticTextControls'
 import { Scene2DTemplateDialog } from '../../features/scene2d/Scene2DTemplateDialog'
+import { RenderQualityPicker } from '../../features/render/RenderQualityPicker'
+import { serverLevel, type RenderChoice } from '../../features/render/renderEstimate.ts'
+import { renderOnServer } from '../../features/render/serverSceneExport.ts'
 import { KineticTextOverlay } from '../common/KineticTextOverlay'
 import { LiveRhythmStore, SceneFinalPreview, SceneFinishControls, SceneMotionControls } from '../../features/scene2d/boostControls'
 import { beatEnvelope } from '../../lib/scene2d/motion'
@@ -302,6 +306,7 @@ export function SceneAnimatorPanel() {
   const [assetExplorer, setAssetExplorer] = useState<AssetExplorerPurpose | null>(null)
   const [playing, setPlaying] = useState(false)
   const [recording, setRecording] = useState(false)
+  const renderChoiceRef = useRef<RenderChoice>({ level: 'draft', shutter: 0 })
   const [publishing, setPublishing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -1652,7 +1657,7 @@ export function SceneAnimatorPanel() {
     const frameDurationUs = Math.round(1_000_000 / fps)
     const frameCount = Math.max(1, Math.round(current.duration * fps))
     const bitrate = Math.round(Math.max(8_000_000, Math.min(80_000_000, current.width * current.height * fps * .22)))
-    const supported = await VideoEncoder.isConfigSupported({ codec: 'avc1.640028', width: current.width, height: current.height, bitrate, framerate: fps, avc: { format: 'avc' } })
+    const supported = await VideoEncoder.isConfigSupported({ codec: h264LevelCodec(current.width, current.height, fps), width: current.width, height: current.height, bitrate, framerate: fps, avc: { format: 'avc' } })
     if (!supported.supported || !supported.config) {
       throw new Error('This browser cannot encode a deterministic H.264 MP4 at the selected resolution.')
     }
@@ -1736,8 +1741,34 @@ export function SceneAnimatorPanel() {
     return saved
   }
   const emptyScene = !scene.layers.length && !scene.sfx?.length
+  const publishServerRender = async (choice: RenderChoice) => {
+    const level = serverLevel(choice)
+    if (!level) return
+    setPublishing(true)
+    setMessage(null)
+    try {
+      const saved = await renderOnServer({
+        kind: 'video2d',
+        workspace: workspace || 'default',
+        document: sceneRef.current,
+        level,
+        shutter: choice.shutter,
+        onProgress: (index, total) => setMessage(t('stage.renderProgress', { index, total })),
+      })
+      await loadOutputs()
+      setMessage(t('stage.renderSaved', { name: saved.name }))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('stage.renderFailed'))
+    } finally {
+      setPublishing(false)
+    }
+  }
   const record = () => {
     if (publishing) return
+    if (serverLevel(renderChoiceRef.current)) {
+      void publishServerRender(renderChoiceRef.current)
+      return
+    }
     setPublishing(true)
     setMessage(null)
     void waitForModelViewers()
@@ -2590,6 +2621,7 @@ export function SceneAnimatorPanel() {
   return <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-bg-tertiary xl:flex-row">
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label={t('animator.sceneNameAria')} className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setLibraryOpen(true)} disabled={playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><FolderOpen size={12} /> {t('animator.openScene')}</button><button type="button" onClick={() => void persistScene()} disabled={saving || emptyScene || playing || recording || publishing} className="rounded border border-accent-blue/40 bg-accent-blue/10 px-2.5 py-1.5 text-[10px] text-accent-blue flex items-center gap-1 disabled:opacity-50">{saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}{saving ? t('animator.saving') : t('animator.saveScene')}</button><button onClick={play} disabled={emptyScene || playing || recording || publishing} className="min-h-12 min-w-36 rounded-lg bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg flex items-center justify-center gap-2 hover:bg-cyan-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-200 disabled:opacity-50"><Play size={22} fill="currentColor" /> {t('animator.preview')}</button><button onClick={record} disabled={recording || playing || publishing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording || publishing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? t('animator.recording') : publishing ? t('animator.savingMp4') : t('animator.exportMp4')}</button></div></div>
+      <RenderQualityPicker width={scene.width} height={scene.height} fps={scene.fps || 30} duration={scene.duration} disabled={playing || recording || publishing} capabilitiesUrl="/api/v1/scenes/video2d/export/capabilities" onChange={choice => { renderChoiceRef.current = choice }} />
       <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title={t('animator.undoTitle')} className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title={t('animator.redoTitle')} className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? t('animator.autosaved', { time: new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }) : t('animator.autosaveWaiting')}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{t(`resolutions.${label === 'HD landscape' ? 'hdLandscape' : label === 'Full HD landscape' ? 'fullHdLandscape' : label === '4K landscape' ? 'fourKLandscape' : label === 'Square' ? 'square' : label === 'HD portrait' ? 'hdPortrait' : label === 'Full HD portrait' ? 'fullHdPortrait' : 'fourKPortrait'}`)}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">{t('animator.frameRate')}{([24, 30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{t('animator.fps', { rate })}</button>)}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary p-1.5">

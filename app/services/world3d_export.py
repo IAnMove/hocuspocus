@@ -45,7 +45,7 @@ WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 BLOCKED_URLS = ("blob:", "file:", "javascript:", "filesystem:")
 MEDIA_KINDS = frozenset({"model3d", "image", "screen"})
 COMMAND_KEYS = frozenset({"version", "operation", "intent_id", "input"})
-INPUT_KEYS = frozenset({"workspace", "document", "refs", "quality", "shutter"})
+INPUT_KEYS = frozenset({"workspace", "document", "refs", "quality", "shutter", "prores"})
 INTENT_RE = re.compile(r"[A-Za-z0-9._-]{1,160}")
 # Render and encode settings of each export quality level. Draft is the export as it was
 # before levels existed: its plan carries no quality fields, so earlier intents replay.
@@ -80,12 +80,31 @@ def even_dim(value) -> int:
     return max(2, number - (number % 2))
 
 
-def export_size(width, height) -> tuple[int, int]:
+def export_size(width, height, quality: str = "draft") -> tuple[int, int]:
+    """Clamp to 1080p on draft. Final and master keep the picture up to 4K and never upscale."""
     width = float(width or 0)
     height = float(height or 0)
-    max_w, max_h = (1920, 1080) if width >= height else (1080, 1920)
+    four_k = quality in {"final", "master"}
+    if width >= height:
+        max_w, max_h = (3840, 2160) if four_k else (1920, 1080)
+    else:
+        max_w, max_h = (2160, 3840) if four_k else (1080, 1920)
     scale = min(1, max_w / max(1, width), max_h / max(1, height))
     return even_dim(width * scale), even_dim(height * scale)
+
+
+def h264_encode_level(width: int, height: int, fps: int) -> str | None:
+    """x264 ``-level`` once the picture no longer fits level 4.2. 1080p returns None so the command stays as before.
+
+    Level 5.1 (``avc1.640033``) covers 4K at 24 and 30 fps. Level 5.2 (``avc1.640034``) covers 4K at 60 fps.
+    """
+    blocks = ((int(width) + 15) // 16) * ((int(height) + 15) // 16)
+    rate = blocks * int(fps)
+    if blocks <= 8704 and rate <= 522240:
+        return None
+    if blocks <= 36864 and rate <= 983040:
+        return "5.1"
+    return "5.2"
 
 
 def playback_speed(value) -> float:
@@ -109,7 +128,7 @@ def export_plan(document: dict, quality: str = "draft", shutter: float | None = 
         raise ValueError("Export fps must be 24, 30 or 60")
     if quality not in QUALITY_PROFILES:
         raise ValueError(f"Export quality must be one of {', '.join(QUALITIES)}")
-    width, height = export_size(document.get("width"), document.get("height"))
+    width, height = export_size(document.get("width"), document.get("height"), quality)
     plan = {"width": width, "height": height, "fps": fps, "duration": duration,
             "count": frame_count(duration, fps)}
     if quality != "draft":
@@ -292,7 +311,7 @@ def mux_wav_audio(video: Path, wav: Path, duration: float, *, label: str = "Audi
 
 
 def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float,
-                       quality: str = "draft") -> Path:
+                       quality: str = "draft", width: int | None = None, height: int | None = None) -> Path:
     if not shutil.which("ffmpeg"):
         raise World3DExportPending("real-render pending: ffmpeg is not available")
     if not frames:
@@ -303,9 +322,16 @@ def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, durat
     command = [
         "ffmpeg", "-v", "error", "-y", "-framerate", str(int(fps)),
         "-i", str(frames[0].parent / "frame_%06d.png"),
-        "-c:v", "libx264", "-preset", profile["preset"], "-crf", str(profile["crf"]), "-pix_fmt", "yuv420p",
-        "-threads", profile["threads"], "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
+        "-c:v", "libx264", "-preset", profile["preset"], "-crf", str(profile["crf"]),
     ]
+    if width and height:
+        level = h264_encode_level(int(width), int(height), int(fps))
+        if level:
+            command.extend(["-level", level])
+    command.extend([
+        "-pix_fmt", "yuv420p", "-threads", profile["threads"],
+        "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
+    ])
     try:
         result = subprocess.run(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -320,6 +346,34 @@ def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, durat
         return destination
     except SceneRecordingTranscodeError as error:
         raise RuntimeError(str(error)) from error
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def write_prores_master(frames: list[Path], destination: Path, *, fps: int, duration: float) -> Path:
+    """Optional ProRes 422 HQ master from the same PNG sequence as the H.264 delivery."""
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("ProRes master needs ffmpeg")
+    if not frames:
+        raise RuntimeError("Export produced no frames")
+    temporary = destination.with_name(f".{destination.stem}.{os.getpid()}.partial.mov")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        "ffmpeg", "-v", "error", "-y", "-framerate", str(int(fps)),
+        "-i", str(frames[0].parent / "frame_%06d.png"),
+        "-c:v", "prores_ks", "-profile:v", "3", "-pix_fmt", "yuv422p10le",
+        "-t", f"{float(duration):.3f}", str(temporary),
+    ]
+    try:
+        result = subprocess.run(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, timeout=1800, check=False,
+        )
+        if result.returncode != 0 or not temporary.is_file() or temporary.stat().st_size <= 0:
+            detail = (result.stderr or "FFmpeg did not produce a ProRes master").strip()
+            raise RuntimeError(detail[-1000:])
+        os.replace(temporary, destination)
+        return destination
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -353,11 +407,20 @@ def _envelope(command) -> dict:
     return command
 
 
+def _reject_prores(value: dict) -> None:
+    prores = value.get("prores", False)
+    if not isinstance(prores, bool):
+        raise http_error(422, "invalid_command", "prores must be true or false")
+    if prores and value.get("quality", "draft") != "master":
+        raise http_error(422, "invalid_command", "ProRes is only available on quality master")
+
+
 def _input(value) -> dict:
     if not isinstance(value, dict) or set(value) - INPUT_KEYS:
-        raise http_error(422, "invalid_command", "input may only include workspace, document, refs and quality")
+        raise http_error(422, "invalid_command", "input may only include workspace, document, refs, quality, shutter and prores")
     if value.get("quality", "draft") not in QUALITY_PROFILES:
         raise http_error(422, "invalid_command", f"quality must be one of {', '.join(QUALITIES)}")
+    _reject_prores(value)
     shutter = value.get("shutter")
     if shutter is not None and (isinstance(shutter, bool) or not isinstance(shutter, (int, float)) or not 0 <= shutter <= 360):
         raise http_error(422, "invalid_command", "shutter must be a number of degrees between 0 and 360")
@@ -536,10 +599,15 @@ def _audio_refs(document: dict, workspace: str) -> list[dict]:
 
 
 def build_snapshot(document: dict, refs: list[dict], workspace: str, quality: str = "draft",
-                   shutter: float | None = None) -> dict:
+                   shutter: float | None = None, *, prores: bool = False) -> dict:
+    plan = export_plan(document, quality, shutter)
+    if prores:
+        if quality != "master":
+            raise ValueError("ProRes is only available on quality master")
+        plan["prores"] = True
     return {
         "workspace": workspace, "document": deepcopy(document), "refs": deepcopy(refs),
-        "plan": export_plan(document, quality, shutter),
+        "plan": plan,
     }
 
 
@@ -551,7 +619,10 @@ def freeze_export_command(command) -> dict:
     reasons = unsupported_capabilities(document)
     if reasons:
         raise http_error(422, "unsupported_capability", "Unsupported export capability: " + ", ".join(reasons))
-    snapshot = build_snapshot(document, refs, payload["workspace"], payload.get("quality", "draft"), payload.get("shutter"))
+    snapshot = build_snapshot(
+        document, refs, payload["workspace"], payload.get("quality", "draft"), payload.get("shutter"),
+        prores=payload.get("prores") is True,
+    )
     original = deepcopy(envelope)
     effective = {"version": 1, "operation": OPERATION,
                  "input": {"workspace": payload["workspace"], "snapshot": snapshot}}
@@ -574,7 +645,9 @@ def command_catalog() -> list[dict]:
                                    "quality": {"enum": list(QUALITIES), "default": "draft",
                                                "description": "draft: as before. final: 1.5x supersampling, 4x MSAA, motion blur of 4 subframes, crf 14. master: 2x supersampling, 4x MSAA, motion blur of 8 subframes, crf 12. Same output size; higher levels take longer."},
                                    "shutter": {"type": "number", "minimum": 0, "maximum": 360,
-                                               "description": "Motion blur shutter in degrees of one frame for final/master (default 180; 0 = sharp). Pixel worlds stay sharp."}},
+                                               "description": "Motion blur shutter in degrees of one frame for final/master (default 180; 0 = sharp). Pixel worlds stay sharp."},
+                                   "prores": {"type": "boolean", "default": False,
+                                              "description": "Optional ProRes 422 HQ master beside the H.264 delivery. Only quality master. Off unless true."}},
                     "required": ["workspace", "document"]}
     return [
         {"name": OPERATION, "version": 1, "supportedVersions": [1], "domain": "scenes", "mutation": True,
@@ -865,12 +938,21 @@ class World3DExportService:
         self.check_publish(snapshot)
         plan = snapshot["plan"]
         encoded = staging / "encoded.mp4"
-        mux_frame_sequence(frames, encoded, fps=plan["fps"], duration=plan["duration"], quality=plan_quality(plan))
+        mux_frame_sequence(
+            frames, encoded, fps=plan["fps"], duration=plan["duration"], quality=plan_quality(plan),
+            width=plan.get("width"), height=plan.get("height"),
+        )
         encoded = self.finish_media(snapshot, staging, encoded)
+        master = None
+        if plan.get("prores"):
+            master = staging / "master.mov"
+            write_prores_master(frames, master, fps=plan["fps"], duration=plan["duration"])
         self._ensure_active(token, registry, task_id)
         name = self.output_name(snapshot)
         output = Path(self.workspace_dir(workspace)) / name
         os.replace(encoded, output)
+        if master is not None:
+            os.replace(master, output.with_suffix(".mov"))
         publish_generation_sidecar(output, self.sidecar(snapshot, name), workspace_id=workspace, tool=self.slug,
                                    capability=self.operation, actor="user")
         return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace}
@@ -916,16 +998,19 @@ class World3DExportService:
 
     def sidecar(self, snapshot: dict, name: str) -> dict:
         plan = snapshot["plan"]
+        params = {
+            "model_type": "scene-animator-3d", "generation_mode": "3d-scene-compositor",
+            "scene": {"version": 1, "name": name, "width": plan["width"], "height": plan["height"],
+                      "fps": plan["fps"], "duration": plan["duration"], "layers": []},
+            "scene_recipe": {"engine": "world3d", "document": snapshot["document"], "refs": snapshot["refs"]},
+            "width": plan["width"], "height": plan["height"], "fps": plan["fps"],
+            "duration_seconds": plan["duration"], "quality": plan_quality(plan),
+            "shutter": plan.get("shutter", 0),
+        }
+        if plan.get("prores"):
+            params["prores"] = True
         return {
-            "params": {
-                "model_type": "scene-animator-3d", "generation_mode": "3d-scene-compositor",
-                "scene": {"version": 1, "name": name, "width": plan["width"], "height": plan["height"],
-                          "fps": plan["fps"], "duration": plan["duration"], "layers": []},
-                "scene_recipe": {"engine": "world3d", "document": snapshot["document"], "refs": snapshot["refs"]},
-                "width": plan["width"], "height": plan["height"], "fps": plan["fps"],
-                "duration_seconds": plan["duration"], "quality": plan_quality(plan),
-                "shutter": plan.get("shutter", 0),
-            },
+            "params": params,
             "generation_mode": "video", "tool": "world3d-export", "output_filename": name,
         }
 
@@ -946,5 +1031,5 @@ __all__ = [
     "World3DExportPending", "World3DExportService", "build_snapshot", "command_catalog",
     "command_handlers", "even_dim", "export_capabilities", "export_plan", "export_size",
     "freeze_export_command", "http_error", "mux_frame_sequence", "mux_wav_audio", "plan_quality", "playwright_module",
-    "staging_dir", "unsupported_capabilities", "write_png",
+    "staging_dir", "unsupported_capabilities", "write_png", "write_prores_master",
 ]

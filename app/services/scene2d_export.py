@@ -27,6 +27,7 @@ from services.scene2d_schema import document_schema
 from services.scene_commands import DocumentInput, command_error as scene_error
 from services.export_receipts import project_export_receipt
 from services.world3d_export import (
+    QUALITIES,
     World3DExportPending,
     World3DExportService,
     _blocked_url,
@@ -36,6 +37,7 @@ from services.world3d_export import (
     http_error,
     mux_wav_audio,
     playwright_module,
+    scene_render_device,
 )
 
 OPERATION = "scenes.video2d.export"
@@ -58,8 +60,8 @@ def _envelope(command) -> dict:
     if not isinstance(intent, str) or not 1 <= len(intent) <= 160 or intent != intent.strip():
         raise http_error(422, "invalid_command", "An exact intent_id is required")
     payload = command.get("input")
-    if not isinstance(payload, dict) or set(payload) - {"workspace", "document"} or "document" not in payload:
-        raise http_error(422, "invalid_command", "input must include workspace and document only")
+    if not isinstance(payload, dict) or set(payload) - {"workspace", "document", "quality", "shutter"} or "document" not in payload:
+        raise http_error(422, "invalid_command", "input must include workspace and document")
     if not isinstance(payload.get("workspace"), str) or not WORKSPACE_RE.fullmatch(payload["workspace"]):
         raise http_error(422, "invalid_workspace", "Use an explicit valid output workspace")
     return command
@@ -155,12 +157,23 @@ def media_refs(document: dict, workspace: str) -> list[dict]:
     return refs
 
 
+def _export_plan(document: dict, payload: dict) -> dict:
+    quality = payload.get("quality", "draft")
+    shutter = payload.get("shutter")
+    if shutter is not None and (isinstance(shutter, bool) or not isinstance(shutter, (int, float))):
+        raise http_error(422, "invalid_command", "shutter must be a number of degrees between 0 and 360")
+    try:
+        return export_plan(document, quality if isinstance(quality, str) else "", None if shutter is None else float(shutter))
+    except ValueError as error:
+        raise http_error(422, "invalid_command", str(error)) from error
+
+
 def freeze_export_command(command) -> dict:
     envelope = _envelope(command)
     payload = envelope["input"]
     document = validated_document(payload["document"])
     refs = media_refs(document, payload["workspace"])
-    snapshot = {"workspace": payload["workspace"], "document": document, "refs": refs, "plan": export_plan(document)}
+    snapshot = {"workspace": payload["workspace"], "document": document, "refs": refs, "plan": _export_plan(document, payload)}
     effective = {"version": 1, "operation": OPERATION, "input": {"workspace": payload["workspace"], "snapshot": snapshot}}
     return {"original": deepcopy(envelope), "effective": effective,
             "fingerprint": _digest({"operation": OPERATION, "input": effective["input"]}), "fingerprint_version": 1}
@@ -226,7 +239,9 @@ class Scene2DExportService(World3DExportService):
         ready = bool(shutil.which("ffmpeg")) and module is not None and renderer_available(self.app_url, module)
         return {"version": 1, "operation": OPERATION, "realRender": "ready" if ready else "pending",
                 "renderer": "scene2d-owned-browser", "fps": [24, 30, 60], "maxDuration": 600,
-                "layerTypes": sorted(LAYER_TYPES), "audioTracks": True}
+                "layerTypes": sorted(LAYER_TYPES), "audioTracks": True,
+                "qualities": list(QUALITIES), "renderDevice": scene_render_device(),
+                "motionBlur": {"shutterDegrees": [0, 360], "default": 180}}
 
     def freeze(self, command) -> dict:
         return freeze_export_command(command)
@@ -298,7 +313,12 @@ def command_catalog() -> list[dict]:
     ids = {"type": "object", "additionalProperties": False, "properties": {"workspace": workspace, "intent_id": intent},
            "required": ["workspace", "intent_id"]}
     export_input = {"type": "object", "additionalProperties": False,
-                    "properties": {"workspace": workspace, "document": document_schema()}, "required": ["workspace", "document"]}
+                    "properties": {"workspace": workspace, "document": document_schema(),
+                                   "quality": {"enum": list(QUALITIES), "default": "draft",
+                                               "description": "draft stays the current painter. final and master add motion blur and a slower encode. Video 2D also supersamples when the plan asks for it."},
+                                   "shutter": {"type": "number", "minimum": 0, "maximum": 360,
+                                               "description": "Motion blur shutter in degrees for final/master (default 180; 0 = sharp)."}},
+                    "required": ["workspace", "document"]}
 
     def entry(name, mutation, description, properties, required):
         return {"name": name, "version": 1, "domain": "scenes", "mutation": mutation, "description": description,

@@ -12,14 +12,17 @@ import { sceneAudioWavDataUrl } from '../sceneFx/audioExport'
 import { paintScene2D, type SceneMedia } from '../../lib/scene2d/paint'
 import type { AnimatorLayer, AnimatorScene } from '../../lib/scene2d/types'
 import { sceneProgressFromSeconds, sceneTimeToLayerTime } from '../../lib/sceneTimeline'
+import { FrameAccumulator } from '../scene3d/exportQuality.ts'
+import { qualityPaintSize, qualitySampleTimes, type QualityPlan } from './qualityFrame.ts'
 
-type Size = { width: number; height: number; fps?: number }
+type Size = QualityPlan
 type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; audio: () => Promise<string>; dispose: () => void }
 declare global { interface Window { __scene2dExport: Renderer } }
 
 const canvas = document.createElement('canvas')
 let scene: AnimatorScene | null = null
 let fps = 30
+let plan: QualityPlan = { width: 0, height: 0 }
 const media = new Map<string, HTMLImageElement | HTMLVideoElement>()
 const sequenceImages = new Map<string, HTMLImageElement>()
 
@@ -76,11 +79,30 @@ function assertRenderable(layer: AnimatorLayer) {
   if (layer.visible && isVisualLayer(layer) && layer.type !== 'effect' && !layer.source.trim() && !hasSequence(layer)) throw new Error(`Layer ${layer.name} has no media source.`)
 }
 
+async function paintAt(seconds: number, target: HTMLCanvasElement) {
+  if (!scene) throw new Error('Load a Video 2D snapshot first')
+  const time = Math.min(scene.duration, Math.max(0, seconds))
+  for (const layer of scene.layers) {
+    if (layer.sequence?.kind === 'frames') {
+      const image = sequenceImages.get(`${layer.id}:${sequenceFrame(layer.sequence, time)}`)
+      if (image) media.set(layer.id, image)
+    } else if (layer.sequence?.kind === 'sheet') {
+      const image = sequenceImages.get(`${layer.id}:sheet`)
+      if (image) media.set(layer.id, image)
+    }
+  }
+  await syncVideos(scene, time)
+  const progress = sceneProgressFromSeconds(time, scene.duration)
+  const painted = paintScene2D(target, scene, progress, createSceneEvaluator(scene), layer => (media.get(layer.id) as SceneMedia | undefined) ?? null)
+  if (!painted) throw new Error('Could not paint the Video 2D frame')
+}
+
 window.__scene2dExport = {
   async load(raw, size) {
     const next = normalizeScene2D(raw)
     next.layers.forEach(assertRenderable)
     fps = size.fps || next.fps || 30
+    plan = size
     canvas.width = size.width
     canvas.height = size.height
     media.clear()
@@ -98,20 +120,32 @@ window.__scene2dExport = {
   },
   async frame(seconds) {
     if (!scene) throw new Error('Load a Video 2D snapshot first')
-    const time = Math.min(scene.duration, Math.max(0, seconds))
-    for (const layer of scene.layers) {
-      if (layer.sequence?.kind === 'frames') {
-        const image = sequenceImages.get(`${layer.id}:${sequenceFrame(layer.sequence, time)}`)
-        if (image) media.set(layer.id, image)
-      } else if (layer.sequence?.kind === 'sheet') {
-        const image = sequenceImages.get(`${layer.id}:sheet`)
-        if (image) media.set(layer.id, image)
-      }
+    const times = qualitySampleTimes(plan, seconds, scene.duration)
+    const paintSize = qualityPaintSize(plan)
+    if (times.length === 1 && paintSize.width === canvas.width && paintSize.height === canvas.height) {
+      await paintAt(times[0], canvas)
+      return canvas.toDataURL('image/png')
     }
-    await syncVideos(scene, time)
-    const progress = sceneProgressFromSeconds(time, scene.duration)
-    const painted = paintScene2D(canvas, scene, progress, createSceneEvaluator(scene), layer => (media.get(layer.id) as SceneMedia | undefined) ?? null)
-    if (!painted) throw new Error('Could not paint the Video 2D frame')
+    const work = document.createElement('canvas')
+    work.width = paintSize.width
+    work.height = paintSize.height
+    const sample = document.createElement('canvas')
+    sample.width = canvas.width
+    sample.height = canvas.height
+    const sampleContext = sample.getContext('2d')
+    const output = canvas.getContext('2d')
+    if (!sampleContext || !output) throw new Error('Could not paint the Video 2D frame')
+    const accumulator = new FrameAccumulator(canvas.width * canvas.height * 4)
+    for (const time of times) {
+      await paintAt(time, work)
+      sampleContext.imageSmoothingQuality = 'high'
+      sampleContext.clearRect(0, 0, sample.width, sample.height)
+      sampleContext.drawImage(work, 0, 0, sample.width, sample.height)
+      accumulator.add(sampleContext.getImageData(0, 0, sample.width, sample.height).data)
+    }
+    const image = new ImageData(canvas.width, canvas.height)
+    image.data.set(accumulator.result())
+    output.putImageData(image, 0, 0)
     return canvas.toDataURL('image/png')
   },
   async audio() {

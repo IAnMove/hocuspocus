@@ -196,6 +196,8 @@ export type Scene3DSlot = {
   clipPlayback?: Scene3DClipPlayback
   /** A sequence of clips with crossfades. When present it drives the model; `clip` and `clipPlayback` are ignored. */
   clips?: import('./clipCues').Scene3DClipCue[]
+  /** This prop is carried in another slot's whole hand. Absent means the slot stays where it was placed. */
+  hold?: import('./handHold').Scene3DHold
   motion?: Scene3DMotion
   loop?: Scene3DLoop
 }

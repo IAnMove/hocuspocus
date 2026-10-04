@@ -24,10 +24,23 @@ export function world3dExportSize(width: number, height: number) {
   }
 }
 
+const H264_LEVELS = [
+  { maxBlocks: 8192, maxRate: 245760, codec: 'avc1.640028' },
+  { maxBlocks: 8704, maxRate: 522240, codec: 'avc1.64002a' },
+  { maxBlocks: 36864, maxRate: 983040, codec: 'avc1.640033' },
+] as const
+
+/** Level 4.0 / 4.2 for 1080p, 5.1 for 4K at 30 fps, 5.2 for 4K at 60 fps. */
+export function h264LevelCodec(width: number, height: number, fps: number): string {
+  const blocks = Math.ceil(width / 16) * Math.ceil(height / 16)
+  const rate = blocks * fps
+  const match = H264_LEVELS.find(level => blocks <= level.maxBlocks && rate <= level.maxRate)
+  return match ? match.codec : 'avc1.640034'
+}
+
 export function world3dEncoderConfig(width: number, height: number, fps: number): VideoEncoderConfig {
-  const blocksPerSecond = Math.ceil(width / 16) * Math.ceil(height / 16) * fps
   return {
-    codec: blocksPerSecond > 245760 ? 'avc1.64002a' : 'avc1.640028',
+    codec: h264LevelCodec(width, height, fps),
     width, height, framerate: fps,
     bitrate: Math.round(Math.max(4_000_000, Math.min(24_000_000, width * height * fps * 0.18))),
     avc: { format: 'avc' },

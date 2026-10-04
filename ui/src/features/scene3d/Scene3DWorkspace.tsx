@@ -38,6 +38,9 @@ import { useStore } from '../../stores/useStore'
 import { Scene3DShotLibraryCard } from './Scene3DShotLibraryCard'
 import { remountUserTemplate, type World3DUserTemplate } from './userTemplates.ts'
 import { Scene3DAnimationControls } from './Scene3DAnimationControls'
+import { Scene3DHoldControls } from './Scene3DHoldControls'
+import { RenderQualityPicker } from '../render/RenderQualityPicker'
+import type { RenderChoice } from '../render/renderEstimate.ts'
 import { Scene3DDocumentControls } from './Scene3DDocumentControls'
 import { Scene3DTransport } from './Scene3DTransport'
 import { Scene3DTransformPanel } from './Scene3DTransformPanel'
@@ -53,6 +56,7 @@ import { SceneObjectInspector } from './SceneObjectInspector.tsx'
 import { canMutateWorld3DScene } from './exportLock.ts'
 import { applyAssignedSlotSource, exportWorkspaceDocument } from './workspaceMutations.ts'
 import { Scene3DStage, type Scene3DStageHandle } from './Scene3DStage.tsx'
+import { Scene3DGeometryReview } from './Scene3DGeometryReview.tsx'
 import { applyScene3DTemplate, patchScene3DSlot, remountScene3DTemplate, type Scene3DTemplateId } from './templates.ts'
 import { Scene3DImageLookControls } from './Scene3DImageLookControls'
 import { Scene3DWindowControls } from './Scene3DWindowControls'
@@ -140,6 +144,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   const stageRef = useRef<Scene3DStageHandle>(null)
   const walkBake = useWalkBake(stageRef, sceneDoc, applyScene, { needsSaved: editorT('travel.walkNeedsSaved'), failed: editorT('travel.walkFailed') })
   const exportAbortRef = useRef<AbortController | null>(null)
+  const renderChoiceRef = useRef<RenderChoice>({ level: 'draft', shutter: 0 })
   const fps = sceneDoc.fps
   const speed = scene3dPlaybackSpeed(sceneDoc.playbackSpeed)
   const count = scene3dFrameCount(sceneDoc.duration, fps)
@@ -346,6 +351,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       setExportNote,
       setExportingFlag,
       abort => { exportAbortRef.current = abort },
+      renderChoiceRef.current,
     )
   }
 
@@ -444,6 +450,15 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       {sceneDoc.dressing === 'workshop' && <label className="flex items-center gap-2 text-xs">{editorT('travel.screen')}<select disabled={exporting} value={sceneDoc.workshopScreen ?? 'code'} onChange={event => applyScene(current => ({ ...current, workshopScreen: event.target.value as 'code' | 'error' | 'success' }))} className="min-h-10 rounded border border-border bg-bg-tertiary px-2">{(['code', 'error', 'success'] as const).map(state => <option key={state} value={state}>{editorT(`travel.${state}`)}</option>)}</select></label>}
       <AtmosClearingControls document={sceneDoc} disabled={exporting} label={key => editorT(key as 'atmos.time')} onChange={atmos => applyScene(current => ({ ...current, atmos }))} />
       <Scene3DFramingControls framing={sceneDoc.camera.framing} slots={sceneDoc.slots} disabled={editingLocked || sceneDoc.camera.family === 'fixed'} onChange={framing => applyScene(current => ({ ...current, camera: { ...current.camera, framing } }))} />
+      <RenderQualityPicker
+        width={sceneDoc.width}
+        height={sceneDoc.height}
+        fps={fps}
+        duration={sceneDoc.duration}
+        disabled={exporting}
+        capabilitiesUrl="/api/v1/scenes/world3d/export/capabilities"
+        onChange={choice => { renderChoiceRef.current = choice }}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-text-primary">{editorT('camera')}
           <select disabled={exporting} value={sceneDoc.camera.family} onChange={event => applyScene(current => ({ ...current, camera: { ...current.camera, family: event.target.value as Scene3DCameraFamily, framing: undefined } }))}
@@ -468,6 +483,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         >{t('stage.exportCancel')}</button>}
       </div>
       <p className="text-xs text-text-muted">{t('stage.exportQualityHint')}</p>
+      <Scene3DGeometryReview stageRef={stageRef} document={sceneDoc} seconds={seconds} disabled={exporting}
+        onSeek={time => { if (exportingRef.current) return; setPlaying(false); setFrame(Math.min(count - 1, Math.max(0, Math.round(time * fps)))) }} />
       {selected && (selected.media !== 'image' || selected.surface === 'cutout') && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
         walk={walkBake.control(selected)} />}
       <button type="button" disabled={editingLocked || sceneDoc.slots.length >= 64} className="min-h-11 self-start rounded-lg border border-cyan-400/50 px-4 text-sm text-text-primary" onClick={() => {
@@ -483,6 +500,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
             slot={slot}
             selected={selectedId === slot.id}
             catalogs={catalogs}
+            slots={sceneDoc.slots}
             duration={sceneDoc.duration}
             templateId={sceneDoc.templateId}
             workspace={workspace}
@@ -643,13 +661,14 @@ function WorkspaceStageColumn({
 }
 
 function Scene3DSlotCard({
-  slot, selected, catalogs, duration, templateId, workspace,
+  slot, selected, catalogs, slots, duration, templateId, workspace,
   exporting, editingLocked, imageItems, modelItems, videoItems, meshes, nodes, t, editorT,
   onSelect, onSpeech, onAssign, onApplyScene, onBumpGeneration, liveSource,
 }: {
   slot: Scene3DSlot
   selected: boolean
   catalogs: Record<string, Scene3DClipCatalogEntry[]>
+  slots: readonly Scene3DSlot[]
   duration: number
   templateId: string
   workspace: string
@@ -706,6 +725,8 @@ function Scene3DSlotCard({
         }}
         onRemove={() => { onBumpGeneration(); onApplyScene(current => ({ ...current, slots: current.slots.filter(value => value.id !== slot.id), camera: current.camera.framing?.targetSlot === slot.id ? { ...current.camera, framing: undefined } : current.camera })) }} />
       <AppearanceControls slot={slot} disabled={editingLocked} onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
+      <Scene3DHoldControls slot={slot} slots={slots} disabled={editingLocked}
+        onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
       <Scene3DAnimationControls slot={slot} clips={catalogs[slot.id]} duration={duration} disabled={editingLocked}
         onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
       {slot.media === 'image' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => onApplyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}

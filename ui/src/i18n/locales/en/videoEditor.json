@@ -128,6 +128,13 @@
     "replacingClip": "Replacing clip {{n}}: {{name}}",
     "download": "Download {{filename}}"
   },
+  "preflight": {
+    "hint": "These warnings do not block export.",
+    "timeline_gap": "Gap from {{time}} s.",
+    "mixed_fps": "Clips use different frame rates (from {{time}} s).",
+    "mixed_resolution": "Clips use different resolutions (from {{time}} s).",
+    "mix_hot": "The mix is above unity and can clip."
+  },
   "errors": {
     "chooseVideos": "Choose one or more video files.",
     "selectVideos": "Select one or more videos.",
