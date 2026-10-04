@@ -218,6 +218,10 @@ def _operation(name: str, mutation: bool, description: str, properties: dict, re
     }
 
 
+def _input(properties: dict, required: list[str] | None = None) -> dict:
+    return {"type": "object", "additionalProperties": False, "properties": properties, "required": required or []}
+
+
 def command_catalog() -> list[dict]:
     version = {"type": "integer", "const": 1}
     intent = {"type": "string", "minLength": 1, "maxLength": _MAX_INTENT}
@@ -226,18 +230,18 @@ def command_catalog() -> list[dict]:
             "jobs.leftovers", False,
             "List generation requests left in the durable queue after a restart. "
             "They are not running. Resume or discard one by intent_id; do not submit a second copy.",
-            {"version": version}, ["version"],
+            {"version": version, "input": _input({})}, ["version"],
         ),
         _operation(
             "jobs.resume", True,
-            "Resume one leftover by intent_id on the existing recovery queue. "
+            "Resume one leftover by input.intent_id on the existing recovery queue. "
             "Does not start a second job when that leftover is already running.",
-            {"version": version, "intent_id": intent}, ["version", "intent_id"],
+            {"version": version, "input": _input({"intent_id": intent}, ["intent_id"]), "intent_id": intent}, ["version"],
         ),
         _operation(
             "jobs.discard", True,
-            "Discard one leftover by intent_id. Does not cancel a job that is already running.",
-            {"version": version, "intent_id": intent}, ["version", "intent_id"],
+            "Discard one leftover by input.intent_id. Does not cancel a job that is already running.",
+            {"version": version, "input": _input({"intent_id": intent}, ["intent_id"]), "intent_id": intent}, ["version"],
         ),
     ]
 
@@ -249,17 +253,23 @@ def _require_version(arguments: Any, operation: str) -> dict:
 
 
 def _intent_argument(arguments: Any, operation: str) -> str:
+    """``{version, input: {intent_id}}`` like every other command; the first top-level form still works."""
     payload = _require_version(arguments, operation)
-    if set(payload) - {"version", "intent_id"}:
+    if set(payload) - {"version", "intent_id", "input"}:
         raise _error(422, "invalid_command", f"{operation} does not accept extra fields")
+    nested = payload.get("input")
+    if nested is not None:
+        if not isinstance(nested, dict) or set(nested) - {"intent_id"} or "intent_id" in payload:
+            raise _error(422, "invalid_command", f"{operation} takes intent_id once, inside input")
+        return _require_intent(nested.get("intent_id"), operation)
     return _require_intent(payload.get("intent_id"), operation)
 
 
 def command_handlers(service: "JobLeftovers") -> dict[str, Callable[[Any], dict]]:
     def leftovers(arguments: Any) -> dict:
         payload = _require_version(arguments, "jobs.leftovers")
-        if set(payload) - {"version"}:
-            raise _error(422, "invalid_command", "jobs.leftovers accepts only version")
+        if set(payload) - {"version", "input"} or payload.get("input") not in (None, {}):
+            raise _error(422, "invalid_command", "jobs.leftovers accepts only version and an empty input")
         return service.list_response()
 
     def resume(arguments: Any) -> dict:

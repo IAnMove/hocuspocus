@@ -312,3 +312,20 @@ def test_planned_h3_leftover_still_matches_the_original_submit(tmp_path):
     duplicate = recovered.duplicate_for_submit(original, "lab")
     assert duplicate is not None
     assert duplicate["job_id"] == created["job_id"]
+
+
+def test_jobs_commands_take_input_like_every_other_command(tmp_path):
+    service = JobLeftovers(queue=DurableGenerationQueue(str(tmp_path / "queue.json")), jobs={})
+    first = service.enqueue(_payload("first"), workspace="lab", intent_id="first")
+    handlers = command_handlers(service.reloaded())
+    listed = handlers["jobs.leftovers"]({"version": 1, "input": {}})
+    assert [item["intent_id"] for item in listed["result"]["jobs"]] == ["first"]
+    dropped = handlers["jobs.discard"]({"version": 1, "input": {"intent_id": "first"}})
+    assert dropped["result"]["job_id"] == first["job_id"]
+    for bad in ({"version": 1, "intent_id": "first", "input": {"intent_id": "first"}},
+                {"version": 1, "input": {"intent_id": "first", "extra": 1}}):
+        with pytest.raises(HTTPException) as error:
+            handlers["jobs.resume"](bad)
+        assert error.value.detail["code"] == "invalid_command"
+    with pytest.raises(HTTPException):
+        handlers["jobs.leftovers"]({"version": 1, "input": {"job": 1}})
