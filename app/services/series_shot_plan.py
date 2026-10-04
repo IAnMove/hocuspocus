@@ -46,66 +46,69 @@ def _number(value: Any, low: float, high: float) -> float | None:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and low <= value <= high else None
 
 
+def _text_field(value: Any, key: str, limit: int) -> dict[str, str]:
+    return {key: value[key][:limit]} if isinstance(value.get(key), str) and value[key] else {}
+
+
+def _numbers(value: dict, limits: tuple[tuple[str, float, float], ...]) -> dict[str, float]:
+    return {key: float(value[key]) for key, low, high in limits if _number(value.get(key), low, high) is not None}
+
+
+def _choice(value: dict, key: str, allowed: tuple[str, ...]) -> dict[str, str]:
+    return {key: value[key]} if value.get(key) in allowed else {}
+
+
+def _explicit_transform(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    numbers = _numbers(value, (("x", -200, 300), ("y", -200, 300), ("scale", 0.01, 10)))
+    return {"transform": numbers} if len(numbers) == 3 else {}
+
+
 def _cast_entry(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or not isinstance(value.get("characterId"), str) or not value["characterId"]:
         return None
-    entry: dict[str, Any] = {"characterId": value["characterId"][:160]}
-    if isinstance(value.get("poseId"), str) and value["poseId"]:
-        entry["poseId"] = value["poseId"][:120]
-    for key, low, high in (("x", -50, 150), ("scale", 0.2, 4)):
-        if _number(value.get(key), low, high) is not None:
-            entry[key] = float(value[key])
-    if value.get("motion") in MOTIONS:
-        entry["motion"] = value["motion"]
-    if value.get("enterFrom") in ("left", "right"):
-        entry["enterFrom"] = value["enterFrom"]
-    transform = value.get("transform")
-    if isinstance(transform, dict) and all(_number(transform.get(key), -200, 300) is not None for key in ("x", "y")) \
-            and _number(transform.get("scale"), 0.01, 10) is not None:
-        entry["transform"] = {key: float(transform[key]) for key in ("x", "y", "scale")}
-    return entry
+    return {"characterId": value["characterId"][:160], **_text_field(value, "poseId", 120),
+            **_numbers(value, (("x", -50, 150), ("scale", 0.2, 4))), **_choice(value, "motion", MOTIONS),
+            **_choice(value, "enterFrom", ("left", "right")), **_explicit_transform(value.get("transform"))}
 
 
 def _prop_entry(value: Any) -> dict[str, Any] | None:
     """A prop on the set: a series asset or a workspace file, at a background anchor or at x/y %."""
     if not isinstance(value, dict):
         return None
-    source = {key: value[key][:300] for key in ("assetId", "file") if isinstance(value.get(key), str) and value[key]}
+    source = {**_text_field(value, "assetId", 300), **_text_field(value, "file", 300)}
     if len(source) != 1:
         return None
-    entry: dict[str, Any] = {**source, "scale": _number(value.get("scale"), 0.01, 4) or 0.3}
-    if isinstance(value.get("anchor"), str) and value["anchor"]:
-        entry["anchor"] = value["anchor"][:80]
-    for key in ("x", "y"):
-        if _number(value.get(key), -50, 150) is not None:
-            entry[key] = float(value[key])
-    if _number(value.get("z"), 0, 100) is not None:
-        entry["z"] = float(value["z"])
-    return entry
+    return {**source, "scale": _number(value.get("scale"), 0.01, 4) or 0.3, **_text_field(value, "anchor", 80),
+            **_numbers(value, (("x", -50, 150), ("y", -50, 150), ("z", 0, 100)))}
+
+
+def _layout_card(card: Any) -> dict[str, Any]:
+    if not isinstance(card, dict) or card.get("kind") not in ("title", "disclaimer", "end"):
+        return {}
+    return {"card": {"kind": card["kind"], "title": str(card.get("title") or "")[:200], "body": str(card.get("body") or "")[:1200]}}
+
+
+def _layout_music(music: Any) -> dict[str, Any]:
+    if not isinstance(music, dict) or not isinstance(music.get("file"), str) or not music["file"]:
+        return {}
+    return {"music": {"file": music["file"][:300], "volume": _number(music.get("volume"), 0, 1) or 0.5,
+                      "start": _number(music.get("start"), 0, 600) or 0.0}}
+
+
+def _layout_list(value: dict, key: str, limit: int, normalize: Any) -> dict[str, list]:
+    items = [entry for entry in (normalize(item) for item in (value.get(key) or [])[:limit]) if entry]
+    return {key: items} if items else {}
 
 
 def normalize_layout2d(value: Any) -> dict[str, Any] | None:
     """The editable 2D plan of a shot; unknown keys and bad values are dropped."""
     if not isinstance(value, dict):
         return None
-    layout: dict[str, Any] = {}
-    if value.get("framing") in FRAMINGS:
-        layout["framing"] = value["framing"]
-    if value.get("camera") in ("static", "push"):
-        layout["camera"] = value["camera"]
-    cast = [entry for entry in (_cast_entry(item) for item in (value.get("cast") or [])[:8]) if entry]
-    if cast:
-        layout["cast"] = cast
-    card = value.get("card")
-    if isinstance(card, dict) and card.get("kind") in ("title", "disclaimer", "end"):
-        layout["card"] = {"kind": card["kind"], "title": str(card.get("title") or "")[:200], "body": str(card.get("body") or "")[:1200]}
-    props = [prop for prop in (_prop_entry(item) for item in (value.get("props") or [])[:12]) if prop]
-    if props:
-        layout["props"] = props
-    music = value.get("music")
-    if isinstance(music, dict) and isinstance(music.get("file"), str) and music["file"]:
-        layout["music"] = {"file": music["file"][:300], "volume": _number(music.get("volume"), 0, 1) or 0.5,
-                           "start": _number(music.get("start"), 0, 600) or 0.0}
+    layout = {**_choice(value, "framing", FRAMINGS), **_choice(value, "camera", ("static", "push")),
+              **_layout_list(value, "cast", 8, _cast_entry), **_layout_card(value.get("card")),
+              **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music"))}
     return layout or None
 
 
@@ -202,26 +205,35 @@ def _character_scale(series: dict[str, Any], entry: dict[str, Any]) -> float:
     return float(own) if _number(own, 0.2, 4) is not None else 1.0
 
 
+def _cast_x(entry: dict[str, Any], framing: str, count: int, homes: dict[str, float], default: float) -> float:
+    if isinstance(entry.get("x"), (int, float)):
+        return float(entry["x"])
+    if framing in ("medium", "close") and count == 1:
+        return 50.0
+    return homes.get(entry["characterId"], default)
+
+
+def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration: float) -> dict[str, Any] | None:
+    ref = kit_ref(series, entry["characterId"])
+    if not ref:
+        return None
+    item = {"kitId": ref["id"], "characterId": entry["characterId"], "poseId": entry.get("poseId") or "base", "x": x,
+            "motion": entry.get("motion") if entry.get("motion") in MOTIONS else "idle", "boost": _character_scale(series, entry)}
+    if isinstance(entry.get("transform"), dict):
+        item["transform"] = entry["transform"]
+    if entry.get("enterFrom") in ("left", "right"):
+        item["enter"] = {"fromX": -15.0 if entry["enterFrom"] == "left" else 115.0, "start": 0.2, "end": min(duration, 1.4)}
+    return item
+
+
 def plan_cast(series: dict[str, Any], shot: dict[str, Any], framing: str, duration: float) -> list[dict[str, Any]]:
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     explicit = [item for item in layout.get("cast") or [] if isinstance(item, dict) and item.get("characterId")]
     entries = explicit or [{"characterId": cid} for cid in shot.get("visibleCharacterIds") or []]
     homes, defaults = _homes(series, shot), spread(len(entries))
-    cast = []
-    for index, entry in enumerate(entries):
-        ref = kit_ref(series, entry["characterId"])
-        if not ref:
-            continue
-        single_close = framing in ("medium", "close") and len(entries) == 1
-        x = entry.get("x") if isinstance(entry.get("x"), (int, float)) else 50.0 if single_close else homes.get(entry["characterId"], defaults[index])
-        item = {"kitId": ref["id"], "characterId": entry["characterId"], "poseId": entry.get("poseId") or "base", "x": float(x),
-                "motion": entry.get("motion") if entry.get("motion") in MOTIONS else "idle", "boost": _character_scale(series, entry)}
-        if isinstance(entry.get("transform"), dict):
-            item["transform"] = entry["transform"]
-        if entry.get("enterFrom") in ("left", "right"):
-            item["enter"] = {"fromX": -15.0 if entry["enterFrom"] == "left" else 115.0, "start": 0.2, "end": min(duration, 1.4)}
-        cast.append(item)
-    return cast
+    items = (_cast_item(series, entry, _cast_x(entry, framing, len(entries), homes, defaults[index]), duration)
+             for index, entry in enumerate(entries))
+    return [item for item in items if item]
 
 
 def _text(tid: str, value: str, start: float, end: float, y: float, size: float, **extra: Any) -> dict[str, Any]:
@@ -242,52 +254,65 @@ def background_point(framing: str, focus: float, u: float, v: float) -> tuple[fl
     return round(x + (u - 0.5) * 100 * zoom, 3), round(50 + (v - 0.5) * 100 * zoom, 3)
 
 
+def _prop_source(series: dict[str, Any], prop: dict[str, Any], workspace: str) -> str | None:
+    if prop.get("assetId"):
+        found = _asset_url(series, prop["assetId"], workspace)
+        return found[0] if found else None
+    return f"/api/v1/file/{quote(prop['file'])}?workspace={quote(workspace)}"
+
+
+def _prop_position(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float, scale: float) -> tuple[float, float]:
+    anchor = anchors.get(prop.get("anchor", "")) if prop.get("anchor") else None
+    if isinstance(anchor, dict) and all(isinstance(anchor.get(key), (int, float)) for key in ("u", "v")):
+        x, y = background_point(framing, focus, float(anchor["u"]), float(anchor["v"]))
+        return x, y - scale * 50  # the prop stands on its anchor
+    return prop.get("x", 50.0), prop.get("y", 60.0)
+
+
 def plan_props(series: dict[str, Any], shot: dict[str, Any], framing: str, focus: float, workspace: str) -> list[dict[str, Any]]:
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), {})
-    anchors = (location.get("layout2d") or {}).get("anchors") if isinstance(location.get("layout2d"), dict) else None
+    anchors = ((location.get("layout2d") or {}).get("anchors") if isinstance(location.get("layout2d"), dict) else None) or {}
     zoom = BACKGROUND_ZOOM.get(framing, 1.0)
     props = []
     for index, prop in enumerate(layout.get("props") or []):
-        if prop.get("assetId"):
-            found = _asset_url(series, prop["assetId"], workspace)
-            if not found:
-                continue
-            source = found[0]
-        else:
-            source = f"/api/v1/file/{quote(prop['file'])}?workspace={quote(workspace)}"
+        source = _prop_source(series, prop, workspace)
+        if not source:
+            continue
         scale = round(prop.get("scale", 0.3) * zoom, 4)
-        anchor = (anchors or {}).get(prop.get("anchor", "")) if prop.get("anchor") else None
-        if isinstance(anchor, dict) and all(isinstance(anchor.get(key), (int, float)) for key in ("u", "v")):
-            x, y = background_point(framing, focus, float(anchor["u"]), float(anchor["v"]))
-            y -= scale * 50  # the prop stands on its anchor
-        else:
-            x, y = prop.get("x", 50.0), prop.get("y", 60.0)
+        x, y = _prop_position(prop, anchors, framing, focus, scale)
         props.append({"id": f"prop-{index + 1}", "name": prop.get("anchor") or f"Prop {index + 1}", "source": source,
                       "x": round(x, 3), "y": round(y, 3), "scale": scale, "z": prop.get("z", 8)})
     return props
 
 
+def _disclaimer_texts(title: str, body: str, duration: float) -> list[dict[str, Any]]:
+    fade = {"preset": "fade", "duration": 0.5}
+    texts = [_text("card-title", title, 0.3, duration - 0.3, 30, 8, font="condensed", enter=fade, exit=fade)] if title else []
+    if body:
+        texts.append(_text("card-body", body, 0.6, duration - 0.3, 56, 4.4, font="sans", weight=500, maxWidth=78, lineHeight=1.35,
+                           enter=fade, exit=fade))
+    return texts
+
+
+def _title_texts(kind: str, title: str, body: str, duration: float) -> list[dict[str, Any]]:
+    stroke = {"color": "#2b1a0e", "width": 0.12}
+    opening = kind == "title"
+    texts = [_text("card-title", title, 0.5, duration, 26 if opening else 30, 11 if opening else 10, color="#fff4c2", font="marker",
+                   stroke=stroke, enter={"preset": "drop", "duration": 0.6})] if title else []
+    if body:
+        lettering = {"font": "hand", "stroke": stroke} if opening else {"font": "sans"}
+        texts.append(_text("card-body", body, 1.6, duration, 44 if opening else 54, 4 if opening else 3, weight=600, **lettering,
+                           enter={"preset": "typewriter" if opening else "fade", "duration": 1.0}))
+    return texts
+
+
 def card_texts(card: dict[str, Any], duration: float) -> list[dict[str, Any]]:
     """Title, disclaimer and end cards in the production's lettering."""
     kind, title, body = card.get("kind"), str(card.get("title") or ""), str(card.get("body") or "")
-    texts = []
-    fade = {"preset": "fade", "duration": 0.5}
     if kind == "disclaimer":
-        if title:
-            texts.append(_text("card-title", title, 0.3, duration - 0.3, 30, 8, font="condensed", enter=fade, exit=fade))
-        if body:
-            texts.append(_text("card-body", body, 0.6, duration - 0.3, 56, 4.4, font="sans", weight=500, maxWidth=78, lineHeight=1.35, enter=fade, exit=fade))
-    elif kind in ("title", "end"):
-        stroke = {"color": "#2b1a0e", "width": 0.12}
-        if title:
-            texts.append(_text("card-title", title, 0.5, duration, 26 if kind == "title" else 30, 11 if kind == "title" else 10, color="#fff4c2",
-                               font="marker", stroke=stroke, enter={"preset": "drop", "duration": 0.6}))
-        if body:
-            texts.append(_text("card-body", body, 1.6, duration, 44 if kind == "title" else 54, 4 if kind == "title" else 3,
-                               font="hand" if kind == "title" else "sans", weight=600, stroke=stroke if kind == "title" else None,
-                               enter={"preset": "typewriter" if kind == "title" else "fade", "duration": 1.0}))
-    return [{key: value for key, value in text.items() if value is not None} for text in texts]
+        return _disclaimer_texts(title, body, duration)
+    return _title_texts(kind, title, body, duration) if kind in ("title", "end") else []
 
 
 def sound_tracks(series: dict[str, Any], shot: dict[str, Any], first_of_scene: bool) -> list[dict[str, Any]]:
@@ -312,19 +337,15 @@ def line_id(episode_id: str, beat_id: str) -> str:
     return f"{episode_id}-{beat_id}"[:120]
 
 
-def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], *, workspace: str,
-                    recorded: dict[str, dict[str, Any]], first_of_scene: bool = False,
-                    size: tuple[int, int] = (1920, 1080)) -> dict[str, Any]:
-    """The compiler input for one shot. ``recorded`` maps beat id to {filename, duration, cues, driver}."""
-    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
-    beats = [beat for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
-    timing, duration = plan_timing([float(recorded[beat["id"]]["duration"]) for beat in beats],
-                                   at_least=float(shot.get("durationSeconds") or 0) if not beats else 0.0)
-    card = layout.get("card") if isinstance(layout.get("card"), dict) else None
+def _shot_framing(layout: dict[str, Any], shot: dict[str, Any], card: dict[str, Any] | None) -> str:
+    if layout.get("framing") in FRAMINGS:
+        return layout["framing"]
     entries = layout.get("cast") or shot.get("visibleCharacterIds") or []
-    framing = layout.get("framing") if layout.get("framing") in FRAMINGS else classify_framing(shot.get("framing", ""), 0 if card else len(entries))
-    cast = [] if framing == "title" else plan_cast(series, shot, framing, duration)
-    visible = {item["characterId"] for item in cast}
+    return classify_framing(shot.get("framing", ""), 0 if card else len(entries))
+
+
+def _shot_lines(series: dict[str, Any], episode: dict[str, Any], beats: list[dict], timing: list[tuple[float, float]],
+                recorded: dict[str, dict[str, Any]], visible: set[str]) -> list[dict[str, Any]]:
     lines = []
     for beat, (start, end) in zip(beats, timing):
         ref = kit_ref(series, beat.get("characterId", ""))
@@ -333,24 +354,52 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
                       "text": beat["text"], "start": start, "end": end, "filename": heard["filename"],
                       "cues": heard.get("cues") or None, "driver": heard.get("driver"),
                       "visible": beat.get("characterId") in visible, "name": beat.get("characterId")})
-    focus = sum(item["x"] for item in cast) / len(cast) if cast and framing in ("two", "medium", "close") else 50.0
+    return lines
+
+
+def _shot_camera(layout: dict[str, Any], shot: dict[str, Any]) -> str:
+    return layout["camera"] if layout.get("camera") in ("static", "push") else classify_camera(shot.get("camera", ""))
+
+
+def _focus(cast: list[dict[str, Any]], framing: str) -> float:
+    """Tighter framings pan the background toward the cast."""
+    return sum(item["x"] for item in cast) / len(cast) if cast and framing in ("two", "medium", "close") else 50.0
+
+
+def _narrative(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any]) -> dict[str, Any]:
+    return {"templateId": "series-shot", "controls": {"seriesId": series["id"], "episodeId": episode["id"], "shotId": shot["id"]},
+            "visualIntent": str(shot.get("action") or shot.get("prompt") or "")[:500]}
+
+
+def _with_set(spec: dict[str, Any], series: dict[str, Any], shot: dict[str, Any], focus: float, workspace: str) -> dict[str, Any]:
     background = background_for(series, shot, workspace)
-    spec = {
-        "name": f"{series.get('title') or series.get('id')} · {episode.get('title') or episode['id']} · {shot['id']}"[:200],
-        "workspace": workspace, "width": size[0], "height": size[1], "fps": FPS, "duration": duration, "framing": framing,
-        "cast": cast, "lines": lines, "audioTracks": sound_tracks(series, shot, first_of_scene),
-        "texts": card_texts(card, duration) if card else [],
-        "camera": layout.get("camera") if layout.get("camera") in ("static", "push") else classify_camera(shot.get("camera", "")),
-        "finish": FINISH,
-        "narrative": {"templateId": "series-shot", "controls": {"seriesId": series["id"], "episodeId": episode["id"], "shotId": shot["id"]},
-                      "visualIntent": str(shot.get("action") or shot.get("prompt") or "")[:500]},
-    }
     if background:
         spec["background"] = {**background, "focusX": focus}
-    props = plan_props(series, shot, framing, focus, workspace)
+    props = plan_props(series, shot, spec["framing"], focus, workspace)
     if props:
         spec["props"] = props
     return spec
+
+
+def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], *, workspace: str,
+                    recorded: dict[str, dict[str, Any]], first_of_scene: bool = False,
+                    size: tuple[int, int] = (1920, 1080)) -> dict[str, Any]:
+    """The compiler input for one shot. ``recorded`` maps beat id to {filename, duration, cues, driver}."""
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    card = layout.get("card") if isinstance(layout.get("card"), dict) else None
+    beats = [beat for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
+    timing, duration = plan_timing([float(recorded[beat["id"]]["duration"]) for beat in beats],
+                                   at_least=0.0 if beats else float(shot.get("durationSeconds") or 0))
+    framing = _shot_framing(layout, shot, card)
+    cast = [] if framing == "title" else plan_cast(series, shot, framing, duration)
+    title = f"{series.get('title') or series.get('id')} · {episode.get('title') or episode['id']} · {shot['id']}"
+    spec = {
+        "name": title[:200], "workspace": workspace, "width": size[0], "height": size[1], "fps": FPS, "duration": duration,
+        "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, beats, timing, recorded, {item["characterId"] for item in cast}),
+        "audioTracks": sound_tracks(series, shot, first_of_scene), "texts": card_texts(card, duration) if card else [],
+        "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
+    }
+    return _with_set(spec, series, shot, _focus(cast, framing), workspace)
 
 
 def recording_key(text: str, voice: dict[str, Any] | None) -> str:
