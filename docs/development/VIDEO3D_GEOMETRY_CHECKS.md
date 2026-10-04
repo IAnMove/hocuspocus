@@ -30,8 +30,11 @@ measures every loaded model in its current pose. Skinned meshes are measured ski
   `geometry.json`, the task metadata keeps it, and `scenes.world3d.export.receipt` returns it as `receipt.geometry`.
 - **Browser.** A client can call `stage.geometrySample(t, doc)` and `checkGeometry(samples)` from
   `ui/src/features/scene3d/geometryChecks.ts`. The Video 3D editor button «Revisar geometría» samples the open shot,
-  lists the same warnings, and jumps the playhead. It does not block export. The review panel that also shows the
-  export receipt is phase 6.F4.
+  lists the same warnings, and jumps the playhead. It does not block export.
+- **Receipt review (6.F4).** After a server export, Video 3D and Video 2D show “Review before you export”. The panel
+  joins `receipt.qa` and `receipt.geometry`, lists fail ahead of watch, and jumps the playhead from a warning or from
+  a marked contact-sheet cell. The sheet is eight times spread across the shot; each cell takes the worst warning
+  that covers that time. A fail does not ask for confirmation and does not disable export.
 
 ## Measured (2026-10-03)
 

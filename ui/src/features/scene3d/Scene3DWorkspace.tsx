@@ -39,7 +39,9 @@ import { Scene3DShotLibraryCard } from './Scene3DShotLibraryCard'
 import { remountUserTemplate, type World3DUserTemplate } from './userTemplates.ts'
 import { Scene3DAnimationControls } from './Scene3DAnimationControls'
 import { Scene3DHoldControls } from './Scene3DHoldControls'
+import { ExportReviewPanel } from '../render/ExportReviewPanel.tsx'
 import { RenderQualityPicker } from '../render/RenderQualityPicker'
+import type { ExportReviewInput } from '../render/exportReview.ts'
 import type { RenderChoice } from '../render/renderEstimate.ts'
 import { Scene3DDocumentControls } from './Scene3DDocumentControls'
 import { Scene3DTransport } from './Scene3DTransport'
@@ -95,6 +97,19 @@ function numberField(label: string, value: number, onChange: (value: number) => 
   )
 }
 
+function seekWorkspaceTime(
+  time: number,
+  exporting: boolean,
+  fps: number,
+  count: number,
+  setPlaying: (value: boolean) => void,
+  setFrame: (value: number) => void,
+) {
+  if (exporting) return
+  setPlaying(false)
+  setFrame(Math.min(count - 1, Math.max(0, Math.round(time * fps))))
+}
+
 export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   const { t } = useUiTranslation('scene3d')
   const { t: editorT } = useUiTranslation('scene3dEditor')
@@ -134,6 +149,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   const [videoItems, setVideoItems] = useState<ApiOutput[]>([])
   const [screenTargets, setScreenTargets] = useState<Record<string, { meshes: string[]; nodes: string[] }>>({})
   const [exportNote, setExportNote] = useState<string | null>(null)
+  const [receiptReview, setReceiptReview] = useState<ExportReviewInput | null>(null)
   const generationRef = useRef(0)
   const [generation, setGeneration] = useState(0)
   const bumpGeneration = useCallback(() => {
@@ -341,6 +357,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
 
   const exportScene = async () => {
     const target = session.captureForSave()
+    setReceiptReview(null)
     await exportWorkspaceDocument(
       stageRef.current,
       target.document,
@@ -352,6 +369,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       setExportingFlag,
       abort => { exportAbortRef.current = abort },
       renderChoiceRef.current,
+      setReceiptReview,
     )
   }
 
@@ -485,6 +503,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       <p className="text-xs text-text-muted">{t('stage.exportQualityHint')}</p>
       <Scene3DGeometryReview stageRef={stageRef} document={sceneDoc} seconds={seconds} disabled={exporting}
         onSeek={time => { if (exportingRef.current) return; setPlaying(false); setFrame(Math.min(count - 1, Math.max(0, Math.round(time * fps)))) }} />
+      <ExportReviewPanel review={receiptReview} duration={sceneDoc.duration} onSeek={time => seekWorkspaceTime(time, exportingRef.current, fps, count, setPlaying, setFrame)} />
       {selected && (selected.media !== 'image' || selected.surface === 'cutout') && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
         walk={walkBake.control(selected)} />}
       <button type="button" disabled={editingLocked || sceneDoc.slots.length >= 64} className="min-h-11 self-start rounded-lg border border-cyan-400/50 px-4 text-sm text-text-primary" onClick={() => {

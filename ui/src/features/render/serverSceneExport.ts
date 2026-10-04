@@ -1,3 +1,4 @@
+import type { GeometryReportView, QaReport } from './exportReview.ts'
 import type { RenderLevel } from './renderEstimate.ts'
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -32,7 +33,9 @@ export type ServerRenderRequest = {
 }
 
 type TaskView = { status?: string; message?: string; current?: number; total?: number }
-type ReceiptView = { artifacts?: { name?: string; url?: string }[] }
+type ReceiptView = { artifacts?: { name?: string; url?: string }[]; qa?: QaReport; geometry?: GeometryReportView }
+
+export type ServerRenderFile = { name: string; url: string; qa?: QaReport; geometry?: GeometryReportView }
 
 function sleep(ms: number) {
   return new Promise<void>(resolve => { setTimeout(resolve, ms) })
@@ -53,10 +56,10 @@ async function failureMessage(response: Response): Promise<string> {
   return `Export failed (${response.status})`
 }
 
-function artifactOf(receipt: ReceiptView | undefined): { name: string; url: string } | null {
+function artifactOf(receipt: ReceiptView | undefined): ServerRenderFile | null {
   const item = receipt?.artifacts?.[0]
   if (!item || typeof item.name !== 'string' || typeof item.url !== 'string') return null
-  return { name: item.name, url: item.url }
+  return { name: item.name, url: item.url, qa: receipt?.qa, geometry: receipt?.geometry }
 }
 
 async function readReceipt(fetchImpl: FetchLike, kind: ServerRenderKind, workspace: string, id: string, signal: AbortSignal | undefined) {
@@ -67,7 +70,7 @@ async function readReceipt(fetchImpl: FetchLike, kind: ServerRenderKind, workspa
   return await response.json() as { task?: TaskView; receipt?: ReceiptView }
 }
 
-export async function renderOnServer(request: ServerRenderRequest): Promise<{ name: string; url: string }> {
+export async function renderOnServer(request: ServerRenderRequest): Promise<ServerRenderFile> {
   const fetchImpl = request.fetchImpl ?? fetch
   const pause = request.sleep ?? sleep
   const route = ROUTES[request.kind]
