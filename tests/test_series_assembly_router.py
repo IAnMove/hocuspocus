@@ -122,6 +122,8 @@ def test_router_joins_in_episode_order_and_persists_episode_asset(tmp_path):
     assert asset["metadata"]["loudness"]["applied"] is False and asset["metadata"]["loudness"]["reason"]
     assert asset["metadata"]["subtitles"]["written"] is False and asset["metadata"]["subtitles"]["reason"]
     assert "Loudness unchanged" in status["message"] and "No subtitles" in status["message"]
+    assets = library["seriesById"]["series-1"]["assets"].values()
+    assert "thumbnailAssetId" not in episode and not [item for item in assets if item.get("isDerivedThumbnail")], "no frame, no thumbnail asset"
     joined = tmp_path / status["filename"]
     sidecar = json.loads(joined.with_suffix(".meta.json").read_text(encoding="utf-8"))
     loaded = read_asset_manifest(joined, workspace_id="default")
@@ -314,3 +316,28 @@ def test_a_language_version_assembles_its_own_takes_into_its_own_cut(tmp_path):
     with pytest.raises(HTTPException) as missing:
         start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default", language="french"))
     assert missing.value.status_code == 400
+
+
+def test_a_finished_cut_keeps_its_thumbnail_on_its_holder(tmp_path, monkeypatch):
+    import routers.series_assembly as assembly
+
+    def finished(output_path, *_args, **_kwargs):
+        name = os.path.splitext(os.path.basename(output_path))[0] + ".thumb.jpg"
+        (tmp_path / name).write_bytes(b"jpg")
+        return {"subtitles": {"written": False, "reason": "stub"}, "loudness": {"applied": False, "reason": "stub"},
+                "thumbnail": {"written": True, "file": name, "time": 4.2}}
+    monkeypatch.setattr(assembly, "finish_episode", finished)
+
+    def concatenate(paths, output_path):
+        shutil.copyfile(paths[0], output_path)
+        return True
+
+    endpoints, library = _client(tmp_path, concatenate)
+    start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
+    status = _wait_for_terminal(endpoints["/api/v1/series/assembly/jobs/{job_id}"],
+                                start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed", status
+    series = library["seriesById"]["series-1"]
+    thumbnail = series["assets"][series["episodesById"]["episode-1"]["thumbnailAssetId"]]
+    assert thumbnail["kind"] == "image" and thumbnail["isDerivedThumbnail"] is True and thumbnail["uri"].endswith(".thumb.jpg")
+    assert thumbnail["metadata"]["assemblyAssetId"] == status["assetId"] and thumbnail["metadata"]["time"] == 4.2

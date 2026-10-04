@@ -448,6 +448,17 @@ def create_series_assembly_router(
                 assembly_ids.append(asset_id)
                 holder["assemblyAssetIds"] = list(dict.fromkeys(assembly_ids))
                 holder["latestAssemblyAssetId"] = asset_id
+                thumbnail = finishing.get("thumbnail") or {}
+                if thumbnail.get("written"):
+                    thumbnail_id = f"asset_thumb_{uuid.uuid4().hex}"
+                    series["assets"][thumbnail_id] = {
+                        "id": thumbnail_id, "workspaceId": job["workspace"], "kind": "image",
+                        "uri": f"outputs/{thumbnail['file']}", "ownerType": "episode", "ownerId": job["episodeId"],
+                        "isDerivedThumbnail": True,
+                        "metadata": {"assemblyAssetId": asset_id, "time": thumbnail.get("time"),
+                                     **({"language": job["language"]} if job.get("language") else {})},
+                    }
+                    holder["thumbnailAssetId"] = thumbnail_id
                 episode["updatedAt"] = completed_at
                 series["episodesById"][episode["id"]] = episode
                 series["revision"] = int(series.get("revision") or 1) + 1

@@ -52,6 +52,8 @@ def _version(value: dict[str, Any], beats: set[str], shots: set[str], attempts: 
     }
     if isinstance(value.get("latestAssemblyAssetId"), str) and value["latestAssemblyAssetId"] in version["assemblyAssetIds"]:
         version["latestAssemblyAssetId"] = value["latestAssemblyAssetId"]
+    if isinstance(value.get("thumbnailAssetId"), str) and value["thumbnailAssetId"]:
+        version["thumbnailAssetId"] = value["thumbnailAssetId"][:200]
     return version
 
 

@@ -266,6 +266,7 @@ export interface SeriesLanguageVersion {
   approvedAttemptIds: Record<string, string>
   assemblyAssetIds: string[]
   latestAssemblyAssetId?: string
+  thumbnailAssetId?: string
 }
 
 export interface SeriesEpisode {
@@ -273,6 +274,8 @@ export interface SeriesEpisode {
   languageVersions?: Record<string, SeriesLanguageVersion>
   latestAssemblyAssetId?: string
   assemblyAssetIds?: string[]
+  /** A frame of the latest cut (after its title card), set by the assembly. */
+  thumbnailAssetId?: string
   id: string
   seasonId: string
   number: number
