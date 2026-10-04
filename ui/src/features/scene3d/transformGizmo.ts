@@ -24,6 +24,13 @@ export function transformPatch(proxy: Object3D, mode: TransformMode, axis: strin
   return { scale: Math.max(0.05, Math.min(worldAxes ? 20 : 100, value)) }
 }
 
+/** The gizmo rests for an empty selection, a locked backdrop, or a prop parented to a hand. */
+function gizmoRests(slot: Scene3DSlot | undefined, worldCue: WorldSfx | undefined, enabled: boolean) {
+  if (!enabled || (!slot && !worldCue)) return true
+  if (slot?.media === 'image' && (slot.surface === 'environment' || slot.loop?.cylinder === true)) return true
+  return Boolean(slot && parseHold(slot.hold, slot.id))
+}
+
 /** A document-space proxy keeps GLB normalization and animation bones separate
  * from user transforms. Helpers never become part of an exported scene. */
 export function createTransformGizmo(world: GpuWorld, onChange: (id: string, patch: TransformPatch) => void, onSelect: (id: string) => void) {
@@ -82,7 +89,7 @@ export function createTransformGizmo(world: GpuWorld, onChange: (id: string, pat
       allowed = enabled
       mode = nextMode
       controls.enabled = enabled
-      if ((!slot && !worldCue) || (slot?.media === 'image' && (slot.surface === 'environment' || slot.loop?.cylinder === true)) || (slot && parseHold(slot.hold, slot.id)) || !enabled) { controls.pointerUp(null); controls.detach(); return }
+      if (gizmoRests(slot, worldCue, enabled)) { controls.pointerUp(null); controls.detach(); return }
       worldAxes = Boolean(worldCue)
       attachedAnchorSlotId = worldCue?.anchor?.slotId
       const id = worldCue ? WORLD_SFX_SELECT_PREFIX + worldCue.id : slot!.id
