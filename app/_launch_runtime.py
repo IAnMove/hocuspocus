@@ -552,7 +552,12 @@ def _coordinated_generation_slot(
             )
         else:
             description = "HocusPocus Lab GPU generation"
-    with generation_slot(_gen_lock, job) as acquired:
+    # Stand aside for a Video 3D export or another coordinator ticket that has
+    # waited longer than this job, or past HOCUS_GPU_WAITER_MAX_WAIT_SECONDS.
+    def owed_turn(waited: float) -> bool:
+        return resource_scheduler.coordinator.has_waiter_owed_turn(_local_gpu_lane, waited=waited)
+
+    with generation_slot(_gen_lock, job, yield_to=owed_turn) as acquired:
         if not acquired:
             yield False
             return
@@ -22633,12 +22638,14 @@ def _run_sfx_generation(job: dict, raw_params: dict, start_time: float):
         if is_cancel_requested(job):
             return False
 
-        # Generate output filename — .mp4 when remuxing onto video, .wav for text-only
+        # Generate output filename — .mp4 when remuxing onto video, .wav for text-only.
+        # A validated output_name (stored as output_filename) replaces the prompt stem.
         seed_val = seed if seed >= 0 else int(time.time()) % 100000
         safe_prompt = "".join(c if c.isalnum() or c in " _-" else "" for c in (prompt or "sfx"))[:40].strip().replace(" ", "_")
         has_video = video_path is not None
         out_ext = ".mp4" if has_video else ".wav"
-        base_filename = f"sfx_{safe_prompt}_{seed_val}{out_ext}"
+        requested_name = raw_params.get("output_filename") or raw_params.get("output_name")
+        base_filename = requested_name or f"sfx_{safe_prompt}_{seed_val}{out_ext}"
         output_path = wgp.get_available_filename(out_dir, base_filename, force_extension=out_ext)
 
         # Run MMAudio
@@ -36977,6 +36984,8 @@ def _discard_generation_leftover(record):
     _durable_generation_queue.remove(str(record.get("id") or ""))
 
 
+from services.scene_export_leftovers import SceneExportLeftovers
+
 _job_leftovers = JobLeftovers(
     queue=_durable_generation_queue,
     jobs=_jobs,
@@ -36985,6 +36994,9 @@ _job_leftovers = JobLeftovers(
     rehydrate=_queue_recovered_generation,
     start=_start_recovered_generation,
     discard_record=_discard_generation_leftover,
+    exports=SceneExportLeftovers(
+        services=[_world3d_export, _scene2d_export], list_workspaces=_list_workspaces, registry_for=_task_registry,
+    ),
 )
 _image_generation_commands.leftover_receipt_lookup = _job_leftovers.receipt_for
 _job_leftover_handlers = job_leftover_handlers(_job_leftovers)
@@ -37152,6 +37164,14 @@ def run_server():
     if host == "0.0.0.0":
         print(f"  (Bound to {host} — LAN-accessible via this machine's IP)")
     print(f"{'='*50}\n")
+    try:
+        from services.server_endpoint import publish_server_endpoint
+        publish_server_endpoint(
+            os.path.join(os.path.dirname(__file__), "settings", "server-endpoint.json"),
+            host=host, display_host=display_host, port=port,
+        )
+    except OSError as error:
+        print(f"[HocusPocus Lab] Could not publish settings/server-endpoint.json: {error}")
 
     # Confirm the polling filter immediately before Uvicorn configures logging.
     install_quiet_access_filter()

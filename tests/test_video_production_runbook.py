@@ -58,6 +58,7 @@ def _catalog_groups() -> list:
     from services.world3d_export import command_catalog as world_export
     from services.song_analysis import command_catalog as audio
     from services.video2d_edit import command_catalog as scene_edit
+    from services.job_leftovers import command_catalog as leftovers
 
     groups = [
         production(),
@@ -70,6 +71,7 @@ def _catalog_groups() -> list:
         world_export(),
         image_command_catalog(),
         [music_command_catalog()],
+        leftovers(),
     ]
     try:
         from services.jobs_wait import command_catalog as jobs_wait

@@ -218,26 +218,30 @@ def _operation(name: str, mutation: bool, description: str, properties: dict, re
     }
 
 
+def _input(properties: dict, required: list[str] | None = None) -> dict:
+    return {"type": "object", "additionalProperties": False, "properties": properties, "required": required or []}
+
+
 def command_catalog() -> list[dict]:
     version = {"type": "integer", "const": 1}
     intent = {"type": "string", "minLength": 1, "maxLength": _MAX_INTENT}
     return [
         _operation(
             "jobs.leftovers", False,
-            "List generation requests left in the durable queue after a restart. "
-            "They are not running. Resume or discard one by intent_id; do not submit a second copy.",
-            {"version": version}, ["version"],
+            "List generation requests left in the durable queue after a restart, and Video 2D/3D exports a restart "
+            "interrupted. They are not running. Resume or discard one by intent_id; do not submit a second copy.",
+            {"version": version, "input": _input({})}, ["version"],
         ),
         _operation(
             "jobs.resume", True,
-            "Resume one leftover by intent_id on the existing recovery queue. "
+            "Resume one leftover by input.intent_id on the existing recovery queue. "
             "Does not start a second job when that leftover is already running.",
-            {"version": version, "intent_id": intent}, ["version", "intent_id"],
+            {"version": version, "input": _input({"intent_id": intent}, ["intent_id"]), "intent_id": intent}, ["version"],
         ),
         _operation(
             "jobs.discard", True,
-            "Discard one leftover by intent_id. Does not cancel a job that is already running.",
-            {"version": version, "intent_id": intent}, ["version", "intent_id"],
+            "Discard one leftover by input.intent_id. Does not cancel a job that is already running.",
+            {"version": version, "input": _input({"intent_id": intent}, ["intent_id"]), "intent_id": intent}, ["version"],
         ),
     ]
 
@@ -249,17 +253,23 @@ def _require_version(arguments: Any, operation: str) -> dict:
 
 
 def _intent_argument(arguments: Any, operation: str) -> str:
+    """``{version, input: {intent_id}}`` like every other command; the first top-level form still works."""
     payload = _require_version(arguments, operation)
-    if set(payload) - {"version", "intent_id"}:
+    if set(payload) - {"version", "intent_id", "input"}:
         raise _error(422, "invalid_command", f"{operation} does not accept extra fields")
+    nested = payload.get("input")
+    if nested is not None:
+        if not isinstance(nested, dict) or set(nested) - {"intent_id"} or "intent_id" in payload:
+            raise _error(422, "invalid_command", f"{operation} takes intent_id once, inside input")
+        return _require_intent(nested.get("intent_id"), operation)
     return _require_intent(payload.get("intent_id"), operation)
 
 
 def command_handlers(service: "JobLeftovers") -> dict[str, Callable[[Any], dict]]:
     def leftovers(arguments: Any) -> dict:
         payload = _require_version(arguments, "jobs.leftovers")
-        if set(payload) - {"version"}:
-            raise _error(422, "invalid_command", "jobs.leftovers accepts only version")
+        if set(payload) - {"version", "input"} or payload.get("input") not in (None, {}):
+            raise _error(422, "invalid_command", "jobs.leftovers accepts only version and an empty input")
         return service.list_response()
 
     def resume(arguments: Any) -> dict:
@@ -284,6 +294,7 @@ class JobLeftovers:
         rehydrate: Callable[[dict], tuple[dict | None, bool]] | None = None,
         start: Callable[[dict], None] | None = None,
         discard_record: Callable[[dict], None] | None = None,
+        exports: Any = None,
     ):
         self.queue = queue
         self.jobs = jobs
@@ -292,6 +303,8 @@ class JobLeftovers:
         self.rehydrate = rehydrate
         self.start = start
         self.discard_record = discard_record
+        # Interrupted scene exports (services/scene_export_leftovers.py), listed beside the queue.
+        self.exports = exports
 
     def reloaded(self) -> "JobLeftovers":
         """New in-memory view of the same queue file, as after a process restart."""
@@ -302,6 +315,7 @@ class JobLeftovers:
             rehydrate=self.rehydrate,
             start=self.start,
             discard_record=self.discard_record,
+            exports=self.exports,
         )
 
     def _queue_records_unlocked(self) -> list[dict]:
@@ -371,6 +385,8 @@ class JobLeftovers:
     def list_response(self) -> dict:
         with self.lock:
             jobs = [public_job(record) for record in self._records_unlocked()]
+        if self.exports is not None:
+            jobs.extend(self.exports.records())
         return {"version": 1, "status": "completed", "operation": "jobs.leftovers", "result": {"jobs": jobs}}
 
     def status_for(self, job_id: str) -> dict | None:
@@ -404,6 +420,9 @@ class JobLeftovers:
         if record is None:
             if live is not None:
                 return self._resume_body(live, intent_id, started=False)
+            resumed = self.exports.resume(intent_id) if self.exports is not None else None
+            if resumed is not None:
+                return {"version": 1, "status": "completed", "operation": "jobs.resume", "result": resumed}
             raise _error(404, "leftover_not_found", "No leftover matches this intent_id")
         job, created = self._rehydrate(record)
         if job is None or not created:
@@ -475,6 +494,9 @@ class JobLeftovers:
             return self._discard_body(live, intent_id, discarded=False)
         record = find_leftover(self._records_unlocked(), intent_id)
         if record is None:
+            discarded = self.exports.discard(intent_id) if self.exports is not None else None
+            if discarded is not None:
+                return {"version": 1, "status": "completed", "operation": "jobs.discard", "result": discarded}
             raise _error(404, "leftover_not_found", "No leftover matches this intent_id")
         self._invoke_discard(record)
         return self._discard_body(record, intent_id, discarded=True)

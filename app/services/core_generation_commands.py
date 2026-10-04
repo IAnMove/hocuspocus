@@ -21,6 +21,7 @@ from services.generation_output_name import (
 )
 from services.image_generation_commands import command_error
 from services.image_generation_spec import ImageGenerationSpecError, freeze_image_generation_spec
+from services.job_lifecycle import take_submission_priority
 from services.minimax_image_service import MiniMaxImageError, prepare_prompt
 from services.task_command_admission import TaskCommandConflict
 from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES, TaskRegistry
@@ -246,6 +247,11 @@ class CoreGenerationCommands:
         del trusted_tool, submission_context
         try:
             command, output_name = prepare_command_output_name(command)
+            # MCP advertises priority on every generation tool; a remote provider has no GPU queue.
+            try:
+                take_submission_priority(command)
+            except ValueError as error:
+                raise command_error(422, "invalid_command", str(error)) from error
             frozen, params = _freeze(command)
             frozen, params = attach_output_name(frozen, params, output_name)
             workspace = str(params.get("workspace") or "")

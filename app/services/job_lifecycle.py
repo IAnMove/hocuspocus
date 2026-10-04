@@ -693,6 +693,34 @@ def priority_fields(priority: int | None) -> dict[str, int]:
     return {"priority": priority}
 
 
+MAX_WAIT_ENV = "HOCUS_QUEUE_MAX_WAIT_SECONDS"
+DEFAULT_MAX_WAIT_SECONDS = 300.0
+
+
+def queue_max_wait_seconds() -> float:
+    """Wait after which only a higher priority may overtake a job. ``0`` turns aging off."""
+    raw = os.environ.get(MAX_WAIT_ENV)
+    if raw is None or not raw.strip():
+        return DEFAULT_MAX_WAIT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_MAX_WAIT_SECONDS
+    return value if value >= 0 and value == value and value != float("inf") else DEFAULT_MAX_WAIT_SECONDS
+
+
+def _overdue(new_job: Mapping[str, Any], queued_job: Mapping[str, Any], now: float, limit: float) -> bool:
+    """A job that waited past the limit keeps its place against equal or lower priority.
+
+    Shortest-first alone let images (1 s) overtake TTS lines, which declare a
+    20 s cap as their length, for as long as images kept arriving.
+    """
+    entered = queued_job.get("_queue_entered_at")
+    if limit <= 0 or type(entered) is not float or now - entered < limit:
+        return False
+    return int(new_job.get("_queue_priority", 0)) <= int(queued_job.get("_queue_priority", 0))
+
+
 def _scheduled_before(
     new_sequence: int,
     new_job: Mapping[str, Any],
@@ -724,10 +752,20 @@ def _insert_generation_waiter(
     The local GPU lock has a single owner. Ordering the pending queue is
     what lets a short or high-priority job start before a long low-priority
     job that has not taken the GPU yet. The running owner is not preempted.
+    A job that has waited ``queue_max_wait_seconds()`` is overtaken only by a
+    higher priority.
     """
     sequence, _token, job = entry
+    now = time.monotonic()
+    job["_queue_entered_at"] = now
+    limit = queue_max_wait_seconds()
+    floor = 0
+    for position, (_, _, queued_job) in enumerate(queue):
+        if _overdue(job, queued_job, now, limit):
+            floor = position + 1
     index = len(queue)
-    for position, (queued_sequence, _, queued_job) in enumerate(queue):
+    for position in range(floor, len(queue)):
+        queued_sequence, _, queued_job = queue[position]
         if _scheduled_before(sequence, job, queued_sequence, queued_job):
             index = position
             break
@@ -818,8 +856,14 @@ def acquire_generation_slot(
     job: MutableMapping[str, Any],
     *,
     poll_interval: float = 0.1,
+    yield_to: Callable[[float], bool] | None = None,
 ) -> bool:
-    """Acquire the single GPU lock in scheduled pending order."""
+    """Acquire the single GPU lock in scheduled pending order.
+
+    ``yield_to(waited)`` receives how long this job has waited. While it
+    returns true, the queue head leaves the free lock to another waiter on the
+    same device (see ``ResourceCoordinator.has_waiter_owed_turn``).
+    """
     register_generation_job(generation_lock, job)
     lock_key = id(generation_lock)
     token = job.get("_generation_queue_token")
@@ -837,6 +881,10 @@ def acquire_generation_slot(
                 _remove_generation_waiter(lock_key, cancelled_token, cancelled_job)
             is_head = bool(queue and queue[0][1] is token)
             if not is_head:
+                _generation_queue_condition.wait(timeout=poll_interval)
+                continue
+            waited = time.monotonic() - float(job.get("_queue_entered_at") or time.monotonic())
+            if yield_to is not None and yield_to(waited):
                 _generation_queue_condition.wait(timeout=poll_interval)
                 continue
 
@@ -865,10 +913,11 @@ def generation_slot(
     job: MutableMapping[str, Any],
     *,
     poll_interval: float = 0.1,
+    yield_to: Callable[[float], bool] | None = None,
 ) -> Iterator[bool]:
     """Context manager form of :func:`acquire_generation_slot`."""
     acquired = acquire_generation_slot(
-        generation_lock, job, poll_interval=poll_interval,
+        generation_lock, job, poll_interval=poll_interval, yield_to=yield_to,
     )
     try:
         yield acquired
@@ -877,3 +926,8 @@ def generation_slot(
             generation_lock.release()
             with _generation_queue_condition:
                 _generation_queue_condition.notify_all()
+            # After the GPU is free: a job's freed buffers stay in its thread's
+            # malloc arena until trimmed (services/memory_trim.py).
+            from services.memory_trim import trim_process_heap
+
+            trim_process_heap("a generation job")

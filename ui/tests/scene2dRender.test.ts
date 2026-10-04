@@ -70,3 +70,19 @@ test('strip offsets wrap copies around the frame', () => {
   const offsets = stripOffsets(layer('strip', { strip: { enabled: true, count: 3, spacing: 30, direction: 'left', speed: 10 } }), 0)
   assert.deepEqual(offsets.map(item => item.x), [-30, 0, 30])
 })
+
+test('headless normalization gives screen effects their catalog colour and drops unknown kinds', async () => {
+  const { FX_CATALOG } = await import('../src/features/sceneFx/types.ts')
+  const { readFileSync } = await import('node:fs')
+  const normalized = normalizeScene2D({ ...scene([layer('bg')]), sfx: [
+    { id: 'smoke', kind: 'smoke', start: 0, end: 2 },
+    { id: 'dust', kind: 'dust', start: 0, end: 2, color: 'not-a-colour' },
+    { id: 'ghost', kind: 'not-an-effect', start: 0, end: 1 },
+  ] })
+  const catalogColor = (kind: string) => FX_CATALOG.find(item => item.id === kind)!.color
+  assert.deepEqual(normalized.sfx?.map(cue => [cue.id, cue.color]), [['smoke', catalogColor('smoke')], ['dust', catalogColor('dust')]])
+  assert.equal(normalizeScene2D(scene([layer('bg')])).sfx, undefined)
+  // The render page has no app stylesheet; it must load the lettering faces itself.
+  assert.match(readFileSync(new URL('../src/features/scene2d/ownedRenderer.ts', import.meta.url), 'utf8'), /kineticText\/fonts\.css/)
+  assert.match(readFileSync(new URL('../src/lib/kineticText/fonts.css', import.meta.url), 'utf8'), /Hocus Marker[\s\S]*Hocus Hand|Hocus Hand[\s\S]*Hocus Marker/)
+})

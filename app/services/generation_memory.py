@@ -642,11 +642,13 @@ def _loaded_transformer() -> str:
 def _release_torch_cache() -> None:
     import gc
 
+    from services.memory_trim import trim_process_heap
+
     gc.collect()
     torch = _import_torch()
-    if torch is None:
-        return
-    _empty_torch_cache(torch)
+    if torch is not None:
+        _empty_torch_cache(torch)
+    trim_process_heap("unloading for the next model")
 
 
 def _import_torch() -> object | None:

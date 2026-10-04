@@ -64,6 +64,30 @@ def hold_crossfade_output_seconds(
     return elapsed
 
 
+def hold_crossfade_offsets(
+    durations: Sequence[float],
+    *,
+    hold_sec: float = HOLD_TAIL_SEC,
+    fade_sec: float = FADE_SEC,
+) -> list[float]:
+    """Where each clip starts on the joined timeline (its dissolve's first frame).
+
+    Same arithmetic as ``build_hold_crossfade_filter``; subtitles depend on it.
+    """
+    if not durations:
+        return []
+    fade = float(fade_sec)
+    hold = float(hold_sec)
+    padded = [max(0.1, float(duration)) + hold for duration in durations]
+    offsets = [0.0]
+    elapsed = padded[0]
+    for index in range(1, len(padded)):
+        pair_fade = min(fade, hold, padded[index - 1] * 0.4, padded[index] * 0.4)
+        offsets.append(max(0.05, elapsed - pair_fade))
+        elapsed = elapsed + padded[index] - pair_fade
+    return offsets
+
+
 def _remove_if_exists(path: str) -> None:
     try:
         if os.path.isfile(path):

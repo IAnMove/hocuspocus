@@ -148,5 +148,41 @@ class TestGenerationQueuePriority(unittest.TestCase):
             take_submission_priority({"priority": 1.5})
 
 
+    def test_a_job_waiting_past_the_limit_is_overtaken_only_by_a_higher_priority(self):
+        """TTS declares a 20 s cap, so images kept overtaking it; aging stops that."""
+        from unittest import mock
+        import services.job_lifecycle as lifecycle
+
+        lock = threading.Lock()
+        lock.acquire()
+        clock = [1000.0]
+        speech = _queued("speech", priority=None, seconds=20, mode="speech")
+        early_image = _queued("early-image", priority=None, seconds=1, mode="image")
+        late_image = _queued("late-image", priority=None, seconds=1, mode="image")
+        urgent = _queued("urgent", priority=5, seconds=30, mode="video")
+        try:
+            with mock.patch.object(lifecycle.time, "monotonic", lambda: clock[0]), \
+                    mock.patch.dict(os.environ, {lifecycle.MAX_WAIT_ENV: "300"}):
+                register_generation_job(lock, speech)
+                register_generation_job(lock, early_image)
+                self.assertEqual(generation_queue_position(lock, early_image), 1, "a fresh wait still runs short first")
+                clock[0] += 301
+                register_generation_job(lock, late_image)
+                register_generation_job(lock, urgent)
+            self.assertEqual(
+                [generation_queue_position(lock, job) for job in (urgent, early_image, speech, late_image)],
+                [1, 2, 3, 4],
+            )
+            with mock.patch.dict(os.environ, {lifecycle.MAX_WAIT_ENV: "0"}):
+                self.assertEqual(lifecycle.queue_max_wait_seconds(), 0)
+            with mock.patch.dict(os.environ, {lifecycle.MAX_WAIT_ENV: "soon"}):
+                self.assertEqual(lifecycle.queue_max_wait_seconds(), lifecycle.DEFAULT_MAX_WAIT_SECONDS)
+            self.assertEqual(_start_order(lock, [speech, early_image, late_image, urgent]),
+                             ["urgent", "early-image", "speech", "late-image"])
+        finally:
+            if lock.locked():
+                lock.release()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

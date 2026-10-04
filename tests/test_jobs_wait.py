@@ -122,7 +122,7 @@ def test_wait_wakes_on_a_job_future_without_spinning():
     assert len(calls) <= 4
 
 
-def test_wait_times_out_with_a_stable_code():
+def test_wait_timeout_returns_the_live_status_not_an_error():
     job = {"id": "job-timeout", "status": "running", "progress": 40, "message": "Still running"}
     calls = []
 
@@ -131,17 +131,18 @@ def test_wait_times_out_with_a_stable_code():
         return _status_of(job)
 
     started = time.monotonic()
-    with pytest.raises(HTTPException) as caught:
-        wait_for_job(job["id"], 0.25, read_status=read_status, lookup_job=lambda _job_id: job)
+    result = wait_for_job(job["id"], 0.25, read_status=read_status, lookup_job=lambda _job_id: job)
     elapsed = time.monotonic() - started
-    detail = caught.value.detail
-    assert caught.value.status_code == 408
-    assert detail["code"] == "timeout"
-    assert detail["status"] == "running"
-    assert detail["progress"] == 40
-    assert detail["retryable"] is True
+    assert result["timed_out"] is True
+    assert result["code"] == "timeout"
+    assert result["status"] == "running"
+    assert result["progress"] == 40
+    assert result["retryable"] is True
     assert len(calls) <= 4
     assert 0.2 <= elapsed < 1.5
+    # An MCP client must not read a healthy long job as a failure.
+    from routers.wangp_mcp import _tool_result_is_error
+    assert _tool_result_is_error(result) is False
 
 
 def test_unknown_job_uses_the_status_not_found_error():
@@ -166,11 +167,10 @@ def test_interrupted_is_not_terminal():
         "progress": 15,
         "message": "Generation was interrupted",
     }
-    with pytest.raises(HTTPException) as caught:
-        wait_for_job(job["id"], 0.2, read_status=lambda _job_id: _status_of(job), lookup_job=lambda _job_id: job)
-    assert caught.value.detail["code"] == "timeout"
-    assert caught.value.detail["status"] == "interrupted"
-    assert caught.value.detail["progress"] == 15
+    result = wait_for_job(job["id"], 0.2, read_status=lambda _job_id: _status_of(job), lookup_job=lambda _job_id: job)
+    assert result["timed_out"] is True
+    assert result["status"] == "interrupted"
+    assert result["progress"] == 15
 
 
 def test_discarded_returns_the_status_payload():

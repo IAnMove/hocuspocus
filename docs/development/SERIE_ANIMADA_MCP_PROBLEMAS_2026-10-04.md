@@ -15,7 +15,7 @@ Se produjo por MCP, sin generación de vídeo con IA, el episodio piloto **«Unc
   - inglés: 4:52;
   - español: 5:32 (el castellano ocupa un 20 % más de tiempo hablado: 236 s frente a 197 s).
 
-Este documento recoge cada obstáculo que apareció por el camino, en orden de impacto, con su causa y la corrección propuesta. Los marcados **[ARREGLADO]** quedan resueltos en esta rama.
+Este documento recoge cada obstáculo que apareció por el camino, en orden de impacto, con su causa y la corrección propuesta. Los marcados **[ARREGLADO]** quedan resueltos en esta rama. Los marcados **[FASE 1A]** se resuelven en `fix/series-phase1-issues` (plan: `SERIES_ANIMADAS_PLAN_2026-10-04.md`).
 
 ## Resumen
 
@@ -28,13 +28,13 @@ Este documento recoge cada obstáculo que apareció por el camino, en orden de i
 | 5 | Lip-sync recibía «Español de España» en vez de `es` | El motor de fonemas fallaba en series en español | **[ARREGLADO]** |
 | 6 | Sin herramientas de escena para «montar personaje» y «añadir línea con lip-sync» | El agente tuvo que ejecutar código TypeScript de la UI | Propuesta |
 | 7 | Una serie tiene un solo idioma; no hay versiones de un capítulo | Hicieron falta dos series | Propuesta |
-| 8 | La cola reordena por duración declarada y deja sin turno a la voz | Las voces esperaron detrás de cada imagen nueva | Propuesta |
-| 9 | El servidor llegó a 50 GB de RAM y lo mató el sistema | Cola perdida en mitad de la producción | Propuesta |
+| 8 | La cola reordena por duración declarada y deja sin turno a la voz | Las voces esperaron detrás de cada imagen nueva | **[FASE 1A]** envejecimiento y `priority` documentado |
+| 9 | El servidor llegó a 50 GB de RAM y lo mató el sistema | Cola perdida en mitad de la producción | **[FASE 1A]** causa medida y corregida; queda el presupuesto por familia |
 | 10 | TTS: ninguna voz predefinida en español; VoiceDesign no es tipo de voz | Hubo que diseñar, comprobar y clonar a mano | Propuesta |
 | 11 | En Video 3D los recortes 2D no pueden hablar | Diálogo en 3D solo con modelos GLB | Propuesta |
-| 12 | Efectos de pantalla sin `color` rompen el pintor | Previsualización y export fallan | Propuesta |
-| 13 | Inconsistencias de contrato MCP | Errores evitables en cada herramienta nueva | Propuesta |
-| 14 | Otros problemas menores | Ver el detalle | Propuesta |
+| 12 | Efectos de pantalla sin `color` rompen el pintor | Previsualización y export fallan | **[FASE 1A]** |
+| 13 | Inconsistencias de contrato MCP | Errores evitables en cada herramienta nueva | **[FASE 1A]** salvo la miniatura 3D |
+| 14 | Otros problemas menores | Ver el detalle | **[FASE 1A]** 2, 4, 7, 8 y 9 |
 
 ## 1. `tools/list` caía para todos los clientes **[ARREGLADO]**
 
@@ -189,6 +189,13 @@ Opcionalmente, `animate_talk {kit_id, style: bob|still|shake}` para la animació
 3. Documentar `priority` en los esquemas `generation.*`.
 4. Exponer en `status` el motivo de la posición en cola.
 
+**[FASE 1A]** Puntos 1 y 3:
+
+- Un trabajo que lleva `HOCUS_QUEUE_MAX_WAIT_SECONDS` (300 s por defecto) en cola solo puede ser adelantado por una prioridad mayor.
+- `tools/list` muestra `priority` en todas las herramientas `generation.*`.
+
+Los puntos 2 y 4 siguen pendientes.
+
 ## 9. OOM del servidor al alternar modelos (propuesta, prioridad alta)
 
 **Síntoma.** Durante la producción el proceso llegó a **50 GB de RSS** y el kernel lo mató (`oom-kill … anon-rss:50097120kB`). La cola mezclaba Qwen Image 2.1, Qwen3 TTS (VoiceDesign, Base y CustomVoice), ACE-Step XL y MMAudio.
@@ -205,6 +212,16 @@ Opcionalmente, `animate_talk {kit_id, style: bob|still|shake}` para la animació
 - Lectura de RSS antes de cargar un modelo.
 - Que las exportaciones de escena interrumpidas aparezcan en `jobs.leftovers` o tengan su propio `resume`.
 - Agrupar por modelo de forma explícita y visible, en vez de alternar.
+
+**[FASE 1A] Causa medida.** Con el servidor aislado ocioso, la RSS era de 37,8 GB. De ella, 35 GiB estaban en unos 1.000 montículos de arenas de glibc (regiones de hasta 64 MiB, alineadas a 64 MiB). No eran modelos cargados. Cada trabajo corre en su propio hilo, y los pesos liberados se quedan en la arena de ese hilo. En una prueba aparte, un fichero de pesos de 2,4 GB cargado y liberado en un hilo dejó la RSS en 2,46 GiB; `malloc_trim(0)` la bajó a 0,45 GiB.
+
+**Arreglo:**
+
+- `services/memory_trim.py` devuelve la memoria libre al sistema en tres momentos: al liberar el modelo de wgp, al descargar para el siguiente modelo y al terminar cada trabajo de GPU.
+- `HOCUS_MALLOC_TRIM=0` lo desactiva.
+- Las exportaciones de escena interrumpidas aparecen en `jobs.leftovers`. `jobs.resume` las relanza con su propio comando guardado; `jobs.discard` las cancela.
+
+Siguen pendientes el presupuesto de RAM por familia de modelos y la agrupación por modelo.
 
 ## 10. Voces locales: lo que faltó (propuesta)
 
@@ -266,6 +283,12 @@ Pasaba con los efectos `smoke` y `dust` sin `color`.
 
 **Relacionado.** Hubo además un fallo intermitente del mismo tipo en cartelas con fuentes `marker`/`hand` que no se reprodujo al repetir; puede ser una carrera de carga de fuentes.
 
+**[FASE 1A] Arreglo:**
+
+- El render sin interfaz pasa los efectos por `parseSceneFx`, como el editor.
+- El servidor rellena `color` con el valor del catálogo al validar y al exportar.
+- La página de render cargaba las letras sin reglas `@font-face`, así que `marker` y `hand` se pintaban con `cursive`. Ahora `fonts.css` se importa también en el renderer.
+
 ## 13. Contratos MCP inconsistentes (propuesta)
 
 | Herramienta | Inconsistencia | Propuesta |
@@ -278,6 +301,16 @@ Pasaba con los efectos `smoke` y `dust` sin `color`.
 | `scenes.document.save` (Video 3D) | Sin `preview`, la biblioteca 3D muestra una miniatura negra. | Generar la miniatura en el servidor con el preview existente. |
 | Puerto del servidor | Si el puerto está ocupado, el servidor elige otro (42050 → 42051 → 42053) y solo lo anuncia en el log. | Escribir el puerto efectivo en `settings/server.json` o exponerlo en `media.options`. |
 
+**[FASE 1A]** Resueltas todas menos la miniatura negra de Video 3D:
+
+- `jobs.wait` devuelve `timed_out: true` con el trabajo vivo.
+- `jobs.*` aceptan `input`.
+- `studio.key` acepta `intent_id`.
+- Una versión no admitida responde `unsupported_version` con `supported_versions`.
+- `generation.sfx` respeta `output_name`.
+- El puerto efectivo, la URL MCP y el pid se publican en `app/settings/server-endpoint.json`.
+- Además, `characters.save` devuelve `ignoredFields` (problema 3), y un test exige `mutation` explícito en todos los catálogos (problema 1).
+
 ## 14. Otros problemas
 
 1. **Tres rutas de «subir fichero»:**
@@ -287,6 +320,8 @@ Pasaba con los efectos `smoke` y `dust` sin `color`.
 
    Propuesta: aceptar en todas partes una referencia canónica de workspace (`/api/v1/file/<f>?workspace=…`) o un `asset_id`.
 2. **El carril de render 3D espera a la GPU.** Una exportación de Video 3D estuvo más de 40 minutos en `waiting_resource` mientras la cola de imágenes seguía llena. Propuesta: intercalar o dar prioridad a los renders cortos, o renderizar en CPU cuando la GPU está ocupada.
+
+   **[FASE 1A]** La cabeza de la cola de generación cede la GPU a un ticket del coordinador que lleva esperando más que ella, o más de `HOCUS_GPU_WAITER_MAX_WAIT_SECONDS` (120 s por defecto). La causa era que la cabeza esperaba bloqueada en el semáforo y siempre ganaba la liberación.
 3. **«Capítulos» depende del nombre del fichero.** El filtro de la galería reconoce `_series_assembly` en el nombre (`app/services/output_result_kind.py`). Un capítulo montado en el Video Editor no aparece aunque pertenezca a una serie. Propuesta: clasificar por `result_kind` del sidecar o por el vínculo `episode.assemblyAssetIds`.
 4. **Imágenes con croma verde y personajes inesperados:**
    - Qwen añadió dos veces una cabeza de personaje detrás de un «escritorio estilo South Park».
@@ -294,6 +329,8 @@ Pasaba con los efectos `smoke` y `dust` sin `color`.
    - `studio.key` solo ofrece `green` o `isnet-anime`.
 
    Propuesta: modo de croma configurable (magenta o azul) y una advertencia cuando el sujeto contiene el color del croma.
+
+   **[FASE 1A]** `studio.key` acepta `blue` y `magenta`, cada uno con su supresión de derrame, y un `intent_id` que reproduce el resultado guardado. La advertencia sigue pendiente.
 5. **Edición con referencia que cambia el estilo.** El garaje de día generado desde el de noche con `image_refs` perdió el estilo plano (quedó acuarela). Se rehízo solo con texto.
 6. **Rig de bocas para estilo plano.** Lips Creator genera bocas con el modelo de imagen. Para el estilo South Park, que es plano, fue mejor otro enfoque:
    - borrar la boca pintada con inpainting;
@@ -305,8 +342,14 @@ Pasaba con los efectos `smoke` y `dust` sin `color`.
 7. **Velocidad de exportación 2D.** Unos 5 s de CPU por segundo de vídeo a 1080p y 24 fps, con concurrencia 2 por defecto (`HOCUS_SCENE_EXPORT_CONCURRENCY`). Un capítulo de 5 minutos en dos idiomas tarda unos 45 minutos. Propuesta:
    - subir la concurrencia por defecto en máquinas con muchos núcleos (aquí había 32);
    - render incremental: reutilizar los planos que no cambian.
+
+   **[FASE 1A]** Por defecto, un pintor por cada seis núcleos, entre 2 y 6 (5 con 32 núcleos); como máximo 8 si se fija a mano. La ganancia no está medida. El render incremental sigue pendiente.
 8. **Ensamblado sin normalización de sonoridad.** Los capítulos salen a −19,3 y −19,6 LUFS, con un rango de 9,5 a 12,7 LU. Cada plano mezcla su audio por separado y el ensamblado concatena. Propuesta: `loudnorm` (−16 LUFS, −1 dBTP) al ensamblar, y fundidos de audio de 2–3 fotogramas en los cortes.
+
+   **[FASE 1A]** El ensamblado aplica dos pasadas de `loudnorm` con ganancia lineal y el vídeo copiado sin recodificar. Con los capítulos reales: inglés de −19,2 a −16,1 LUFS y −1,2 dBTP; español de −19,5 a −16 LUFS; unos 16 s por capítulo. Los fundidos de audio en los cortes siguen pendientes.
 9. **Subtítulos.** No se generan SRT por idioma, aunque el texto y el tiempo de cada línea son exactos (`dialogueBeats`). Propuesta: generar SRT y VTT al ensamblar.
+
+   **[FASE 1A]** El ensamblado escribe `<capítulo>.srt` y `.vtt` con los `dialogueBeats` de cada toma, colocados con los mismos desfases que el fundido del montaje. Cada subtítulo tiene como máximo dos líneas de 42 caracteres. Con los capítulos reales: 73 subtítulos en inglés y 80 en español. Además, la energía de la voz es 3,5 veces mayor dentro de cada subtítulo que medio segundo antes.
 
 ## Artefactos de esta producción
 

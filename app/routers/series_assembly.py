@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.asset_manifest import publish_generation_sidecar
+from services.episode_finishing import finish_episode, finishing_note, remove_episode_subtitles
 from services.series_assembly import episode_assembly_plan
 from services.series_jobs import SeriesJobStore
 from services.task_manager import get_cancellation_token, get_task_registry
@@ -35,6 +36,7 @@ def _remove_assembly_artifacts(output_path: str | None) -> None:
                 os.remove(path)
         except OSError:
             pass
+    remove_episode_subtitles(output_path)
 
 
 def _write_assembly_sidecar(output_path: str, job: dict[str, Any]) -> None:
@@ -374,6 +376,19 @@ def create_series_assembly_router(
                 raise RuntimeError("ffmpeg could not join the approved Series clips")
             if not os.path.isfile(output_path):
                 raise RuntimeError("Series assembly finished without an output file")
+            update(job_id, stage="finishing", message="Evening the loudness and writing subtitles…")
+            finishing = finish_episode(
+                output_path, clip_paths, [item.get("sceneFilename") for item in job.get("clips", [])],
+                workspace_dir=output_directory, abort_callback=token.is_cancelled,
+            )
+            if token.is_cancelled():
+                _remove_assembly_artifacts(output_path)
+                update(
+                    job_id, status="cancelled", stage="cancelled",
+                    error=None, finishedAt=time.time(),
+                    message="Series episode assembly cancelled; no joined output was kept.",
+                )
+                return
             _write_assembly_sidecar(output_path, job)
             if token.is_cancelled():
                 _remove_assembly_artifacts(output_path)
@@ -409,6 +424,8 @@ def create_series_assembly_router(
                         "orderedClipAssetIds": [
                             item.get("assetId") for item in job.get("clips", [])
                         ],
+                        "loudness": finishing["loudness"],
+                        "subtitles": {**finishing["subtitles"], "language": series.get("spokenLanguage") or series.get("language")},
                         "createdAt": completed_at,
                     },
                 }
@@ -437,7 +454,7 @@ def create_series_assembly_router(
                 assetId=asset_id,
                 filename=os.path.basename(output_path),
                 finishedAt=time.time(),
-                message=f"Joined {len(clip_paths)} approved clips in episode order.",
+                message=f"Joined {len(clip_paths)} approved clips in episode order. {finishing_note(finishing)}",
             )
         except Exception as exc:
             if published:

@@ -85,8 +85,10 @@ def command_catalog() -> list[dict]:
         "description": (
             "Block until a generation job reaches completed, failed, cancelled, "
             "or discarded, or until timeout_s. Returns the same payload as status, "
-            "including progress when the queue already has it. Does not poll the GPU "
-            "or start a model. An interrupted job stays open because it can be resumed."
+            "including progress when the queue already has it. When timeout_s elapses "
+            "first it returns the live status with timed_out: true (not an error); call "
+            "again to keep waiting. Does not poll the GPU or start a model. An "
+            "interrupted job stays open because it can be resumed."
         ),
         "inputSchema": {
             "type": "object",
@@ -133,7 +135,7 @@ def wait_for_job(
             return payload
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise _timeout_error(payload)
+            return _timed_out(payload)
         signal = completion_signal(_record(lookup_job, job_id))
         if signal is not None and not _signaled(signal):
             signal_seen = False
@@ -176,11 +178,14 @@ def _public_status(payload: Any) -> dict:
     return dict(payload)
 
 
-def _timeout_error(payload: dict) -> HTTPException:
-    detail = dict(payload)
-    detail["code"] = "timeout"
-    detail["retryable"] = True
-    return HTTPException(status_code=408, detail=detail)
+def _timed_out(payload: dict) -> dict:
+    """The job is still open: return its live status, not an error.
+
+    An MCP error envelope reads ``status: failed`` at the top level, which made
+    clients treat a long but healthy job as a failure. ``code`` stays for
+    callers that matched it.
+    """
+    return {**payload, "timed_out": True, "code": "timeout", "retryable": True}
 
 
 def _invalid(message: str) -> HTTPException:

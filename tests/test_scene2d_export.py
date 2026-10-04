@@ -180,6 +180,17 @@ def test_freeze_accepts_screen_fx_sound_and_sequence_refs():
     assert error.value.detail["code"] == "missing_ref"
 
 
+def test_freeze_gives_colourless_screen_effects_their_catalog_colour():
+    # The effect painters call addColorStop(cue.color); a missing colour failed the whole render.
+    from services.scene2d_schema import EFFECT_COLORS
+    frozen = freeze_export_command(_command(document=_document(sfx=[
+        {"id": "smoke", "kind": "smoke", "start": 0, "end": 1},
+        {"id": "dust", "kind": "dust", "start": 0, "end": 1, "color": "#123456"},
+    ])))
+    cues = frozen["effective"]["input"]["snapshot"]["document"]["sfx"]
+    assert [cue["color"] for cue in cues] == [EFFECT_COLORS["smoke"], "#123456"]
+
+
 def _queued_receipt():
     return {
         "version": 1, "commandId": "scene2d-1", "operation": OPERATION, "status": "queued",
@@ -220,6 +231,7 @@ def test_receipt_follows_the_completed_task_and_lists_the_mp4(tmp_path, monkeypa
 
 def test_catalog_and_lane_do_not_use_the_gpu(monkeypatch):
     monkeypatch.delenv("HOCUS_SCENE_EXPORT_CONCURRENCY", raising=False)
+    monkeypatch.setattr("services.scene_export_lane.os.cpu_count", lambda: 8)
     assert [item["name"] for item in command_catalog()] == [OPERATION, OPERATION + ".receipt", OPERATION + ".cancel"]
     assert Scene2DExportService.resource_lane(None) == resource_scheduler.cpu_lane("scene2d-render", capacity=2)
 

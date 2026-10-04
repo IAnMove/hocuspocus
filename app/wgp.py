@@ -190,6 +190,13 @@ def release_model():
         offloadobj = None
     offload.flush_torch_caches()
     gc.collect()
+    try:
+        from services.memory_trim import trim_process_heap
+    except ImportError:
+        pass
+    else:
+        # Freed weights stay in this thread's malloc arena until trimmed.
+        trim_process_heap("releasing the model")
     reload_needed = True
 def get_unique_id():
     global unique_id  

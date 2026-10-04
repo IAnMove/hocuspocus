@@ -2,6 +2,7 @@
 // (scenes.video2d.export). It loads a frozen scene, preloads its media and paints
 // deterministic frames with the same evaluator/painter as the Scene Animator.
 import '../../i18n'
+import '../../lib/kineticText/fonts.css'
 import { createSceneEvaluator } from '../../lib/scene2d/evaluate'
 import { isVisualLayer } from '../../lib/scene2d/layerStyle'
 import { normalizeScene2D } from '../../lib/scene2d/normalize'

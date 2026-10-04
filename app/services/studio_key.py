@@ -1,6 +1,7 @@
 """CPU chroma key for one workspace image or video.
 
-Green screen pixels become transparent and the foreground is despilled.
+Green (or blue / magenta) screen pixels become transparent and the foreground
+is despilled. Pick blue or magenta when the subject itself is green.
 Interior mattes use weights 0.15, 0.7, 0.15. A heavier neighbor weight
 leaves a halo on motion, so those weights stay fixed. ``isnet-anime``
 runs only when that ONNX file is already installed, on CPU, and never
@@ -32,7 +33,8 @@ _ISNET_NAME = "isnet-anime.onnx"
 _ISNET_MEAN = (0.485, 0.456, 0.406)
 _ISNET_SIZE = (1024, 1024)
 _IMAGE_EXTENSIONS = {".jpeg", ".jpg", ".png", ".webp"}
-_ENVELOPE_KEYS = frozenset({"version", "input"})
+_ENVELOPE_KEYS = frozenset({"version", "input", "intent_id"})
+SCREENS = ("green", "blue", "magenta")
 _INPUT_KEYS = frozenset({"workspace", "source", "mode"})
 MAX_SECONDS = 60
 MAX_FRAMES = 1800
@@ -55,7 +57,8 @@ def command_catalog() -> list[dict]:
         "properties": {
             "workspace": {"type": "string", "minLength": 1, "maxLength": 120},
             "source": {"type": "string", "minLength": 1, "maxLength": 2000},
-            "mode": {"type": "string", "enum": ["green", "isnet-anime"]},
+            "mode": {"type": "string", "enum": [*SCREENS, "isnet-anime"],
+                     "description": "Screen colour (default green). Use blue or magenta when the subject contains green."},
         },
         "required": ["workspace", "source"],
     }
@@ -65,19 +68,21 @@ def command_catalog() -> list[dict]:
         "domain": "studio",
         "mutation": True,
         "description": (
-            "Key a workspace image or video on the CPU. Green screen pixels become "
-            "transparent, foreground green spill is removed, and interior mattes are "
+            "Key a workspace image or video on the CPU. Green, blue or magenta screen "
+            "pixels become transparent, foreground spill is removed, and interior mattes are "
             "smoothed with fixed weights 0.15, 0.7, 0.15. Stronger smoothing leaves "
             "halos, so those weights do not change. mode isnet-anime runs only when "
             "that model is already installed; otherwise the call fails with "
             "model_not_installed and green remains available. Returns file, url, "
-            "sha256, and frames. Does not return pixels, use the GPU, or download a model."
+            "sha256, and frames. Does not return pixels, use the GPU, or download a model. "
+            "An optional intent_id replays the stored result instead of keying again."
         ),
         "inputSchema": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
                 "version": {"type": "integer", "const": 1},
+                "intent_id": {"type": "string", "minLength": 1, "maxLength": 160},
                 "input": payload,
             },
             "required": ["version", "input"],
@@ -90,12 +95,12 @@ def command_handlers(workspace_dir, uploads_dir, find_model: Callable[[], str | 
 
     async def handle(arguments: dict) -> dict:
         try:
-            result = key_request(
+            result = _key_once(arguments, workspace_dir, lambda: key_request(
                 arguments,
                 workspace_dir=workspace_dir,
                 uploads_dir=uploads_dir,
                 find_model=finder,
-            )
+            ))
         except StudioKeyError as exc:
             raise HTTPException(exc.status, {
                 "code": exc.code,
@@ -105,6 +110,28 @@ def command_handlers(workspace_dir, uploads_dir, find_model: Callable[[], str | 
         return {"version": 1, "status": "completed", "operation": "studio.key", "result": result}
 
     return {"studio.key": handle}
+
+
+def _key_once(arguments, workspace_dir, run: Callable[[], dict]) -> dict:
+    """Same intent_id and input: the stored result, not a second keyed file."""
+    intent = arguments.get("intent_id") if isinstance(arguments, dict) else None
+    if intent is None:
+        return run()
+    from pathlib import Path
+    from services.mcp_intent import IntentConflict, check_intent_id, intent_digest, load_intent, store_intent
+    payload = _input(arguments)
+    try:
+        intent_id = check_intent_id(intent)
+        digest = intent_digest(payload)
+        root = Path(_folder(workspace_dir, payload["workspace"]))
+        previous = load_intent(root, "studio.key", intent_id, digest)
+    except IntentConflict as exc:
+        raise StudioKeyError("intent_conflict", str(exc), 409) from exc
+    if previous is not None:
+        return {**previous, "replayed": True}
+    result = run()
+    store_intent(root, "studio.key", intent_id, digest, result)
+    return result
 
 
 def key_request(arguments, *, workspace_dir, uploads_dir, find_model: Callable[[], str | None]) -> dict:
@@ -123,16 +150,30 @@ def key_request(arguments, *, workspace_dir, uploads_dir, find_model: Callable[[
     return _published(destination, workspace, uploads_root, folder, frames)
 
 
-def green_rgba(rgb: np.ndarray) -> np.ndarray:
-    """Despill one RGB frame and attach a green-screen matte."""
+def screen_rgba(rgb: np.ndarray, screen: str = "green") -> np.ndarray:
+    """Despill one RGB frame and attach a matte for a green, blue or magenta screen."""
     color = np.asarray(rgb, dtype=np.float32) / 255.0
     red, green, blue = color[..., 0], color[..., 1], color[..., 2]
-    greenness = green - np.maximum(red, blue)
-    alpha = 1.0 - np.clip((greenness - _GREEN_START) / _GREEN_SPAN, 0.0, 1.0)
     color = np.array(color, copy=True)
-    color[..., 1] = np.minimum(green, np.maximum(red, blue) * _DESPILL_GAIN + _DESPILL_LIFT)
+    if screen == "magenta":
+        # Magenta is strong red and blue over weak green.
+        keyness = np.minimum(red, blue) - green
+        excess = np.clip(np.minimum(red, blue) - (green * _DESPILL_GAIN + _DESPILL_LIFT), 0.0, None)
+        color[..., 0] = red - excess
+        color[..., 2] = blue - excess
+    else:
+        index = 1 if screen == "green" else 2
+        others = np.maximum(red, blue) if index == 1 else np.maximum(red, green)
+        keyness = color[..., index] - others
+        color[..., index] = np.minimum(color[..., index], others * _DESPILL_GAIN + _DESPILL_LIFT)
+    alpha = 1.0 - np.clip((keyness - _GREEN_START) / _GREEN_SPAN, 0.0, 1.0)
     rgba = np.concatenate([color, alpha[..., None]], axis=-1)
     return np.clip(np.rint(rgba * 255.0), 0, 255).astype(np.uint8)
+
+
+def green_rgba(rgb: np.ndarray) -> np.ndarray:
+    """Despill one RGB frame and attach a green-screen matte."""
+    return screen_rgba(rgb, "green")
 
 
 def smooth_alpha(frames: list[np.ndarray]) -> list[np.ndarray]:
@@ -234,9 +275,9 @@ def _input(arguments) -> dict:
 
 def _mode(payload: dict) -> str:
     mode = payload.get("mode", "green")
-    if mode == "green" or mode == "isnet-anime":
+    if mode in SCREENS or mode == "isnet-anime":
         return mode
-    raise StudioKeyError("invalid_command", "mode must be green or isnet-anime.")
+    raise StudioKeyError("invalid_command", "mode must be green, blue, magenta or isnet-anime.")
 
 
 def _folder(workspace_dir, name: str) -> str:
@@ -332,8 +373,8 @@ def _key_image(source: str, destination: str, mode: str, session) -> int:
 
 
 def _rgba_frame(rgb: np.ndarray, mode: str, session) -> np.ndarray:
-    if mode == "green":
-        return green_rgba(rgb)
+    if mode in SCREENS:
+        return screen_rgba(rgb, mode)
     alpha = _isnet_alpha(Image.fromarray(np.asarray(rgb)), session)
     rgba = np.empty(rgb.shape[:-1] + (4,), dtype=np.uint8)
     rgba[..., :3] = np.asarray(rgb)[..., :3]

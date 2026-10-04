@@ -153,7 +153,8 @@ def test_catalog_is_versioned_green_or_isnet():
     assert schema["required"] == ["version", "input"]
     payload = schema["properties"]["input"]
     assert payload["required"] == ["workspace", "source"]
-    assert payload["properties"]["mode"]["enum"] == ["green", "isnet-anime"]
+    assert payload["properties"]["mode"]["enum"] == ["green", "blue", "magenta", "isnet-anime"]
+    assert "intent_id" in schema["properties"]
     assert "0.15" in operation["description"]
     assert "model_not_installed" in operation["description"]
 
@@ -187,3 +188,28 @@ def test_video_key_returns_a_webm_not_pixels(tmp_path):
     assert result["sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
     assert "workspace=clip" in result["url"]
     assert source.read_bytes() == before
+
+
+@pytest.mark.parametrize("screen, backdrop", [("magenta", (255, 0, 255)), ("blue", (0, 0, 255))])
+def test_blue_and_magenta_screens_keep_a_green_subject(tmp_path, screen, backdrop):
+    # A green prop on a green screen would vanish; the other screens keep it.
+    workspace, _uploads, handlers = _layout(tmp_path)
+    (workspace / "prop.png").write_bytes(_png(2, 1, bytes([*backdrop, 30, 200, 60])))
+    result = _call(handlers, {"workspace": "clip", "source": "prop.png", "mode": screen})["result"]
+    with Image.open(workspace / result["file"]) as keyed:
+        screen_pixel, subject = list(keyed.convert("RGBA").getdata())
+    assert screen_pixel[3] == 0
+    assert subject[3] == 255 and subject[1] > 150
+
+
+def test_same_intent_replays_without_keying_again(tmp_path):
+    workspace, _uploads, handlers = _layout(tmp_path)
+    (workspace / "plate.png").write_bytes(_plate())
+    command = {"version": 1, "intent_id": "key-plate-1", "input": {"workspace": "clip", "source": "plate.png"}}
+    first = asyncio.run(handlers["studio.key"](command))["result"]
+    again = asyncio.run(handlers["studio.key"](command))["result"]
+    assert again["file"] == first["file"] and again["replayed"] is True
+    assert len(list(workspace.glob("plate-key*.png"))) == 1
+    with pytest.raises(HTTPException) as conflict:
+        asyncio.run(handlers["studio.key"]({**command, "input": {**command["input"], "mode": "magenta"}}))
+    assert conflict.value.status_code == 409

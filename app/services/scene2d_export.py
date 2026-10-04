@@ -23,7 +23,7 @@ from pydantic import ValidationError
 
 from services import resource_scheduler
 from services.media_refs import parse_media_ref
-from services.scene2d_schema import document_schema
+from services.scene2d_schema import document_schema, fill_sfx_colors
 from services.scene_commands import DocumentInput, command_error as scene_error
 from services.export_receipts import project_export_receipt
 from services.world3d_export import (
@@ -78,6 +78,7 @@ def validated_document(raw) -> dict:
         raise http_error(422, "invalid_document", "Choose a Video 2D scene (layers); use scenes.world3d.export for Video 3D")
     if document.get("fps", 30) not in (24, 30, 60):
         raise http_error(422, "unsupported_capability", "Export fps must be 24, 30 or 60")
+    fill_sfx_colors(document)
     for layer in document["layers"]:
         if layer.get("type") not in LAYER_TYPES:
             raise http_error(422, "unsupported_capability",
