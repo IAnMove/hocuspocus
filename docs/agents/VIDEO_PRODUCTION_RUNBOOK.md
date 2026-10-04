@@ -386,13 +386,20 @@ changes. A retake updates its revision so the following resume keeps the new cli
 
 An isolated runtime can set `HOCUS_PRODUCTION_MIN_FREE_GB=15` and
 `HOCUS_PRODUCTION_EXTERNAL_VRAM_MB=2048` in its process environment. Before each
-music/image/H3 or native video export admission, the runner invokes `df -h` and
+music/image/speech/SFX/H3 or native video export admission, the runner invokes `df -h` and
 `nvidia-smi`. It waits in 30-second intervals while another GPU process exceeds
 the limit; its own resident model is excluded. A disk shortfall stops the
 resumable production with `resource_disk_low`, without deleting files. The agent
 must propose a cleanup and wait for the user's approval before resuming.
 These opt-in checks leave other instances untouched. They require the named
 local commands when enabled; absent commands fail before admission.
+
+Series Lab's native renderer applies the same checks to each speech and export
+call in `series.episode.render_native` and the render stage of
+`series.episode.produce`. The UI, MCP and wizard share that renderer. Disk is
+measured on the episode workspace, including every speech retry. Status polling
+and CPU speech checks do not wait for the GPU. CPU video exports check disk
+without waiting for an unrelated GPU generation.
 
 
 ### Rig an existing model through MCP

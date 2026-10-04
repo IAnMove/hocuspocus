@@ -10,6 +10,26 @@ KEVIN_ES = {"provider": "local", "model": "qwen3_tts_base", "voiceId": "referenc
 GARY = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan"}
 
 
+def test_native_speech_stops_before_generation_when_workspace_disk_is_low(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from services.production_resource_gate import guard_workspace_mcp
+    monkeypatch.setenv('HOCUS_PRODUCTION_MIN_FREE_GB', '15')
+    probes, submitted = [], []
+    def guarded(call, resolve):
+        return guard_workspace_mcp(call, resolve,
+            run=lambda command, **_: probes.append(command) or SimpleNamespace(stdout='Filesystem\nlocal 14G'),
+            usage=lambda _: SimpleNamespace(free=14 * 1024 ** 3))
+    monkeypatch.setattr('services.series_native_render.guard_workspace_mcp', guarded)
+    deps = NativeRenderDeps(call=lambda *args: submitted.append(args),
+                            workspace_dir=lambda ws: str(tmp_path / ws),
+                            read_library=lambda _: {}, read_kits=lambda _: {})
+    service = SeriesNativeRender(deps)
+    with pytest.raises(ValueError, match='resource_disk_low'):
+        service._speak('anime', {'language': 'spanish'}, 'line', 'Hola.', KEVIN_ES, 0)
+    assert probes == [['df', '-h', str(tmp_path / 'anime')]]
+    assert not submitted
+
+
 def library():
     character = lambda cid: {"id": cid, "name": cid, "voiceProfile": {"characterKitRef": {"id": f"kit-{cid}", "workspace": "cast"}}}
     shot = lambda sid, order, method, beats, scene="scene_1": {

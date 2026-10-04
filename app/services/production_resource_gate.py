@@ -2,13 +2,30 @@
 from __future__ import annotations
 
 import os
+import logging
 import shutil
 import subprocess
 import time
+from types import SimpleNamespace
 
 from services.world3d_renderer_support import scene_render_device
 
-GPU_OPERATIONS = frozenset({"generation.music", "generation.image", "generate", "scenes.world3d.export", "scenes.video2d.export"})
+GPU_OPERATIONS = frozenset({"generation.music", "generation.image", "generation.speech", "generation.sfx",
+                            "generate", "scenes.world3d.export", "scenes.video2d.export"})
+
+
+def guard_workspace_mcp(mcp, workspace_dir, **probes):
+    """Apply the same admission policy to each workspace-scoped Series Lab call."""
+    def call(operation, arguments):
+        if operation not in GPU_OPERATIONS:
+            return mcp(operation, arguments)
+        workspace = (arguments.get("input") or {}).get("workspace")
+        if not isinstance(workspace, str) or not workspace.strip():
+            raise ValueError("resource_workspace_required: use an explicit workspace")
+        context = SimpleNamespace(root=workspace_dir(workspace),
+                                  log=logging.getLogger(__name__).info)
+        return guard_mcp(context, mcp, **probes)(operation, arguments)
+    return call
 
 
 def external_gpu_jobs(report: str, own_pid: int, limit_mb: float):
