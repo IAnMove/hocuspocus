@@ -12,6 +12,8 @@ export type Framing = 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
 export type Motion = 'idle' | 'still' | 'shake'
 export type CastSpec = {
   kitId: string; poseId?: string; x: number; z?: number; motion?: Motion
+  /** Size multiplier for this character (a small robot, a tall giant). */
+  boost?: number
   transform?: Pose; blinks?: number[]
   enter?: { fromX: number; start: number; end: number }
   exit?: { toX: number; start: number; end: number }
@@ -208,7 +210,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     const kit = kits[cast.kitId]
     if (!kit) throw new Error(`Missing Character Kit ${cast.kitId}`)
     const single = shot.cast.length === 1 && shot.framing === 'wide'
-    const base = cast.transform ?? personTransform(kit, cast.poseId ?? 'base', shot.framing, cast.x, aspect, single ? 1.25 : 1)
+    const base = cast.transform ?? personTransform(kit, cast.poseId ?? 'base', shot.framing, cast.x, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
     const talking = shot.lines.filter(line => line.kitId === cast.kitId && line.visible !== false)
       .map(line => [line.start, line.end] as [number, number])
     const mounted = mountCast(kit, { ...cast, z: cast.z ?? 20 + index * 10 }, base, shot.duration, viewport, shot.workspace, talking)

@@ -1,0 +1,127 @@
+"""A Series Lab shot is planned as a Video 2D shot from what the writer or the planner already set."""
+import shutil
+
+import pytest
+
+from services.series_shot_plan import (
+    background_for, build_shot_spec, card_texts, classify_camera, classify_framing, language_key, normalize_layout2d, plan_cast,
+    plan_timing, sound_tracks, spread,
+)
+
+
+def series(**extra):
+    character = lambda cid, **more: {"id": cid, "voiceProfile": {"characterKitRef": {"id": f"kit-{cid}", "workspace": "cast"}}, **more}
+    value = {
+        "id": "uv", "title": "Valle", "spokenLanguage": "Español de España",
+        "characters": [character("kevin"), character("gary", layout2d={"scale": 0.6}), {"id": "nokit"}],
+        "locations": [{"id": "garage", "referenceAssetIds": ["asset_day"], "layout2d": {"homes": {"kevin": 30, "gary": 70}},
+                       "variants": [{"id": "night", "referenceAssetIds": ["asset_night"]}]}],
+        "assets": {"asset_day": {"kind": "image", "uri": "outputs/day.png"}, "asset_night": {"kind": "image", "uri": "assets/night 1.png"},
+                   "asset_plate": {"kind": "video", "uri": "plate.mp4"}},
+        "soundDesign": {"stinger": {"file": "sting.wav", "volume": 0.7}, "ambienceByLocation": {"garage": {"file": "crickets.wav"}}},
+    }
+    value.update(extra)
+    return value
+
+
+@pytest.mark.parametrize("text, count, expected", [
+    ("Wide establishing shot", 2, "wide"), ("plano general del garaje", 2, "wide"), ("medium close-up", 1, "close"),
+    ("Plano medio", 1, "medium"), ("two-shot over the shoulder", 2, "two"), ("inserto del móvil", 0, "insert"),
+    ("", 0, "title"), ("", 1, "medium"), ("", 2, "two"), ("", 3, "wide"),
+])
+def test_free_text_framing_in_english_or_spanish(text, count, expected):
+    assert classify_framing(text, count) == expected
+
+
+def test_camera_spread_language_and_timing():
+    assert classify_camera("slow push-in") == "push" and classify_camera("cámara se acerca") == "push" and classify_camera("static") == "static"
+    assert spread(1) == [50.0] and spread(2) == [34.0, 66.0] and spread(3) == [15.0, 50.0, 85.0]
+    assert language_key(series()) == "spanish" and language_key({"spokenLanguage": "English (US)"}) == "english"
+    timing, duration = plan_timing([1.0, 2.0])
+    assert timing == [(0.35, 1.35), (1.57, 3.57)] and duration == round(round(4.02 * 24) / 24, 4)
+    assert plan_timing([], at_least=6)[1] == 6
+
+
+def test_backgrounds_prefer_the_variant_then_the_location_and_quote_paths():
+    shot = {"locationId": "garage", "locationVariantId": "night"}
+    assert background_for(series(), shot, "cast") == {"source": "/api/v1/file/assets/night%201.png?workspace=cast", "kind": "image"}
+    assert background_for(series(), {"locationId": "garage"}, "cast")["source"] == "/api/v1/file/day.png?workspace=cast"
+    plated = series()
+    plated["locations"][0]["layout2d"]["plateAssetId"] = "asset_plate"
+    assert background_for(plated, shot, "cast")["kind"] == "video"
+    assert background_for(series(), {"locationId": "moon"}, "cast") is None
+
+
+def test_cast_uses_homes_explicit_layout_and_character_scale():
+    shot = {"locationId": "garage", "visibleCharacterIds": ["kevin", "gary", "nokit"]}
+    cast = plan_cast(series(), shot, "wide", 4)
+    assert [(item["kitId"], item["x"], item["boost"]) for item in cast] == [("kit-kevin", 30.0, 1.0), ("kit-gary", 70.0, 0.6)]
+    explicit = {"locationId": "garage", "layout2d": {"cast": [{"characterId": "kevin", "poseId": "panic", "x": 20, "motion": "shake", "enterFrom": "left",
+                                                                "scale": 1.2, "transform": {"x": 20, "y": 60, "scale": 0.5}}]}}
+    entry = plan_cast(series(), explicit, "two", 4)[0]
+    assert entry["poseId"] == "panic" and entry["motion"] == "shake" and entry["boost"] == 1.2
+    assert entry["enter"] == {"fromX": -15.0, "start": 0.2, "end": 1.4} and entry["transform"] == {"x": 20, "y": 60, "scale": 0.5}
+    assert plan_cast(series(), {"visibleCharacterIds": ["kevin"]}, "close", 4)[0]["x"] == 50.0, "a lone close-up is centred"
+
+
+def test_cards_and_sound():
+    titles = card_texts({"kind": "title", "title": "VALLE", "body": "Episodio 1"}, 5)
+    assert [text["id"] for text in titles] == ["card-title", "card-body"] and titles[0]["font"] == "marker"
+    assert card_texts({"kind": "disclaimer", "title": "", "body": "Parodia."}, 5)[0]["id"] == "card-body"
+    tracks = sound_tracks(series(), {"locationId": "garage", "layout2d": {"music": {"file": "moral.wav", "volume": 0.4, "start": 1}}}, True)
+    assert [(track["id"], track["filename"]) for track in tracks] == [("ambience", "crickets.wav"), ("stinger", "sting.wav"), ("music", "moral.wav")]
+    assert [track["id"] for track in sound_tracks(series(), {"locationId": "garage"}, False)] == ["ambience"]
+
+
+def test_layout_normalization_keeps_only_known_values():
+    assert normalize_layout2d({"framing": "close", "camera": "zoom", "cast": [{"characterId": "a", "x": 500, "motion": "dance"}, {"x": 1}],
+                               "card": {"kind": "end", "title": "Fin"}, "junk": 1}) == {
+        "framing": "close", "cast": [{"characterId": "a"}], "card": {"kind": "end", "title": "Fin", "body": ""}}
+    assert normalize_layout2d({"junk": 1}) is None and normalize_layout2d("x") is None
+
+
+def test_the_series_library_keeps_a_shot_layout():
+    from services.series_library import _normalize_shot
+    shot = _normalize_shot({"id": "s1", "productionMethod": "animation_2d", "layout2d": {"framing": "two", "bad": True}}, 0)
+    assert shot["layout2d"] == {"framing": "two"}
+    assert "layout2d" not in _normalize_shot({"id": "s2", "productionMethod": "animation_2d", "layout2d": {}}, 1)
+
+
+def test_a_full_shot_spec_with_lines_card_and_focus():
+    shot = {"id": "s1", "sceneId": "a", "framing": "two-shot", "camera": "static", "locationId": "garage", "visibleCharacterIds": ["kevin", "gary"],
+            "dialogueBeats": [{"id": "b1", "characterId": "kevin", "text": "Hola."}, {"id": "b2", "characterId": "boss", "text": "(off)"},
+                              {"id": "b3", "characterId": "gary", "text": "  "}]}
+    recorded = {"b1": {"filename": "l1.wav", "duration": 1.0, "cues": [{"start": 0, "end": 1, "value": "D"}], "driver": "wav2vec2-phoneme"},
+                "b2": {"filename": "l2.wav", "duration": 0.5, "cues": []}}
+    spec = build_shot_spec(series(), {"id": "ep1", "title": "Piloto"}, shot, workspace="cast", recorded=recorded, first_of_scene=True)
+    assert spec["framing"] == "two" and spec["camera"] == "static" and spec["fps"] == 24
+    assert [(line["id"], line["visible"], line["cues"] is None) for line in spec["lines"]] == [("ep1-b1", True, False), ("ep1-b2", False, True)]
+    assert spec["background"]["focusX"] == 50.0 and spec["narrative"]["controls"] == {"seriesId": "uv", "episodeId": "ep1", "shotId": "s1"}
+    card = build_shot_spec(series(), {"id": "ep1"}, {"id": "s0", "durationSeconds": 6, "layout2d": {"card": {"kind": "title", "title": "VALLE"}}},
+                           workspace="cast", recorded={})
+    assert card["framing"] == "title" and card["cast"] == [] and card["duration"] == 6 and card["texts"][0]["text"] == "VALLE"
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node required")
+def test_the_bridge_compiles_a_planned_shot_with_the_editor_code(tmp_path):
+    from PIL import Image
+    from services.series_shot_bridge import run_series_shot, with_pose_sizes
+    from services.video2d_compile import TSX
+    if not TSX.is_file():
+        pytest.skip("ui/node_modules/tsx is not installed")
+    Image.new("RGBA", (300, 600), (255, 0, 0, 255)).save(tmp_path / "k.png")
+    asset = lambda aid, kind="overlay": {"id": aid, "name": aid, "source": f"/api/v1/file/{aid}.png?workspace=cast" if kind == "overlay" else "/api/v1/file/k.png?workspace=cast",
+                                         "kind": kind, "alphaStatus": "transparent", "reviewState": "approved"}
+    states = ["closed", "small", "wide", "round", "pressed", "medium", "pucker", "bite", "tongue"]
+    kit = {"version": 1, "id": "kit-kevin", "name": "Kevin", "style": "cutout", "base": asset("base", "image"), "poses": {},
+           "mouth": {state: asset(f"m-{state}") for state in states}, "eyes": {}, "provenance": [],
+           "mouthMapping": {"rest": "closed", "M": "pressed", "A": "wide", "E": "medium", "I": "small", "O": "round", "U": "pucker", "F": "bite", "L": "tongue"},
+           "anchors": {"base": {"mouth": {"offsetX": 0, "offsetY": -10, "scale": 0.1, "rotation": 0}}}}
+    sized = with_pose_sizes(kit, str(tmp_path))
+    assert (sized["base"]["width"], sized["base"]["height"]) == (300, 600)
+    shot = {"id": "s1", "framing": "medium", "visibleCharacterIds": ["kevin"], "dialogueBeats": [{"id": "b1", "characterId": "kevin", "text": "Hola."}]}
+    spec = build_shot_spec(series(), {"id": "ep1"}, shot, workspace="cast",
+                           recorded={"b1": {"filename": "l1.wav", "duration": 1.2, "cues": [{"start": 0, "end": 0.6, "value": "D"}]}})
+    document = run_series_shot({"mode": "shot", "kits": {"kit-kevin": sized}, "shot": spec})
+    assert document["dialogueBeats"][0]["lipSync"]["cues"] and len(document["dialogueBeats"][0]["mouthLayerIds"]) == 9
+    assert any(layer.get("characterKitRef", {}).get("id") == "kit-kevin" for layer in document["layers"])

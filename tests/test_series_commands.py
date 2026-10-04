@@ -135,3 +135,17 @@ def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp
     with pytest.raises(HTTPException) as error:
         call(handlers, "characters.styles", {"style": "oil-painting", "kind": "character"})
     assert error.value.status_code == 404
+
+
+def test_the_server_episode_render_is_reachable_over_mcp(tmp_path):
+    handlers, calls, _, _ = harness(tmp_path, [{"jobId": "native-1", "status": "queued"}, {"jobId": "native-1", "status": "running"},
+                                               {"jobId": "native-1", "status": "queued"}])
+    started = call(handlers, "series.episode.render_native", {"workspace": "series", "series_id": "uv", "episode_id": "ep1",
+                                                               "shot_ids": ["s01"], "approve": True})
+    assert started["result"]["job"]["jobId"] == "native-1"
+    assert calls[0][:2] == ("POST", "http://127.0.0.1:9/api/v1/series/uv/episodes/ep1/native-render")
+    assert calls[0][2] == {"workspace": "series", "approve": True, "shotIds": ["s01"]}
+    call(handlers, "series.episode.render_native.status", {"workspace": "series", "job_id": "native-1"})
+    assert calls[1][:2] == ("GET", "http://127.0.0.1:9/api/v1/series/native-render/jobs/native-1?workspace=series")
+    call(handlers, "series.episode.render_native.resume", {"workspace": "series", "job_id": "native-1"})
+    assert calls[2][:2] == ("POST", "http://127.0.0.1:9/api/v1/series/native-render/jobs/native-1/resume")

@@ -60,6 +60,27 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "background (studio.key). style: smile -1..1 (frown to grin), smirk 0..1, width, mouth_scale; screen true for "
         "a face that is a screen. Returns the saved kit, a review image URL and unwipedPoses (no painted mouth found).",
     ),
+    "series.episode.render_native": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_ids": {"type": "array", "items": ID, "maxItems": 500},
+         "approve": {"type": "boolean"}},
+        ["workspace", "series_id", "episode_id"], True,
+        "Render every 2D animation shot of an episode on the server, no browser needed: each line in the character's voice "
+        "for the series language (checked with qa.speech, up to three takes), phonetic mouth cues, an editable Video 2D "
+        "scene (framing from shot.framing or shot.layout2d, cast, sound, cards), a headless export and a take on the shot "
+        "(approve: true approves it). Returns the job; poll series.episode.render_native.status. Resumable.",
+    ),
+    "series.episode.render_native.status": (
+        {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
+        "Status of a server episode render: per shot stage (voices, scene, export, import, done), line takes and errors.",
+    ),
+    "series.episode.render_native.cancel": (
+        {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
+        "Stop a server episode render after its current step. Finished shots keep their takes; resume continues.",
+    ),
+    "series.episode.render_native.resume": (
+        {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
+        "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines.",
+    ),
     "series.list": (
         {"workspace": WORKSPACE}, ["workspace"], False,
         "List Series Lab projects with their revision, language and episodes (id, number, title, shot count, status).",
@@ -233,6 +254,23 @@ def _rig_flat_character(data: dict[str, Any], request: Callable[..., Any], **_ex
     return {**rigged, "character": _kit_summary(rigged["character"])}
 
 
+def _render_native(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {"workspace": data["workspace"], "approve": bool(data.get("approve"))}
+    if data.get("shot_ids"):
+        body["shotIds"] = data["shot_ids"]
+    path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/native-render"
+    return {"job": request("POST", path, body=body)}
+
+
+def _native_job(action: str) -> Callable[..., dict[str, Any]]:
+    def run(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+        path = f"/api/v1/series/native-render/jobs/{_quote(data['job_id'])}"
+        if action == "status":
+            return {"job": request("GET", path, query={"workspace": data["workspace"]})}
+        return {"job": request("POST", f"{path}/{action}", body={"workspace": data["workspace"]})}
+    return run
+
+
 def _list_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     listed = request("GET", "/api/v1/series", query={"workspace": data["workspace"]})
     return {"series": [_series_summary(item) for item in listed.get("series") or []]}
@@ -343,6 +381,10 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "characters.save": _save_character,
     "characters.styles": _character_styles,
     "characters.rig.flat": _rig_flat_character,
+    "series.episode.render_native": _render_native,
+    "series.episode.render_native.status": _native_job("status"),
+    "series.episode.render_native.cancel": _native_job("cancel"),
+    "series.episode.render_native.resume": _native_job("resume"),
     "series.list": _list_series,
     "series.get": _get_series,
     "series.create": _create_series,

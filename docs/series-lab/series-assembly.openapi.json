@@ -188,7 +188,8 @@
               { "type": "string", "minLength": 1, "maxLength": 200 },
               { "type": "null" }
             ]
-          }
+          },
+          "burnSubtitles": { "type": "boolean", "default": false }
         },
         "type": "object"
       },
