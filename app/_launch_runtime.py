@@ -37154,6 +37154,14 @@ def run_server():
     if host == "0.0.0.0":
         print(f"  (Bound to {host} — LAN-accessible via this machine's IP)")
     print(f"{'='*50}\n")
+    try:
+        from services.server_endpoint import publish_server_endpoint
+        publish_server_endpoint(
+            os.path.join(os.path.dirname(__file__), "settings", "server-endpoint.json"),
+            host=host, display_host=display_host, port=port,
+        )
+    except OSError as error:
+        print(f"[HocusPocus Lab] Could not publish settings/server-endpoint.json: {error}")
 
     # Confirm the polling filter immediately before Uvicorn configures logging.
     install_quiet_access_filter()

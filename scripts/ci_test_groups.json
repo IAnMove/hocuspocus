@@ -128,6 +128,7 @@
         "tests/test_scene_recording.py",
         "tests/test_select_local_tests.py",
         "tests/test_server_lifecycle.py",
+        "tests/test_server_endpoint.py",
         "tests/test_series_assembly.py",
         "tests/test_series_assembly_contract.py",
         "tests/test_series_episode_update_router.py",
