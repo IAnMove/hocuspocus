@@ -2,6 +2,13 @@ import { Mesh, PlaneGeometry, ShaderMaterial, type Texture } from 'three'
 
 export type ImageFootprint = { bottom: number; center: number; width: number }
 
+const FLOATING_BOTTOM = 0.08
+
+/** A cutout floats when its opaque pixels stop well above the canvas and it is not grounded. */
+export function cutoutFloats(foot: ImageFootprint | null, grounded = false) {
+  return Boolean(foot && !grounded && foot.bottom > FLOATING_BOTTOM)
+}
+
 /** Ignore faint antialiasing and use the lowest opaque band, not the PNG canvas. */
 export function imageFootprint(rgba: ArrayLike<number>, width: number, height: number): ImageFootprint | null {
   let bottom = -1

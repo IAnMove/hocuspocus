@@ -583,7 +583,42 @@ def normalize_document(raw: Any, *, workspace: str, workspace_dir: Callable[[str
     _warn_duration(document, warnings)
     _warn_layout(document, warnings)
     _warn_media(document, workspace, workspace_dir, uploads_dir, warnings)
+    _warn_audio_level(document, warnings)
+    _warn_floating_cutouts(document, warnings)
     return {"document": document, "errors": errors, "warnings": warnings}
+
+
+def _warn_audio_level(document: dict, warnings: list[dict[str, Any]]) -> None:
+    tracks = document.get("audioTracks")
+    if not isinstance(tracks, list):
+        return
+    for index, track in enumerate(tracks):
+        volume = _number(track.get("volume")) if isinstance(track, dict) else None
+        if volume is not None and volume > 1:
+            _add(warnings, _issue("audio_hot", f"audioTracks[{index}].volume", f"Audio track volume {volume:g} is above 1 and can clip."))
+
+
+def _warn_floating_cutouts(document: dict, warnings: list[dict[str, Any]]) -> None:
+    layers = document.get("layers")
+    if not isinstance(layers, list):
+        return
+    for index, layer in enumerate(layers):
+        issue = _floating_cutout(layer, index)
+        if issue:
+            _add(warnings, issue)
+
+
+def _floating_cutout(layer: Any, index: int) -> dict[str, Any] | None:
+    if not isinstance(layer, dict) or layer.get("type") != "image" or layer.get("visible") is False or layer.get("grounded") is True:
+        return None
+    foot = layer.get("footprint")
+    bottom = _number(foot.get("bottom")) if isinstance(foot, dict) else None
+    if bottom is None or bottom <= 0.08:
+        return None
+    return _issue(
+        "cutout_floating", f"layers[{index}].footprint",
+        f"Opaque pixels stop {bottom:.0%} above the canvas bottom, so this cutout floats.",
+    )
 
 
 def command_catalog() -> list[dict[str, Any]]:
@@ -597,6 +632,8 @@ def command_catalog() -> list[dict[str, Any]]:
         "Text and lyric boxes use font, size, maxWidth, align and box padding. text_overlap, lyrics_overlap, "
         "text_outside_frame (the real box: left and right x are those edges; center or omitted align stays centered), "
         "empty_timespan (a span over 2s with no visible layer or text), "
+        "audio_hot (an audio track volume above 1), "
+        "cutout_floating (an image footprint whose opaque pixels stop more than 8% above the canvas, unless grounded), "
         "reserved_zone (document.reservedZones) and text_low_contrast (sampled luminance under 3:1 when the painter "
         "can start; otherwise the sample is skipped and no ratio is invented). No GPU and no scene-file write."
     )

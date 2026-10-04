@@ -29,8 +29,9 @@ measures every loaded model in its current pose. Skinned meshes are measured ski
   stage is a pure function of time, so the frames do not change (measured byte-identical). The worker writes
   `geometry.json`, the task metadata keeps it, and `scenes.world3d.export.receipt` returns it as `receipt.geometry`.
 - **Browser.** A client can call `stage.geometrySample(t, doc)` and `checkGeometry(samples)` from
-  `ui/src/features/scene3d/geometryChecks.ts`. The review panel that lists the warnings and jumps to their time is phase
-  6.F4.
+  `ui/src/features/scene3d/geometryChecks.ts`. The Video 3D editor button «Revisar geometría» samples the open shot,
+  lists the same warnings, and jumps the playhead. It does not block export. The review panel that also shows the
+  export receipt is phase 6.F4.
 
 ## Measured (2026-10-03)
 
