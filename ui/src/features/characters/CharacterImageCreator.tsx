@@ -8,6 +8,8 @@ import { generateImageAsset } from '../../lib/imageGeneration'
 import { createCharacterKit, type CharacterKit, type CharacterKitAsset } from '../../lib/characterKit'
 import { characterImageModels, preferredCharacterImageModel } from '../../lib/characterImageModels'
 import { randomUuid } from '../../lib/uuid'
+import { characterStyle, characterStyleLabel, characterStyles, characterStyleSummary } from '../../lib/characterStyles'
+import { CharacterStyleCreator } from './CharacterStyleCreator'
 
 const control = 'min-h-10 rounded-lg border border-border bg-bg-primary px-3 text-sm disabled:opacity-40'
 
@@ -16,8 +18,10 @@ export function CharacterImageCreator({ workspace, disabled, onUseReference }: {
   workspace: string; disabled?: boolean
   onUseReference: (asset: CharacterKitAsset, description: string, signal: AbortSignal) => Promise<void>
 }) {
-  const { t } = useUiTranslation('characters')
+  const { t, i18n } = useUiTranslation('characters')
   const models = useStore(state => state.models)
+  const [styleId, setStyleId] = useState('')
+  const style = characterStyle(styleId)
   const imageModels = characterImageModels(models, false)
   const [model, setModel] = useState(''), [name, setName] = useState(''), [description, setDescription] = useState('')
   const [draft, setDraft] = useState<CharacterKit>(), [saved, setSaved] = useState(false)
@@ -74,7 +78,20 @@ export function CharacterImageCreator({ workspace, disabled, onUseReference }: {
   })
   const blocked = Boolean(busy) || disabled
   return <section data-testid="character-image-creator" className="mx-auto mb-5 max-w-5xl space-y-4 rounded-xl border border-cyan-400/30 bg-bg-secondary p-4">
-    <div><h3 className="text-base font-semibold">{t('imageCreator.title')}</h3><p className="mt-1 text-sm text-text-muted">{t('imageCreator.hint')}</p></div>
+    <div><h3 className="text-base font-semibold">{t('imageCreator.title')}</h3><p className="mt-1 text-sm text-text-muted">{t(style ? 'styleCreator.hint' : 'imageCreator.hint')}</p></div>
+    <label className="block max-w-md text-xs text-text-secondary">{t('styleCreator.style')}
+      <select value={styleId} disabled={Boolean(busy) || disabled} onChange={event => setStyleId(event.target.value)} className={`${control} mt-1 w-full`} data-testid="character-style">
+        <option value="">{t('styleCreator.free')}</option>
+        {characterStyles.map(item => <option key={item.id} value={item.id}>{characterStyleLabel(item, i18n.language)}</option>)}
+      </select>
+      {style && <span className="mt-1 block text-text-muted">{characterStyleSummary(style, i18n.language)}</span>}
+    </label>
+    {style ? <>
+      <label className="block max-w-md text-xs text-text-secondary">{t('lips.imageModel')}<select value={imageModel} disabled={disabled} onChange={event => setModel(event.target.value)} className={`${control} mt-1 w-full`}>
+        {!imageModels.length && <option value="">{t('lips.noImageModel')}</option>}{imageModels.map(item => <option key={item.model_type} value={item.model_type}>{item.name}</option>)}
+      </select></label>
+      <CharacterStyleCreator key={style.id} workspace={workspace} style={style} model={imageModel} disabled={disabled} />
+    </> : <>
     <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_15rem]">
       <div className="space-y-3">
         <label className="block text-xs text-text-secondary">{t('imageCreator.name')}<input value={name} maxLength={80} disabled={blocked || saved} onChange={event => setName(event.target.value)} className={`${control} mt-1 w-full`} /></label>
@@ -100,5 +117,6 @@ export function CharacterImageCreator({ workspace, disabled, onUseReference }: {
     {busy && <p role="status" className="text-sm text-text-muted">{t(busy === 'generate' ? 'imageCreator.generating' : 'lips.saving')}</p>}
     {message && <p role="status" className="text-sm text-emerald-200">{message}</p>}
     {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+    </>}
   </section>
 }

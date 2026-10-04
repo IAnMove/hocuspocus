@@ -4,17 +4,19 @@ import type { CharacterKit } from '../../lib/characterKit'
 import type { CharacterVoice, CharacterVoicesByLanguage } from '../../lib/characterVoice'
 import { SPOKEN_LANGUAGES, type SpokenLanguage } from '../../lib/speechLanguage'
 import { CharacterVoiceFields } from './CharacterVoiceFields'
+import { CharacterVoiceDesigner } from './CharacterVoiceDesigner'
 
 const newReference = (language: SpokenLanguage): CharacterVoice =>
   ({ provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: '', referenceAudio: '', transcript: '', language })
 
 /** Optional dedicated voices per spoken language. The default voice keeps speaking every other language. */
-export function CharacterLanguageVoices({ workspace, value, onChange, savedKits, disabled, onBusyChange }: {
+export function CharacterLanguageVoices({ workspace, value, onChange, savedKits, disabled, onBusyChange, characterName = '' }: {
   workspace: string; value?: CharacterVoicesByLanguage; onChange: (voices: CharacterVoicesByLanguage | undefined) => void
-  savedKits?: CharacterKit[]; disabled?: boolean; onBusyChange?: (busy: boolean) => void
+  savedKits?: CharacterKit[]; disabled?: boolean; onBusyChange?: (busy: boolean) => void; characterName?: string
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const [adding, setAdding] = useState<SpokenLanguage | ''>('')
+  const [designing, setDesigning] = useState<SpokenLanguage | ''>('')
   const assigned = SPOKEN_LANGUAGES.filter(language => value?.[language])
   const available = SPOKEN_LANGUAGES.filter(language => !value?.[language])
   const set = (language: SpokenLanguage, voice: CharacterVoice | undefined) => {
@@ -29,9 +31,15 @@ export function CharacterLanguageVoices({ workspace, value, onChange, savedKits,
     {assigned.map(language => <div key={language} data-testid={`language-voice-${language}`} className="space-y-2 border-t border-border pt-3">
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium">{t(`speech.customVoice.languages.${language}`)}</span>
-        <button type="button" className="min-h-10 px-2 underline" onClick={() => set(language, undefined)}>
-          {t('speech.languageVoices.remove')}</button>
+        <span className="flex gap-1">
+          <button type="button" className="min-h-10 px-2 underline" aria-expanded={designing === language}
+            onClick={() => setDesigning(open => open === language ? '' : language)}>{t('speech.languageVoices.design')}</button>
+          <button type="button" className="min-h-10 px-2 underline" onClick={() => set(language, undefined)}>
+            {t('speech.languageVoices.remove')}</button>
+        </span>
       </div>
+      {designing === language && <CharacterVoiceDesigner workspace={workspace} characterName={characterName || t(`speech.customVoice.languages.${language}`)}
+        initialLanguage={language} disabled={disabled} onUse={(chosen, voice) => { set(chosen, voice); setDesigning('') }} />}
       <CharacterVoiceFields workspace={workspace} language={language} value={value?.[language]} savedKits={savedKits}
         onBusyChange={onBusyChange} onChange={voice => set(language, voice)} />
     </div>)}

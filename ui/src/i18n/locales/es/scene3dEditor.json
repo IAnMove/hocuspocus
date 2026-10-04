@@ -303,7 +303,8 @@
       "add": "Añadir una voz para",
       "choose": "Elige un idioma",
       "addButton": "Añadir voz",
-      "remove": "Quitar"
+      "remove": "Quitar",
+      "design": "Diseñar una voz"
     }
   },
   "title": "Estudio de escenas 3D",
