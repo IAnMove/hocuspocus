@@ -149,6 +149,122 @@ def build_scene_recording_command(
     return command
 
 
+def _probe_quietly(path: str | os.PathLike[str]) -> dict[str, object] | None:
+    """Probe metadata, or give up so a broken upload still takes the transcode path."""
+    try:
+        metadata = probe_scene_recording_output(path)
+    except Exception:
+        return None
+    return metadata if isinstance(metadata, dict) else None
+
+
+def _video_stream(metadata: dict[str, object]) -> dict[str, object] | None:
+    streams = metadata.get("streams")
+    if not isinstance(streams, list):
+        return None
+    for item in streams:
+        if isinstance(item, dict) and item.get("codec_type") == "video":
+            return item
+    return None
+
+
+def _stream_rate(stream: dict[str, object]) -> float | None:
+    for key in ("avg_frame_rate", "r_frame_rate"):
+        raw = stream.get(key)
+        if not isinstance(raw, str) or not raw or raw == "0/0":
+            continue
+        if "/" in raw:
+            num, _, den = raw.partition("/")
+            try:
+                numerator = float(num)
+                denominator = float(den)
+            except ValueError:
+                continue
+            if denominator == 0:
+                continue
+            return numerator / denominator
+        try:
+            return float(raw)
+        except ValueError:
+            continue
+    return None
+
+
+def _duration_close(
+    metadata: dict[str, object],
+    video: dict[str, object],
+    duration: float | None,
+    fps: int,
+) -> bool:
+    if not duration or float(duration) <= 0:
+        return True
+    format_data = metadata.get("format")
+    raw = video.get("duration") or (format_data.get("duration") if isinstance(format_data, dict) else None)
+    try:
+        actual = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    allowed = max(0.05, 1 / max(1, canonical_scene_fps(fps)))
+    return actual > 0 and abs(actual - float(duration)) <= allowed
+
+
+def _audio_is_aac(metadata: dict[str, object]) -> bool:
+    streams = metadata.get("streams")
+    if not isinstance(streams, list):
+        return False
+    found = False
+    for item in streams:
+        if not isinstance(item, dict) or item.get("codec_type") != "audio":
+            continue
+        found = True
+        if item.get("codec_name") != "aac":
+            return False
+    return found
+
+
+def _can_remux(
+    source: str | os.PathLike[str],
+    *,
+    fps: int,
+    audio_tracks: Iterable[Mapping[str, object]],
+    duration: float | None,
+    embedded_audio: bool,
+) -> bool:
+    """True when the upload is already the playable H.264 file we would otherwise encode."""
+    if list(audio_tracks):
+        return False
+    metadata = _probe_quietly(source)
+    if metadata is None:
+        return False
+    video = _video_stream(metadata)
+    if video is None or video.get("codec_name") != "h264":
+        return False
+    if video.get("pix_fmt") not in (None, "yuv420p"):
+        return False
+    rate = _stream_rate(video)
+    if rate is None or abs(rate - canonical_scene_fps(fps)) > 0.05:
+        return False
+    if not _duration_close(metadata, video, duration, fps):
+        return False
+    if embedded_audio and not _audio_is_aac(metadata):
+        return False
+    return True
+
+
+def _remux_command(source: str, destination: str, *, embedded_audio: bool) -> list[str]:
+    """Copy the video bitstream. Extra mixes still go through the transcode command."""
+    command = [
+        "ffmpeg", "-v", "error", "-y", "-i", source,
+        "-map", "0:v:0", "-c:v", "copy",
+    ]
+    if embedded_audio:
+        command.extend(["-map", "0:a:0", "-c:a", "copy"])
+    else:
+        command.append("-an")
+    command.extend(["-movflags", "+faststart", destination])
+    return command
+
+
 def transcode_scene_recording(
     source: str | os.PathLike[str],
     destination: str | os.PathLike[str],
@@ -168,16 +284,26 @@ def transcode_scene_recording(
     )
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     tracks = list(audio_tracks)
+    if _can_remux(
+        source_path,
+        fps=fps,
+        audio_tracks=tracks,
+        duration=duration,
+        embedded_audio=embedded_audio,
+    ):
+        command = _remux_command(str(source_path), str(temporary_path), embedded_audio=embedded_audio)
+    else:
+        command = build_scene_recording_command(
+            str(source_path),
+            str(temporary_path),
+            fps=fps,
+            audio_tracks=tracks,
+            duration=duration,
+            embedded_audio=embedded_audio,
+        )
     try:
         result = subprocess.run(
-            build_scene_recording_command(
-                str(source_path),
-                str(temporary_path),
-                fps=fps,
-                audio_tracks=tracks,
-                duration=duration,
-                embedded_audio=embedded_audio,
-            ),
+            command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

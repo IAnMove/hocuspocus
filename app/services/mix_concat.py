@@ -322,7 +322,7 @@ def concat_with_tail_hold_and_crossfade(
     if with_audio and audio_label:
         cmd += ["-map", f"[{audio_label}]", "-c:a", "aac"]
     cmd += [
-        "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+        "-c:v", "libx264", "-crf", "14", "-preset", "slow",
         "-pix_fmt", "yuv420p", "-movflags", "+faststart",
         os.path.abspath(output_path).replace("\\", "/"),
     ]

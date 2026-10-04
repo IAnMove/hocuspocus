@@ -26,6 +26,7 @@ from services.world3d_export import (
     World3DExportCancelled,
     World3DExportService,
     _OWNED_BROWSER_JS,
+    build_snapshot,
     command_catalog,
     command_handlers,
     export_capabilities,
@@ -35,6 +36,7 @@ from services.world3d_export import (
     staging_dir,
     unsupported_capabilities,
     write_png,
+    write_prores_master,
 )
 
 
@@ -663,6 +665,63 @@ def test_four_k_mux_asks_for_level_5_and_full_hd_does_not(tmp_path, monkeypatch)
     assert commands[1][commands[1].index("-level") + 1] == "5.2"
     assert commands[2][commands[2].index("-level") + 1] == "5.1"
     assert "-level" not in commands[3]
+
+
+def test_prores_stays_off_unless_master_asks_for_it():
+    assert "prores" not in export_plan(_document(), "master")
+    plain = freeze_export_command(_command(quality="master"))
+    asked = freeze_export_command(_command(intent_id="world3d-prores", quality="master", prores=True))
+    off = freeze_export_command(_command(intent_id="world3d-prores-off", quality="master", prores=False))
+    assert "prores" not in plain["effective"]["input"]["snapshot"]["plan"]
+    assert asked["effective"]["input"]["snapshot"]["plan"]["prores"] is True
+    assert off["fingerprint"] == plain["fingerprint"]
+    assert asked["fingerprint"] != plain["fingerprint"]
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["prores"]
+    assert schema["default"] is False
+    snapshot = build_snapshot(_document(), [], WORKSPACE, "master", prores=True)
+    assert snapshot["plan"]["prores"] is True
+
+
+@pytest.mark.parametrize("patch", [
+    {"prores": True},
+    {"prores": "yes", "quality": "master"},
+    {"prores": 1, "quality": "master"},
+])
+def test_prores_is_refused_unless_it_is_a_master_flag(tmp_path, patch):
+    service = _service(tmp_path, renderer=_paint)
+    with pytest.raises(Exception) as caught:
+        service.submit(_command(intent_id="world3d-prores-bad", **patch))
+    assert caught.value.status_code == 422
+    assert "prores" in caught.value.detail["message"].lower() or "ProRes" in caught.value.detail["message"]
+
+
+def test_prores_master_matches_the_h264_delivery(tmp_path):
+    import re
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg is required to compare ProRes with the delivery")
+    encoders = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, check=False)
+    if "prores_ks" not in (encoders.stdout or ""):
+        pytest.skip("prores_ks is not available")
+    frames = []
+    colors = ((20, 40, 80), (200, 30, 30), (30, 180, 40), (20, 20, 220))
+    for index, color in enumerate(colors, start=1):
+        path = tmp_path / "frames" / f"frame_{index:06d}.png"
+        write_png(path, 64, 64, color)
+        frames.append(path)
+    delivery = tmp_path / "delivery.mp4"
+    master = tmp_path / "master.mov"
+    mux_frame_sequence(frames, delivery, fps=24, duration=4 / 24, quality="master", width=64, height=64)
+    write_prores_master(frames, master, fps=24, duration=4 / 24)
+    compared = subprocess.run(
+        ["ffmpeg", "-i", str(delivery), "-i", str(master), "-lavfi", "ssim", "-f", "null", "-"],
+        capture_output=True, text=True, check=False,
+    )
+    match = re.search(r"All:([0-9.]+)", compared.stderr)
+    assert match, compared.stderr[-500:]
+    assert float(match.group(1)) >= 0.99
+    assert "prores" not in export_plan(_document(), "draft")
 
 
 def test_one_four_k_frame_probes_as_3840_with_level_51(tmp_path):

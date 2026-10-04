@@ -120,8 +120,9 @@ Real headless render (GPU, 320×180, 24 fps, 2 s): a soundtrack at gain 0.3 plus
 | Frames | 48 | 48 |
 | 50 ms RMS envelope against the sources (correlation, mean error) | 1.000, 0.0006 | 1.000, 0.0001 |
 
-## Not in this phase
+## Master and a single delivery encode (1.F4)
 
-Owned by other phases of the roadmap:
-
-- the optional ProRes master, remuxing valid uploads, and lossless editor intermediates (1.F4).
+- **ProRes stays off.** A master export writes the H.264 delivery (still x264 `slow`, crf 12) and, only when the request sets `prores: true`, a ProRes 422 HQ `.mov` from the same PNGs. Draft and final reject that flag. A plan without it is unchanged, so older intents keep their fingerprint.
+- **Valid uploads are remuxed.** Scene Animator keeps a browser upload that is already H.264, yuv420p, at the requested fps, and AAC when its embedded audio is kept. The video bitstream is copied (`-c copy`). WebM, a wrong frame rate, or extra audio tracks still go through the existing transcode.
+- **The editor encodes with loss once.** Clip preparation, transitions, time cards and overlays use x264 crf 0 `ultrafast`. The export then writes one H.264 delivery at crf 14 `slow`. The comic storyboard preview stays a fast crf 18 preview and is not that delivery.
+- **1080p commands stay as they are.** Full HD does not gain an H.264 `-level`, and master H.264 is not lowered to crf 14.
