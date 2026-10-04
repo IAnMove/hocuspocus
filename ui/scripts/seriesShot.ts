@@ -39,6 +39,11 @@ const round = (value: number) => Math.round(value * 1000) / 1000
 export const FRAMING: Record<'wide' | 'two' | 'medium' | 'close', { scale: number; eye: number | null }> = {
   wide: { scale: 0.5, eye: null }, two: { scale: 0.8, eye: 33 }, medium: { scale: 1.22, eye: 33 }, close: { scale: 1.78, eye: 42 },
 }
+/** The same framings in a vertical frame (TikTok, Reels): the frame is 0.56 as wide, so people are drawn smaller
+ * against its height to fit side by side and stand on the floor even in a two-shot, and a close-up fills the width with the face. */
+export const FRAMING_PORTRAIT: typeof FRAMING = {
+  wide: { scale: 0.42, eye: null }, two: { scale: 0.55, eye: null }, medium: { scale: 0.78, eye: 30 }, close: { scale: 1.1, eye: 38 },
+}
 const FEET = 94
 export const BACKGROUND_ZOOM: Record<Framing, number> = { wide: 1, two: 1.12, medium: 1.28, close: 1.5, insert: 1, title: 1 }
 
@@ -64,7 +69,7 @@ function eyeFraction(kit: CharacterKit, poseId: string, size: { width: number; h
 
 /** Where a standing character goes for a framing: feet on the floor in wide shots, eyes on the line otherwise. */
 export function personTransform(kit: CharacterKit, poseId: string, framing: Framing, x: number, aspect: number, boost = 1): Pose {
-  const preset = FRAMING[framing === 'insert' || framing === 'title' ? 'wide' : framing]
+  const preset = (aspect < 1 ? FRAMING_PORTRAIT : FRAMING)[framing === 'insert' || framing === 'title' ? 'wide' : framing]
   const size = poseAsset(kit, poseId)
   const scale = preset.scale * boost
   const height = drawnHeight(size, scale, aspect)
@@ -78,11 +83,14 @@ export const DIALOGUE_DUCK_DB = 10
 export const PERCH: Record<'wide' | 'two' | 'medium' | 'close', { height: number; bottom: number }> = {
   wide: { height: 29, bottom: 70 }, two: { height: 40, bottom: 74 }, medium: { height: 56, bottom: 84 }, close: { height: 76, bottom: 94 },
 }
+export const PERCH_PORTRAIT: typeof PERCH = {
+  wide: { height: 20, bottom: 72 }, two: { height: 28, bottom: 76 }, medium: { height: 40, bottom: 84 }, close: { height: 56, bottom: 94 },
+}
 
 /** Where a perched character and its prop go: the character's bottom on the prop's top surface. */
 export function perchTransforms(size: { width: number; height: number }, framing: Framing, x: number, aspect: number,
   perch: NonNullable<CastSpec['perch']>): { character: Pose; prop: Pose } {
-  const preset = PERCH[framing === 'insert' || framing === 'title' ? 'wide' : framing]
+  const preset = (aspect < 1 ? PERCH_PORTRAIT : PERCH)[framing === 'insert' || framing === 'title' ? 'wide' : framing]
   const characterWidth = preset.height * (size.width / size.height) / aspect
   const propWidth = characterWidth * (perch.widthRatio ?? 1.45)
   const propAspect = perch.width / perch.height

@@ -44,6 +44,15 @@ test('framing puts eyes on one line and feet on the floor in wide shots', () => 
   assert.equal(Math.round((wide.y + 25 - 0.75) * 1000) / 1000, 94, 'half of a 50 % tall pose above the feet line')
 })
 
+test('a vertical frame draws people smaller against its height so two fit side by side', () => {
+  const landscape = personTransform(kits.kevin, 'base', 'two', 27, 16 / 9)
+  const portrait = personTransform(kits.kevin, 'base', 'two', 27, 9 / 16)
+  assert.equal(portrait.scale, 0.55)
+  assert.ok(portrait.scale < landscape.scale)
+  const close = personTransform(kits.kevin, 'base', 'close', 50, 9 / 16)
+  assert.equal(close.scale, 1.1)
+})
+
 test('a planned shot compiles to an editable scene with mounted kits, phonetic mouths, motion and camera', () => {
   const scene = compileSeriesShot(kits, shot())
   const background = scene.layers.find(layer => layer.id === 'background')!
