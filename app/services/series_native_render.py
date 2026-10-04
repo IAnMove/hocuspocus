@@ -1,0 +1,381 @@
+"""Render every 2D shot of a Series Lab episode on the server ("Generate everything").
+
+Until now an ``animation_2d`` take was made in a browser tab: speech per line,
+scene, lip-sync, a WebCodecs recording and an upload. Closing the tab stopped
+the batch. This job does the same on the server, one shot at a time, with
+the tools an agent would call (run in process, see ``local_mcp``):
+
+1. **Voices.** Each line is spoken with the character's voice for the
+   series language (``voicesByLanguage``, else the default voice), trimmed
+   of silence, checked with ``qa.speech`` (up to three takes when the
+   transcript drifts) and analysed into phonetic mouth cues.
+2. **Scene.** ``series_shot_plan`` plans framing, cast, timing, sound and
+   cards; ``series_shot_bridge`` compiles the editable Video 2D document.
+3. **Take.** The scene is saved, exported headlessly
+   (``scenes.video2d.export``) and imported as a take of the shot, which
+   can be approved automatically.
+
+State is saved per shot and stage, so a restart or a cancel resumes where it
+stopped. A recording is keyed by text and voice and reused.
+"""
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import os
+import subprocess
+import threading
+import time
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
+
+from services.series_jobs import SeriesJobStore
+from services.series_shot_bridge import run_series_shot, with_pose_sizes
+from services.series_shot_plan import build_shot_spec, kit_ref, language_key, recording_key, voice_for
+
+KIND = "native"
+STAGES = ("voices", "scene", "export", "import", "done")
+MAX_TAKES = 3
+MAX_WER = 0.34
+SPEECH_CODES = {"english": "en", "spanish": "es", "french": "fr", "german": "de", "italian": "it", "portuguese": "pt",
+                "japanese": "ja", "korean": "ko", "chinese": "cmn", "russian": "ru"}
+
+
+class NativeRenderError(RuntimeError):
+    def __init__(self, code: str, message: str, status: int = 409) -> None:
+        super().__init__(message)
+        self.code, self.status = code, status
+
+
+def trim_silence(source: str, target: str, pad: float = 0.06) -> float:
+    """Cut leading and trailing silence, keep a short natural pad; returns the new duration."""
+    flt = (f"silenceremove=start_periods=1:start_threshold=-42dB:start_silence={pad},areverse,"
+           f"silenceremove=start_periods=1:start_threshold=-42dB:start_silence={pad + 0.06},areverse")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", source, "-af", flt, "-ar", "44100", "-ac", "1", target],
+                   check=True, timeout=120)
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", target],
+                           capture_output=True, text=True, check=True, timeout=30)
+    return float(probe.stdout.strip())
+
+
+@dataclass
+class NativeRenderDeps:
+    call: Callable[[str, dict], dict]
+    workspace_dir: Callable[[str], str]
+    read_library: Callable[[str], dict]
+    read_kits: Callable[[str], dict]
+    compile_shot: Callable[[dict], dict] = run_series_shot
+    trim: Callable[[str, str], float] = trim_silence
+    sleep: Callable[[float], None] = time.sleep
+    poll_seconds: float = 3.0
+    check_speech: bool = True
+    # Sets shot.durationSeconds to the rendered length; a take shorter than its shot is refused on import.
+    set_shot_duration: Callable[[str, str, str, str, float], None] | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+def _ok(result: dict, label: str) -> dict:
+    if not isinstance(result, dict) or result.get("_is_error") or result.get("status") == "failed":
+        error = (result or {}).get("error") if isinstance(result, dict) else None
+        message = error.get("message") if isinstance(error, dict) else json.dumps(result)[:300]
+        raise NativeRenderError("tool_failed", f"{label}: {message}", 502)
+    return result
+
+
+def _job_id(result: dict) -> str | None:
+    receipt = result.get("receipt") if isinstance(result.get("receipt"), dict) else result
+    value = (receipt.get("result") or {}) if isinstance(receipt, dict) else {}
+    return value.get("job_id") or (value.get("task") or {}).get("job_id") or result.get("job_id")
+
+
+def _output_file(status: dict, suffixes: tuple[str, ...]) -> str | None:
+    for item in status.get("outputs") or status.get("output_files") or []:
+        name = item.get("path") if isinstance(item, dict) else item
+        if isinstance(name, str) and name.lower().endswith(suffixes):
+            return os.path.basename(name)
+    path = status.get("path")
+    return os.path.basename(path) if isinstance(path, str) and path.lower().endswith(suffixes) else None
+
+
+def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) -> dict[str, Any]:
+    """Generation params for one line in one character voice (reference clone or preset)."""
+    seconds = min(30, max(4, round(len(text.split()) * 0.6 + 3)))
+    # The speech schema requires a resolution even for audio; it does not change the output.
+    params: dict[str, Any] = {"prompt": text, "model_type": voice["model"], "seed": seed, "duration_seconds": seconds, "priority": 10,
+                              "resolution": "1280x720"}
+    if voice.get("model") == "qwen3_tts_base":
+        params.update({"model_mode": voice.get("language") or language, "audio_prompt_type": "A",
+                       "audio_guide": voice["referenceAudio"], "alt_prompt": voice.get("transcript") or ""})
+    elif voice.get("voiceId"):
+        params.update({"model_mode": voice["voiceId"], "alt_prompt": voice.get("instructions") or ""})
+    return params
+
+
+class SeriesNativeRender:
+    def __init__(self, deps: NativeRenderDeps) -> None:
+        self.deps = deps
+        self._threads: dict[str, threading.Thread] = {}
+        self._cancel: set[str] = set()
+        self._lock = threading.Lock()
+
+    # Job lifecycle -------------------------------------------------------
+
+    def _store(self, workspace: str) -> SeriesJobStore:
+        return SeriesJobStore(self.deps.workspace_dir(workspace), KIND)
+
+    def _episode(self, workspace: str, series_id: str, episode_id: str) -> tuple[dict, dict]:
+        series = (self.deps.read_library(workspace).get("seriesById") or {}).get(series_id)
+        episode = (series or {}).get("episodesById", {}).get(episode_id)
+        if not series or not episode:
+            raise NativeRenderError("not_found", "Series episode not found", 404)
+        return series, episode
+
+    def start(self, workspace: str, series_id: str, episode_id: str, *, shot_ids: list[str] | None = None,
+              approve: bool = False) -> dict[str, Any]:
+        series, episode = self._episode(workspace, series_id, episode_id)
+        shots = sorted((shot for shot in episode.get("shots") or [] if shot.get("productionMethod") == "animation_2d"
+                        and (not shot_ids or shot["id"] in shot_ids)), key=lambda shot: shot.get("order", 0))
+        if not shots:
+            raise NativeRenderError("no_2d_shots", "The episode has no 2D animation shots to render", 400)
+        store = self._store(workspace)
+        for job in store.list():
+            if job.get("episodeId") == episode_id and job.get("status") in ("queued", "running"):
+                raise NativeRenderError("already_running", "This episode is already rendering on the server")
+        job_id = f"native-{uuid.uuid4().hex[:12]}"
+        job = {"jobId": job_id, "workspace": workspace, "seriesId": series_id, "episodeId": episode_id, "status": "queued",
+               "approve": bool(approve), "language": language_key(series), "current": 0, "total": len(shots),
+               "items": [{"shotId": shot["id"], "stage": "voices", "status": "queued", "lines": {}} for shot in shots],
+               "createdAt": time.time(), "message": "Queued"}
+        store.save(job)
+        self._launch(workspace, job_id)
+        return job
+
+    def _launch(self, workspace: str, job_id: str) -> None:
+        with self._lock:
+            running = self._threads.get(job_id)
+            if running and running.is_alive():
+                return
+            self._cancel.discard(job_id)
+            thread = threading.Thread(target=self._run, args=(workspace, job_id), name=f"series-native-{job_id}", daemon=True)
+            self._threads[job_id] = thread
+            thread.start()
+
+    def jobs(self, workspace: str) -> list[dict[str, Any]]:
+        return self._store(workspace).list()
+
+    def status(self, workspace: str, job_id: str) -> dict[str, Any]:
+        job = self._store(workspace).load(job_id)
+        if not job:
+            raise NativeRenderError("not_found", "Render job not found", 404)
+        return job
+
+    def cancel(self, workspace: str, job_id: str) -> dict[str, Any]:
+        job = self.status(workspace, job_id)
+        with self._lock:
+            self._cancel.add(job_id)
+        if job["status"] in ("queued", "running"):
+            job.update(status="cancelling", message="Stopping after the current step")
+            self._store(workspace).save(job)
+        return job
+
+    def resume(self, workspace: str, job_id: str) -> dict[str, Any]:
+        job = self.status(workspace, job_id)
+        if job["status"] in ("queued", "running"):
+            return job
+        for item in job["items"]:
+            if item["status"] != "done":
+                item.update(status="queued", error=None)
+            if item["stage"] == "export":
+                # A failed export retries only when submitted again; the compile is deterministic, so the
+                # scene stage rebuilds the same document and replays the same export intent.
+                item["stage"] = "scene"
+        job.update(status="queued", message="Resuming", error=None)
+        self._store(workspace).save(job)
+        self._launch(workspace, job_id)
+        return job
+
+    # Worker --------------------------------------------------------------
+
+    def _save(self, workspace: str, job: dict, **patch: Any) -> None:
+        job.update(patch)
+        self._store(workspace).save(job)
+
+    def _cancelled(self, job_id: str) -> bool:
+        with self._lock:
+            return job_id in self._cancel
+
+    def _run(self, workspace: str, job_id: str) -> None:
+        job = self.status(workspace, job_id)
+        self._save(workspace, job, status="running", message="Rendering")
+        failed = 0
+        for index, item in enumerate(job["items"]):
+            if item["status"] == "done":
+                continue
+            if self._cancelled(job_id):
+                self._save(workspace, job, status="cancelled", message="Cancelled; resume to continue")
+                return
+            self._save(workspace, job, current=index, activeShotId=item["shotId"], message=f"Shot {item['shotId']}")
+            try:
+                self._render_item(workspace, job, item, index)
+                item.update(status="done", stage="done", error=None)
+            except Exception as error:  # one shot must not stop the episode
+                failed += 1
+                item.update(status="failed", error=f"{type(error).__name__}: {error}"[:500])
+            self._save(workspace, job)
+        done = sum(1 for item in job["items"] if item["status"] == "done")
+        self._save(workspace, job, current=len(job["items"]), activeShotId=None, finishedAt=time.time(),
+                   status="completed" if not failed else "failed",
+                   message=f"{done} of {len(job['items'])} shots rendered" + (f"; {failed} failed, resume to retry" if failed else ""))
+
+    def _render_item(self, workspace: str, job: dict, item: dict, index: int) -> None:
+        series, episode = self._episode(workspace, job["seriesId"], job["episodeId"])
+        shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), None)
+        if shot is None:
+            raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
+        kits = self.deps.read_kits(workspace)
+        item["status"] = "running"
+        if item["stage"] == "voices":
+            self._voices(workspace, job, item, series, shot, kits)
+            item["stage"] = "scene"
+            self._save(workspace, job)
+        if item["stage"] == "scene":
+            self._scene(workspace, job, item, series, episode, shot, kits, index)
+        if item["stage"] == "export":
+            self._export(workspace, job, item)
+        if item["stage"] == "import":
+            self._import(workspace, job, item)
+
+    def _voices(self, workspace: str, job: dict, item: dict, series: dict, shot: dict, kits: dict) -> None:
+        for beat in shot.get("dialogueBeats") or []:
+            text = str(beat.get("text") or "").strip()
+            if not text:
+                continue
+            ref = kit_ref(series, beat.get("characterId", ""))
+            kit = kits.get(ref["id"]) if ref else None
+            voice = voice_for(kit, job["language"]) if kit else None
+            if not voice:
+                raise NativeRenderError("no_voice", f"{beat.get('characterId')} has no voice for {job['language']}")
+            key = recording_key(text, voice)
+            done = item["lines"].get(beat["id"])
+            if done and done.get("key") == key and os.path.isfile(os.path.join(self.deps.workspace_dir(workspace), done["filename"])):
+                continue
+            item["lines"][beat["id"]] = self._record(workspace, job, beat["id"], text, voice, key)
+            self._save(workspace, job)
+            if self._cancelled(job["jobId"]):
+                raise NativeRenderError("cancelled", "Cancelled")
+
+    def _record(self, workspace: str, job: dict, beat_id: str, text: str, voice: dict, key: str) -> dict[str, Any]:
+        root = self.deps.workspace_dir(workspace)
+        stem = f"ln-{job['episodeId']}-{beat_id}-{key}"[:150]
+        best: dict[str, Any] | None = None
+        for attempt in range(MAX_TAKES):
+            raw = self._speak(workspace, job, stem, text, voice, attempt)
+            duration = self.deps.trim(os.path.join(root, raw), os.path.join(root, f"{stem}.wav"))
+            wer = self._wer(workspace, f"{stem}.wav", text, job["language"])
+            take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer, "attempt": attempt}
+            if best is None or (wer is not None and (best["wer"] is None or wer < best["wer"])):
+                best = take
+                os.replace(os.path.join(root, f"{stem}.wav"), os.path.join(root, f"{stem}.best.wav"))
+            if wer is None or wer <= MAX_WER:
+                break
+        os.replace(os.path.join(root, f"{stem}.best.wav"), os.path.join(root, f"{stem}.wav"))
+        cues = self._cues(workspace, best["filename"], best["duration"], text, job["language"])
+        return {**best, **cues}
+
+    def _speak(self, workspace: str, job: dict, stem: str, text: str, voice: dict, attempt: int) -> str:
+        seed = int(hashlib.sha1(f"{stem}-{attempt}".encode()).hexdigest()[:6], 16)
+        submitted = _ok(self.deps.call("generation.speech", {"version": 2, "intent_id": f"{stem}-a{attempt}"[:160], "input": {
+            "workspace": workspace, "output_name": f"{stem}-raw{attempt}", "params": speech_params(voice, text, job["language"], seed)}}), "speech")
+        job_id = _job_id(submitted)
+        if not job_id:
+            raise NativeRenderError("tool_failed", "Speech generation returned no job id", 502)
+        while True:
+            waited = self.deps.call("jobs.wait", {"version": 1, "input": {"job_id": job_id, "timeout_s": 120}})
+            payload = waited.get("error") if isinstance(waited.get("error"), dict) and waited["error"].get("job_id") else waited
+            state = payload.get("status")
+            if state == "completed":
+                name = _output_file(payload, (".wav", ".mp3", ".flac"))
+                if not name:
+                    raise NativeRenderError("tool_failed", "Speech finished without an audio file", 502)
+                return name
+            if state in ("failed", "cancelled", "discarded"):
+                raise NativeRenderError("tool_failed", f"Speech {state}: {payload.get('error') or payload.get('message')}", 502)
+            if self._cancelled(job["jobId"]):
+                raise NativeRenderError("cancelled", "Cancelled")
+
+    def _wer(self, workspace: str, filename: str, text: str, language: str) -> float | None:
+        if not self.deps.check_speech:
+            return None
+        checked = self.deps.call("qa.speech", {"version": 1, "input": {"workspace": workspace, "file": filename, "text": text, "language": language}})
+        return None if checked.get("_is_error") else (checked.get("result") or {}).get("wer")
+
+    def _cues(self, workspace: str, filename: str, duration: float, text: str, language: str) -> dict[str, Any]:
+        found = self.deps.call("audio.mouth_cues", {"version": 1, "input": {
+            "workspace": workspace, "file": filename, "start": 0, "duration": round(min(90, duration), 3), "dialogue": text,
+            "language": SPEECH_CODES.get(language, "en"), "engine": "phoneme"}})
+        result = found.get("result") or {}
+        cues = result.get("mouthCues") or result.get("cues") or []
+        return {"cues": cues, "driver": result.get("recognizer") or result.get("driver") or "wav2vec2-phoneme"} if cues else {"cues": []}
+
+    def _scene(self, workspace: str, job: dict, item: dict, series: dict, episode: dict, shot: dict, kits: dict, index: int) -> None:
+        ordered = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
+        position = next(i for i, value in enumerate(ordered) if value["id"] == shot["id"])
+        first = position == 0 or ordered[position - 1].get("sceneId") != shot.get("sceneId")
+        spec = build_shot_spec(series, episode, shot, workspace=workspace, recorded=item["lines"], first_of_scene=first)
+        root = self.deps.workspace_dir(workspace)
+        used = {cast["kitId"]: with_pose_sizes(kits[cast["kitId"]], root) for cast in spec["cast"] if cast["kitId"] in kits}
+        document = self.deps.compile_shot({"mode": "shot", "kits": used, "shot": spec})
+        digest = hashlib.sha1(json.dumps(document, sort_keys=True).encode()).hexdigest()[:10]
+        saved = _ok(self.deps.call("scenes.document.save", {"version": 1, "intent_id": f"{job['jobId']}-{shot['id']}-{digest}", "input": {
+            "workspace": workspace, "name": f"{series['id']}-{episode['id']}-{shot['id']}"[:100], "document": document}}), "save scene")
+        item.update(scene=(saved.get("result") or {}).get("name"), duration=document["duration"], digest=digest, stage="export",
+                    exportIntent=f"{job['jobId']}-{shot['id']}-{digest}-export")
+        exported = self.deps.call("scenes.video2d.export", {"version": 1, "intent_id": item["exportIntent"],
+                                                            "input": {"workspace": workspace, "document": document}})
+        _ok(exported, "export")
+        self._save(workspace, job)
+
+    def _export(self, workspace: str, job: dict, item: dict) -> None:
+        while True:
+            receipt = self.deps.call("scenes.video2d.export.receipt", {"version": 1, "input": {"workspace": workspace, "intent_id": item["exportIntent"]}})
+            body = receipt.get("result") if isinstance(receipt.get("result"), dict) else receipt
+            artifacts = (body.get("receipt") or {}).get("artifacts") or []
+            task = body.get("task") or {}
+            if artifacts:
+                item.update(video=artifacts[0]["name"], stage="import")
+                self._save(workspace, job)
+                return
+            if task.get("status") in ("failed", "cancelled"):
+                raise NativeRenderError("export_failed", str(task.get("error") or task.get("message") or "export failed")[:300], 502)
+            if self._cancelled(job["jobId"]):
+                raise NativeRenderError("cancelled", "Cancelled")
+            self.deps.sleep(self.deps.poll_seconds)
+
+    def _import(self, workspace: str, job: dict, item: dict) -> None:
+        if self.deps.set_shot_duration and item.get("duration"):
+            self.deps.set_shot_duration(workspace, job["seriesId"], job["episodeId"], item["shotId"], float(item["duration"]))
+        metadata = {"productionMethod": "animation_2d", "sceneFilename": item["scene"], "automaticDraft": True,
+                    "nativeServerRender": job["jobId"], "duration": item.get("duration")}
+        imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {
+            "workspace": workspace, "series_id": job["seriesId"], "file": item["video"], "owner_type": "shot", "owner_id": item["shotId"],
+            "kind": "video", "as_take": True, "metadata": metadata}}), "import take")
+        attempt = (imported.get("result") or {}).get("attempt") or {}
+        item.update(attemptId=attempt.get("id"), stage="done")
+        if job.get("approve") and attempt.get("id"):
+            _ok(self.deps.call("series.take.approve", {"version": 1, "input": {
+                "workspace": workspace, "series_id": job["seriesId"], "episode_id": job["episodeId"], "shot_id": item["shotId"],
+                "attempt_id": attempt["id"]}}), "approve take")
+            item["approved"] = True
+        self._save(workspace, job)
+
+
+def public_job(job: dict[str, Any]) -> dict[str, Any]:
+    """Status without the per-line cue arrays."""
+    view = copy.deepcopy(job)
+    for item in view.get("items") or []:
+        item["lines"] = {key: {k: v for k, v in value.items() if k != "cues"} | {"cueCount": len(value.get("cues") or [])}
+                         for key, value in (item.get("lines") or {}).items()}
+    return view

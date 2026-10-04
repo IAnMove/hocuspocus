@@ -3953,13 +3953,63 @@
     },
     {
       "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/native-render",
+      "endpoint": "start_native_render",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/series_native_render.py",
+      "ordinal": 395
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/native-render/jobs/{job_id}",
+      "endpoint": "native_render_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/series_native_render.py",
+      "ordinal": 396
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/native-render/jobs/{job_id}/cancel",
+      "endpoint": "cancel_native_render",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/series_native_render.py",
+      "ordinal": 397
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/native-render/jobs/{job_id}/resume",
+      "endpoint": "resume_native_render",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/series_native_render.py",
+      "ordinal": 398
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/native-render/recovery",
+      "endpoint": "native_render_recovery",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/series_native_render.py",
+      "ordinal": 399
+    },
+    {
+      "method": "POST",
       "path": "/api/v1/wangp/mcp",
       "endpoint": "mcp",
       "status_code": null,
       "response_model": null,
       "include_in_schema": false,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 395
+      "ordinal": 400
     },
     {
       "method": "POST",
@@ -3969,7 +4019,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 396
+      "ordinal": 401
     },
     {
       "method": "GET",
@@ -3979,7 +4029,7 @@
       "response_model": null,
       "include_in_schema": false,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 397
+      "ordinal": 402
     },
     {
       "method": "GET",
@@ -3989,7 +4039,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 398
+      "ordinal": 403
     },
     {
       "method": "GET",
@@ -3999,7 +4049,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/system_capabilities.py",
-      "ordinal": 399
+      "ordinal": 404
     },
     {
       "method": "GET",
@@ -4009,7 +4059,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/about.py",
-      "ordinal": 400
+      "ordinal": 405
     },
     {
       "method": "GET",
@@ -4019,7 +4069,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 401
+      "ordinal": 406
     },
     {
       "method": "POST",
@@ -4029,7 +4079,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 402
+      "ordinal": 407
     },
     {
       "method": "DELETE",
@@ -4039,7 +4089,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 403
+      "ordinal": 408
     },
     {
       "method": "GET",
@@ -4049,7 +4099,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 404
+      "ordinal": 409
     },
     {
       "method": "GET",
@@ -4059,7 +4109,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 405
+      "ordinal": 410
     },
     {
       "method": "POST",
@@ -4069,7 +4119,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 406
+      "ordinal": 411
     },
     {
       "method": "DELETE",
@@ -4079,7 +4129,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 407
+      "ordinal": 412
     },
     {
       "method": "GET",
@@ -4089,7 +4139,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 408
+      "ordinal": 413
     },
     {
       "method": "GET",
@@ -4099,7 +4149,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 409
+      "ordinal": 414
     }
   ]
 }

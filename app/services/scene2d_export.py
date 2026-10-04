@@ -107,6 +107,18 @@ def _sequence_urls(layer: dict) -> list[str]:
     return urls
 
 
+def _media_name(path: str) -> str:
+    """Workspace-relative name of a file URL; Series Lab keeps images in ``assets/<series>/``."""
+    clean = (path or "").replace("\\", "/")
+    for prefix in ("/api/v1/file/", "/api/v1/uploads/"):
+        if clean.startswith(prefix):
+            parts = [part for part in clean[len(prefix):].split("/") if part]
+            if not parts or any(part in (".", "..") for part in parts):
+                raise http_error(422, "missing_ref", "Use a media path inside the workspace")
+            return "/".join(parts)
+    return os.path.basename(clean)
+
+
 def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequence: bool) -> None:
     label = "sequence" if sequence else "source"
     if not url or _blocked_url(url) or not _durable(url):
@@ -124,7 +136,7 @@ def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequen
     # parse_media_ref would hide gallery Uploads (`?workspace=__uploads__`)
     # and media picked from another workspace folder.
     path, scoped = parse_media_ref(url)
-    record["filename"] = os.path.basename((path or "").replace("\\", "/"))
+    record["filename"] = _media_name(path)
     if url.lower().startswith("/api/v1/uploads/") or scoped == "__uploads__":
         record["root"] = "uploads"
     else:

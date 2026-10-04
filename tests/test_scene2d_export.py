@@ -387,3 +387,18 @@ def test_scene_documents_save_2d_and_3d_revisions(tmp_path):
     with pytest.raises(SceneDocumentError):
         save_document(WORKSPACE, _document(layers=[_layer(sequence={"kind": "frames", "sources": ["https://example.com/a.png"], "fps": 8, "loop": "loop"})]), name=None, preview=None, workspace_dir=workspace_dir)
     assert [item["name"] for item in document_catalog()] == ["scenes.document.save", "scenes.document.get"]
+
+
+def test_series_lab_media_in_a_workspace_subfolder_can_be_exported(tmp_path):
+    # Series Lab keeps location images in assets/<series>/; the export used to look only at the file name.
+    service = _service(tmp_path)
+    folder = Path(_workspace_dir(tmp_path)(WORKSPACE)) / "assets" / "uv"
+    folder.mkdir(parents=True)
+    write_png(folder / "garage.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source=f"/api/v1/file/assets/uv/garage.png?workspace={WORKSPACE}")])
+    admitted = service.submit(_command("scene2d-subfolder", document))
+    assert admitted["receipt"]["taskIds"]
+    escaping = _document(layers=[_layer(source=f"/api/v1/file/assets/../../secret.png?workspace={WORKSPACE}")])
+    with pytest.raises(Exception) as error:
+        service.submit(_command("scene2d-escape", escaping))
+    assert error.value.status_code == 422

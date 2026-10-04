@@ -15,7 +15,7 @@ from services.series_jobs import KINDS, SeriesJobStore
 
 
 ACTIVE_SERIES_JOB_STATUSES = frozenset({"queued", "running", "cancelling"})
-SERIES_JOB_KINDS = ("planning", "render", "assembly")
+SERIES_JOB_KINDS = ("planning", "render", "assembly", "native")
 PUBLIC_JOB_KEYS = (
     "jobId",
     "kind",

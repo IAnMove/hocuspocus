@@ -3,6 +3,7 @@ import { useSeriesNativeBatch } from './nativeBatchState'
 import { allowedSeriesMethods, seriesShotMethod, seriesTakeStage } from './productionMethods'
 import type { SeriesEpisode, SeriesProject } from './types'
 import { SeriesLipSyncPreparation } from './SeriesLipSyncPreparation'
+import { SeriesServerRender } from './SeriesServerRender'
 
 export function SeriesNativeDrafts({ workspace, series, episode }: { workspace: string; series: SeriesProject; episode: SeriesEpisode }) {
   const { t } = useUiTranslation('seriesLab')
@@ -20,5 +21,6 @@ export function SeriesNativeDrafts({ workspace, series, episode }: { workspace: 
       initialShots={pending} hasCompleted={completed > 0} />
     {own && job.total > 0 && <p role="status" className="text-xs">{t('native.progress', { done: job.completed, total: job.total, order: job.order })}</p>}
     {own && job.error && <p role="alert" className="text-xs text-red-300">{job.error}</p>}
+    <SeriesServerRender key={`server-${workspace}/${series.id}/${episode.id}`} workspace={workspace} series={series} episode={episode} />
   </section>
 }

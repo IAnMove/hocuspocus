@@ -26,7 +26,7 @@ Este documento recoge cada obstáculo que apareció por el camino, en orden de i
 | 3 | Character Kits sin herramientas MCP | Personajes y voces solo por HTTP o navegador | **[ARREGLADO]** (`characters.*`) |
 | 4 | Una sola voz por personaje | Imposible doblar la serie | **[ARREGLADO]** (`voicesByLanguage`) |
 | 5 | Lip-sync recibía «Español de España» en vez de `es` | El motor de fonemas fallaba en series en español | **[ARREGLADO]** |
-| 6 | Sin herramientas de escena para «montar personaje» y «añadir línea con lip-sync» | El agente tuvo que ejecutar código TypeScript de la UI | Propuesta |
+| 6 | Sin herramientas de escena para «montar personaje» y «añadir línea con lip-sync» | El agente tuvo que ejecutar código TypeScript de la UI | **[FASE 2]** |
 | 7 | Una serie tiene un solo idioma; no hay versiones de un capítulo | Hicieron falta dos series | Propuesta |
 | 8 | La cola reordena por duración declarada y deja sin turno a la voz | Las voces esperaron detrás de cada imagen nueva | **[FASE 1A]** envejecimiento y `priority` documentado |
 | 9 | El servidor llegó a 50 GB de RAM y lo mató el sistema | Cola perdida en mitad de la producción | **[FASE 1A]** causa medida y corregida; queda el presupuesto por familia |
@@ -149,6 +149,16 @@ El episodio de este documento se creó entero con estas herramientas. Tests en `
   - recompila las bocas.
 
 Opcionalmente, `animate_talk {kit_id, style: bob|still|shake}` para la animación limitada de cuerpo, igual que `animateSeriesDraft`.
+
+**[FASE 2] Arreglo.**
+
+- `scenes.video2d.edit` acepta tres operaciones:
+  - `mount_character {workspace, kit_id, x, framing, pose_id?, z?, motion?}`;
+  - `add_line {kit_id, id, text, start, end, filename, cues?}`;
+  - `animate_talk {motion?}`.
+- Usan el compilador de planos de Series (`ui/scripts/seriesShot.ts`), que monta el kit con `mountCharacterKitLayers` y compila las bocas con `rebuildCutoutDialogueLayers`.
+- Las señales fonéticas vienen de `audio.mouth_cues`. Sin ellas, la boca sigue el texto y la operación avisa.
+- Además, `series.episode.render_native` renderiza en el servidor todos los planos 2D de un capítulo.
 
 ## 7. Un capítulo en varios idiomas (propuesta)
 

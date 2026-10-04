@@ -87,6 +87,7 @@ class SeriesAssemblyStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     workspace: str | None = Field(default=None, min_length=1, max_length=200)
+    burnSubtitles: bool = False
 
 
 class SeriesAssemblyActionRequest(BaseModel):
@@ -380,6 +381,7 @@ def create_series_assembly_router(
             finishing = finish_episode(
                 output_path, clip_paths, [item.get("sceneFilename") for item in job.get("clips", [])],
                 workspace_dir=output_directory, abort_callback=token.is_cancelled,
+                burn=bool(job.get("burnSubtitles")),
             )
             if token.is_cancelled():
                 _remove_assembly_artifacts(output_path)
@@ -553,6 +555,7 @@ def create_series_assembly_router(
                     "current": 0,
                     "total": len(clips),
                     "clips": clips,
+                    "burnSubtitles": bool(payload.burnSubtitles),
                     "message": "Episode assembly queued.",
                     "error": None,
                     "assetId": None,

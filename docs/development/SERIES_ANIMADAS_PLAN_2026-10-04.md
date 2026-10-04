@@ -121,6 +121,26 @@ En la primera prueba Qwen pintó la piel del color del croma. El preset ahora lo
 
 **Aceptación:** un capítulo de 3 a 5 minutos desde el guion con un botón, y cada plano editable.
 
+**Estado fase 2 (2026-10-04):** hecho.
+
+- `series.episode.render_native`: servicio, rutas HTTP, MCP con `.status`, `.cancel` y `.resume`, y el botón «Generar en el servidor» en Series Lab.
+- Compilador de planos en TypeScript (`ui/scripts/seriesShot.ts`), ejecutado sin navegador con el puente tsx.
+- Plan por plano (`series_shot_plan.py`) que interpreta `framing` y `camera` en inglés o español, o un `layout2d` editable.
+- Operaciones `mount_character`, `add_line` y `animate_talk`.
+- `soundDesign`, cartelas, props en anclajes y el vocabulario 2D en el planificador.
+
+**Prueba real** en la instancia aislada, con una serie de prueba de tres planos en español:
+
+- Planos: cartela de título, plano general con Kevin y Gary, y primer plano de Kevin.
+- Las voces salieron con la voz clonada de cada personaje (WER 0,0, entre 24 y 32 señales de boca).
+- Las escenas se compilaron y guardaron, y se exportaron sin interfaz como tomas aprobadas.
+- El montaje final lleva subtítulos incrustados, a −16 LUFS.
+
+La prueba destapó y corrigió dos fallos previos:
+
+- La exportación 2D no aceptaba medios en subcarpetas del workspace, y Series Lab guarda las imágenes en `assets/<serie>/`.
+- Una toma más corta que la duración por defecto del plano se rechazaba al importar.
+
 ## Fase 3 — Doblaje, 3D y acabado
 
 1. **Versiones de idioma de un capítulo** (`episode.languageVersions`, P7):

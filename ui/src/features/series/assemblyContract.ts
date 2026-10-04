@@ -7,6 +7,7 @@ export type SeriesAssemblyStatus = 'queued' | 'running' | 'cancelling' | 'comple
 
 export interface SeriesAssemblyStartRequest {
   workspace?: string | null
+  burnSubtitles?: boolean
 }
 
 export interface SeriesAssemblyActionRequest {
