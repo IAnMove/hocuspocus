@@ -28,7 +28,7 @@ _ASSET_PATH = re.compile(r"^(assets|outputs)/[A-Za-z0-9._/-]+$")
 EPISODE_EDITOR_FIELDS = frozenset({
     "seasonId", "number", "title", "premise", "logline",
     "targetDurationSeconds", "outline", "script", "shots",
-    "continuityIssues", "proposedCanonDelta",
+    "continuityIssues", "proposedCanonDelta", "languageVersions",
 })
 SHOT_EDITOR_FIELDS = frozenset({
     "sceneId", "order", "durationSeconds", "framing", "camera", "action",
@@ -529,6 +529,17 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
     return annotate_episode_shot_dialogue(episode)
 
 
+def _normalize_episode_languages(episode: dict, project: dict) -> None:
+    """Language versions of an episode (series_language_versions); empty ones are dropped."""
+    from .series_language_versions import normalize_language_versions
+    from .series_shot_plan import language_key
+    versions = normalize_language_versions(episode.get("languageVersions"), episode.get("shots") or [], language_key(project))
+    if versions:
+        episode["languageVersions"] = versions
+    else:
+        episode.pop("languageVersions", None)
+
+
 def _validate_project_graph_ids(project: dict) -> None:
     """Reject ambiguous IDs and references that would corrupt the live graph."""
     seen: dict[str, str] = {}
@@ -791,6 +802,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         if not isinstance(raw_episode, dict):
             continue
         episode = _normalize_episode(raw_episode, str(episode_key), index, default_season_id, canon, allowed)
+        _normalize_episode_languages(episode, project)
         if episode["seasonId"] not in season_ids:
             episode["seasonId"] = default_season_id
         episodes[episode["id"]] = episode

@@ -189,6 +189,8 @@
         "tests/test_workspace_commands.py",
         "tests/test_workspace_registry.py",
         "tests/test_world3d_owned_render_smoke.py",
+        "tests/test_world3d_talk.py",
+        "tests/test_series_plates.py",
         "tests/test_world3d_templates.py",
         "tests/test_production_review.py",
         "tests/test_lipsync_span.py",
@@ -221,7 +223,9 @@
         "tests/test_humanoid_retarget.py",
         "tests/test_humanoid_rig_api.py",
         "tests/test_production_generation_link.py",
-        "tests/test_production_shot_regeneration.py"
+        "tests/test_production_shot_regeneration.py",
+        "tests/test_series_language_versions.py",
+        "tests/test_local_mcp.py"
       ]
     },
     {
@@ -230,6 +234,7 @@
       "name": "Python tests B",
       "weight": 1586,
       "paths": [
+        "tests/test_series_templates.py",
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
         "tests/test_api_workspace_security.py",
@@ -362,7 +367,6 @@
         "tests/test_series_native_render.py",
         "tests/test_series_shot_plan.py",
         "tests/test_series_native_render_router.py",
-        "tests/test_local_mcp.py",
         "tests/test_flat_rig.py",
         "tests/test_speech_qa.py",
         "tests/test_character_styles.py",

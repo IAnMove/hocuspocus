@@ -398,9 +398,9 @@ export async function approveSeriesAttemptsBulk(
 }
 
 export async function startSeriesEpisodeAssembly(
-  workspace: string, seriesId: string, episodeId: string,
+  workspace: string, seriesId: string, episodeId: string, options: { language?: string; burnSubtitles?: boolean } = {},
 ): Promise<SeriesAssemblyJob> {
-  const payload: SeriesAssemblyStartRequest = { workspace }
+  const payload: SeriesAssemblyStartRequest = { workspace, ...options }
   return seriesResponse(fetch(
     `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/assembly/start`,
     {
@@ -488,12 +488,14 @@ export type SeriesServerRenderItem = {
 export type SeriesServerRenderJob = {
   jobId: string; seriesId: string; episodeId: string; current: number; total: number; message?: string; activeShotId?: string | null
   status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'; items: SeriesServerRenderItem[]; createdAt?: number
+  language?: string
 }
 
 /** Voices, scene, headless export and take for every 2D shot of an episode, on the server. */
-export async function startSeriesServerRender(workspace: string, seriesId: string, episodeId: string, approve: boolean): Promise<SeriesServerRenderJob> {
+export async function startSeriesServerRender(workspace: string, seriesId: string, episodeId: string, approve: boolean,
+  language?: string): Promise<SeriesServerRenderJob> {
   return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/native-render`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, approve }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, approve, ...(language ? { language } : {}) }),
   }), 'Could not start the server render')
 }
 
@@ -512,4 +514,70 @@ export async function fetchSeriesServerRenders(workspace: string): Promise<Serie
   const body = await seriesResponse<{ jobs: SeriesServerRenderJob[] }>(
     fetch(`${BASE}/api/v1/series/native-render/recovery?workspace=${encodeURIComponent(workspace)}`), 'Could not list server renders')
   return body.jobs
+}
+
+export type SeriesLanguageVersionReply = {
+  revision: number; language: string; missingLines: string[]
+  version: import('../features/series/types').SeriesLanguageVersion | null
+}
+
+function versionPath(seriesId: string, episodeId: string, language: string) {
+  return `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/language-versions/${encodeURIComponent(language)}`
+}
+
+/** Write a version's title, lines ({beatId: text}) or cards. Its takes and cuts are kept. */
+export async function saveSeriesLanguageVersion(workspace: string, seriesId: string, episodeId: string, language: string,
+  version: { title?: string; dialogue?: Record<string, string>; cards?: Record<string, { title: string; body: string }> }): Promise<SeriesLanguageVersionReply> {
+  return seriesResponse(fetch(versionPath(seriesId, episodeId, language), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, version }),
+  }), 'Could not save the language version')
+}
+
+/** Translate every line and card of the episode with the configured LLM. */
+export async function translateSeriesLanguageVersion(workspace: string, seriesId: string, episodeId: string, language: string): Promise<SeriesLanguageVersionReply> {
+  return seriesResponse(fetch(`${versionPath(seriesId, episodeId, language)}/translate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+  }), 'Could not translate the episode')
+}
+
+export async function deleteSeriesLanguageVersion(workspace: string, seriesId: string, episodeId: string, language: string): Promise<void> {
+  await seriesResponse(fetch(versionPath(seriesId, episodeId, language), {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+  }), 'Could not remove the language version')
+}
+
+export type SeriesLocationPlate = {
+  locationId: string; status: 'none' | 'rendering' | 'done' | 'failed'
+  intent?: string; seconds?: number; scene?: string; progress?: number; assetId?: string; plateAssetId?: string; error?: string
+}
+
+function platePath(seriesId: string, locationId: string) {
+  return `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/locations/${encodeURIComponent(locationId)}/plate3d`
+}
+
+/** Render a saved Video 3D scene once, silent and looping, as a location's 2D background. */
+export async function startSeriesLocationPlate(workspace: string, seriesId: string, locationId: string, scene: string, seconds: number): Promise<SeriesLocationPlate> {
+  return seriesResponse(fetch(platePath(seriesId, locationId), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, scene, seconds }),
+  }), 'Could not start the 3D background')
+}
+
+/** Follow the export; once ready the server imports it and makes it the location plate. */
+export async function fetchSeriesLocationPlate(workspace: string, seriesId: string, locationId: string): Promise<SeriesLocationPlate> {
+  return seriesResponse(fetch(`${platePath(seriesId, locationId)}?workspace=${encodeURIComponent(workspace)}`), 'Could not read the 3D background')
+}
+
+export type SeriesTemplateCard = { id: string; title: string; description: string; characters: string[]; locations: string[]; pilotShots: number }
+
+/** Series templates: cast, locations, canon and a five-shot 2D pilot. */
+export async function fetchSeriesTemplates(language: 'es' | 'en'): Promise<SeriesTemplateCard[]> {
+  const reply = await seriesResponse<{ templates?: unknown }>(fetch(`${BASE}/api/v1/series/templates?language=${language}`), 'Could not load series templates')
+  // An older server answers this path with something else; no list means no templates, never a broken library.
+  return Array.isArray(reply?.templates) ? reply.templates as SeriesTemplateCard[] : []
+}
+
+export async function createSeriesFromTemplate(workspace: string, templateId: string, language: 'es' | 'en', title = ''): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/templates/${encodeURIComponent(templateId)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, language, ...(title ? { title } : {}) }),
+  }), 'Could not create the series from the template')
 }

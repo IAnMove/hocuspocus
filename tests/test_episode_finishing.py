@@ -13,6 +13,7 @@ from services.episode_finishing import (
     finishing_note,
     join_offsets,
     measure_loudness,
+    remove_episode_subtitles,
     scene_beats,
     srt_text,
     vtt_text,
@@ -130,6 +131,21 @@ def test_a_joined_episode_is_evened_to_minus_16_lufs_with_subtitles_on_the_joine
     assert loudness["after"]["lufs"] == pytest.approx(-16.0, abs=1.0)
     assert measure_loudness(str(joined), "ffmpeg")["input_i"]
     assert not list(workspace.glob("*loudnorm-tmp*"))
+
+    thumbnail = finished["thumbnail"]
+    assert thumbnail["written"] and (workspace / thumbnail["file"]).stat().st_size > 0
+    assert thumbnail["file"] == "episode_series_assembly.thumb.jpg"
+    assert thumbnail["time"] == pytest.approx(hold_crossfade_offsets([3.0, 4.0])[1] + 1.0, abs=0.05), "inside the second shot"
+    remove_episode_subtitles(str(joined))
+    assert not (workspace / thumbnail["file"]).exists(), "a discarded cut takes its thumbnail with it"
+
+
+def test_the_thumbnail_skips_a_short_opening():
+    from services.episode_finishing import thumbnail_time
+    assert thumbnail_time([], 9.0) == 3.0
+    assert thumbnail_time([8.0, 2.0], 10.0) == pytest.approx(10 / 3, abs=0.001), "a long first shot is the episode"
+    offsets, _join = join_offsets([0.8, 1.0], 1.8)
+    assert thumbnail_time([0.8, 1.0], 1.8) == pytest.approx(min(1.75, offsets[1] + 0.5), abs=0.001), "half of a short second shot"
 
 
 def test_the_subtitles_filter_escapes_paths_twice():

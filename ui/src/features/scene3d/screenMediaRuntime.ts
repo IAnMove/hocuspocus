@@ -4,6 +4,7 @@ import { SCREEN_PLANE_NAME, attachScreenPlane, detachScreenPlane, screenUsesPlan
 import { applyPsxImageMaterial, type ImageLook } from './imageLook'
 import { applyImageColorKey } from './imageColorKey'
 import { loadImagePoses } from './imagePoseRuntime'
+import { loadTalkingCutout } from './talkingCutout'
 
 export type ScreenMediaRuntime = {
   /** The painted picture, for light the screen throws on its surroundings. */
@@ -64,7 +65,7 @@ function screenSurfaceAspect(target: Mesh, screen: MediaScreen, imagePlate: bool
 
 function applyScreenLook(material: MeshBasicMaterial, texture: CanvasTexture, screen: MediaScreen, imagePlate?: { look?: ImageLook }) {
   material.map = texture
-  if (screen.transparent || screen.poseSequence) {
+  if (screen.transparent || screen.poseSequence || screen.talk) {
     material.transparent = true
     material.alphaTest = .05
     material.depthWrite = true
@@ -170,6 +171,7 @@ function drawScreenFrame(context: CanvasRenderingContext2D, canvas: HTMLCanvasEl
 
 async function loadScreenSource(screen: MediaScreen, shared: SharedVideo | null, image: HTMLImageElement | null, signal: AbortSignal) {
   if (screen.poseSequence) return loadImagePoses(screen.poseSequence, signal)
+  if (screen.talk) return loadTalkingCutout(screen.talk, signal)
   if (shared) await untilAborted(shared.ready, signal)
   else { image!.crossOrigin = 'anonymous'; image!.src = screen.sourceUrl; await image!.decode() }
   return undefined
@@ -180,8 +182,8 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
   const { attachedPlane, target, previous, canvas, context, texture, material } = prepareScreenSurface(root, screen, standalone, imagePlate)
   const shared = screen.media === 'video' ? acquireVideo(screen.sourceUrl, screen.style === 'crt') : null
   const video = shared?.video ?? null
-  const image = video || screen.poseSequence ? null : new Image()
-  let poses: Awaited<ReturnType<typeof loadImagePoses>> | undefined
+  const image = video || screen.poseSequence || screen.talk ? null : new Image()
+  let poses: { paint(context: CanvasRenderingContext2D, screen: MediaScreen, seconds: number): void; dispose(): void } | undefined
   const abort = new AbortController()
   let released = false
   const tube = screen.style === 'crt' ? crtOverlay(canvas.width, canvas.height) : null

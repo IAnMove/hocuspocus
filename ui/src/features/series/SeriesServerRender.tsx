@@ -10,7 +10,9 @@ import type { SeriesEpisode, SeriesProject } from './types'
 const LIVE = new Set(['queued', 'running', 'cancelling'])
 
 /** Render every 2D shot on the server: no tab has to stay open, and a stopped job resumes. */
-export function SeriesServerRender({ workspace, series, episode }: { workspace: string; series: SeriesProject; episode: SeriesEpisode }) {
+export function SeriesServerRender({ workspace, series, episode, language }: { workspace: string; series: SeriesProject; episode: SeriesEpisode
+  /** A language version; omitted renders the original. */
+  language?: string }) {
   const { t } = useUiTranslation('seriesLab')
   const [job, setJob] = useState<SeriesServerRenderJob>()
   const [approve, setApprove] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false)
@@ -19,12 +21,12 @@ export function SeriesServerRender({ workspace, series, episode }: { workspace: 
   useEffect(() => {
     let alive = true
     fetchSeriesServerRenders(workspace).then(jobs => {
-      const latest = jobs.filter(item => item.seriesId === series.id && item.episodeId === episode.id)
+      const latest = jobs.filter(item => item.seriesId === series.id && item.episodeId === episode.id && (!language || item.language === language))
         .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0]
       if (alive && latest) setJob(latest)
     }).catch(() => {})
     return () => { alive = false }
-  }, [workspace, series.id, episode.id])
+  }, [workspace, series.id, episode.id, language])
 
   useEffect(() => {
     if (!job || !LIVE.has(job.status)) return
@@ -49,7 +51,7 @@ export function SeriesServerRender({ workspace, series, episode }: { workspace: 
     <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={approve} disabled={live || busy}
       onChange={event => setApprove(event.target.checked)} />{t('serverRender.approve')}</label>
     <div className="flex flex-wrap gap-2">
-      <button className={primaryButton} disabled={live || busy} onClick={() => void act(() => startSeriesServerRender(workspace, series.id, episode.id, approve))}>
+      <button className={primaryButton} disabled={live || busy} onClick={() => void act(() => startSeriesServerRender(workspace, series.id, episode.id, approve, language))}>
         {t('serverRender.start')}</button>
       {live && <button className={secondaryButton} disabled={busy || job?.status === 'cancelling'}
         onClick={() => void act(() => controlSeriesServerRender(workspace, job!.jobId, 'cancel'))}>{t('serverRender.stop')}</button>}

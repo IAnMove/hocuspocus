@@ -153,6 +153,32 @@ La prueba destapó y corrigió dos fallos previos:
 4. **Acabado:** fundidos de audio en los cortes, subtítulos incrustados opcionales, miniaturas y publicación.
 5. **Series plantilla:** «empezar una serie como Uncanny Valley», con estilo, cabecera y cortinillas ya hechos.
 
+**Estado fase 3 (2026-10-04):** hecho, salvo lo indicado como pendiente.
+
+- **Versiones de idioma** (`episode.languageVersions`):
+  - mismos planos e ids de línea; cada versión tiene su título, sus líneas, sus cartelas, sus tomas aprobadas, sus montajes y su miniatura;
+  - `localized_view` da al render y al montaje la serie en ese idioma: las voces salen de `voicesByLanguage`;
+  - traducción con el LLM configurado, o líneas escritas a mano;
+  - rutas `/language-versions/{lang}` y herramientas MCP `series.episode.translate` y `series.episode.language_version.set`; `render_native` y `assembly.start` aceptan `language`;
+  - panel «Versiones de idioma» en Resultados, que genera y monta la versión cuando todas sus líneas tienen texto.
+- **Recortes que hablan en Video 3D:**
+  - `screen.talk` en un objeto de imagen pinta la pose aprobada del kit, la boca de cada cue y el parpadeo;
+  - `world3d.scene.talk` lo construye desde un Character Kit y las líneas (salida de `audio.mouth_cues`) y añade el audio de cada línea a la banda sonora de la escena.
+- **Fondos 3D:** una escena guardada de Video 3D se renderiza una vez, sin sonido y en bucle, y queda como `layout2d.plateAssetId` de la localización, que los planos 2D ya prefieren como fondo. MCP: `series.location.plate3d` y `.status`; selector en la ficha de cada localización.
+- **Acabado:** miniatura de cada montaje (un fotograma del primer plano tras la cartela) como asset derivado; subtítulos incrustados opcionales ya estaban en la fase 2.
+- **Plantillas:** sátira de recortables, explicador con presentador y sitcom de oficina, en español o inglés:
+  - reparto con descripciones, localizaciones con posiciones 2D, canon y un piloto de cinco planos 2D con cartelas;
+  - MCP `series.templates` y `series.create_from_template`; selector en la biblioteca;
+  - el render en servidor rechaza ahora un reparto sin Character Kits (`missing_kits`).
+
+**Pendiente:**
+
+- fundidos de audio en los cortes;
+- publicación del capítulo;
+- rótulos de fondo localizados;
+- selector de idioma también en Planos;
+- plantillas con cabecera y cortinilla sonora ya hechas (hoy traen cartelas, no audio ni kits).
+
 ## Orden y dependencias
 
 - La fase 1A no depende de nada y desbloquea trabajos largos fiables. Va en su propio PR, encima del #795.

@@ -740,5 +740,59 @@
       "import": "toma",
       "done": "hecho"
     }
+  },
+  "languages": {
+    "title": "Versiones de idioma",
+    "hint": "Dobla este capítulo: los mismos planos con sus propias líneas, voces, tomas y montaje. El original está en {{original}}.",
+    "add": "Añadir",
+    "choose": "Elige un idioma",
+    "translate": "Traducir con IA",
+    "empty": "Empezar vacía",
+    "lineLabel": "Traducción de {{id}}",
+    "missing": "Faltan {{count}} líneas por escribir",
+    "save": "Guardar líneas",
+    "assemble": "Montar esta versión",
+    "remove": "Quitar versión",
+    "created": "Versión creada. Faltan {{missing}} líneas.",
+    "saved": "Líneas guardadas. Faltan {{missing}}.",
+    "assembling": "Montando la versión con subtítulos…",
+    "names": {
+      "english": "inglés",
+      "spanish": "español",
+      "french": "francés",
+      "german": "alemán",
+      "italian": "italiano",
+      "portuguese": "portugués",
+      "japanese": "japonés",
+      "korean": "coreano",
+      "chinese": "chino",
+      "russian": "ruso"
+    },
+    "busy": {
+      "translate": "Traduciendo con el modelo de lenguaje…",
+      "create": "Creando la versión…",
+      "save": "Guardando…",
+      "assemble": "Iniciando el montaje…",
+      "remove": "Quitando…"
+    }
+  },
+  "plates": {
+    "title": "Fondo 3D",
+    "hint": "Renderiza una vez una escena guardada de Video 3D como fondo en bucle de esta localización para los planos 2D.",
+    "active": "Los planos 2D de aquí usan el fondo 3D. Renderiza otra vez para cambiarlo.",
+    "scene": "Escena de Video 3D",
+    "choose": "Elige una escena",
+    "noScenes": "No hay escenas de Video 3D guardadas en este espacio",
+    "seconds": "Bucle (s)",
+    "render": "Renderizar fondo 3D",
+    "rendering": "Renderizando el fondo 3D… {{progress}}%",
+    "done": "Fondo 3D listo: los planos 2D de esta localización lo usan.",
+    "failed": "El fondo 3D ha fallado: {{error}}"
+  },
+  "templates": {
+    "title": "Empezar con una plantilla",
+    "language": "Idioma",
+    "contents": "Reparto: {{characters}} · piloto de {{shots}} planos 2D",
+    "create": "Crear «{{title}}»"
   }
 }

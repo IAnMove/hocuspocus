@@ -9,6 +9,8 @@ scene document holds the exact text and timing of its lines (``dialogueBeats``).
    dissolve, or a hard cut when the join fell back to one).
 2. Loudness: two ffmpeg ``loudnorm`` passes apply one linear gain to -16 LUFS
    integrated, under a -1 dBTP ceiling after AAC. Video is stream-copied.
+3. Thumbnail: ``<episode>.thumb.jpg``, a frame of the first shot after the
+   opening one (a series opens on its title card), for lists and publishing.
 
 Neither step fails the assembly. A step that cannot run says why.
 """
@@ -39,6 +41,7 @@ LOUDNESS_RANGE = 20.0
 LINE_CHARACTERS = 42
 CUE_CHARACTERS = LINE_CHARACTERS * 2
 SUBTITLE_SUFFIXES = (".srt", ".vtt")
+THUMBNAIL_SUFFIX = ".thumb.jpg"
 
 
 def ffmpeg_binary() -> str | None:
@@ -272,6 +275,28 @@ def burn_subtitles(output_path: str, srt_name: str, *, ffmpeg: str,
 
 # All steps -------------------------------------------------------------------
 
+def thumbnail_time(durations: Sequence[float], joined: float) -> float:
+    """Into the second shot when the first is a short opening, else a third of the way in."""
+    if len(durations) >= 2 and durations[0] < joined / 2:
+        offsets, _join = join_offsets(durations, joined)
+        return round(min(joined - 0.05, offsets[1] + min(1.0, durations[1] / 2)), 3)
+    return round(joined / 3, 3)
+
+
+def write_episode_thumbnail(output_path: str, clip_paths: Sequence[str], *, ffmpeg: str) -> dict[str, Any]:
+    joined = probe_duration_seconds(output_path, ffmpeg)
+    if not joined:
+        return {"written": False, "reason": "The episode duration could not be read"}
+    durations = [probe_duration_seconds(path, ffmpeg) for path in clip_paths]
+    at = thumbnail_time([] if any(value is None for value in durations) else durations, joined)
+    target = os.path.splitext(output_path)[0] + THUMBNAIL_SUFFIX
+    result = subprocess.run([ffmpeg, "-v", "error", "-y", "-ss", f"{at:.3f}", "-i", output_path, "-frames:v", "1",
+                             "-vf", "scale=1280:-2", "-q:v", "3", target], capture_output=True, text=True, timeout=120, check=False)
+    if result.returncode or not os.path.isfile(target):
+        return {"written": False, "reason": (result.stderr or "ffmpeg wrote no frame").strip()[-300:]}
+    return {"written": True, "file": os.path.basename(target), "time": at}
+
+
 def finish_episode(
     output_path: str, clip_paths: Sequence[str], scene_filenames: Sequence[Any], *, workspace_dir: str,
     abort_callback: Callable[[], bool] | None = None, burn: bool = False,
@@ -296,6 +321,10 @@ def finish_episode(
             subtitles.update(burn_subtitles(output_path, subtitles["srt"], ffmpeg=ffmpeg, abort_callback=abort_callback))
         except Exception as error:
             subtitles.update({"burned": False, "reason": str(error)})
+    try:
+        finished["thumbnail"] = write_episode_thumbnail(output_path, clip_paths, ffmpeg=ffmpeg)
+    except Exception as error:  # Nor does the thumbnail.
+        finished["thumbnail"] = {"written": False, "reason": str(error)}
     return finished
 
 
@@ -314,7 +343,7 @@ def finishing_note(finished: dict[str, Any]) -> str:
 
 def remove_episode_subtitles(output_path: str) -> None:
     stem = os.path.splitext(output_path)[0]
-    for suffix in (*SUBTITLE_SUFFIXES, "_subtitled.mp4"):
+    for suffix in (*SUBTITLE_SUFFIXES, "_subtitled.mp4", THUMBNAIL_SUFFIX):
         try:
             os.remove(f"{stem}{suffix}")
         except OSError:

@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from services.asset_manifest import publish_generation_sidecar
 from services.episode_finishing import finish_episode, finishing_note, remove_episode_subtitles
 from services.series_assembly import episode_assembly_plan
+from services.series_language_versions import localized_view
 from services.series_jobs import SeriesJobStore
 from services.task_manager import get_cancellation_token, get_task_registry
 
@@ -37,6 +38,27 @@ def _remove_assembly_artifacts(output_path: str | None) -> None:
         except OSError:
             pass
     remove_episode_subtitles(output_path)
+
+
+def _publish_cut(series: dict[str, Any], episode: dict[str, Any], job: dict[str, Any], asset_id: str, thumbnail: dict[str, Any]) -> None:
+    """Record the cut (and its thumbnail) on the episode, or on the language version it was made for."""
+    holder = episode
+    if job.get("language"):
+        holder = (episode.get("languageVersions") or {}).get(job["language"])
+        if not isinstance(holder, dict):
+            raise ValueError("The language version no longer exists")
+    assembly_ids = [str(value) for value in holder.get("assemblyAssetIds", []) if isinstance(value, str) and value]
+    holder["assemblyAssetIds"] = list(dict.fromkeys([*assembly_ids, asset_id]))
+    holder["latestAssemblyAssetId"] = asset_id
+    if not thumbnail.get("written"):
+        return
+    thumbnail_id = f"asset_thumb_{uuid.uuid4().hex}"
+    series["assets"][thumbnail_id] = {
+        "id": thumbnail_id, "workspaceId": job["workspace"], "kind": "image",
+        "uri": f"outputs/{thumbnail['file']}", "ownerType": "episode", "ownerId": job["episodeId"], "isDerivedThumbnail": True,
+        "metadata": {"assemblyAssetId": asset_id, "time": thumbnail.get("time"), **({"language": job["language"]} if job.get("language") else {})},
+    }
+    holder["thumbnailAssetId"] = thumbnail_id
 
 
 def _write_assembly_sidecar(output_path: str, job: dict[str, Any]) -> None:
@@ -88,6 +110,7 @@ class SeriesAssemblyStartRequest(BaseModel):
 
     workspace: str | None = Field(default=None, min_length=1, max_length=200)
     burnSubtitles: bool = False
+    language: str | None = Field(default=None, min_length=2, max_length=40)
 
 
 class SeriesAssemblyActionRequest(BaseModel):
@@ -427,18 +450,12 @@ def create_series_assembly_router(
                             item.get("assetId") for item in job.get("clips", [])
                         ],
                         "loudness": finishing["loudness"],
-                        "subtitles": {**finishing["subtitles"], "language": series.get("spokenLanguage") or series.get("language")},
+                        "subtitles": {**finishing["subtitles"], "language": job.get("language") or series.get("spokenLanguage") or series.get("language")},
+                        **({"language": job["language"]} if job.get("language") else {}),
                         "createdAt": completed_at,
                     },
                 }
-                assembly_ids = [
-                    str(value)
-                    for value in episode.get("assemblyAssetIds", [])
-                    if isinstance(value, str) and value
-                ]
-                assembly_ids.append(asset_id)
-                episode["assemblyAssetIds"] = list(dict.fromkeys(assembly_ids))
-                episode["latestAssemblyAssetId"] = asset_id
+                _publish_cut(series, episode, job, asset_id, finishing.get("thumbnail") or {})
                 episode["updatedAt"] = completed_at
                 series["episodesById"][episode["id"]] = episode
                 series["revision"] = int(series.get("revision") or 1) + 1
@@ -508,9 +525,11 @@ def create_series_assembly_router(
             if not isinstance(episode, dict):
                 raise HTTPException(status_code=404, detail="Series episode not found")
             try:
-                clips = episode_assembly_plan(series, episode)
+                view_series, view_episode = localized_view(series, episode, payload.language)
+                clips = episode_assembly_plan(view_series, view_episode)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
+            language = payload.language if view_series is not series else None
             # Keep validation and durable registration under the same lock as
             # Series deletion. Deletion therefore either wins first (404 here)
             # or observes this queued Assembly checkpoint and returns 409.
@@ -556,6 +575,7 @@ def create_series_assembly_router(
                     "total": len(clips),
                     "clips": clips,
                     "burnSubtitles": bool(payload.burnSubtitles),
+                    "language": language,
                     "message": "Episode assembly queued.",
                     "error": None,
                     "assetId": None,

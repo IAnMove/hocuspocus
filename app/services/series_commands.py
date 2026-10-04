@@ -21,6 +21,7 @@ WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REVISION = {"type": "integer", "minimum": 0}
 OBJECT = {"type": "object"}
+LANGUAGE = {"type": "string", "enum": ["english", "spanish", "french", "german", "italian", "portuguese", "japanese", "korean", "chinese", "russian"]}
 
 # name: (properties, required, mutation, description)
 OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
@@ -62,12 +63,13 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.render_native": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_ids": {"type": "array", "items": ID, "maxItems": 500},
-         "approve": {"type": "boolean"}},
+         "approve": {"type": "boolean"}, "language": LANGUAGE},
         ["workspace", "series_id", "episode_id"], True,
         "Render every 2D animation shot of an episode on the server, no browser needed: each line in the character's voice "
         "for the series language (checked with qa.speech, up to three takes), phonetic mouth cues, an editable Video 2D "
         "scene (framing from shot.framing or shot.layout2d, cast, sound, cards), a headless export and a take on the shot "
-        "(approve: true approves it). Returns the job; poll series.episode.render_native.status. Resumable.",
+        "(approve: true approves it). language renders a language version (its lines, the characters' voices for that "
+        "language, its own takes). Returns the job; poll series.episode.render_native.status. Resumable.",
     ),
     "series.episode.render_native.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
@@ -80,6 +82,30 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.episode.render_native.resume": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
         "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines.",
+    ),
+    "series.location.plate3d": (
+        {"workspace": WORKSPACE, "series_id": ID, "location_id": ID, "scene": {"type": "string", "minLength": 1, "maxLength": 200},
+         "document": OBJECT, "seconds": {"type": "number", "minimum": 2, "maximum": 20}, "quality": {"enum": ["draft", "final", "master"]}},
+        ["workspace", "series_id", "location_id"], True,
+        "Render a Video 3D scene once as the looping background plate of a series location: give scene (a saved Video 3D "
+        "scene file or a w3d- working scene id) or document. The plate is silent, without kinetic text, seconds long "
+        "(default 6). Poll series.location.plate3d.status: when the export is ready it is imported as a location video "
+        "and 2D shots in that location use it as their background.",
+    ),
+    "series.location.plate3d.status": (
+        {"workspace": WORKSPACE, "series_id": ID, "location_id": ID}, ["workspace", "series_id", "location_id"], False,
+        "Status of a location's 3D plate (rendering, done, failed). When the export has finished it imports the video "
+        "and sets it as the location plate (idempotent).",
+    ),
+    "series.templates": (
+        {"language": {"enum": ["es", "en"]}}, [], False,
+        "List series templates (cutout satire, host explainer, office sitcom...): cast, locations and a five-shot 2D pilot.",
+    ),
+    "series.create_from_template": (
+        {"workspace": WORKSPACE, "template_id": ID, "title": {"type": "string", "maxLength": 300}, "language": {"enum": ["es", "en"]}},
+        ["workspace", "template_id"], True,
+        "Create a series from a template in Spanish or English: characters with descriptions (make their kits next), locations "
+        "with 2D layout, canon and a pilot episode of 2D shots with title and end cards, ready for series.episode.render_native.",
     ),
     "series.list": (
         {"workspace": WORKSPACE}, ["workspace"], False,
@@ -131,8 +157,25 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Approve one completed take for its shot. Assembly uses the approved take of every shot.",
     ),
     "series.assembly.start": (
-        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], True,
-        "Assemble the approved takes of an episode into one chapter video (shown under Capítulos). Returns a job.",
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE, "burn_subtitles": {"type": "boolean"}},
+        ["workspace", "series_id", "episode_id"], True,
+        "Assemble the approved takes of an episode into one chapter video (shown under Capítulos), at -16 LUFS with SRT/VTT "
+        "subtitles; burn_subtitles also writes a copy with them on the picture. language assembles that language version's "
+        "approved takes. Returns a job.",
+    ),
+    "series.episode.language_version.set": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE,
+          "title": {"type": "string", "maxLength": 300}, "dialogue": OBJECT, "cards": OBJECT},
+        ["workspace", "series_id", "episode_id", "language"], True,
+        "Write a language version of an episode: the same shots and line ids with their own text. dialogue maps beat id to "
+        "text; cards maps shot id to {title, body}. Approved takes and cuts of the version are kept. Returns missingLines.",
+    ),
+    "series.episode.translate": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE},
+        ["workspace", "series_id", "episode_id", "language"], True,
+        "Translate every line and card of an episode into a language version with the configured LLM (for dubbing: same "
+        "meaning and joke, similar length, numbers as words). Review it with series.get, then render it with "
+        "series.episode.render_native language.",
     ),
     "series.assembly.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
@@ -256,6 +299,8 @@ def _rig_flat_character(data: dict[str, Any], request: Callable[..., Any], **_ex
 
 def _render_native(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body: dict[str, Any] = {"workspace": data["workspace"], "approve": bool(data.get("approve"))}
+    if data.get("language"):
+        body["language"] = data["language"]
     if data.get("shot_ids"):
         body["shotIds"] = data["shot_ids"]
     path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/native-render"
@@ -269,6 +314,29 @@ def _native_job(action: str) -> Callable[..., dict[str, Any]]:
             return {"job": request("GET", path, query={"workspace": data["workspace"]})}
         return {"job": request("POST", f"{path}/{action}", body={"workspace": data["workspace"]})}
     return run
+
+
+def _plate_path(data: dict[str, Any]) -> str:
+    return f"/api/v1/series/{_quote(data['series_id'])}/locations/{_quote(data['location_id'])}/plate3d"
+
+
+def _start_plate(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body = {"workspace": data["workspace"], **{key: data[key] for key in ("scene", "document", "seconds", "quality") if key in data}}
+    return {"plate": request("POST", _plate_path(data), body=body)}
+
+
+def _plate_status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return {"plate": request("GET", _plate_path(data), query={"workspace": data["workspace"]})}
+
+
+def _list_templates(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return request("GET", "/api/v1/series/templates", query={"language": data["language"]} if data.get("language") else None)
+
+
+def _create_from_template(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body = {"workspace": data["workspace"], **{key: data[key] for key in ("title", "language") if data.get(key)}}
+    created = request("POST", f"/api/v1/series/templates/{_quote(data['template_id'])}", body=body)
+    return {"series": _series_summary(created)}
 
 
 def _list_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
@@ -367,7 +435,26 @@ def _approve_take(data: dict[str, Any], request: Callable[..., Any], **_extra: A
 
 def _start_assembly(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/assembly/start"
-    return {"job": request("POST", path, body={"workspace": data["workspace"]})}
+    body: dict[str, Any] = {"workspace": data["workspace"]}
+    if data.get("language"):
+        body["language"] = data["language"]
+    if data.get("burn_subtitles"):
+        body["burnSubtitles"] = True
+    return {"job": request("POST", path, body=body)}
+
+
+def _version_path(data: dict[str, Any]) -> str:
+    return (f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}"
+            f"/language-versions/{_quote(data['language'])}")
+
+
+def _set_language_version(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    version = {key: data[key] for key in ("title", "dialogue", "cards") if key in data}
+    return request("PUT", _version_path(data), body={"workspace": data["workspace"], "version": version})
+
+
+def _translate_episode(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return request("POST", f"{_version_path(data)}/translate", body={"workspace": data["workspace"]})
 
 
 def _assembly_status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
@@ -385,6 +472,10 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.episode.render_native.status": _native_job("status"),
     "series.episode.render_native.cancel": _native_job("cancel"),
     "series.episode.render_native.resume": _native_job("resume"),
+    "series.location.plate3d": _start_plate,
+    "series.location.plate3d.status": _plate_status,
+    "series.templates": _list_templates,
+    "series.create_from_template": _create_from_template,
     "series.list": _list_series,
     "series.get": _get_series,
     "series.create": _create_series,
@@ -394,6 +485,8 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.episode.update": _update_episode,
     "series.take.approve": _approve_take,
     "series.assembly.start": _start_assembly,
+    "series.episode.language_version.set": _set_language_version,
+    "series.episode.translate": _translate_episode,
     "series.assembly.status": _assembly_status,
 }
 

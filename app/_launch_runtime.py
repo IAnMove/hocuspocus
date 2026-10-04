@@ -37030,18 +37030,55 @@ from services.series_native_render import NativeRenderDeps, SeriesNativeRender
 from routers.series_native_render import create_series_native_render_router
 from services.character_kit_library import read_character_kit_library as _read_kit_library
 
-def _set_series_shot_duration(workspace: str, series_id: str, episode_id: str, shot_id: str, seconds: float) -> None:
-    """A server-rendered take sets its shot's length, as the editor does before importing."""
+def _change_series(workspace: str, series_id: str, change) -> dict:
+    """Apply ``change(series)`` under the library lock and return the stored series (KeyError if missing)."""
     resolved = _series_library_workspace(workspace)
     with _series_library_lock:
         library = _read_series_workspace(resolved)
         series = library["seriesById"][series_id]
-        for shot in series["episodesById"][episode_id]["shots"]:
-            if shot["id"] == shot_id:
-                shot["durationSeconds"] = round(seconds, 3)
+        change(series)
         series["revision"] = int(series.get("revision") or 1) + 1
         series["updatedAt"] = _series_iso_now()
-        _write_series_workspace(resolved, library)
+        stored = _write_series_workspace(resolved, library)
+    return stored["seriesById"][series_id]
+
+
+def _change_series_episode(workspace: str, series_id: str, episode_id: str, change) -> dict:
+    """Apply ``change(series, episode)`` under the library lock and return the stored series (KeyError if missing)."""
+    return _change_series(workspace, series_id, lambda series: change(series, series["episodesById"][episode_id]))
+
+
+def _read_series_episode(workspace: str, series_id: str, episode_id: str) -> tuple[dict, dict]:
+    series = _read_series_workspace(_series_library_workspace(workspace))["seriesById"][series_id]
+    return series, series["episodesById"][episode_id]
+
+
+def _set_series_shot_duration(workspace: str, series_id: str, episode_id: str, shot_id: str, seconds: float) -> None:
+    """A server-rendered take sets its shot's length, as the editor does before importing."""
+    def change(_series: dict, episode: dict) -> None:
+        for shot in episode["shots"]:
+            if shot["id"] == shot_id:
+                shot["durationSeconds"] = round(seconds, 3)
+    _change_series_episode(workspace, series_id, episode_id, change)
+
+
+def _set_series_version_take(workspace: str, series_id: str, episode_id: str, language: str, shot_id: str, attempt_id: str) -> None:
+    """Approve a take in a language version; the original's approval is untouched."""
+    def change(_series: dict, episode: dict) -> None:
+        version = episode.setdefault("languageVersions", {}).setdefault(language, {"dialogue": {}, "cards": {}})
+        version.setdefault("approvedAttemptIds", {})[shot_id] = attempt_id
+    _change_series_episode(workspace, series_id, episode_id, change)
+
+
+def _translate_series_version(prompt: str, system_prompt: str, schema: dict):
+    return _generate_comic_director_json(prompt=prompt, system_prompt=system_prompt, schema=schema, max_new_tokens=8000,
+                                         stage="Series Lab translation", llm_override=None)
+
+
+from routers.series_language_versions import create_series_language_versions_router
+api.include_router(create_series_language_versions_router(
+    change_episode=_change_series_episode, read_episode=_read_series_episode, translate=_translate_series_version,
+))
 
 
 def _character_kit_for_scene(workspace: str, kit_id: str) -> dict | None:
@@ -37060,8 +37097,32 @@ _series_native_render = SeriesNativeRender(NativeRenderDeps(
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
     read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {},
     set_shot_duration=_set_series_shot_duration,
+    set_version_take=_set_series_version_take,
 ))
 api.include_router(create_series_native_render_router(_series_native_render, _local_mcp.bind_loop))
+
+
+def _read_world3d_scene(workspace: str, name: str) -> dict:
+    """A saved Video 3D gallery scene, or a ``w3d-`` working scene, by name."""
+    from services.world3d_scenes import World3DSceneError, inspect_scene
+    if name.startswith("w3d-"):
+        try:
+            return inspect_scene(workspace, name, _workspace_dir)["document"]
+        except World3DSceneError as error:
+            raise KeyError(name) from error
+    from services.scene_documents import SceneDocumentError, get_document
+    try:
+        return get_document(workspace, name, workspace_dir=_workspace_dir)["document"]
+    except SceneDocumentError as error:
+        raise KeyError(name) from error
+
+
+from routers.series_plates import create_series_plates_router
+from services.series_plates import PlateDeps, SeriesPlates
+api.include_router(create_series_plates_router(SeriesPlates(PlateDeps(
+    call=_local_mcp.call, read_series=lambda workspace, series_id: _read_series_workspace(_series_library_workspace(workspace))["seriesById"][series_id],
+    change_series=_change_series, read_scene=_read_world3d_scene,
+)), _local_mcp.bind_loop))
 
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,

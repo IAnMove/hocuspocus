@@ -16,6 +16,7 @@ import { SeriesReviewLink } from '../production-catalog/SeriesReviewLink'
 import { SeriesRenderActions, SeriesReviewShotAction } from './SeriesRenderActions'
 import { SeriesEpisodeProgress } from './SeriesEpisodeProgress'
 import { SeriesNativeDrafts } from './SeriesNativeDrafts'
+import { SeriesLanguageVersions } from './SeriesLanguageVersions'
 import { SeriesSavedAssembly } from './SeriesSavedAssembly'
 import { isRegeneratedSeriesAsset } from './nativeTake'
 import type { OpenSeriesReference } from './shotReferences'
@@ -338,6 +339,7 @@ export function SeriesReviewPanel({
   return <div className="space-y-4 pb-10">
     <SeriesSavedAssembly workspace={workspace} series={series} episode={episode} />
     <SeriesNativeDrafts workspace={workspace} series={series} episode={episode} />
+    <SeriesLanguageVersions workspace={workspace} series={series} episode={episode} />
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
     <div className="sticky top-0 z-10 flex flex-wrap gap-2 rounded-xl border border-border bg-bg-secondary/95 p-2 shadow-lg backdrop-blur">
       {([
