@@ -6,6 +6,13 @@ import copy
 from typing import Any
 
 
+def _scene_filename(asset: dict[str, Any]) -> str:
+    """A 2D take's scene document, which holds the exact line timing for subtitles."""
+    metadata = asset.get("metadata") if isinstance(asset.get("metadata"), dict) else {}
+    value = metadata.get("sceneFilename")
+    return value if isinstance(value, str) else ""
+
+
 def episode_assembly_plan(series: dict[str, Any], episode: dict[str, Any]) -> list[dict[str, Any]]:
     """Return one approved video per shot in deterministic episode order."""
     assets = series.get("assets") if isinstance(series.get("assets"), dict) else {}
@@ -37,9 +44,8 @@ def episode_assembly_plan(series: dict[str, Any], episode: dict[str, Any]) -> li
             "assetId": str(asset.get("id") or ""),
             "uri": str(asset.get("uri") or ""),
         }
-        metadata = asset.get("metadata") if isinstance(asset.get("metadata"), dict) else {}
-        if isinstance(metadata.get("sceneFilename"), str) and metadata["sceneFilename"]:
-            # A 2D take's scene document holds the exact line timing for subtitles.
-            item["sceneFilename"] = metadata["sceneFilename"]
+        scene_filename = _scene_filename(asset)
+        if scene_filename:
+            item["sceneFilename"] = scene_filename
         plan.append(item)
     return copy.deepcopy(plan)
