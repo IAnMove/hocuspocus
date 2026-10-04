@@ -571,8 +571,9 @@ export type SeriesTemplateCard = { id: string; title: string; description: strin
 
 /** Series templates: cast, locations, canon and a five-shot 2D pilot. */
 export async function fetchSeriesTemplates(language: 'es' | 'en'): Promise<SeriesTemplateCard[]> {
-  const reply = await seriesResponse<{ templates: SeriesTemplateCard[] }>(fetch(`${BASE}/api/v1/series/templates?language=${language}`), 'Could not load series templates')
-  return reply.templates
+  const reply = await seriesResponse<{ templates?: unknown }>(fetch(`${BASE}/api/v1/series/templates?language=${language}`), 'Could not load series templates')
+  // An older server answers this path with something else; no list means no templates, never a broken library.
+  return Array.isArray(reply?.templates) ? reply.templates as SeriesTemplateCard[] : []
 }
 
 export async function createSeriesFromTemplate(workspace: string, templateId: string, language: 'es' | 'en', title = ''): Promise<import('../features/series/types').SeriesProject> {

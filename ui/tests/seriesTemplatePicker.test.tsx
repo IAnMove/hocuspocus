@@ -34,3 +34,17 @@ test('a series starts from a template in the chosen language', async t => {
   await waitFor(() => assert.deepEqual(created, [['cutout-satire', 'es']]))
   assert.ok(asked.includes('/series/templates?language=es'))
 })
+
+test('a server without templates leaves the picker empty instead of breaking the library', async t => {
+  const { render, cleanup, waitFor } = await import('@testing-library/react')
+  const { SeriesTemplatePicker } = await import('../src/features/series/SeriesTemplatePicker')
+  t.after(cleanup)
+  const original = globalThis.fetch
+  t.after(() => { globalThis.fetch = original })
+  let asked = 0
+  globalThis.fetch = (async () => { asked++; return new Response(JSON.stringify({ id: 'series_signal', title: 'Signal' }), { status: 200, headers: { 'Content-Type': 'application/json' } }) }) as typeof fetch
+  const view = render(<SeriesTemplatePicker onCreate={() => {}} />)
+  await waitFor(() => assert.equal(asked, 1))
+  assert.ok(view.getByTestId('series-template-picker'))
+  assert.equal(view.queryAllByRole('listitem').length, 0)
+})
