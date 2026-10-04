@@ -775,5 +775,18 @@
       "assemble": "Starting the assembly…",
       "remove": "Removing…"
     }
+  },
+  "plates": {
+    "title": "3D background",
+    "hint": "Render a saved Video 3D scene once as this location's looping background for 2D shots.",
+    "active": "2D shots here use the 3D background. Render again to replace it.",
+    "scene": "Video 3D scene",
+    "choose": "Choose a scene",
+    "noScenes": "No saved Video 3D scenes in this workspace",
+    "seconds": "Loop (s)",
+    "render": "Render 3D background",
+    "rendering": "Rendering the 3D background… {{progress}}%",
+    "done": "3D background ready: 2D shots in this location use it.",
+    "failed": "The 3D background failed: {{error}}"
   }
 }

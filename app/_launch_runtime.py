@@ -37030,17 +37030,22 @@ from services.series_native_render import NativeRenderDeps, SeriesNativeRender
 from routers.series_native_render import create_series_native_render_router
 from services.character_kit_library import read_character_kit_library as _read_kit_library
 
-def _change_series_episode(workspace: str, series_id: str, episode_id: str, change) -> dict:
-    """Apply ``change(series, episode)`` under the library lock and return the stored series (KeyError if missing)."""
+def _change_series(workspace: str, series_id: str, change) -> dict:
+    """Apply ``change(series)`` under the library lock and return the stored series (KeyError if missing)."""
     resolved = _series_library_workspace(workspace)
     with _series_library_lock:
         library = _read_series_workspace(resolved)
         series = library["seriesById"][series_id]
-        change(series, series["episodesById"][episode_id])
+        change(series)
         series["revision"] = int(series.get("revision") or 1) + 1
         series["updatedAt"] = _series_iso_now()
         stored = _write_series_workspace(resolved, library)
     return stored["seriesById"][series_id]
+
+
+def _change_series_episode(workspace: str, series_id: str, episode_id: str, change) -> dict:
+    """Apply ``change(series, episode)`` under the library lock and return the stored series (KeyError if missing)."""
+    return _change_series(workspace, series_id, lambda series: change(series, series["episodesById"][episode_id]))
 
 
 def _read_series_episode(workspace: str, series_id: str, episode_id: str) -> tuple[dict, dict]:
@@ -37095,6 +37100,29 @@ _series_native_render = SeriesNativeRender(NativeRenderDeps(
     set_version_take=_set_series_version_take,
 ))
 api.include_router(create_series_native_render_router(_series_native_render, _local_mcp.bind_loop))
+
+
+def _read_world3d_scene(workspace: str, name: str) -> dict:
+    """A saved Video 3D gallery scene, or a ``w3d-`` working scene, by name."""
+    from services.world3d_scenes import World3DSceneError, inspect_scene
+    if name.startswith("w3d-"):
+        try:
+            return inspect_scene(workspace, name, _workspace_dir)["document"]
+        except World3DSceneError as error:
+            raise KeyError(name) from error
+    from services.scene_documents import SceneDocumentError, get_document
+    try:
+        return get_document(workspace, name, workspace_dir=_workspace_dir)["document"]
+    except SceneDocumentError as error:
+        raise KeyError(name) from error
+
+
+from routers.series_plates import create_series_plates_router
+from services.series_plates import PlateDeps, SeriesPlates
+api.include_router(create_series_plates_router(SeriesPlates(PlateDeps(
+    call=_local_mcp.call, read_series=lambda workspace, series_id: _read_series_workspace(_series_library_workspace(workspace))["seriesById"][series_id],
+    change_series=_change_series, read_scene=_read_world3d_scene,
+)), _local_mcp.bind_loop))
 
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,

@@ -775,5 +775,18 @@
       "assemble": "Iniciando el montaje…",
       "remove": "Quitando…"
     }
+  },
+  "plates": {
+    "title": "Fondo 3D",
+    "hint": "Renderiza una vez una escena guardada de Video 3D como fondo en bucle de esta localización para los planos 2D.",
+    "active": "Los planos 2D de aquí usan el fondo 3D. Renderiza otra vez para cambiarlo.",
+    "scene": "Escena de Video 3D",
+    "choose": "Elige una escena",
+    "noScenes": "No hay escenas de Video 3D guardadas en este espacio",
+    "seconds": "Bucle (s)",
+    "render": "Renderizar fondo 3D",
+    "rendering": "Renderizando el fondo 3D… {{progress}}%",
+    "done": "Fondo 3D listo: los planos 2D de esta localización lo usan.",
+    "failed": "El fondo 3D ha fallado: {{error}}"
   }
 }

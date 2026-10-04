@@ -93,6 +93,8 @@ export interface SeriesLocation {
   variants: SeriesVisualVariant[]
   currentState: Record<string, unknown>
   approval: SeriesApproval
+  /** 2D series layout: a background or 3D plate asset, character homes (x %), and the plate render state. */
+  layout2d?: { plateAssetId?: string; backgroundAssetId?: string; homes?: Record<string, number>; plate3d?: Record<string, unknown> }
 }
 
 export interface SeriesProp {

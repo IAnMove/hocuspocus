@@ -83,6 +83,20 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
         "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines.",
     ),
+    "series.location.plate3d": (
+        {"workspace": WORKSPACE, "series_id": ID, "location_id": ID, "scene": {"type": "string", "minLength": 1, "maxLength": 200},
+         "document": OBJECT, "seconds": {"type": "number", "minimum": 2, "maximum": 20}, "quality": {"enum": ["draft", "final", "master"]}},
+        ["workspace", "series_id", "location_id"], True,
+        "Render a Video 3D scene once as the looping background plate of a series location: give scene (a saved Video 3D "
+        "scene file or a w3d- working scene id) or document. The plate is silent, without kinetic text, seconds long "
+        "(default 6). Poll series.location.plate3d.status: when the export is ready it is imported as a location video "
+        "and 2D shots in that location use it as their background.",
+    ),
+    "series.location.plate3d.status": (
+        {"workspace": WORKSPACE, "series_id": ID, "location_id": ID}, ["workspace", "series_id", "location_id"], False,
+        "Status of a location's 3D plate (rendering, done, failed). When the export has finished it imports the video "
+        "and sets it as the location plate (idempotent).",
+    ),
     "series.list": (
         {"workspace": WORKSPACE}, ["workspace"], False,
         "List Series Lab projects with their revision, language and episodes (id, number, title, shot count, status).",
@@ -292,6 +306,19 @@ def _native_job(action: str) -> Callable[..., dict[str, Any]]:
     return run
 
 
+def _plate_path(data: dict[str, Any]) -> str:
+    return f"/api/v1/series/{_quote(data['series_id'])}/locations/{_quote(data['location_id'])}/plate3d"
+
+
+def _start_plate(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body = {"workspace": data["workspace"], **{key: data[key] for key in ("scene", "document", "seconds", "quality") if key in data}}
+    return {"plate": request("POST", _plate_path(data), body=body)}
+
+
+def _plate_status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return {"plate": request("GET", _plate_path(data), query={"workspace": data["workspace"]})}
+
+
 def _list_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     listed = request("GET", "/api/v1/series", query={"workspace": data["workspace"]})
     return {"series": [_series_summary(item) for item in listed.get("series") or []]}
@@ -425,6 +452,8 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.episode.render_native.status": _native_job("status"),
     "series.episode.render_native.cancel": _native_job("cancel"),
     "series.episode.render_native.resume": _native_job("resume"),
+    "series.location.plate3d": _start_plate,
+    "series.location.plate3d.status": _plate_status,
     "series.list": _list_series,
     "series.get": _get_series,
     "series.create": _create_series,

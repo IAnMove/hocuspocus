@@ -545,3 +545,24 @@ export async function deleteSeriesLanguageVersion(workspace: string, seriesId: s
     method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
   }), 'Could not remove the language version')
 }
+
+export type SeriesLocationPlate = {
+  locationId: string; status: 'none' | 'rendering' | 'done' | 'failed'
+  intent?: string; seconds?: number; scene?: string; progress?: number; assetId?: string; plateAssetId?: string; error?: string
+}
+
+function platePath(seriesId: string, locationId: string) {
+  return `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/locations/${encodeURIComponent(locationId)}/plate3d`
+}
+
+/** Render a saved Video 3D scene once, silent and looping, as a location's 2D background. */
+export async function startSeriesLocationPlate(workspace: string, seriesId: string, locationId: string, scene: string, seconds: number): Promise<SeriesLocationPlate> {
+  return seriesResponse(fetch(platePath(seriesId, locationId), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, scene, seconds }),
+  }), 'Could not start the 3D background')
+}
+
+/** Follow the export; once ready the server imports it and makes it the location plate. */
+export async function fetchSeriesLocationPlate(workspace: string, seriesId: string, locationId: string): Promise<SeriesLocationPlate> {
+  return seriesResponse(fetch(`${platePath(seriesId, locationId)}?workspace=${encodeURIComponent(workspace)}`), 'Could not read the 3D background')
+}
