@@ -37,12 +37,15 @@ const catalog = {
 test('workspace assignment clears or applies a catalog choice without the editor inlining the commit', async () => {
   const { applyAssignedSlotSource } = await import('../src/features/scene3d/workspaceMutations.ts')
   const scene = applyScene3DTemplate('two-shot')
+  scene.slots[0].clips = [{ clip: { index: 0, name: 'Walk' }, start: 0, fade: 0 }]
   const slot = scene.slots[0]
   const patches = []
   applyAssignedSlotSource(slot, { ...capture, exporting: false }, capture, catalog, () => {}, updater => { patches.push(updater(scene)) }, current => current)
   assert.equal(patches[0].slots[0].sourceUrl, catalog.url)
+  assert.equal(patches[0].slots[0].clips, undefined)
   applyAssignedSlotSource(slot, { ...capture, exporting: false }, capture, null, () => {}, updater => { patches.push(updater(scene)) }, current => current)
   assert.equal(patches[1].slots[0].sourceUrl, '')
+  assert.equal(patches[1].slots[0].clips, undefined)
   applyAssignedSlotSource(slot, { ...capture, exporting: true }, capture, catalog, () => {}, updater => { patches.push(updater(scene)) }, current => current)
   applyAssignedSlotSource(slot, { ...capture, generation: 9, exporting: false }, capture, catalog, () => {}, updater => { patches.push(updater(scene)) }, current => current)
   assert.equal(patches.length, 2)

@@ -32,6 +32,7 @@ export function useWalkBake(
         return patchScene3DSlot(current, slot.id, {
           sourceUrl: result.url, sourceRef: { ...ref, filename: result.file, url: result.url }, clip,
           clipPlayback: { speed: 1, start: 0, loop: false },
+          clips: undefined,
           motion: { ...live.motion, walk: { sourceUrl: result.url, clip, key: walkKey(live, duration) } },
         })
       })

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { AnimationClip, Object3D, Quaternion, QuaternionKeyframeTrack, Vector3 } from 'three'
+import { AnimationClip, AnimationMixer, Object3D, Quaternion, QuaternionKeyframeTrack, Vector3 } from 'three'
 import { clipWeightsAt, cueContactsInScene, cueLocalTime, parseClipCues, type Scene3DClipCue } from '../src/features/scene3d/clipCues.ts'
 import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document.ts'
-import { paintClipCues } from '../src/features/scene3d/gpu.ts'
+import { paintClipCues, seekBoundMixer } from '../src/features/scene3d/gpu.ts'
 
 const walk = { index: 0, name: 'Walk' }
 const wave = { index: 1, name: 'Wave' }
@@ -63,6 +63,19 @@ test('a stored sequence is bounded, sorted and survives a reload; without clips 
   assert.equal('clips' in plain.slots[0], false)
 })
 
+test('all-invalid clips are stripped so the single clip still drives the model', () => {
+  const doc = createDefaultScene3DDocument()
+  doc.slots[0] = {
+    ...doc.slots[0],
+    clip: walk,
+    clips: [{ start: 0 }, null, { clip: { index: -1, name: 'x' }, start: 1 }, {}] as never,
+  }
+  const parsed = parseScene3DDocument(JSON.parse(JSON.stringify(doc)))!
+  assert.equal('clips' in parsed.slots[0], false)
+  assert.deepEqual(parsed.slots[0].clip, walk)
+  assert.equal(parseClipCues(doc.slots[0].clips), undefined)
+})
+
 test('foot landings follow each cue clock and only count while the cue weighs half or more', () => {
   const cues: Scene3DClipCue[] = [{ clip: walk, start: 0 }, { clip: wave, start: 2, fade: 0.4 }]
   const catalog = (clip: { index: number }) => clip.index === 0
@@ -99,4 +112,22 @@ test('the mixer shows the blend half way through a fade and each clip alone outs
   const mixer = gpu.cues!.mixer
   paintClipCues(gpu, cues, 2.2, 4)
   assert.equal(gpu.cues!.mixer, mixer, 'the mixer is rebuilt only when the clips change')
+})
+
+test('clearing the sequence releases its mixer so a single clip can pose the model again', () => {
+  const root = new Object3D(), bone = new Object3D()
+  bone.name = 'bone'; root.add(bone)
+  const walkClip = turnTrack('Walk', 0), waveClip = turnTrack('Wave', 90)
+  const gpu: Parameters<typeof paintClipCues>[0] = { root, animations: [walkClip, waveClip], cues: undefined }
+  const cues: Scene3DClipCue[] = [{ clip: walk, start: 0 }, { clip: wave, start: 2, fade: 0.4 }]
+  const yaw = () => (new Vector3(0, 0, 1).applyQuaternion(bone.quaternion).angleTo(new Vector3(0, 0, 1)) * 180) / Math.PI
+  paintClipCues(gpu, cues, 3, 4)
+  assert.ok(Math.abs(yaw() - 90) < 1e-3)
+  const single = new AnimationMixer(root)
+  seekBoundMixer(single, walkClip, 0)
+  assert.ok(Math.abs(yaw() - 90) < 1e-3, 'a second mixer cannot overwrite the leftover sequence pose')
+  paintClipCues(gpu, [], 0, 4)
+  assert.equal(gpu.cues, undefined)
+  seekBoundMixer(single, walkClip, 0)
+  assert.ok(yaw() < 1e-4, `single clip must own the skeleton again, yaw ${yaw()}`)
 })

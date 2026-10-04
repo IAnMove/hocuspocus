@@ -12,6 +12,7 @@ import os
 import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Any
 
 from services.production_shot_review import history_entry, is_runner_snapshot, load_review, record_decision
@@ -389,19 +390,59 @@ def _locate(workspace_dir: str, production_id: str):
     return None, None, None
 
 
+def snapshot_recency(path: str, body: dict[str, Any] | None = None) -> tuple[float, float]:
+    """Rank a Director snapshot so review, select and regenerate share one file.
+
+    A second Start from a lingering Story Lab handoff writes another
+    ``_director_pipeline_*.json`` with the same ``production_id``. Lexicographic
+    name order then pointed writes at the older cut.
+    """
+    stamp = _timestamp(body.get("updated_at") if isinstance(body, dict) else None)
+    if stamp is None and isinstance(body, dict):
+        stamp = _timestamp(body.get("completed_at"))
+    if stamp is None and isinstance(body, dict):
+        stamp = _timestamp(body.get("created_at"))
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        mtime = 0.0
+    return (stamp or 0.0, mtime)
+
+
+def _timestamp(value: Any) -> float | None:
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
 def _director_path(workspace_dir: str, production_id: str) -> str | None:
     try:
         names = sorted(os.listdir(workspace_dir))
     except OSError:
         return None
+    chosen: str | None = None
+    chosen_rank: tuple[float, float] | None = None
     for name in names:
         if not name.startswith("_director_pipeline_") or not name.endswith(".json") or ".." in name:
             continue
         path = os.path.join(workspace_dir, name)
         body, problem = _read(path)
-        if not problem and isinstance(body, dict) and _director_matches(body, production_id):
-            return path
-    return None
+        if problem or not isinstance(body, dict) or not _director_matches(body, production_id):
+            continue
+        rank = snapshot_recency(path, body)
+        if chosen_rank is None or rank > chosen_rank:
+            chosen, chosen_rank = path, rank
+    return chosen
 
 
 def _director_matches(body: dict, production_id: str) -> bool:

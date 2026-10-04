@@ -2011,7 +2011,7 @@ export function VideoEditorPanel() {
           height={resolution.height}
           duration={totalDuration}
           overlays={montage.layers.overlays.map(item => ({ id: item.id, y: item.y, width: item.width }))}
-          source={exportJob?.url || exportJob?.filename || ''}
+          source={exportJob?.filename || ''}
           workspace={activeWorkspace}
           onError={setError}
         />

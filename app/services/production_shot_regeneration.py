@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 
-from services.production_shot_actions import ActionError, stored_revision
+from services.production_shot_actions import ActionError, snapshot_recency, stored_revision
 from services.production_shot_review import load_review
 from services.production_run import adapt_pipeline_record
 
@@ -107,14 +107,26 @@ def _music(root: str, workspace: str, production_id: str, shot_id: str) -> dict:
 
 
 def _director(root: str, workspace: str, production_id: str, shot_id: str) -> dict:
+    chosen: tuple[Path, dict] | None = None
+    chosen_rank: tuple[float, float] | None = None
     for path in Path(root).glob("_director_pipeline_*.json"):
-        state = _read(path)
-        if adapt_pipeline_record(state, workspace)["production"]["id"] != production_id:
+        try:
+            state = _read(path)
+            adapted = adapt_pipeline_record(state, workspace)
+        except (ActionError, TypeError, ValueError):
             continue
-        for index, clip in enumerate(state.get("clips") or []):
-            if (clip.get("shot_id") or f"clip-{index + 1}") == shot_id:
-                return {"executor": "http", "path": f"/api/v1/director/pipelines/{quote(state['pipeline_id'])}/clips/{index}/rerun-video",
-                        "body": {"workspace": workspace}}
+        if adapted["production"]["id"] != production_id:
+            continue
+        rank = snapshot_recency(str(path), state)
+        if chosen_rank is None or rank > chosen_rank:
+            chosen, chosen_rank = (path, state), rank
+    if chosen is None:
+        raise ActionError("origin_unsupported")
+    _path, state = chosen
+    for index, clip in enumerate(state.get("clips") or []):
+        if (clip.get("shot_id") or f"clip-{index + 1}") == shot_id:
+            return {"executor": "http", "path": f"/api/v1/director/pipelines/{quote(state['pipeline_id'])}/clips/{index}/rerun-video",
+                    "body": {"workspace": workspace}}
     raise ActionError("origin_unsupported")
 
 

@@ -20,7 +20,7 @@ export function applyAssignedSlotSource(
   if (commit.action === 'ignore' || !canMutateWorld3DScene(live.exporting)) return
   revoke(slot.sourceUrl)
   if (commit.action === 'clear') {
-    applyScene(current => patchScene3DSlot(current, slot.id, { sourceUrl: '', sourceRef: undefined, clip: null, speech: undefined }))
+    applyScene(current => patchScene3DSlot(current, slot.id, { sourceUrl: '', sourceRef: undefined, clip: null, clips: undefined, speech: undefined }))
   } else {
     applyScene(current => patchScene3DSlot(current, slot.id, {
       sourceUrl: commit.sourceUrl,
@@ -28,6 +28,7 @@ export function applyAssignedSlotSource(
       speech: slot.speech ? { ...slot.speech, face: undefined, atlas: undefined } : undefined,
       media: commit.media,
       clip: commit.clip,
+      clips: undefined,
     }))
   }
   setCatalogs(current => {

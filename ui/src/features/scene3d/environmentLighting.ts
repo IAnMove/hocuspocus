@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, PMREMGenerator, type Scene, type Texture, type ToneMapping, type WebGLRenderer } from 'three'
+import { ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, NoToneMapping, PMREMGenerator, type Scene, type Texture, type ToneMapping, type WebGLRenderer } from 'three'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { exposureFactor, type ToneMappingName } from './look'
 import type { Scene3DDocument } from './types'
@@ -40,9 +40,19 @@ export class EnvironmentLighting {
   }
 }
 
-/** The document's tone mapping and exposure. Without a `look`, the renderer keeps today's settings. */
-export function applyLook(renderer: WebGLRenderer, document: Scene3DDocument) {
-  if (!document.look || document.pixelWorld) return
-  renderer.toneMapping = TONE_MAPPING[document.look.toneMapping]
-  renderer.toneMappingExposure = exposureFactor(document.look)
+/** The document's tone mapping and exposure. Always written so a previous scene cannot leak its grade.
+ *  `cinematic` is the old default: ACES when the composer path is active, otherwise none. */
+export function applyLook(renderer: WebGLRenderer, document: Scene3DDocument, cinematic = false) {
+  if (document.pixelWorld) {
+    renderer.toneMapping = NoToneMapping
+    renderer.toneMappingExposure = 1
+    return
+  }
+  if (document.look) {
+    renderer.toneMapping = TONE_MAPPING[document.look.toneMapping]
+    renderer.toneMappingExposure = exposureFactor(document.look)
+    return
+  }
+  renderer.toneMapping = cinematic ? ACESFilmicToneMapping : NoToneMapping
+  renderer.toneMappingExposure = 1
 }

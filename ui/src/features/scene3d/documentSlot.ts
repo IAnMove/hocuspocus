@@ -51,7 +51,7 @@ function normalizeCharacter(character: Scene3DSlot['character']) {
 export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
   const sourceUrl = durableScene3DSourceUrl(typeof slot.sourceUrl === 'string' ? slot.sourceUrl : '')
   const sourceRef = parseScene3DSourceRef(slot.sourceRef)
-  return {
+  const next: Scene3DSlot = {
     ...slot, sourceUrl, sourceRef: sourceUrl && sourceRef ? sourceRef : undefined,
     character: normalizeCharacter(slot.character),
     speech: parseSlotMedia(slot.media) === 'model3d' ? parseSpeech(slot.speech) : undefined,
@@ -63,11 +63,9 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat),
     performance: parsePerformance(slot.performance),
     rhythm: parseSlotRhythm(slot.rhythm),
-    ...clipCuesField(slot),
   }
-}
-
-function clipCuesField(slot: Scene3DSlot): Pick<Scene3DSlot, 'clips'> {
-  const clips = parseSlotMedia(slot.media) === 'model3d' ? parseClipCues(slot.clips) : undefined
-  return clips ? { clips } : {}
+  const clips = next.media === 'model3d' ? parseClipCues(slot.clips) : undefined
+  if (clips) next.clips = clips
+  else delete next.clips
+  return next
 }

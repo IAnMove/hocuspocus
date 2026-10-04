@@ -512,7 +512,7 @@ const DRESSING_BY_TEMPLATE: Partial<Record<Scene3DTemplateId, Scene3DDocument['d
 export function patchScene3DSlot(
   document: Scene3DDocument,
   slotId: string,
-  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook' | 'rhythm'>>,
+  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'clips' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook' | 'rhythm'>>,
 ): Scene3DDocument {
   return {
     ...document,
@@ -544,6 +544,13 @@ export function takeKeptSlot(
     ?? takePreviousSlot(previous, used, item => item.slot === slot.slot && item.media === slot.media && slotHasKeepableAsset(item))
 }
 
+/** Workspace/gallery objects the user assigned. Shipped `/scene3d` plates and `/examples` GLBs are not. */
+export function slotHasUserSource(slot: Scene3DSlot) {
+  if (!slot.sourceUrl) return false
+  if (slot.sourceRef) return true
+  return !slot.sourceUrl.startsWith('/scene3d/') && !slot.sourceUrl.startsWith('/examples/')
+}
+
 export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefined): Scene3DSlot {
   if (!old) return slot
   const keptScreenUrl = slot.screen?.sourceUrl || old.screen?.sourceUrl || ''
@@ -555,7 +562,10 @@ export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefi
         media: slot.screen.sourceUrl ? slot.screen.media : (old.screen?.media || slot.screen.media),
       }
     : (old.speech?.facePack && old.screen ? structuredClone(old.screen) : slot.screen)
-  if (slot.sourceUrl) return { ...slot, screen }
+  // A user-template file already on the destination stays. An empty slot still
+  // inherits the previous object, including shipped examples. A shipped default
+  // only yields when the previous slot is a user-assigned file.
+  if (slotHasUserSource(slot) || (slot.sourceUrl && !slotHasUserSource(old))) return { ...slot, screen }
   return {
     ...slot,
     character: old.character,
@@ -563,6 +573,7 @@ export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefi
     sourceRef: old.sourceRef,
     clip: old.clip,
     clipPlayback: old.clipPlayback,
+    clips: old.clips ? structuredClone(old.clips) : undefined,
     rhythm: old.rhythm ? structuredClone(old.rhythm) : undefined,
     speech: old.speech ? structuredClone(old.speech) : undefined,
     screen,

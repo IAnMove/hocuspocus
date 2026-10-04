@@ -12,6 +12,9 @@ from services.publish_presets import (
     PublishPresetError,
     collect_warnings,
     encode_args,
+    loudness_report,
+    loudness_target,
+    loudnorm_usable,
     measure_loudnorm,
     render_publish,
 )
@@ -46,11 +49,22 @@ def publish_file(
     stem = os.path.splitext(os.path.basename(source))[0][:48] or "publish"
     name = f"{stem}_{preset}.mp4"
     destination = os.path.join(folder, name)
-    measured = measure_loudnorm(source) if body.get("loudnorm") else None
+    normalize = bool(body.get("loudnorm")) and loudness_target(preset) is not None
+    measured = None
+    if normalize:
+        try:
+            measured = measure_loudnorm(source, preset)
+        except PublishPresetError:
+            measured = None
+    applied = measured if loudnorm_usable(measured) else None
     try:
-        render_publish(source, destination, preset, premium=bool(body.get("premium")), loudnorm=measured)
+        render_publish(source, destination, preset, premium=bool(body.get("premium")), loudnorm=applied)
+        report = loudness_report(destination, preset) if normalize else None
     except PublishPresetError as exc:
         raise HTTPException(exc.status, {"code": "publish_preset", "message": str(exc)}) from exc
+    if report and report.get("warning"):
+        warnings = [*warnings, report["warning"]]
+    loudness = None if report is None else {key: report[key] for key in ("lufs", "true_peak", "target_lufs", "target_true_peak")}
     thumbnail = os.path.splitext(destination)[0] + ".png"
     extract_frame(destination, thumbnail, 0.0)
     sidecar = {
@@ -59,10 +73,11 @@ def publish_file(
         "args": encode_args(preset, premium=bool(body.get("premium"))),
         "warnings": warnings,
         "loudnorm": measured,
+        "loudness": loudness,
     }
     sidecar_name = os.path.splitext(name)[0] + ".publish.json"
     with open(os.path.join(folder, sidecar_name), "w", encoding="utf-8") as handle:
-        json.dump(sidecar, handle, ensure_ascii=False, indent=2)
+        json.dump(sidecar, handle, ensure_ascii=False, indent=2, allow_nan=False)
     return {
         "file": name,
         "url": f"/api/v1/file/{name}",
@@ -70,6 +85,7 @@ def publish_file(
         "sidecar": sidecar_name,
         "warnings": warnings,
         "loudnorm": measured,
+        "loudness": loudness,
     }
 
 
@@ -78,7 +94,11 @@ def create_publish_router(*, resolve_source: Callable[[str, str], str], workspac
 
     @router.post("/api/v1/video-editor/publish-check")
     def publish_check(body: dict):
-        return {"warnings": _checked(body), "args": encode_args(str(body.get("preset") or ""), premium=bool(body.get("premium")))}
+        warnings = _checked(body)
+        preset = str(body.get("preset") or "")
+        target = loudness_target(preset)
+        loudness = None if target is None else {"lufs": target[0], "true_peak": target[1]}
+        return {"warnings": warnings, "args": encode_args(preset, premium=bool(body.get("premium"))), "loudness": loudness}
 
     @router.post("/api/v1/video-editor/publish")
     def publish_video(body: dict):

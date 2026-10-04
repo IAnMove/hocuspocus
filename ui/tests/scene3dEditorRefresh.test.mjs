@@ -42,16 +42,47 @@ test('new layouts are distinct and existing shots get different camera compositi
 
 test('shot changes preserve asset identity and clip choices without mutating the previous scene', () => {
   const original = applyScene3DTemplate('two-shot')
-  Object.assign(original.slots[0], { sourceUrl: '/api/v1/file/hero.glb?workspace=test', sourceRef: { workspaceId: 'test', filename: 'hero.glb', url: '/api/v1/file/hero.glb?workspace=test', assetId: 'canonical-hero' }, clip: { index: 2, name: 'Walk exact' } })
+  Object.assign(original.slots[0], { sourceUrl: '/api/v1/file/hero.glb?workspace=test', sourceRef: { workspaceId: 'test', filename: 'hero.glb', url: '/api/v1/file/hero.glb?workspace=test', assetId: 'canonical-hero' }, clip: { index: 2, name: 'Walk exact' }, clips: [{ clip: { index: 2, name: 'Walk exact' }, start: 0, fade: 0 }, { clip: { index: 3, name: 'Wave' }, start: 2, fade: 0.3 }] })
   original.playbackSpeed = 2
   const before = JSON.stringify(original)
   const next = remountScene3DTemplate('duo-diagonal', original)
   assert.deepEqual(next.slots[0].sourceRef, original.slots[0].sourceRef)
   assert.deepEqual(next.slots[0].clip, original.slots[0].clip)
+  assert.deepEqual(next.slots[0].clips, original.slots[0].clips)
   assert.notDeepEqual(next.slots[0].position, original.slots[0].position)
   assert.equal(next.playbackSpeed, 2)
   assert.equal(JSON.stringify(original), before)
   assert.equal(remountScene3DTemplate('duo-diagonal', original, false).slots[0].sourceUrl, '')
+})
+
+test('keep-objects replaces a shipped plate or example GLB, not another user-template file', () => {
+  const chase = applyScene3DTemplate('drive-chase')
+  const background = chase.slots.find(slot => slot.slot === 'background')
+  assert.equal(background.sourceUrl, '/scene3d/drive-city.jpg')
+  Object.assign(background, {
+    sourceUrl: '/api/v1/file/my-city.jpg?workspace=film',
+    sourceRef: { workspaceId: 'film', filename: 'my-city.jpg', url: '/api/v1/file/my-city.jpg?workspace=film' },
+  })
+  const hood = remountScene3DTemplate('drive-hood', chase)
+  const keptPlate = hood.slots.find(slot => slot.slot === 'background')
+  assert.equal(keptPlate.sourceUrl, '/api/v1/file/my-city.jpg?workspace=film')
+  assert.equal(keptPlate.sourceRef.filename, 'my-city.jpg')
+  assert.equal(keptPlate.loop.cylinder, true)
+
+  const stock = remountScene3DTemplate('drive-wing', applyScene3DTemplate('drive-chase'))
+  assert.equal(stock.slots.find(slot => slot.slot === 'background').sourceUrl, '/scene3d/drive-coast.jpg')
+
+  const hero = applyScene3DTemplate('two-shot')
+  Object.assign(hero.slots[0], {
+    sourceUrl: '/api/v1/file/hero.glb?workspace=film',
+    sourceRef: { workspaceId: 'film', filename: 'hero.glb', url: '/api/v1/file/hero.glb?workspace=film' },
+    clip: { index: 2, name: 'Walk exact' },
+    clips: [{ clip: { index: 2, name: 'Walk exact' }, start: 0, fade: 0 }, { clip: { index: 3, name: 'Wave' }, start: 2, fade: 0.3 }],
+  })
+  const tv = remountScene3DTemplate('tv-head-walk', hero)
+  assert.equal(tv.slots[0].sourceUrl, '/api/v1/file/hero.glb?workspace=film')
+  assert.equal(tv.slots[0].clips[1].clip.name, 'Wave')
+  assert.notEqual(tv.slots[0].sourceUrl, '/examples/tv-head-humanoid.glb')
 })
 
 test('rate changes output duration and preserves complete timeline coverage and metadata', () => {
