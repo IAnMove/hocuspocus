@@ -92,6 +92,16 @@ class NativeRenderDeps:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+def _discard(path: str) -> None:
+    """Remove a generated file and its ``.meta.json`` sidecar; a missing file is fine."""
+    stem = os.path.splitext(path)[0]
+    for item in (path, f"{stem}.meta.json"):
+        try:
+            os.remove(item)
+        except OSError:
+            pass
+
+
 def _ok(result: dict, label: str) -> dict:
     if not isinstance(result, dict) or result.get("_is_error") or result.get("status") == "failed":
         error = (result or {}).get("error") if isinstance(result, dict) else None
@@ -342,19 +352,27 @@ class SeriesNativeRender:
     def _record(self, workspace: str, job: dict, beat_id: str, text: str, voice: dict, key: str) -> dict[str, Any]:
         root = self.deps.workspace_dir(workspace)
         stem = self._stem(job, beat_id, key)
+        final, best_path = os.path.join(root, f"{stem}.wav"), os.path.join(root, f"{stem}.best.wav")
         best: dict[str, Any] | None = None
-        for attempt in range(MAX_TAKES):
-            raw = self._speak(workspace, job, stem, text, voice, attempt)
-            duration = self.deps.trim(os.path.join(root, raw), os.path.join(root, f"{stem}.wav"))
-            wer = self._wer(workspace, f"{stem}.wav", text, job["language"])
-            take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer, "attempt": attempt}
-            if best is None or (wer is not None and (best["wer"] is None or wer < best["wer"])):
-                best = take
-                os.replace(os.path.join(root, f"{stem}.wav"), os.path.join(root, f"{stem}.best.wav"))
-            if wer is None or wer <= MAX_WER:
-                break
-        os.replace(os.path.join(root, f"{stem}.best.wav"), os.path.join(root, f"{stem}.wav"))
-        self.deps.level(os.path.join(root, f"{stem}.wav"))
+        try:
+            for attempt in range(MAX_TAKES):
+                raw = self._speak(workspace, job, stem, text, voice, attempt)
+                try:
+                    duration = self.deps.trim(os.path.join(root, raw), final)
+                finally:
+                    _discard(os.path.join(root, raw))  # the trimmed take is the recording; the raw one is an intermediate
+                wer = self._wer(workspace, f"{stem}.wav", text, job["language"])
+                take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer, "attempt": attempt}
+                if best is None or (wer is not None and (best["wer"] is None or wer < best["wer"])):
+                    best = take
+                    os.replace(final, best_path)
+                if wer is None or wer <= MAX_WER:
+                    break
+        finally:
+            # The best take so far becomes the recording even when a later attempt fails, so a resume reuses it.
+            if os.path.isfile(best_path):
+                os.replace(best_path, final)
+        self.deps.level(final)
         cues = self._cues(workspace, best["filename"], best["duration"], text, job["language"])
         return {**best, **cues}
 

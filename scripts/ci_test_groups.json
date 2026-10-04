@@ -371,6 +371,7 @@
         "tests/test_series_shot_extras.py",
         "tests/test_series_script_produce.py",
         "tests/test_audio_levels.py",
+        "tests/test_workspace_cleanup.py",
         "tests/test_series_native_render_router.py",
         "tests/test_flat_rig.py",
         "tests/test_speech_qa.py",

@@ -27,6 +27,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from services.asset_manifest import publish_generation_sidecar
+from services.workspace_cleanup import keep_export_staging, release_export_staging
 from services import resource_scheduler
 from services.world3d_media_cache import prepare_media_snapshot
 from services.world3d_renderer_support import scene_render_device
@@ -697,10 +698,14 @@ def command_handlers(service):
     return {OPERATION: submit, RECEIPT_OPERATION: receipt, CANCEL_OPERATION: cancel}
 
 
-def staging_dir(workspace_path: str, intent_id: str, folder: str = ".world3d-export") -> Path:
+def staging_token(intent_id: str) -> str:
+    """The staging folder name of an intent: the intent itself when it is a safe name, else a digest."""
     safe = bool(INTENT_RE.fullmatch(intent_id)) and intent_id not in {".", ".."} and ".." not in intent_id
-    token = intent_id if safe else hashlib.sha256(intent_id.encode("utf-8")).hexdigest()[:32]
-    path = Path(workspace_path) / folder / token
+    return intent_id if safe else hashlib.sha256(intent_id.encode("utf-8")).hexdigest()[:32]
+
+
+def staging_dir(workspace_path: str, intent_id: str, folder: str = ".world3d-export") -> Path:
+    path = Path(workspace_path) / folder / staging_token(intent_id)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -910,6 +915,9 @@ class World3DExportService:
             metadata["geometry"] = geometry
         self._finish(registry, task_id, "completed", phase="completed",
                      message=f"Published {self.title} MP4", result_refs=[published["name"]], metadata=metadata)
+        # The frames and audio mix served their purpose; the MP4 is published and the snapshot says what was rendered.
+        if not keep_export_staging():
+            release_export_staging(staging)
 
     def _owned_browser(self, snapshot, staging, progress, cancelled) -> list[Path]:
         module = playwright_module()
@@ -1031,5 +1039,5 @@ __all__ = [
     "World3DExportPending", "World3DExportService", "build_snapshot", "command_catalog",
     "command_handlers", "even_dim", "export_capabilities", "export_plan", "export_size",
     "freeze_export_command", "http_error", "mux_frame_sequence", "mux_wav_audio", "plan_quality", "playwright_module",
-    "staging_dir", "unsupported_capabilities", "write_png", "write_prores_master",
+    "staging_dir", "staging_token", "unsupported_capabilities", "write_png", "write_prores_master",
 ]

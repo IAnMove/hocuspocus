@@ -37042,6 +37042,17 @@ _job_leftovers = JobLeftovers(
     ),
 )
 _image_generation_commands.leftover_receipt_lookup = _job_leftovers.receipt_for
+
+
+def _release_intermediates_at_startup() -> None:
+    """Frames of published exports, raw voice takes and stale temp folders go; live and resumable work is kept."""
+    from services.workspace_cleanup import startup_cleanup
+    from services.world3d_export import staging_token
+    names = [item.get("name") for item in _list_workspaces() if isinstance(item, dict) and item.get("name")]
+    startup_cleanup(names, _workspace_dir, _task_registry, {_world3d_export.operation, _scene2d_export.operation}, staging_token)
+
+
+threading.Thread(target=_release_intermediates_at_startup, name="workspace-cleanup", daemon=True).start()
 _job_leftover_handlers = job_leftover_handlers(_job_leftovers)
 # qa.people C3 duplicate-person flag: register beside the MCP router (feat/qa-people).
 from services.qa_people import command_catalog as qa_people_catalog, command_handlers as qa_people_handlers

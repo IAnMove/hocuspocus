@@ -853,3 +853,16 @@ def test_a_malformed_geometry_report_is_ignored(tmp_path):
     (tmp_path / "geometry.json").write_text(json.dumps({"verdict": "maybe"}))
     assert read_geometry_report(tmp_path) is None
     assert read_geometry_report(tmp_path / "missing") is None
+
+
+def test_a_published_export_releases_its_frames_and_keeps_its_snapshot(tmp_path, monkeypatch):
+    monkeypatch.delenv("HOCUS_KEEP_EXPORT_STAGING", raising=False)
+    service = _service(tmp_path, renderer=_paint)
+    service.submit(_command(intent_id="release-me"))
+    registry = service._registry(WORKSPACE)
+    task_id = registry.command_admission("release-me")["task_id"]
+    _wait(registry, task_id, {"completed"})
+    staging = staging_dir(registry.workspace_dir, "release-me")
+    assert not (staging / "frames").exists() and not (staging / "encoded.mp4").exists(), "intermediates go with the publish"
+    assert (staging / "snapshot.json").is_file(), "what was rendered stays readable"
+    forget_task_registry(registry.workspace_dir)
