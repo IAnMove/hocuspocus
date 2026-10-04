@@ -72,6 +72,8 @@ class NativeRenderDeps:
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 3.0
     check_speech: bool = True
+    # Sets shot.durationSeconds to the rendered length; a take shorter than its shot is refused on import.
+    set_shot_duration: Callable[[str, str, str, str, float], None] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -353,6 +355,8 @@ class SeriesNativeRender:
             self.deps.sleep(self.deps.poll_seconds)
 
     def _import(self, workspace: str, job: dict, item: dict) -> None:
+        if self.deps.set_shot_duration and item.get("duration"):
+            self.deps.set_shot_duration(workspace, job["seriesId"], job["episodeId"], item["shotId"], float(item["duration"]))
         metadata = {"productionMethod": "animation_2d", "sceneFilename": item["scene"], "automaticDraft": True,
                     "nativeServerRender": job["jobId"], "duration": item.get("duration")}
         imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {

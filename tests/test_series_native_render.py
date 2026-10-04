@@ -83,8 +83,10 @@ def service(tmp_path, tools, compiled):
     kits = {f"kit-{cid}": {"id": f"kit-{cid}", "name": cid, "base": {"source": "/api/v1/file/k.png", "width": 400, "height": 800},
                            "poses": {}, "voice": GARY, **({"voicesByLanguage": {"spanish": KEVIN_ES}} if cid == "kevin" else {})}
             for cid in ("kevin", "gary")}
+    durations = tools.durations = []
     return SeriesNativeRender(NativeRenderDeps(call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: library(),
-                                               read_kits=lambda _ws: kits, compile_shot=compile_shot, trim=trim, sleep=lambda _s: None, poll_seconds=0))
+                                               read_kits=lambda _ws: kits, compile_shot=compile_shot, trim=trim, sleep=lambda _s: None, poll_seconds=0,
+                                               set_shot_duration=lambda *args: durations.append(args)))
 
 
 def finished(render, job_id, tmp_path):
@@ -116,6 +118,7 @@ def test_every_2d_shot_becomes_an_approved_take_with_each_voice_in_the_series_la
     assert [(item["owner_id"], item["as_take"], item["metadata"]["sceneFilename"]) for item in imports] == [
         ("s01", True, "uv-ep1-s01.scene.json"), ("s03", True, "uv-ep1-s03.scene.json")]
     assert all(item["approved"] for item in done["items"])
+    assert [(args[3], args[4] > 1.5) for args in tools.durations] == [("s01", True), ("s03", True)], "each shot takes its rendered length"
     assert all("cues" not in line for item in public_job(done)["items"] for line in item["lines"].values())
 
 

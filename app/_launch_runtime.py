@@ -37030,12 +37030,27 @@ from services.series_native_render import NativeRenderDeps, SeriesNativeRender
 from routers.series_native_render import create_series_native_render_router
 from services.character_kit_library import read_character_kit_library as _read_kit_library
 
+def _set_series_shot_duration(workspace: str, series_id: str, episode_id: str, shot_id: str, seconds: float) -> None:
+    """A server-rendered take sets its shot's length, as the editor does before importing."""
+    resolved = _series_library_workspace(workspace)
+    with _series_library_lock:
+        library = _read_series_workspace(resolved)
+        series = library["seriesById"][series_id]
+        for shot in series["episodesById"][episode_id]["shots"]:
+            if shot["id"] == shot_id:
+                shot["durationSeconds"] = round(seconds, 3)
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = _series_iso_now()
+        _write_series_workspace(resolved, library)
+
+
 # Server jobs call the same tool handlers as MCP clients, in process (no token needed).
 _local_mcp = LocalMcp(lambda: _mcp_handlers)
 _series_native_render = SeriesNativeRender(NativeRenderDeps(
     call=_local_mcp.call, workspace_dir=_workspace_dir,
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
     read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {},
+    set_shot_duration=_set_series_shot_duration,
 ))
 api.include_router(create_series_native_render_router(_series_native_render, _local_mcp.bind_loop))
 
