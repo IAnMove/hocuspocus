@@ -59,6 +59,8 @@ test('adding a language starts a recording in that language; removing it returns
   assert.equal(current?.spanish?.model, 'qwen3_tts_base')
   assert.equal((current?.spanish as CustomCharacterVoice).language, 'spanish')
   const block = within(view.getByTestId('language-voice-spanish'))
+  const languageSelect = block.getByLabelText('Language for new dialogue') as HTMLSelectElement
+  assert.deepEqual([...languageSelect.options].map(option => option.value), ['spanish', 'auto'], 'a Spanish voice cannot be switched to another language')
   fireEvent.change(block.getByTestId('character-voice'), { target: { value: 'saved:other:spanish' } })
   assert.deepEqual(current?.spanish, spanish, 'a language voice saved on another character can be reused')
   fireEvent.change(block.getByTestId('character-voice'), { target: { value: 'ryan' } })

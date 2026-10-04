@@ -59,7 +59,8 @@ export function CharacterVoiceFields({ workspace, value, onChange, disabled, sav
       <p className="font-medium">{t(`speech.voiceProfiles.${voiceId}`)}</p>
       <p className="text-text-secondary">{t('speech.voiceOrigin', { language: t(`speech.voiceOrigins.${profile.origin}`) })}</p>
     </div>}
-    {custom && <CustomCharacterVoiceFields value={custom} onChange={onChange} onBusyChange={captureBusy} />}
+    {custom && <CustomCharacterVoiceFields value={custom} onChange={onChange} onBusyChange={captureBusy}
+      languages={language ? [language, 'auto'] : undefined} />}
     {value?.model === 'qwen3_tts_customvoice' && <label className="block">{t('speech.voiceDirection')}<textarea maxLength={1000} rows={2}
       className="mt-1 w-full rounded border border-border bg-bg-primary p-2" value={value.instructions ?? ''}
       onChange={e => onChange({ ...value, instructions: e.target.value })} /></label>}
