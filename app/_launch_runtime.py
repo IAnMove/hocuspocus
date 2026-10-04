@@ -446,6 +446,7 @@ from services.job_lifecycle import (
     generation_queue_position,
     generation_slot,
     is_cancel_requested,
+    new_media_files,
     record_job_outputs,
     register_abort_state,
     register_generation_job,
@@ -22679,8 +22680,7 @@ def _run_sfx_generation(job: dict, raw_params: dict, start_time: float):
         )
         # Publish files even when cancellation arrived during MMAudio's
         # non-cooperative call; terminal status/message remain untouched.
-        after = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
-        new_files = sorted(after - before)
+        new_files = new_media_files(out_dir, before)
         record_job_outputs(job, new_files)
         if is_cancel_requested(job):
             return False
@@ -28685,7 +28685,11 @@ def put_series_episode_endpoint(series_id: str, episode_id: str, body: dict):
             series_id, episode_id, body, series, updated_at=_series_iso_now(),
         )
         library["seriesById"][series_id] = updated_series
-        stored = _write_series_workspace(workspace, library)
+        try:
+            stored = _write_series_workspace(workspace, library)
+        except ValueError as exc:
+            # Validation of the whole project (for example an id used twice in the series) is the caller's error.
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     return stored["seriesById"][series_id]["episodesById"][episode_id]
 
 
@@ -30566,6 +30570,28 @@ def discard_series_render_job(job_id: str):
     return {"discarded": True, "jobId": job_id, "outputsPreserved": True}
 
 
+def _approve_series_version_take(workspace: str, library: dict, series: dict, episode: dict, shot_index: int, language: str,
+                                 attempt_id: str) -> dict:
+    """Approve a take for a language version (its own approval and length); the original's stays as it was."""
+    from services.series_language_versions import set_version_take
+    shot = episode["shots"][shot_index]
+    try:
+        set_version_take(episode, language, shot["id"], attempt_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    now = _series_iso_now()
+    episode["updatedAt"] = now
+    series["episodesById"][episode["id"]] = episode
+    series["revision"] = int(series.get("revision") or 1) + 1
+    series["updatedAt"] = now
+    library["seriesById"][series["id"]] = series
+    stored = _write_series_workspace(workspace, library)
+    version = stored["seriesById"][series["id"]]["episodesById"][episode["id"]]["languageVersions"][language]
+    return {**stored["seriesById"][series["id"]]["episodesById"][episode["id"]]["shots"][shot_index],
+            "language": language, "approvedAttemptId": version["approvedAttemptIds"].get(shot["id"]),
+            "durationSeconds": (version.get("durations") or {}).get(shot["id"])}
+
+
 @api.post("/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot_id}/attempts/{attempt_id}/approve")
 def approve_series_shot_attempt_endpoint(
     series_id: str, episode_id: str, shot_id: str, attempt_id: str, body: dict | None = None,
@@ -30586,6 +30612,11 @@ def approve_series_shot_attempt_endpoint(
         ), None)
         if shot_index is None:
             raise HTTPException(status_code=404, detail="Series shot not found")
+        language = body.get("language")
+        if isinstance(language, str) and language:
+            from services.series_shot_plan import language_key
+            if language != language_key(series):
+                return _approve_series_version_take(workspace, library, series, episode, shot_index, language, attempt_id)
         try:
             episode["shots"][shot_index] = approve_shot_render_attempt(
                 episode["shots"][shot_index], attempt_id,
@@ -36892,7 +36923,13 @@ from services.scene_asset_facts import command_catalog as scene_asset_facts_cata
 from services.mcp_access import McpAccess
 from routers.mcp_access import create_mcp_access_router
 _mcp_access = McpAccess(os.path.join(os.path.dirname(__file__), 'settings', 'mcp-access.json'))
-api.include_router(create_mcp_access_router(_mcp_access))
+# Clients that only speak OAuth (ChatGPT connectors) sign in once with the same key; see services/mcp_oauth.py.
+from services.mcp_oauth import McpOAuth
+from services.mcp_profiles import PROFILES as _MCP_PROFILES
+from routers.mcp_oauth import create_mcp_oauth_router
+_mcp_oauth = McpOAuth(os.path.join(os.path.dirname(__file__), 'settings', 'mcp-oauth.json'), _mcp_access.token, set(_MCP_PROFILES))
+api.include_router(create_mcp_access_router(_mcp_access, on_change=_mcp_oauth.revoke_all))
+api.include_router(create_mcp_oauth_router(_mcp_oauth))
 from routers.music_productions import create_music_productions_router
 api.include_router(create_music_productions_router(
     workspace_dir=_workspace_dir,
@@ -37064,10 +37101,14 @@ def _set_series_shot_duration(workspace: str, series_id: str, episode_id: str, s
 
 def _set_series_version_take(workspace: str, series_id: str, episode_id: str, language: str, shot_id: str, attempt_id: str) -> None:
     """Approve a take in a language version; the original's approval is untouched."""
-    def change(_series: dict, episode: dict) -> None:
-        version = episode.setdefault("languageVersions", {}).setdefault(language, {"dialogue": {}, "cards": {}})
-        version.setdefault("approvedAttemptIds", {})[shot_id] = attempt_id
-    _change_series_episode(workspace, series_id, episode_id, change)
+    from services.series_language_versions import set_version_take
+    _change_series_episode(workspace, series_id, episode_id, lambda _series, episode: set_version_take(episode, language, shot_id, attempt_id))
+
+
+def _set_series_version_duration(workspace: str, series_id: str, episode_id: str, language: str, shot_id: str, seconds: float) -> None:
+    """A version's server take sets that version's shot length; the original keeps its own."""
+    from services.series_language_versions import set_version_duration
+    _change_series_episode(workspace, series_id, episode_id, lambda _series, episode: set_version_duration(episode, language, shot_id, seconds))
 
 
 def _translate_series_version(prompt: str, system_prompt: str, schema: dict):
@@ -37098,8 +37139,14 @@ _series_native_render = SeriesNativeRender(NativeRenderDeps(
     read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {},
     set_shot_duration=_set_series_shot_duration,
     set_version_take=_set_series_version_take,
+    set_version_duration=_set_series_version_duration,
 ))
 api.include_router(create_series_native_render_router(_series_native_render, _local_mcp.bind_loop))
+from routers.series_guide import create_series_guide_router
+api.include_router(create_series_guide_router(
+    read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
+    read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}, workspace_dir=_workspace_dir,
+))
 
 
 def _read_world3d_scene(workspace: str, name: str) -> dict:
@@ -37131,6 +37178,7 @@ api.include_router(create_wangp_mcp_router(
               **wangp_agent_handlers(api), **lips_creator_handlers(_workspace_dir), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **world3d_template_handlers(_workspace_dir), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **media_options_handlers(_media_options_sources), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers, **_qa_people_handlers, **_studio_key_handlers, **_clip_align_handlers, **_montage_preview_handlers, **audio_analysis_handlers(_workspace_dir), **lipsync_qa_handlers(_workspace_dir), **speech_qa_handlers(_workspace_dir), **_export_qa_handlers,
               **music_production_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or "", _mcp_access.token), **production_review_handlers(_workspace_dir), **series_command_handlers(lambda: _scene2d_export.app_url or "", _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **_model3d_command_handlers, **_model3d_rig_handlers, **_model3d_compose_handlers, **_model3d_animate_handlers}),
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
+    profiles=_MCP_PROFILES, oauth=_mcp_oauth,
     command_operations=[*lips_creator_catalog(), *scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
         adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *world3d_template_catalog(), *montage_command_catalog(), *template_command_catalog(), *media_options_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog(), *qa_people_catalog(), *studio_key_catalog(), *clip_align_catalog(), *montage_preview_catalog(), *audio_analysis_catalog(), *lipsync_qa_catalog(), *speech_qa_catalog(), *export_qa_catalog(), *music_production_catalog(), *production_review_catalog(), *series_command_catalog(), *model3d_command_catalog(), *model3d_rig_catalog(), *model3d_compose_catalog(), *model3d_animate_catalog()],
 ))

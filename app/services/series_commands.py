@@ -97,6 +97,17 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Status of a location's 3D plate (rendering, done, failed). When the export has finished it imports the video "
         "and sets it as the location plate (idempotent).",
     ),
+    "series.guide": (
+        {"workspace": WORKSPACE, "series_id": ID}, ["workspace"], False,
+        "Start here. How to make an episode with these tools (steps, shot format, conventions, pitfalls) and, with "
+        "series_id, the series bible: characters with their kit, poses and voices, locations with variants and anchors, "
+        "the music and sound files in the workspace, the episodes so far and the id prefix for the next one.",
+    ),
+    "series.episode.get": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], False,
+        "Read one episode compactly: script, shots with their layout2d and lines, the last takes (id, language, seconds, "
+        "editable scene file) and its language versions. Use it instead of series.get to copy an episode's style.",
+    ),
     "series.templates": (
         {"language": {"enum": ["es", "en"]}}, [], False,
         "List series templates (cutout satire, host explainer, office sitcom...): cast, locations and a five-shot 2D pilot.",
@@ -152,9 +163,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "(metadata.sceneFilename lets Series Lab reopen its editable scene). A take is appended unapproved.",
     ),
     "series.take.approve": (
-        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_id": ID, "attempt_id": ID},
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_id": ID, "attempt_id": ID, "language": LANGUAGE},
         ["workspace", "series_id", "episode_id", "shot_id", "attempt_id"], True,
-        "Approve one completed take for its shot. Assembly uses the approved take of every shot.",
+        "Approve one completed take for its shot. Assembly uses the approved take of every shot. With language (not the "
+        "series' own), it approves the take for that language version only and keeps the take's length as the version's.",
     ),
     "series.assembly.start": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE, "burn_subtitles": {"type": "boolean"}},
@@ -165,10 +177,12 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.language_version.set": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE,
-          "title": {"type": "string", "maxLength": 300}, "dialogue": OBJECT, "cards": OBJECT},
+          "title": {"type": "string", "maxLength": 300}, "dialogue": OBJECT, "cards": OBJECT, "music": OBJECT},
         ["workspace", "series_id", "episode_id", "language"], True,
         "Write a language version of an episode: the same shots and line ids with their own text. dialogue maps beat id to "
-        "text; cards maps shot id to {title, body}. Approved takes and cuts of the version are kept. Returns missingLines.",
+        "text; cards maps shot id to {title, body}; music maps shot id to a workspace audio file that replaces that shot's "
+        "layout2d.music in this language (a theme sung in it). Approved takes, lengths and cuts of the version are kept. "
+        "Returns missingLines.",
     ),
     "series.episode.translate": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE},
@@ -329,6 +343,18 @@ def _plate_status(data: dict[str, Any], request: Callable[..., Any], **_extra: A
     return {"plate": request("GET", _plate_path(data), query={"workspace": data["workspace"]})}
 
 
+def _guide(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    if data.get("series_id"):
+        return request("GET", f"/api/v1/series/{_quote(data['series_id'])}/guide", query={"workspace": data["workspace"]})
+    listed = request("GET", "/api/v1/series", query={"workspace": data["workspace"]})
+    return {**request("GET", "/api/v1/series-agent/guide"), "series": [_series_summary(item) for item in listed.get("series") or []]}
+
+
+def _episode_get(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/compact"
+    return {"episode": request("GET", path, query={"workspace": data["workspace"]})}
+
+
 def _list_templates(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     return request("GET", "/api/v1/series/templates", query={"language": data["language"]} if data.get("language") else None)
 
@@ -429,8 +455,10 @@ def _approve_take(data: dict[str, Any], request: Callable[..., Any], **_extra: A
         f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}"
         f"/shots/{_quote(data['shot_id'])}/attempts/{_quote(data['attempt_id'])}/approve"
     )
-    shot = request("POST", path, body={"workspace": data["workspace"]})
-    return {"shot": {"id": shot.get("id"), "approvedAttemptId": shot.get("approvedAttemptId")}}
+    body = {"workspace": data["workspace"], **({"language": data["language"]} if data.get("language") else {})}
+    shot = request("POST", path, body=body)
+    return {"shot": {"id": shot.get("id"), "approvedAttemptId": shot.get("approvedAttemptId"),
+                     **({"language": shot["language"]} if shot.get("language") else {})}}
 
 
 def _start_assembly(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
@@ -449,7 +477,7 @@ def _version_path(data: dict[str, Any]) -> str:
 
 
 def _set_language_version(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
-    version = {key: data[key] for key in ("title", "dialogue", "cards") if key in data}
+    version = {key: data[key] for key in ("title", "dialogue", "cards", "music") if key in data}
     return request("PUT", _version_path(data), body={"workspace": data["workspace"], "version": version})
 
 
@@ -474,6 +502,8 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.episode.render_native.resume": _native_job("resume"),
     "series.location.plate3d": _start_plate,
     "series.location.plate3d.status": _plate_status,
+    "series.guide": _guide,
+    "series.episode.get": _episode_get,
     "series.templates": _list_templates,
     "series.create_from_template": _create_from_template,
     "series.list": _list_series,

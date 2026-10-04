@@ -287,6 +287,20 @@ def positional_clip_outputs(value: Any) -> list[Any]:
     return []
 
 
+def new_media_files(out_dir: str, before: Any) -> list[str]:
+    """Media files created in ``out_dir`` since ``before``. Hidden and temporary files are never outputs: the
+    workspace task database (``.maestro-tasks-v1.sqlite3-wal``) and editor temps are written there during a job."""
+    try:
+        after = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
+    except OSError:
+        return []
+    return sorted(
+        name for name in after - set(before or ())
+        if os.path.splitext(name)[1].lower() in GENERATED_MEDIA_EXTENSIONS
+        and not name.startswith((".", "_")) and os.path.isfile(os.path.join(out_dir, name))
+    )
+
+
 def record_job_outputs(
     job: MutableMapping[str, Any],
     output_files: list[str],
