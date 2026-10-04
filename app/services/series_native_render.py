@@ -29,10 +29,11 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from services.audio_levels import gain_to, level_file
+from services.production_resource_gate import guard_workspace_mcp
 from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_shot_bridge import run_series_shot, with_pose_sizes
@@ -141,7 +142,7 @@ def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) ->
 
 class SeriesNativeRender:
     def __init__(self, deps: NativeRenderDeps) -> None:
-        self.deps = deps
+        self.deps = replace(deps, call=guard_workspace_mcp(deps.call, deps.workspace_dir))
         self._threads: dict[str, threading.Thread] = {}
         self._cancel: set[str] = set()
         self._lock = threading.Lock()
