@@ -489,7 +489,7 @@ function carryHeldProps(world: GpuWorld, slots: readonly Scene3DSlot[]) {
     const carrierRoot = carrier ? world.slots.get(carrier.id)?.root : undefined
     const bone = hold && carrierRoot ? findHandBone(carrierRoot, hold.hand) : undefined
     if (!hold || !bone) {
-      releaseHandShadow(gpu, world.renderer.shadowMap.enabled)
+      releaseHandShadow(gpu, world)
       continue
     }
     followHand(gpu.root, bone, hold.offset ?? [0, 0, 0], slot.rotationY)
@@ -499,10 +499,10 @@ function carryHeldProps(world: GpuWorld, slots: readonly Scene3DSlot[]) {
 }
 
 /** Show the blob again only for a prop that this painter had hidden. Other slots keep the visibility paintActor chose. */
-function releaseHandShadow(gpu: SlotGpu, shadowMap: boolean) {
+function releaseHandShadow(gpu: SlotGpu, world: GpuWorld) {
   if (!handHeldShadows.has(gpu)) return
   handHeldShadows.delete(gpu)
-  if (gpu.contactShadow && !shadowMap) gpu.contactShadow.visible = true
+  if (gpu.contactShadow && !world.renderer?.shadowMap?.enabled) gpu.contactShadow.visible = true
 }
 
 function paintSlotSequence(gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number, shotDuration: number) {
