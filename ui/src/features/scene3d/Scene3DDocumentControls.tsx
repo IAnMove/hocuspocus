@@ -3,7 +3,7 @@ import type { ApiOutput } from '../../api/outputs'
 import { useUiTranslation } from '../../i18n'
 import { parseScene3DDocument } from './document.ts'
 import type { Scene3DDocumentRef } from './documentHistory.ts'
-import { applyFrameFormat, scene3dFrameFormat, type Scene3DFrameFormat } from './frameFormat.ts'
+import { applyFrameFormat, scene3dFrameFormat, scene3dFrameTier, type Scene3DFrameFormat, type Scene3DFrameTier } from './frameFormat.ts'
 import { reviewClipNumber } from './performance.ts'
 import { Scene3DLibraryControls } from './Scene3DLibraryControls'
 import type { Scene3DDocument } from './types.ts'
@@ -53,6 +53,16 @@ export function Scene3DDocumentControls({ document, disabled, workspace, preview
         onChange={event => onChange(applyFrameFormat(document, event.target.value as Scene3DFrameFormat))}>
         <option value="landscape">{t('frameFormatLandscape')}</option>
         <option value="portrait">{t('frameFormatPortrait')}</option>
+      </select>
+    </label>
+    <label>{t('frameTier')}
+      <select data-testid="world3d-frame-tier" aria-label={t('frameTier')} disabled={disabled}
+        className="ml-2 min-h-10 rounded-lg border border-border bg-bg-primary px-2"
+        value={scene3dFrameTier(document.width, document.height)}
+        onChange={event => onChange(applyFrameFormat(document, scene3dFrameFormat(document.width, document.height), event.target.value as Scene3DFrameTier))}>
+        <option value="hd">{t('frameTierHd')}</option>
+        <option value="fhd">{t('frameTierFhd')}</option>
+        <option value="uhd">{t('frameTierUhd')}</option>
       </select>
     </label>
     <label>{t('frameRate')}

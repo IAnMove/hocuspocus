@@ -2,10 +2,30 @@ import { MOBILE_CAMERA, scaleEyeForMobile } from './camera.ts'
 import type { Scene3DCamera, Scene3DDocument, Vec3 } from './types.ts'
 
 export type Scene3DFrameFormat = 'landscape' | 'portrait'
+export type Scene3DFrameTier = 'hd' | 'fhd' | 'uhd'
 
 export const SCENE3D_FRAME_FORMATS: Record<Scene3DFrameFormat, { width: number; height: number }> = {
   landscape: { width: 1280, height: 720 },
   portrait: { width: 720, height: 1280 },
+}
+
+const FRAME_TIER_SIZE: Record<Scene3DFrameTier, Record<Scene3DFrameFormat, { width: number; height: number }>> = {
+  hd: SCENE3D_FRAME_FORMATS,
+  fhd: {
+    landscape: { width: 1920, height: 1080 },
+    portrait: { width: 1080, height: 1920 },
+  },
+  uhd: {
+    landscape: { width: 3840, height: 2160 },
+    portrait: { width: 2160, height: 3840 },
+  },
+}
+
+export function scene3dFrameTier(width: number, height: number): Scene3DFrameTier {
+  const longSide = Math.max(width, height)
+  if (longSide >= 3840) return 'uhd'
+  if (longSide >= 1920) return 'fhd'
+  return 'hd'
 }
 
 export function scene3dFrameFormat(width: number, height: number): Scene3DFrameFormat {
@@ -79,8 +99,8 @@ export function fromPortraitCamera(camera: Scene3DCamera): Scene3DCamera {
   return next
 }
 
-export function applyFrameFormat(document: Scene3DDocument, format: Scene3DFrameFormat): Scene3DDocument {
-  const size = SCENE3D_FRAME_FORMATS[format]
+export function applyFrameFormat(document: Scene3DDocument, format: Scene3DFrameFormat, tier: Scene3DFrameTier = scene3dFrameTier(document.width, document.height)): Scene3DDocument {
+  const size = FRAME_TIER_SIZE[tier][format]
   const current = scene3dFrameFormat(document.width, document.height)
   let camera = document.camera
   if (format === 'portrait' && current !== 'portrait') camera = toPortraitCamera(camera)

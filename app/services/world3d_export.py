@@ -80,12 +80,31 @@ def even_dim(value) -> int:
     return max(2, number - (number % 2))
 
 
-def export_size(width, height) -> tuple[int, int]:
+def export_size(width, height, quality: str = "draft") -> tuple[int, int]:
+    """Clamp to 1080p on draft. Final and master keep the picture up to 4K and never upscale."""
     width = float(width or 0)
     height = float(height or 0)
-    max_w, max_h = (1920, 1080) if width >= height else (1080, 1920)
+    four_k = quality in {"final", "master"}
+    if width >= height:
+        max_w, max_h = (3840, 2160) if four_k else (1920, 1080)
+    else:
+        max_w, max_h = (2160, 3840) if four_k else (1080, 1920)
     scale = min(1, max_w / max(1, width), max_h / max(1, height))
     return even_dim(width * scale), even_dim(height * scale)
+
+
+def h264_encode_level(width: int, height: int, fps: int) -> str | None:
+    """x264 ``-level`` once the picture no longer fits level 4.2. 1080p returns None so the command stays as before.
+
+    Level 5.1 (``avc1.640033``) covers 4K at 24 and 30 fps. Level 5.2 (``avc1.640034``) covers 4K at 60 fps.
+    """
+    blocks = ((int(width) + 15) // 16) * ((int(height) + 15) // 16)
+    rate = blocks * int(fps)
+    if blocks <= 8704 and rate <= 522240:
+        return None
+    if blocks <= 36864 and rate <= 983040:
+        return "5.1"
+    return "5.2"
 
 
 def playback_speed(value) -> float:
@@ -109,7 +128,7 @@ def export_plan(document: dict, quality: str = "draft", shutter: float | None = 
         raise ValueError("Export fps must be 24, 30 or 60")
     if quality not in QUALITY_PROFILES:
         raise ValueError(f"Export quality must be one of {', '.join(QUALITIES)}")
-    width, height = export_size(document.get("width"), document.get("height"))
+    width, height = export_size(document.get("width"), document.get("height"), quality)
     plan = {"width": width, "height": height, "fps": fps, "duration": duration,
             "count": frame_count(duration, fps)}
     if quality != "draft":
@@ -292,7 +311,7 @@ def mux_wav_audio(video: Path, wav: Path, duration: float, *, label: str = "Audi
 
 
 def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float,
-                       quality: str = "draft") -> Path:
+                       quality: str = "draft", width: int | None = None, height: int | None = None) -> Path:
     if not shutil.which("ffmpeg"):
         raise World3DExportPending("real-render pending: ffmpeg is not available")
     if not frames:
@@ -303,9 +322,16 @@ def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, durat
     command = [
         "ffmpeg", "-v", "error", "-y", "-framerate", str(int(fps)),
         "-i", str(frames[0].parent / "frame_%06d.png"),
-        "-c:v", "libx264", "-preset", profile["preset"], "-crf", str(profile["crf"]), "-pix_fmt", "yuv420p",
-        "-threads", profile["threads"], "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
+        "-c:v", "libx264", "-preset", profile["preset"], "-crf", str(profile["crf"]),
     ]
+    if width and height:
+        level = h264_encode_level(int(width), int(height), int(fps))
+        if level:
+            command.extend(["-level", level])
+    command.extend([
+        "-pix_fmt", "yuv420p", "-threads", profile["threads"],
+        "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
+    ])
     try:
         result = subprocess.run(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -865,7 +891,10 @@ class World3DExportService:
         self.check_publish(snapshot)
         plan = snapshot["plan"]
         encoded = staging / "encoded.mp4"
-        mux_frame_sequence(frames, encoded, fps=plan["fps"], duration=plan["duration"], quality=plan_quality(plan))
+        mux_frame_sequence(
+            frames, encoded, fps=plan["fps"], duration=plan["duration"], quality=plan_quality(plan),
+            width=plan.get("width"), height=plan.get("height"),
+        )
         encoded = self.finish_media(snapshot, staging, encoded)
         self._ensure_active(token, registry, task_id)
         name = self.output_name(snapshot)

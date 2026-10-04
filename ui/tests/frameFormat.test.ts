@@ -5,6 +5,7 @@ import {
   applyFrameFormat,
   fromPortraitCamera,
   scene3dFrameFormat,
+  scene3dFrameTier,
   toPortraitCamera,
 } from '../src/features/scene3d/frameFormat.ts'
 import { throwIfAborted, world3dExportPlan } from '../src/features/scene3d/exportMp4.ts'
@@ -52,6 +53,20 @@ test('every 3D shot has a mobile camera that still looks at the scene', () => {
       assert.ok(projected.y > 0.05 && projected.y < 0.95, `${template.id} look y ${projected.y}`)
     }
   }
+})
+
+test('a 720p landscape stays 720p in portrait and 4K keeps its tier', () => {
+  const landscape = applyScene3DTemplate('two-shot')
+  assert.equal(scene3dFrameTier(landscape.width, landscape.height), 'hd')
+  const portrait = applyFrameFormat(landscape, 'portrait')
+  assert.deepEqual([portrait.width, portrait.height], [720, 1280])
+  const uhd = applyFrameFormat(landscape, 'landscape', 'uhd')
+  assert.deepEqual([uhd.width, uhd.height], [3840, 2160])
+  const uhdPortrait = applyFrameFormat(uhd, 'portrait')
+  assert.equal(scene3dFrameTier(uhdPortrait.width, uhdPortrait.height), 'uhd')
+  assert.deepEqual([uhdPortrait.width, uhdPortrait.height], [2160, 3840])
+  const fullHd = applyFrameFormat(landscape, 'landscape', 'fhd')
+  assert.deepEqual([fullHd.width, fullHd.height], [1920, 1080])
 })
 
 test('remounting a template keeps the mobile frame and adapts the new camera', () => {

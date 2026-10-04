@@ -3,6 +3,7 @@ import { sceneAudioWav, supportsSceneAac } from '../../features/sceneFx/audioExp
 import { waitForSceneImages } from '../../lib/sceneMediaReady'
 import { mixFxAudio } from '../../features/sceneFx/mix'
 import { encodeSpeechAudio } from '../../features/scene3d/speech/encodeAudio'
+import { h264LevelCodec } from '../../features/scene3d/exportMp4'
 import { presentSceneDocument, useSceneDocumentHandoff } from '../../features/sceneFx/handoff'
 import { galleryWorkspaceEpoch, galleryWorkspaceName } from '../../stores/gallerySlice'
 import { SceneFxControls } from '../../features/sceneFx/SceneFxControls'
@@ -1656,7 +1657,7 @@ export function SceneAnimatorPanel() {
     const frameDurationUs = Math.round(1_000_000 / fps)
     const frameCount = Math.max(1, Math.round(current.duration * fps))
     const bitrate = Math.round(Math.max(8_000_000, Math.min(80_000_000, current.width * current.height * fps * .22)))
-    const supported = await VideoEncoder.isConfigSupported({ codec: 'avc1.640028', width: current.width, height: current.height, bitrate, framerate: fps, avc: { format: 'avc' } })
+    const supported = await VideoEncoder.isConfigSupported({ codec: h264LevelCodec(current.width, current.height, fps), width: current.width, height: current.height, bitrate, framerate: fps, avc: { format: 'avc' } })
     if (!supported.supported || !supported.config) {
       throw new Error('This browser cannot encode a deterministic H.264 MP4 at the selected resolution.')
     }
