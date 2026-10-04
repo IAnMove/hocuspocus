@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from routers.series_library import _bind_series_library_runtime, create_series_library_router
+from routers.series_library import create_series_library_router
 from services.series_commands import command_catalog
 from services.series_shot_plan import build_shot_spec, normalize_layout2d
 from services.series_templates import SeriesTemplateError, build_series, list_templates
@@ -60,7 +60,8 @@ def test_a_template_pilot_shot_plans_into_a_2d_scene():
     assert title["framing"] == "title" and title["cast"] == [] and [text["text"] for text in title["texts"]][:1] == ["MONDAY"]
 
 
-def test_the_routes_list_and_create_and_mcp_offers_them():
+def test_the_routes_list_and_create_and_mcp_offers_them(monkeypatch):
+    import routers.series_library as module
     library = {"seriesById": {}, "seriesOrder": []}
 
     def write(_workspace, value):
@@ -69,9 +70,11 @@ def test_the_routes_list_and_create_and_mcp_offers_them():
         library.update(snapshot)
         return copy.deepcopy(snapshot)
 
-    _bind_series_library_runtime(resolve_workspace=lambda value: value or "default", library_lock=threading.RLock(),
-                                 read_library=lambda _workspace: library, write_library=write,
-                                 project_or_404=lambda current, series_id: current["seriesById"][series_id])
+    # The router reads module globals that the running app also uses: bind them only for this test.
+    for name, value in {"_resolve_workspace": lambda value: value or "default", "_library_lock": threading.RLock(),
+                        "_read_library": lambda _workspace: library, "_write_library": write,
+                        "_project_or_404": lambda current, series_id: current["seriesById"][series_id]}.items():
+        monkeypatch.setattr(module, name, value, raising=False)
     app = FastAPI()
     app.include_router(create_series_library_router())
     client = TestClient(app)
