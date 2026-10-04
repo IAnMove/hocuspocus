@@ -28,10 +28,10 @@ def library():
 
 
 class Tools:
-    def __init__(self, tmp_path, bad_first_take=False, fail_export_once=False):
+    def __init__(self, tmp_path, bad_first_take=False, fail_export_once=False, wait_errors=()):
         self.root, self.calls, self.jobs = tmp_path, [], 0
         self.bad_first_take, self.fail_export_once = bad_first_take, fail_export_once
-        self.exports = {}
+        self.exports, self.wait_errors = {}, list(wait_errors)
 
     def __call__(self, tool, arguments):
         self.calls.append((tool, arguments))
@@ -42,6 +42,9 @@ class Tools:
             (self.root / name).write_bytes(b"raw speech")
             return {"receipt": {"result": {"job_id": f"job-{self.jobs}"}}, "_name": name}
         if tool == "jobs.wait":
+            if self.wait_errors:
+                # As LocalMcp returns a tool error: no top-level status.
+                return {"_is_error": True, "error": self.wait_errors.pop(0)}
             speech = [args for name, args in self.calls if name == "generation.speech"][-1]
             return {"status": "completed", "outputs": [{"path": f"{speech['input']['output_name']}.wav"}]}
         if tool == "qa.speech":
@@ -68,7 +71,7 @@ class Tools:
         raise AssertionError(tool)
 
 
-def service(tmp_path, tools, compiled):
+def service(tmp_path, tools, compiled, **deps):
     def trim(source, target):
         with open(source, "rb") as handle:
             data = handle.read()
@@ -86,7 +89,7 @@ def service(tmp_path, tools, compiled):
     durations = tools.durations = []
     return SeriesNativeRender(NativeRenderDeps(call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: library(),
                                                read_kits=lambda _ws: kits, compile_shot=compile_shot, trim=trim, sleep=lambda _s: None, poll_seconds=0,
-                                               set_shot_duration=lambda *args: durations.append(args)))
+                                               set_shot_duration=lambda *args: durations.append(args), **deps))
 
 
 def finished(render, job_id, tmp_path):
@@ -146,6 +149,32 @@ def test_a_failed_export_resumes_at_that_shot_and_reuses_its_recordings(tmp_path
     assert [tool for tool, _ in tools.calls].count("generation.speech") == spoken, "recordings are reused"
     exports = [args["intent_id"] for tool, args in tools.calls if tool == "scenes.video2d.export"]
     assert exports[0] == exports[-1] and len(exports) == 3, "the failed shot's export is submitted again with its intent"
+
+
+def test_a_new_render_reuses_the_recordings_of_an_earlier_one(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    finished(render, render.start("cast", "uv", "ep1", shot_ids=["s01"])["jobId"], tmp_path)
+    spoken = [tool for tool, _ in tools.calls].count("generation.speech")
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s01"])["jobId"], tmp_path)
+    assert again["status"] == "completed" and spoken == 2
+    assert [tool for tool, _ in tools.calls].count("generation.speech") == spoken, "same text, same voice: same file"
+    line = again["items"][0]["lines"]["s01_d0"]
+    assert line["reused"] and line["duration"] == 1.25 and line["cues"], "a reused line still gets its mouth cues"
+
+
+def test_a_speech_job_lost_in_a_restart_is_asked_for_again_and_other_wait_errors_fail(tmp_path):
+    tools, compiled = Tools(tmp_path, wait_errors=[{"code": "invalid_command", "message": "Job not found", "status": 404}]), []
+    render = service(tmp_path, tools, compiled)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "completed"
+    intents = [args["intent_id"] for tool, args in tools.calls if tool == "generation.speech"]
+    assert len(intents) == 2 and intents[1].startswith(intents[0] + "-"), "a fresh intent, not the replayed one"
+    tools = Tools(tmp_path / "x", wait_errors=[{"code": "failed", "message": "queue offline", "status": 503}])
+    (tmp_path / "x").mkdir()
+    broken = service(tmp_path / "x", tools, [])
+    failed = finished(broken, broken.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert failed["status"] == "failed" and "queue offline" in failed["items"][0]["error"], "an error is not waited on forever"
 
 
 def test_refusals_and_speech_params():

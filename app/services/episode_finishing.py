@@ -141,7 +141,9 @@ def vtt_text(cues: Sequence[dict[str, Any]]) -> str:
 
 
 def scene_beats(workspace_dir: str, scene_filename: Any) -> list[dict[str, Any]]:
-    """Dialogue beats of a take's scene document; nothing for a missing or foreign file."""
+    """Dialogue beats of a take's scene document (or the take's own beats, given as a list); nothing for a missing or foreign file."""
+    if isinstance(scene_filename, list):
+        return [beat for beat in scene_filename if isinstance(beat, dict)]
     if not isinstance(scene_filename, str) or not scene_filename:
         return []
     root = Path(workspace_dir).resolve()

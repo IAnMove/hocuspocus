@@ -35,7 +35,9 @@ from typing import Any
 from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_shot_bridge import run_series_shot, with_pose_sizes
-from services.series_shot_plan import build_shot_spec, kit_ref, language_key, recording_key, voice_for
+from services import series_shot3d
+from services.series_shot_extras import pauses, timing_args
+from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, voice_for
 
 KIND = "native"
 STAGES = ("voices", "scene", "export", "import", "done")
@@ -51,15 +53,19 @@ class NativeRenderError(RuntimeError):
         self.code, self.status = code, status
 
 
+def audio_seconds(path: str) -> float:
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                           capture_output=True, text=True, check=True, timeout=30)
+    return float(probe.stdout.strip())
+
+
 def trim_silence(source: str, target: str, pad: float = 0.06) -> float:
     """Cut leading and trailing silence, keep a short natural pad; returns the new duration."""
     flt = (f"silenceremove=start_periods=1:start_threshold=-42dB:start_silence={pad},areverse,"
            f"silenceremove=start_periods=1:start_threshold=-42dB:start_silence={pad + 0.06},areverse")
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", source, "-af", flt, "-ar", "44100", "-ac", "1", target],
                    check=True, timeout=120)
-    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", target],
-                           capture_output=True, text=True, check=True, timeout=30)
-    return float(probe.stdout.strip())
+    return audio_seconds(target)
 
 
 @dataclass
@@ -70,6 +76,7 @@ class NativeRenderDeps:
     read_kits: Callable[[str], dict]
     compile_shot: Callable[[dict], dict] = run_series_shot
     trim: Callable[[str, str], float] = trim_silence
+    probe: Callable[[str], float] = audio_seconds
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 3.0
     check_speech: bool = True
@@ -172,10 +179,10 @@ class SeriesNativeRender:
                    language: str | None) -> tuple[dict[str, Any], str, list[dict[str, Any]]]:
         """The series, the language and the 2D shots to render; refuses what would fail later."""
         raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
-        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if shot.get("productionMethod") == "animation_2d"
+        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if series_shot3d.wants_render(shot)
                   and (not shot_ids or shot["id"] in shot_ids)}
         if not wanted:
-            raise NativeRenderError("no_2d_shots", "The episode has no 2D animation shots to render", 400)
+            raise NativeRenderError("no_2d_shots", "The episode has no 2D shots (or 3D shots with scene3d) to render", 400)
         language = self._check_language(raw_series, raw_episode, language, wanted)
         series, episode = self._episode(workspace, series_id, episode_id, language)
         shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
@@ -280,12 +287,16 @@ class SeriesNativeRender:
             self._voices(workspace, job, item, series, shot, kits)
             item["stage"] = "scene"
             self._save(workspace, job)
+        three_d = shot.get("productionMethod") == "animation_3d"
         if item["stage"] == "scene":
-            self._scene(workspace, job, item, series, episode, shot, kits, index)
+            if three_d:
+                self._scene3d(workspace, job, item, series, shot, kits)
+            else:
+                self._scene(workspace, job, item, series, episode, shot, kits, index)
         if item["stage"] == "export":
             self._export(workspace, job, item)
         if item["stage"] == "import":
-            self._import(workspace, job, item)
+            self._import(workspace, job, item, "animation_3d" if three_d else "animation_2d")
 
     def _voices(self, workspace: str, job: dict, item: dict, series: dict, shot: dict, kits: dict) -> None:
         for beat in shot.get("dialogueBeats") or []:
@@ -301,14 +312,31 @@ class SeriesNativeRender:
             done = item["lines"].get(beat["id"])
             if done and done.get("key") == key and os.path.isfile(os.path.join(self.deps.workspace_dir(workspace), done["filename"])):
                 continue
-            item["lines"][beat["id"]] = self._record(workspace, job, beat["id"], text, voice, key)
+            item["lines"][beat["id"]] = self._reuse(workspace, job, beat["id"], text, key) or self._record(workspace, job, beat["id"], text, voice, key)
             self._save(workspace, job)
             if self._cancelled(job["jobId"]):
                 raise NativeRenderError("cancelled", "Cancelled")
 
+    @staticmethod
+    def _stem(job: dict, beat_id: str, key: str) -> str:
+        return f"ln-{job['episodeId']}-{beat_id}-{key}"[:150]
+
+    def _reuse(self, workspace: str, job: dict, beat_id: str, text: str, key: str) -> dict[str, Any] | None:
+        """The recording an earlier render made of the same line in the same voice (its file name says so)."""
+        filename = f"{self._stem(job, beat_id, key)}.wav"
+        path = os.path.join(self.deps.workspace_dir(workspace), filename)
+        if not os.path.isfile(path):
+            return None
+        try:
+            duration = self.deps.probe(path)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None
+        cues = self._cues(workspace, filename, duration, text, job["language"])
+        return {"key": key, "filename": filename, "duration": round(duration, 3), "wer": None, "attempt": 0, "reused": True, **cues}
+
     def _record(self, workspace: str, job: dict, beat_id: str, text: str, voice: dict, key: str) -> dict[str, Any]:
         root = self.deps.workspace_dir(workspace)
-        stem = f"ln-{job['episodeId']}-{beat_id}-{key}"[:150]
+        stem = self._stem(job, beat_id, key)
         best: dict[str, Any] | None = None
         for attempt in range(MAX_TAKES):
             raw = self._speak(workspace, job, stem, text, voice, attempt)
@@ -326,14 +354,30 @@ class SeriesNativeRender:
 
     def _speak(self, workspace: str, job: dict, stem: str, text: str, voice: dict, attempt: int) -> str:
         seed = int(hashlib.sha1(f"{stem}-{attempt}".encode()).hexdigest()[:6], 16)
-        submitted = _ok(self.deps.call("generation.speech", {"version": 2, "intent_id": f"{stem}-a{attempt}"[:160], "input": {
-            "workspace": workspace, "output_name": f"{stem}-raw{attempt}", "params": speech_params(voice, text, job["language"], seed)}}), "speech")
-        job_id = _job_id(submitted)
-        if not job_id:
-            raise NativeRenderError("tool_failed", "Speech generation returned no job id", 502)
+        intent = f"{stem}-a{attempt}"
+        for _ in range(2):
+            submitted = _ok(self.deps.call("generation.speech", {"version": 2, "intent_id": intent[:160], "input": {
+                "workspace": workspace, "output_name": f"{stem}-raw{attempt}", "params": speech_params(voice, text, job["language"], seed)}}), "speech")
+            job_id = _job_id(submitted)
+            if not job_id:
+                raise NativeRenderError("tool_failed", "Speech generation returned no job id", 502)
+            name = self._wait_speech(job, job_id)
+            if name:
+                return name
+            # The intent replayed a job the server no longer knows (it restarted mid-generation): ask again.
+            intent = f"{stem}-a{attempt}-{uuid.uuid4().hex[:6]}"
+        raise NativeRenderError("tool_failed", "Speech job disappeared twice", 502)
+
+    def _wait_speech(self, job: dict, job_id: str) -> str | None:
+        """The audio file of a finished speech job; None when the server does not know the job."""
         while True:
             waited = self.deps.call("jobs.wait", {"version": 1, "input": {"job_id": job_id, "timeout_s": 120}})
-            payload = waited.get("error") if isinstance(waited.get("error"), dict) and waited["error"].get("job_id") else waited
+            error = waited.get("error") if isinstance(waited.get("error"), dict) else {}
+            if waited.get("_is_error") and not error.get("job_id"):
+                if error.get("status") == 404 or "not found" in str(error.get("message") or "").lower():
+                    return None
+                raise NativeRenderError("tool_failed", f"Waiting for speech: {error.get('message') or waited}"[:300], 502)
+            payload = error if error.get("job_id") else waited
             state = payload.get("status")
             if state == "completed":
                 name = _output_file(payload, (".wav", ".mp3", ".flac"))
@@ -377,6 +421,26 @@ class SeriesNativeRender:
         _ok(exported, "export")
         self._save(workspace, job)
 
+    def _scene3d(self, workspace: str, job: dict, item: dict, series: dict, shot: dict, kits: dict) -> None:
+        """A Video 3D shot: lines timed like a 2D shot, cast objects talk as their kits, exported by the 3D exporter."""
+        beats = [beat for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
+        layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+        timing, duration = plan_timing([float(item["lines"][beat["id"]]["duration"]) for beat in beats], **timing_args(layout),
+                                       at_least=0.0 if beats else float(shot.get("durationSeconds") or 5), pauses=pauses(beats))
+        lines = [{"characterId": beat.get("characterId"), "start": start, "filename": item["lines"][beat["id"]]["filename"],
+                  "cues": item["lines"][beat["id"]].get("cues") or []} for beat, (start, _end) in zip(beats, timing)]
+        characters = {value["id"]: (kit_ref(series, value["id"]) or {}).get("id") for value in series.get("characters") or []}
+        scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError)
+        config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
+        intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export"[:160]
+        _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {
+            "workspace": workspace, "document": scene["document"], "quality": config.get("quality", "draft")}}), "export 3D")
+        # A Video 3D scene has no dialogue beats: the take carries its lines for the episode's subtitles.
+        subtitles = [{"text": str(beat.get("text") or "").strip(), "start": start, "end": end} for beat, (start, end) in zip(beats, timing)]
+        item.update(scene=scene.get("file"), duration=round(duration, 3), stage="export", exportIntent=intent,
+                    exportReceipt="scenes.world3d.export.receipt", subtitles=subtitles)
+        self._save(workspace, job)
+
     @staticmethod
     def _scene_name(job: dict, series: dict, episode: dict, shot: dict) -> str:
         suffix = "" if job.get("original", True) else f"-{job['language']}"
@@ -384,7 +448,8 @@ class SeriesNativeRender:
 
     def _export(self, workspace: str, job: dict, item: dict) -> None:
         while True:
-            receipt = self.deps.call("scenes.video2d.export.receipt", {"version": 1, "input": {"workspace": workspace, "intent_id": item["exportIntent"]}})
+            tool = item.get("exportReceipt") or "scenes.video2d.export.receipt"
+            receipt = self.deps.call(tool, {"version": 1, "input": {"workspace": workspace, "intent_id": item["exportIntent"]}})
             body = receipt.get("result") if isinstance(receipt.get("result"), dict) else receipt
             artifacts = (body.get("receipt") or {}).get("artifacts") or []
             task = body.get("task") or {}
@@ -416,10 +481,11 @@ class SeriesNativeRender:
         elif self.deps.set_version_duration:
             self.deps.set_version_duration(workspace, job["seriesId"], job["episodeId"], job["language"], item["shotId"], float(item["duration"]))
 
-    def _import(self, workspace: str, job: dict, item: dict) -> None:
+    def _import(self, workspace: str, job: dict, item: dict, method: str = "animation_2d") -> None:
         self._set_length(workspace, job, item)
-        metadata = {"productionMethod": "animation_2d", "sceneFilename": item["scene"], "automaticDraft": True,
-                    "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"]}
+        metadata = {"productionMethod": method, "sceneFilename": item["scene"], "automaticDraft": True,
+                    "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"],
+                    **({"dialogueBeats": item["subtitles"]} if item.get("subtitles") else {})}
         imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {
             "workspace": workspace, "series_id": job["seriesId"], "file": item["video"], "owner_type": "shot", "owner_id": item["shotId"],
             "kind": "video", "as_take": True, "metadata": metadata}}), "import take")

@@ -22,6 +22,7 @@ import hashlib
 from typing import Any
 from urllib.parse import quote
 
+from services import series_shot_extras as extras
 from services.speech_language import speech_language_code
 
 FRAMINGS = ("wide", "two", "medium", "close", "insert", "title")
@@ -108,7 +109,9 @@ def normalize_layout2d(value: Any) -> dict[str, Any] | None:
         return None
     layout = {**_choice(value, "framing", FRAMINGS), **_choice(value, "camera", ("static", "push")),
               **_layout_list(value, "cast", 8, _cast_entry), **_layout_card(value.get("card")),
-              **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music"))}
+              **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music")),
+              **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
+              **_layout_list(value, "fx", 12, extras.fx_entry)}
     return layout or None
 
 
@@ -156,9 +159,11 @@ def voice_for(kit: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def plan_timing(durations: list[float], *, intro: float = 0.35, gap: float = 0.22, tail: float = 0.45,
-                minimum: float = 1.5, at_least: float = 0.0) -> tuple[list[tuple[float, float]], float]:
+                minimum: float = 1.5, at_least: float = 0.0, pauses: list[float] | None = None) -> tuple[list[tuple[float, float]], float]:
+    """Line spans and shot length; ``pauses[i]`` is extra silence before line ``i`` (a dramatic beat)."""
     cursor, timing = intro, []
-    for duration in durations:
+    for index, duration in enumerate(durations):
+        cursor += (pauses or [])[index] if index < len(pauses or []) else 0.0
         timing.append((round(cursor, 3), round(cursor + duration, 3)))
         cursor += duration + gap
     end = max([end for _, end in timing], default=0.0)
@@ -213,7 +218,7 @@ def _cast_x(entry: dict[str, Any], framing: str, count: int, homes: dict[str, fl
     return homes.get(entry["characterId"], default)
 
 
-def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration: float) -> dict[str, Any] | None:
+def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration: float, workspace: str = "") -> dict[str, Any] | None:
     ref = kit_ref(series, entry["characterId"])
     if not ref:
         return None
@@ -221,17 +226,22 @@ def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration
             "motion": entry.get("motion") if entry.get("motion") in MOTIONS else "idle", "boost": _character_scale(series, entry)}
     if isinstance(entry.get("transform"), dict):
         item["transform"] = entry["transform"]
+    else:
+        character = next((value for value in series.get("characters") or [] if value.get("id") == entry["characterId"]), {})
+        seat = extras.perch(character, workspace)
+        if seat:
+            item["perch"] = seat
     if entry.get("enterFrom") in ("left", "right"):
         item["enter"] = {"fromX": -15.0 if entry["enterFrom"] == "left" else 115.0, "start": 0.2, "end": min(duration, 1.4)}
     return item
 
 
-def plan_cast(series: dict[str, Any], shot: dict[str, Any], framing: str, duration: float) -> list[dict[str, Any]]:
+def plan_cast(series: dict[str, Any], shot: dict[str, Any], framing: str, duration: float, workspace: str = "") -> list[dict[str, Any]]:
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     explicit = [item for item in layout.get("cast") or [] if isinstance(item, dict) and item.get("characterId")]
     entries = explicit or [{"characterId": cid} for cid in shot.get("visibleCharacterIds") or []]
     homes, defaults = _homes(series, shot), spread(len(entries))
-    items = (_cast_item(series, entry, _cast_x(entry, framing, len(entries), homes, defaults[index]), duration)
+    items = (_cast_item(series, entry, _cast_x(entry, framing, len(entries), homes, defaults[index]), duration, workspace)
              for index, entry in enumerate(entries))
     return [item for item in items if item]
 
@@ -388,15 +398,16 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     card = layout.get("card") if isinstance(layout.get("card"), dict) else None
     beats = [beat for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
-    timing, duration = plan_timing([float(recorded[beat["id"]]["duration"]) for beat in beats],
-                                   at_least=0.0 if beats else float(shot.get("durationSeconds") or 0))
+    timing, duration = plan_timing([float(recorded[beat["id"]]["duration"]) for beat in beats], **extras.timing_args(layout),
+                                   at_least=0.0 if beats else float(shot.get("durationSeconds") or 0), pauses=extras.pauses(beats))
     framing = _shot_framing(layout, shot, card)
-    cast = [] if framing == "title" else plan_cast(series, shot, framing, duration)
+    cast = [] if framing == "title" else plan_cast(series, shot, framing, duration, workspace)
     title = f"{series.get('title') or series.get('id')} · {episode.get('title') or episode['id']} · {shot['id']}"
     spec = {
         "name": title[:200], "workspace": workspace, "width": size[0], "height": size[1], "fps": FPS, "duration": duration,
         "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, beats, timing, recorded, {item["characterId"] for item in cast}),
-        "audioTracks": sound_tracks(series, shot, first_of_scene), "texts": card_texts(card, duration) if card else [],
+        "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration)],
+        "texts": card_texts(card, duration) if card else [], "sfx": extras.fx_cues(layout, timing, duration),
         "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
     }
     return _with_set(spec, series, shot, _focus(cast, framing), workspace)

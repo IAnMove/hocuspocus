@@ -13,6 +13,14 @@ def _scene_filename(asset: dict[str, Any]) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _inline_beats(asset: dict[str, Any]) -> list[dict[str, Any]]:
+    """Lines a take records with its own timing when its scene has none (a Video 3D take)."""
+    metadata = asset.get("metadata") if isinstance(asset.get("metadata"), dict) else {}
+    beats = metadata.get("dialogueBeats")
+    return [{"text": str(beat.get("text") or ""), "start": beat.get("start"), "end": beat.get("end")}
+            for beat in beats if isinstance(beat, dict)] if isinstance(beats, list) else []
+
+
 def episode_assembly_plan(series: dict[str, Any], episode: dict[str, Any]) -> list[dict[str, Any]]:
     """Return one approved video per shot in deterministic episode order."""
     assets = series.get("assets") if isinstance(series.get("assets"), dict) else {}
@@ -47,5 +55,7 @@ def episode_assembly_plan(series: dict[str, Any], episode: dict[str, Any]) -> li
         scene_filename = _scene_filename(asset)
         if scene_filename:
             item["sceneFilename"] = scene_filename
+        if _inline_beats(asset):
+            item["dialogueBeats"] = _inline_beats(asset)
         plan.append(item)
     return copy.deepcopy(plan)

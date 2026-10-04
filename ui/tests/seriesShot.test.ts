@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit'
-import { blinkTimes, compileSeriesShot, personTransform, runSeriesShot, type ShotSpec } from '../scripts/seriesShot.ts'
+import { blinkTimes, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, type ShotSpec } from '../scripts/seriesShot.ts'
 
 const STATES = ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const
 const asset = (id: string, kind: 'image' | 'overlay' = 'overlay', size?: { width: number; height: number }): CharacterKitAsset => ({
@@ -72,6 +72,22 @@ test('entering characters hop in; panic shakes; off-screen lines do not move mou
   assert.equal(frames[0].x, -15)
   assert.ok(frames.some(frame => frame.time > 0.2 && frame.time < 1 && frame.rotation !== 0), 'hops on the way in')
   assert.deepEqual(scene.dialogueBeats![0].mouthLayerIds, [])
+})
+
+test('a perched character sits on its prop, just in front of it, in every framing', () => {
+  const desk = { source: '/api/v1/file/desk.png?workspace=cast', width: 808, height: 246 }
+  for (const framing of ['wide', 'two', 'medium', 'close'] as const) {
+    const { character, prop } = perchTransforms({ width: 500, height: 1000 }, framing, 66, 16 / 9, desk)
+    const propHeight = character.scale * 100 * 0.5 / (16 / 9) * 1.45 * (16 / 9) / (808 / 246)
+    assert.equal(Math.round((character.y + character.scale * 50) * 10) / 10, PERCH[framing].bottom, 'feet on the line')
+    assert.equal(Math.round((prop.y - 0.46 * propHeight) * 10) / 10, PERCH[framing].bottom, 'the desk top is that line')
+  }
+  const scene = compileSeriesShot(kits, shot({ cast: [{ kitId: 'kevin', x: 34 }, { kitId: 'gary', x: 66, perch: desk }] }))
+  const seat = scene.layers.find(layer => layer.id === 'perch-gary')!
+  const gary = scene.layers.find(layer => layer.characterKitRef?.id === 'gary' && !layer.faceBinding)!
+  assert.equal(seat.source, desk.source)
+  assert.equal(seat.z, gary.z - 1)
+  assert.equal(gary.transform.scale, PERCH.two.height / 100)
 })
 
 test('blinks are repeatable for a seed and stay inside the shot', () => {

@@ -15,6 +15,8 @@ export type CastSpec = {
   /** Size multiplier for this character (a small robot, a tall giant). */
   boost?: number
   transform?: Pose; blinks?: number[]
+  /** Sits on a prop (a laptop on its desk): the prop's image size, its top surface (fraction from the top) and width vs the character. */
+  perch?: { source: string; width: number; height: number; top?: number; widthRatio?: number }
   enter?: { fromX: number; start: number; end: number }
   exit?: { toX: number; start: number; end: number }
 }
@@ -68,6 +70,25 @@ export function personTransform(kit: CharacterKit, poseId: string, framing: Fram
   const height = drawnHeight(size, scale, aspect)
   const y = preset.eye === null ? FEET - height / 2 + height * 0.015 : preset.eye + (0.5 - eyeFraction(kit, poseId, size)) * height
   return { x, y: round(y), scale: round(scale) }
+}
+
+/** A perched character's height and the line it sits on (% of frame) per framing, as in 1x01's laptop on its desk. */
+export const PERCH: Record<'wide' | 'two' | 'medium' | 'close', { height: number; bottom: number }> = {
+  wide: { height: 29, bottom: 70 }, two: { height: 40, bottom: 74 }, medium: { height: 56, bottom: 84 }, close: { height: 76, bottom: 94 },
+}
+
+/** Where a perched character and its prop go: the character's bottom on the prop's top surface. */
+export function perchTransforms(size: { width: number; height: number }, framing: Framing, x: number, aspect: number,
+  perch: NonNullable<CastSpec['perch']>): { character: Pose; prop: Pose } {
+  const preset = PERCH[framing === 'insert' || framing === 'title' ? 'wide' : framing]
+  const characterWidth = preset.height * (size.width / size.height) / aspect
+  const propWidth = characterWidth * (perch.widthRatio ?? 1.45)
+  const propAspect = perch.width / perch.height
+  const propHeight = propWidth * aspect / propAspect
+  const propScale = propAspect < aspect ? propHeight / 100 : propWidth / 100
+  const propY = preset.bottom - ((perch.top ?? 0.04) - 0.5) * propHeight
+  return { character: { x, y: round(preset.bottom - preset.height / 2), scale: round(preset.height / 100) },
+    prop: { x, y: round(propY), scale: round(propScale) } }
 }
 
 export function backgroundLayer(background: NonNullable<ShotSpec['background']>, framing: Framing, duration: number): SceneLayer {
@@ -210,10 +231,15 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     const kit = kits[cast.kitId]
     if (!kit) throw new Error(`Missing Character Kit ${cast.kitId}`)
     const single = shot.cast.length === 1 && shot.framing === 'wide'
-    const base = cast.transform ?? personTransform(kit, cast.poseId ?? 'base', shot.framing, cast.x, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
+    const z = cast.z ?? 20 + index * 10
+    const seat = !cast.transform && cast.perch ? perchTransforms(poseAsset(kit, cast.poseId ?? 'base'), shot.framing, cast.x, aspect, cast.perch) : null
+    if (seat && cast.perch) {
+      layers.push(propLayer({ id: `perch-${kit.id}`, name: `${kit.name} seat`, source: cast.perch.source, ...seat.prop, z: z - 1 }, shot.duration))
+    }
+    const base = cast.transform ?? seat?.character ?? personTransform(kit, cast.poseId ?? 'base', shot.framing, cast.x, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
     const talking = shot.lines.filter(line => line.kitId === cast.kitId && line.visible !== false)
       .map(line => [line.start, line.end] as [number, number])
-    const mounted = mountCast(kit, { ...cast, z: cast.z ?? 20 + index * 10 }, base, shot.duration, viewport, shot.workspace, talking)
+    const mounted = mountCast(kit, { ...cast, z }, base, shot.duration, viewport, shot.workspace, talking)
     mouthIds.set(cast.kitId, mounted.mouthIds)
     layers.push(...mounted.layers)
   })
@@ -255,7 +281,7 @@ export function mountCharacter(scene: Scene, kit: CharacterKit, request: { poseI
   const z = request.z ?? 20 + 10 * new Set(scene.layers.map(layer => layer.characterKitRef?.id).filter(Boolean)).size
   const mounted = mountCast(kit, { kitId: kit.id, poseId: request.poseId, x: request.x, z, motion: request.motion }, base,
     scene.duration, { width: scene.width, height: scene.height }, request.workspace, [])
-  return { ...scene, layers: rebuildCutoutDialogueLayers([...scene.layers, ...mounted.layers], scene.dialogueBeats ?? [], scene.fps, scene.duration) }
+  return { ...scene, layers: rebuildCutoutDialogueLayers([...scene.layers, ...mounted.layers], scene.dialogueBeats ?? [], scene.fps ?? 24, scene.duration) }
 }
 
 /** add_line: a recorded line for a mounted character: its audio, its beat and its mouth keyframes. */
@@ -277,7 +303,7 @@ export function animateTalk(scene: Scene, motion: Motion = 'idle'): Scene {
     return { ...layer, animation: { ...layer.animation, duration: scene.duration,
       keyframes: bodyKeyframes(layer.id, base, scene.duration, talking, motion) } }
   })
-  return { ...scene, layers: rebuildCutoutDialogueLayers(layers, scene.dialogueBeats ?? [], scene.fps, scene.duration) }
+  return { ...scene, layers: rebuildCutoutDialogueLayers(layers, scene.dialogueBeats ?? [], scene.fps ?? 24, scene.duration) }
 }
 
 export type SeriesShotPayload =

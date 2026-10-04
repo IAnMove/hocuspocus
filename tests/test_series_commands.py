@@ -104,6 +104,17 @@ def test_a_stale_revision_is_reported_as_a_retryable_conflict(tmp_path):
     assert error.value.detail == {"code": "conflict", "message": "Series revision changed to 7; reload before saving", "retryable": True}
 
 
+def test_a_route_error_keeps_its_code_message_and_problems(tmp_path):
+    body = b'{"detail": {"code": "invalid_script", "message": "shot 0: unknown effect x", "problems": ["shot 0: unknown effect x"]}}'
+    bad = urllib.error.HTTPError("http://x", 400, "Bad Request", {}, io.BytesIO(body))
+    handlers, _, _, _ = harness(tmp_path, [bad])
+    with pytest.raises(HTTPException) as error:
+        call(handlers, "series.episode.from_script", {"workspace": "series", "series_id": "uv", "script": {"shots": []}})
+    assert error.value.status_code == 400
+    assert error.value.detail == {"code": "invalid_script", "message": "shot 0: unknown effect x", "problems": ["shot 0: unknown effect x"],
+                                  "retryable": False}
+
+
 def test_unknown_input_fields_are_rejected_before_any_request(tmp_path):
     handlers, calls, _, _ = harness(tmp_path, [])
     with pytest.raises(HTTPException) as error:
