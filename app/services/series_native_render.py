@@ -32,6 +32,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from services.audio_levels import gain_to, level_file
 from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_shot_bridge import run_series_shot, with_pose_sizes
@@ -77,6 +78,9 @@ class NativeRenderDeps:
     compile_shot: Callable[[dict], dict] = run_series_shot
     trim: Callable[[str, str], float] = trim_silence
     probe: Callable[[str], float] = audio_seconds
+    # Lines are levelled to the dialogue loudness; music and effects volumes are scaled by their own loudness.
+    level: Callable[[str], float] = level_file
+    loudness_gain: Callable[[str], float] = gain_to
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 3.0
     check_speech: bool = True
@@ -331,6 +335,7 @@ class SeriesNativeRender:
             duration = self.deps.probe(path)
         except (OSError, ValueError, subprocess.SubprocessError):
             return None
+        self.deps.level(path)
         cues = self._cues(workspace, filename, duration, text, job["language"])
         return {"key": key, "filename": filename, "duration": round(duration, 3), "wer": None, "attempt": 0, "reused": True, **cues}
 
@@ -349,6 +354,7 @@ class SeriesNativeRender:
             if wer is None or wer <= MAX_WER:
                 break
         os.replace(os.path.join(root, f"{stem}.best.wav"), os.path.join(root, f"{stem}.wav"))
+        self.deps.level(os.path.join(root, f"{stem}.wav"))
         cues = self._cues(workspace, best["filename"], best["duration"], text, job["language"])
         return {**best, **cues}
 
@@ -409,6 +415,7 @@ class SeriesNativeRender:
         first = position == 0 or ordered[position - 1].get("sceneId") != shot.get("sceneId")
         spec = build_shot_spec(series, episode, shot, workspace=workspace, recorded=item["lines"], first_of_scene=first)
         root = self.deps.workspace_dir(workspace)
+        self._balance(root, spec)
         used = {cast["kitId"]: with_pose_sizes(kits[cast["kitId"]], root) for cast in spec["cast"] if cast["kitId"] in kits}
         document = self.deps.compile_shot({"mode": "shot", "kits": used, "shot": spec})
         digest = hashlib.sha1(json.dumps(document, sort_keys=True).encode()).hexdigest()[:10]
@@ -420,6 +427,13 @@ class SeriesNativeRender:
                                                             "input": {"workspace": workspace, "document": document}})
         _ok(exported, "export")
         self._save(workspace, job)
+
+    def _balance(self, root: str, spec: dict) -> None:
+        """Music and effect volumes mean "relative to the dialogue", whatever loudness their file was made at."""
+        for track in spec.get("audioTracks") or []:
+            path = os.path.join(root, os.path.basename(str(track.get("filename") or "")))
+            if track.get("kind") != "speech" and os.path.isfile(path):
+                track["volume"] = round(min(2.0, float(track.get("volume", 1)) * self.deps.loudness_gain(path)), 3)
 
     def _scene3d(self, workspace: str, job: dict, item: dict, series: dict, shot: dict, kits: dict) -> None:
         """A Video 3D shot: lines timed like a 2D shot, cast objects talk as their kits, exported by the 3D exporter."""

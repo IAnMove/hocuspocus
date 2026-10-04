@@ -205,23 +205,66 @@ def _mix_wav(video: Path, wav: Path, duration: float) -> Path:
     return mux_wav_audio(video, wav, duration, label="Screen FX mix")
 
 
-def mix_audio_tracks(video: Path, tracks: list[dict], workspace_root: Path, duration: float,
-                     extras: list[Path] | None = None) -> Path:
-    """Mix scene audio tracks (startTime, volume) and optional extra WAVs under the silent render."""
-    usable = [(extra, 0.0, 1.0) for extra in extras or [] if extra.is_file()]
+# Same envelope as Video 3D dialogue ducking (ui/src/features/scene3d/speech/audio.ts).
+DUCK_ATTACK, DUCK_RELEASE, DUCK_MARGIN = 0.12, 0.4, 0.08
+
+
+def audio_seconds(path: Path) -> float:
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                           capture_output=True, text=True, timeout=30, check=False)
+    try:
+        return float(probe.stdout.strip())
+    except ValueError:
+        return 0.0
+
+
+def duck_db(document: dict) -> float:
+    """``audioMix.duckDb``: how far music and effects dip while someone speaks (0 = off)."""
+    value = (document.get("audioMix") or {}).get("duckDb") if isinstance(document.get("audioMix"), dict) else None
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value <= 30 else 0.0
+
+
+def duck_expression(windows: list[tuple[float, float]], depth_db: float) -> str | None:
+    """A volume expression of output time: 1, down by ``depth_db`` inside each speech window, with short ramps."""
+    if not windows or depth_db <= 0:
+        return None
+    depth = 1 - 10 ** (-depth_db / 20)
+    terms = [f"min(clip((t-{start - DUCK_MARGIN:.3f})/{DUCK_ATTACK},0,1),clip(({end + DUCK_RELEASE:.3f}-t)/{DUCK_RELEASE},0,1))"
+             for start, end in windows]
+    combined = terms[0]
+    for term in terms[1:]:
+        combined = f"max({combined},{term})"
+    return f"1-{depth:.4f}*{combined}"
+
+
+def _usable_tracks(tracks: list[dict], workspace_root: Path, duration: float) -> list[tuple[Path, float, float, bool]]:
+    usable = []
     for track in tracks:
         source = workspace_root / os.path.basename(str(track.get("filename") or ""))
         start = float(track.get("startTime") or 0)
         if source.is_file() and 0 <= start < duration:
-            usable.append((source, start, max(0.0, min(2.0, float(track.get("volume", 1) or 0)))))
+            usable.append((source, start, max(0.0, min(2.0, float(track.get("volume", 1) or 0))), track.get("kind") == "speech"))
+    return usable
+
+
+def mix_audio_tracks(video: Path, tracks: list[dict], workspace_root: Path, duration: float,
+                     extras: list[Path] | None = None, duck: float = 0.0) -> Path:
+    """Mix scene audio tracks (startTime, volume) and optional extra WAVs under the silent render.
+
+    With ``duck`` (dB), every track that is not speech, and the extras, dips under the speech tracks.
+    """
+    usable = [(extra, 0.0, 1.0, False) for extra in extras or [] if extra.is_file()] + _usable_tracks(tracks, workspace_root, duration)
     if not usable:
         return video
+    windows = [(start, start + audio_seconds(source)) for source, start, _, speech in usable if speech] if duck else []
+    envelope = duck_expression(windows, duck)
     command = ["ffmpeg", "-v", "error", "-y", "-i", str(video)]
     parts, labels = [], []
-    for index, (source, start, volume) in enumerate(usable, start=1):
+    for index, (source, start, volume, speech) in enumerate(usable, start=1):
         command += ["-i", str(source)]
         delay = int(round(start * 1000))
-        parts.append(f"[{index}:a]aresample=48000,aformat=channel_layouts=stereo,volume={volume:.4f},adelay={delay}|{delay}[a{index}]")
+        ducked = f",volume='{envelope}':eval=frame" if envelope and not speech else ""
+        parts.append(f"[{index}:a]aresample=48000,aformat=channel_layouts=stereo,volume={volume:.4f},adelay={delay}|{delay}{ducked}[a{index}]")
         labels.append(f"[a{index}]")
     parts.append(f"{''.join(labels)}amix=inputs={len(labels)}:normalize=0,alimiter=limit=0.97,apad,atrim=0:{duration:.4f}[mix]")
     mixed = video.with_name("mixed.mp4")
@@ -297,7 +340,8 @@ class Scene2DExportService(World3DExportService):
             return _mix_wav(encoded, fx, duration)
         if not tracks:
             return encoded
-        return mix_audio_tracks(encoded, tracks, Path(self.workspace_dir(snapshot["workspace"])), duration, extras=extras)
+        return mix_audio_tracks(encoded, tracks, Path(self.workspace_dir(snapshot["workspace"])), duration, extras=extras,
+                                duck=duck_db(snapshot["document"]))
 
     def output_name(self, snapshot: dict) -> str:
         label = re.sub(r"[^A-Za-z0-9._-]+", "-", str(snapshot["document"].get("name") or "scene")).strip("-._")[:40] or "scene"
@@ -340,7 +384,8 @@ def command_catalog() -> list[dict]:
                                 "required": ["version", "operation", *required]}}
     return [
         entry(OPERATION, True, "Render a version 1 Video 2D scene (layers with keyframes, camera, atmosphere, screen FX, kinetic "
-              "texts and audioTracks) to MP4 on the server with the Scene Animator's own painter, on a CPU lane. Media must be "
+              "texts and audioTracks) to MP4 on the server with the Scene Animator's own painter, on a CPU lane. "
+              "audioMix {duckDb} dips every track that is not speech under the speech tracks (10 is a good start). Media must be "
               "durable workspace/example URLs. Returns a receipt; poll the receipt for the published MP4.",
               {"intent_id": intent, "input": export_input}, ["intent_id", "input"]),
         entry(RECEIPT_OPERATION, False,

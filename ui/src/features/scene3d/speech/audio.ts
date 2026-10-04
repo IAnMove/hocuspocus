@@ -184,6 +184,11 @@ function scheduleBuffer(
   source.start(schedule.when, schedule.offset, schedule.duration)
 }
 
+/** Soundtrack clips are music, except the lines world3d.scene.talk adds (`talk-<object>-<n>`): those are dialogue. */
+export function isMusicTrack(track: { key: string }): boolean {
+  return track.key.startsWith('soundtrack/') && !track.key.startsWith('soundtrack/talk-')
+}
+
 export async function mixSceneSpeech(document: Scene3DDocument): Promise<AudioBuffer | undefined> {
   const tracks = sceneVoiceTracks(document)
   if (!tracks.length && !document.sfx?.some(cue => cue.sound && cue.volume) && !document.worldSfx?.some(cue => cue.sound && cue.volume)) return undefined
@@ -192,8 +197,8 @@ export async function mixSceneSpeech(document: Scene3DDocument): Promise<AudioBu
   if (duration > 180) throw new Error('Voice exports support up to 180 output seconds per scene.')
   const context = new OfflineAudioContext(2, Math.ceil(duration * 48000), 48000)
   scheduleFx(context, [...(document.sfx ?? []), ...worldSfxAudioCues(document.worldSfx)], document.duration, speed)
-  const music = tracks.filter(track => track.key.startsWith('soundtrack/'))
-  const spoken = tracks.filter(track => !track.key.startsWith('soundtrack/'))
+  const music = tracks.filter(isMusicTrack)
+  const spoken = tracks.filter(track => !isMusicTrack(track))
   const windows: DuckWindow[] = []
   for (const track of spoken) {
     const buffer = await decodeVoice(track.audio!.url)

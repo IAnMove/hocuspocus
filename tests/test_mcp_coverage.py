@@ -26,6 +26,7 @@ SCENE_TS = ROOT / "ui" / "src" / "types" / "index.ts"
 
 # Whole words already present in the save/export description or document schema.
 PUBLISHED_KEYS = frozenset({
+    "audioMix",
     "audioTracks",
     "composition",
     "copilotAudit",

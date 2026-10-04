@@ -73,6 +73,8 @@ export function personTransform(kit: CharacterKit, poseId: string, framing: Fram
 }
 
 /** A perched character's height and the line it sits on (% of frame) per framing, as in 1x01's laptop on its desk. */
+export const DIALOGUE_DUCK_DB = 10
+
 export const PERCH: Record<'wide' | 'two' | 'medium' | 'close', { height: number; bottom: number }> = {
   wide: { height: 29, bottom: 70 }, two: { height: 40, bottom: 74 }, medium: { height: 56, bottom: 84 }, close: { height: 76, bottom: 94 },
 }
@@ -250,6 +252,8 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     generationPolicy: 'provided_only',
     layers: rebuildCutoutDialogueLayers(layers, dialogueBeats, shot.fps, shot.duration),
     audioTracks: [...shot.lines.map(speechTrack), ...(shot.audioTracks ?? [])], dialogueBeats,
+    // Music and effects dip while someone speaks, as in Video 3D.
+    ...(shot.lines.length ? { audioMix: { duckDb: DIALOGUE_DUCK_DB } } : {}),
     ...(shot.texts?.length ? { texts: shot.texts } : {}),
     ...(shot.sfx?.length ? { sfx: shot.sfx } : {}),
     ...(shot.finish ? { finish: shot.finish } : {}),
