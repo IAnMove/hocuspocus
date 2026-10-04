@@ -27,23 +27,23 @@ def extra_catalog() -> list[dict[str, Any]]:
     shot = {"type": "string", "minLength": 1, "maxLength": 80}
     base = {"workspace": workspace, "production_id": production_id}
     return [
-        {"name": USE_TAKE, "description": (
+        {"name": USE_TAKE, "mutation": True, "description": (
             "Use one kept take as this shot's clip, save a new scene revision, re-export only that scene and "
             "replace its montage clip (expected_revision). No GPU. take_not_found when that file is not a take."
         ), "inputSchema": _envelope({**base, "shot": shot, "take_file": {"type": "string", "minLength": 1, "maxLength": 180}},
                                      ["workspace", "production_id", "shot", "take_file"])},
-        {"name": SHOT_UPDATE, "description": (
+        {"name": SHOT_UPDATE, "mutation": True, "description": (
             "Store lyric_style, title and/or camera on spec.shots[i].overrides and re-export only that scene. "
             "The human path is the Music productions panel; this is the agent path."
         ), "inputSchema": _envelope({**base, "shot": shot, "lyric_style": {"type": "object"}, "title": {"type": "object"},
                                      "camera": {"type": "string", "minLength": 1, "maxLength": 80}},
                                     ["workspace", "production_id", "shot"])},
-        {"name": SONG_USE, "description": (
+        {"name": SONG_USE, "mutation": True, "description": (
             "Switch to a song candidate kept in song_candidates (its id or its file). Re-analyses the song, "
             "recomputes windows and marks clips obsolete when their window moved by more than 0.3 s. Does not delete clips."
         ), "inputSchema": _envelope({**base, "candidate": {"type": "string", "minLength": 1, "maxLength": 180}},
                                     ["workspace", "production_id", "candidate"])},
-        {"name": CANCEL, "description": (
+        {"name": CANCEL, "mutation": True, "description": (
             "Ask a live production.run to stop between rounds. Status becomes cancelled and a later production.run resumes."
         ), "inputSchema": _envelope(base, ["workspace", "production_id"])},
     ]

@@ -377,14 +377,54 @@ def test_canonical_and_legacy_urls_share_tools_and_request_journal(tmp_path):
 def test_a_catalog_without_a_mutation_flag_still_lists_every_tool():
     # tools/list once failed for every client because three catalogs omitted the flag.
     from routers.wangp_mcp import tool_definitions
-    from services.lipsync_qa import command_catalog as lipsync_catalog
-    from services.music_production import command_catalog as production_catalog
-    from services.song_analysis import command_catalog as audio_catalog
-    operations = [*audio_catalog(), *lipsync_catalog(), *production_catalog()]
+    schema = {'type': 'object', 'required': ['version'], 'properties': {'version': {'type': 'integer', 'const': 1}}}
+    operations = [{'name': 'demo.flagged', 'mutation': False, 'description': 'x', 'inputSchema': schema},
+                  {'name': 'demo.unflagged', 'description': 'x', 'inputSchema': schema}]
     tools = tool_definitions({operation['name'] for operation in operations}, operations)
-    assert [tool['name'] for tool in tools] == [operation['name'] for operation in operations]
-    unflagged = [tool for tool, operation in zip(tools, operations) if 'mutation' not in operation]
-    assert unflagged and all(tool['annotations']['readOnlyHint'] is False for tool in unflagged)
+    assert [tool['name'] for tool in tools] == ['demo.flagged', 'demo.unflagged']
+    assert [tool['annotations']['readOnlyHint'] for tool in tools] == [True, False], 'unflagged reads as a mutation'
+
+
+def _catalog_operations():
+    """Every operation from the zero-argument catalog functions in services/ and routers/."""
+    import ast
+    import importlib
+    import inspect
+    from pathlib import Path
+
+    app = Path(__file__).resolve().parents[1] / 'app'
+    for folder in ('services', 'routers'):
+        for path in sorted((app / folder).glob('*.py')):
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            names = [node.name for node in tree.body
+                     if isinstance(node, ast.FunctionDef) and 'catalog' in node.name and not node.name.startswith('_')]
+            if not names:
+                continue
+            try:
+                module = importlib.import_module(f'{folder}.{path.stem}')
+            except ModuleNotFoundError:
+                continue  # An optional heavy dependency; the count check below keeps the scan honest.
+            for name in names:
+                function = getattr(module, name)
+                required = [parameter for parameter in inspect.signature(function).parameters.values()
+                            if parameter.default is parameter.empty
+                            and parameter.kind not in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD)]
+                if required:
+                    continue
+                value = function()
+                operations = value.get('operations') if isinstance(value, dict) else value
+                for operation in operations if isinstance(operations, (list, tuple)) else []:
+                    if isinstance(operation, dict) and 'name' in operation and 'inputSchema' in operation:
+                        yield f'{folder}.{path.stem}.{name}', operation
+
+
+def test_every_mcp_catalog_says_whether_each_operation_mutates():
+    # The router defaults a missing flag to a mutation; a catalog must not rely on that.
+    operations = list(_catalog_operations())
+    assert len(operations) > 100
+    unflagged = sorted({f"{source}: {operation['name']}" for source, operation in operations
+                        if type(operation.get('mutation')) is not bool})
+    assert unflagged == []
 
 
 def test_an_unsupported_version_names_the_versions_the_tool_accepts(tmp_path):

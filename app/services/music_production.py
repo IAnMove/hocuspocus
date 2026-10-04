@@ -538,7 +538,7 @@ def command_catalog() -> list[dict[str, Any]]:
     ws = {"type": "string", "minLength": 1, "maxLength": 120}
     pid = {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$"}
     return publication_catalog() + [
-        {"name": RUN, "description": ("Produce a music video from one spec, in the background: K song candidates (best lyric recall, no cut "
+        {"name": RUN, "mutation": True, "description": ("Produce a music video from one spec, in the background: K song candidates (best lyric recall, no cut "
                                       "ending), analysis, cast sheets, start frames, H3 clips driven by the exact song slice with automatic "
                                       "lip-sync retakes, one Video 2D scene per shot with timed lyric captions, instrumental gaps filled on bar "
                                       "lines, montage and export. Pass spec to start; pass only production_id to resume (missing clips are retried "
