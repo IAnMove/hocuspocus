@@ -127,12 +127,36 @@ def _eye_pair(parts: list[dict[str, int]]) -> tuple[dict[str, int], dict[str, in
     return (best[1], best[2]) if best else (parts[0], parts[1])
 
 
+def _half(labels: np.ndarray, region: np.ndarray, part: dict[str, int], x0: int, x1: int, label: int) -> dict[str, int]:
+    rows = np.flatnonzero(region[:, x0:x1].any(axis=1))
+    labels[part["y0"]:part["y1"], part["x0"] + x0:part["x0"] + x1][region[:, x0:x1]] = label
+    return {"label": label, "size": int(region[:, x0:x1].sum()), "x0": part["x0"] + x0, "x1": part["x0"] + x1,
+            "y0": part["y0"] + int(rows[0]), "y1": part["y0"] + int(rows[-1]) + 1}
+
+
+def _split_touching(labels: np.ndarray, parts: list[dict[str, int]]) -> list[dict[str, int]]:
+    """Two eyes drawn touching each other come out as one wide blob: cut it at its narrowest column."""
+    found, spare = [], int(labels.max()) + 1
+    for part in parts:
+        width, height = part["x1"] - part["x0"], part["y1"] - part["y0"]
+        if width < 1.4 * height:
+            found.append(part)
+            continue
+        region = labels[part["y0"]:part["y1"], part["x0"]:part["x1"]] == part["label"]
+        low, high = int(width * 0.3), int(width * 0.7)
+        cut = low + int(np.argmin(region.sum(axis=0)[low:high]))
+        found += [_half(labels, region, part, 0, cut, part["label"]), _half(labels, region, part, cut, width, spare)]
+        spare += 1
+    return found
+
+
 def find_eyes(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float = 0.55):
     """The two largest white blobs of similar size side by side, in the top of the figure."""
     height, width = alpha.shape
     white = (rgb.min(axis=2) > 218) & (alpha > 200)
     white[int(height * top_fraction):] = False
     labels, parts = _components(_open(white, 2))
+    parts = _split_touching(labels, parts)
     parts = sorted((part for part in parts if part["size"] > width * height * 0.0015), key=lambda part: -part["size"])
     if len(parts) < 2 and parts and parts[0]["size"] > width * height * 0.05:
         raise FlatRigError("face_too_light", "The face is as light as the eyes; give the character a skin colour")
@@ -154,7 +178,7 @@ def find_eyes(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float = 0.55):
     return box, mask
 
 
-def _mouth_marks(region: np.ndarray, inside: np.ndarray, eye_height: int, screen: bool):
+def _mouth_marks(region: np.ndarray, inside: np.ndarray, eye_height: int, screen: bool, faint: bool = False):
     lum = region @ np.array([0.299, 0.587, 0.114])
     if screen:
         mark = (region.min(axis=2) > 200) & inside
@@ -165,7 +189,8 @@ def _mouth_marks(region: np.ndarray, inside: np.ndarray, eye_height: int, screen
     # A perfectly flat fill has no pixel above its own percentile; paper texture always does.
     background = np.median(region[lighter if lighter.any() else inside], axis=0)
     skin = float(background @ np.array([0.299, 0.587, 0.114]))
-    return (lum < skin * 0.62) & inside, (lum < skin * 0.5) & inside, background
+    mark, dark = (0.8, 0.7) if faint else (0.62, 0.5)
+    return (lum < skin * mark) & inside, (lum < skin * dark) & inside, background
 
 
 def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = False):
@@ -178,17 +203,21 @@ def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = Fals
     inside = alpha[ry0:ry1, rx0:rx1] > 200
     if not inside.any():
         raise FlatRigError("mouth_not_found", "No face was found under the eyes")
-    mark, dark, background = _mouth_marks(region, inside, eye_height, screen)
-    face = _close(np.abs(region - background).sum(axis=2) < 60, 6)
-    labels, parts = _components(_close(mark, 2))
-    good = []
-    for part in parts:
-        piece = labels[part["y0"]:part["y1"], part["x0"]:part["x1"]] == part["label"]
-        if part["size"] < 12 or not dark[part["y0"]:part["y1"], part["x0"]:part["x1"]][piece].any():
-            continue
-        ring = face[max(0, part["y0"] - 6):part["y1"] + 6, max(0, part["x0"] - 6):part["x1"] + 6]
-        if ring.mean() >= 0.55:
-            good.append(part)
+    # A thin pen-line mouth breaks into tiny faint pieces: try again with a softer threshold and a smaller piece.
+    for faint, smallest in ((False, 12), (True, 5)):
+        mark, dark, background = _mouth_marks(region, inside, eye_height, screen, faint)
+        face = _close(np.abs(region - background).sum(axis=2) < 60, 6)
+        labels, parts = _components(_close(mark, 3 if faint else 2))
+        good = []
+        for part in parts:
+            piece = labels[part["y0"]:part["y1"], part["x0"]:part["x1"]] == part["label"]
+            if part["size"] < smallest or not dark[part["y0"]:part["y1"], part["x0"]:part["x1"]][piece].any():
+                continue
+            ring = face[max(0, part["y0"] - 6):part["y1"] + 6, max(0, part["x0"] - 6):part["x1"] + 6]
+            if ring.mean() >= 0.55:
+                good.append(part)
+        if good:
+            break
     if not good:
         raise FlatRigError("mouth_not_found", "No painted mouth was found under the eyes")
     centre = (rx1 - rx0) / 2
@@ -446,7 +475,10 @@ def _rig_poses(kit: dict[str, Any], style, workspace: str, workspace_dir: str, p
     for pose in wanted:
         if not assets.get(pose):
             raise FlatRigError("unknown_pose", f"The character has no pose {pose}")
-        sources[pose] = originals.get(pose) or assets[pose]["source"]
+        current = assets[pose]["source"]
+        # The recorded original only stands in for this rig's own output; a pose replaced since then is rigged as given.
+        rigged = f"kit-{kit.get('id', '')}-{pose}-rig-" in current
+        sources[pose] = originals[pose] if rigged and originals.get(pose) else current
         with Image.open(_workspace_file(sources[pose], workspace, workspace_dir)) as image:
             try:
                 rigs[pose] = rig_pose(image, style)
