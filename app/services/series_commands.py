@@ -83,6 +83,35 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
         "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines.",
     ),
+    "series.episode.from_script": (
+        {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"}},
+        ["workspace", "series_id", "script"], True,
+        "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
+        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx, props, timing and 3D "
+        "dialogue shots. It checks every character, pose, location, file and effect against the series first and lists "
+        "all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
+        "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id).",
+    ),
+    "series.episode.produce": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "languages": {"type": "array", "items": LANGUAGE, "maxItems": 10},
+         "burn_subtitles": {"type": "boolean"}},
+        ["workspace", "series_id", "episode_id"], True,
+        "Render and cut an episode in one call: the server renders the original and every language version (languages "
+        "narrows it) with automatic approval, retries failed shots once, then assembles each language with subtitles burned "
+        "in (burn_subtitles false skips it). Poll series.episode.produce.status every minute or two; chapters lists the files.",
+    ),
+    "series.episode.produce.status": (
+        {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
+        "Status of a production: each render and assembly step with its job id, progress and error, and the chapter files.",
+    ),
+    "series.episode.produce.cancel": (
+        {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
+        "Stop a production after its current step (the running render stops too). Resume continues.",
+    ),
+    "series.episode.produce.resume": (
+        {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
+        "Resume a stopped or failed production from its first unfinished step; a failed render resumes its own job.",
+    ),
     "series.location.plate3d": (
         {"workspace": WORKSPACE, "series_id": ID, "location_id": ID, "scene": {"type": "string", "minLength": 1, "maxLength": 200},
          "document": OBJECT, "seconds": {"type": "number", "minimum": 2, "maximum": 20}, "quality": {"enum": ["draft", "final", "master"]}},
@@ -330,6 +359,28 @@ def _native_job(action: str) -> Callable[..., dict[str, Any]]:
     return run
 
 
+def _from_script(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body = {"workspace": data["workspace"], "script": data["script"], "check": bool(data.get("check")),
+            **({"episodeId": data["episode_id"]} if data.get("episode_id") else {})}
+    return request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes/from-script", body=body)
+
+
+def _produce(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {"workspace": data["workspace"], "burnSubtitles": data.get("burn_subtitles", True) is not False}
+    if data.get("languages"):
+        body["languages"] = data["languages"]
+    return {"job": request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/produce", body=body)}
+
+
+def _produce_job(action: str) -> Callable[..., dict[str, Any]]:
+    def run(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+        path = f"/api/v1/series/produce/jobs/{_quote(data['job_id'])}"
+        if action == "status":
+            return {"job": request("GET", path, query={"workspace": data["workspace"]})}
+        return {"job": request("POST", f"{path}/{action}", body={"workspace": data["workspace"]})}
+    return run
+
+
 def _plate_path(data: dict[str, Any]) -> str:
     return f"/api/v1/series/{_quote(data['series_id'])}/locations/{_quote(data['location_id'])}/plate3d"
 
@@ -500,6 +551,11 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.episode.render_native.status": _native_job("status"),
     "series.episode.render_native.cancel": _native_job("cancel"),
     "series.episode.render_native.resume": _native_job("resume"),
+    "series.episode.from_script": _from_script,
+    "series.episode.produce": _produce,
+    "series.episode.produce.status": _produce_job("status"),
+    "series.episode.produce.cancel": _produce_job("cancel"),
+    "series.episode.produce.resume": _produce_job("resume"),
     "series.location.plate3d": _start_plate,
     "series.location.plate3d.status": _plate_status,
     "series.guide": _guide,

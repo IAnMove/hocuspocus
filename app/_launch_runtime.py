@@ -37147,6 +37147,15 @@ api.include_router(create_series_guide_router(
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
     read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}, workspace_dir=_workspace_dir,
 ))
+from services.series_produce import ProduceDeps, SeriesProduce
+from routers.series_produce import create_series_produce_router
+api.include_router(create_series_produce_router(
+    SeriesProduce(ProduceDeps(call=_local_mcp.call, workspace_dir=_workspace_dir,
+                              read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)))),
+    call=_local_mcp.call, bind_loop=_local_mcp.bind_loop,
+    read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
+    read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}, workspace_dir=_workspace_dir,
+))
 
 
 def _read_world3d_scene(workspace: str, name: str) -> dict:

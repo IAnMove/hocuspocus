@@ -11,6 +11,8 @@ SERIES_TOOLS = frozenset({
     # Start here, then the series itself.
     "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",
     "series.templates", "series.create_from_template",
+    "series.episode.from_script", "series.episode.produce", "series.episode.produce.status", "series.episode.produce.cancel",
+    "series.episode.produce.resume",
     "series.episode.create", "series.episode.update", "series.episode.language_version.set", "series.episode.translate",
     "series.episode.render_native", "series.episode.render_native.status", "series.episode.render_native.cancel",
     "series.episode.render_native.resume", "series.asset.import", "series.take.approve",
@@ -35,7 +37,8 @@ PROFILES: dict[str, dict] = {
             "HocusPocus Series Lab: animated series made locally (2D cutout characters, Video 3D, local voices and lip-sync). "
             "Call series.guide first with the workspace and series id: it returns how to make an episode with these tools, "
             "the shot format, the house conventions and the series bible (characters with their kits, poses and voices, "
-            "locations, music and sound files, episodes). Long jobs return an id: poll their status tool. Reuse intent_id on retries."
+            "locations, music and sound files, episodes). Write the episode with series.episode.from_script and make it with "
+            "series.episode.produce. Long jobs return an id: poll their status tool. Reuse intent_id on retries."
         ),
     },
 }

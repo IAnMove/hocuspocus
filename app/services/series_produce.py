@@ -1,0 +1,215 @@
+"""Render and cut an episode in every language with one call (``series.episode.produce``).
+
+1x02 was a dozen tool calls per language, each followed by polling: render the
+original, render each language version, then assemble each one. This job does
+that on the server with the same tools (run in process, see ``local_mcp``):
+
+1. ``series.episode.render_native`` with ``approve`` for the original, then for
+   each language version. A render that ends with failed shots is resumed once.
+2. ``series.assembly.start`` for each language (subtitles burned in by
+   default) and the chapter files when they are ready.
+
+Steps are saved as they finish, so a restart or a cancel resumes where it stopped.
+"""
+from __future__ import annotations
+
+import threading
+import time
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
+from services.series_jobs import SeriesJobStore
+from services.series_language_versions import LANGUAGES
+from services.series_shot_plan import language_key
+
+KIND = "produce"
+RENDER_RETRIES = 1
+ACTIVE = ("queued", "running", "cancelling")
+
+
+class ProduceError(RuntimeError):
+    def __init__(self, code: str, message: str, status: int = 409) -> None:
+        super().__init__(message)
+        self.code, self.status = code, status
+
+
+@dataclass
+class ProduceDeps:
+    call: Callable[[str, dict], dict]
+    workspace_dir: Callable[[str], str]
+    read_library: Callable[[str], dict]
+    sleep: Callable[[float], None] = time.sleep
+    poll_seconds: float = 5.0
+
+
+def _result(reply: dict, label: str) -> dict:
+    if not isinstance(reply, dict) or reply.get("_is_error"):
+        error = (reply or {}).get("error") if isinstance(reply, dict) else None
+        raise ProduceError("tool_failed", f"{label}: {(error or {}).get('message') if isinstance(error, dict) else reply}"[:500], 502)
+    return reply.get("result") if isinstance(reply.get("result"), dict) else reply
+
+
+class SeriesProduce:
+    def __init__(self, deps: ProduceDeps) -> None:
+        self.deps = deps
+        self._threads: dict[str, threading.Thread] = {}
+        self._cancel: set[str] = set()
+        self._lock = threading.Lock()
+
+    def _store(self, workspace: str) -> SeriesJobStore:
+        return SeriesJobStore(self.deps.workspace_dir(workspace), KIND)
+
+    def _languages(self, workspace: str, series_id: str, episode_id: str, wanted: list[str] | None) -> tuple[str, list[str]]:
+        series = (self.deps.read_library(workspace).get("seriesById") or {}).get(series_id)
+        episode = ((series or {}).get("episodesById") or {}).get(episode_id)
+        if not series or not episode:
+            raise ProduceError("not_found", "Series episode not found", 404)
+        original = language_key(series)
+        versions = sorted(episode.get("languageVersions") or {})
+        languages = list(dict.fromkeys(wanted or [original, *versions]))
+        unknown = [lang for lang in languages if lang != original and (lang not in LANGUAGES or lang not in versions)]
+        if unknown:
+            raise ProduceError("no_version", f"No language version for {', '.join(unknown)}; write it with series.episode.language_version.set", 400)
+        return original, languages
+
+    def start(self, workspace: str, series_id: str, episode_id: str, *, languages: list[str] | None = None,
+              burn_subtitles: bool = True) -> dict[str, Any]:
+        original, languages = self._languages(workspace, series_id, episode_id, languages)
+        store = self._store(workspace)
+        if any(job.get("episodeId") == episode_id and job.get("status") in ACTIVE for job in store.list()):
+            raise ProduceError("already_running", "This episode is already being produced")
+        steps = [{"kind": kind, "language": lang, "status": "queued"} for kind in ("render", "assemble") for lang in languages]
+        job = {"jobId": f"produce-{uuid.uuid4().hex[:12]}", "workspace": workspace, "seriesId": series_id, "episodeId": episode_id,
+               "original": original, "languages": languages, "burnSubtitles": bool(burn_subtitles), "status": "queued",
+               "steps": steps, "chapters": {}, "createdAt": time.time(), "message": "Queued"}
+        store.save(job)
+        self._launch(workspace, job["jobId"])
+        return job
+
+    def status(self, workspace: str, job_id: str) -> dict[str, Any]:
+        job = self._store(workspace).load(job_id)
+        if not job:
+            raise ProduceError("not_found", "Production job not found", 404)
+        return job
+
+    def cancel(self, workspace: str, job_id: str) -> dict[str, Any]:
+        job = self.status(workspace, job_id)
+        with self._lock:
+            self._cancel.add(job_id)
+        if job["status"] in ACTIVE:
+            step = next((item for item in job["steps"] if item["status"] == "running" and item.get("jobId")), None)
+            if step and step["kind"] == "render":
+                self.deps.call("series.episode.render_native.cancel", self._args(job, job_id=step["jobId"]))
+            job.update(status="cancelling", message="Stopping after the current step")
+            self._store(workspace).save(job)
+        return job
+
+    def resume(self, workspace: str, job_id: str) -> dict[str, Any]:
+        job = self.status(workspace, job_id)
+        if job["status"] in ACTIVE:
+            return job
+        for step in job["steps"]:
+            if step["status"] != "done":
+                step.update(status="queued", error=None, retries=0)
+        job.update(status="queued", message="Resuming", error=None)
+        self._store(workspace).save(job)
+        self._launch(workspace, job_id)
+        return job
+
+    def _launch(self, workspace: str, job_id: str) -> None:
+        with self._lock:
+            running = self._threads.get(job_id)
+            if running and running.is_alive():
+                return
+            self._cancel.discard(job_id)
+            thread = threading.Thread(target=self._run, args=(workspace, job_id), name=f"series-produce-{job_id}", daemon=True)
+            self._threads[job_id] = thread
+            thread.start()
+
+    # Worker --------------------------------------------------------------
+
+    def _save(self, job: dict, **patch: Any) -> None:
+        job.update(patch)
+        self._store(job["workspace"]).save(job)
+
+    def _cancelled(self, job_id: str) -> bool:
+        with self._lock:
+            return job_id in self._cancel
+
+    @staticmethod
+    def _args(job: dict, **data: Any) -> dict[str, Any]:
+        return {"version": 1, "input": {"workspace": job["workspace"], **data}}
+
+    def _run(self, workspace: str, job_id: str) -> None:
+        job = self.status(workspace, job_id)
+        self._save(job, status="running", message="Producing")
+        for step in job["steps"]:
+            if step["status"] == "done":
+                continue
+            if self._cancelled(job_id):
+                self._save(job, status="cancelled", message="Cancelled; resume to continue")
+                return
+            self._save(job, message=f"{step['kind'].capitalize()} {step['language']}")
+            step["status"] = "running"
+            try:
+                (self._render if step["kind"] == "render" else self._assemble)(job, step)
+                step.update(status="done", error=None)
+            except Exception as error:  # report the step; later steps need it
+                step.update(status="failed", error=f"{type(error).__name__}: {error}"[:500])
+                self._save(job, status="cancelled" if self._cancelled(job_id) else "failed", finishedAt=time.time(),
+                           message=f"{step['kind'].capitalize()} {step['language']} failed; resume to retry")
+                return
+            self._save(job)
+        self._save(job, status="completed", finishedAt=time.time(),
+                   message=f"Rendered and cut in {', '.join(job['languages'])}")
+
+    def _wait(self, job: dict, step: dict, tool: str) -> dict[str, Any]:
+        while True:
+            current = _result(self.deps.call(tool, self._args(job, job_id=step["jobId"])), tool)["job"]
+            step["progress"] = current.get("message")
+            self._save(job)
+            if current.get("status") not in ACTIVE:
+                return current
+            self.deps.sleep(self.deps.poll_seconds)
+
+    def _render(self, job: dict, step: dict) -> None:
+        if not step.get("jobId"):
+            data = {"series_id": job["seriesId"], "episode_id": job["episodeId"], "approve": True}
+            if step["language"] != job["original"]:
+                data["language"] = step["language"]
+            step["jobId"] = _result(self.deps.call("series.episode.render_native", self._args(job, **data)), "render")["job"]["jobId"]
+            self._save(job)
+        while True:
+            render = self._wait(job, step, "series.episode.render_native.status")
+            if render["status"] == "completed":
+                return
+            failed = [f"{item['shotId']}: {item.get('error')}" for item in render.get("items") or [] if item.get("status") == "failed"]
+            if render["status"] == "cancelled" or step.get("retries", 0) >= RENDER_RETRIES:
+                raise ProduceError("render_failed", "; ".join(failed[:4]) or render.get("message") or render["status"])
+            step["retries"] = step.get("retries", 0) + 1
+            _result(self.deps.call("series.episode.render_native.resume", self._args(job, job_id=step["jobId"])), "resume render")
+
+    def _assemble(self, job: dict, step: dict) -> None:
+        if not step.get("jobId"):
+            data = {"series_id": job["seriesId"], "episode_id": job["episodeId"], "burn_subtitles": job["burnSubtitles"]}
+            if step["language"] != job["original"]:
+                data["language"] = step["language"]
+            step["jobId"] = _result(self.deps.call("series.assembly.start", self._args(job, **data)), "assemble")["job"]["jobId"]
+            self._save(job)
+        cut = self._wait(job, step, "series.assembly.status")
+        if cut.get("status") != "completed":
+            raise ProduceError("assembly_failed", cut.get("error") or cut.get("message") or cut.get("status"))
+        job["chapters"][step["language"]] = self._chapter(job, cut)
+
+    def _chapter(self, job: dict, cut: dict) -> dict[str, Any]:
+        series = (self.deps.read_library(job["workspace"]).get("seriesById") or {}).get(job["seriesId"]) or {}
+        meta = ((series.get("assets") or {}).get(cut.get("assetId")) or {}).get("metadata") or {}
+        subtitles = meta.get("subtitles") or {}
+        return {"assetId": cut.get("assetId"), "file": cut.get("filename"), "subtitledFile": subtitles.get("file"),
+                "srt": subtitles.get("srt"), "loudness": (meta.get("loudness") or {}).get("after")}
+
+
+def public_job(job: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in job.items() if key != "workspace"}

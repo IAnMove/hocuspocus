@@ -35,7 +35,9 @@ from typing import Any
 from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_shot_bridge import run_series_shot, with_pose_sizes
-from services.series_shot_plan import build_shot_spec, kit_ref, language_key, recording_key, voice_for
+from services import series_shot3d
+from services.series_shot_extras import pauses, timing_args
+from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, voice_for
 
 KIND = "native"
 STAGES = ("voices", "scene", "export", "import", "done")
@@ -172,10 +174,10 @@ class SeriesNativeRender:
                    language: str | None) -> tuple[dict[str, Any], str, list[dict[str, Any]]]:
         """The series, the language and the 2D shots to render; refuses what would fail later."""
         raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
-        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if shot.get("productionMethod") == "animation_2d"
+        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if series_shot3d.wants_render(shot)
                   and (not shot_ids or shot["id"] in shot_ids)}
         if not wanted:
-            raise NativeRenderError("no_2d_shots", "The episode has no 2D animation shots to render", 400)
+            raise NativeRenderError("no_2d_shots", "The episode has no 2D shots (or 3D shots with scene3d) to render", 400)
         language = self._check_language(raw_series, raw_episode, language, wanted)
         series, episode = self._episode(workspace, series_id, episode_id, language)
         shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
@@ -280,12 +282,16 @@ class SeriesNativeRender:
             self._voices(workspace, job, item, series, shot, kits)
             item["stage"] = "scene"
             self._save(workspace, job)
+        three_d = shot.get("productionMethod") == "animation_3d"
         if item["stage"] == "scene":
-            self._scene(workspace, job, item, series, episode, shot, kits, index)
+            if three_d:
+                self._scene3d(workspace, job, item, series, shot, kits)
+            else:
+                self._scene(workspace, job, item, series, episode, shot, kits, index)
         if item["stage"] == "export":
             self._export(workspace, job, item)
         if item["stage"] == "import":
-            self._import(workspace, job, item)
+            self._import(workspace, job, item, "animation_3d" if three_d else "animation_2d")
 
     def _voices(self, workspace: str, job: dict, item: dict, series: dict, shot: dict, kits: dict) -> None:
         for beat in shot.get("dialogueBeats") or []:
@@ -377,6 +383,24 @@ class SeriesNativeRender:
         _ok(exported, "export")
         self._save(workspace, job)
 
+    def _scene3d(self, workspace: str, job: dict, item: dict, series: dict, shot: dict, kits: dict) -> None:
+        """A Video 3D shot: lines timed like a 2D shot, cast objects talk as their kits, exported by the 3D exporter."""
+        beats = [beat for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
+        layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+        timing, duration = plan_timing([float(item["lines"][beat["id"]]["duration"]) for beat in beats], **timing_args(layout),
+                                       at_least=0.0 if beats else float(shot.get("durationSeconds") or 5), pauses=pauses(beats))
+        lines = [{"characterId": beat.get("characterId"), "start": start, "filename": item["lines"][beat["id"]]["filename"],
+                  "cues": item["lines"][beat["id"]].get("cues") or []} for beat, (start, _end) in zip(beats, timing)]
+        characters = {value["id"]: (kit_ref(series, value["id"]) or {}).get("id") for value in series.get("characters") or []}
+        scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError)
+        config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
+        intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export"[:160]
+        _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {
+            "workspace": workspace, "document": scene["document"], "quality": config.get("quality", "draft")}}), "export 3D")
+        item.update(scene=scene.get("file"), duration=round(duration, 3), stage="export", exportIntent=intent,
+                    exportReceipt="scenes.world3d.export.receipt")
+        self._save(workspace, job)
+
     @staticmethod
     def _scene_name(job: dict, series: dict, episode: dict, shot: dict) -> str:
         suffix = "" if job.get("original", True) else f"-{job['language']}"
@@ -384,7 +408,8 @@ class SeriesNativeRender:
 
     def _export(self, workspace: str, job: dict, item: dict) -> None:
         while True:
-            receipt = self.deps.call("scenes.video2d.export.receipt", {"version": 1, "input": {"workspace": workspace, "intent_id": item["exportIntent"]}})
+            tool = item.get("exportReceipt") or "scenes.video2d.export.receipt"
+            receipt = self.deps.call(tool, {"version": 1, "input": {"workspace": workspace, "intent_id": item["exportIntent"]}})
             body = receipt.get("result") if isinstance(receipt.get("result"), dict) else receipt
             artifacts = (body.get("receipt") or {}).get("artifacts") or []
             task = body.get("task") or {}
@@ -416,9 +441,9 @@ class SeriesNativeRender:
         elif self.deps.set_version_duration:
             self.deps.set_version_duration(workspace, job["seriesId"], job["episodeId"], job["language"], item["shotId"], float(item["duration"]))
 
-    def _import(self, workspace: str, job: dict, item: dict) -> None:
+    def _import(self, workspace: str, job: dict, item: dict, method: str = "animation_2d") -> None:
         self._set_length(workspace, job, item)
-        metadata = {"productionMethod": "animation_2d", "sceneFilename": item["scene"], "automaticDraft": True,
+        metadata = {"productionMethod": method, "sceneFilename": item["scene"], "automaticDraft": True,
                     "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"]}
         imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {
             "workspace": workspace, "series_id": job["seriesId"], "file": item["video"], "owner_type": "shot", "owner_id": item["shotId"],

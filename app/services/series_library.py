@@ -36,7 +36,7 @@ SHOT_EDITOR_FIELDS = frozenset({
     "primarySpeakerId", "locationId", "locationVariantId",
     "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
     "continuityFromShotId", "renderStrategy", "productionMethod", "referencePolicy", "prompt",
-    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d",
+    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
 SERIES_CANON_INPUT_FIELDS = (
@@ -384,6 +384,12 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
         shot["layout2d"] = layout
     else:
         shot.pop("layout2d", None)
+    from .series_shot3d import normalize_scene3d
+    scene3d = normalize_scene3d(shot.get("scene3d"))
+    if scene3d:
+        shot["scene3d"] = scene3d
+    else:
+        shot.pop("scene3d", None)
     policy = shot["referencePolicy"]
     policy["mode"] = "manual" if policy.get("mode") == "manual" else "automatic"
     policy["manualIncludeAssetIds"] = _unique_ids(policy.get("manualIncludeAssetIds"))

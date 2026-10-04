@@ -17,23 +17,56 @@ use only those ids and file names, never invent one.
      (owner_type location, reference_role environment);
    - 3D background: `world3d.templates.list` → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
    After changing characters or locations, `series.canon.approve` (episodes freeze the approved canon).
-3. **Write the episode:** `series.episode.create`, then `series.episode.update` with `script` (scenes) and `shots`
-   (format below), in the series' own language.
-4. **Other languages:** `series.episode.language_version.set` with every line (`dialogue` beat id → text), the card
-   texts (`cards`) and, for a sung theme, `music` (shot id → file). `series.episode.translate` drafts it with the local LLM.
-5. **Render:** `series.episode.render_native` (approve true) for the original, then again with `language`. Poll
-   `series.episode.render_native.status`. Voices are checked automatically (up to three takes per line).
-6. **Look:** `scenes.video2d.preview` or the take files; fix a shot by changing it and rendering only that shot
-   (`shot_ids`). A take's editable scene is in its asset's `metadata.sceneFilename` (`scenes.document.get`).
-7. **Finish:** `series.assembly.start` (burn_subtitles true) per language → `series.assembly.status`.
+3. **Write the episode:** `series.episode.from_script` with the whole script (format below), every language in the
+   same lines. Send it with `check: true` first: it lists every unknown character, pose, location, file or effect at
+   once. It assigns the ids, writes the shots and a language version for every other language.
+4. **Make it:** `series.episode.produce`: renders the original and every language version on the server (voices checked
+   with `qa.speech`, up to three takes per line; failed shots retried once), approves the takes and cuts each language
+   with subtitles burned in. Poll `series.episode.produce.status` every minute or two; `chapters` lists the files.
+5. **Look and fix:** `series.episode.get` lists each take's editable scene (`sceneFilename`): `scenes.video2d.preview`
+   it, or open it with `scenes.document.get`. Fix a shot by changing the script and sending it again with `episode_id`
+   (takes are kept by shot id), then `series.episode.render_native` with `shot_ids` (and `language`), and
+   `series.episode.produce` again to recut.
+
+The lower-level tools (`series.episode.create`/`update`, `series.episode.language_version.set`,
+`series.episode.render_native`, `series.assembly.start`) do the same steps one by one.
+
+## The script
+
+```json
+{"title": {"es": "El vecino", "en": "The Neighbour"}, "premise": {"es": "...", "en": "..."},
+ "scenes": [{"id": "cold_open", "location": "street", "variant": "street_day", "purpose": "Mark moves in"}],
+ "shots": [
+  {"scene": "cold_open", "framing": "title", "duration": 7,
+   "card": {"kind": "title", "es": ["VALLE INQUIETANTE", "Episodio 3"], "en": ["UNCANNY VALLEY", "Episode 3"]},
+   "music": {"file": "mus-theme-es.wav", "en": "mus-theme-en.wav", "volume": 0.9}},
+  {"scene": "cold_open", "framing": "two", "camera": "push",
+   "cast": [["kevin", "base", 32], {"characterId": "mark", "poseId": "wave", "x": 68, "enterFrom": "right"}],
+   "lines": [{"who": "kevin", "es": "¿Eso es un búnker?", "en": "Is that a bunker?"},
+             {"who": "mark", "es": "...Es un jardín.", "en": "...It's a garden.", "pauseBefore": 1.0}],
+   "sfx": [{"file": "sfx-truck.wav", "at": 0.2}, {"file": "sfx-pen.wav", "line": 1, "anchor": "end", "offset": 0.1}],
+   "fx": [{"kind": "confetti", "line": 1, "duration": 1.5, "x": 70, "y": 30, "size": 40}],
+   "props": [{"file": "prop-truck-s8-key.png", "x": 12, "y": 74, "scale": 0.36}],
+   "timing": {"intro": 0.6, "tail": 1.0}},
+  {"scene": "mars", "kind": "3d", "lines": [{"who": "elon", "es": "...", "en": "..."}],
+   "scene3d": {"template": "user-uv-mars-elon", "quality": "final",
+               "cast": [{"characterId": "elon", "objectId": "elon", "poseId": "phone"}]}}]}
+```
+
+The first language is the series' own (`es` or `spanish`); every other language in the lines becomes a version.
+`scenes[].id` is short (`cold_open`): the episode prefix is added for you. A shot can override the scene's place with
+`location` and `variant`.
 
 ## Ids
 
 Ids are unique in the whole series: characters, locations, scenes and shots of every episode share one namespace.
-Prefix an episode's scene and shot ids with its number: scenes `e3_cold_open`, shots `e3s00`, `e3s01`, …; dialogue
-beats `e3s01_b0`, `e3s01_b1`. Never reuse a character or location id as a scene id.
+`series.episode.from_script` prefixes them with the episode number: scenes `e3_cold_open`, shots `e3s00`, `e3s01`,
+…; dialogue beats `e3s01_b0`, `e3s01_b1`. Writing shots by hand, do the same and never reuse a character or location
+id as a scene id.
 
-## A shot
+## A shot in detail
+
+What `from_script` writes on each shot, and what `series.episode.update` takes (script keys in brackets):
 
 ```json
 {"id": "e3s05", "order": 6, "sceneId": "e3_street", "locationId": "street", "locationVariantId": "street_day",
@@ -53,20 +86,25 @@ beats `e3s01_b0`, `e3s01_b1`. Never reuse a character or location id as a scene 
 - **cast:** `x` is the horizontal position in % of the frame. Keep each character on the same side within a scene,
   as in the bible's `homes`. `motion`: `idle` (default bob), `still`, `shake` (panic). `enterFrom`: `left`/`right`
   walks in. `poseId` must be one of the kit's poses.
-- **perched characters:** a character whose bible entry has `layout2d.perch` (a laptop on a desk, a pet on a shelf)
-  needs that prop and an explicit transform in every shot; copy them from an earlier episode's shot with the same
-  framing (`series.episode.get`).
+- **perched characters:** a character whose bible entry has `layout2d.perch` (a laptop on a desk) is placed on that
+  prop in every framing automatically. Give it no transform.
 - **props:** a workspace image (`file`, keyed with `studio.key`) or a series asset (`assetId`), at `x`/`y` (%) and
   `scale` (fraction of the frame height), or on a location `anchor` from the bible (it then stands on that point in
   every framing).
-- **music:** one extra audio track per shot: a bumper at the start of a scene, a sting, an ambience, or a sound effect
-  (a truck, a pen). Files from the bible only.
+- **music:** one music track per shot (a bumper at the start of a scene, a theme); a language can have its own file.
+- **sfx:** sound effects at a line's `start`/`end` (`line`, `anchor`, `offset` s) or at a second (`at`), `volume`
+  0–1. Files from the bible only.
+- **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
+  speedlines…), `duration`, `x`/`y`/`size` in %, `color`. Keep them off faces: a small burst to one side.
+- **timing:** `intro` (silence before the first line, default 0.35 s), `gap` (between lines, 0.22), `tail` (after the
+  last, 0.45). A line's `pauseBefore` adds a dramatic beat before it.
 - **card:** `title` (opening), `end` (credits), `disclaimer` (white text on dark; also used for news flashes). A card
   shot has no cast and a `durationSeconds` (4–7 s) and usually `locationId` of a dark or title location.
-- **durationSeconds:** only for shots without dialogue. With dialogue, the render sets it from the voices.
-- **productionMethod:** `animation_2d` for everything the server renders. `animation_3d` shots are made in Video 3D
-  (`world3d.scene.talk` for a talking cutout) and imported with `series.asset.import` (as_take) +
-  `series.take.approve` (with `language` for a version).
+- **durationSeconds** (`duration`)**:** only for shots without dialogue. With dialogue, the render sets it from the voices.
+- **3D dialogue (`kind: "3d"` in the script, `productionMethod: animation_3d` + `scene3d` on a shot):** a Video 3D
+  template (`world3d.templates.list`, or a personal one) or a saved scene file, and which object each speaking
+  character is (`objectId`). The server render records the lines like a 2D shot, makes each object talk as its
+  Character Kit, exports it and imports the take. `quality`: `draft` (fast) or `final`.
 
 ## Writing for quality
 
@@ -84,6 +122,8 @@ beats `e3s01_b0`, `e3s01_b1`. Never reuse a character or location id as a scene 
 - Episodes freeze the approved canon: add characters and locations, then `series.canon.approve`, then create the episode.
 - `series.update` replaces the whole project at a revision: read, change, send back with `base_revision`.
 - A language version keeps its own takes, lengths and music; approve its takes with `series.take.approve` + `language`.
+- Effects and sounds placed by hand in a take's scene are lost when the shot renders again: declare them in the
+  script (`sfx`, `fx`) instead.
 - Image references for `generation.image` are workspace URLs `/api/v1/file/<name>?workspace=<ws>`.
 - `generation.*` receipts can stay `queued` while the job finished: wait with `jobs.wait` and read the files from the
   receipt's `task.result_refs`.
