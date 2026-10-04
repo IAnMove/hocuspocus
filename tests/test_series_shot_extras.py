@@ -185,4 +185,21 @@ def test_the_server_render_makes_a_3d_dialogue_shot_a_take(tmp_path):
     assert talk["lines"][0]["start"] == 0.8
     imported = next(args for tool, args in tools.calls if tool == "series.asset.import")["input"]
     assert imported["file"] == "elon-3d.mp4" and imported["metadata"]["productionMethod"] == "animation_3d"
+    assert imported["metadata"]["dialogueBeats"] == [{"text": "Marte.", "start": 0.8, "end": 2.3}], "the take carries its subtitles"
     assert lengths == [("cast", "uv", "ep1", "s20", 3.208)], "intro 0.8 + 1.5 s line + tail 0.9, on the frame grid"
+
+
+def test_a_3d_take_subtitles_come_from_its_own_lines():
+    from services.episode_finishing import episode_cues, scene_beats
+    from services.series_assembly import episode_assembly_plan
+    beats = [{"text": "Desde Marte: aprobado.", "start": 0.35, "end": 2.0}]
+    series = {"assets": {
+        "a2d": {"id": "a2d", "kind": "video", "uri": "outputs/a.mp4", "metadata": {"sceneFilename": "a.scene.json"}},
+        "a3d": {"id": "a3d", "kind": "video", "uri": "outputs/b.mp4", "metadata": {"sceneFilename": "w3d.world3d.scene.json", "dialogueBeats": beats}}}}
+    shot = lambda sid, order, asset: {"id": sid, "order": order, "approvedAttemptId": f"t{sid}",
+                                      "attempts": [{"id": f"t{sid}", "status": "completed", "outputAssetIds": [asset]}]}
+    plan = episode_assembly_plan(series, {"shots": [shot("s1", 1, "a2d"), shot("s2", 2, "a3d")]})
+    assert "dialogueBeats" not in plan[0] and plan[1]["dialogueBeats"] == beats
+    assert scene_beats("/nonexistent", plan[1]["dialogueBeats"]) == beats
+    cues = episode_cues([{"offset": 5.0, "duration": 2.5, "beats": scene_beats("/nonexistent", beats)}])
+    assert [(cue["start"], cue["end"], cue["text"]) for cue in cues] == [(5.35, 7.0, "Desde Marte: aprobado.")]

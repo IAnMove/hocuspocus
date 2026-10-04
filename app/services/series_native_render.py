@@ -397,8 +397,10 @@ class SeriesNativeRender:
         intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export"[:160]
         _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {
             "workspace": workspace, "document": scene["document"], "quality": config.get("quality", "draft")}}), "export 3D")
+        # A Video 3D scene has no dialogue beats: the take carries its lines for the episode's subtitles.
+        subtitles = [{"text": str(beat.get("text") or "").strip(), "start": start, "end": end} for beat, (start, end) in zip(beats, timing)]
         item.update(scene=scene.get("file"), duration=round(duration, 3), stage="export", exportIntent=intent,
-                    exportReceipt="scenes.world3d.export.receipt")
+                    exportReceipt="scenes.world3d.export.receipt", subtitles=subtitles)
         self._save(workspace, job)
 
     @staticmethod
@@ -444,7 +446,8 @@ class SeriesNativeRender:
     def _import(self, workspace: str, job: dict, item: dict, method: str = "animation_2d") -> None:
         self._set_length(workspace, job, item)
         metadata = {"productionMethod": method, "sceneFilename": item["scene"], "automaticDraft": True,
-                    "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"]}
+                    "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"],
+                    **({"dialogueBeats": item["subtitles"]} if item.get("subtitles") else {})}
         imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {
             "workspace": workspace, "series_id": job["seriesId"], "file": item["video"], "owner_type": "shot", "owner_id": item["shotId"],
             "kind": "video", "as_take": True, "metadata": metadata}}), "import take")

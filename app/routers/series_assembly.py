@@ -402,7 +402,7 @@ def create_series_assembly_router(
                 raise RuntimeError("Series assembly finished without an output file")
             update(job_id, stage="finishing", message="Evening the loudness and writing subtitles…")
             finishing = finish_episode(
-                output_path, clip_paths, [item.get("sceneFilename") for item in job.get("clips", [])],
+                output_path, clip_paths, [item.get("dialogueBeats") or item.get("sceneFilename") for item in job.get("clips", [])],
                 workspace_dir=output_directory, abort_callback=token.is_cancelled,
                 burn=bool(job.get("burnSubtitles")),
             )
