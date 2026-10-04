@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { derivedTextMotion, displayedKineticText, KINETIC_TEXT_SCHEMA, kineticTextState, parseKineticTexts, wrapKineticLines } from '../src/lib/kineticText.ts'
+import { derivedTextMotion, displayedKineticText, KINETIC_TEXT_SCHEMA, kineticTextState, paintKineticTexts, parseKineticTexts, wrapKineticLines } from '../src/lib/kineticText.ts'
 import type { KineticText } from '../src/lib/kineticText.ts'
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -61,4 +61,98 @@ test('v2 fields are optional, bounded, and drive wrapping and counters', () => {
   const ctx = { measureText: (text: string) => ({ width: text.length * 10 }) } as unknown as CanvasRenderingContext2D
   assert.deepEqual(wrapKineticLines(ctx, 'aa bb cc', 50), ['aa bb', 'cc'])
   assert.equal(parseKineticTexts([{ id: 'bad', text: 'x', start: 0, end: 1, preset: 'impact', enter: { preset: 'nope', duration: 9 } }])[0].enter, undefined)
+})
+
+type Matrix = { a: number; b: number; c: number; d: number; e: number; f: number }
+
+function inkBounds(cue: KineticText, width = 400, height = 100) {
+  const pixels = new Uint8Array(width * height)
+  let matrix: Matrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }
+  const stack: Matrix[] = []
+  const mark = (x: number, y: number) => {
+    const px = Math.round(x)
+    const py = Math.round(y)
+    if (px >= 0 && py >= 0 && px < width && py < height) pixels[py * width + px] = 1
+  }
+  const ctx = {
+    font: '16px sans-serif', textAlign: 'left' as CanvasTextAlign, textBaseline: 'alphabetic' as CanvasTextBaseline,
+    fillStyle: '#fff', strokeStyle: '#000', lineWidth: 1, globalAlpha: 1, filter: 'none', letterSpacing: '0px', lineJoin: 'round' as CanvasLineJoin,
+    shadowColor: 'transparent', shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0,
+    save() { stack.push({ ...matrix }) },
+    restore() { const previous = stack.pop(); if (previous) matrix = previous },
+    translate(x: number, y: number) { matrix = { ...matrix, e: matrix.e + matrix.a * x + matrix.c * y, f: matrix.f + matrix.b * x + matrix.d * y } },
+    scale(x: number, y: number) { matrix = { ...matrix, a: matrix.a * x, b: matrix.b * x, c: matrix.c * y, d: matrix.d * y } },
+    rotate(angle: number) {
+      const cos = Math.cos(angle)
+      const sin = Math.sin(angle)
+      matrix = { a: matrix.a * cos + matrix.c * sin, b: matrix.b * cos + matrix.d * sin, c: matrix.c * cos - matrix.a * sin, d: matrix.d * cos - matrix.b * sin, e: matrix.e, f: matrix.f }
+    },
+    setTransform(a = 1, b = 0, c = 0, d = 1, e = 0, f = 0) { matrix = { a, b, c, d, e, f } },
+    measureText(text: string) { return { width: Array.from(text).length * 10 } },
+    beginPath() {}, closePath() {}, moveTo() {}, lineTo() {}, arcTo() {}, rect() {}, clip() {}, fill() {}, fillRect() {}, strokeText() {},
+    createLinearGradient() { return { addColorStop() {} } },
+    fillText(text: string, x: number, y: number) {
+      const textWidth = Array.from(text).length * 10
+      const start = this.textAlign === 'center' ? x - textWidth / 2 : this.textAlign === 'right' ? x - textWidth : x
+      for (let index = 0; index < textWidth; index += 1) mark(matrix.a * (start + index) + matrix.c * y + matrix.e, matrix.b * (start + index) + matrix.d * y + matrix.f)
+    },
+  }
+  paintKineticTexts(ctx as unknown as CanvasRenderingContext2D, width, height, 1.2, [cue])
+  let min = width
+  let max = -1
+  for (let index = 0; index < pixels.length; index += 1) {
+    if (!pixels[index]) continue
+    const x = index % width
+    if (x < min) min = x
+    if (x > max) max = x
+  }
+  return { min, max }
+}
+
+function placed(align?: 'left' | 'center' | 'right', font?: 'display' | 'sans') {
+  return parseKineticTexts([{
+    id: 'date', text: 'STORY LAB', start: 0, end: 4, preset: 'impact', x: 30, y: 50, size: 10,
+    ...(font ? { font } : {}),
+    ...(align ? { align } : {}),
+    enter: { preset: 'none', duration: 0.2 }, exit: { preset: 'none', duration: 0.2 },
+  }])[0]
+}
+
+test('left and right text sit on x while center and omitted align stay centered', () => {
+  const anchor = 400 * 0.3
+  const width = 9 * 10
+  const left = inkBounds(placed('left', 'display'))
+  const center = inkBounds(placed('center', 'display'))
+  const omitted = inkBounds(placed(undefined, 'display'))
+  const legacy = inkBounds(parseKineticTexts([{ id: 'date', text: 'STORY LAB', start: 0, end: 4, preset: 'impact', x: 30, y: 50, size: 10 }])[0])
+  const right = inkBounds(placed('right', 'display'))
+  assert.ok(Math.abs(left.min - anchor) <= 1, `left edge ${left.min}`)
+  assert.ok(Math.abs(center.min - (anchor - width / 2)) <= 1, `center edge ${center.min}`)
+  assert.equal(omitted.min, center.min)
+  assert.equal(legacy.min, center.min)
+  assert.ok(Math.abs(right.max - (anchor - 1)) <= 1, `right edge ${right.max}`)
+})
+
+test('tape width is measured with the same letter spacing used to paint its glyphs', () => {
+  const measuredSpacing: string[] = []
+  let tapeWidth = 0
+  const ctx = {
+    letterSpacing: '0em', globalAlpha: 1, fillStyle: '', strokeStyle: '', shadowColor: '', shadowBlur: 0,
+    shadowOffsetX: 0, shadowOffsetY: 0, lineWidth: 0, textAlign: 'center', lineJoin: 'round',
+    save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, beginPath() {}, closePath() {},
+    moveTo() {}, arcTo() {}, fill() {}, strokeText() {}, fillText() {},
+    measureText(text: string) {
+      measuredSpacing.push(this.letterSpacing)
+      return { width: text.length * (10 + (this.letterSpacing === '0.1em' ? 5 : 0)) }
+    },
+  } as unknown as CanvasRenderingContext2D
+  const originalMove = ctx.moveTo.bind(ctx)
+  ctx.moveTo = (x: number, _y: number) => { if (!tapeWidth) tapeWidth = Math.abs(x) * 2; originalMove(x, _y) }
+  const cue = parseKineticTexts([{ id: 'tape', text: 'OPEN', start: 0, end: 4, preset: 'impact',
+    x: 50, y: 50, size: 10, letterSpacing: 0.1, enter: { preset: 'none', duration: 0.1 },
+    box: { kind: 'tape', color: '#ffffff', opacity: 1, padding: 0.2 } }])[0]
+  paintKineticTexts(ctx, 400, 100, 1, [cue])
+  assert.ok(measuredSpacing.length > 0)
+  assert.ok(measuredSpacing.every(spacing => spacing === '0.1em'))
+  assert.ok(tapeWidth > 55, `tape width ${tapeWidth}`)
 })

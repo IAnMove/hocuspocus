@@ -3,6 +3,7 @@ import { sceneAudioWav, supportsSceneAac } from '../../features/sceneFx/audioExp
 import { waitForSceneImages } from '../../lib/sceneMediaReady'
 import { mixFxAudio } from '../../features/sceneFx/mix'
 import { encodeSpeechAudio } from '../../features/scene3d/speech/encodeAudio'
+import { h264LevelCodec } from '../../features/scene3d/exportMp4'
 import { presentSceneDocument, useSceneDocumentHandoff } from '../../features/sceneFx/handoff'
 import { galleryWorkspaceEpoch, galleryWorkspaceName } from '../../stores/gallerySlice'
 import { SceneFxControls } from '../../features/sceneFx/SceneFxControls'
@@ -10,6 +11,12 @@ import { SceneFxOverlay } from '../../features/sceneFx/SceneFxOverlay'
 import { isRetroLook } from '../../features/sceneFx/retroPaint'
 import { adoptPreparedSceneDocument, withFxShowcase } from '../../features/sceneFx/showcase'
 import { KineticTextControls } from '../common/KineticTextControls'
+import { Scene2DTemplateDialog } from '../../features/scene2d/Scene2DTemplateDialog'
+import { RenderQualityPicker } from '../../features/render/RenderQualityPicker'
+import { serverLevel, type RenderChoice } from '../../features/render/renderEstimate.ts'
+import { ExportReviewPanel } from '../../features/render/ExportReviewPanel.tsx'
+import { reviewFromArtifact, type ExportReviewInput } from '../../features/render/exportReview.ts'
+import { renderOnServer } from '../../features/render/serverSceneExport.ts'
 import { KineticTextOverlay } from '../common/KineticTextOverlay'
 import { LiveRhythmStore, SceneFinalPreview, SceneFinishControls, SceneMotionControls } from '../../features/scene2d/boostControls'
 import { beatEnvelope } from '../../lib/scene2d/motion'
@@ -280,6 +287,22 @@ function AtmospherePreview({ atmosphere, seconds, width, height, layerId }: { at
   return <canvas ref={canvasRef} data-layer-id={layerId} width={pixelWidth} height={pixelHeight} className="h-full w-full" />
 }
 
+function seekAnimatorReview(
+  time: number,
+  duration: number,
+  recording: boolean,
+  frame: number | null,
+  setPlaying: (value: boolean) => void,
+  sync: (seconds: number) => void,
+  setProgress: (value: number) => void,
+) {
+  if (recording) return
+  if (frame) cancelAnimationFrame(frame)
+  setPlaying(false)
+  sync(time)
+  setProgress(Math.max(0, Math.min(1, time / Math.max(0.1, duration))))
+}
+
 export function SceneAnimatorPanel() {
   const { t } = useUiTranslation('scene3d')
   const { t: commonT } = useUiTranslation('common')
@@ -297,14 +320,17 @@ export function SceneAnimatorPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [templateComposerOpen, setTemplateComposerOpen] = useState(false)
+  const [userTemplatesOpen, setUserTemplatesOpen] = useState(false)
   const [assetExplorer, setAssetExplorer] = useState<AssetExplorerPurpose | null>(null)
   const [playing, setPlaying] = useState(false)
   const [recording, setRecording] = useState(false)
+  const renderChoiceRef = useRef<RenderChoice>({ level: 'draft', shutter: 0 })
   const [publishing, setPublishing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState(0)
   const [flash, setFlash] = useState<{ x: number; y: number } | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [receiptReview, setReceiptReview] = useState<ExportReviewInput | null>(null)
   const [motionText, setMotionText] = useState('')
   const [reassignId, setReassignId] = useState<string | null>(null)
   const [jsonOpen, setJsonOpen] = useState(false)
@@ -1650,7 +1676,7 @@ export function SceneAnimatorPanel() {
     const frameDurationUs = Math.round(1_000_000 / fps)
     const frameCount = Math.max(1, Math.round(current.duration * fps))
     const bitrate = Math.round(Math.max(8_000_000, Math.min(80_000_000, current.width * current.height * fps * .22)))
-    const supported = await VideoEncoder.isConfigSupported({ codec: 'avc1.640028', width: current.width, height: current.height, bitrate, framerate: fps, avc: { format: 'avc' } })
+    const supported = await VideoEncoder.isConfigSupported({ codec: h264LevelCodec(current.width, current.height, fps), width: current.width, height: current.height, bitrate, framerate: fps, avc: { format: 'avc' } })
     if (!supported.supported || !supported.config) {
       throw new Error('This browser cannot encode a deterministic H.264 MP4 at the selected resolution.')
     }
@@ -1734,8 +1760,36 @@ export function SceneAnimatorPanel() {
     return saved
   }
   const emptyScene = !scene.layers.length && !scene.sfx?.length
+  const publishServerRender = async (choice: RenderChoice) => {
+    const level = serverLevel(choice)
+    if (!level) return
+    setPublishing(true)
+    setMessage(null)
+    setReceiptReview(null)
+    try {
+      const saved = await renderOnServer({
+        kind: 'video2d',
+        workspace: workspace || 'default',
+        document: sceneRef.current,
+        level,
+        shutter: choice.shutter,
+        onProgress: (index, total) => setMessage(t('stage.renderProgress', { index, total })),
+      })
+      await loadOutputs()
+      setReceiptReview(reviewFromArtifact(saved))
+      setMessage(t('stage.renderSaved', { name: saved.name }))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('stage.renderFailed'))
+    } finally {
+      setPublishing(false)
+    }
+  }
   const record = () => {
     if (publishing) return
+    if (serverLevel(renderChoiceRef.current)) {
+      void publishServerRender(renderChoiceRef.current)
+      return
+    }
     setPublishing(true)
     setMessage(null)
     void waitForModelViewers()
@@ -1797,6 +1851,12 @@ export function SceneAnimatorPanel() {
       status(t('animator.savingScene'))
       await persistScene()
     }
+  }
+  const templatePreview = () => {
+    const current = sceneRef.current, canvas = document.createElement('canvas'), scale = Math.min(1, 960 / Math.max(current.width, current.height))
+    canvas.width = Math.max(1, Math.round(current.width * scale)); canvas.height = Math.max(1, Math.round(current.height * scale))
+    paintScene(canvas, progress)
+    return canvas.toDataURL('image/jpeg', 0.85)
   }
   const persistScene = async (): Promise<string | null> => {
     const current = sceneRef.current
@@ -2579,9 +2639,13 @@ export function SceneAnimatorPanel() {
   const canRedo = historyRevision >= 0 && futureScenesRef.current.length > 0
   const verticalSafeWidth = Math.min(100, (9 / 16) / (scene.width / Math.max(1, scene.height)) * 100)
 
+  // Playback, recording or publishing: controls that change the scene wait.
+  const busy = playing || recording || publishing
   return <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-bg-tertiary xl:flex-row">
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label={t('animator.sceneNameAria')} className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setLibraryOpen(true)} disabled={playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><FolderOpen size={12} /> {t('animator.openScene')}</button><button type="button" onClick={() => void persistScene()} disabled={saving || emptyScene || playing || recording || publishing} className="rounded border border-accent-blue/40 bg-accent-blue/10 px-2.5 py-1.5 text-[10px] text-accent-blue flex items-center gap-1 disabled:opacity-50">{saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}{saving ? t('animator.saving') : t('animator.saveScene')}</button><button onClick={play} disabled={emptyScene || playing || recording || publishing} className="min-h-12 min-w-36 rounded-lg bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg flex items-center justify-center gap-2 hover:bg-cyan-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-200 disabled:opacity-50"><Play size={22} fill="currentColor" /> {t('animator.preview')}</button><button onClick={record} disabled={recording || playing || publishing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording || publishing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? t('animator.recording') : publishing ? t('animator.savingMp4') : t('animator.exportMp4')}</button></div></div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label={t('animator.sceneNameAria')} className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setLibraryOpen(true)} disabled={busy} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><FolderOpen size={12} /> {t('animator.openScene')}</button><button type="button" onClick={() => void persistScene()} disabled={saving || emptyScene || busy} className="rounded border border-accent-blue/40 bg-accent-blue/10 px-2.5 py-1.5 text-[10px] text-accent-blue flex items-center gap-1 disabled:opacity-50">{saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}{saving ? t('animator.saving') : t('animator.saveScene')}</button><button onClick={play} disabled={emptyScene || busy} className="min-h-12 min-w-36 rounded-lg bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg flex items-center justify-center gap-2 hover:bg-cyan-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-200 disabled:opacity-50"><Play size={22} fill="currentColor" /> {t('animator.preview')}</button><button onClick={record} disabled={recording || playing || publishing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording || publishing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? t('animator.recording') : publishing ? t('animator.savingMp4') : t('animator.exportMp4')}</button></div></div>
+      <RenderQualityPicker width={scene.width} height={scene.height} fps={scene.fps || 30} duration={scene.duration} disabled={busy} capabilitiesUrl="/api/v1/scenes/video2d/export/capabilities" onChange={choice => { renderChoiceRef.current = choice }} />
+      <ExportReviewPanel review={receiptReview} duration={scene.duration} onSeek={time => seekAnimatorReview(time, scene.duration, recording, animationRef.current, setPlaying, syncSceneMedia, setProgress)} />
       <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title={t('animator.undoTitle')} className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title={t('animator.redoTitle')} className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? t('animator.autosaved', { time: new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }) : t('animator.autosaveWaiting')}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{t(`resolutions.${label === 'HD landscape' ? 'hdLandscape' : label === 'Full HD landscape' ? 'fullHdLandscape' : label === '4K landscape' ? 'fourKLandscape' : label === 'Square' ? 'square' : label === 'HD portrait' ? 'hdPortrait' : label === 'Full HD portrait' ? 'fullHdPortrait' : 'fourKPortrait'}`)}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">{t('animator.frameRate')}{([24, 30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{t('animator.fps', { rate })}</button>)}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary p-1.5">
@@ -2610,8 +2674,8 @@ export function SceneAnimatorPanel() {
       </div>
       </div>
       <p className="mt-2 text-[9px] text-text-muted">{t('animator.canvasHelp')}</p>
-      <SceneFxControls cues={scene.sfx} duration={scene.duration} disabled={playing || recording || publishing} onChange={sfx => updateScene(current => ({ ...current, sfx }))} onShowcase={collection => updateScene(current => withFxShowcase(current, collection))} />
-      <KineticTextControls cues={scene.texts} lyrics={scene.lyrics} duration={scene.duration} width={scene.width} height={scene.height} disabled={playing || recording || publishing} onChange={texts => updateScene(current => ({ ...current, texts }))} onLyricsChange={lyrics => updateScene(current => ({ ...current, lyrics }))} />
+      <SceneFxControls cues={scene.sfx} duration={scene.duration} disabled={busy} onChange={sfx => updateScene(current => ({ ...current, sfx }))} onShowcase={collection => updateScene(current => withFxShowcase(current, collection))} />
+      <KineticTextControls cues={scene.texts} lyrics={scene.lyrics} duration={scene.duration} width={scene.width} height={scene.height} disabled={busy} onChange={texts => updateScene(current => ({ ...current, texts }))} onLyricsChange={lyrics => updateScene(current => ({ ...current, lyrics }))} />
       <SceneFinishControls finish={scene.finish} playing={playing} recording={recording} publishing={publishing} onChange={finish => updateScene(current => ({ ...current, finish }))} />
       <SceneFinalPreview scene={scene} seconds={progress * scene.duration} />
       <SceneMotionControls layer={selected} playing={playing} recording={recording} publishing={publishing} onPath={path => { if (selected) updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, path } })) }} onSequence={sequence => { if (selected) updateLayer(selected.id, layer => ({ ...layer, sequence })) }} />
@@ -2640,7 +2704,7 @@ export function SceneAnimatorPanel() {
     </section>
     <aside className="w-full shrink-0 border-t border-border bg-bg-secondary p-3 overflow-y-auto space-y-3 xl:w-[300px] xl:border-l xl:border-t-0">
       <SceneAnimatorNarrativeSetup
-        busy={playing || recording || publishing}
+        busy={busy}
         templateId={narrativeTemplateId}
         template={narrativeTemplate}
         visuals={narrativeVisuals}
@@ -2682,23 +2746,23 @@ export function SceneAnimatorPanel() {
       <div className="space-y-1.5 rounded border border-amber-400/30 bg-amber-400/[.04] p-2">
         <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-amber-100">{t('animator.sceneAudio')}</span><span className="text-[8px] text-amber-200/75">{t('animator.sceneAudioMeta')}</span></div>
         <p className="text-[8px] leading-relaxed text-text-muted">{t('animator.sceneAudioHelp')}</p>
-        <ModelCharacterLink layer={selected} workspace={workspace} disabled={playing || recording || publishing}
+        <ModelCharacterLink layer={selected} workspace={workspace} disabled={busy}
           onChange={(id, characterKitRef) => updateLayer(id, layer => ({ ...layer, characterKitRef }))} />
-        <textarea value={sceneAudioPrompt} disabled={sceneAudioBusy || playing || recording || publishing} onChange={event => setSceneAudioPrompt(event.target.value)} placeholder={t('animator.sceneAudioPlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
-        <button type="button" disabled={!sceneAudioPrompt.trim() || sceneAudioBusy || playing || recording || publishing} onClick={() => void generateSceneSpeech()} className="w-full rounded border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100 disabled:opacity-40">{sceneAudioBusy ? t('animator.generatingNarration') : t('animator.generateSpeech', { model: selectedSpeechModel })}</button>
-        {generatedAudio.length > 0 && <SceneAnimatorAudioInput audio={generatedAudio} disabled={playing || recording || publishing} onAttach={(filename, title, kind) => attachSceneAudio(filename, title, kind)} />}
+        <textarea value={sceneAudioPrompt} disabled={sceneAudioBusy || busy} onChange={event => setSceneAudioPrompt(event.target.value)} placeholder={t('animator.sceneAudioPlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <button type="button" disabled={!sceneAudioPrompt.trim() || sceneAudioBusy || busy} onClick={() => void generateSceneSpeech()} className="w-full rounded border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100 disabled:opacity-40">{sceneAudioBusy ? t('animator.generatingNarration') : t('animator.generateSpeech', { model: selectedSpeechModel })}</button>
+        {generatedAudio.length > 0 && <SceneAnimatorAudioInput audio={generatedAudio} disabled={busy} onAttach={(filename, title, kind) => attachSceneAudio(filename, title, kind)} />}
         {(scene.audioTracks ?? []).length > 0 && <div className="space-y-1 rounded border border-amber-300/15 bg-black/15 p-1.5">{scene.audioTracks!.map(track => <div key={track.id} className="grid grid-cols-[1fr_44px_44px_18px] items-center gap-1 text-[8px]"><span title={track.prompt ?? track.name} className="truncate text-amber-100">{track.kind} · {track.name}</span><label className="text-text-muted">{t('animator.at')}<input aria-label={t('animator.startTrack', { name: track.name })} type="number" min="0" max={scene.duration} step="0.1" value={track.startTime} onChange={event => { const startTime = Number(event.target.value); if (Number.isFinite(startTime)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, startTime: Math.max(0, Math.min(current.duration, startTime)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><label className="text-text-muted">{t('animator.vol')}<input aria-label={t('animator.volumeTrack', { name: track.name })} type="number" min="0" max="2" step="0.1" value={track.volume} onChange={event => { const volume = Number(event.target.value); if (Number.isFinite(volume)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, volume: Math.max(0, Math.min(2, volume)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><button type="button" title={t('animator.removeTrack', { name: track.name })} onClick={() => updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).filter(item => item.id !== track.id) }))} className="mt-3 text-red-300"><Trash2 size={12} /></button></div>)}</div>}
         {rhythmAudioTracks.length > 0 && <div className="space-y-1.5 rounded border border-violet-300/25 bg-violet-400/[.045] p-1.5">
           <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-medium text-violet-100">{t('animator.rhythmTitle')}</span><span className="text-[7px] text-violet-200/70">{t('animator.rhythmMeta')}</span></div>
-          <label className="block text-[8px] text-text-muted">{t('animator.rhythmTrack')}<select value={selectedRhythmTrack?.id ?? ''} disabled={rhythmBusy || playing || recording || publishing} onChange={event => { setRhythmTrackId(event.target.value); setRhythmError(null) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[9px] disabled:opacity-40">{rhythmAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind} · {track.name}</option>)}</select></label>
-          <button type="button" disabled={!selectedRhythmTrack || rhythmBusy || playing || recording || publishing} onClick={() => void analyzeSceneRhythm()} className="w-full rounded border border-violet-300/45 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{rhythmBusy ? t('animator.detectingBeats') : activeRhythmAnalysis ? t('animator.analyzeAgain') : t('animator.analyzeBpm')}</button>
+          <label className="block text-[8px] text-text-muted">{t('animator.rhythmTrack')}<select value={selectedRhythmTrack?.id ?? ''} disabled={rhythmBusy || busy} onChange={event => { setRhythmTrackId(event.target.value); setRhythmError(null) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[9px] disabled:opacity-40">{rhythmAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind} · {track.name}</option>)}</select></label>
+          <button type="button" disabled={!selectedRhythmTrack || rhythmBusy || busy} onClick={() => void analyzeSceneRhythm()} className="w-full rounded border border-violet-300/45 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{rhythmBusy ? t('animator.detectingBeats') : activeRhythmAnalysis ? t('animator.analyzeAgain') : t('animator.analyzeBpm')}</button>
           {activeRhythmAnalysis && <div className="rounded border border-violet-300/15 bg-black/15 px-1.5 py-1 text-[8px] text-violet-100">{t('animator.rhythmStats', { bpm: activeRhythmAnalysis.bpm.toFixed(1), beats: activeRhythmAnalysis.beats.length, downbeats: activeRhythmAnalysis.downbeats.length, sections: activeRhythmAnalysis.sections.length })}</div>}
           <div className="grid grid-cols-2 gap-1">
             <label className="text-[8px] text-text-muted">{t('animator.trigger')}<select value={rhythmCueSource} onChange={event => setRhythmCueSource(event.target.value as SceneRhythmCueSource)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="beats">{t('animator.everyBeat')}</option><option value="downbeats">{t('animator.downbeatsOnly')}</option></select></label>
             <label className="text-[8px] text-text-muted">{t('animator.reaction')}<select value={rhythmProfile} onChange={event => setRhythmProfile(event.target.value as SceneRhythmProfile)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="pulse">{t('animator.scalePulse')}</option><option value="bounce">{t('curves.bounce')}</option><option value="peek" disabled={selected?.type === 'camera'}>{t('animator.peekOnBeat')}</option><option value="camera-punch">{t('animator.cameraPunch')}</option></select></label>
           </div>
           <label className="block text-[8px] text-text-muted">{t('animator.intensityPercent', { percent: Math.round(rhythmIntensity * 100) })}<input type="range" min="0" max="1" step="0.05" value={rhythmIntensity} onChange={event => setRhythmIntensity(Number(event.target.value))} className="mt-0.5 w-full accent-violet-400" /></label>
-          <button type="button" disabled={!activeRhythmAnalysis || !selected || selected.locked || rhythmBusy || playing || recording || publishing} onClick={applySceneRhythm} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{selected?.name ? t('animator.applyToLayer', { name: selected.name }) : t('animator.applyToSelected')}</button>
+          <button type="button" disabled={!activeRhythmAnalysis || !selected || selected.locked || rhythmBusy || busy} onClick={applySceneRhythm} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{selected?.name ? t('animator.applyToLayer', { name: selected.name }) : t('animator.applyToSelected')}</button>
           <LiveRhythmStore analysis={activeRhythmAnalysis} track={selectedRhythmTrack} duration={scene.duration} playing={playing} recording={recording} publishing={publishing} rhythmBusy={rhythmBusy} onChange={rhythm => updateScene(current => ({ ...current, rhythm }))} />
           <p className="text-[7px] leading-relaxed text-text-muted">{t('animator.rhythmHelp')}</p>
         </div>}
@@ -2717,7 +2781,7 @@ export function SceneAnimatorPanel() {
         mouthState={characterKitMouthState}
         hasSelectedLayer={Boolean(selected)}
         selectedIsFace={Boolean(selected && isCutoutFaceLayer(selected))}
-        disabled={playing || recording || publishing}
+        disabled={busy}
         onSelectKit={(kit, tab) => { setCharacterKitDraft(kit); setCharacterKitPoseId('base'); setCharacterKitEditorTab(tab); setCharacterKitError(null) }}
         onNewNameChange={setCharacterKitName}
         onCreateFromSelected={createKitFromSelected}
@@ -2738,11 +2802,11 @@ export function SceneAnimatorPanel() {
       <div className="space-y-1.5 rounded border border-rose-300/30 bg-rose-400/[.04] p-2">
         <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-rose-100">{t('animator.cutoutTitle')}</span><span className="text-[8px] text-rose-200/75">{t('animator.cutoutMeta')}</span></div>
         <p className="text-[8px] leading-relaxed text-text-muted">{t('animator.cutoutHelp')}</p>
-        <button type="button" disabled={!selected || playing || recording || publishing} onClick={bindCutoutFace} className="w-full rounded border border-rose-300/30 bg-black/10 px-2 py-1 text-[9px] text-rose-100 disabled:opacity-40">{t('animator.bindFace')}</button>
+        <button type="button" disabled={!selected || busy} onClick={bindCutoutFace} className="w-full rounded border border-rose-300/30 bg-black/10 px-2 py-1 text-[9px] text-rose-100 disabled:opacity-40">{t('animator.bindFace')}</button>
         {dialogueAudioTracks.length > 0 && <label className="block text-[8px] text-text-muted">{t('animator.voiceTrack')}<select aria-label={t('animator.voiceTrackAria')} value={selectedDialogueTrack?.id ?? ''} onChange={event => setCutoutDialogueTrackId(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[9px] text-text-secondary">{dialogueAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind === 'speech' ? t('animator.voice') : track.kind} · {track.name}</option>)}</select></label>}
-        <textarea value={cutoutDialogueText} disabled={playing || recording || publishing} onChange={event => setCutoutDialogueText(event.target.value)} placeholder={t('animator.dialoguePlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <textarea value={cutoutDialogueText} disabled={busy} onChange={event => setCutoutDialogueText(event.target.value)} placeholder={t('animator.dialoguePlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
         <div className="grid grid-cols-2 gap-1"><label className="text-[8px] text-text-muted">{t('animator.start')}<input aria-label={t('animator.dialogueStartAria')} type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueStart} onChange={event => setCutoutDialogueStart(Number(event.target.value) || 0)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label><label className="text-[8px] text-text-muted">{t('animator.end')}<input aria-label={t('animator.dialogueEndAria')} type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueEnd} onChange={event => setCutoutDialogueEnd(Number(event.target.value) || scene.duration)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label></div>
-        <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!cutoutDialogueText.trim() || cutoutDialogueBusy || playing || recording || publishing} onClick={animateCutoutDialogue} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{t('animator.animateFromLine')}</button><button type="button" disabled={cutoutDialogueBusy || !selectedDialogueTrack || playing || recording || publishing} onClick={() => void animateCutoutDialogueFromAudio()} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{cutoutDialogueBusy ? t('animator.analyzingSpeech') : t('animator.detectFromAudio')}</button></div>
+        <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!cutoutDialogueText.trim() || cutoutDialogueBusy || busy} onClick={animateCutoutDialogue} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{t('animator.animateFromLine')}</button><button type="button" disabled={cutoutDialogueBusy || !selectedDialogueTrack || busy} onClick={() => void animateCutoutDialogueFromAudio()} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{cutoutDialogueBusy ? t('animator.analyzingSpeech') : t('animator.detectFromAudio')}</button></div>
         {(scene.dialogueBeats ?? []).length > 0 && <div className="space-y-1 rounded border border-rose-300/15 bg-black/10 p-1.5"><div className="text-[8px] text-rose-100/80">{t('animator.beats', { count: scene.dialogueBeats!.length })}</div>{scene.dialogueBeats!.map(beat => {
           const mouth = scene.layers.find(layer => beat.mouthLayerIds.includes(layer.id))
           const poseLayerId = mouth?.faceBinding?.poseLayerId ?? (mouth?.relationship?.type === 'parent' ? mouth.relationship.targetLayerId : '')
@@ -2751,8 +2815,9 @@ export function SceneAnimatorPanel() {
         })}</div>}
       </div>
       {selected && <div className="space-y-1 rounded border border-fuchsia-400/20 bg-fuchsia-400/[.025] p-2"><div className="text-[9px] text-fuchsia-100">{t('animator.suggestions', { name: selected.name })}</div><div className="flex flex-wrap gap-1">{copilotSuggestions.map(suggestion => <button key={suggestion} type="button" disabled={copilotBusy || selected.locked} onClick={() => { setCopilotIntent(suggestion); setCopilotError(null) }} className="rounded border border-fuchsia-300/25 px-1.5 py-0.5 text-left text-[8px] text-fuchsia-100 hover:bg-fuchsia-400/10 disabled:opacity-40">{suggestion}</button>)}</div></div>}
-      <SceneRecipePanel disabled={playing || recording || publishing || saving} outputs={outputs} characterKits={characterKitLibrary} onApply={applyRecipeScene} />
-      <button type="button" disabled={playing || recording || publishing || saving} onClick={() => setTemplateComposerOpen(true)} className="w-full rounded border border-cyan-400/40 p-2 text-xs text-cyan-100 disabled:opacity-40">{t('animator.createFromLibrary')}</button>
+      <SceneRecipePanel disabled={busy || saving} outputs={outputs} characterKits={characterKitLibrary} onApply={applyRecipeScene} />
+      <button type="button" disabled={busy || saving} onClick={() => setTemplateComposerOpen(true)} className="w-full rounded border border-cyan-400/40 p-2 text-xs text-cyan-100 disabled:opacity-40">{t('animator.createFromLibrary')}</button>
+      <button type="button" disabled={busy || saving} onClick={() => setUserTemplatesOpen(true)} className="w-full rounded border border-border p-2 text-xs disabled:opacity-40">{t('animator.myTemplates')}</button>
       <a href="/scene-template-review" target="_blank" rel="noopener noreferrer" className="block rounded border border-cyan-500/30 p-2 text-center text-xs text-cyan-200">{t('animator.labCatalog')}</a>
       <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> {t('animator.addLayer')}</button>{addOpen && <div className="absolute z-[1100] mt-1 max-h-[75vh] w-full space-y-1 overflow-y-auto rounded border border-border bg-bg-primary p-1 shadow-xl"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">{t('animator.addCamera')}</button><div className="px-2 pt-1 text-[8px] font-medium uppercase tracking-wider text-text-muted">{t('animator.atmospherePresets')}</div><div className="grid grid-cols-2 gap-1">{ATMOSPHERE_KINDS.map(kind => <button key={kind} onClick={() => addAtmosphere(kind)} title={`${t(`atmosphere.labels.${kind}`)} — ${t(`atmosphere.descriptions.${kind}`, { defaultValue: ATMOSPHERE_DESCRIPTIONS[kind] })}`} className="truncate rounded border border-border px-2 py-1.5 text-left text-[9px] text-purple-200 hover:border-purple-400/60 hover:bg-bg-hover">{t(`atmosphere.labels.${kind}`)}</button>)}</div><button onClick={() => openLayerPicker('model3d', null)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.selectGenerated3d')}</button><button onClick={() => startLocalLayerPick('model3d', null, modelInputRef)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importGlb')}</button><button onClick={() => openLayerPicker('media', null)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.selectGeneratedMedia')}</button><button onClick={() => startLocalLayerPick('media', null, mediaInputRef)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importMedia')}</button><button onClick={() => openLayerPicker('overlay', null)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.chooseAsset')}</button><button onClick={() => startLocalLayerPick('overlay', null, overlayInputRef)} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importOverlay')}</button></div>}</div>
       <input ref={modelInputRef} type="file" accept=".glb,model/gltf-binary" className="hidden" data-testid="scene-layer-model-file" onChange={event => { const files = [...(event.target.files ?? [])]; event.currentTarget.value = ''; if (files.length) void pickLocalLayerFiles('model3d', files) }} /><input ref={mediaInputRef} type="file" accept="image/*,video/*" className="hidden" data-testid="scene-layer-media-file" onChange={event => { const files = [...(event.target.files ?? [])]; event.currentTarget.value = ''; if (files.length) void pickLocalLayerFiles('media', files) }} /><input ref={overlayInputRef} type="file" accept="image/png,image/webp" multiple className="hidden" data-testid="scene-layer-overlay-file" onChange={event => { const files = [...(event.target.files ?? [])]; event.currentTarget.value = ''; if (files.length) void pickLocalLayerFiles('overlay', files) }} />
@@ -2864,6 +2929,8 @@ export function SceneAnimatorPanel() {
       </div>
       {message && <p className="text-[10px] text-text-secondary">{message}</p>}
     </aside>
+    {userTemplatesOpen && <Scene2DTemplateDialog scene={scene} workspace={workspace} disabled={saving} preview={templatePreview} onClose={() => setUserTemplatesOpen(false)}
+      onApply={(summary, next) => importScene(JSON.stringify(next), t('animator.templateApplied', { name: summary.title }))} />}
     {templateComposerOpen && <TemplateComposerDialog key={workspace} workspace={workspace} onClose={() => setTemplateComposerOpen(false)} onApply={next => importScene(JSON.stringify(next), t('animator.templateFromLibrary'))} />}
     <SceneAnimatorExplorer
       purpose={assetExplorer}

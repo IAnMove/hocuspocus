@@ -468,6 +468,9 @@ def render_project(
             staging_path, temp_dir, layers, width=width, height=height, fps=fps,
             duration=duration_seconds, progress=progress, abort_callback=abort_callback,
         )
+        delivered_path = os.path.join(temp_dir, "delivery.mp4")
+        _deliver_master(staging_path, delivered_path, fps=fps)
+        staging_path = delivered_path
 
         if progress:
             progress(98, "Validating exported frames and audio…")
@@ -491,6 +494,24 @@ def render_project(
         "transitions": transitions,
         "audio_seconds": accounting.get("audio_seconds"),
     }
+
+
+def _deliver_master(source: str, destination: str, *, fps: int) -> None:
+    """The one lossy H.264 encode. Earlier editor passes stay at crf 0."""
+    _run(
+        [
+            "ffmpeg", "-y", "-i", source,
+            "-map", "0:v:0", "-map", "0:a:0",
+            "-c:v", "libx264", "-preset", "slow", "-crf", "14", "-pix_fmt", "yuv420p",
+            "-r", str(int(fps)),
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            destination,
+        ],
+        timeout=1800,
+        label="Writing the delivery encode",
+        phase="deliver",
+    )
 
 
 def _comic_preview_video_filter(

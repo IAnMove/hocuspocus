@@ -1,10 +1,10 @@
-"""Resolve existing local voice and reuse the native Rhubarb analyser."""
-import subprocess
+"""Resolve existing local voice and reuse the shared native speech analyser."""
 from copy import deepcopy
 from pathlib import Path
 from urllib.parse import quote
 
-from services.scene3d_speech import analyze_voice, SpeechAnalysisUnavailable
+from services.speech_alignment import analyze_voice
+from services.speech_file_commands import _probe_duration, _window_wav
 
 VISEMES = dict(zip('XABCDEFGH', ['rest', 'M', 'I', 'E', 'A', 'O', 'U', 'F', 'L']))
 
@@ -24,27 +24,17 @@ def prepare_speech(value, workspace_dir):
         raise ValueError('Audio was not found in the selected workspace')
     if path.stat().st_size > 32 * 1024 * 1024:
         raise ValueError('Voice exceeds 32 MB')
-    try:
-        converted = subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-ss', str(value.offset), '-i', str(path),
-                                '-t', str(value.end - value.start), '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', '-f', 'wav', 'pipe:1'],
-                                   capture_output=True, timeout=45, check=False)
-    except (subprocess.TimeoutExpired, OSError) as error:
-        raise SpeechAnalysisUnavailable('Audio decoding is unavailable or timed out') from error
-    if converted.returncode:
-        raise ValueError('The selected audio could not be decoded')
-    # ffmpeg's pipe WAV uses an unknown RIFF size. Rewrite bounded PCM to a proper WAV.
-    import io
-    import wave
-    with wave.open(io.BytesIO(converted.stdout), 'rb') as source:
-        pcm = source.readframes(source.getnframes())
-    data = io.BytesIO()
-    with wave.open(data, 'wb') as output:
-        output.setnchannels(1); output.setsampwidth(2); output.setframerate(16000); output.writeframes(pcm)
-    analysis = analyze_voice(data.getvalue(), isolate_vocals=value.isolate_vocals)
+    duration = value.end - value.start
+    if value.offset + duration > _probe_duration(path) + .01:
+        raise ValueError('The intervention extends beyond the selected recording')
+    analysis = analyze_voice(_window_wav(path, value.offset, duration), isolate_vocals=value.isolate_vocals,
+                             dialogue=value.text, language=value.language, engine=value.engine)
     reference = {'workspaceId': value.workspace, 'filename': value.audio_filename,
                  'url': f'/api/v1/file/{quote(value.audio_filename, safe="")}?workspace={quote(value.workspace, safe="")}'}
     clip = {'id': value.clip_id, 'text': value.text, 'start': value.start, 'end': value.end, 'offset': value.offset,
-            'gain': 1, 'audible': True, 'audio': reference, 'driver': 'rhubarb-vocals' if value.isolate_vocals else 'rhubarb',
+            'gain': 1, 'audible': True, 'audio': reference, 'driver': analysis['driver'],
+            'analysisEngine': value.engine, 'language': value.language,
+            'analysisFallback': analysis['fallbackReason'],
             'cues': [{'start': cue['start'] + value.offset, 'end': cue['end'] + value.offset,
                       'viseme': VISEMES[cue['value']]} for cue in analysis['mouthCues']]}
     slot = matches[0]
@@ -60,7 +50,9 @@ def with_speech_clip(speech, clip, duration):
     if prior is None:
         prior = []
         if speech.get('audio') or speech.get('cues'):
-            legacy = {key: speech[key] for key in ('audio', 'cues', 'driver', 'start', 'end', 'offset', 'gain', 'audible') if key in speech}
+            fields = ('audio', 'cues', 'driver', 'start', 'end', 'offset', 'gain', 'audible',
+                      'analysisEngine', 'analysisFallback', 'language', 'text')
+            legacy = {key: speech[key] for key in fields if key in speech}
             legacy['id'] = 'legacy-voice' if clip['id'] != 'legacy-voice' else 'previous-voice'
             legacy.setdefault('end', duration)
             prior.append(legacy)

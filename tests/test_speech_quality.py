@@ -13,7 +13,7 @@ from tests.test_scene3d_speech import wav
 def test_script_envelope_preserves_unicode_and_rejects_unbounded_or_invalid_input():
     raw = wav()
     data, options = speech_request(json.dumps({"wavBase64": base64.b64encode(raw).decode(), "dialogue": "¿Qué ocurrió?", "language": "es"}).encode(), "application/json")
-    assert data == raw and options == {"dialogue": "¿Qué ocurrió?", "language": "es"}
+    assert data == raw and options == {"dialogue": "¿Qué ocurrió?", "language": "es", "engine": "auto"}
     for body in ({"wavBase64": "!!!"}, {"wavBase64": "", "dialogue": "x" * 4001}, [], {"language": 42}):
         with pytest.raises(speech.SpeechAnalysisError):
             speech_request(json.dumps(body).encode(), "application/json")

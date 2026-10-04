@@ -15,10 +15,11 @@ import uuid
 from typing import Any
 
 from .character_face_patch import normalize_character_face_patch
-from .character_speech_definition import normalize_speech3d, normalize_character_voice
+from .character_speech_definition import normalize_speech3d, normalize_character_voice, normalize_character_voices_by_language
 
 
 CHARACTER_KIT_LIBRARY_FILENAME = ".character-kit-library-v1.json"
+LIPS_CREATOR_LIBRARY_FILENAME = ".lips-creator-library-v1.json"
 MAX_CHARACTER_KITS = 100
 MAX_LIBRARY_BYTES = 20 * 1024 * 1024
 _LOCK = threading.RLock()
@@ -27,6 +28,7 @@ _STYLES = {"cutout", "children-illustration", "anime-2d"}
 _REVIEW_STATES = {"pending", "approved", "rejected"}
 _ALPHA_STATES = {"unknown", "transparent", "opaque"}
 _MOUTH_STATES = {"closed", "small", "wide", "round", "pressed", "medium", "pucker", "bite", "tongue"}
+_MOUTH_SOUNDS = {"rest", "M", "A", "E", "I", "O", "U", "F", "L"}
 
 
 class CharacterKitRevisionConflict(ValueError):
@@ -105,6 +107,45 @@ def _asset(value: Any, label: str) -> dict[str, Any]:
     return result
 
 
+def _copy_mouth_candidates(value: dict[str, Any], into: dict[str, Any]) -> None:
+    raw = value.get("mouthCandidates")
+    if raw is None:
+        return
+    if not isinstance(raw, dict) or any(key not in _MOUTH_STATES for key in raw):
+        raise ValueError("Mouth candidates are invalid")
+    into["mouthCandidates"] = {key: _asset(asset, f"Mouth candidate {key}") for key, asset in raw.items()}
+
+
+def _copy_mouth_mapping(value: dict[str, Any], into: dict[str, Any]) -> None:
+    raw = value.get("mouthMapping")
+    if raw is None:
+        return
+    if not isinstance(raw, dict) or any(
+        key not in _MOUTH_SOUNDS or not isinstance(state, str) or state not in _MOUTH_STATES
+        for key, state in raw.items()
+    ):
+        raise ValueError("Mouth sound assignments are invalid")
+    into["mouthMapping"] = dict(raw)
+
+
+def _copy_mouth_prompts(value: dict[str, Any], into: dict[str, Any]) -> None:
+    raw = value.get("mouthPrompts")
+    if raw is None:
+        return
+    if not isinstance(raw, dict) or any(key not in _MOUTH_STATES for key in raw):
+        raise ValueError("Mouth prompts are invalid")
+    into["mouthPrompts"] = {key: _text(text, "Mouth prompt", 1500) for key, text in raw.items()}
+
+
+def _copy_mouth_generation_mode(value: dict[str, Any], into: dict[str, Any]) -> None:
+    raw = value.get("mouthGenerationMode")
+    if raw is None:
+        return
+    if not isinstance(raw, str) or raw not in ("description", "reference"):
+        raise ValueError("Mouth generation mode is invalid")
+    into["mouthGenerationMode"] = raw
+
+
 def _anchor(value: Any, label: str) -> dict[str, float]:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be an object")
@@ -138,6 +179,8 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
     if not isinstance(mouth_raw, dict) or any(key not in _MOUTH_STATES for key in mouth_raw):
         raise ValueError("Character Kit mouth states are invalid")
     mouth = {key: _asset(asset, f"Mouth {key}") for key, asset in mouth_raw.items()}
+    lips_fields: dict[str, Any] = {}
+    _copy_mouth_candidates(value, lips_fields)
 
     eyes_raw = value.get("eyes") or {}
     if not isinstance(eyes_raw, dict) or any(key not in {"open", "blink"} for key in eyes_raw):
@@ -178,10 +221,18 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
     }
     if len(result["provenance"]) > 500 or any(not isinstance(item, dict) for item in result["provenance"]):
         raise ValueError("Character Kit provenance must contain at most 500 objects")
+    _copy_mouth_mapping(value, lips_fields)
+    _copy_mouth_prompts(value, lips_fields)
+    _copy_mouth_generation_mode(value, lips_fields)
+    result.update(lips_fields)
     if value.get("speech3d") is not None:
         result["speech3d"] = normalize_speech3d(value["speech3d"])
     if value.get("voice") is not None:
         result["voice"] = normalize_character_voice(value["voice"])
+    if value.get("voicesByLanguage"):
+        voices = normalize_character_voices_by_language(value["voicesByLanguage"])
+        if voices:
+            result["voicesByLanguage"] = voices
     if value.get("lookNotes"):
         result["lookNotes"] = _text(value["lookNotes"], "Character look notes", 4000)
     if value.get("restPose") is not None:
@@ -217,13 +268,15 @@ def normalize_character_kit_library(value: Any) -> dict[str, Any]:
     return {"version": 1, "revision": revision, "activeId": active_id, "kits": kits}
 
 
-def character_kit_library_path(workspace_dir: str) -> str:
-    return os.path.join(workspace_dir, CHARACTER_KIT_LIBRARY_FILENAME)
+def character_kit_library_path(workspace_dir: str, library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> str:
+    if library_filename not in {CHARACTER_KIT_LIBRARY_FILENAME, LIPS_CREATOR_LIBRARY_FILENAME}:
+        raise ValueError("Unknown character asset library")
+    return os.path.join(workspace_dir, library_filename)
 
 
-def read_character_kit_library(workspace_dir: str) -> dict[str, Any]:
+def read_character_kit_library(workspace_dir: str, *, library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> dict[str, Any]:
     with _LOCK:
-        path = character_kit_library_path(workspace_dir)
+        path = character_kit_library_path(workspace_dir, library_filename)
         if not os.path.isfile(path):
             return empty_character_kit_library()
         with open(path, "r", encoding="utf-8") as handle:
@@ -236,11 +289,11 @@ def _revision(value: Any) -> int:
     return value
 
 
-def write_character_kit_library(workspace_dir: str, value: Any, *, base_revision: int) -> dict[str, Any]:
+def write_character_kit_library(workspace_dir: str, value: Any, *, base_revision: int, library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> dict[str, Any]:
     expected = _revision(base_revision)
     library = normalize_character_kit_library(value)
     with _LOCK:
-        current = read_character_kit_library(workspace_dir)
+        current = read_character_kit_library(workspace_dir, library_filename=library_filename)
         if expected != current["revision"]:
             raise CharacterKitRevisionConflict(expected, int(current["revision"]))
         library["revision"] = int(current["revision"]) + 1
@@ -248,7 +301,7 @@ def write_character_kit_library(workspace_dir: str, value: Any, *, base_revision
         if len(encoded.encode("utf-8")) > MAX_LIBRARY_BYTES:
             raise ValueError("Character Kit library is too large to save")
         os.makedirs(workspace_dir, exist_ok=True)
-        path = character_kit_library_path(workspace_dir)
+        path = character_kit_library_path(workspace_dir, library_filename)
         temporary = f"{path}.{uuid.uuid4().hex}.tmp"
         # Keep the previous authored revision; never silently discard calibration.
         if current["revision"] > 0:
@@ -271,26 +324,26 @@ def write_character_kit_library(workspace_dir: str, value: Any, *, base_revision
         return library
 
 
-def patch_character_kit(workspace_dir: str, kit_id: str, kit: Any, *, base_revision: int, make_active: bool = True) -> dict[str, Any]:
+def patch_character_kit(workspace_dir: str, kit_id: str, kit: Any, *, base_revision: int, make_active: bool = True, library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> dict[str, Any]:
     token = _token(kit_id, "Character Kit")
     candidate = normalize_character_kit(kit, token)
     if candidate["id"] != token:
         raise ValueError("Character Kit id does not match the request path")
     with _LOCK:
-        current = read_character_kit_library(workspace_dir)
+        current = read_character_kit_library(workspace_dir, library_filename=library_filename)
         expected = _revision(base_revision)
         if expected != current["revision"]:
             raise CharacterKitRevisionConflict(expected, int(current["revision"]))
         next_library = {**current, "kits": {**current["kits"], token: candidate}}
         if make_active or not current.get("activeId"):
             next_library["activeId"] = token
-        return write_character_kit_library(workspace_dir, next_library, base_revision=expected)
+        return write_character_kit_library(workspace_dir, next_library, base_revision=expected, library_filename=library_filename)
 
 
-def delete_character_kit(workspace_dir: str, kit_id: str, *, base_revision: int) -> dict[str, Any]:
+def delete_character_kit(workspace_dir: str, kit_id: str, *, base_revision: int, library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> dict[str, Any]:
     token = _token(kit_id, "Character Kit")
     with _LOCK:
-        current = read_character_kit_library(workspace_dir)
+        current = read_character_kit_library(workspace_dir, library_filename=library_filename)
         expected = _revision(base_revision)
         if expected != current["revision"]:
             raise CharacterKitRevisionConflict(expected, int(current["revision"]))
@@ -299,4 +352,4 @@ def delete_character_kit(workspace_dir: str, kit_id: str, *, base_revision: int)
         kits = dict(current["kits"])
         del kits[token]
         next_library = {**current, "kits": kits, "activeId": current["activeId"] if current.get("activeId") in kits else next(iter(kits), "")}
-        return write_character_kit_library(workspace_dir, next_library, base_revision=expected)
+        return write_character_kit_library(workspace_dir, next_library, base_revision=expected, library_filename=library_filename)

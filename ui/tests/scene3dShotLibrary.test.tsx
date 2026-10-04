@@ -79,6 +79,23 @@ test('double-click and Enter use a shot straight away, and it shows up under Rec
   }
 })
 
+test('a scraped technique is found by name, previewed, and applied from the library', async () => {
+  const { screen, fireEvent, cleanup } = await import('@testing-library/react')
+  try {
+    const calls = await openLibrary()
+    fireEvent.click(screen.getByRole('button', { name: 'Cinema' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search templates' }), { target: { value: 'Slow Zoom In' } })
+    const card = screen.getByTestId('world3d-template-cine-slow-zoom-in')
+    assert.match(card.textContent ?? '', /Slow Zoom In/)
+    fireEvent.click(card)
+    assert.match(screen.getByTestId('world3d-shot-preview').textContent ?? '', /lens tightens slowly/)
+    fireEvent.click(screen.getByTestId('world3d-use-shot'))
+    assert.deepEqual(calls.templates, ['cine-slow-zoom-in'])
+  } finally {
+    cleanup()
+  }
+})
+
 test('while exporting the library can be browsed but not applied', async () => {
   const { screen, fireEvent, cleanup } = await import('@testing-library/react')
   try {
@@ -92,20 +109,23 @@ test('while exporting the library can be browsed but not applied', async () => {
 })
 
 test('my scenarios live in the library: pick one, then use it', async () => {
-  const { screen, fireEvent, cleanup } = await import('@testing-library/react')
-  const { createUserTemplate, saveUserTemplate } = await import('../src/features/scene3d/userTemplates')
+  const { screen, fireEvent, cleanup, waitFor } = await import('@testing-library/react')
   const { applyScene3DTemplate } = await import('../src/features/scene3d/templates')
-  const pack = createUserTemplate({ document: applyScene3DTemplate('cafe-dance'), title: 'Harbor cafe', description: '', includeAssets: false })!
-  saveUserTemplate(pack)
+  const summary = { id: 'ina/harbor-cafe', editor: 'video3d', title: 'Harbor cafe', description: '', tags: [], author: { x: 'theinaog' },
+    license: 'CC-BY-4.0', templateVersion: '1.0.0', createdAt: '', updatedAt: '', slots: [], controls: [], media: 0, source: 'user', previewUrl: null }
+  const original = globalThis.fetch
+  globalThis.fetch = (async (url: string) => new Response(JSON.stringify(String(url).endsWith('/apply')
+    ? { document: applyScene3DTemplate('cafe-dance'), missingSlots: [], copiedMedia: [] } : { templates: [summary] }), { status: 200 })) as typeof fetch
   try {
     const calls = await openLibrary()
-    fireEvent.click(screen.getByRole('button', { name: 'My scenarios' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Harbor cafe' }))
+    fireEvent.click(screen.getByRole('button', { name: 'My templates' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Harbor cafe' }))
+    await waitFor(() => assert.match(screen.getByTestId('world3d-shot-preview').textContent ?? '', /Harbor cafe/))
     assert.deepEqual(calls.packs, [])
-    assert.match(screen.getByTestId('world3d-shot-preview').textContent ?? '', /Harbor cafe/)
     fireEvent.click(screen.getByTestId('world3d-use-shot'))
-    assert.deepEqual(calls.packs, [pack.id])
+    assert.deepEqual(calls.packs, ['ina/harbor-cafe'])
   } finally {
+    globalThis.fetch = original
     cleanup()
   }
 })
@@ -131,7 +151,7 @@ test('the saved view and recents survive bad or stale storage', async () => {
 test('main catalog retains advanced templates, every pixel world and legacy IDs', async () => {
   const { CORE_TEMPLATES, TEMPLATE_VARIANT_GROUPS, exampleCollections } = await import('../src/features/scene3d/templateCatalog')
   const { SCENE3D_TEMPLATES, applyScene3DTemplate } = await import('../src/features/scene3d/templates')
-  assert.equal(CORE_TEMPLATES.length, 243)
+  assert.equal(CORE_TEMPLATES.length, 707)
   const primary = new Set(CORE_TEMPLATES.map(item => item.id))
   const grouped = new Set(TEMPLATE_VARIANT_GROUPS.flatMap(group => [...group]))
   for (const item of SCENE3D_TEMPLATES) {
@@ -143,7 +163,7 @@ test('main catalog retains advanced templates, every pixel world and legacy IDs'
     assert.ok(primary.has(group[0]))
     for (const id of group.slice(1)) assert.ok(!primary.has(id), id)
   }
-  assert.equal(SCENE3D_TEMPLATES.length, 288)
+  assert.equal(SCENE3D_TEMPLATES.length, 752)
   for (const item of SCENE3D_TEMPLATES) assert.equal(applyScene3DTemplate(item.id).templateId, item.id)
   assert.deepEqual(exampleCollections({ slots: [{ sourceUrl: '/examples/creative/image.png?v=1' }], face: '/examples/face-pack/mouth.png', own: '/api/v1/assets/mine' }), ['creative', 'face-pack'])
 })
@@ -158,7 +178,7 @@ test('browsing examples and selecting a variant only requests catalog metadata',
   }) as typeof fetch
   try {
     const calls = await openLibrary()
-    assert.equal(document.querySelectorAll('[data-shot-card]').length, 243)
+    assert.equal(document.querySelectorAll('[data-shot-card]').length, 707)
     assert.deepEqual(requests, [])
     fireEvent.click(screen.getByRole('button', { name: 'Examples and variants' }))
     await waitFor(() => assert.ok(requests.length > 0))

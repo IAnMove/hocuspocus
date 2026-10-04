@@ -11,7 +11,8 @@ import { sourceRefFromOutput } from '../scene3d/slotSource'
 import { characterFromSlot, characterSlotPatch } from '../scene3d/speech/characterBinding'
 import { modelDigest } from '../scene3d/speech/profiles'
 import { CharacterVoiceFields } from './CharacterVoiceFields'
-import { isCharacterVoiceReady, type CharacterVoice } from '../../lib/characterVoice'
+import { CharacterLanguageVoices } from './CharacterLanguageVoices'
+import { isCharacterVoiceReady, type CharacterVoice, type CharacterVoicesByLanguage } from '../../lib/characterVoice'
 import { randomUuid } from '../../lib/uuid'
 import { CharacterDefinitionSpeechTools } from './CharacterDefinitionSpeechTools'
 import type { CharacterDefinitionDraft } from './characterEditorHandoff'
@@ -24,24 +25,34 @@ type Props = { saveRef?: RefObject<(() => Promise<void>) | null>; workspace: str
 
 function initialDefinition(workspace: string, slot?: Scene3DSlot, kit?: CharacterKit) {
   const character = slot?.character
-  if (character) return { id: character.kitRef?.workspace === workspace ? character.kitRef.id : '', name: character.name, voice: character.voice }
-  return { id: kit?.id ?? '', name: kit?.name ?? '', voice: kit?.voice }
+  if (character) return { id: character.kitRef?.workspace === workspace ? character.kitRef.id : '', name: character.name, voice: character.voice,
+    voicesByLanguage: undefined as CharacterVoicesByLanguage | undefined }
+  return { id: kit?.id ?? '', name: kit?.name ?? '', voice: kit?.voice, voicesByLanguage: kit?.voicesByLanguage }
 }
 function definitionKit(library: CharacterKitLibrary | undefined, id: string, seed?: CharacterKit) {
   const saved = library?.kits[id]
   if (seed?.id !== id) return saved
   return saved ? { ...saved, base: saved.base ?? seed.base, identityReference: saved.identityReference ?? seed.identityReference } : seed
 }
-function isDefinitionDirty(kit: CharacterKit | undefined, name: string, voice: CharacterVoice | undefined, model: ApiOutput | undefined) {
-  return Boolean(kit && (name !== kit.name || JSON.stringify(voice) !== JSON.stringify(kit.voice) || model))
+/** A Video 3D slot edits only the default voice; language voices stay as saved on the kit. */
+function isDefinitionDirty(kit: CharacterKit | undefined, name: string, voice: CharacterVoice | undefined, model: ApiOutput | undefined,
+  voicesByLanguage: CharacterVoicesByLanguage | undefined, slot: Scene3DSlot | undefined) {
+  return Boolean(kit && (name !== kit.name || JSON.stringify(voice) !== JSON.stringify(kit.voice) || model
+    || (!slot && JSON.stringify(voicesByLanguage ?? null) !== JSON.stringify(kit.voicesByLanguage ?? null))))
 }
+const languageVoicesReady = (voices?: CharacterVoicesByLanguage) => Object.values(voices ?? {}).every(isCharacterVoiceReady)
 function canSaveDefinition(library: CharacterKitLibrary | undefined, name: string, slot: Scene3DSlot | undefined) {
   if (!library || !name.trim()) return false
   return slot ? Boolean(slot.speech?.face && slot.sourceRef) : true
 }
-async function definitionForSave(workspace: string, name: string, voice: CharacterVoice | undefined, kit: CharacterKit | undefined, slot: Scene3DSlot | undefined, model: ApiOutput | undefined) {
+async function definitionForSave(workspace: string, name: string, voice: CharacterVoice | undefined, kit: CharacterKit | undefined, slot: Scene3DSlot | undefined, model: ApiOutput | undefined,
+  voicesByLanguage?: CharacterVoicesByLanguage) {
   const previous = kit ?? { ...createCharacterKit(name), id: randomUuid() }
   let next: CharacterKit = { ...previous, name: name.trim(), voice, updatedAt: new Date().toISOString() }
+  if (!slot) {
+    if (voicesByLanguage) next.voicesByLanguage = voicesByLanguage
+    else delete next.voicesByLanguage
+  }
   if (slot) next = { ...await characterFromSlot(next, { ...slot, character: { id: slot.character?.id ?? slot.id, name, voice } }), voice }
   else if (model) {
     const ref = sourceRefFromOutput(model, workspace), digest = await modelDigest(ref.url)
@@ -80,6 +91,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
   const [id, setId] = useState(initial.id)
   const [name, setName] = useState(initial.name)
   const [voice, setVoice] = useState(initial.voice)
+  const [voicesByLanguage, setVoicesByLanguage] = useState(initial.voicesByLanguage)
   const [model, setModel] = useState<ApiOutput | undefined>(initialDraft?.model), [items, setItems] = useState<ApiOutput[]>([])
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('')
   const [workshopDirty, setWorkshopDirty] = useState(false), [workshopBusy, setWorkshopBusy] = useState(false)
@@ -90,10 +102,10 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
   const alive = useRef(true)
   const hasSlot = Boolean(slot)
   const kit = definitionKit(library, id, initialKit)
-  const dirty = isDefinitionDirty(kit, name, voice, model)
+  const dirty = isDefinitionDirty(kit, name, voice, model, voicesByLanguage, slot)
   useEffect(() => { onBusyChange?.(busy || speechBusy); return () => onBusyChange?.(false) }, [busy, speechBusy, onBusyChange])
   useEffect(() => { onDirtyChange?.(dirty || workshopDirty); return () => onDirtyChange?.(false) }, [dirty, workshopDirty, onDirtyChange])
-  useEffect(() => { onDraftChange?.({ name, voice, model }) }, [name, voice, model, onDraftChange])
+  useEffect(() => { onDraftChange?.({ name, voice, voicesByLanguage, model }) }, [name, voice, voicesByLanguage, model, onDraftChange])
   useEffect(() => {
     alive.current = true
     void fetchCharacterKitLibrary(workspace).then(result => { if (alive.current) setLibrary(result) })
@@ -109,13 +121,14 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
   }
   const saveAll = async () => {
     if (saving.current || speechBusy || !canSaveDefinition(library, name, slot)) throw new Error(t('speech.busy'))
-    if (!isCharacterVoiceReady(voice)) throw new Error(t('speech.customVoice.incomplete'))
+    if (!isCharacterVoiceReady(voice) || !languageVoicesReady(voicesByLanguage)) throw new Error(t('speech.customVoice.incomplete'))
     saving.current = true; setBusy(true); setNotice('')
     try {
-      const update = (current?: CharacterKit) => definitionForSave(workspace, name, voice, current, slot, model)
+      const update = (current?: CharacterKit) => definitionForSave(workspace, name, voice, current, slot, model, voicesByLanguage)
       const { saved, kit: savedKit, linked } = await saveCharacterDefinition({ workspace, library: library!, id, kit,
         workshop: workshopSave.current, update, isCurrent: () => alive.current })
       setLibrary(saved); setId(savedKit.id); setName(savedKit.name); setVoice(savedKit.voice); setModel(undefined)
+      if (!slot) setVoicesByLanguage(savedKit.voicesByLanguage)
       if (!linked) await onSaved?.(savedKit)
       if (slot) onApply?.({ character: { id: slot.character?.id ?? slot.id, name: savedKit.name,
         kitRef: { id: savedKit.id, workspace }, libraryRevision: saved.revision, voice } })
@@ -134,7 +147,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
       <DefinitionIdentity library={library} initialKit={initialKit} id={id} disabled={lockIdentity || workshopDirty || speechBusy}
         onSelect={(nextId, next) => {
           setId(nextId); setNotice('')
-          if (!slot) { setName(next?.name ?? ''); setVoice(next?.voice); setModel(undefined) }
+          if (!slot) { setName(next?.name ?? ''); setVoice(next?.voice); setVoicesByLanguage(next?.voicesByLanguage); setModel(undefined) }
         }} />
       {slot && <button data-testid="apply-character" className="min-h-10 rounded border border-border px-3" disabled={speechBusy || !kit?.speech3d}
         onClick={() => run(async () => {
@@ -148,8 +161,10 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
         setVoice(next)
         if (slot && isCharacterVoiceReady(next)) onApply?.({ character: { id: slot.character?.id ?? slot.id, name: slot.character?.name ?? name, ...slot.character, voice: next } })
       }} />
+      {!slot && <CharacterLanguageVoices key={`languages-${id}`} workspace={workspace} value={voicesByLanguage}
+        savedKits={Object.values(library?.kits ?? {})} onBusyChange={setVoiceBusy} onChange={setVoicesByLanguage} characterName={name} />}
       <button data-testid="save-character" className="min-h-10 rounded border border-border px-3"
-        disabled={speechBusy || !isCharacterVoiceReady(voice) || !canSaveDefinition(library, name, slot)}
+        disabled={speechBusy || !isCharacterVoiceReady(voice) || !languageVoicesReady(voicesByLanguage) || !canSaveDefinition(library, name, slot)}
         onClick={() => { void saveAll().catch(() => undefined) }}>{busy ? t('speech.busy') : t('speech.saveCharacter')}</button>
       <button className="min-h-10 px-2 underline" disabled={workshopDirty || speechBusy} onClick={() => run(async () => {
         const saved = await fetchCharacterKitLibrary(workspace)
@@ -157,7 +172,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
         setLibrary(saved); setNotice(t('speech.libraryReloaded'))
         if (lockIdentity) {
           const restored = saved.kits[id] ?? initialKit
-          setName(restored?.name ?? ''); setVoice(restored?.voice); setModel(undefined)
+          setName(restored?.name ?? ''); setVoice(restored?.voice); setVoicesByLanguage(restored?.voicesByLanguage); setModel(undefined)
         }
       })}>{t('speech.reloadLibrary')}</button>
       {!slot && <CharacterDefinitionSpeechTools workspace={workspace} kit={library?.kits[id]}

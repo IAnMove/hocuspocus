@@ -5,6 +5,10 @@ import { SPEECH_TEMPLATE_IDS } from './speech/templateIds'
 import type { Scene3DSpeech, Scene3DSoundtrack } from './speech/types'
 import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
 import { PIXEL_TEMPLATE_IDS } from './pixel/pixelTemplateIds'
+import { ATMOS_TEMPLATE_IDS } from './atmos/registryIds.ts'
+import { TECHNIQUE_TEMPLATE_IDS } from './techniqueTemplateIds'
+import type { AtmosSetId } from './atmos/registryIds.ts'
+import type { AtmosSettings } from './atmos/params.ts'
 
 export type Vec3 = readonly [number, number, number]
 
@@ -122,6 +126,8 @@ export const SCENE3D_TEMPLATE_IDS = [
   'hangar-talk',
   'sea-talk',
   'voxel-talk',
+  ...ATMOS_TEMPLATE_IDS,
+  ...TECHNIQUE_TEMPLATE_IDS,
 ] as const
 
 export type Scene3DTemplateId = (typeof SCENE3D_TEMPLATE_IDS)[number]
@@ -140,9 +146,13 @@ export type Scene3DClipPlayback = {
 export type Scene3DMotion = {
   to: Vec3
   via?: Vec3
+  /** Waypoints between the start and `to`, walked on a centripetal Catmull-Rom curve. */
+  points?: Vec3[]
   faceTravel?: boolean
   turnTo?: number
   easing?: 'linear' | 'smooth'
+  /** A baked humanoid walk of this path with planted feet; while it matches, the clip moves the model. */
+  walk?: import('./walkPath').Scene3DMotionWalk
 }
 
 export type Scene3DSlotMedia = 'model3d' | 'image' | 'screen'
@@ -152,7 +162,7 @@ export type Scene3DLoop = {
   speed: number
 }
 
-export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino' | 'pixel-lake' | 'pixel-peaks' | 'pixel-gallery' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza'
+export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino' | 'pixel-lake' | 'pixel-peaks' | 'pixel-gallery' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza' | AtmosSetId
 
 export type Scene3DSourceRef = {
   workspaceId: string
@@ -162,8 +172,10 @@ export type Scene3DSourceRef = {
 }
 
 export type Scene3DSlot = {
+  rhythm?: import('./rhythm').Scene3DSlotRhythm
   character?: { id: string; name: string; kitRef?: import('../../lib/characterVoice').CharacterKitRef;
-    libraryRevision?: number; voice?: import('../../lib/characterVoice').CharacterVoice }
+    libraryRevision?: number; voice?: import('../../lib/characterVoice').CharacterVoice
+    voicesByLanguage?: import('../../lib/characterVoice').CharacterVoicesByLanguage }
   id: string
   slot: Scene3DSlotId
   position: Vec3
@@ -182,6 +194,10 @@ export type Scene3DSlot = {
   grounded?: boolean
   clip: Scene3DClipRef | null
   clipPlayback?: Scene3DClipPlayback
+  /** A sequence of clips with crossfades. When present it drives the model; `clip` and `clipPlayback` are ignored. */
+  clips?: import('./clipCues').Scene3DClipCue[]
+  /** This prop is carried in another slot's whole hand. Absent means the slot stays where it was placed. */
+  hold?: import('./handHold').Scene3DHold
   motion?: Scene3DMotion
   loop?: Scene3DLoop
 }
@@ -211,6 +227,9 @@ export type Scene3DFraming = {
   orbitTurns?: number
   rollFrom?: number
   rollTo?: number
+  /** Lens size at the start and end of the move. Omitted values keep `camera.fov`. */
+  fovFrom?: number
+  fovTo?: number
   relativeToFacing?: boolean
 }
 
@@ -222,6 +241,9 @@ export type Scene3DLight = {
 }
 
 export type Scene3DDocument = {
+  rhythm?: import('./rhythm').Scene3DRhythm
+  /** Whole-frame low-resolution, flat-shaded, close-fog look for authored models. */
+  renderLook?: 'n64'
   soundtrack?: Scene3DSoundtrack[]
   production?: { kind: 'song' | 'dialogue' | 'episode' | 'trailer'; title: string; sourceId?: string; workspace: string }
   version: 1
@@ -247,14 +269,29 @@ export type Scene3DDocument = {
   light: Scene3DLight
   environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road'; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number }
   dressing?: Scene3DDressing
+  atmos?: AtmosSettings
+  /** Light from the environment (reflections, soft fill). New scenes get a generated room. */
+  lighting?: import('./look').Scene3DLighting
+  /** Tone mapping, exposure and an optional LUT. Absent: the renderer's previous behaviour. */
+  look?: import('./look').Scene3DLook
   workshopScreen?: 'code' | 'error' | 'success'
   slots: Scene3DSlot[]
+}
+
+/** A foot landing inside a clip, in clip seconds, written by the humanoid rig as
+ * `animations[i].extras.hocuspocus_contacts`. */
+export type Scene3DFootContact = {
+  t: number
+  foot: 'left' | 'right'
+  strength: number
 }
 
 export type Scene3DClipCatalogEntry = {
   index: number
   name: string
   durationSeconds: number | null
+  /** Foot landings, when the GLB records them. */
+  contacts?: Scene3DFootContact[]
 }
 
 export type Scene3DClipError = {

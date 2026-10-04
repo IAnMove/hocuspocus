@@ -1,8 +1,9 @@
 """Rig & animate job manager for Maestro's 3D outputs.
 
 Runs the procedural rigging worker (app/services/hunyuan3d/rig_worker.py)
-in the Hunyuan3D isolated environment. Jobs are CPU-only and finish in
-seconds, but the lifecycle mirrors model3d_service: short-lived worker
+with the app's own Python on every machine (it only needs numpy and
+pygltflib), or the Hunyuan3D environment on installs not yet updated. Jobs
+are CPU-only and finish in seconds, but the lifecycle mirrors model3d_service: short-lived worker
 subprocess, MAESTRO_EVENT progress streaming, on-disk pid files with a
 startup reaper, watchdog timeouts and a bounded in-memory registry.
 """
@@ -10,12 +11,14 @@ startup reaper, watchdog timeouts and a bounded in-memory registry.
 from __future__ import annotations
 
 import atexit
+import importlib.util
 import json
 import os
 import re
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -28,6 +31,7 @@ from typing import Any
 from . import resource_scheduler
 from .asset_manifest import publish_generation_sidecar_best_effort
 
+APP_DIR = Path(__file__).resolve().parents[1]
 SERVICE_DIR = Path(__file__).resolve().parent / "hunyuan3d"
 ENV_DIR = SERVICE_DIR / "env"
 INSTALL_MARKER = ENV_DIR / ".maestro_hunyuan3d_v1.installed"
@@ -97,7 +101,7 @@ RIG_PROFILES: list[dict[str, Any]] = [
     {
         "id": "humanoid",
         "label": "Humanoid",
-        "description": "Upright characters. Uses a denser Y-up body chain; it is a procedural approximation, not semantic limb retargeting.",
+        "description": "Upright characters. UniRig maps recognizable Y-up limbs for idle, walk and wobble; other clips and the procedural engine use body-chain approximations.",
         "default_spine_joints": 7,
         "default_axis_mode": "y",
         "default_weight_falloff": 2.4,
@@ -170,9 +174,19 @@ _WORKER_INACTIVITY_LIMIT_SECONDS = 2 * 60
 _WORKER_TIME_LIMIT_SECONDS = 10 * 60
 
 
+def cpu_worker_python() -> Path | None:
+    """Interpreter that can import numpy and pygltflib for the CPU rig workers."""
+    return _python_path()
+
+
 def _python_path() -> Path | None:
-    candidates = [managed_python_path(ENV_DIR)]
-    return next((path for path in candidates if path.is_file() and managed_ready("hunyuan3d")), None)
+    # Procedural rigging must not depend on the optional CUDA 3D engine.
+    if all(importlib.util.find_spec(name) for name in ("numpy", "pygltflib")):
+        return Path(sys.executable)
+    hunyuan = managed_python_path(ENV_DIR)
+    if hunyuan.is_file() and INSTALL_MARKER.is_file() and managed_ready("hunyuan3d"):
+        return hunyuan
+    return None
 
 
 def _unirig_python_path() -> Path | None:
@@ -182,10 +196,10 @@ def _unirig_python_path() -> Path | None:
 
 def installation_status() -> dict[str, Any]:
     python_path = _python_path()
-    installed = bool(python_path and INSTALL_MARKER.is_file() and WORKER_PATH.is_file())
+    installed = bool(python_path and WORKER_PATH.is_file())
     return {
         "installed": installed,
-        "install_hint": None if installed else "Run HocusPocus Lab's standard Install or Update action (the rig worker shares the Hunyuan3D runtime).",
+        "install_hint": None if installed else "Run Update in Pinokio to add procedural rigging to the app environment.",
     }
 
 
@@ -293,8 +307,16 @@ def capabilities() -> dict[str, Any]:
                 "installed": unirig_status["installed"],
                 "install_hint": unirig_status["install_hint"],
             },
+            {
+                "id": "humanoid",
+                "label": "Humanoid (standard)",
+                "description": "Mixamo-named skeleton fitted to a character standing in a T or A pose, with clips baked for its proportions. CPU only. Refuses meshes it cannot rig safely (arms against the body, legs together).",
+                "installed": status["installed"],
+                "install_hint": status["install_hint"],
+            },
         ],
         "animations": ANIMATIONS,
+        "humanoid_animations": _humanoid_animation_catalog(),
         "rig_profiles": RIG_PROFILES,
         "default_rig_profile": DEFAULT_RIG_PROFILE,
         "default_spine_joints": 5,
@@ -336,6 +358,51 @@ def _prune_finished_jobs_locked() -> None:
             _jobs.pop(job_id, None)
 
 
+def _humanoid_animation_catalog() -> list[dict[str, Any]]:
+    from services.humanoid_rig.clips import clip_catalog
+
+    return clip_catalog()
+
+
+def _humanoid_animations(value: Any) -> list[str]:
+    from services.humanoid_rig.names import CLIP_IDS
+
+    if not isinstance(value, list) or not value:
+        raise ValueError("Select at least one animation")
+    if any(not isinstance(item, str) for item in value):
+        raise ValueError("Animation identifiers must be strings")
+    animations = list(dict.fromkeys(item.strip() for item in value))
+    if any(not item for item in animations):
+        raise ValueError("Animation identifiers cannot be empty")
+    invalid = [item for item in animations if item not in CLIP_IDS]
+    if invalid:
+        raise ValueError(f"Unknown animations: {', '.join(invalid)}")
+    return animations
+
+
+def _animation_catalog(engine: str):
+    if engine == "humanoid":
+        from services.humanoid_rig.names import CLIP_IDS
+        return CLIP_IDS
+    return ANIMATION_IDS
+
+
+def _requested_profile(raw_profile: Any, engine: str) -> tuple[bool, str]:
+    """``(explicit, profile id)``. The humanoid engine fits its own skeleton, so it records ``humanoid``."""
+    explicit = raw_profile is not None and str(raw_profile).strip() != ""
+    if engine == "humanoid":
+        return explicit, "humanoid"
+    return explicit, str(raw_profile).strip().lower() if explicit else DEFAULT_RIG_PROFILE
+
+
+def _humanoid_pose(value: Any) -> str:
+    """The rest pose is detected from the mesh; ``t`` and ``a`` stay accepted as hints."""
+    pose = str(value or "auto").strip().lower()
+    if pose not in {"auto", "t", "a"}:
+        raise ValueError("pose must be auto, t or a")
+    return pose
+
+
 def start_job(
     *,
     body: dict[str, Any],
@@ -356,16 +423,14 @@ def start_job(
         raise ValueError("Too many queued rig jobs; wait for the current ones to finish or cancel them")
 
     engine = str(body.get("engine") or "procedural")
-    if engine not in {"procedural", "unirig"}:
+    if engine not in {"procedural", "unirig", "humanoid"}:
         raise ValueError(f"Unknown rig engine: {engine}")
     if engine == "unirig":
         unirig_status = unirig_installation_status()
         if not unirig_status["installed"]:
             raise RuntimeError(unirig_status["install_hint"])
 
-    raw_profile = body.get("rig_profile")
-    profile_was_explicit = raw_profile is not None and str(raw_profile).strip() != ""
-    rig_profile = str(raw_profile).strip().lower() if profile_was_explicit else DEFAULT_RIG_PROFILE
+    profile_was_explicit, rig_profile = _requested_profile(body.get("rig_profile"), engine)
     profile = RIG_PROFILES_BY_ID.get(rig_profile)
     if profile is None:
         raise ValueError(f"Unknown rig profile: {rig_profile}")
@@ -373,8 +438,13 @@ def start_job(
     # Preserve the pre-profile API behaviour when old clients omit the field:
     # all clips and the original 5/auto/2 defaults remain valid. New clients
     # get the selected profile's curated clips and fitting defaults.
-    animations = body.get("animations")
-    if animations is None:
+    pose = "t"
+    if engine == "humanoid":
+        animations = _humanoid_animations(body.get("animations"))
+        pose = _humanoid_pose(body.get("pose"))
+    else:
+        animations = body.get("animations")
+    if engine != "humanoid" and animations is None:
         animations = (
             list(profile["recommended_animations"])
             if profile_was_explicit
@@ -382,17 +452,18 @@ def start_job(
         )
     if not isinstance(animations, list) or not animations:
         raise ValueError("Select at least one animation")
-    if len(animations) > len(ANIMATION_IDS):
-        raise ValueError(f"Select at most {len(ANIMATION_IDS)} animations")
+    catalog_size = len(_animation_catalog(engine))
+    if len(animations) > catalog_size:
+        raise ValueError(f"Select at most {catalog_size} animations")
     if any(not isinstance(item, str) for item in animations):
         raise ValueError("Animation identifiers must be strings")
     animations = list(dict.fromkeys(item.strip() for item in animations))
     if not animations or any(not item for item in animations):
         raise ValueError("Animation identifiers cannot be empty")
-    invalid = [item for item in animations if item not in ANIMATION_IDS]
+    invalid = [item for item in animations if item not in _animation_catalog(engine)]
     if invalid:
         raise ValueError(f"Unknown animations: {', '.join(map(str, invalid))}")
-    if profile_was_explicit:
+    if profile_was_explicit and engine != "humanoid":
         allowed = set(profile["allowed_animations"])
         incompatible = [item for item in animations if item not in allowed]
         if incompatible:
@@ -416,16 +487,21 @@ def start_job(
     except (TypeError, ValueError):
         weight_falloff = default_weight_falloff
 
+    from services.hunyuan3d.humanoid_animation import animation_tempo, rig_seed
     request_data = {
         "engine": engine,
         "workspace": str(workspace or "default"),
         "source": os.path.abspath(source_path),
         "rig_profile": rig_profile,
+        "animation_bpm": animation_tempo(body.get("animation_bpm", 120)),
+        "seed": rig_seed(body.get("seed", 12345)),
         "animations": [str(item) for item in animations],
         "spine_joints": spine_joints,
         "axis_mode": axis_mode,
         "weight_falloff": weight_falloff,
     }
+    if engine == "humanoid":
+        request_data["pose"] = pose
     job_id = uuid.uuid4().hex
     task_id = _canonical_task_id(job_id)
     job = {
@@ -606,6 +682,12 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         # GPU inference plus a one-time weights download on first use.
         inactivity_limit = 15 * 60
         time_limit = 2 * 3600
+    elif engine == "humanoid":
+        python_path = _python_path()
+        worker_path = APP_DIR
+        worker_cwd = APP_DIR
+        inactivity_limit = _WORKER_INACTIVITY_LIMIT_SECONDS
+        time_limit = _WORKER_TIME_LIMIT_SECONDS
     else:
         python_path = _python_path()
         worker_path = WORKER_PATH
@@ -626,7 +708,10 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     request_path.write_text(json.dumps(request_data, indent=2), encoding="utf-8")
     pid_path = JOBS_DIR / f"{job_id}.pid"
 
-    command = [str(python_path), str(worker_path), "--request", str(request_path), "--output", str(output_path)]
+    if engine == "humanoid":
+        command = [str(python_path), "-m", "services.humanoid_rig.worker", "--request", str(request_path), "--output", str(output_path)]
+    else:
+        command = [str(python_path), str(worker_path), "--request", str(request_path), "--output", str(output_path)]
     env = isolated_environment(Path(python_path))
     if engine == "unirig":
         # Same network isolation as the Hunyuan3D worker: the public UniRig
@@ -722,7 +807,10 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             return
         if timeout_reason:
             raise RuntimeError(timeout_reason["error"])
-        if exit_code != 0 or not output_path.is_file():
+        if result_summary.get("ok") is False and result_summary.get("error") in _WorkerRefused.CODES:
+            raise _WorkerRefused(result_summary)
+        if exit_code != 0 or not output_path.is_file() or result_summary.get("ok") is False:
+            # A crash: keep the worker's last lines (the traceback) so the failure can be diagnosed.
             detail = "\n".join(lines[-15:]) or f"Rig worker exited with code {exit_code}"
             raise RuntimeError(detail[-4000:])
 
@@ -732,9 +820,14 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             {
                 "joint_count": result_summary.get("joint_count", 0),
                 "animation_chain_joints": result_summary.get("animation_chain_joints", 0),
+                **{key: result_summary[key] for key in (
+                    "animation_mode", "articulated_clips", "humanoid_joints", "animation_warnings", "animation_bpm",
+                ) if key in result_summary},
             }
             if engine == "unirig"
-            else {"spine_joints": result_summary.get("joints", request_data["spine_joints"])}
+            else _humanoid_metrics(result_summary)
+            if engine == "humanoid"
+            else {"spine_joints": result_summary.get("joints", request_data.get("spine_joints", 0))}
         )
         publish_generation_sidecar_best_effort(
             output_path,
@@ -788,7 +881,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         with _lock:
             cancelled = _jobs.get(job_id, {}).get("status") == "cancelled"
         if not cancelled:
-            _update_job(job_id, status="failed", phase="failed", message="Rigging failed", error=str(exc))
+            refusal = exc.fields if isinstance(exc, _WorkerRefused) else {}
+            _update_job(job_id, status="failed", phase="failed", message="Rigging failed", error=str(exc), **refusal)
         if not generation_committed:
             _cleanup_partial_output(output_path)
     finally:
@@ -806,6 +900,37 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 stale_path.unlink(missing_ok=True)
             except Exception:
                 pass
+
+
+class _WorkerRefused(RuntimeError):
+    """The worker declined the mesh or its inputs with a stable code and reason."""
+
+    CODES = ("not_humanoid", "invalid_input")
+
+    def __init__(self, summary: dict[str, Any]) -> None:
+        code = str(summary.get("error") or "rig_failed")
+        reason = str(summary.get("reason") or "")
+        self.fields = {"error_code": code, "error_reason": reason}
+        super().__init__(_REFUSALS.get(reason) or (f"{code}: {reason}" if reason else code))
+
+
+_REFUSALS = {
+    "hands_stuck": "not_humanoid: the arms touch the body or hang straight down. Use a T or A pose with a gap under each arm.",
+    "single_leg": "not_humanoid: no gap between the legs. Use a model standing with its legs apart.",
+    "legs_too_short": "not_humanoid: the legs are too short to rig (or hidden by a dress or robe).",
+    "asymmetry": "not_humanoid: the left and right sides differ too much. Use a symmetric T or A pose.",
+    "not_upright": "not_humanoid: the model does not stand upright (Y up).",
+    "degenerate": "not_humanoid: the mesh is empty or broken.",
+    "arms_raised": "not_humanoid: the arms are raised well above the shoulders. Use a T or A pose.",
+    "turned": "not_humanoid: the model is turned at an angle. Use a model facing the camera straight on.",
+}
+
+
+def _humanoid_metrics(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "joint_count": summary.get("joints", 0),
+        "humanoid": {key: summary[key] for key in ("pose", "arm_drop", "confidence", "warnings", "clips", "height") if key in summary},
+    }
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:

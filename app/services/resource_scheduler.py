@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+import os
 import threading
 import time
 from typing import Callable, Iterator
@@ -25,6 +26,22 @@ REMOTE_PROVIDERS = frozenset({
 # is deliberately separate: matching strings such as ``"Maestro WGP ..."``
 # made runtime ownership depend on product branding and silently broke when
 # the UI was renamed to HocusPocus.
+GPU_WAITER_MAX_WAIT_ENV = "HOCUS_GPU_WAITER_MAX_WAIT_SECONDS"
+DEFAULT_GPU_WAITER_MAX_WAIT_SECONDS = 120.0
+
+
+def gpu_waiter_max_wait_seconds() -> float:
+    """Wait after which a coordinator ticket takes the next GPU turn. ``0`` turns it off."""
+    raw = os.environ.get(GPU_WAITER_MAX_WAIT_ENV)
+    if raw is None or not raw.strip():
+        return DEFAULT_GPU_WAITER_MAX_WAIT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_GPU_WAITER_MAX_WAIT_SECONDS
+    return value if 0 <= value < float("inf") else DEFAULT_GPU_WAITER_MAX_WAIT_SECONDS
+
+
 GPU_ENGINE_H3_LEGACY = "h3-legacy"
 GPU_ENGINE_LOCAL_LLM = "local-llm"
 GPU_ENGINE_WGP = "wgp"
@@ -91,9 +108,10 @@ def local_gpu_lane(gpu_index: int = 0) -> ResourceLane:
     return ResourceLane(f"local_gpu:{index}", f"Local GPU {index}", "local")
 
 
-def cpu_lane(name: str = "llm") -> ResourceLane:
+def cpu_lane(name: str = "llm", capacity: int = 1) -> ResourceLane:
     safe_name = str(name or "task").strip().lower().replace(" ", "_")
-    return ResourceLane(f"local_cpu:{safe_name}", f"Local CPU · {safe_name}", "local")
+    slots = capacity if isinstance(capacity, int) and not isinstance(capacity, bool) and capacity >= 1 else 1
+    return ResourceLane(f"local_cpu:{safe_name}", f"Local CPU · {safe_name}", "local", slots)
 
 
 def remote_lane(provider: str, base_url: str = "") -> ResourceLane:
@@ -400,6 +418,29 @@ class ResourceCoordinator:
                 slot.release()
                 with self._guard:
                     condition.notify_all()
+
+    def has_waiter_owed_turn(
+        self, lane: ResourceLane, *, waited: float, max_wait: float | None = None,
+    ) -> bool:
+        """True when a ticket on ``lane`` has waited longer than ``waited``, or past ``max_wait``.
+
+        The generation queue holds :meth:`shared_lock` through its own FIFO, and
+        its head blocks inside ``acquire`` so a release always wakes it first. A
+        ticket that only polls lost every hand-off: a Video 3D export waited
+        more than 40 minutes behind a full image queue. The generation head asks
+        this before taking the semaphore and stands aside when it is true.
+        Each duration is measured on its own clock, so the two queues never
+        compare timestamps.
+        """
+        limit = gpu_waiter_max_wait_seconds() if max_wait is None else float(max_wait)
+        if limit <= 0:
+            return False
+        threshold = min(max(0.0, float(waited)), limit)
+        now = time.time()
+        with self._guard:
+            state = self._state.get(lane.key)
+            waiters = list(state["waiters"]) if state else []
+        return any(now - float(waiter["queued_at"]) >= threshold for waiter in waiters)
 
     def snapshot(self) -> list[dict]:
         with self._guard:

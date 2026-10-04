@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import type { CharacterKit } from '../../lib/characterKit'
-import type { CharacterKitRef } from '../../lib/characterVoice'
+import { characterVoiceFor, characterVoiceLabel, type CharacterKitRef } from '../../lib/characterVoice'
 import { speechPreparationReadiness } from '../../lib/characterSpeechPreparation'
 import { CharacterKitLink } from '../characters/CharacterKitLink'
 import { useCharacterKitLibrary } from '../characters/useCharacterKitLibrary'
@@ -34,7 +34,7 @@ export function SeriesCharacterSpeech({ workspace, series, character, onPatch, s
   }
   return <section aria-label={t('speech.characterTitle', { name: character.name })} className="mt-3 space-y-2 rounded-lg border border-cyan-500/30 p-3">
     <h4 className="text-xs font-semibold">{t('speech.title')}</h4>
-    <CharacterSpeechStatus kit={kit} />
+    <CharacterSpeechStatus kit={kit} language={series.spokenLanguage || series.language} />
     <button type="button" className={secondaryButton} disabled={busy}
       onClick={() => void configure()}>{t('speech.openCreator')}</button>
     <div className="space-y-1"><p className="text-xs text-text-muted">{t('speech.linkExisting')}</p>
@@ -46,11 +46,13 @@ export function SeriesCharacterSpeech({ workspace, series, character, onPatch, s
   </section>
 }
 
-function CharacterSpeechStatus({ kit }: { kit?: CharacterKit }) {
+/** Shows the voice this series will use: the kit's voice for the spoken language, else its default. */
+function CharacterSpeechStatus({ kit, language }: { kit?: CharacterKit; language: string }) {
   const { t } = useUiTranslation('seriesLab')
   const ready2d = kit && speechPreparationReadiness(kit, 'base').complete
+  const voice = characterVoiceFor(kit, language)
   return <ul className="flex flex-wrap gap-3 text-xs">
-    <li>{t('speech.voice')}: {kit?.voice?.voiceId || t('speech.pending')}</li>
+    <li>{t('speech.voice')}: {voice ? characterVoiceLabel(voice) : t('speech.pending')}</li>
     <li>{t('speech.lipsync2d')}: {t(ready2d ? 'speech.ready' : 'speech.pending')}</li>
     <li>{t('speech.lipsync3d')}: {t(kit?.speech3d?.settings?.face ? 'speech.ready' : 'speech.pending')}</li>
   </ul>

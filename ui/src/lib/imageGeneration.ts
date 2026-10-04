@@ -28,6 +28,8 @@ export type LocalImageOptions = {
   submissionContext?: GenerationSubmissionContext
   /** Stops observation only. Cancelling server work is an explicit separate action. */
   signal?: AbortSignal
+  /** Fixed seed, so several candidates from one prompt differ. Local models only. */
+  seed?: number
 }
 
 export function observeImageRequest<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -256,6 +258,7 @@ async function runLocalImage(
       ...imageParams,
       ...referenceParams,
       ...(options.resolution ? { resolution: options.resolution } : {}),
+      ...(options.seed !== undefined ? { seed: options.seed } : {}),
       prompt,
       negative_prompt: negativePrompt,
       model_type: selected,

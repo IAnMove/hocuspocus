@@ -272,6 +272,12 @@
       "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
+      "file": "tests/test_montage_preview.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
       "file": "tests/test_output_completion_time.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -300,6 +306,18 @@
       "target": "ui/src/stores/useStore.ts",
       "classification": "fragile_source",
       "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
+    },
+    {
+      "file": "tests/test_production_generation_link.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "symbol_importable",
+      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
+    },
+    {
+      "file": "tests/test_production_producer_link.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
       "file": "tests/test_qwen_image_21.py",
@@ -651,6 +669,12 @@
     },
     {
       "file": "ui/tests/inputsPanel.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/lipsCreatorWizard.test.ts",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."

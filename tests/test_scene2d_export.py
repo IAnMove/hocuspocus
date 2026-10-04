@@ -23,6 +23,7 @@ from services.scene2d_export import (
     command_catalog,
     command_handlers,
     freeze_export_command,
+    project_export_receipt,
 )
 from services.scene_documents import SceneDocumentError, command_catalog as document_catalog, get_document, save_document
 from services.task_manager import TaskRegistry
@@ -51,8 +52,9 @@ def _document(**overrides):
     return document
 
 
-def _command(intent="scene2d-1", document=None):
-    return {"version": 1, "operation": OPERATION, "intent_id": intent, "input": {"workspace": WORKSPACE, "document": document or _document()}}
+def _command(intent="scene2d-1", document=None, **extra):
+    return {"version": 1, "operation": OPERATION, "intent_id": intent,
+            "input": {"workspace": WORKSPACE, "document": document or _document(), **extra}}
 
 
 def _workspace_dir(tmp_path):
@@ -97,6 +99,16 @@ def _tone_energy(media, frequency, sample_rate=48000):
         real += sample * math.cos(angle)
         imag += sample * math.sin(angle)
     return (real * real + imag * imag) / max(1, len(samples))
+
+
+def test_freeze_keeps_draft_and_accepts_a_final_shutter():
+    draft = freeze_export_command(_command())["effective"]["input"]["snapshot"]["plan"]
+    assert "quality" not in draft and "shutter" not in draft
+    final = freeze_export_command(_command(quality="final", shutter=90))["effective"]["input"]["snapshot"]["plan"]
+    assert final["quality"] == "final" and final["shutter"] == 90 and final["subframes"] == 4 and final["supersample"] == 1.5
+    with pytest.raises(Exception) as caught:
+        freeze_export_command(_command(quality="draft", shutter=180))
+    assert caught.value.status_code == 422
 
 
 def test_freeze_validates_2d_documents_and_collects_refs():
@@ -168,9 +180,60 @@ def test_freeze_accepts_screen_fx_sound_and_sequence_refs():
     assert error.value.detail["code"] == "missing_ref"
 
 
-def test_catalog_and_lane_do_not_use_the_gpu():
+def test_freeze_gives_colourless_screen_effects_their_catalog_colour():
+    # The effect painters call addColorStop(cue.color); a missing colour failed the whole render.
+    from services.scene2d_schema import EFFECT_COLORS
+    frozen = freeze_export_command(_command(document=_document(sfx=[
+        {"id": "smoke", "kind": "smoke", "start": 0, "end": 1},
+        {"id": "dust", "kind": "dust", "start": 0, "end": 1, "color": "#123456"},
+    ])))
+    cues = frozen["effective"]["input"]["snapshot"]["document"]["sfx"]
+    assert [cue["color"] for cue in cues] == [EFFECT_COLORS["smoke"], "#123456"]
+
+
+def _queued_receipt():
+    return {
+        "version": 1, "commandId": "scene2d-1", "operation": OPERATION, "status": "queued",
+        "entities": [], "artifacts": [], "taskIds": ["task-1"], "pipelineIds": [],
+        "result": {"job_id": "job-1", "task_id": "task-1", "workspace": WORKSPACE, "status": "queued"},
+    }
+
+
+def test_receipt_follows_the_completed_task_and_lists_the_mp4(tmp_path, monkeypatch):
+    stored = _queued_receipt()
+    published = {"name": "clip.mp4", "url": "/api/v1/file/clip.mp4", "workspace": WORKSPACE}
+    task = {"id": "task-1", "status": "completed", "workspace": WORKSPACE, "metadata": {"output": published}, "result_refs": ["clip.mp4"]}
+
+    class Registry:
+        def command_admission(self, intent_id):
+            assert intent_id == "scene2d-1"
+            return {"receipt": stored, "task_id": "task-1"}
+
+        def get(self, task_id):
+            assert task_id == "task-1"
+            return task
+
+    service = _service(tmp_path)
+    monkeypatch.setattr(service, "_registry", lambda _workspace: Registry())
+    viewed = service.receipt(WORKSPACE, "scene2d-1")
+    assert viewed["receipt"]["status"] == "completed"
+    assert viewed["receipt"]["result"]["status"] == "completed"
+    assert viewed["receipt"]["artifacts"] == [published]
+    assert stored["status"] == "queued"
+    assert stored["artifacts"] == []
+    refs_only = {**task, "metadata": {}, "result_refs": ["only.mp4"]}
+    fallback = project_export_receipt(stored, refs_only)
+    assert fallback["artifacts"] == [{"name": "only.mp4", "url": "/api/v1/file/only.mp4", "workspace": WORKSPACE}]
+    running = project_export_receipt(stored, {"status": "running", "workspace": WORKSPACE, "metadata": {}, "result_refs": []})
+    assert running["status"] == "running"
+    assert running["artifacts"] == []
+
+
+def test_catalog_and_lane_do_not_use_the_gpu(monkeypatch):
+    monkeypatch.delenv("HOCUS_SCENE_EXPORT_CONCURRENCY", raising=False)
+    monkeypatch.setattr("services.scene_export_lane.os.cpu_count", lambda: 8)
     assert [item["name"] for item in command_catalog()] == [OPERATION, OPERATION + ".receipt", OPERATION + ".cancel"]
-    assert Scene2DExportService.resource_lane(None) == resource_scheduler.cpu_lane("scene2d-render")
+    assert Scene2DExportService.resource_lane(None) == resource_scheduler.cpu_lane("scene2d-render", capacity=2)
 
 
 def test_missing_workspace_media_is_refused_before_admission(tmp_path):
@@ -200,6 +263,38 @@ def test_missing_upload_media_is_refused_before_admission(tmp_path):
     document = _document(layers=[_layer(source="/api/v1/uploads/local-hero.png")])
     with pytest.raises(Exception) as error:
         service.submit(_command(intent="scene2d-upload-missing", document=document))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+
+
+def test_freeze_marks_uploads_gallery_file_urls():
+    document = _document(layers=[_layer(source="/api/v1/file/gallery-hero.png?workspace=__uploads__")])
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["refs"] == [{"layerId": "bg", "url": "/api/v1/file/gallery-hero.png?workspace=__uploads__",
+                                 "kind": "image", "filename": "gallery-hero.png", "root": "uploads"}]
+
+
+def test_uploads_gallery_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.uploads_dir()) / "gallery-hero.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source="/api/v1/file/gallery-hero.png?workspace=__uploads__")])
+    receipt = service.submit(_command(intent="scene2d-uploads-gallery", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_scoped_workspace_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.workspace_dir("assets")) / "shared.png", 8, 8, (40, 50, 60))
+    document = _document(layers=[_layer(source="/api/v1/file/shared.png?workspace=assets")])
+    receipt = service.submit(_command(intent="scene2d-scoped", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_missing_scoped_workspace_file_is_refused(tmp_path):
+    service = _service(tmp_path)
+    write_png(Path(service.workspace_dir(WORKSPACE)) / "shared.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source="/api/v1/file/shared.png?workspace=assets")])
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent="scene2d-scoped-missing", document=document))
     assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
 
 
@@ -275,6 +370,39 @@ def test_finish_media_keeps_screen_fx_when_mixing_audio_tracks(tmp_path):
     assert _tone_energy(mixed, 330) > 10 * noise
 
 
+def test_a_series_mix_dips_music_and_effects_under_speech(tmp_path):
+    from services.scene2d_export import duck_db, duck_expression
+    assert duck_db({"audioMix": {"duckDb": 10}}) == 10 and duck_db({}) == 0 and duck_db({"audioMix": {"duckDb": 99}}) == 0
+    assert duck_expression([], 10) is None and duck_expression([(1, 2)], 0) is None
+    assert duck_expression([(1, 2), (3, 4)], 10).startswith("1-0.6838*max(min(clip((t-0.920)/0.12")
+    service = _service(tmp_path)
+    root = Path(service.workspace_dir(WORKSPACE))
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    encoded = staging / "silent.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=64x36:d=2:r=24",
+                    "-pix_fmt", "yuv420p", str(encoded)], check=True)
+    _tone(root / "bed.wav", 440, duration=2)
+    _tone(root / "vo.wav", 330, duration=0.6)
+
+    def music_during_and_before(document):
+        mixed = service.finish_media({"workspace": WORKSPACE, "document": document,
+                                      "plan": {"width": 64, "height": 36, "fps": 24, "duration": 2, "count": 48}, "refs": []},
+                                     staging, encoded)
+        parts = []
+        for start, end in ((1.1, 1.5), (0.1, 0.5)):
+            part = staging / f"part-{start}.wav"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(start), "-to", str(end), "-i", str(mixed), str(part)], check=True)
+            parts.append(_tone_energy(part, 440))
+        return parts
+    tracks = [{"id": "vo", "filename": "vo.wav", "name": "vo", "kind": "speech", "startTime": 1.0, "volume": 1},
+              {"id": "bed", "filename": "bed.wav", "name": "bed", "kind": "music", "startTime": 0, "volume": 1}]
+    during, before = music_during_and_before(_document(audioTracks=tracks))
+    assert during > 0.8 * before, "without audioMix nothing dips"
+    during, before = music_during_and_before(_document(audioTracks=tracks, audioMix={"duckDb": 10}))
+    assert during < 0.15 * before, "10 dB is a tenth of the power"
+
+
 def test_scene_documents_save_2d_and_3d_revisions(tmp_path):
     workspace_dir = _workspace_dir(tmp_path)
     saved = save_document(WORKSPACE, _document(), name="Intro shot", preview=None, workspace_dir=workspace_dir)
@@ -292,3 +420,18 @@ def test_scene_documents_save_2d_and_3d_revisions(tmp_path):
     with pytest.raises(SceneDocumentError):
         save_document(WORKSPACE, _document(layers=[_layer(sequence={"kind": "frames", "sources": ["https://example.com/a.png"], "fps": 8, "loop": "loop"})]), name=None, preview=None, workspace_dir=workspace_dir)
     assert [item["name"] for item in document_catalog()] == ["scenes.document.save", "scenes.document.get"]
+
+
+def test_series_lab_media_in_a_workspace_subfolder_can_be_exported(tmp_path):
+    # Series Lab keeps location images in assets/<series>/; the export used to look only at the file name.
+    service = _service(tmp_path)
+    folder = Path(_workspace_dir(tmp_path)(WORKSPACE)) / "assets" / "uv"
+    folder.mkdir(parents=True)
+    write_png(folder / "garage.png", 8, 8, (10, 20, 30))
+    document = _document(layers=[_layer(source=f"/api/v1/file/assets/uv/garage.png?workspace={WORKSPACE}")])
+    admitted = service.submit(_command("scene2d-subfolder", document))
+    assert admitted["receipt"]["taskIds"]
+    escaping = _document(layers=[_layer(source=f"/api/v1/file/assets/../../secret.png?workspace={WORKSPACE}")])
+    with pytest.raises(Exception) as error:
+        service.submit(_command("scene2d-escape", escaping))
+    assert error.value.status_code == 422

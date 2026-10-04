@@ -1,40 +1,98 @@
-// Video 2D scene documents for the four unapproved candidates. They use effect
-// layers so an export does not depend on a missing example file.
+// Video 2D scene documents for the four unapproved candidates. Effect layers
+// keep a compile without files exportable; provided slot images still bind.
 import { buildTextTemplate } from '../../lib/kineticText'
-import type { Scene } from '../../types'
+import type { Scene, SceneLayer } from '../../types'
 import { FINISH_PRESETS } from '../../lib/scene2d/finish'
 
-const layer = (id: string, kind: 'dust' | 'smoke' | 'bokeh' | 'leaves') => ({
+export type Video2dCandidateSize = { width?: number; height?: number; duration?: number; fps?: number }
+export type Video2dCandidateAssets = Partial<Record<'hero' | 'plate' | 'foreground', string>>
+
+function candidateFrame(id: string, size: Video2dCandidateSize) {
+  const vertical = id === 'lyric-vertical'
+  let width = vertical ? 1080 : 1920
+  let height = vertical ? 1920 : 1080
+  let duration = 6
+  if (typeof size.width === 'number') width = size.width
+  if (typeof size.height === 'number') height = size.height
+  if (typeof size.duration === 'number') duration = size.duration
+  return { start: 0, duration, width, height }
+}
+
+function candidateFps(id: string, fps: number | undefined): 24 | 30 | 60 {
+  if (fps === 24 || fps === 30 || fps === 60) return fps
+  return id === 'lyric-vertical' ? 30 : 24
+}
+
+/** Duration 6 keeps the authored cue times; other durations scale that timeline. */
+function scaled(value: number, duration: number) {
+  if (duration === 6) return value
+  return value * duration / 6
+}
+
+const layer = (id: string, kind: 'dust' | 'smoke' | 'bokeh' | 'leaves', duration: number) => ({
   id, name: id, type: 'effect' as const, source: '', visible: true, z: 0,
   transform: { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 },
-  animation: { start: { x: 50, y: 50, scale: 1, opacity: 1 }, end: { x: 50, y: 50, scale: 1.04, opacity: 1 }, duration: 6, curve: 'ease' as const },
+  animation: { start: { x: 50, y: 50, scale: 1, opacity: 1 }, end: { x: 50, y: 50, scale: 1.04, opacity: 1 }, duration, curve: 'ease' as const },
   atmosphere: { kind, density: 24, speed: 0.4, size: 1.2, wind: 4, color: '#dbe7f5' },
 })
 
-export function compileVideo2dCandidate(id: string): Scene | undefined {
-  const frame = { start: 0, duration: 6, width: id === 'lyric-vertical' ? 1080 : 1920, height: id === 'lyric-vertical' ? 1920 : 1080 }
+function imageSource(source: string | undefined) {
+  const text = source?.trim() ?? ''
+  if (!text || /^data:model\/gltf-binary;/i.test(text) || /\.glb(?:$|[?#])/i.test(text)) return ''
+  return text
+}
+
+function imageLayer(id: string, source: string, duration: number, z: number): SceneLayer {
+  const pose = { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 }
+  return {
+    id, name: id, type: 'image', source, visible: true, z, fill: id !== 'hero',
+    transform: pose,
+    animation: { start: pose, end: pose, duration, curve: 'ease' },
+  }
+}
+
+function withSlotImages(layers: SceneLayer[], assets: Video2dCandidateAssets | undefined, duration: number) {
+  const extras: SceneLayer[] = []
+  const plate = imageSource(assets?.plate)
+  const hero = imageSource(assets?.hero)
+  const foreground = imageSource(assets?.foreground)
+  if (plate) extras.push(imageLayer('plate', plate, duration, 0))
+  if (hero) extras.push(imageLayer('hero', hero, duration, 10))
+  if (foreground) extras.push(imageLayer('foreground', foreground, duration, 80))
+  if (!extras.length) return layers
+  const taken = new Set(extras.map(item => item.id))
+  return [...extras, ...layers.map(item => {
+    if (!taken.has(item.id)) return { ...item, z: Math.max(item.z ?? 0, 20) }
+    const id = `atmosphere-${item.id}`
+    return { ...item, id, name: id, z: Math.max(item.z ?? 0, 20) }
+  })]
+}
+
+export function compileVideo2dCandidate(id: string, size: Video2dCandidateSize = {}, assets: Video2dCandidateAssets = {}): Scene | undefined {
+  const frame = candidateFrame(id, size)
+  const fps = candidateFps(id, size.fps)
   if (id === 'documentary-history') return {
-    version: 1, name: 'Documentary', width: frame.width, height: frame.height, fps: 24, duration: 6,
-    layers: [layer('plate', 'dust')],
+    version: 1, name: 'Documentary', width: frame.width, height: frame.height, fps, duration: frame.duration,
+    layers: withSlotImages([layer('plate', 'dust', frame.duration)], assets, frame.duration),
     texts: [...buildTextTemplate('lower-third-date', { date: '1968', caption: 'The harbour keeps the light' }, frame), ...buildTextTemplate('year-counter', { from: '1960', to: '1968', label: 'Year' }, frame)],
     finish: FINISH_PRESETS.oldDoc,
   }
   if (id === 'trailer-teaser') return {
-    version: 1, name: 'Trailer', width: frame.width, height: frame.height, fps: 24, duration: 6,
-    layers: [layer('black', 'smoke')],
-    texts: [...buildTextTemplate('trailer-slam', { lines: 'ONE|LAST|LIGHT' }, frame), ...buildTextTemplate('title-card', { title: 'Musktopia', subtitle: 'A harbour story' }, { ...frame, start: 4.2, duration: 0.8 }), ...buildTextTemplate('end-card', { title: 'Coming soon', cta: '@studio' }, { ...frame, start: 5.1, duration: 0.9 })],
+    version: 1, name: 'Trailer', width: frame.width, height: frame.height, fps, duration: frame.duration,
+    layers: withSlotImages([layer('black', 'smoke', frame.duration)], assets, frame.duration),
+    texts: [...buildTextTemplate('trailer-slam', { lines: 'ONE|LAST|LIGHT' }, frame), ...buildTextTemplate('title-card', { title: 'Musktopia', subtitle: 'A harbour story' }, { ...frame, start: scaled(4.2, frame.duration), duration: scaled(0.8, frame.duration) }), ...buildTextTemplate('end-card', { title: 'Coming soon', cta: '@studio' }, { ...frame, start: scaled(5.1, frame.duration), duration: scaled(0.9, frame.duration) })],
     finish: { ...FINISH_PRESETS.warmCinema, bloom: { amount: 0.4, threshold: 0.6, radius: 0.4 }, letterbox: { ratio: 2.39, color: '#000000' } },
   }
   if (id === 'lyric-vertical') return {
-    version: 1, name: 'Lyric', width: frame.width, height: frame.height, fps: 30, duration: 6,
-    layers: [layer('glow', 'bokeh')],
-    lyrics: { mode: 'karaoke', lines: [{ id: 'line', start: 0.2, end: 5.5, words: [{ text: 'The', start: 0.2, end: 0.8 }, { text: 'bird', start: 0.8, end: 1.6 }, { text: 'is', start: 1.6, end: 2 }, { text: 'freed', start: 2, end: 3.4 }] }], style: { font: 'sans', size: 6, color: '#f4efe6', activeColor: '#9ae7ff', x: 50, y: 70, maxWidth: 76, align: 'center', visibleLines: 2, beatPulse: 0.35 }, source: { kind: 'manual' } },
+    version: 1, name: 'Lyric', width: frame.width, height: frame.height, fps, duration: frame.duration,
+    layers: withSlotImages([layer('glow', 'bokeh', frame.duration)], assets, frame.duration),
+    lyrics: { mode: 'karaoke', lines: [{ id: 'line', start: scaled(0.2, frame.duration), end: scaled(5.5, frame.duration), words: [{ text: 'The', start: scaled(0.2, frame.duration), end: scaled(0.8, frame.duration) }, { text: 'bird', start: scaled(0.8, frame.duration), end: scaled(1.6, frame.duration) }, { text: 'is', start: scaled(1.6, frame.duration), end: scaled(2, frame.duration) }, { text: 'freed', start: scaled(2, frame.duration), end: scaled(3.4, frame.duration) }] }], style: { font: 'sans', size: 6, color: '#f4efe6', activeColor: '#9ae7ff', x: 50, y: 70, maxWidth: 76, align: 'center', visibleLines: 2, beatPulse: 0.35 }, source: { kind: 'manual' } },
     finish: FINISH_PRESETS.nightNeon,
-    rhythm: { bpm: 96, beats: [0.4, 1.0, 1.6, 2.2, 2.8, 3.4] },
+    rhythm: { bpm: 96, beats: [0.4, 1.0, 1.6, 2.2, 2.8, 3.4].map(beat => scaled(beat, frame.duration)) },
   }
   if (id === 'city-postcard') return {
-    version: 1, name: 'Postcard', width: frame.width, height: frame.height, fps: 24, duration: 6,
-    layers: [{ ...layer('sky', 'leaves'), strip: { enabled: true, count: 3, spacing: 30, direction: 'left' as const, speed: 6 }, animation: { start: { x: 20, y: 60, scale: 1, opacity: 1 }, end: { x: 80, y: 40, scale: 1, opacity: 1 }, duration: 6, curve: 'ease' as const, path: { points: [{ x: 15, y: 70 }, { x: 40, y: 42 }, { x: 78, y: 58 }], orient: true } } }],
+    version: 1, name: 'Postcard', width: frame.width, height: frame.height, fps, duration: frame.duration,
+    layers: withSlotImages([{ ...layer('sky', 'leaves', frame.duration), strip: { enabled: true, count: 3, spacing: 30, direction: 'left' as const, speed: 6 }, animation: { start: { x: 20, y: 60, scale: 1, opacity: 1 }, end: { x: 80, y: 40, scale: 1, opacity: 1 }, duration: frame.duration, curve: 'ease' as const, path: { points: [{ x: 15, y: 70 }, { x: 40, y: 42 }, { x: 78, y: 58 }], orient: true } } }], assets, frame.duration),
     texts: buildTextTemplate('chorus-banner', { line: 'Salt on the windows' }, frame),
     finish: { ...FINISH_PRESETS.paperComic, rays: { amount: 0.25, x: 70, y: 20, length: 0.4, threshold: 0.7 } },
   }

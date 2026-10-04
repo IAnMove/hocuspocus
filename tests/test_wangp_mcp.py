@@ -372,3 +372,99 @@ def test_canonical_and_legacy_urls_share_tools_and_request_journal(tmp_path):
         assert not replies[0]['isError']
         assert json.loads(replies[0]['content'][0]['text']) == {'job_id': 'task-a'}
         assert len(calls) == 1
+
+
+def test_a_catalog_without_a_mutation_flag_still_lists_every_tool():
+    # tools/list once failed for every client because three catalogs omitted the flag.
+    from routers.wangp_mcp import tool_definitions
+    schema = {'type': 'object', 'required': ['version'], 'properties': {'version': {'type': 'integer', 'const': 1}}}
+    operations = [{'name': 'demo.flagged', 'mutation': False, 'description': 'x', 'inputSchema': schema},
+                  {'name': 'demo.unflagged', 'description': 'x', 'inputSchema': schema}]
+    tools = tool_definitions({operation['name'] for operation in operations}, operations)
+    assert [tool['name'] for tool in tools] == ['demo.flagged', 'demo.unflagged']
+    assert [tool['annotations']['readOnlyHint'] for tool in tools] == [True, False], 'unflagged reads as a mutation'
+
+
+def _catalog_operations():
+    """Every operation from the zero-argument catalog functions in services/ and routers/."""
+    import ast
+    import importlib
+    import inspect
+    from pathlib import Path
+
+    app = Path(__file__).resolve().parents[1] / 'app'
+    for folder in ('services', 'routers'):
+        for path in sorted((app / folder).glob('*.py')):
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            names = [node.name for node in tree.body
+                     if isinstance(node, ast.FunctionDef) and 'catalog' in node.name and not node.name.startswith('_')]
+            if not names:
+                continue
+            try:
+                module = importlib.import_module(f'{folder}.{path.stem}')
+            except ModuleNotFoundError:
+                continue  # An optional heavy dependency; the count check below keeps the scan honest.
+            for name in names:
+                function = getattr(module, name)
+                required = [parameter for parameter in inspect.signature(function).parameters.values()
+                            if parameter.default is parameter.empty
+                            and parameter.kind not in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD)]
+                if required:
+                    continue
+                value = function()
+                operations = value.get('operations') if isinstance(value, dict) else value
+                for operation in operations if isinstance(operations, (list, tuple)) else []:
+                    if isinstance(operation, dict) and 'name' in operation and 'inputSchema' in operation:
+                        yield f'{folder}.{path.stem}.{name}', operation
+
+
+def test_every_mcp_catalog_says_whether_each_operation_mutates():
+    # The router defaults a missing flag to a mutation; a catalog must not rely on that.
+    operations = list(_catalog_operations())
+    assert len(operations) > 100
+    unflagged = sorted({f"{source}: {operation['name']}" for source, operation in operations
+                        if type(operation.get('mutation')) is not bool})
+    assert unflagged == []
+
+
+def test_an_unsupported_version_names_the_versions_the_tool_accepts(tmp_path):
+    # generation.speech only takes version 2; a version 1 call used to list every v2 field as missing.
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    operation = {'name': 'demo.speak', 'version': 2, 'domain': 'demo', 'mutation': False, 'description': 'Demo.',
+                 'inputSchema': {'type': 'object', 'required': ['version', 'input'], 'properties': {
+                     'version': {'type': 'integer', 'const': 2}, 'input': {'type': 'object'}}}}
+    calls = []
+    app = FastAPI()
+    app.include_router(create_wangp_mcp_router(
+        handlers={'demo.speak': lambda arguments: calls.append(arguments) or {'version': 2, 'ok': True}},
+        command_operations=[operation], journal_path=tmp_path / 'journal.sqlite', token_getter=lambda: 'test-token'))
+    client = TestClient(app)
+
+    def call(arguments):
+        reply = client.post('/api/v1/mcp', headers={'Authorization': 'Bearer test-token'}, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'demo.speak', 'arguments': arguments}})
+        return reply.json()['result']
+
+    rejected = call({'version': 1, 'input': {}})
+    assert rejected['isError'] is True
+    error = rejected['structuredContent']['error']
+    assert error['code'] == 'unsupported_version'
+    assert error['supported_versions'] == [2]
+    assert error['message'] == 'demo.speak accepts version 2; got 1'
+    assert calls == []
+    assert call({'version': 2, 'input': {}})['isError'] is False
+    assert len(calls) == 1
+
+
+def test_generation_tools_advertise_the_queue_priority_they_accept():
+    from routers.wangp_mcp import tool_definitions
+    schema = {'type': 'object', 'required': ['version'], 'properties': {'version': {'type': 'integer', 'const': 2}}}
+    operations = [{'name': name, 'version': 2, 'domain': 'generation', 'mutation': mutation, 'description': 'x',
+                   'inputSchema': schema} for name, mutation in
+                  (('generation.speech', True), ('generation.receipt', False), ('scenes.video2d.validate', False))]
+    tools = {tool['name']: tool for tool in tool_definitions({item['name'] for item in operations}, operations)}
+    assert tools['generation.speech']['inputSchema']['properties']['priority']['type'] == 'integer'
+    assert 'priority' not in tools['generation.receipt']['inputSchema']['properties']
+    assert 'priority' not in tools['scenes.video2d.validate']['inputSchema']['properties']
+    assert 'priority' not in schema['properties'], 'the source catalog is not mutated'

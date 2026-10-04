@@ -3,6 +3,7 @@
 import { canonicalSceneFps } from '../sceneFps'
 import { normalizeFaceBinding } from '../cutoutDialogue'
 import { parseFinish } from './finish'
+import { parseSceneFx } from '../../features/sceneFx/types'
 import { lyricFields, parseKineticTexts } from '../kineticText'
 import { parsePath, parseRhythm, parseSequence } from './motion'
 import { getSceneLayerTiming, normalizeSceneEvents, normalizeSceneKeyframes, withNormalizedSceneTiming, withSceneKeyframes } from '../sceneTimeline'
@@ -176,6 +177,19 @@ function layerExtras(rawLayer: RawLayer) {
   return { ...(sequence ? { sequence } : {}), ...(beatPulse ? { beatPulse } : {}) }
 }
 
+function layerWithoutFocus(raw: RawLayer): Omit<RawLayer, 'focus'> {
+  const rest = { ...raw }
+  delete rest.focus
+  return rest
+}
+
+function focusFields(raw: RawLayer): { focus?: { x: number; y: number } } {
+  const focus = raw.focus
+  if (!focus || typeof focus.x !== 'number' || typeof focus.y !== 'number') return {}
+  if (!Number.isFinite(focus.x) || !Number.isFinite(focus.y)) return {}
+  return { focus: { x: Math.max(0, Math.min(100, focus.x)), y: Math.max(0, Math.min(100, focus.y)) } }
+}
+
 function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLayer {
   if (!isAnimatorLayerType((rawLayer as { type?: unknown }).type)) throw new Error(`Unsupported scene layer type: ${String((rawLayer as { type?: unknown }).type ?? 'missing')}`)
   const isCamera = rawLayer.type === 'camera'
@@ -183,7 +197,7 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
   const transform = normalizeTransform(rawLayer.transform)
   const source = String(rawLayer.source ?? '')
   const layer = {
-    ...rawLayer,
+    ...layerWithoutFocus(rawLayer),
     name: typeof rawLayer.name === 'string' && rawLayer.name.trim() ? rawLayer.name : `Layer ${rawLayer.id}`,
     source: isCamera ? '' : source,
     visible: isCamera ? rawLayer.id === context.activeCameraId : rawLayer.visible !== false,
@@ -205,6 +219,7 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
     },
     missingAsset: isCamera || isEffect ? false : Boolean(rawLayer.missingAsset || !source.trim() || context.isMissing(source)),
     ...layerExtras(rawLayer),
+    ...focusFields(rawLayer),
   } as AnimatorLayer
   const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
   const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
@@ -239,5 +254,8 @@ export function normalizeScene2D(raw: unknown): AnimatorScene {
   const duration = Math.min(3600, Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed })))
   const finish = parseFinish(incoming.finish)
   const rhythm = parseRhythm(incoming.rhythm)
-  return { ...incoming, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), ...(finish ? { finish } : {}), ...(rhythm ? { rhythm } : {}), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
+  // Same cue parser as the editor: catalog colour and bounded fields. Painters
+  // call addColorStop(cue.color) and failed on cues saved without a colour.
+  const sfx = parseSceneFx(incoming.sfx)
+  return { ...incoming, sfx: sfx.length ? sfx : undefined, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), ...(finish ? { finish } : {}), ...(rhythm ? { rhythm } : {}), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
 }

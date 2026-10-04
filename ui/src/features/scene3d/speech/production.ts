@@ -6,6 +6,7 @@ import { safeMediaUrl } from './track'
 import { randomUuid } from '../../../lib/uuid'
 
 export type SpeechProductionInput = {
+  analysis?: import('./types').SpeechAnalysisSettings & { isolateVocals?: boolean }
   kind: NonNullable<Scene3DDocument['production']>['kind']
   title: string
   sourceId?: string
@@ -26,7 +27,8 @@ export function buildSpeechProduction(input: SpeechProductionInput): Scene3DDocu
   doc.production = { kind: input.kind, title: input.title, sourceId: input.sourceId, workspace: input.workspace }
   doc.soundtrack = input.audio ? [{ id: 'production-audio', audio: input.audio, start: 0, offset: input.offset, end: input.duration, gain: 1 }] : undefined
   const lines = input.lines?.length ? input.lines : input.cast.map((c, i) => ({
-    id: 'line-' + i, characterId: c.id, text: '', start: i * input.duration / input.cast.length, end: (i + 1) * input.duration / input.cast.length,
+    id: 'line-' + i, characterId: c.id, text: input.cast.length === 1 ? input.analysis?.text ?? '' : '',
+    start: i * input.duration / input.cast.length, end: (i + 1) * input.duration / input.cast.length,
   }))
   if (lines.some(line => !input.cast.some(c => c.id === line.characterId))) throw new Error('Every dialogue line needs a selected 3D character.')
   doc.slots = doc.slots.map(slot => {

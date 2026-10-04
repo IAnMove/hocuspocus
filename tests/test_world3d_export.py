@@ -26,6 +26,7 @@ from services.world3d_export import (
     World3DExportCancelled,
     World3DExportService,
     _OWNED_BROWSER_JS,
+    build_snapshot,
     command_catalog,
     command_handlers,
     export_capabilities,
@@ -35,10 +36,25 @@ from services.world3d_export import (
     staging_dir,
     unsupported_capabilities,
     write_png,
+    write_prores_master,
 )
 
 
 WORKSPACE = "workspace-a"
+
+
+def test_explicit_cpu_renderer_uses_a_cpu_lane_and_reports_its_device(monkeypatch):
+    monkeypatch.setenv("HOCUS_SCENE_RENDER_DEVICE", " CPU ")
+    assert World3DExportService.resource_lane(None) == resource_scheduler.cpu_lane("world3d-render")
+    assert export_capabilities()["renderDevice"] == "cpu"
+    monkeypatch.delenv("HOCUS_SCENE_RENDER_DEVICE")
+    assert World3DExportService.resource_lane(None) == resource_scheduler.local_gpu_lane(0)
+
+
+def test_unknown_renderer_device_fails_before_resource_admission(monkeypatch):
+    monkeypatch.setenv("HOCUS_SCENE_RENDER_DEVICE", "automatic-gpu-bypass")
+    with pytest.raises(ValueError, match="auto or cpu"):
+        World3DExportService.resource_lane(None)
 
 
 def _document(**overrides):
@@ -95,7 +111,12 @@ def _service(tmp_path: Path, renderer=None):
     def registry_for(name: str):
         return TaskRegistry(workspace_dir(name), interrupt_stale=False)
 
-    return World3DExportService(workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer)
+    uploads = tmp_path / "uploads"
+    uploads.mkdir(exist_ok=True)
+    return World3DExportService(
+        workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer,
+        uploads_dir=lambda: str(uploads),
+    )
 
 
 def _client(service, tmp_path: Path) -> TestClient:
@@ -153,35 +174,80 @@ def test_voiced_duration_is_an_explicit_preflight_reject():
     assert "voiced_duration" in error.value.detail["message"]
 
 
-def test_short_voiced_scene_is_rejected_instead_of_silent_mp4():
-    document = _document(duration=2, sfx=[{"id": "spark", "kind": "sparks", "start": 0, "end": 1,
-                                          "sound": True, "volume": 0.4}])
-    assert "voiced_audio" in unsupported_capabilities(document)
-    with pytest.raises(Exception) as error:
-        freeze_export_command(_command(document=document))
-    assert error.value.status_code == 422
-    assert error.value.detail["code"] == "unsupported_capability"
-    assert "voiced_audio" in error.value.detail["message"]
-    spoken = _document(slots=[{
+def _spoken(**speech):
+    return _document(duration=2, slots=[{
         "id": "subject_1", "slot": "subject_1", "position": [0, 0, 0], "rotationY": 0,
         "scale": 1, "sourceUrl": "", "media": "model3d", "clip": None,
-        "speech": {"enabled": True, "audio": {"url": "/api/v1/file/voice.wav", "filename": "voice.wav"}},
+        "speech": {"enabled": True, "audio": {"url": "/api/v1/file/voice.wav", "filename": "voice.wav"}, **speech},
     }])
+
+
+def test_short_voiced_scene_is_admitted_with_its_audio_frozen_as_a_ref():
+    effects = _document(duration=2, sfx=[{"id": "spark", "kind": "sparks", "start": 0, "end": 1,
+                                         "sound": True, "volume": 0.4}])
+    assert unsupported_capabilities(effects) == []
+    spoken = _spoken()
+    assert unsupported_capabilities(spoken) == []
+    refs = freeze_export_command(_command(document=spoken))["effective"]["input"]["snapshot"]["refs"]
+    assert refs == [{"audioId": "subject_1/voice", "url": "/api/v1/file/voice.wav", "kind": "audio",
+                     "filename": "voice.wav", "workspace": WORKSPACE}]
+
+
+def test_voiced_admission_requires_the_audio_file(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
     with pytest.raises(Exception) as error:
-        freeze_export_command(_command(document=spoken))
+        service.submit(_command(intent_id="voiced-missing", document=_spoken()))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+    (Path(service.workspace_dir(WORKSPACE)) / "voice.wav").write_bytes(b"RIFF")
+    assert service.submit(_command(intent_id="voiced-present", document=_spoken()))["replayed"] is False
+    forget_task_registry(service._registry(WORKSPACE).workspace_dir)
+
+
+def test_ephemeral_audio_urls_are_refused():
+    with pytest.raises(Exception) as error:
+        freeze_export_command(_command(document=_spoken(audio={"url": "blob:http://x/1"})))
     assert error.value.detail["code"] == "unsupported_capability"
 
 
-def test_publish_refuses_a_voiced_snapshot_even_if_preflight_is_bypassed(tmp_path):
+@pytest.mark.parametrize("speech", [
+    {"enabled": True, "cues": [{"start": 0, "end": 1, "viseme": "A"}]},
+    {"enabled": True, "audible": False, "audio": {"url": "/api/v1/file/voice.wav"}},
+    {"enabled": False, "audio": {"url": "/api/v1/file/voice.wav"}},
+    {"enabled": True, "audio": {"url": "/api/v1/file/unused.wav"}, "clips": []},
+    {"enabled": True, "clips": [{"audio": {"url": "/api/v1/file/voice.wav"}, "audible": False}]},
+])
+def test_muted_mouth_animation_is_exportable(speech):
+    document = _document()
+    document["slots"][0]["speech"] = speech
+    assert unsupported_capabilities(document) == []
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["document"]["slots"][0]["speech"] == speech
+
+
+def test_only_audible_clips_become_audio_refs():
+    document = _document()
+    document["slots"][0]["speech"] = {"enabled": True, "audible": False, "clips": [
+        {"id": "one", "audio": {"url": "/api/v1/file/one.wav"}, "audible": False},
+        {"id": "two", "audio": {"url": "/api/v1/file/two.wav"}},
+    ]}
+    document["soundtrack"] = [{"id": "bed", "audio": {"url": "/api/v1/uploads/bed.wav"}}]
+    assert unsupported_capabilities(document) == []
+    refs = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]["refs"]
+    assert [(ref["audioId"], ref["filename"], ref.get("root")) for ref in refs] == [
+        ("soundtrack/bed", "bed.wav", "uploads"), ("subject_1/two", "two.wav", None)]
+
+
+def test_publish_refuses_a_voiced_snapshot_without_its_audio_mix(tmp_path):
     service = _service(tmp_path, renderer=_paint)
     snapshot = {
         "workspace": WORKSPACE,
-        "document": _document(duration=2, soundtrack=[{"id": "bed", "audio": {"url": "/api/v1/file/bed.wav"}}]),
+        "document": _document(soundtrack=[{"id": "bed", "audio": {"url": "/api/v1/file/bed.wav"}}]),
         "refs": [],
-        "plan": export_plan(_document(duration=2)),
+        "plan": export_plan(_document()),
     }
-    frames = [tmp_path / "frame_000001.png"]
-    write_png(frames[0], 64, 64, (1, 2, 3))
+    frames = [tmp_path / "frame_000001.png", tmp_path / "frame_000002.png"]
+    for frame in frames:
+        write_png(frame, 64, 64, (1, 2, 3))
 
     class _Token:
         def is_cancelled(self):
@@ -213,6 +279,55 @@ def test_bundled_template_refs_do_not_require_duplicate_workspace_uploads(tmp_pa
     with pytest.raises(Exception) as error:
         _service(tmp_path)._assert_refs(frozen["effective"]["input"]["snapshot"]["refs"], WORKSPACE)
     assert error.value.detail["code"] == "missing_ref"
+
+
+def test_freeze_marks_uploads_gallery_file_urls():
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/hero.glb?workspace=__uploads__"
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["refs"] == [{
+        "slotId": "subject_1", "url": "/api/v1/file/hero.glb?workspace=__uploads__",
+        "kind": "model3d", "filename": "hero.glb", "root": "uploads",
+    }]
+
+
+def test_uploads_gallery_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    (Path(service.uploads_dir()) / "hero.glb").write_bytes(b"glb")
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/hero.glb?workspace=__uploads__"
+    receipt = service.submit(_command(intent_id="world3d-uploads-gallery", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_uploads_prefix_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    (Path(service.uploads_dir()) / "local.glb").write_bytes(b"glb")
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/uploads/local.glb"
+    snapshot = freeze_export_command(_command(document=document))["effective"]["input"]["snapshot"]
+    assert snapshot["refs"][0]["root"] == "uploads"
+    receipt = service.submit(_command(intent_id="world3d-uploads-prefix", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_scoped_workspace_file_url_is_admitted(tmp_path):
+    service = _service(tmp_path)
+    (Path(service.workspace_dir("assets")) / "shared.glb").write_bytes(b"glb")
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/shared.glb?workspace=assets"
+    receipt = service.submit(_command(intent_id="world3d-scoped", document=document))
+    assert receipt["receipt"]["taskIds"]
+
+
+def test_same_basename_in_export_workspace_does_not_admit_missing_scoped_file(tmp_path):
+    service = _service(tmp_path)
+    (Path(service.workspace_dir(WORKSPACE)) / "shared.glb").write_bytes(b"wrong")
+    document = _document()
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/shared.glb?workspace=assets"
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent_id="world3d-scoped-missing", document=document))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
 
 
 @pytest.mark.parametrize("url", ["/examples/../private.png", "/examples/%2e%2e/private.png", "/examples/a%5cprivate.png"])
@@ -417,7 +532,7 @@ def test_capabilities_endpoint_matches_worker_preflight(tmp_path):
     assert listed["renderer"] == "world3d-export-flow"
     assert listed["realRender"] in {"ready", "pending"}
     assert listed["ffmpeg"] is export_capabilities()["ffmpeg"]
-    assert listed["maxVoicedDuration"] == 0
+    assert listed["maxVoicedDuration"] == 180
     assert listed["fps"] == [24, 30, 60]
 
 
@@ -452,3 +567,289 @@ def test_mux_validates_before_replacing_destination(tmp_path):
     video = next(item for item in probe_scene_recording_output(destination)["streams"]
                  if item.get("codec_type") == "video")
     assert video["codec_name"] == "h264"
+
+
+def test_draft_plan_is_unchanged_so_earlier_intents_still_replay():
+    document = _document()
+    assert export_plan(document) == export_plan(document, "draft")
+    assert set(export_plan(document)) == {"width", "height", "fps", "duration", "count"}
+    draft = freeze_export_command(_command())
+    explicit = freeze_export_command(_command(quality="draft"))
+    assert draft["effective"] == explicit["effective"]
+
+
+def test_final_and_master_plans_carry_supersampling_and_msaa():
+    final = export_plan(_document(), "final")
+    master = export_plan(_document(), "master")
+    assert (final["quality"], final["supersample"], final["samples"]) == ("final", 1.5, 4)
+    assert (master["quality"], master["supersample"], master["samples"]) == ("master", 2, 4)
+    assert (final["width"], final["height"]) == (64, 64), "the output size never changes with the level"
+    assert freeze_export_command(_command(quality="final"))["fingerprint"] != freeze_export_command(_command())["fingerprint"]
+
+
+def test_unknown_quality_is_refused_before_admission(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
+    with pytest.raises(Exception) as caught:
+        service.submit(_command(quality="ultra"))
+    assert caught.value.status_code == 422
+    assert "quality" in caught.value.detail["message"]
+    with pytest.raises(ValueError):
+        export_plan(_document(), "ultra")
+
+
+def test_quality_is_offered_in_the_catalog_and_capabilities():
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["quality"]
+    assert schema["enum"] == ["draft", "final", "master"] and schema["default"] == "draft"
+    assert export_capabilities()["qualities"] == ["draft", "final", "master"]
+
+
+def test_each_level_encodes_with_its_profile(tmp_path, monkeypatch):
+    import services.world3d_export as module
+
+    commands = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(command)
+        Path(command[-1]).write_bytes(b"mp4")
+        return type("Done", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(module.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module, "validate_scene_recording_output", lambda *_args, **_kwargs: None)
+    frame = tmp_path / "frames" / "frame_000001.png"
+    write_png(frame, 4, 4, (1, 2, 3))
+    for quality in ("draft", "final", "master"):
+        mux_frame_sequence([frame], tmp_path / f"{quality}.mp4", fps=30, duration=1 / 30, quality=quality)
+    settings = [(c[c.index("-preset") + 1], c[c.index("-crf") + 1], c[c.index("-threads") + 1]) for c in commands]
+    assert settings == [("fast", "18", "1"), ("slow", "14", "0"), ("slow", "12", "0")]
+    assert all("-level" not in command for command in commands)
+
+
+def test_final_and_master_keep_four_k_and_draft_stays_full_hd():
+    ultra = _document(width=3840, height=2160)
+    assert (export_plan(ultra)["width"], export_plan(ultra)["height"]) == (1920, 1080)
+    assert (export_plan(ultra, "final")["width"], export_plan(ultra, "final")["height"]) == (3840, 2160)
+    assert (export_plan(ultra, "master")["width"], export_plan(ultra, "master")["height"]) == (3840, 2160)
+    portrait = _document(width=2160, height=3840)
+    assert (export_plan(portrait)["width"], export_plan(portrait)["height"]) == (1080, 1920)
+    assert (export_plan(portrait, "final")["width"], export_plan(portrait, "final")["height"]) == (2160, 3840)
+    square = _document(width=2160, height=2160)
+    assert (export_plan(square)["width"], export_plan(square)["height"]) == (1080, 1080)
+    assert (export_plan(square, "master")["width"], export_plan(square, "master")["height"]) == (2160, 2160)
+    huge = _document(width=7680, height=4320)
+    assert (export_plan(huge, "master")["width"], export_plan(huge, "master")["height"]) == (3840, 2160)
+    hd = _document(width=1280, height=720)
+    assert (export_plan(hd, "master")["width"], export_plan(hd, "master")["height"]) == (1280, 720)
+
+
+def test_four_k_mux_asks_for_level_5_and_full_hd_does_not(tmp_path, monkeypatch):
+    import services.world3d_export as module
+
+    commands = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(command)
+        Path(command[-1]).write_bytes(b"mp4")
+        return type("Done", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(module.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module, "validate_scene_recording_output", lambda *_args, **_kwargs: None)
+    frame = tmp_path / "frames" / "frame_000001.png"
+    write_png(frame, 4, 4, (1, 2, 3))
+    mux_frame_sequence([frame], tmp_path / "uhd30.mp4", fps=30, duration=1 / 30, width=3840, height=2160)
+    mux_frame_sequence([frame], tmp_path / "uhd60.mp4", fps=60, duration=1 / 60, width=3840, height=2160)
+    mux_frame_sequence([frame], tmp_path / "uhd24.mp4", fps=24, duration=1 / 24, width=2160, height=3840)
+    mux_frame_sequence([frame], tmp_path / "fhd.mp4", fps=60, duration=1 / 60, width=1920, height=1080)
+    assert commands[0][commands[0].index("-level") + 1] == "5.1"
+    assert commands[1][commands[1].index("-level") + 1] == "5.2"
+    assert commands[2][commands[2].index("-level") + 1] == "5.1"
+    assert "-level" not in commands[3]
+
+
+def test_prores_stays_off_unless_master_asks_for_it():
+    assert "prores" not in export_plan(_document(), "master")
+    plain = freeze_export_command(_command(quality="master"))
+    asked = freeze_export_command(_command(intent_id="world3d-prores", quality="master", prores=True))
+    off = freeze_export_command(_command(intent_id="world3d-prores-off", quality="master", prores=False))
+    assert "prores" not in plain["effective"]["input"]["snapshot"]["plan"]
+    assert asked["effective"]["input"]["snapshot"]["plan"]["prores"] is True
+    assert off["fingerprint"] == plain["fingerprint"]
+    assert asked["fingerprint"] != plain["fingerprint"]
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["prores"]
+    assert schema["default"] is False
+    snapshot = build_snapshot(_document(), [], WORKSPACE, "master", prores=True)
+    assert snapshot["plan"]["prores"] is True
+
+
+@pytest.mark.parametrize("patch", [
+    {"prores": True},
+    {"prores": "yes", "quality": "master"},
+    {"prores": 1, "quality": "master"},
+])
+def test_prores_is_refused_unless_it_is_a_master_flag(tmp_path, patch):
+    service = _service(tmp_path, renderer=_paint)
+    with pytest.raises(Exception) as caught:
+        service.submit(_command(intent_id="world3d-prores-bad", **patch))
+    assert caught.value.status_code == 422
+    assert "prores" in caught.value.detail["message"].lower() or "ProRes" in caught.value.detail["message"]
+
+
+def test_prores_master_matches_the_h264_delivery(tmp_path):
+    import re
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg is required to compare ProRes with the delivery")
+    encoders = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, check=False)
+    if "prores_ks" not in (encoders.stdout or ""):
+        pytest.skip("prores_ks is not available")
+    frames = []
+    colors = ((20, 40, 80), (200, 30, 30), (30, 180, 40), (20, 20, 220))
+    for index, color in enumerate(colors, start=1):
+        path = tmp_path / "frames" / f"frame_{index:06d}.png"
+        write_png(path, 64, 64, color)
+        frames.append(path)
+    delivery = tmp_path / "delivery.mp4"
+    master = tmp_path / "master.mov"
+    mux_frame_sequence(frames, delivery, fps=24, duration=4 / 24, quality="master", width=64, height=64)
+    write_prores_master(frames, master, fps=24, duration=4 / 24)
+    compared = subprocess.run(
+        ["ffmpeg", "-i", str(delivery), "-i", str(master), "-lavfi", "ssim", "-f", "null", "-"],
+        capture_output=True, text=True, check=False,
+    )
+    match = re.search(r"All:([0-9.]+)", compared.stderr)
+    assert match, compared.stderr[-500:]
+    assert float(match.group(1)) >= 0.99
+    assert "prores" not in export_plan(_document(), "draft")
+
+
+def test_one_four_k_frame_probes_as_3840_with_level_51(tmp_path):
+    if not export_capabilities()["ffmpeg"]:
+        pytest.skip("ffmpeg is required to probe a 4K frame")
+    frame = tmp_path / "frames" / "frame_000001.png"
+    write_png(frame, 3840, 2160, (12, 24, 36))
+    destination = tmp_path / "uhd.mp4"
+    mux_frame_sequence([frame], destination, fps=30, duration=1 / 30, width=3840, height=2160)
+    video = next(item for item in probe_scene_recording_output(destination)["streams"]
+                 if item.get("codec_type") == "video")
+    assert (video["width"], video["height"], int(video["level"])) == (3840, 2160, 51)
+
+
+def test_receipt_reports_the_quality_level(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
+    receipt = service.submit(_command(intent_id="world3d-final-1", quality="final"))["receipt"]
+    registry = service._registry(WORKSPACE)
+    _wait(registry, receipt["taskIds"][0], {"completed", "failed"})
+    viewed = service.receipt(WORKSPACE, "world3d-final-1")
+    assert viewed["receipt"]["quality"] == "final"
+    assert viewed["task"]["metadata"]["quality"] == "final"
+    forget_task_registry(registry.workspace_dir)
+
+
+def test_final_and_master_plans_blur_motion_with_a_half_frame_shutter():
+    final = export_plan(_document(), "final")
+    master = export_plan(_document(), "master")
+    assert (final["subframes"], final["shutter"]) == (4, 180)
+    assert (master["subframes"], master["shutter"]) == (8, 180)
+    assert "subframes" not in export_plan(_document()), "draft stays one sharp frame"
+
+
+def test_shutter_overrides_and_pixel_worlds_stay_sharp():
+    assert export_plan(_document(), "final", 90)["shutter"] == 90
+    assert (export_plan(_document(), "master", 0)["subframes"], export_plan(_document(), "master", 0)["shutter"]) == (1, 0)
+    pixel = export_plan(_document(pixelWorld={"pixelSize": 4, "levels": 16}), "master")
+    assert (pixel["subframes"], pixel["shutter"]) == (1, 0)
+    with pytest.raises(ValueError):
+        export_plan(_document(), "final", 400)
+    with pytest.raises(ValueError):
+        export_plan(_document(), "draft", 180)
+
+
+@pytest.mark.parametrize("patch", [{"shutter": 400}, {"shutter": "wide"}, {"shutter": True}, {"shutter": 180}])
+def test_bad_or_draft_shutter_is_refused_before_admission(tmp_path, patch):
+    service = _service(tmp_path, renderer=_paint)
+    with pytest.raises(Exception) as caught:
+        service.submit(_command(intent_id="world3d-shutter", **patch))
+    assert caught.value.status_code == 422
+    assert "shutter" in caught.value.detail["message"] or "Motion blur" in caught.value.detail["message"]
+
+
+def test_catalog_offers_the_shutter():
+    schema = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]["shutter"]
+    assert (schema["minimum"], schema["maximum"]) == (0, 360)
+    assert export_capabilities()["motionBlur"]["default"] == 180
+
+
+def _tone_wav(path: Path, seconds: float, rate: int = 48000) -> None:
+    import math
+    import struct
+    import wave
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(2); out.setsampwidth(2); out.setframerate(rate)
+        frames = bytearray()
+        for index in range(int(seconds * rate)):
+            value = int(12000 * math.sin(2 * math.pi * 440 * index / rate))
+            frames += struct.pack("<hh", value, value)
+        out.writeframes(bytes(frames))
+
+
+def test_voiced_publish_muxes_the_page_mix_under_the_video(tmp_path):
+    if not export_capabilities()["ffmpeg"]:
+        pytest.skip("ffmpeg is required to mux the audio")
+    service = _service(tmp_path, renderer=_paint)
+    document = _document(duration=1, fps=24, soundtrack=[{"id": "bed", "audio": {"url": "/api/v1/file/bed.wav"}}])
+    snapshot = {"workspace": WORKSPACE, "document": document, "refs": [], "plan": export_plan(document)}
+    frames = []
+    for index in range(24):
+        frames.append(tmp_path / "frames" / f"frame_{index + 1:06d}.png")
+        write_png(frames[-1], 64, 64, (index * 8, 40, 90))
+    _tone_wav(tmp_path / "fx.wav", 1.0)
+
+    class _Token:
+        def is_cancelled(self):
+            return False
+
+    published = service._publish(snapshot, tmp_path, frames, WORKSPACE, service._registry(WORKSPACE), "task", _Token())
+    output = Path(service.workspace_dir(WORKSPACE)) / published["name"]
+    streams = probe_scene_recording_output(output)["streams"]
+    assert sorted(item["codec_name"] for item in streams) == ["aac", "h264"]
+    audio = next(item for item in streams if item["codec_type"] == "audio")
+    assert abs(float(audio["duration"]) - 1.0) < 1 / 24 + 0.03
+
+
+def test_a_failed_page_mix_is_reported_instead_of_a_silent_mp4(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
+    document = _document(soundtrack=[{"id": "bed", "audio": {"url": "/api/v1/file/bed.wav"}}])
+    (tmp_path / "audio-error.txt").write_text("Voice could not be loaded.")
+    with pytest.raises(RuntimeError, match="Voice could not be loaded.*silent MP4"):
+        service.finish_media({"document": document, "plan": export_plan(document)}, tmp_path, tmp_path / "encoded.mp4")
+    assert "audio-error.txt" in _OWNED_BROWSER_JS
+
+
+def test_geometry_warnings_from_the_render_page_reach_the_receipt(tmp_path):
+    def painter(snapshot, staging, progress, cancelled):
+        (Path(staging) / "geometry.json").write_text(json.dumps({
+            "verdict": "fail", "samples": 8,
+            "warnings": [{"code": "below_floor", "severity": "fail", "slot": "subject_1", "start": 0.25, "end": 1.0, "detail": "under"}]}))
+        return _paint(snapshot, staging, progress, cancelled)
+
+    service = _service(tmp_path, renderer=painter)
+    receipt = service.submit(_command(intent_id="world3d-geometry-1"))["receipt"]
+    registry = service._registry(WORKSPACE)
+    _wait(registry, receipt["taskIds"][0], {"completed", "failed"})
+    viewed = service.receipt(WORKSPACE, "world3d-geometry-1")
+    assert viewed["task"]["status"] == "completed", "a warning never blocks the export"
+    assert viewed["receipt"]["geometry"]["verdict"] == "fail"
+    assert viewed["receipt"]["geometry"]["warnings"][0]["code"] == "below_floor"
+    forget_task_registry(registry.workspace_dir)
+
+
+def test_a_malformed_geometry_report_is_ignored(tmp_path):
+    from services.world3d_export import read_geometry_report
+
+    (tmp_path / "geometry.json").write_text("{not json")
+    assert read_geometry_report(tmp_path) is None
+    (tmp_path / "geometry.json").write_text(json.dumps({"verdict": "maybe"}))
+    assert read_geometry_report(tmp_path) is None
+    assert read_geometry_report(tmp_path / "missing") is None

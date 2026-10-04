@@ -61,6 +61,29 @@ test('legacy silent scenes remain valid without speech', () => {
   assert.ok(parseScene3DDocument(applyScene3DTemplate('two-shot')))
   assert.equal(parseScene3DDocument(applyScene3DTemplate('two-shot'))?.slots[0].speech, undefined)
 })
+test('contour morph round-trips while keeping cue timing and legacy scenes intact', () => {
+  const original = speech(), doc = applyScene3DTemplate('speech-portrait')
+  doc.slots[0].speech = { ...original, morph: true, offset: .08 }
+  const restored = parseScene3DDocument(JSON.parse(JSON.stringify(doc)))!.slots[0].speech!
+  assert.equal(restored.morph, true)
+  for (const time of [0, .01, .5, .94, 1, 1.43, 1.44, 1.45, 1.9, 2]) {
+    assert.deepEqual(mouthAt(restored, time), mouthAt(original, time + .08))
+  }
+  assert.equal(parseSpeech({ ...original, morph: false })?.morph, false)
+  assert.equal(parseSpeech(original)?.morph, undefined)
+  for (const morph of [1, 'true', null]) assert.throws(() => parseSpeech({ ...original, morph }))
+})
+
+test('bold cartoon survives saved documents without changing legacy styles or timing', () => {
+  const original = speech(), doc = applyScene3DTemplate('speech-portrait')
+  doc.slots[0].speech = { ...original, style: 'toon-bold', audible: false, offset: .1 }
+  const restored = parseScene3DDocument(JSON.parse(JSON.stringify(doc)))!
+  assert.equal(restored.slots[0].speech?.style, 'toon-bold')
+  assert.equal(restored.slots[0].speech?.audible, false)
+  assert.deepEqual(mouthAt(restored.slots[0].speech!, .1), mouthAt(original, .2))
+  assert.equal(parseSpeech({ ...original, style: 'toon' })?.style, 'toon')
+  assert.equal(defaultSpeech().style, 'soft')
+})
 test('Taberna v2 placement and eye settings convert without applying offsets twice', () => {
   const imported = speechFromLabConfig({ type: 'taberna-talking-character', version: 2,
     anchor: { center: face.center, width: .1, height: .08 }, skin: face.skin, eyes: face.eyes,

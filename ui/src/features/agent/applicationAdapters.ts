@@ -33,6 +33,8 @@ import type {
   AgentTrimVideoEditorClipAction,
 } from './videoEditorActions'
 import type {
+  AgentLipsCreatorAction,
+  AgentGenerateLipsAction,
   AgentApplyCharacterKitPresetAction,
   AgentAttachCharacterKitReferencesAction,
   AgentBuildCharacterKitAction,
@@ -44,9 +46,12 @@ import type {
 } from './characterKitActions'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
+import { executeProductionWorks } from './productionWorkCapabilities'
+import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
 import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
+import { setupSpeechAnalysis } from './speechAnalysisAdapter'
 
 export interface AdapterOutcome {
   commandResult?: CommandResult
@@ -164,6 +169,7 @@ export interface VideoclipAdapter {
 }
 
 export interface Video3DAdapter {
+  setupSpeechAnalysis(action: import('./agentActions').AgentSpeechAnalysisEngineAction): Promise<AdapterOutcome>
   open(animate?: boolean): Promise<AdapterOutcome>
   prepareProgrammaticVideo(action: import('./programmaticVideo').AgentPrepareProgrammaticVideoAction): Promise<AdapterOutcome>
   applyRhythm(action: AgentApply3dRhythmAction): Promise<AdapterOutcome>
@@ -180,6 +186,9 @@ export interface WizardApplicationAdapters {
   video3d: Video3DAdapter
   videoEditor: VideoEditorAdapter
   characterKit: CharacterKitAdapter
+  lipsCreator: { command(action: AgentLipsCreatorAction, workspace?: string): Promise<AdapterOutcome>; generate(action: AgentGenerateLipsAction, workspace?: string, context?: { onStep?: (message: string) => void; generationContext?: GenerationSubmissionContext }): Promise<AdapterOutcome> }
+  world3dTemplates: { command(action: import('./world3dTemplateCapabilities').AgentWorld3DTemplatesAction, workspace?: string): Promise<AdapterOutcome> }
+  productionWorks: { command(action: import('./productionWorkCapabilities').AgentProductionWorksAction, workspace?: string): Promise<AdapterOutcome> }
   queue: QueueAdapter
   workspace: WorkspaceAdapter
   videoclips: VideoclipAdapter
@@ -190,7 +199,7 @@ const TAB_TARGETS: Partial<Record<AgentTab, MediaFilter>> = {
   images: 'images', videos: 'videos', audio: 'audio', '3d': 'model3d',
   story_lab: 'stories', series_lab: 'series', comics: 'comics',
   video_editor: 'videoeditor', video_3d: 'scene3d', animate_3d: 'animate3d',
-  character_creator: 'characters', character_kit: 'characters', workspaces: 'workspaces',
+  character_creator: 'characters', character_kit: 'characters', lips_creator: 'lips', workspaces: 'workspaces',
 }
 
 const TAB_LABELS: Record<AgentTab, string> = {
@@ -198,7 +207,7 @@ const TAB_LABELS: Record<AgentTab, string> = {
   videos: 'Videos', audio: 'Audio', '3d': '3D', story_lab: 'Story Lab',
   series_lab: 'Series Lab', comics: 'Comics', video_editor: 'Video Editor',
   video_3d: '3D Video', animate_3d: 'Animate 3D', character_creator: 'Character Creator',
-  character_kit: 'CharacterKit', workspaces: 'Workspaces', settings: 'Settings',
+  character_kit: 'CharacterKit', lips_creator: 'Lips Creator', workspaces: 'Workspaces', settings: 'Settings',
 }
 
 function target(tab: AgentTab): AgentExecutionTarget {
@@ -709,6 +718,47 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       return editorOutcome(result, message, { report, outputNames })
     },
   }
+  adapters.world3dTemplates = {
+    async command(action, workspace) {
+      const active = workspace || useStore.getState().activeWorkspace
+      const input = { ...action.input }
+      const intent = world3dTemplateCommandIntent(action.operation, input)
+      delete input.intent_id
+      const response = await fetch('/api/v1/world3d/templates/commands', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ operation: action.operation, version: 1, input: { workspace: active, ...input }, ...(intent ? { intent_id: intent } : {}) }),
+      })
+      const body = await response.json() as { status?: string; result?: Record<string, unknown>; detail?: { message?: string } }
+      if (!response.ok) throw new Error(body.detail?.message || 'Video 3D template command failed')
+      const scene = body.result?.scene as { document?: unknown; sceneId?: string; templateId?: string } | undefined
+      if (scene?.document && shouldMountWorld3DScene(action.operation)) {
+        const { requestWorld3DDocument } = await import('../scene3d/world3dAgent')
+        await navigate('video_3d')
+        await requestWorld3DDocument({ document: scene.document, sceneId: scene.sceneId || 'world3d' })
+      }
+      const message = world3dTemplateMessage(body)
+      return { message, metadata: body as Record<string, unknown>, sceneId: scene?.sceneId, target: { kind: 'video_3d_scene', id: scene?.sceneId || 'world3d', title: scene?.templateId || action.operation } }
+    },
+  }
+  adapters.productionWorks = {
+    async command(action, workspace) {
+      return executeProductionWorks(action, workspace)
+    },
+  }
+  adapters.lipsCreator = {
+    async command(action, workspace) {
+      const { manageLipsCollection } = await import('../characters/lipsActions')
+      const result = await manageLipsCollection(action, workspace || useStore.getState().activeWorkspace)
+      await navigate('lips_creator')
+      return result
+    },
+    async generate(action, workspace, context) {
+      const { generateLipsCollection } = await import('../characters/lipsActions')
+      const result = await generateLipsCollection(action, workspace || useStore.getState().activeWorkspace, context)
+      await navigate('lips_creator')
+      return result
+    },
+  }
   adapters.characterKit = {
     open: creator => navigate(creator ? 'character_creator' : 'character_kit'),
     async create(action) {
@@ -852,6 +902,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     },
   }
   adapters.video3d = {
+    setupSpeechAnalysis,
     open: animate => navigate(animate ? 'animate_3d' : 'video_3d'),
     async prepareProgrammaticVideo(action) {
       const workspace = useStore.getState().activeWorkspace || 'default'

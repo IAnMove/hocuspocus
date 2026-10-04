@@ -5,7 +5,7 @@ export const TEXT_EXITS = ['none', 'fade', 'fall', 'blur', 'wipe', 'scale', 'sli
 export const TEXT_LOOPS = ['none', 'wave', 'pulse', 'shake', 'float', 'flicker'] as const
 export const TEXT_WEIGHTS = [400, 500, 600, 700, 800, 900] as const
 export const TEXT_ALIGNS = ['left', 'center', 'right'] as const
-export const TEXT_BOX_KINDS = ['none', 'solid', 'paper', 'pill', 'bar', 'underline', 'plate'] as const
+export const TEXT_BOX_KINDS = ['none', 'solid', 'paper', 'pill', 'bar', 'underline', 'plate', 'tape', 'card'] as const
 
 export type TextFont = (typeof TEXT_FONTS)[number]
 export type TextEnter = (typeof TEXT_ENTERS)[number]
@@ -20,6 +20,7 @@ export type TextShadow = { color: string; blur: number; x: number; y: number }
 export type TextFill = { kind: 'solid' } | { kind: 'gradient'; from: string; to: string; angle: number }
 export type TextBox = { kind: TextBoxKind; color: string; opacity: number; padding: number; radius?: number }
 export type TextCounter = { from: number; to: number; decimals: number; ease: 'linear' | 'ease' }
+export type TextGraphic = { id: string; params?: Record<string, number | string> }
 export type TextSpan = { preset: TextEnter | TextExit; duration: number }
 
 export type KineticText = {
@@ -49,10 +50,14 @@ export type KineticText = {
   fill?: TextFill
   box?: TextBox
   counter?: TextCounter
+  /** Catalog drawing from scene_graphics.json. Absent cues paint text only. */
+  graphic?: TextGraphic
   /** Provenance for a template. It does not change painting. */
   template?: string
   /** Live scale added on stored beats. Absent means the cue does not pulse. */
   beatPulse?: number
+  /** Reserve the black plate under this cue even when the riso press is off. */
+  trap?: boolean
 }
 
 export type TextMotion = {

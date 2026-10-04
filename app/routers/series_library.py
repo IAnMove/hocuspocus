@@ -94,6 +94,29 @@ def create_series_library_router() -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @router.get("/api/v1/series/templates")
+    def list_series_templates(language: str | None = None):
+        """Templates to start a series from: cast, locations, canon and a 2D pilot."""
+        from services.series_templates import list_templates
+        return {"templates": list_templates(language)}
+
+    @router.post("/api/v1/series/templates/{template_id}")
+    def create_series_from_template(template_id: str, body: dict):
+        """Create a series and its pilot from a template, in language es or en."""
+        from services.series_templates import SeriesTemplateError, build_series
+
+        workspace = _resolve_workspace(body.get("workspace"))
+        try:
+            series = build_series(template_id, workspace, title=str(body.get("title") or ""), language=body.get("language"))
+        except SeriesTemplateError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+        with _library_lock:
+            library = _read_library(workspace)
+            library["seriesById"][series["id"]] = series
+            library["seriesOrder"].append(series["id"])
+            stored = _write_library(workspace, library)
+        return stored["seriesById"][series["id"]]
+
     @router.get("/api/v1/series/{series_id}")
     def get_series_project_endpoint(series_id: str, workspace: str | None = None):
         target_workspace = _resolve_workspace(workspace)

@@ -9,6 +9,7 @@ import { SpeechNumber, speechInput } from './FaceControls'
 import { CharacterDefinitionEditor } from '../../characters/CharacterDefinitionEditor'
 import { GenerateCharacterLine } from './GenerateCharacterLine'
 import { randomUuid } from '../../../lib/uuid'
+import { characterVoiceFor } from '../../../lib/characterVoice'
 
 export function Scene3DSpeakerControls(props: SpeechControlsProps) {
   const { t } = useUiTranslation('scene3dEditor')
@@ -34,6 +35,7 @@ export function Scene3DSpeakerControls(props: SpeechControlsProps) {
   const change = (next: Scene3DSpeech) => {
     if (!stored.clips) { commit(next); return }
     const updated: SpeechClip = { ...clip, audio: next.audio, cues: next.cues, driver: next.driver,
+      text: next.text, language: next.language, analysisEngine: next.analysisEngine, analysisFallback: next.analysisFallback,
       start: next.start, offset: next.offset, end: next.end, gain: next.gain, audible: next.audible }
     commit({ ...stored, ...faceSettings(next), enabled: next.enabled, clips: clips.map((item, i) => i === index ? updated : item) })
   }
@@ -55,7 +57,7 @@ export function Scene3DSpeakerControls(props: SpeechControlsProps) {
       }}>{t('speech.addIntervention')}</button>
       {stored.clips && clip && <label className="block text-xs">{t('speech.literalText')}<textarea className={speechInput + ' mt-1 w-full'} value={clip.text ?? ''}
         disabled={locked} maxLength={4000} onChange={event => commit({ ...stored, clips: clips.map((item, i) => i === index ? { ...item, text: event.target.value } : item) })} /></label>}
-      {stored.clips && clip && <GenerateCharacterLine key={clip.id} clip={clip} voice={props.slot.character?.voice} workspace={props.workspace}
+      {stored.clips && clip && <GenerateCharacterLine key={clip.id} clip={clip} voice={characterVoiceFor(props.slot.character, clip.language)} workspace={props.workspace}
         disabled={isLocked('voice')} onBusyChange={setVoiceBusy}
         onChange={next => { commit({ ...stored, clips: clips.map((item, i) => i === index ? next : item) }); props.onFit(next.end!) }} />}
     </details>

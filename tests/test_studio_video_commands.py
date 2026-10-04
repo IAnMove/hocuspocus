@@ -26,7 +26,8 @@ def write_png(path):
 def test_catalog_describes_the_closed_wan_t2v_tool():
     catalog = video_command_catalog()
     assert catalog["name"] == "generation.video"
-    assert catalog["version"] == 2
+    assert catalog["version"] == 3
+    assert catalog["supportedVersions"] == [2, 3]
     assert catalog["videoModelTypes"] == ["t2v", "t2v_1.3B"]
     assert catalog["inputSchema"]["properties"]["operation"]["const"] == "generation.video"
     assert catalog["inputSchema"]["additionalProperties"] is False

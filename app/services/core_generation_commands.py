@@ -13,8 +13,15 @@ from copy import deepcopy
 from typing import Any
 
 from services import core_remote_image, core_workspace as core, execution_mode
+from services.generation_output_name import (
+    OutputNameError,
+    attach_output_name,
+    generation_receipt_view,
+    prepare_command_output_name,
+)
 from services.image_generation_commands import command_error
 from services.image_generation_spec import ImageGenerationSpecError, freeze_image_generation_spec
+from services.job_lifecycle import take_submission_priority
 from services.minimax_image_service import MiniMaxImageError, prepare_prompt
 from services.task_command_admission import TaskCommandConflict
 from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES, TaskRegistry
@@ -209,7 +216,11 @@ class CoreGenerationCommands:
                     404, "receipt_not_found",
                     "No admission exists for this intention in this workspace",
                 )
-            return {"receipt": entry["receipt"], "task": get_task(workspace, entry["task_id"])}
+            task = get_task(workspace, entry["task_id"])
+            return generation_receipt_view(
+                entry["receipt"], task, workspace=workspace,
+                workspace_dir=core.workspace_dir(workspace),
+            )
         except (OSError, sqlite3.Error) as error:
             raise command_error(503, "storage_unavailable", "Command storage is unavailable") from error
 
@@ -228,13 +239,21 @@ class CoreGenerationCommands:
             },
             workspace=workspace,
             job_id=job_id,
+            output_name=params.get("output_name"),
             on_update=lambda: get_task(workspace, task_id),
         )
 
     async def submit(self, command, *, trusted_tool=None, submission_context=None):
         del trusted_tool, submission_context
         try:
+            command, output_name = prepare_command_output_name(command)
+            # MCP advertises priority on every generation tool; a remote provider has no GPU queue.
+            try:
+                take_submission_priority(command)
+            except ValueError as error:
+                raise command_error(422, "invalid_command", str(error)) from error
             frozen, params = _freeze(command)
+            frozen, params = attach_output_name(frozen, params, output_name)
             workspace = str(params.get("workspace") or "")
             _require_minimax_image(params)
             execution_mode.validate_remote_provider(workspace, "minimax-image")
@@ -266,6 +285,8 @@ class CoreGenerationCommands:
                     if task:
                         core_remote_image.restore_job(task)
             return admitted
+        except OutputNameError as error:
+            raise command_error(422, error.code, str(error)) from error
         except ImageGenerationSpecError as error:
             raise command_error(422, "invalid_command", str(error)) from error
         except MiniMaxImageError as error:

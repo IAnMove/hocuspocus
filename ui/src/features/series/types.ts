@@ -93,6 +93,8 @@ export interface SeriesLocation {
   variants: SeriesVisualVariant[]
   currentState: Record<string, unknown>
   approval: SeriesApproval
+  /** 2D series layout: a background or 3D plate asset, character homes (x %), and the plate render state. */
+  layout2d?: { plateAssetId?: string; backgroundAssetId?: string; homes?: Record<string, number>; plate3d?: Record<string, unknown> }
 }
 
 export interface SeriesProp {
@@ -256,9 +258,24 @@ export interface SeriesCanonDeltaItem extends CanonFact {
   decidedAt?: string
 }
 
+export interface SeriesLanguageVersion {
+  title?: string
+  /** Text of each line by its beat id; the shots and line ids are shared with the original. */
+  dialogue: Record<string, string>
+  cards: Record<string, { title: string; body: string }>
+  approvedAttemptIds: Record<string, string>
+  assemblyAssetIds: string[]
+  latestAssemblyAssetId?: string
+  thumbnailAssetId?: string
+}
+
 export interface SeriesEpisode {
+  /** Dubbed versions by spoken language (english, spanish...); the series language is the original. */
+  languageVersions?: Record<string, SeriesLanguageVersion>
   latestAssemblyAssetId?: string
   assemblyAssetIds?: string[]
+  /** A frame of the latest cut (after its title card), set by the assembly. */
+  thumbnailAssetId?: string
   id: string
   seasonId: string
   number: number

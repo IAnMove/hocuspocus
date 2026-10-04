@@ -4,6 +4,7 @@ import { decodeVoice, voiceWav } from '../features/scene3d/speech/audio'
 import { generateSceneSpeechClip } from './sceneSpeech'
 import { previewFaceRigDialogueFromCues } from './characterKitFaceRig'
 import type { CharacterKit } from './characterKit'
+import { characterVoiceFor } from './characterVoice'
 
 export const characterSpeechPreviewServices = {
   generate: generateSceneSpeechClip, decode: decodeVoice, wav: voiceWav, analyze: analyzeSceneSpeechDetailed,
@@ -21,13 +22,14 @@ export async function createCharacterSpeechPreview(options: {
 }, services = characterSpeechPreviewServices) {
   const { kit, workspace, language, signal } = options
   const text = options.text.trim()
-  const clip = await services.generate({ prompt: text, model: kit.voice?.model || options.model,
-    voice: kit.voice, workspace, signal, durationSeconds: speechPreviewDuration(text) })
+  const voice = characterVoiceFor(kit, language)
+  const clip = await services.generate({ prompt: text, model: voice?.model || options.model,
+    voice, workspace, signal, durationSeconds: speechPreviewDuration(text) })
   signal.throwIfAborted()
   const buffer = await services.decode(getFileUrl(clip.filename, workspace), signal)
   const wav = await services.wav(buffer)
   signal.throwIfAborted()
   const analysis = await services.analyze(wav, { dialogue: text, language, signal })
   signal.throwIfAborted()
-  return { filename: clip.filename, preview: previewFaceRigDialogueFromCues(kit, text, analysis, buffer.duration) }
+  return { filename: clip.filename, preview: previewFaceRigDialogueFromCues(kit, text, analysis, buffer.duration), cues: analysis, duration: buffer.duration }
 }

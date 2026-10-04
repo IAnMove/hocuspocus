@@ -11,6 +11,7 @@ from app.services.resource_scheduler import (
     gpu_engine_kind,
     image_lane,
     llm_lane,
+    local_gpu_lane,
     may_overlap,
     video_lane,
 )
@@ -381,3 +382,77 @@ def test_cancelling_middle_fifo_ticket_leaves_a_and_c():
     third.join(1)
     assert entered == ["A", "C"]
     assert coordinator.snapshot()[0]["waiting"] == 0
+
+
+def _gpu_relay(*, max_wait, export_first=False, settle=0.0):
+    """Three queued generations and one coordinator ticket behind a running job."""
+    from app.services.job_lifecycle import acquire_generation_slot, register_generation_job
+
+    coordinator = ResourceCoordinator()
+    lane = local_gpu_lane(0)
+    lock = coordinator.shared_lock(lane)
+    lock.acquire()
+    started = []
+    jobs = [{"id": f"g{index}", "status": "queued", "params": {"generation_mode": "image"}} for index in (1, 2, 3)]
+
+    def owed(waited):
+        return coordinator.has_waiter_owed_turn(lane, waited=waited, max_wait=max_wait)
+
+    def generation(job):
+        if acquire_generation_slot(lock, job, poll_interval=0.005, yield_to=owed):
+            started.append(job["id"])
+            time.sleep(0.02)
+            lock.release()
+
+    def export():
+        # Production tickets poll every 0.1 s; the generation head blocks inside acquire.
+        with coordinator.acquire(lane, task_id="export", poll_interval=0.1):
+            started.append("export")
+            time.sleep(0.02)
+
+    def queued_export():
+        thread = threading.Thread(target=export)
+        thread.start()
+        while not any(state["waiters"] for state in coordinator.snapshot()):
+            time.sleep(0.001)
+        return thread
+
+    threads = [queued_export()] if export_first else []
+    time.sleep(0.01 if export_first else 0)
+    for job in jobs:
+        register_generation_job(lock, job)
+    threads += [threading.Thread(target=generation, args=(job,)) for job in jobs]
+    for thread in threads[-3:]:
+        thread.start()
+    if not export_first:
+        threads.append(queued_export())
+    time.sleep(settle)
+    lock.release()
+    for thread in threads:
+        thread.join(timeout=5)
+    assert not any(thread.is_alive() for thread in threads), started
+    return started
+
+
+def test_a_full_generation_queue_starved_a_polling_ticket_without_fairness():
+    assert _gpu_relay(max_wait=0, export_first=True) == ["g1", "g2", "g3", "export"]
+
+
+def test_a_ticket_that_arrived_first_takes_the_next_gpu_turn():
+    assert _gpu_relay(max_wait=100, export_first=True)[0] == "export"
+
+
+def test_a_later_ticket_waits_for_earlier_generations_until_its_wait_runs_out():
+    assert _gpu_relay(max_wait=100) == ["g1", "g2", "g3", "export"]
+    assert _gpu_relay(max_wait=0.05, settle=0.1)[0] == "export"
+
+
+def test_owed_turn_reads_the_wait_setting(monkeypatch):
+    coordinator = ResourceCoordinator()
+    lane = local_gpu_lane(0)
+    assert coordinator.has_waiter_owed_turn(lane, waited=0) is False, "an unknown lane owes nothing"
+    monkeypatch.setenv("HOCUS_GPU_WAITER_MAX_WAIT_SECONDS", "0")
+    from app.services.resource_scheduler import gpu_waiter_max_wait_seconds
+    assert gpu_waiter_max_wait_seconds() == 0
+    monkeypatch.setenv("HOCUS_GPU_WAITER_MAX_WAIT_SECONDS", "later")
+    assert gpu_waiter_max_wait_seconds() == 120

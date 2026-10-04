@@ -74,7 +74,8 @@ async function submitSpeech(options: SceneSpeechOptions, deps: SceneSpeechDepend
   return { prompt, model, jobId: submitted.job_id }
 }
 
-async function awaitSpeechOutput(options: SceneSpeechOptions, deps: SceneSpeechDependencies, submitted: Omit<SceneSpeechClip, 'filename'>): Promise<SceneSpeechClip> {
+/** Wait for an audio job this caller submitted; aborting cancels that job only. */
+export async function awaitSpeechOutput(options: SceneSpeechOptions, deps: SceneSpeechDependencies, submitted: Omit<SceneSpeechClip, 'filename'>): Promise<SceneSpeechClip> {
   const timeoutMs = options.timeoutMs ?? 15 * 60_000
   const pollMs = options.pollMs ?? 1000
   const now = deps.now ?? Date.now

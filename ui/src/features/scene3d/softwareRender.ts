@@ -1,3 +1,4 @@
+import { atmosEye, atmosFallbackLook, isAtmosDressing } from './atmos/index.ts'
 import { cylinderUvOffset, isCylinderBackdrop, wrapUnit } from './backdrop.ts'
 import { cameraEyeAtTime, cameraLookAtTime, projectPoint } from './camera.ts'
 import { scene3dSlotColor } from './document.ts'
@@ -55,9 +56,14 @@ export function renderScene3DSoftware(document: Scene3DDocument, sceneSeconds: n
   for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255
   const frame = { width, height, pixels }
   const cylinder = document.slots.find(isCylinderBackdrop)
+  const fallback = isAtmosDressing(document.dressing) ? atmosFallbackLook(document.atmos, document.dressing) : null
   if (cylinder?.loop) fillScrollingWorld(frame, sceneSeconds, cylinder.loop)
-  else fillRect(frame, 0, height * 0.62, width, height, [32, 34, 38])
-  const eye = cameraEyeAtTime(document.camera, sceneSeconds, document.duration, document.slots)
+  else if (fallback) {
+    fillRect(frame, 0, 0, width, height, fallback.sky)
+    fillRect(frame, 0, height * 0.62, width, height, fallback.ground)
+  } else fillRect(frame, 0, height * 0.62, width, height, [32, 34, 38])
+  const rawEye = cameraEyeAtTime(document.camera, sceneSeconds, document.duration, document.slots)
+  const eye = fallback ? atmosEye(rawEye, sceneSeconds, document.duration, document.camera.family) : rawEye
   const look = cameraLookAtTime(document.camera, sceneSeconds, document.duration, document.slots)
   const aspect = width / height
   for (const slot of document.slots) {

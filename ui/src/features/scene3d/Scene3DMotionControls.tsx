@@ -1,8 +1,11 @@
 import { useUiTranslation } from '../../i18n'
 import type { Scene3DSlot, Vec3 } from './types'
+import { isWalkBaked } from './walkPath'
 
-export function Scene3DMotionControls({ slot, duration, disabled, onChange }: {
-  slot: Scene3DSlot; duration: number; disabled?: boolean; onChange: (patch: Partial<Scene3DSlot>) => void
+type WalkControl = { sceneDuration: number; baking: boolean; error?: string; onBake: () => void }
+
+export function Scene3DMotionControls({ slot, duration, disabled, onChange, walk }: {
+  slot: Scene3DSlot; duration: number; disabled?: boolean; onChange: (patch: Partial<Scene3DSlot>) => void; walk?: WalkControl
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const motion = slot.motion
@@ -26,6 +29,20 @@ export function Scene3DMotionControls({ slot, duration, disabled, onChange }: {
         <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={motion.easing === 'smooth'} onChange={event => onChange({ motion: { ...motion, easing: event.target.checked ? 'smooth' : 'linear' } })} />{t('travel.ease')}</label>
       </div>
       <p className="text-text-muted">{t('travel.distance', { distance: distance.toFixed(1), speed: (distance / Math.max(.1, duration)).toFixed(1) })}</p>
+      {walk && slot.media === 'model3d' && <WalkBake slot={slot} walk={walk} />}
     </>}
   </fieldset>
+}
+
+function WalkBake({ slot, walk }: { slot: Scene3DSlot; walk: WalkControl }) {
+  const { t } = useUiTranslation('scene3dEditor')
+  const baked = isWalkBaked(slot, walk.sceneDuration)
+  const stale = Boolean(slot.motion?.walk) && !baked
+  return <div className="mt-2 space-y-1 border-t border-border pt-2">
+    <button type="button" disabled={walk.baking} onClick={walk.onBake} className="min-h-9 rounded border border-border px-3 text-xs hover:border-accent-blue disabled:opacity-50">
+      {walk.baking ? t('travel.walkBaking') : t('travel.walk')}
+    </button>
+    <p className="text-text-muted">{baked ? t('travel.walkReady') : stale ? t('travel.walkStale') : t('travel.walkHelp')}</p>
+    {walk.error && <p className="text-red-300">{walk.error}</p>}
+  </div>
 }

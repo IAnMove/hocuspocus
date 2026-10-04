@@ -209,9 +209,9 @@ test('Character Creator captures 4 stills before Hunyuan, from one image', async
     assert.equal((screen.getByRole('button', { name: /Generate 360 orbit/ }) as HTMLButtonElement).disabled, true)
     const hunyuan = screen.getByRole('button', { name: /Generate Hunyuan3D/ }) as HTMLButtonElement
     assert.equal(hunyuan.disabled, true)
-    assert.ok(screen.getByText(/MiniMax or the internal LLM describe/i))
-    assert.ok(screen.getByText(/3D turnaround/i))
-    assert.ok(screen.getByText(/For a 2D puppet, open Prepare 2D speech below; it does not need a 360 video/i))
+    assert.ok(screen.getByRole('heading', { name: 'Create a character from a description' }))
+    assert.ok(screen.getByRole('textbox', { name: 'Character description' }))
+    assert.ok(screen.getByRole('button', { name: 'Generate character image' }))
     assert.ok(screen.getByText('Prepare 2D speech', { selector: 'summary' }))
     assert.ok(screen.getByRole('region', { name: 'Lipsync face (cube plane)' }))
     assert.ok(screen.getByRole('button', { name: 'Copy rest prompt' }))

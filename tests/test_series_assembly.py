@@ -43,3 +43,18 @@ def test_episode_assembly_never_falls_back_to_a_rejected_or_newer_attempt():
         ],
     }]}
     assert episode_assembly_plan(_series(), episode)[0]["attemptId"] == "attempt-approved"
+
+
+def test_a_2d_take_brings_its_scene_document_for_subtitles():
+    series = _series()
+    series["assets"]["asset-1"]["metadata"] = {"sceneFilename": "s01.scene.json"}
+    episode = {"shots": [{
+        "id": "shot-1", "order": 1, "approvedAttemptId": "attempt-1",
+        "attempts": [{"id": "attempt-1", "status": "completed", "outputAssetIds": ["asset-1"]}],
+    }, {
+        "id": "shot-2", "order": 2, "approvedAttemptId": "attempt-2",
+        "attempts": [{"id": "attempt-2", "status": "completed", "outputAssetIds": ["asset-2"]}],
+    }]}
+    plan = episode_assembly_plan(series, episode)
+    assert plan[0]["sceneFilename"] == "s01.scene.json"
+    assert "sceneFilename" not in plan[1]

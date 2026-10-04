@@ -19,7 +19,7 @@ function finiteRange(value: number, min: number, max: number, label: string) {
 }
 function validateAsset(value: TemplateAsset) {
   if (typeof value.source !== 'string' || !value.source.trim() || value.source.length > 2_000_000) throw new Error('Cada slot necesita un recurso existente y durable (máximo 2 MB de referencia).')
-  if (!/^(?:data:(?:image\/|model\/gltf-binary;)|\/api\/v1\/|https?:\/\/)/i.test(value.source)) throw new Error('Usa un asset de Library o una referencia de imagen/GLB durable; no blob:, scripts ni rutas del disco.')
+  if (!/^(?:data:(?:image\/|model\/gltf-binary;)|\/api\/v1\/|\/examples\/|https?:\/\/)/i.test(value.source)) throw new Error('Usa un asset de Library o una referencia de imagen/GLB durable; no blob:, scripts ni rutas del disco.')
   // HTTP/API references are checked by the media loader; only inline MIME is known here.
   if (/^data:/i.test(value.source)) {
     const matchesKind = value.type === 'image' ? /^data:image\//i : /^data:model\/gltf-binary;/i

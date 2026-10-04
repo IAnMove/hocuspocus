@@ -67,6 +67,33 @@ class PlatformCapabilitiesTests(unittest.TestCase):
         self.assertEqual(snap["ui"]["mode"], "macosIntel")
         self.assertEqual(snap["capabilities"]["minimax_h3_local"]["state"], HIDDEN)
 
+    def test_core_runtime_on_linux_or_windows_reports_core_remote(self):
+        from unittest.mock import patch
+        from services.platform_capabilities import CORE_RUNTIME_ENV, PROFILE_CORE_REMOTE, platform_capabilities
+        for system in ("linux", "windows"):
+            with patch("services.platform_capabilities.host_platform", return_value=system), \
+                    patch.dict("os.environ", {CORE_RUNTIME_ENV: "core"}):
+                snap = platform_capabilities(ffmpeg_present=True, rhubarb_present=False)
+            self.assertEqual(snap["profile"], PROFILE_CORE_REMOTE)
+            self.assertEqual(snap["ui"]["mode"], "coreRemote")
+            self.assertFalse(snap["ui"]["show_cuda_controls"])
+            self.assertEqual(snap["capabilities"]["wangp_local"]["state"], HIDDEN)
+            self.assertEqual(snap["capabilities"]["wangp_local"]["reason_code"], "requires_nvidia")
+            self.assertEqual(snap["capabilities"]["editors"]["state"], AVAILABLE)
+
+    def test_launch_boots_core_only_when_install_chose_it(self):
+        import tempfile
+        from pathlib import Path
+        import launch
+        with tempfile.TemporaryDirectory() as folder:
+            markers = Path(folder) / ".runtime"
+            self.assertFalse(launch._core_installed(folder), "legacy installs keep the full runtime")
+            markers.mkdir()
+            (markers / "core.managed").write_text("x")
+            self.assertTrue(launch._core_installed(folder))
+            (markers / "wangp.managed").write_text("x")
+            self.assertFalse(launch._core_installed(folder))
+
     def test_http_surface_and_409_guard(self):
         app = FastAPI()
         app.include_router(create_system_capabilities_router())

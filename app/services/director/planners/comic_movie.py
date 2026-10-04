@@ -1558,8 +1558,15 @@ shot, no montage or internal cuts. Keep every video_prompt below 110 words."""
                         else "moderate"
                     ),
                 ),
+                # Comic Film is silent I2V: panels already exist, and Director
+                # does not generate a soundtrack or a dialogue ledger. Spoken
+                # lines stay in metadata and as a visual performance cue.
+                # Marking those shots dialogue_driven without dialogue_beats
+                # made MiniMax H3 preflight refuse the whole PRE with
+                # "silent generation uses an unsupported audio_plan.mode".
                 audio_plan=AudioPlan(
-                    mode="dialogue_driven" if dialogue else "ambient_only",
+                    mode="ambient_only",
+                    timing_anchor="video",
                     lip_sync_critical=False,
                 ),
                 ending_beat=end_beat,

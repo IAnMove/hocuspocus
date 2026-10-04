@@ -55,6 +55,16 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(name)
 
 
+def _core_installed(app_dir: str) -> bool:
+    """Install chose the core/remote runtime: core was set up, WanGP never was.
+
+    Legacy installs predate these markers and keep the full runtime.
+    """
+    markers = os.path.join(app_dir, ".runtime")
+    return (os.path.exists(os.path.join(markers, "core.managed"))
+            and not os.path.exists(os.path.join(markers, "wangp.managed")))
+
+
 def run_server() -> None:
     """Execute the unchanged runtime entry point exactly once."""
 
@@ -64,6 +74,7 @@ def run_server() -> None:
         if app_dir not in sys.path:
             sys.path.insert(0, app_dir)
         from services.platform_capabilities import (
+            CORE_RUNTIME_ENV,
             PROFILE_MACOS_ARM64,
             host_machine,
             host_platform,
@@ -71,7 +82,10 @@ def run_server() -> None:
         )
         from services.ui_distribution import report_identity
         report_identity()
-        if resolve_profile(host_platform(), host_machine()) == PROFILE_MACOS_ARM64:
+        if (resolve_profile(host_platform(), host_machine()) == PROFILE_MACOS_ARM64
+                or _core_installed(app_dir)):
+            # Inherited by workers, so every capability check reports core/remote.
+            os.environ[CORE_RUNTIME_ENV] = "core"
             runpy.run_module("core_runtime", run_name="__main__")
             return
         runpy.run_module("_launch_runtime", run_name="__main__")

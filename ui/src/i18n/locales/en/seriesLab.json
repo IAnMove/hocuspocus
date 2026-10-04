@@ -24,6 +24,8 @@
     "loadPreview": "Load video preview",
     "savedMetadata": "Saved generation request and result metadata",
     "reject": "Reject",
+    "sharedShots": "Review shots",
+    "sharedShotsMissing": "This episode has no linked production",
     "seedMeta": "seed {{seed}} · {{seconds}}s · {{model}}",
     "durableQueue": "Durable render queue",
     "durableQueueHint": "Completed shots survive cancellation and restart. Approved shots are never included in bulk missing/failed runs.",
@@ -715,5 +717,82 @@
     "productionSettings": "Production settings",
     "editShot": "Edit shot",
     "analyzing": "Synchronizing mouths with the recording…"
+  },
+  "serverRender": {
+    "hint": "Or render them on the server: voices, scenes, lip-sync, video and takes, without keeping this tab open. A stopped render resumes where it left off.",
+    "approve": "Approve each take when it is ready",
+    "start": "Render on the server",
+    "stop": "Stop after this step",
+    "resume": "Resume",
+    "progress": "{{done}} of {{total}} shots · {{status}}",
+    "status": {
+      "queued": "queued",
+      "running": "rendering",
+      "cancelling": "stopping",
+      "completed": "done",
+      "failed": "some shots failed",
+      "cancelled": "stopped"
+    },
+    "stage": {
+      "voices": "voices",
+      "scene": "scene",
+      "export": "video",
+      "import": "take",
+      "done": "done"
+    }
+  },
+  "languages": {
+    "title": "Language versions",
+    "hint": "Dub this episode: the same shots with their own lines, voices, takes and cut. The original is {{original}}.",
+    "add": "Add",
+    "choose": "Choose a language",
+    "translate": "Translate with AI",
+    "empty": "Start empty",
+    "lineLabel": "Translation of {{id}}",
+    "missing": "{{count}} lines still need text",
+    "save": "Save lines",
+    "assemble": "Assemble this version",
+    "remove": "Remove version",
+    "created": "Version created. {{missing}} lines still need text.",
+    "saved": "Lines saved. {{missing}} still need text.",
+    "assembling": "Assembling the version with subtitles…",
+    "names": {
+      "english": "English",
+      "spanish": "Spanish",
+      "french": "French",
+      "german": "German",
+      "italian": "Italian",
+      "portuguese": "Portuguese",
+      "japanese": "Japanese",
+      "korean": "Korean",
+      "chinese": "Chinese",
+      "russian": "Russian"
+    },
+    "busy": {
+      "translate": "Translating with the language model…",
+      "create": "Creating the version…",
+      "save": "Saving…",
+      "assemble": "Starting the assembly…",
+      "remove": "Removing…"
+    }
+  },
+  "plates": {
+    "title": "3D background",
+    "hint": "Render a saved Video 3D scene once as this location's looping background for 2D shots.",
+    "active": "2D shots here use the 3D background. Render again to replace it.",
+    "scene": "Video 3D scene",
+    "choose": "Choose a scene",
+    "noScenes": "No saved Video 3D scenes in this workspace",
+    "seconds": "Loop (s)",
+    "render": "Render 3D background",
+    "rendering": "Rendering the 3D background… {{progress}}%",
+    "done": "3D background ready: 2D shots in this location use it.",
+    "failed": "The 3D background failed: {{error}}"
+  },
+  "templates": {
+    "title": "Start from a template",
+    "language": "Language",
+    "contents": "Cast: {{characters}} · pilot of {{shots}} 2D shots",
+    "create": "Create “{{title}}”"
   }
 }

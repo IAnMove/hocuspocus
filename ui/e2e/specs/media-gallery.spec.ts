@@ -756,7 +756,10 @@ test.describe('Media gallery viewer and tools', () => {
   test('grid and mosaic group outputs by day and follow the chosen order', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     const session = await bootMixedGallery(page)
-    const now = Math.floor(Date.now() / 1000)
+    // Anchor fixtures at local midday so a run around midnight still has a real "Yesterday" group.
+    const anchor = new Date()
+    anchor.setHours(12, 0, 0, 0)
+    const now = Math.floor(anchor.getTime() / 1000)
     const day = 86_400
     const dated = MIXED.slice(0, 12).map((file, index) => ({
       ...file,

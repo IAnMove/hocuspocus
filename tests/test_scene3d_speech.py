@@ -66,5 +66,5 @@ def test_router_mounted_under_existing_character_boundary(monkeypatch, tmp_path)
     assert client.post(path, content=wav()).status_code == 415
     assert client.post(path, content=b"bad", headers={"content-type": "audio/wav"}).status_code == 400
     monkeypatch.setattr(speech, "rhubarb_executable", lambda: None)
-    assert client.post(path, content=wav(), headers={"content-type": "audio/wav"}).status_code == 503
+    assert client.post(path + '?engine=rhubarb', content=wav(), headers={"content-type": "audio/wav"}).status_code == 503
     assert client.post(path, content=b"x" * (speech.MAX_BYTES + 1), headers={"content-type": "audio/wav"}).status_code == 413

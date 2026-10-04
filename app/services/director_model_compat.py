@@ -29,6 +29,7 @@ DIRECTOR_PIPELINE_TYPES = (
     "music_video",
     "short_film_audio",
     "short_film_story",
+    "comic_movie",
 )
 
 
@@ -291,6 +292,9 @@ def assess_director_model(
             "music_video": dict(audio_video),
             "short_film_audio": dict(audio_video),
             "short_film_story": story_video,
+            # A comic film animates provided panels shot by shot (hold, push, living still or I2V): it needs
+            # an I2V-capable model but no soundtrack input and no generated dialogue.
+            "comic_movie": dict(base_video),
             "seamless": seamless,
         },
         # Keep input and output audio separate.  The old supports_audio field

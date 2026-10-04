@@ -69,6 +69,8 @@
     "characterReplacement": "Reemplaza un personaje de un vídeo con un fotograma editado y Viggle.",
     "animate3d": "Anima personajes y objetos dentro de una escena 3D.",
     "productions": "Consulta las producciones preparadas y su progreso.",
+    "works": "Todas las obras de este workspace, con Revisar planos.",
+    "musicProductions": "Planos, tomas y montaje de un videoclip.",
     "characters": "Crea personajes y referencias reutilizables.",
     "projects": "Documentos creativos duraderos que puedes reabrir y editar.",
     "assets": "Archivos fuente y resultados generados reutilizables.",
@@ -79,7 +81,8 @@
     "directAudio": "Crea voz, música, efectos o una mezcla.",
     "direct3d": "Genera un recurso 3D independiente.",
     "directEdit": "Edita, cambia el estilo, rellena o sustituye un resultado.",
-    "directTools": "Ejecuta herramientas de posprocesado sobre un recurso existente."
+    "directTools": "Ejecuta herramientas de posprocesado sobre un recurso existente.",
+    "lips": "Crea bocas y vincúlalas con sonidos."
   },
   "search": {
     "placeholder": "Buscar...",
@@ -108,6 +111,8 @@
     "comics": "Cómics",
     "videoEditor": "Video Editor",
     "productions": "Producciones",
+    "musicProductions": "Producciones musicales",
+    "works": "Obras",
     "scene3d": "Vídeo 2,5D",
     "world3d": "Vídeo 3D",
     "characterReplacement": "Reemplazar personaje",
@@ -115,7 +120,8 @@
     "edits": "Edits",
     "multiclip": "Multi-clip",
     "auditDev": "Auditoría interna dev",
-    "favorites": "Favoritos"
+    "favorites": "Favoritos",
+    "lips": "Lips Creator"
   },
   "short": {
     "all": "Todo",
@@ -142,7 +148,8 @@
     "animate3d": "Anim",
     "edits": "Edit",
     "multiclip": "MC",
-    "auditDev": "Audit"
+    "auditDev": "Audit",
+    "lips": "Lips"
   },
   "filters": {
     "allWorkspaces": "Todos los Workspaces"
@@ -161,12 +168,68 @@
     "scene3d": "Editor vídeo 2,5D",
     "world3d": "Editor vídeo 3D",
     "animate3d": "Rig y Animate",
-    "auditDev": "Auditoría interna"
+    "auditDev": "Auditoría interna",
+    "lips": "Lips Creator"
   },
   "outputFolder": {
     "option": "Salida",
     "switch": "Cambiar carpeta de salida",
     "list": "Carpetas de salida",
     "uploads": "Subidas"
+  },
+  "musicProductions": {
+    "title": "Producciones musicales",
+    "empty": "No hay producciones musicales en este espacio.",
+    "loading": "Cargando…",
+    "open": "Abrir",
+    "close": "Cerrar",
+    "back": "Volver",
+    "status": "Estado",
+    "duration": "Duración",
+    "sung": "Cantado",
+    "notSung": "Sin canto",
+    "lyric": "Letra",
+    "takes": "Tomas",
+    "noTakes": "Sin tomas",
+    "openScene": "Abrir escena",
+    "anotherTake": "Otra toma",
+    "useTake": "Usar esta toma",
+    "openMontage": "Abrir montaje",
+    "clip": "Clip",
+    "scene": "Escena",
+    "failed": "No se pudo completar",
+    "reviewPending": "Revisión pendiente",
+    "reviewApproved": "Plano aprobado",
+    "reviewChanges": "Cambios pedidos",
+    "approveShot": "Aprobar plano",
+    "requestChanges": "Pedir cambios",
+    "lockShot": "Bloquear plano",
+    "unlockShot": "Desbloquear plano",
+    "review": "Revisar",
+    "reviewTitle": "Revisar planos",
+    "approve": "Aprobar",
+    "requestChange": "Pedir cambio",
+    "instruction": "Qué debe cambiar",
+    "applyPlan": "Aplicar",
+    "undo": "Deshacer",
+    "lock": "Bloquear",
+    "unlock": "Desbloquear",
+    "pendingOnly": "Solo pendientes",
+    "allShots": "Todos los planos",
+    "progress": "{{approved}}/{{total}} aprobados",
+    "closeReview": "Cerrar revisión",
+    "noPending": "No hay planos pendientes",
+    "planSummary": "Plan",
+    "diff": "Diferencia",
+    "cost": "Coste",
+    "sceneVideo": "Vídeo de la escena",
+    "prompts": "Indicaciones",
+    "framePrompt": "Indicación del fotograma",
+    "action": "Acción",
+    "locked": "Bloqueado",
+    "statusPending": "Pendiente",
+    "statusApproved": "Aprobado",
+    "statusChanges": "Pide cambios",
+    "otherTake": "Otra toma"
   }
 }

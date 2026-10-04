@@ -4,6 +4,7 @@ import type { CanonicalTask } from '../../api/client'
 import { canonicalTaskVisualState } from '../../lib/canonicalTaskEvents'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
+import { ActivityMemoryWarning } from './ActivityMemoryWarning'
 import type { ActivityGroup, ActivityTaskLike } from './lineage'
 import { isLiveStatus, taskProgressPercent } from './lineage'
 import type { TaskControlAction } from './executionDetail'
@@ -234,6 +235,7 @@ export function ActivityCompactBar({
       />
       <div className="min-w-0 flex-1 flex items-center gap-2">
         <CompactSummary primary={primary} clock={clock} t={tActivity} onCopyPrompt={onCopyPrompt} />
+        <ActivityMemoryWarning performance={primary?.metadata?.performance} />
         <CompactSubtask child={liveChild(primaryGroup, primary)} clock={clock} t={tActivity} />
         <span className={`truncate ${messageClass}`} title={message}>{message}</span>
       </div>

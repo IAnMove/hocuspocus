@@ -84,6 +84,80 @@ def test_real_embedded_audio_survives_publication(tmp_path):
     assert .07 < rms < .1  # Original tone, not silence or a doubled track.
 
 
+def _video_md5(path: Path) -> str:
+    import subprocess
+    result = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:v:0", "-c", "copy", "-f", "md5", "-"],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, (result.stderr or "")[-400:]
+    line = result.stdout.strip()
+    assert line.startswith("MD5=")
+    return line
+
+
+def _h264_aac(path: Path, *, fps: int) -> None:
+    import subprocess
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=red:s=64x64:r={fps}:d=1",
+         "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-threads", "1", "-c:a", "aac", str(path)],
+        check=True, capture_output=True,
+    )
+
+
+def test_valid_h264_aac_upload_keeps_its_video_bitstream(tmp_path, monkeypatch):
+    import shutil
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        pytest.skip("FFmpeg is required to check a remux")
+    source = tmp_path / "upload.mp4"
+    _h264_aac(source, fps=30)
+    before = _video_md5(source)
+    commands = []
+    real_run = scene_recording.subprocess.run
+
+    def spy(command, **kwargs):
+        commands.append(list(command))
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(scene_recording.subprocess, "run", spy)
+    output = tmp_path / "published.mp4"
+    scene_recording.transcode_scene_recording(source, output, fps=30, duration=1, embedded_audio=True)
+    encodes = [command for command in commands if command and command[0] == "ffmpeg" and "-c:v" in command]
+    assert encodes[-1][encodes[-1].index("-c:v") + 1] == "copy"
+    assert _video_md5(output) == before
+
+
+def test_webm_and_wrong_fps_still_transcode(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        pytest.skip("FFmpeg is required to check a transcode")
+    webm = tmp_path / "capture.webm"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=blue:s=64x64:r=30:d=1",
+         "-c:v", "libvpx-vp9", "-an", str(webm)],
+        check=True, capture_output=True,
+    )
+    mismatched = tmp_path / "twentyfour.mp4"
+    _h264_aac(mismatched, fps=24)
+    commands = []
+    real_run = scene_recording.subprocess.run
+
+    def spy(command, **kwargs):
+        commands.append(list(command))
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(scene_recording.subprocess, "run", spy)
+    scene_recording.transcode_scene_recording(webm, tmp_path / "from-webm.mp4", fps=30, duration=1)
+    scene_recording.transcode_scene_recording(
+        mismatched, tmp_path / "from-24.mp4", fps=30, duration=1, embedded_audio=True,
+    )
+    encodes = [command for command in commands if command and command[0] == "ffmpeg" and "-c:v" in command]
+    assert len(encodes) == 2
+    assert all(command[command.index("-c:v") + 1] == "libx264" for command in encodes)
+
+
 def test_validate_output_checks_h264_audio_and_target_duration(monkeypatch, tmp_path: Path):
     output = tmp_path / "scene.mp4"
     output.write_bytes(b"mp4")

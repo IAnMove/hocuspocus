@@ -99,7 +99,7 @@ def main() -> None:
     if not VENDOR_DIR.is_dir():
         raise RuntimeError("UniRig is not installed; run 'Install AI Rigging (UniRig)' from the HocusPocus Lab menu")
     clip_ids = list(request.get("animations") or list(procedural_rig.CLIPS))
-    seed = int(request.get("seed") or 12345)
+    seed = int(request.get("seed", 12345))
 
     with tempfile.TemporaryDirectory(prefix="maestro_unirig_") as temp_name:
         temp_dir = Path(temp_name)
@@ -127,7 +127,10 @@ def main() -> None:
         run_unirig("merge.sh", ["--source", str(skin_fbx), "--target", str(source), "--output", str(merged_glb)])
         require_rigged_glb(merged_glb, "merged rig")
 
-        summary = procedural_rig.bake_clips_onto_existing_rig(str(merged_glb), str(output_path), clip_ids, progress=event)
+        summary = procedural_rig.bake_clips_onto_existing_rig(
+            str(merged_glb), str(output_path), clip_ids, progress=event,
+            rig_profile=request.get("rig_profile", "prop"), animation_bpm=request.get("animation_bpm", 120),
+        )
 
     require_rigged_glb(output_path, "animated output", [procedural_rig.CLIPS[clip_id] for clip_id in clip_ids])
     summary["joint_count"] = summary.pop("joints", 0)

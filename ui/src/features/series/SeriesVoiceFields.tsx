@@ -23,7 +23,7 @@ export function SeriesVoiceFields({
       {series.characters.map((character, index) => {
         const profile = character.voiceProfile ?? {}
         const kit = kits.find(item => item.id === profile.characterKitRef?.id)
-        const tts = resolvedCharacterTts(kit, character.voiceProfile)
+        const tts = resolvedCharacterTts(kit, character.voiceProfile, series.spokenLanguage || series.language)
         const kitOwnsTts = tts.source === 'kit'
         return (
         <div key={character.id} className="rounded-lg border border-border p-3">

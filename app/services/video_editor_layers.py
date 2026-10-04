@@ -286,7 +286,7 @@ def apply_layers(
     command += ["-map", "[vout]"] if maps_video else ["-map", "0:v:0"]
     command += ["-map", "[mixed]"] if maps_audio else ["-map", "0:a:0"]
     if maps_video:
-        command += ["-c:v", "libx264", "-preset", "medium", "-crf", "16", "-r", str(int(fps)), "-pix_fmt", "yuv420p"]
+        command += ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "0", "-r", str(int(fps)), "-pix_fmt", "yuv420p"]
     else:
         command += ["-c:v", "copy"]
     command += ["-c:a", "aac", "-b:a", "192k", "-t", f"{duration:.6f}", "-movflags", "+faststart", output_path]

@@ -1,5 +1,7 @@
 """Reject image inputs that the native selectors would discard."""
 
+from services.model_selectors import conditioning_hint
+
 
 def validate_image_selectors(params, definition):
     image_selector = params.get("image_prompt_type") or ""
@@ -23,7 +25,10 @@ def _validate_selected_field(field, value, enabled, definition):
     selected = any(values)
     generated_start = field == "image_start" and definition.get("black_frame")
     if selected and not enabled:
-        raise ValueError(f"input.params.{field}: its native conditioning selector must be enabled")
+        hint = conditioning_hint(field, definition)
+        raise ValueError(
+            f"input.params.{field}: its native conditioning selector must be enabled.{hint}"
+        )
     if enabled and not selected and not generated_start:
         raise ValueError(f"input.params.{field}: its conditioning selector requires an image")
     if enabled and selected and any(item == "" for item in values):

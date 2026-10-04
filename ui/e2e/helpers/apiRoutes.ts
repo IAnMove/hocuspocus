@@ -320,6 +320,17 @@ function exactCatalog(): Record<string, ReturnType<typeof json> | { sse: true }>
       required: false,
       authenticated: true,
     }),
+    // The render picker asks for the device before any export. CPU keeps the estimate on the long path.
+    'GET /api/v1/scenes/world3d/export/capabilities': json({
+      renderDevice: 'cpu',
+      qualities: ['draft', 'final', 'master'],
+      motionBlur: { shutterDegrees: [0, 360], default: 180 },
+    }),
+    'GET /api/v1/scenes/video2d/export/capabilities': json({
+      renderDevice: 'cpu',
+      qualities: ['draft', 'final', 'master'],
+      motionBlur: { shutterDegrees: [0, 360], default: 180 },
+    }),
     'GET /api/v1/models': json({
       families: [{ id: 'stub', label: 'Stub', order: 1 }],
       models: [{

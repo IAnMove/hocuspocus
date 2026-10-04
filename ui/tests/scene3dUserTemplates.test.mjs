@@ -50,8 +50,10 @@ test('export strips clip identity, production and blob URLs from a scenario pack
 test('export without assets clears durable URLs too', () => {
   const document = createDefaultScene3DDocument()
   document.slots[0].sourceUrl = gallery.url
+  document.slots[0].clips = [{ clip: { index: 0, name: 'Walk' }, start: 0, fade: 0 }]
   const stripped = scenarioDocumentFromShot(document, false)
   assert.equal(stripped.slots[0].sourceUrl, '')
+  assert.equal(stripped.slots[0].clips, undefined)
   assert.equal(createUserTemplate({ document, title: '  ' }), undefined)
 })
 
@@ -216,6 +218,7 @@ test('applying a scenario keeps clip size and can reuse the current GLBs', () =>
   previous.slots[0].sourceUrl = gallery.url
   previous.slots[0].sourceRef = gallery
   previous.slots[0].clip = { index: 0, name: 'Walk' }
+  previous.slots[0].clips = [{ clip: { index: 0, name: 'Walk' }, start: 0, fade: 0 }, { clip: { index: 1, name: 'Wave' }, start: 2, fade: 0.3 }]
   const pack = createUserTemplate({ document: applyScene3DTemplate('hero-push'), title: 'Hero', id: 'user-hero' })
   const kept = remountUserTemplate(pack, previous, true)
   assert.equal(kept.clipNumber, 8)
@@ -223,9 +226,29 @@ test('applying a scenario keeps clip size and can reuse the current GLBs', () =>
   assert.equal(kept.templateId, 'hero-push')
   assert.equal(kept.slots[0].sourceUrl, gallery.url)
   assert.equal(kept.slots[0].clip.name, 'Walk')
+  assert.equal(kept.slots[0].clips?.[1].clip.name, 'Wave')
   const fresh = remountUserTemplate(pack, previous, false)
   assert.equal(fresh.slots[0].sourceUrl, '')
   assert.equal(fresh.clipNumber, 8)
+})
+
+test('keep-objects reuses a sequence when the scenario already embeds that GLB', () => {
+  const previous = applyScene3DTemplate('two-shot')
+  previous.slots[0].sourceUrl = gallery.url
+  previous.slots[0].sourceRef = gallery
+  previous.slots[0].clip = { index: 0, name: 'Walk' }
+  previous.slots[0].clipPlayback = { speed: 1.5, start: 0.2, loop: false }
+  previous.slots[0].clips = [{ clip: { index: 0, name: 'Walk' }, start: 0, fade: 0 }, { clip: { index: 1, name: 'Wave' }, start: 2, fade: 0.3 }]
+  const bundled = applyScene3DTemplate('hero-push')
+  bundled.slots[0].sourceUrl = gallery.url
+  bundled.slots[0].sourceRef = gallery
+  bundled.slots[0].clip = { index: 0, name: 'Idle' }
+  const pack = createUserTemplate({ document: bundled, title: 'Hero assets', includeAssets: true, id: 'user-hero-assets' })
+  const kept = remountUserTemplate(pack, previous, true)
+  assert.equal(kept.slots[0].sourceUrl, gallery.url)
+  assert.equal(kept.slots[0].clip.name, 'Walk')
+  assert.equal(kept.slots[0].clipPlayback.speed, 1.5)
+  assert.equal(kept.slots[0].clips?.[1].clip.name, 'Wave')
 })
 
 test('browser library stores at most 24 scenarios and rejects oversized files', () => {

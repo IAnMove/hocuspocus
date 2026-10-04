@@ -37,6 +37,8 @@ _generation_queues: dict[
 ] = {}
 _generation_queue_locks: dict[int, Any] = {}
 _job_state_observer: Callable[[Mapping[str, Any]], None] | None = None
+_MISSING = object()
+_DURATION_KEYS = ("queue_seconds", "duration_seconds", "_duration_seconds")
 
 
 def set_job_state_observer(
@@ -54,6 +56,15 @@ def set_job_state_observer(
         _job_state_observer = observer
 
 
+def _wake_job_waiters(snapshot: Mapping[str, Any]) -> None:
+    """Wake jobs.wait. A missing helper must not fail the generation."""
+    try:
+        from services.jobs_wait import note_job_state
+        note_job_state(snapshot)
+    except Exception:
+        return
+
+
 def _notify_job_state(job: MutableMapping[str, Any]) -> None:
     with _lifecycle_lock:
         observer = _job_state_observer
@@ -62,6 +73,7 @@ def _notify_job_state(job: MutableMapping[str, Any]) -> None:
             snapshot["output_files"] = list(snapshot["output_files"])
         if isinstance(snapshot.get("clip_output_files"), dict):
             snapshot["clip_output_files"] = dict(snapshot["clip_output_files"])
+    _wake_job_waiters(snapshot)
     if observer is None:
         return
     try:
@@ -242,6 +254,51 @@ def snapshot_job(job: MutableMapping[str, Any]) -> dict[str, Any]:
         if isinstance(snapshot.get("clip_output_files"), dict):
             snapshot["clip_output_files"] = dict(snapshot["clip_output_files"])
         return snapshot
+
+
+def positional_clip_outputs(value: Any) -> list[Any]:
+    """Return clip filenames in shot order for a list or an indexed dict.
+
+    A live multiclip job stores a sparse list. Registration stores
+    ``{"0": filename}``. Iterating the dict yields the keys ``"0"`` and
+    ``"1"``, which Director then saved as if they were video files.
+    """
+
+    if isinstance(value, Mapping):
+        indexed: list[tuple[int, Any]] = []
+        for key, filename in value.items():
+            try:
+                index = int(key)
+            except (TypeError, ValueError):
+                continue
+            if index >= 0:
+                indexed.append((index, filename or None))
+        if not indexed:
+            return []
+        last = max(index for index, _filename in indexed)
+        slots: list[Any] = [None] * (last + 1)
+        for index, filename in sorted(indexed, key=lambda item: item[0]):
+            if index >= len(slots):
+                slots.extend([None] * (index + 1 - len(slots)))
+            slots[index] = filename
+        return slots
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return []
+
+
+def new_media_files(out_dir: str, before: Any) -> list[str]:
+    """Media files created in ``out_dir`` since ``before``. Hidden and temporary files are never outputs: the
+    workspace task database (``.maestro-tasks-v1.sqlite3-wal``) and editor temps are written there during a job."""
+    try:
+        after = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
+    except OSError:
+        return []
+    return sorted(
+        name for name in after - set(before or ())
+        if os.path.splitext(name)[1].lower() in GENERATED_MEDIA_EXTENSIONS
+        and not name.startswith((".", "_")) and os.path.isfile(os.path.join(out_dir, name))
+    )
 
 
 def record_job_outputs(
@@ -538,16 +595,210 @@ def finish_job(
     return published
 
 
+def _required_priority(raw: Any) -> int:
+    """Return an integer priority. ``None`` is the FIFO default of zero."""
+    if raw is None:
+        return 0
+    if isinstance(raw, bool) or type(raw) is not int:
+        raise ValueError("priority must be an integer")
+    return raw
+
+
+def generation_queue_priority(job: Mapping[str, Any]) -> int:
+    """Higher integers run first. Omitted priority keeps registration order."""
+    if "priority" in job:
+        return _required_priority(job.get("priority"))
+    params = job.get("params")
+    if isinstance(params, Mapping) and "priority" in params:
+        return _required_priority(params.get("priority"))
+    return 0
+
+
+def ensure_generation_priority(payload: Mapping[str, Any]) -> None:
+    """Reject a non-integer generate/submit priority before queueing."""
+    if "priority" not in payload:
+        return
+    generation_queue_priority({"priority": payload.get("priority")})
+
+
+def _non_negative_seconds(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number < 0 or number != number or number == float("inf"):
+        return None
+    return number
+
+
+def _explicit_seconds(source: Mapping[str, Any]) -> float | None:
+    for key in _DURATION_KEYS:
+        if key not in source:
+            continue
+        parsed = _non_negative_seconds(source.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _frames_seconds(job: Mapping[str, Any], params: Mapping[str, Any]) -> float | None:
+    frames = _non_negative_seconds(params.get("video_length"))
+    if frames is None or frames <= 0:
+        return None
+    fps = _non_negative_seconds(params.get("fps", job.get("fps", 24)))
+    if fps is None or fps <= 0:
+        return None
+    return frames / fps
+
+
+def generation_queue_seconds(job: Mapping[str, Any]) -> float | None:
+    """Known output length in seconds, or ``None`` when length was not declared.
+
+    A one-second still is ``generation_mode=image``. Unknown length does not
+    jump ahead of another job that also omitted a length.
+    """
+    explicit = _explicit_seconds(job)
+    if explicit is not None:
+        return explicit
+    params = job.get("params")
+    if not isinstance(params, Mapping):
+        params = {}
+    else:
+        explicit = _explicit_seconds(params)
+        if explicit is not None:
+            return explicit
+    if params.get("generation_mode", job.get("generation_mode")) == "image":
+        return 1.0
+    return _frames_seconds(job, params)
+
+
+def _pop_command_priority(command: dict[str, Any]) -> Any:
+    """Remove optional priority so strict command schemas do not reject it."""
+    found = _MISSING
+    if "priority" in command:
+        found = command.pop("priority")
+    payload = command.get("input")
+    if isinstance(payload, dict):
+        if "priority" in payload:
+            inner = payload.pop("priority")
+            if found is _MISSING:
+                found = inner
+        params = payload.get("params")
+        if isinstance(params, dict) and "priority" in params:
+            inner = params.pop("priority")
+            if found is _MISSING:
+                found = inner
+    return found
+
+
+def take_submission_priority(command: Any) -> int | None:
+    """Lift optional priority off a generate command before it is frozen."""
+    if not isinstance(command, dict):
+        return None
+    raw = _pop_command_priority(command)
+    if raw is _MISSING or raw is None:
+        return None
+    return _required_priority(raw)
+
+
+def priority_fields(priority: int | None) -> dict[str, int]:
+    """Return the generate-body fragment for one already validated priority."""
+    if priority is None:
+        return {}
+    return {"priority": priority}
+
+
+MAX_WAIT_ENV = "HOCUS_QUEUE_MAX_WAIT_SECONDS"
+DEFAULT_MAX_WAIT_SECONDS = 300.0
+
+
+def queue_max_wait_seconds() -> float:
+    """Wait after which only a higher priority may overtake a job. ``0`` turns aging off."""
+    raw = os.environ.get(MAX_WAIT_ENV)
+    if raw is None or not raw.strip():
+        return DEFAULT_MAX_WAIT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_MAX_WAIT_SECONDS
+    return value if value >= 0 and value == value and value != float("inf") else DEFAULT_MAX_WAIT_SECONDS
+
+
+def _overdue(new_job: Mapping[str, Any], queued_job: Mapping[str, Any], now: float, limit: float) -> bool:
+    """A job that waited past the limit keeps its place against equal or lower priority.
+
+    Shortest-first alone let images (1 s) overtake TTS lines, which declare a
+    20 s cap as their length, for as long as images kept arriving.
+    """
+    entered = queued_job.get("_queue_entered_at")
+    if limit <= 0 or type(entered) is not float or now - entered < limit:
+        return False
+    return int(new_job.get("_queue_priority", 0)) <= int(queued_job.get("_queue_priority", 0))
+
+
+def _scheduled_before(
+    new_sequence: int,
+    new_job: Mapping[str, Any],
+    queued_sequence: int,
+    queued_job: Mapping[str, Any],
+) -> bool:
+    """Pending order: higher priority, then shorter known work, then FIFO."""
+    new_priority = int(new_job.get("_queue_priority", 0))
+    queued_priority = int(queued_job.get("_queue_priority", 0))
+    if new_priority != queued_priority:
+        return new_priority > queued_priority
+    new_seconds = new_job.get("_queue_seconds")
+    queued_seconds = queued_job.get("_queue_seconds")
+    if (
+        type(new_seconds) is float
+        and type(queued_seconds) is float
+        and new_seconds != queued_seconds
+    ):
+        return new_seconds < queued_seconds
+    return new_sequence < queued_sequence
+
+
+def _insert_generation_waiter(
+    queue: deque[tuple[int, object, MutableMapping[str, Any]]],
+    entry: tuple[int, object, MutableMapping[str, Any]],
+) -> int:
+    """Insert one waiter and return its 1-based position.
+
+    The local GPU lock has a single owner. Ordering the pending queue is
+    what lets a short or high-priority job start before a long low-priority
+    job that has not taken the GPU yet. The running owner is not preempted.
+    A job that has waited ``queue_max_wait_seconds()`` is overtaken only by a
+    higher priority.
+    """
+    sequence, _token, job = entry
+    now = time.monotonic()
+    job["_queue_entered_at"] = now
+    limit = queue_max_wait_seconds()
+    floor = 0
+    for position, (_, _, queued_job) in enumerate(queue):
+        if _overdue(job, queued_job, now, limit):
+            floor = position + 1
+    index = len(queue)
+    for position in range(floor, len(queue)):
+        queued_sequence, _, queued_job = queue[position]
+        if _scheduled_before(sequence, job, queued_sequence, queued_job):
+            index = position
+            break
+    queue.insert(index, entry)
+    return index + 1
+
+
 def register_generation_job(
     generation_lock: threading.Lock,
     job: MutableMapping[str, Any],
 ) -> int:
-    """Register ``job`` in the fair queue for one GPU lock.
+    """Register ``job`` on the single GPU queue before its worker starts.
 
-    Registration is intentionally separate from worker startup. API handlers
-    can therefore reserve the FIFO position synchronously, before thread
-    scheduling has a chance to reorder a burst of submissions.
+    Registration stays separate from worker startup so a burst of API calls
+    cannot lose its order to thread scheduling. Omitted priority is ``0``.
+    Equal priority and equal or unknown length keep registration order.
     """
+    priority = generation_queue_priority(job)
+    seconds = generation_queue_seconds(job)
     lock_key = id(generation_lock)
     with _generation_queue_condition:
         queue = _generation_queues.setdefault(lock_key, deque())
@@ -560,9 +811,11 @@ def register_generation_job(
                 if queued_token is token:
                     return position
 
+        job["_queue_priority"] = priority
+        job["_queue_seconds"] = None if seconds is None else float(seconds)
         token = object()
         sequence = next(_generation_queue_sequence)
-        queue.append((sequence, token, job))
+        position = _insert_generation_waiter(queue, (sequence, token, job))
         # Keep a strong reference while waiters exist so a recycled object id
         # can never inherit another lock's queue.
         _generation_queue_locks[lock_key] = generation_lock
@@ -570,7 +823,7 @@ def register_generation_job(
         job["_generation_queue_token"] = token
         job["_generation_queue_sequence"] = sequence
         _generation_queue_condition.notify_all()
-        return len(queue)
+        return position
 
 
 def generation_queue_position(
@@ -617,8 +870,14 @@ def acquire_generation_slot(
     job: MutableMapping[str, Any],
     *,
     poll_interval: float = 0.1,
+    yield_to: Callable[[float], bool] | None = None,
 ) -> bool:
-    """Acquire the GPU lock in registration order, with cancellable waiting."""
+    """Acquire the single GPU lock in scheduled pending order.
+
+    ``yield_to(waited)`` receives how long this job has waited. While it
+    returns true, the queue head leaves the free lock to another waiter on the
+    same device (see ``ResourceCoordinator.has_waiter_owed_turn``).
+    """
     register_generation_job(generation_lock, job)
     lock_key = id(generation_lock)
     token = job.get("_generation_queue_token")
@@ -636,6 +895,10 @@ def acquire_generation_slot(
                 _remove_generation_waiter(lock_key, cancelled_token, cancelled_job)
             is_head = bool(queue and queue[0][1] is token)
             if not is_head:
+                _generation_queue_condition.wait(timeout=poll_interval)
+                continue
+            waited = time.monotonic() - float(job.get("_queue_entered_at") or time.monotonic())
+            if yield_to is not None and yield_to(waited):
                 _generation_queue_condition.wait(timeout=poll_interval)
                 continue
 
@@ -664,10 +927,11 @@ def generation_slot(
     job: MutableMapping[str, Any],
     *,
     poll_interval: float = 0.1,
+    yield_to: Callable[[float], bool] | None = None,
 ) -> Iterator[bool]:
     """Context manager form of :func:`acquire_generation_slot`."""
     acquired = acquire_generation_slot(
-        generation_lock, job, poll_interval=poll_interval,
+        generation_lock, job, poll_interval=poll_interval, yield_to=yield_to,
     )
     try:
         yield acquired
@@ -676,3 +940,8 @@ def generation_slot(
             generation_lock.release()
             with _generation_queue_condition:
                 _generation_queue_condition.notify_all()
+            # After the GPU is free: a job's freed buffers stay in its thread's
+            # malloc arena until trimmed (services/memory_trim.py).
+            from services.memory_trim import trim_process_heap
+
+            trim_process_heap("a generation job")

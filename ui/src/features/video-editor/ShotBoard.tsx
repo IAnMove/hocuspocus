@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Film, Loader2, RefreshCw, Sparkles, X } from 'lucide-react'
+import { Check, Film, Loader2, Pencil, RefreshCw, Sparkles, X } from 'lucide-react'
 import { getMontageShots, regenerateShot, selectShotTake, type MontageShot, type MontageShotBoard, type ShotTake } from '../../api/montages'
 import { useUiTranslation } from '../../i18n'
+import { openSceneOutput } from '../../lib/sceneOutput'
 import { randomUuid } from '../../lib/uuid'
-import { formatSlot, hasPendingTakes, shortPrompt } from './shotBoardModel'
+import { formatSlot, hasPendingTakes, sceneOutput, shortPrompt } from './shotBoardModel'
 
 interface Props {
   workspace: string
@@ -50,8 +51,9 @@ function RegenerateForm({ shot, busy, onSubmit, onCancel }: {
   </div>
 }
 
-function ShotCard({ shot, busy, onRegenerate, onSelect }: {
+function ShotCard({ shot, busy, onRegenerate, onSelect, onOpenScene }: {
   shot: MontageShot; busy: boolean; onRegenerate: (prompt: string, seed?: number) => void; onSelect: (take: ShotTake) => void
+  onOpenScene: (scene: string) => void
 }) {
   const { t } = useUiTranslation('videoEditor')
   const [editing, setEditing] = useState(false)
@@ -72,6 +74,7 @@ function ShotCard({ shot, busy, onRegenerate, onSelect }: {
     {origin.prompt && <p className="mt-0.5 text-[11px] text-text-secondary" title={origin.prompt}>{shortPrompt(origin.prompt)}</p>}
     {origin.startImage && <a href={origin.startImage.url} target="_blank" rel="noreferrer" className="mt-0.5 block truncate text-[11px] text-accent-blue hover:underline">{t('shots.startImage')}</a>}
     {shot.takes.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{shot.takes.map(take => <TakeChip key={take.id} take={take} busy={busy} onSelect={() => onSelect(take)} />)}</div>}
+    {origin.scene && <button type="button" className={`${button} mt-2`} disabled={busy} onClick={() => onOpenScene(origin.scene as string)}><Pencil size={11} /> {t('shots.openScene')}</button>}
     {origin.canRegenerate && !editing && <button type="button" className={`${button} mt-2`} disabled={busy} onClick={() => setEditing(true)}><RefreshCw size={11} /> {t('shots.regenerate')}</button>}
     {!origin.canRegenerate && <p className="mt-1.5 text-[10px] text-text-muted">{t(origin.scene ? 'shots.sceneHint' : 'shots.notRegenerable')}</p>}
     {editing && <RegenerateForm shot={shot} busy={busy} onCancel={() => setEditing(false)}
@@ -118,7 +121,8 @@ export function ShotBoard({ workspace, file, onChanged, onError }: Props) {
     </div>
     <div className="grid max-h-[60vh] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-4">
       {board.shots.map(shot => <ShotCard key={shot.id} shot={shot} busy={busy}
-        onRegenerate={(prompt, seed) => regenerate(shot, prompt, seed)} onSelect={take => select(shot, take)} />)}
+        onRegenerate={(prompt, seed) => regenerate(shot, prompt, seed)} onSelect={take => select(shot, take)}
+        onOpenScene={scene => void run(() => openSceneOutput(sceneOutput(workspace, scene)), false)} />)}
     </div>
   </section>
 }

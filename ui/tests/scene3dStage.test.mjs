@@ -234,6 +234,11 @@ test('encoder level admits full HD at 60 fps while preserving the 720p configura
     assert.equal(config.framerate, 60)
     assert.ok(config.bitrate <= 24_000_000)
   }
+  assert.equal(world3dEncoderConfig(3840, 2160, 24).codec, 'avc1.640033')
+  assert.equal(world3dEncoderConfig(3840, 2160, 30).codec, 'avc1.640033')
+  assert.equal(world3dEncoderConfig(2160, 3840, 30).codec, 'avc1.640033')
+  assert.equal(world3dEncoderConfig(3840, 2160, 60).codec, 'avc1.640034')
+  assert.equal(world3dEncoderConfig(2160, 3840, 60).codec, 'avc1.640034')
 })
 
 test('wizard can mount the run-loop cylinder template', () => {

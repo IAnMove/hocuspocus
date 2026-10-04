@@ -5,6 +5,8 @@ import re
 from urllib.parse import urlsplit, parse_qsl, unquote
 
 CHARACTER_VOICE_LANGUAGES = {"auto", "chinese", "english", "japanese", "korean", "german", "french", "russian", "portuguese", "spanish", "italian"}
+# A character can carry one dedicated voice per spoken language; "auto" is not a language.
+CHARACTER_VOICE_DUB_LANGUAGES = CHARACTER_VOICE_LANGUAGES - {"auto"}
 
 
 def _voice_reference_query(kind, raw):
@@ -92,12 +94,12 @@ def _face_placement(face):
 def _face_style(value):
     if "atlas" in value:
         source_ref(value["atlas"])
-    for key in ("clean", "blink", "eyes"):
+    for key in ("clean", "blink", "eyes", "morph"):
         if key in value and type(value[key]) is not bool:
             raise ValueError("Invalid face switch.")
     if "strength" in value and (type(value["strength"]) not in (int, float) or not 0 <= value["strength"] <= 1.5):
         raise ValueError("Invalid face strength.")
-    for key, choices in (("style", {"soft", "toon", "pixel"}), ("expression", {"neutral", "happy", "angry", "worried", "surprised", "sleepy"})):
+    for key, choices in (("style", {"soft", "toon", "toon-bold", "pixel"}), ("expression", {"neutral", "happy", "angry", "worried", "surprised", "sleepy"})):
         if key in value and (not isinstance(value[key], str) or value[key] not in choices):
             raise ValueError("Invalid face style.")
     if "lip" in value and not re.fullmatch(r"#[0-9a-fA-F]{6}", str(value["lip"])):
@@ -105,7 +107,7 @@ def _face_style(value):
 
 
 def face_settings(value):
-    allowed = {"face", "atlas", "strength", "clean", "style", "lip", "expression", "blink", "eyes"}
+    allowed = {"face", "atlas", "strength", "clean", "morph", "style", "lip", "expression", "blink", "eyes"}
     if not isinstance(value, dict) or not isinstance(value.get("face"), dict) or not set(value).issubset(allowed):
         raise ValueError("Only face settings may be stored.")
     _face_placement(value["face"])
@@ -153,3 +155,18 @@ def normalize_character_voice(value):
     if "instructions" in value and (not isinstance(value["instructions"], str) or len(value["instructions"]) > 1000):
         raise ValueError("Voice instructions are too long.")
     return dict(value)
+
+
+def normalize_character_voices_by_language(value):
+    """Optional per-language voices. ``voice`` stays the default for any other language."""
+    if not isinstance(value, dict) or len(value) > len(CHARACTER_VOICE_DUB_LANGUAGES):
+        raise ValueError("Store voices by language as an object keyed by language.")
+    result = {}
+    for language, voice in value.items():
+        if language not in CHARACTER_VOICE_DUB_LANGUAGES:
+            raise ValueError("Unsupported voice language.")
+        normalized = normalize_character_voice(voice)
+        if normalized.get("model") == "qwen3_tts_base" and normalized["language"] not in {language, "auto"}:
+            raise ValueError("A reference voice must speak the language it is assigned to.")
+        result[language] = normalized
+    return result

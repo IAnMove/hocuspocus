@@ -15,6 +15,7 @@ const PRESETS = [
   ['oldDoc', 'finishDoc'],
   ['nightNeon', 'finishNeon'],
   ['paperComic', 'finishPaper'],
+  ['risoPress', 'finishRiso'],
 ] as const
 
 export function SceneFinishControls({ finish, playing, recording, publishing, onChange }: { finish?: SceneFinish; playing?: boolean; recording?: boolean; publishing?: boolean; onChange: (finish: SceneFinish | undefined) => void }) {

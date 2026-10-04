@@ -26,7 +26,7 @@ REQUEST_TOOLS = MUTATIONS | {'analyze'}
 # separate /api/v1/model3d/generate contract and is intentionally not routed
 # through this MCP tool.
 GENERATION_MODES = ('image', 'video', 'audio', 'avatar')
-LEGACY_TOOLS = REQUEST_TOOLS | {'models', 'processors', 'status', 'assets', 'collections'}
+LEGACY_TOOLS = REQUEST_TOOLS | {'models', 'models.list', 'processors', 'status', 'assets', 'collections'}
 
 
 def _selected_operations(command_operations):
@@ -39,25 +39,67 @@ def _selected_operations(command_operations):
     return entries, frozenset(names)
 
 
+def _supported_versions(operation):
+    declared = ((operation.get('inputSchema') or {}).get('properties') or {}).get('version')
+    if not isinstance(declared, dict):
+        return None
+    if 'const' in declared:
+        return [declared['const']]
+    values = declared.get('enum')
+    return list(values) if isinstance(values, list) else None
+
+
+def _check_version(operation, arguments):
+    """Name the accepted versions before the operation schema lists every field of the other version."""
+    supported = _supported_versions(operation)
+    if supported is None or 'version' not in arguments or arguments['version'] in supported:
+        return
+    accepted = ' or '.join(str(value) for value in supported)
+    raise HTTPException(status_code=422, detail={
+        'code': 'unsupported_version', 'retryable': False, 'supported_versions': supported,
+        'message': f"{operation['name']} accepts version {accepted}; got {arguments['version']!r}",
+    })
+
+
+QUEUE_PRIORITY = {
+    'type': 'integer',
+    'description': 'Optional GPU queue priority; higher runs first, omitted is 0. Within one priority the shortest '
+                   'declared output runs first, and a job that has waited 5 minutes is overtaken only by a higher priority.',
+}
+
+
+def _takes_queue_priority(operation):
+    # Lifted off the command before its strict schema (job_lifecycle.take_submission_priority).
+    name = operation['name']
+    return name.startswith('generation.') and name != 'generation.receipt' and operation.get('mutation', True)
+
+
 def _command_tool(operation):
     # HTTP carries its operation explicitly; MCP carries it as the tool name.
     # Derive the transport projection from the same source schema.
     schema = operation['inputSchema']
     schema = {**schema, 'properties': {key: value for key, value in schema['properties'].items() if key != 'operation'},
               'required': [key for key in schema['required'] if key != 'operation']}
+    if _takes_queue_priority(operation):
+        schema['properties'] = {**schema['properties'], 'priority': QUEUE_PRIORITY}
     guidance = 'Versioned command. Follow inputSchema for workspace and exact resource IDs.'
-    if operation['mutation']:
-        guidance += ' Reuse intent_id on transport retries; inspect commands.receipt after an uncertain response.'
+    # A catalog that forgets the flag must not take tools/list down for every
+    # client; treat it as a mutation, the conservative reading.
+    mutation = operation.get('mutation', True)
+    if mutation:
+        receipt_tool = operation.get('receipt_tool', 'commands.receipt')
+        guidance += f' Reuse intent_id on transport retries; inspect {receipt_tool} after an uncertain response.'
     return {
         'name': operation['name'], 'description': f"{operation['description']} {guidance}", 'inputSchema': schema,
-        'annotations': {'readOnlyHint': not operation['mutation'], 'destructiveHint': False, 'idempotentHint': True},
+        'annotations': {'readOnlyHint': not mutation, 'destructiveHint': bool(operation.get('destructive', False)), 'idempotentHint': True},
     }
 
 
 def tool_definitions(available=None, command_operations=None):
     tools = []
     for name, description in [
-        ('models', 'Discover exact model identifiers and capabilities.'),
+        ('models', 'List model summaries (id, name, one-line description, counts). Pass detail true for the full catalog, or model_type for one model\'s options, including allowed selector values.'),
+        ('models.list', 'Same summary list as models. Pass detail true for the full catalog, or model_type for one model\'s options, including allowed selector values.'),
         ('processors', 'Discover available postprocessors and hardware restrictions.'),
         ('status', 'Read the canonical status of a previously submitted job.'),
         ('assets', 'Find existing canonical media IDs and URLs. Paginate with limit and offset; never invent filenames.'),
@@ -102,8 +144,11 @@ def tool_definitions(available=None, command_operations=None):
         elif name == 'assets':
             properties = {key: {'type': 'string'} for key in ('search', 'kind', 'workspace')}
             properties.update(limit={'type': 'integer', 'minimum': 1, 'maximum': 500}, offset={'type': 'integer', 'minimum': 0})
-        elif name == 'models':
-            properties = {'model_type': {'type': 'string', 'description': 'Optional exact ID to get input/options instead of the catalog.'}}
+        elif name in {'models', 'models.list'}:
+            properties = {
+                'model_type': {'type': 'string', 'description': 'Optional exact ID. Returns that model\'s input and options instead of the summary list.'},
+                'detail': {'type': 'boolean', 'description': 'When true, return the full model catalog. Default is a short summary.'},
+            }
         tools.append({'name': name, 'description': description,
                       'inputSchema': {'type': 'object', 'properties': properties, 'required': required, 'additionalProperties': False},
                       'annotations': {'readOnlyHint': name not in MUTATIONS, 'destructiveHint': False, 'idempotentHint': True}})
@@ -190,18 +235,22 @@ def _prepare_generate_params(params):
         params['image_mode'] = 1 if params.get('generation_mode') == 'image' else 0
 
 
-def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, command_operations=None):
+def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, command_operations=None, profiles=None, oauth=None):
     router = APIRouter()
     journal = RequestJournal(journal_path)
     token_getter = token_getter or (lambda: os.environ.get('HOCUS_MCP_TOKEN', ''))
 
     operations, operation_names = _selected_operations(command_operations)
+    operations_by_name = {operation['name']: operation for operation in operations}
     callable_names = LEGACY_TOOLS | operation_names
 
-    async def call_tool(name, arguments):
+    async def call_tool(name, arguments, allowed=None):
         if not isinstance(name, str) or name not in callable_names or not callable(handlers.get(name)) or not isinstance(arguments, dict):
             raise ValueError('Unknown tool or invalid arguments')
+        if allowed is not None and name not in allowed:
+            raise ValueError('Unknown tool or invalid arguments')
         if name in operation_names:
+            _check_version(operations_by_name[name], arguments)
             result = handlers[name](arguments)
             return await result if inspect.isawaitable(result) else result
         if name in REQUEST_TOOLS:
@@ -251,13 +300,16 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
             return result
         if name == 'status':
             result = handlers[name](arguments['job_id'])
-        elif name in {'assets', 'models'}:
+        elif name in {'assets', 'models', 'models.list'}:
             result = handlers[name](arguments)
         else:
             result = handlers[name]()
         return await result if inspect.isawaitable(result) else result
 
-    async def dispatch(message):
+    default_instructions = ('One queue: keep returned job IDs and poll status. Reuse request_id on retries; never assume '
+                            'generated quality from submission success.')
+
+    async def dispatch(message, allowed=None, instructions=default_instructions):
         if not isinstance(message, dict) or message.get('jsonrpc') != '2.0':
             return {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'Invalid request'}}
         if 'id' not in message:
@@ -266,19 +318,19 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         try:
             if method == 'initialize':
                 result = {'protocolVersion': PROTOCOL, 'capabilities': {'tools': {}},
-                          'serverInfo': {'name': 'hocuspocus', 'version': '1'},
-                          'instructions': 'One queue: keep returned job IDs and poll status. Reuse request_id on retries; never assume generated quality from submission success.'}
+                          'serverInfo': {'name': 'hocuspocus', 'version': '1'}, 'instructions': instructions}
             elif method == 'ping':
                 result = {}
             elif method == 'tools/list':
-                result = {'tools': tool_definitions({name for name, handler in handlers.items() if callable(handler)}, operations)}
+                available = {name for name, handler in handlers.items() if callable(handler)}
+                result = {'tools': tool_definitions(available if allowed is None else available & allowed, operations)}
             elif method == 'tools/call':
                 params = message.get('params') or {}
                 if not isinstance(params, dict):
                     raise ValueError('Tool call params must be an object')
-                value = await call_tool(params.get('name'), params.get('arguments') or {})
+                value = await call_tool(params.get('name'), params.get('arguments') or {}, allowed)
                 result = {
-                    'content': [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}],
+                    'content': _tool_content(value),
                     'isError': _tool_result_is_error(value),
                 }
                 if params.get('name') in operation_names and isinstance(value, dict):
@@ -298,22 +350,62 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
                 }}
             return {'jsonrpc': '2.0', 'id': request_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': str(detail)}]}}
 
-    @router.post('/api/v1/wangp/mcp', include_in_schema=False)
-    @router.post('/api/v1/mcp')
-    async def mcp(request: Request):
+    def authorize(request: Request, profile_name=None):
         token = token_getter()
         if not token:
             raise HTTPException(503, 'External agent access is disabled; configure HOCUS_MCP_TOKEN')
-        if not secrets.compare_digest(request.headers.get('authorization', ''), f'Bearer {token}'):
-            raise HTTPException(401, 'Invalid MCP credentials')
+        header = request.headers.get('authorization', '')
+        if secrets.compare_digest(header, f'Bearer {token}'):
+            return
+        # Clients that cannot hold the installation key (ChatGPT connectors) sign in with OAuth and send their own token.
+        if oauth is not None and header.startswith('Bearer ') and oauth.verify(header[7:], profile_name or 'all'):
+            return
+        challenge = {}
+        if oauth is not None:
+            challenge = {'WWW-Authenticate': f'Bearer resource_metadata="{oauth.resource_metadata_url(request, profile_name)}"'}
+        raise HTTPException(401, 'Invalid MCP credentials', headers=challenge)
+
+    def same_origin(request: Request):
         origin = request.headers.get('origin')
         if origin and origin != f'{request.url.scheme}://{request.url.netloc}':
             raise HTTPException(403, 'Origin is not permitted')
+
+    async def payload(request: Request):
         try:
-            payload = await request.json()
+            return await request.json()
         except ValueError:
+            return None
+
+    @router.post('/api/v1/wangp/mcp', include_in_schema=False)
+    @router.post('/api/v1/mcp')
+    async def mcp(request: Request):
+        authorize(request)
+        same_origin(request)
+        body = await payload(request)
+        if body is None:
             return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}, status_code=400)
-        return await mcp_payload_response(payload, dispatch)
+        return await mcp_payload_response(body, dispatch)
+
+    @router.post('/api/v1/mcp/{profile_name}')
+    async def mcp_profile(profile_name: str, request: Request):
+        """The same tools filtered to one job (see services/mcp_profiles.py), for agents such as ChatGPT."""
+        chosen = (profiles or {}).get(profile_name)
+        if chosen is None:
+            raise HTTPException(404, 'Unknown MCP profile')
+        authorize(request, profile_name)
+        same_origin(request)
+        body = await payload(request)
+        if body is None:
+            return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}, status_code=400)
+        allowed = frozenset(chosen['tools'])
+
+        async def profile_dispatch(message):
+            return await dispatch(message, allowed, chosen.get('instructions') or default_instructions)
+        return await mcp_payload_response(body, profile_dispatch)
+
+    @router.get('/api/v1/mcp/{profile_name}')
+    async def no_profile_stream(profile_name: str):
+        return Response(status_code=405, headers={'Allow': 'POST'})
 
     @router.get('/api/v1/wangp/mcp', include_in_schema=False)
     @router.get('/api/v1/mcp')
@@ -321,6 +413,20 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         return Response(status_code=405, headers={'Allow': 'POST'})
 
     return router
+
+
+def _tool_content(value):
+    """Keep the JSON summary first. Image blocks follow so a vision client can see the preview."""
+    content = [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}]
+    images = value.get('images') if isinstance(value, dict) else None
+    if not isinstance(images, list):
+        return content
+    for image in images:
+        if not isinstance(image, dict) or not isinstance(image.get('data'), str) or not image['data']:
+            continue
+        mime = image.get('mimeType')
+        content.append({'type': 'image', 'mimeType': mime if isinstance(mime, str) and mime else 'image/png', 'data': image['data']})
+    return content
 
 
 def _tool_result_is_error(value):

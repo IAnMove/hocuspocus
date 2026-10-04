@@ -13,9 +13,13 @@ class MediaPathNotAllowed(ValueError):
 
 
 _KIND_EXTENSIONS = {
+    "model3d": {".glb"},
     "audio": {
         ".aac", ".aif", ".aiff", ".flac", ".m4a", ".mp3", ".ogg",
         ".opus", ".wav", ".wma",
+    },
+    "image": {
+        ".jpeg", ".jpg", ".png", ".webp",
     },
     "video": {
         ".avi", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg",

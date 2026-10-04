@@ -1,6 +1,7 @@
 # Runtime ABI constraints; generated from app/runtime/profiles.json.
 flash-attn==2.7.4.post1
 numpy==1.26.4
+bpy==4.2.22
 torch==2.7.0+cu128
 torchvision==0.22.0+cu128
 transformers==4.51.3

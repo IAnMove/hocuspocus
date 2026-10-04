@@ -38,9 +38,10 @@ def command(engine: str, arguments: list[str]) -> tuple[list[str], dict[str, str
     args = [uv, "--no-config", "pip", *arguments, "--python", sys.executable]
     if arguments[0] == "install":
         args.extend(["--constraint", str(constraints),
-                     "--default-index", "https://pypi.org/simple",
-                     "--index", f"https://download.pytorch.org/whl/cu{spec['cuda'].replace('.', '')}",
-                     "--index-strategy", "unsafe-best-match"])
+                     "--default-index", "https://pypi.org/simple"])
+        if spec.get("cuda"):
+            args.extend(["--index", f"https://download.pytorch.org/whl/cu{spec['cuda'].replace('.', '')}",
+                         "--index-strategy", "unsafe-best-match"])
         lock = ROOT / "app" / "runtime" / "locks" / f"{sys.platform}-{engine}.txt"
         if not lock.is_file():
             raise RuntimeError(f"Missing dependency lock for {engine}")
@@ -68,6 +69,9 @@ def main() -> None:
             prepare_rasterizer(rasterizer, source)
             arguments = ["install", "--no-build-isolation", str(source)]
         cmd, env = command(args.engine, arguments)
+        if args.engine == "rigging" and arguments == ["check"]:
+            from runtime_bpy_metadata import repair_bpy_metadata
+            repair_bpy_metadata()
         result = subprocess.run(cmd, env=env)
     if result.returncode:
         raise SystemExit("Error: HOCUS_RUNTIME_FAILED. Package operation failed; environment was not verified.")

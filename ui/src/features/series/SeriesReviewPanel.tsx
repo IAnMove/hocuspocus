@@ -12,9 +12,11 @@ import { listenForAgentSeriesAssemblyJob, listenForAgentSeriesReviewView } from 
 import { useUiTranslation } from '../../i18n'
 import { bulkApproveSelections } from './shotReviewPolicy'
 import { isSeriesGeneratedShot } from './productionMethods'
+import { SeriesReviewLink } from '../production-catalog/SeriesReviewLink'
 import { SeriesRenderActions, SeriesReviewShotAction } from './SeriesRenderActions'
 import { SeriesEpisodeProgress } from './SeriesEpisodeProgress'
 import { SeriesNativeDrafts } from './SeriesNativeDrafts'
+import { SeriesLanguageVersions } from './SeriesLanguageVersions'
 import { SeriesSavedAssembly } from './SeriesSavedAssembly'
 import { isRegeneratedSeriesAsset } from './nativeTake'
 import type { OpenSeriesReference } from './shotReferences'
@@ -337,6 +339,7 @@ export function SeriesReviewPanel({
   return <div className="space-y-4 pb-10">
     <SeriesSavedAssembly workspace={workspace} series={series} episode={episode} />
     <SeriesNativeDrafts workspace={workspace} series={series} episode={episode} />
+    <SeriesLanguageVersions workspace={workspace} series={series} episode={episode} />
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
     <div className="sticky top-0 z-10 flex flex-wrap gap-2 rounded-xl border border-border bg-bg-secondary/95 p-2 shadow-lg backdrop-blur">
       {([
@@ -344,6 +347,7 @@ export function SeriesReviewPanel({
         ['history', t('review.historyAttempts'), `${episode.shots.reduce((total, shot) => total + shot.attempts.length, 0)}`],
         ['finish', t('review.finishCanon'), `${approved.length}/${episode.shots.length}`],
       ] as const).map(([id, label, count]) => <button key={id} className={`rounded-lg border px-3 py-2 text-xs ${reviewView === id ? 'border-violet-400 bg-violet-500/20 text-violet-100' : 'border-border bg-bg-primary text-text-muted hover:bg-bg-hover'}`} onClick={() => setReviewView(id)}>{label}<span className="ml-2 rounded bg-black/20 px-1.5 py-0.5 text-[9px]">{count}</span></button>)}
+      <SeriesReviewLink workspace={workspace} episodeId={episode.id} productionIds={episode.productionIds} />
     </div>
     <SeriesEpisodeProgress series={series} episode={episode} onOpenReferences={onOpenReferences}
       onOpenShot={id => onOpenShots?.(id)} onReviewShot={id => { setReviewView('assembly'); focusSlot(id); setRevealReviewShot(true) }} />

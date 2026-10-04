@@ -1,15 +1,23 @@
 import { parseAppearance } from './cinematicSettings'
 import { parseImageLook } from './imageLook'
 import { parseClipPlayback, parseMotion } from './performance.ts'
+import { parseSlotRhythm } from './rhythm'
 import { parseSpeech } from './speech/track'
-import { parseCharacterKitRef, parseCharacterVoice } from '../../lib/characterVoice'
+import { parseCharacterKitRef, parseCharacterVoice, parseCharacterVoicesByLanguage } from '../../lib/characterVoice'
 import { parseMediaScreen } from './mediaScreen.ts'
 import { parseScene3DLoop } from './backdrop.ts'
 import { durableScene3DSourceUrl, parseScene3DSourceRef } from './slotSource.ts'
+import { ATMOS_SET_IDS, isAtmosId } from './atmos/registryIds.ts'
+import { parseClipCues } from './clipCues.ts'
+import { parseHold } from './handHold.ts'
 import type { Scene3DDressing, Scene3DSlot } from './types.ts'
 
-const DRESSINGS = new Set<Scene3DDressing>(['street', 'space', 'treadmill', 'cafe', 'drive-city', 'drive-coast', 'drive-tunnel', 'citadel', 'workshop', 'chase-street', 'retro-lab', 'observatory', 'broadcast-plaza', 'open-sea', 'lunar', 'rooftop', 'hangar', 'desert', 'train', 'space-lane', 'jungle', 'snow', 'casino', 'pixel-lake', 'pixel-peaks', 'pixel-gallery', 'pixel-city', 'pixel-desert', 'pixel-coast', 'pixel-forest', 'pixel-viaduct', 'pixel-volcano', 'pixel-drivein', 'pixel-garden', 'pixel-reef', 'pixel-valley', 'pixel-fair', 'pixel-village', 'pixel-falls', 'pixel-orbit', 'pixel-tulips', 'pixel-alley', 'pixel-castle', 'pixel-beach', 'pixel-lanterns', 'pixel-window', 'pixel-express', 'pixel-daycycle', 'pixel-eclipse', 'pixel-seasons', 'pixel-cathedral', 'pixel-koi', 'pixel-caravan', 'pixel-synthwave', 'pixel-monsoon', 'pixel-marsh', 'pixel-launch', 'pixel-grotto', 'pixel-starry', 'pixel-dawnmist', 'pixel-motel', 'pixel-tidal', 'pixel-mirage', 'pixel-meadow', 'pixel-fjord', 'pixel-clockwork', 'pixel-orrery', 'pixel-rainbow', 'pixel-risingcity', 'pixel-abyss', 'pixel-blizzard', 'pixel-lantern', 'pixel-empire', 'pixel-startrails', 'pixel-wheat', 'pixel-pool', 'pixel-piazza'])
-export const parseDressing = (value?: Scene3DDressing) => DRESSINGS.has(value!) ? value : undefined
+const DRESSINGS = new Set<Scene3DDressing>(['none', 'street', 'space', 'treadmill', 'cafe', 'drive-city', 'drive-coast', 'drive-tunnel', 'citadel', 'workshop', 'chase-street', 'retro-lab', 'observatory', 'broadcast-plaza', 'open-sea', 'lunar', 'rooftop', 'hangar', 'desert', 'train', 'space-lane', 'jungle', 'snow', 'casino', 'pixel-lake', 'pixel-peaks', 'pixel-gallery', 'pixel-city', 'pixel-desert', 'pixel-coast', 'pixel-forest', 'pixel-viaduct', 'pixel-volcano', 'pixel-drivein', 'pixel-garden', 'pixel-reef', 'pixel-valley', 'pixel-fair', 'pixel-village', 'pixel-falls', 'pixel-orbit', 'pixel-tulips', 'pixel-alley', 'pixel-castle', 'pixel-beach', 'pixel-lanterns', 'pixel-window', 'pixel-express', 'pixel-daycycle', 'pixel-eclipse', 'pixel-seasons', 'pixel-cathedral', 'pixel-koi', 'pixel-caravan', 'pixel-synthwave', 'pixel-monsoon', 'pixel-marsh', 'pixel-launch', 'pixel-grotto', 'pixel-starry', 'pixel-dawnmist', 'pixel-motel', 'pixel-tidal', 'pixel-mirage', 'pixel-meadow', 'pixel-fjord', 'pixel-clockwork', 'pixel-orrery', 'pixel-rainbow', 'pixel-risingcity', 'pixel-abyss', 'pixel-blizzard', 'pixel-lantern', 'pixel-empire', 'pixel-startrails', 'pixel-wheat', 'pixel-pool', 'pixel-piazza', ...ATMOS_SET_IDS])
+
+export function parseDressing(value?: string): Scene3DDressing | undefined {
+  if (value && (DRESSINGS.has(value as Scene3DDressing) || isAtmosId(value))) return value as Scene3DDressing
+  return undefined
+}
 
 function textureRepeat(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(16, Math.max(1, value)) : undefined
@@ -38,12 +46,13 @@ function normalizeCharacter(character: Scene3DSlot['character']) {
   return { id: character.id, name: character.name,
     ...(character.kitRef !== undefined ? { kitRef: parseCharacterKitRef(character.kitRef) } : {}),
     ...(character.voice !== undefined ? { voice: parseCharacterVoice(character.voice) } : {}),
+    ...(character.voicesByLanguage !== undefined ? { voicesByLanguage: parseCharacterVoicesByLanguage(character.voicesByLanguage) } : {}),
     ...(character.libraryRevision !== undefined ? { libraryRevision: character.libraryRevision } : {}) }
 }
 export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
   const sourceUrl = durableScene3DSourceUrl(typeof slot.sourceUrl === 'string' ? slot.sourceUrl : '')
   const sourceRef = parseScene3DSourceRef(slot.sourceRef)
-  return {
+  const next: Scene3DSlot = {
     ...slot, sourceUrl, sourceRef: sourceUrl && sourceRef ? sourceRef : undefined,
     character: normalizeCharacter(slot.character),
     speech: parseSlotMedia(slot.media) === 'model3d' ? parseSpeech(slot.speech) : undefined,
@@ -54,5 +63,19 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     surface: parseSurface(slot.surface),
     grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat),
     performance: parsePerformance(slot.performance),
+    rhythm: parseSlotRhythm(slot.rhythm),
   }
+  const clips = next.media === 'model3d' ? parseClipCues(slot.clips) : undefined
+  if (clips) next.clips = clips
+  else delete next.clips
+  const hold = holdable(next) ? parseHold(slot.hold, slot.id) : undefined
+  if (hold) next.hold = hold
+  else delete next.hold
+  return next
+}
+
+function holdable(slot: Scene3DSlot) {
+  if (slot.media !== 'model3d' && slot.media !== 'image') return false
+  if (slot.loop?.cylinder || slot.surface === 'floor' || slot.surface === 'wall' || slot.surface === 'environment') return false
+  return true
 }

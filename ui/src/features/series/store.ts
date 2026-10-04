@@ -30,6 +30,7 @@ interface SeriesState {
   acceptAssetImport: (workspace: string, result: SeriesReferenceImport) => void
   saveNow: () => Promise<SeriesProject | null>
   newSeries: () => Promise<void>
+  newSeriesFromTemplate: (templateId: string, language: 'es' | 'en') => Promise<void>
   duplicateSeries: (seriesId?: string) => Promise<void>
   deleteSeries: (seriesId?: string) => Promise<void>
   importStory: (storyId: string) => Promise<void>
@@ -72,6 +73,21 @@ function restoredSelection(workspace: string): { seriesId?: string; episodeId?: 
 
 let saveTimer: number | undefined
 let saveInFlight: Promise<SeriesProject | null> | null = null
+
+/** Add a series the server just created to the library and open it. */
+function adoptNewSeries(set: (partial: Partial<SeriesState>) => void, get: () => SeriesState, project: SeriesProject) {
+  const state = get()
+  set({
+    library: {
+      ...state.library,
+      seriesOrder: [...state.library.seriesOrder, project.id],
+      seriesById: { ...state.library.seriesById, [project.id]: project },
+    },
+    activeSeriesId: project.id, activeEpisodeId: '', serverRevision: project.revision,
+    dirty: false, error: null,
+  })
+  rememberSelection(state.workspace, project.id, '')
+}
 
 export const useSeriesStore = create<SeriesState>((set, get) => ({
   workspace: initialWorkspace,
@@ -279,18 +295,12 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
 
   newSeries: async () => {
     await get().saveNow()
-    const project = await api.createSeriesProject(get().workspace)
-    const state = get()
-    set({
-      library: {
-        ...state.library,
-        seriesOrder: [...state.library.seriesOrder, project.id],
-        seriesById: { ...state.library.seriesById, [project.id]: project },
-      },
-      activeSeriesId: project.id, activeEpisodeId: '', serverRevision: project.revision,
-      dirty: false, error: null,
-    })
-    rememberSelection(state.workspace, project.id, '')
+    adoptNewSeries(set, get, await api.createSeriesProject(get().workspace))
+  },
+
+  newSeriesFromTemplate: async (templateId, language) => {
+    await get().saveNow()
+    adoptNewSeries(set, get, await api.createSeriesFromTemplate(get().workspace, templateId, language))
   },
 
   duplicateSeries: async seriesId => {

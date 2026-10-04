@@ -1,5 +1,5 @@
-import { planCutoutDialogue } from './cutoutDialogue'
-import { CHARACTER_MOUTH_STATES, MOUTH_STATE_FALLBACK, PHONETIC_MOUTH_STATE } from './characterMouthStates'
+import { mapCutoutDialoguePlan, planCutoutDialogue } from './cutoutDialogue'
+import { CHARACTER_MOUTH_STATES, MOUTH_STATE_FALLBACK, mouthStateForSound } from './characterMouthStates'
 import { parseMouthCues } from '../features/scene3d/speech/track'
 import {
   DEFAULT_CHARACTER_BLINK_ANCHOR,
@@ -597,7 +597,7 @@ function withMouthFallback(
 /** Plan a 2–4s viseme preview from text using the existing cutout cadence. */
 export function previewFaceRigDialogue(kit: CharacterKit, text: string, durationSeconds = 3, fps = 30): FaceRigDialoguePreview {
   const duration = clampFaceRigDialogueDuration(durationSeconds)
-  const plan = planCutoutDialogue(text.trim(), 0, duration, fps)
+  const plan = mapCutoutDialoguePlan(planCutoutDialogue(text.trim(), 0, duration, fps), kit.mouthMapping)
   return withMouthFallback(kit, text.trim(), plan.visemes, plan.start, plan.end)
 }
 
@@ -614,7 +614,7 @@ export function previewFaceRigDialogueFromAudio(
   const visemes = usable.flatMap(unit => {
     const start = Math.max(0, unit.start)
     if (start >= end) return []
-    return planCutoutDialogue(unit.text, start, Math.min(end, unit.end), fps).visemes
+    return mapCutoutDialoguePlan(planCutoutDialogue(unit.text, start, Math.min(end, unit.end), fps), kit.mouthMapping).visemes
   })
   return withMouthFallback(kit, text.trim() || usable.map(unit => unit.text).join(' '), visemes, 0, end)
 }
@@ -627,11 +627,11 @@ export function previewFaceRigDialogueFromCues(kit: CharacterKit, text: string, 
   for (const cue of parseMouthCues(data)) {
     if (cue.end > duration + .1) throw new Error('Mouth cues exceed the recorded voice.')
     const start = Math.min(duration, Math.max(cursor, cue.start)), end = Math.min(duration, cue.end)
-    if (start > cursor) visemes.push({ start: cursor, end: start, state: 'closed' })
-    if (end > start) visemes.push({ start, end, state: PHONETIC_MOUTH_STATE[cue.viseme] })
+    if (start > cursor) visemes.push({ start: cursor, end: start, state: mouthStateForSound('rest', kit.mouthMapping) })
+    if (end > start) visemes.push({ start, end, state: mouthStateForSound(cue.viseme, kit.mouthMapping) })
     cursor = Math.max(cursor, end)
   }
-  if (cursor < duration) visemes.push({ start: cursor, end: duration, state: 'closed' })
+  if (cursor < duration) visemes.push({ start: cursor, end: duration, state: mouthStateForSound('rest', kit.mouthMapping) })
   return withMouthFallback(kit, text.trim(), visemes, 0, duration)
 }
 

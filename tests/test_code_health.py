@@ -406,12 +406,15 @@ class ReleaseIntegrationHealthTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "measurement inputs|measurement inputs changed"):
                     self.release.read_trees(["base", "head"])
 
-    def test_only_test_script_changes_are_irrelevant_to_measurement(self):
+    def test_only_install_hooks_among_scripts_are_measurement_inputs(self):
         base = {"scripts": {"test": "old", "postinstall": "safe"}, "dependencies": {"eslint": "1"}}
-        changed = {**base, "scripts": {"test": "new", "postinstall": "safe"}}
+        changed = {**base, "scripts": {"test": "new", "postinstall": "safe", "atmos:capture": "tsx scripts/atmos-capture.mjs"}}
         original = self.release.measurement_manifest(json.dumps(base))
         self.assertEqual(original, self.release.measurement_manifest(json.dumps(changed)))
         changed["scripts"]["postinstall"] = "mutate-eslint"
+        self.assertNotEqual(original, self.release.measurement_manifest(json.dumps(changed)))
+        changed["scripts"]["postinstall"] = "safe"
+        changed["dependencies"] = {"eslint": "2"}
         self.assertNotEqual(original, self.release.measurement_manifest(json.dumps(changed)))
 
     def test_main_push_requires_exact_unchanged_two_parent_development_merge(self):

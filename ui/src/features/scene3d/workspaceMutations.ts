@@ -1,5 +1,8 @@
 import type { TFunction } from 'i18next'
 import type { ApiOutput } from '../../api/outputs'
+import { serverLevel, type RenderChoice } from '../render/renderEstimate.ts'
+import { reviewFromArtifact, type ExportReviewInput } from '../render/exportReview.ts'
+import { renderOnServer } from '../render/serverSceneExport.ts'
 import { canMutateWorld3DScene } from './exportLock.ts'
 import { exportWorld3DDocument } from './exportFlow.ts'
 import { commitSlotSourceChoice, type SlotSourceCapture, type SlotSourceLive } from './slotSource.ts'
@@ -20,7 +23,7 @@ export function applyAssignedSlotSource(
   if (commit.action === 'ignore' || !canMutateWorld3DScene(live.exporting)) return
   revoke(slot.sourceUrl)
   if (commit.action === 'clear') {
-    applyScene(current => patchScene3DSlot(current, slot.id, { sourceUrl: '', sourceRef: undefined, clip: null, speech: undefined }))
+    applyScene(current => patchScene3DSlot(current, slot.id, { sourceUrl: '', sourceRef: undefined, clip: null, clips: undefined, speech: undefined }))
   } else {
     applyScene(current => patchScene3DSlot(current, slot.id, {
       sourceUrl: commit.sourceUrl,
@@ -28,6 +31,7 @@ export function applyAssignedSlotSource(
       speech: slot.speech ? { ...slot.speech, face: undefined, atlas: undefined } : undefined,
       media: commit.media,
       clip: commit.clip,
+      clips: undefined,
     }))
   }
   setCatalogs(current => {
@@ -47,6 +51,8 @@ export async function exportWorkspaceDocument(
   onNote: (note: string) => void,
   onExporting: (value: boolean) => void,
   setAbort: (abort: AbortController | null) => void,
+  choice: RenderChoice,
+  onReview?: (review: ExportReviewInput | null) => void,
 ) {
   if (!stage || exporting || playing) return
   const abort = new AbortController()
@@ -54,12 +60,27 @@ export async function exportWorkspaceDocument(
   onExporting(true)
   onNote(copy('stage.exporting'))
   try {
-    const result = await exportWorld3DDocument(stage, document, workspace, (index, total) => {
-      onNote(copy('stage.exportProgress', { index, total }))
-    }, abort.signal)
-    ;(window as Window & { __world3dLastMp4?: Blob }).__world3dLastMp4 = result.blob
-    if (result.saved) onNote(copy('stage.exported', { name: result.saved.name }))
-    else onNote(result.error?.message ?? copy('stage.exportFailed'))
+    const level = serverLevel(choice)
+    if (!level) {
+      const result = await exportWorld3DDocument(stage, document, workspace, (index, total) => {
+        onNote(copy('stage.exportProgress', { index, total }))
+      }, abort.signal)
+      ;(window as Window & { __world3dLastMp4?: Blob }).__world3dLastMp4 = result.blob
+      if (result.saved) onNote(copy('stage.exported', { name: result.saved.name }))
+      else onNote(result.error?.message ?? copy('stage.exportFailed'))
+    } else {
+      const saved = await renderOnServer({
+        kind: 'world3d',
+        workspace,
+        document,
+        level,
+        shutter: choice.shutter,
+        signal: abort.signal,
+        onProgress: (index, total) => onNote(copy('stage.renderProgress', { index, total })),
+      })
+      onNote(copy('stage.renderSaved', { name: saved.name }))
+      onReview?.(reviewFromArtifact(saved))
+    }
   } catch (error) {
     const aborted = abort.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')
     onNote(aborted ? copy('stage.exportCancelled') : error instanceof Error ? error.message : copy('stage.exportFailed'))

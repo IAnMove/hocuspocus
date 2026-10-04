@@ -27,6 +27,11 @@ import type { ParseKeys } from 'i18next'
 import { useUiTranslation } from '../../i18n'
 import { MontageLayersPanel, MontageToolbar, type MontageEditorState } from './MontageControls'
 import { loadMontageIntoEditor } from './montageLoader'
+import { useOpenProductionMontage } from '../music-productions/useOpenProductionMontage'
+import { DeriveVerticalButton } from './DeriveVerticalButton'
+import { ShortenSongPanel } from './ShortenSongPanel'
+import { PublishPresetBar } from './PublishPresetBar'
+import { EditorPreflightNotices } from './EditorPreflightNotices'
 import { ShotBoard } from './ShotBoard'
 import { exportLayerFields, loadMontageState, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
@@ -43,14 +48,16 @@ import { VIDEO_EDITOR_PENDING_SOURCE_KEY, editorSourcePath } from './editorHando
 import {
   applyTransitionToGaps,
   editorClipRecoveryMessage,
+  exportClipBody,
   normalizeEditorClips,
   splitClipAtTime,
   TIMELINE_TRIM_PX_PER_SEC,
   trimClipFromDelta,
-  type ClipFit,
   type EditorClip,
   type Transition,
 } from './editorClipNormalization'
+import { BlurFillBackdrop, ClipFrameControls } from './ClipFrameControls'
+import { clipObjectPosition, clipPreviewClass } from './clipFrame'
 import {
   clipId,
   loadEditorDraft,
@@ -737,6 +744,7 @@ export function VideoEditorPanel() {
     persistEditorDraft(state.clips, state.projectName, state.resolution, state.fps, draftWorkspaceRef.current, state.soundtrack)
     setMontage({ layers, ref }); persistMontageState(activeWorkspace, layers, ref)
   }
+  useOpenProductionMontage(activeWorkspace, applyMontage)
   const [previewTime, setPreviewTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [sequenceMode, setSequenceMode] = useState(false)
@@ -1861,19 +1869,7 @@ export function VideoEditorPanel() {
           volume: soundtrack.volume,
           loop: soundtrack.loop,
         } : null,
-        clips: normalized.clips.map(clip => ({
-          name: clip.name,
-          source: clip.source,
-          trim_start: clip.trimStart,
-          trim_end: clip.trimEnd,
-          volume: clip.volume,
-          muted: clip.muted,
-          fit: clip.fit,
-          transition: clip.transition,
-          transition_duration: clip.transitionDuration,
-          transition_text: clip.transitionText,
-          transition_text_size: clip.transitionTextSize,
-        })),
+        clips: normalized.clips.map(clip => exportClipBody(clip)),
         ...exportLayerFields(montage.layers),
       })
       writeVideoEditorExportId(activeWorkspace, started.job_id)
@@ -1997,6 +1993,13 @@ export function VideoEditorPanel() {
           onSaved={ref => { setMontage(current => ({ ...current, ref })); persistMontageState(activeWorkspace, montage.layers, ref) }}
           onError={setError}
         />
+        <DeriveVerticalButton
+          workspace={activeWorkspace}
+          file={montage.ref?.file ?? null}
+          disabled={isVideoEditorJobActive(exportJob)}
+          onOpened={loaded => applyMontage(loaded.state, loaded.layers, loaded.ref)}
+          onError={setError}
+        />
         {montage.ref && (
           <button type="button" onClick={() => setShotBoardOpen(open => !open)} aria-pressed={shotBoardOpen}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border hover:bg-bg-hover ${shotBoardOpen ? 'bg-bg-hover text-text-primary' : 'bg-bg-secondary'}`}
@@ -2004,6 +2007,15 @@ export function VideoEditorPanel() {
             <Film size={13} /> {t('shots.toggle')}
           </button>
         )}
+        <PublishPresetBar
+          width={resolution.width}
+          height={resolution.height}
+          duration={totalDuration}
+          overlays={montage.layers.overlays.map(item => ({ id: item.id, y: item.y, width: item.width }))}
+          source={exportJob?.filename || ''}
+          workspace={activeWorkspace}
+          onError={setError}
+        />
         <button
           onClick={startExport}
           disabled={!clips.length || isVideoEditorJobActive(exportJob)}
@@ -2051,13 +2063,16 @@ export function VideoEditorPanel() {
                   const clip = clips[clipIndex]
                   if (!clip) return null
                   return (
+                    <Fragment key={`${slot}-${clip.id}`}>
+                    <BlurFillBackdrop fit={clip.fit} src={clip.thumbnailUrl} />
                     <video
                       key={`${slot}-${clip.id}`}
                       ref={element => { sequenceRefs.current[slot] = element }}
                       src={clip.previewUrl}
-                      className={`absolute inset-0 w-full h-full ${clip.fit === 'fill' ? 'object-cover' : 'object-contain'}`}
+                      className={clipPreviewClass(clip.fit)}
                       style={{
                         opacity: sequenceStyles[slot].opacity,
+                        objectPosition: clipObjectPosition(clip),
                         clipPath: sequenceStyles[slot].clipPath,
                         transform: sequenceStyles[slot].transform,
                         filter: sequenceStyles[slot].filter,
@@ -2072,6 +2087,7 @@ export function VideoEditorPanel() {
                         pendingSeekAtRef.current = 0
                       }}
                     />
+                    </Fragment>
                   )
                 })}
                 {sequenceInterstitial && (
@@ -2085,11 +2101,13 @@ export function VideoEditorPanel() {
               </ExportPreviewCanvas>
             ) : selected ? (
               <ExportPreviewCanvas width={resolution.width} height={resolution.height}>
+                <BlurFillBackdrop fit={selected.fit} src={selected.thumbnailUrl} />
                 <video
                   key={selected.id}
                   ref={videoRef}
                   src={selected.previewUrl}
-                  className={`absolute inset-0 w-full h-full ${selected.fit === 'fill' ? 'object-cover' : 'object-contain'}`}
+                  className={clipPreviewClass(selected.fit)}
+                  style={{ objectPosition: clipObjectPosition(selected) }}
                   playsInline
                   onLoadedMetadata={event => {
                     event.currentTarget.currentTime = selected.trimStart
@@ -2536,21 +2554,7 @@ export function VideoEditorPanel() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-3">
-                {(['fit', 'fill'] as ClipFit[]).map(value => (
-                  <button
-                    key={value}
-                    onClick={() => patchClip(selected.id, { fit: value })}
-                    className={`px-2 py-1.5 text-[10px] rounded border ${
-                      selected.fit === value
-                        ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
-                        : 'border-border text-text-muted hover:text-text-secondary'
-                    }`}
-                  >
-                    {value === 'fit' ? t('inspector.fit') : t('inspector.fill')}
-                  </button>
-                ))}
-              </div>
+              <ClipFrameControls clip={selected} onChange={patch => patchClip(selected.id, patch)} />
 
               <div className="flex gap-1.5 mt-3">
                 <button
@@ -2629,6 +2633,7 @@ export function VideoEditorPanel() {
                   )}
                 </div>
               )}
+              <EditorPreflightNotices clips={clips} soundtrack={soundtrack} />
               {error && (
                 <div className="space-y-2">
                   <div className="whitespace-pre-wrap text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2">
@@ -2671,6 +2676,22 @@ export function VideoEditorPanel() {
               <Volume2 size={10} /> {soundtrack.name}{soundtrack.loop ? ` · ${t('timeline.loop')}` : ''}
             </span>
           )}
+          <ShortenSongPanel
+            workspace={activeWorkspace}
+            soundtrack={soundtrack}
+            clips={clips}
+            layers={montage.layers}
+            projectName={projectName}
+            resolution={resolution}
+            fps={fps}
+            onApply={next => {
+              setSoundtrack(next.soundtrack)
+              setClips(next.clips)
+              setMontage(current => ({ ...current, layers: next.layers }))
+              if (next.report) setError(next.report)
+            }}
+            onError={setError}
+          />
           <label className="ml-auto flex items-center gap-1.5">
             <span>{t('timeline.allGaps')}</span>
             <select

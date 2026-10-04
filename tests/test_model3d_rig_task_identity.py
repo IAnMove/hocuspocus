@@ -300,3 +300,44 @@ def test_rig_keeps_generated_file_when_sidecar_publish_fails(tmp_path, monkeypat
     assert output.is_file()
     assert output.read_bytes() == b"generated asset"
     assert not output.with_suffix(".meta.json").is_file()
+
+
+class _FailingWorker(_SuccessfulWorker):
+    def __init__(self, lines):
+        self.stdout = [line + "\n" for line in lines]
+
+    def poll(self):
+        return 1
+
+    def wait(self, timeout=None):
+        return 1
+
+
+@pytest.mark.parametrize("lines,code,shown", [
+    (['MAESTRO_RESULT {"ok": false, "error": "invalid_input", "reason": "compressed meshes are not supported"}'],
+     "invalid_input", "invalid_input: compressed meshes are not supported"),
+    (['MAESTRO_RESULT {"ok": false, "error": "not_humanoid", "reason": "turned"}'],
+     "not_humanoid", "not_humanoid: the model is turned at an angle"),
+    (["Traceback (most recent call last):", '  File "weights.py", line 9, in smooth', "IndexError: index 9 is out of bounds",
+      'MAESTRO_RESULT {"ok": false, "error": "rig_failed", "reason": "index 9 is out of bounds"}'],
+     None, "IndexError: index 9 is out of bounds"),
+])
+def test_rig_refusals_keep_their_code_and_crashes_keep_their_trace(tmp_path, monkeypatch, lines, code, shown):
+    job_id = "rig-refused"
+    source = tmp_path / "source.glb"
+    source.write_bytes(b"source asset")
+    monkeypatch.setattr(rig_service, "installation_status", lambda: {"installed": True, "install_hint": None})
+    monkeypatch.setattr(rig_service.uuid, "uuid4", lambda: SimpleNamespace(hex=job_id))
+    monkeypatch.setattr(rig_service.threading, "Thread", _DeferredThread)
+    monkeypatch.setattr(rig_service, "JOBS_DIR", tmp_path / "rig-jobs")
+    monkeypatch.setattr(rig_service, "_python_path", lambda: Path("/fake/python"))
+    monkeypatch.setattr(rig_service.subprocess, "Popen", lambda *_args, **_kwargs: _FailingWorker(lines))
+
+    rig_service.start_job(body={"engine": "procedural", "animations": ["idle"]}, source_path=str(source),
+                          output_dir=str(tmp_path / "outputs"), workspace="studio-b")
+    rig_service._run_job_serialized(job_id, str(tmp_path / "outputs"))
+
+    failed = rig_service.get_job(job_id)
+    assert failed["status"] == "failed"
+    assert shown in failed["error"]
+    assert failed.get("error_code") == code

@@ -28,6 +28,10 @@ export type ShotLibraryProps = {
   onTemplate: (id: Scene3DTemplateId) => void
   onUserTemplate: (pack: World3DUserTemplate) => void
   onClose: () => void
+  /** Workspace used to save and apply library templates. */
+  workspace?: string
+  /** PNG data URL of the current frame, used as a template preview. */
+  preview?: () => string | undefined
 }
 
 /** The shot library in its own dialog: pick a shot, look at it, then use it. */
@@ -95,7 +99,7 @@ function ShotLibraryBody(props: ShotLibraryProps) {
       <LibrarySidebar available={LIBRARY_CATEGORIES.filter(category => filterScene3DTemplates({ category, setting: 'all', query: '', locale, titleOf }).some(item => allowed.has(item.id)))} view={view} hasRecent={recent.length > 0} settings={settings} onView={setView} />
       <main className="min-h-0 overflow-y-auto p-3">
         {view.category === 'mine'
-          ? <Scene3DUserTemplates document={props.document} disabled={props.editingLocked} selectedId={picked?.kind === 'user' ? picked.pack.id : undefined}
+          ? <Scene3DUserTemplates document={props.document} workspace={props.workspace} preview={props.preview} disabled={props.editingLocked} selectedId={picked?.kind === 'user' ? picked.pack.id : undefined}
             onApply={pack => setPicked({ kind: 'user', pack })} />
           : <ShotGrid templates={shown} picked={picked?.kind === 'template' ? picked.id : undefined} current={props.userTemplateId ? undefined : props.document.templateId}
             onPick={id => setPicked({ kind: 'template', id })} onUse={id => use({ kind: 'template', id })} />}

@@ -1,0 +1,265 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "lower-third-date",
+      "labelKey": "templates.lower-third-date",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "date",
+          "default": "1991",
+          "labelKey": "fields.date"
+        },
+        {
+          "key": "caption",
+          "default": "A city keeps its name",
+          "labelKey": "fields.caption"
+        }
+      ]
+    },
+    {
+      "id": "chorus-banner",
+      "labelKey": "templates.chorus-banner",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "line",
+          "default": "The bird is freed",
+          "labelKey": "fields.line"
+        }
+      ]
+    },
+    {
+      "id": "title-card",
+      "labelKey": "templates.title-card",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "title",
+          "default": "Musktopia",
+          "labelKey": "fields.title"
+        },
+        {
+          "key": "subtitle",
+          "default": "",
+          "labelKey": "fields.subtitle"
+        }
+      ]
+    },
+    {
+      "id": "end-card",
+      "labelKey": "templates.end-card",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "title",
+          "default": "Coming soon",
+          "labelKey": "fields.title"
+        },
+        {
+          "key": "cta",
+          "default": "@studio",
+          "labelKey": "fields.cta"
+        }
+      ]
+    },
+    {
+      "id": "year-counter",
+      "labelKey": "templates.year-counter",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "from",
+          "default": "1990",
+          "labelKey": "fields.from"
+        },
+        {
+          "key": "to",
+          "default": "2000",
+          "labelKey": "fields.to"
+        },
+        {
+          "key": "label",
+          "default": "Year",
+          "labelKey": "fields.label"
+        }
+      ]
+    },
+    {
+      "id": "quote",
+      "labelKey": "templates.quote",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "quote",
+          "default": "Keep the line.",
+          "labelKey": "fields.quote"
+        },
+        {
+          "key": "author",
+          "default": "",
+          "labelKey": "fields.author"
+        }
+      ]
+    },
+    {
+      "id": "trailer-slam",
+      "labelKey": "templates.trailer-slam",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "lines",
+          "default": "One|Two|Three",
+          "labelKey": "fields.lines"
+        }
+      ]
+    },
+    {
+      "id": "chapter",
+      "labelKey": "templates.chapter",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "kicker",
+          "default": "CHAPTER",
+          "labelKey": "fields.kicker"
+        },
+        {
+          "key": "title",
+          "default": "One",
+          "labelKey": "fields.title"
+        }
+      ]
+    },
+    {
+      "id": "social-caption",
+      "labelKey": "templates.social-caption",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "caption",
+          "default": "Read this",
+          "labelKey": "fields.caption"
+        }
+      ]
+    },
+    {
+      "id": "ransom",
+      "labelKey": "templates.ransom",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "line",
+          "default": "THE BIRD IS FREED",
+          "labelKey": "fields.line"
+        }
+      ]
+    },
+    {
+      "id": "dymo",
+      "labelKey": "templates.dymo",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "line",
+          "default": "KEEP THE LINE",
+          "labelKey": "fields.line"
+        },
+        {
+          "key": "background",
+          "default": "paper",
+          "labelKey": "fields.background"
+        }
+      ]
+    },
+    {
+      "id": "card",
+      "labelKey": "templates.card",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "title",
+          "default": "Musktopia",
+          "labelKey": "fields.title"
+        }
+      ]
+    },
+    {
+      "id": "desktop",
+      "labelKey": "templates.desktop",
+      "formats": [
+        "16:9",
+        "9:16"
+      ],
+      "fields": [
+        {
+          "key": "theme",
+          "default": "tokyo-night",
+          "labelKey": "fields.theme"
+        },
+        {
+          "key": "layout",
+          "default": "triple",
+          "labelKey": "fields.layout"
+        },
+        {
+          "key": "apps",
+          "default": "mixed",
+          "labelKey": "fields.apps"
+        },
+        {
+          "key": "focus",
+          "default": "0",
+          "labelKey": "fields.focus"
+        },
+        {
+          "key": "workspace",
+          "default": "1",
+          "labelKey": "fields.workspace"
+        },
+        {
+          "key": "switch",
+          "default": "none",
+          "labelKey": "fields.switch"
+        }
+      ]
+    }
+  ]
+}

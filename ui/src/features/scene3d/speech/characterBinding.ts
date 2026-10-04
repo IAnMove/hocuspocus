@@ -1,6 +1,6 @@
 import type { CharacterKit, CharacterKitLibrary } from '../../../lib/characterKit'
 import type { Scene3DSlot } from '../types'
-import { parseCharacterVoice, type CharacterKitRef } from '../../../lib/characterVoice'
+import { parseCharacterVoice, parseCharacterVoicesByLanguage, type CharacterKitRef } from '../../../lib/characterVoice'
 import { parseScene3DSourceRef } from '../slotSource'
 import { defaultSpeech } from './types'
 import { faceSettings, modelDigest } from './profiles'
@@ -15,7 +15,8 @@ export async function characterSlotPatch(kit: CharacterKit, workspace: string, r
   const settings = faceSettings(parseSpeech({ ...defaultSpeech(), ...kit.speech3d.settings })!)
   return { sourceUrl: model.url, sourceRef: model, media: 'model3d', clip: null,
     character: { id: slot?.character?.id ?? slot?.id ?? kit.id, name: kit.name, kitRef: { id: kit.id, workspace },
-      libraryRevision: revision, voice: parseCharacterVoice(kit.voice) },
+      libraryRevision: revision, voice: parseCharacterVoice(kit.voice),
+      ...(kit.voicesByLanguage ? { voicesByLanguage: parseCharacterVoicesByLanguage(kit.voicesByLanguage) } : {}) },
     speech: { ...defaultSpeech(), ...slot?.speech, ...settings, face: settings.face } }
 }
 /** Preserve every existing 2D pose/eye/mouth asset when saving the 3D extension. */

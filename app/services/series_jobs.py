@@ -10,7 +10,7 @@ from typing import Any
 
 
 SERIES_JOBS_DIR = ".series-jobs-v1"
-KINDS = {"planning", "render", "assembly"}
+KINDS = {"planning", "render", "assembly", "native", "produce"}
 
 
 class SeriesJobStore:

@@ -23,8 +23,11 @@ from pydantic import ValidationError
 
 from services import resource_scheduler
 from services.media_refs import parse_media_ref
+from services.scene2d_schema import document_schema, fill_sfx_colors
 from services.scene_commands import DocumentInput, command_error as scene_error
+from services.export_receipts import project_export_receipt
 from services.world3d_export import (
+    QUALITIES,
     World3DExportPending,
     World3DExportService,
     _blocked_url,
@@ -32,11 +35,15 @@ from services.world3d_export import (
     _tool_ids,
     export_plan,
     http_error,
+    mux_wav_audio,
     playwright_module,
+    scene_render_device,
 )
 
 OPERATION = "scenes.video2d.export"
 RECEIPT_OPERATION = "scenes.video2d.export.receipt"
+
+
 CANCEL_OPERATION = "scenes.video2d.export.cancel"
 WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 LAYER_TYPES = frozenset({"image", "video", "overlay", "effect", "camera"})
@@ -53,8 +60,8 @@ def _envelope(command) -> dict:
     if not isinstance(intent, str) or not 1 <= len(intent) <= 160 or intent != intent.strip():
         raise http_error(422, "invalid_command", "An exact intent_id is required")
     payload = command.get("input")
-    if not isinstance(payload, dict) or set(payload) - {"workspace", "document"} or "document" not in payload:
-        raise http_error(422, "invalid_command", "input must include workspace and document only")
+    if not isinstance(payload, dict) or set(payload) - {"workspace", "document", "quality", "shutter"} or "document" not in payload:
+        raise http_error(422, "invalid_command", "input must include workspace and document")
     if not isinstance(payload.get("workspace"), str) or not WORKSPACE_RE.fullmatch(payload["workspace"]):
         raise http_error(422, "invalid_workspace", "Use an explicit valid output workspace")
     return command
@@ -71,6 +78,7 @@ def validated_document(raw) -> dict:
         raise http_error(422, "invalid_document", "Choose a Video 2D scene (layers); use scenes.world3d.export for Video 3D")
     if document.get("fps", 30) not in (24, 30, 60):
         raise http_error(422, "unsupported_capability", "Export fps must be 24, 30 or 60")
+    fill_sfx_colors(document)
     for layer in document["layers"]:
         if layer.get("type") not in LAYER_TYPES:
             raise http_error(422, "unsupported_capability",
@@ -99,6 +107,18 @@ def _sequence_urls(layer: dict) -> list[str]:
     return urls
 
 
+def _media_name(path: str) -> str:
+    """Workspace-relative name of a file URL; Series Lab keeps images in ``assets/<series>/``."""
+    clean = (path or "").replace("\\", "/")
+    for prefix in ("/api/v1/file/", "/api/v1/uploads/"):
+        if clean.startswith(prefix):
+            parts = [part for part in clean[len(prefix):].split("/") if part]
+            if not parts or any(part in (".", "..") for part in parts):
+                raise http_error(422, "missing_ref", "Use a media path inside the workspace")
+            return "/".join(parts)
+    return os.path.basename(clean)
+
+
 def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequence: bool) -> None:
     label = "sequence" if sequence else "source"
     if not url or _blocked_url(url) or not _durable(url):
@@ -112,9 +132,12 @@ def _append_visual_ref(refs: list, layer: dict, url: str, workspace: str, sequen
             raise http_error(422, "missing_ref", "Use a valid bundled example URL")
         refs.append(record)
         return
-    path, scoped = parse_media_ref(url, workspace)
-    record["filename"] = os.path.basename((path or "").replace("\\", "/"))
-    if url.lower().startswith("/api/v1/uploads/"):
+    # Honor the URL's own workspace. Passing the export workspace into
+    # parse_media_ref would hide gallery Uploads (`?workspace=__uploads__`)
+    # and media picked from another workspace folder.
+    path, scoped = parse_media_ref(url)
+    record["filename"] = _media_name(path)
+    if url.lower().startswith("/api/v1/uploads/") or scoped == "__uploads__":
         record["root"] = "uploads"
     else:
         record["workspace"] = scoped or workspace
@@ -147,12 +170,23 @@ def media_refs(document: dict, workspace: str) -> list[dict]:
     return refs
 
 
+def _export_plan(document: dict, payload: dict) -> dict:
+    quality = payload.get("quality", "draft")
+    shutter = payload.get("shutter")
+    if shutter is not None and (isinstance(shutter, bool) or not isinstance(shutter, (int, float))):
+        raise http_error(422, "invalid_command", "shutter must be a number of degrees between 0 and 360")
+    try:
+        return export_plan(document, quality if isinstance(quality, str) else "", None if shutter is None else float(shutter))
+    except ValueError as error:
+        raise http_error(422, "invalid_command", str(error)) from error
+
+
 def freeze_export_command(command) -> dict:
     envelope = _envelope(command)
     payload = envelope["input"]
     document = validated_document(payload["document"])
     refs = media_refs(document, payload["workspace"])
-    snapshot = {"workspace": payload["workspace"], "document": document, "refs": refs, "plan": export_plan(document)}
+    snapshot = {"workspace": payload["workspace"], "document": document, "refs": refs, "plan": _export_plan(document, payload)}
     effective = {"version": 1, "operation": OPERATION, "input": {"workspace": payload["workspace"], "snapshot": snapshot}}
     return {"original": deepcopy(envelope), "effective": effective,
             "fingerprint": _digest({"operation": OPERATION, "input": effective["input"]}), "fingerprint_version": 1}
@@ -168,34 +202,69 @@ def renderer_available(app_url: str | None, module) -> bool:
 
 
 def _mix_wav(video: Path, wav: Path, duration: float) -> Path:
-    mixed = video.with_name("fx-mixed.mp4")
-    command = ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-i", str(wav), "-filter_complex",
-               f"[1:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:{duration:.4f}[mix]",
-               "-map", "0:v:0", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-               "-t", f"{duration:.4f}", "-movflags", "+faststart", str(mixed)]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=1800, check=False)
-    if result.returncode != 0 or not mixed.is_file():
-        raise RuntimeError(("Screen FX mix failed: " + (result.stderr or "")).strip()[-800:])
-    return mixed
+    return mux_wav_audio(video, wav, duration, label="Screen FX mix")
 
 
-def mix_audio_tracks(video: Path, tracks: list[dict], workspace_root: Path, duration: float,
-                     extras: list[Path] | None = None) -> Path:
-    """Mix scene audio tracks (startTime, volume) and optional extra WAVs under the silent render."""
-    usable = [(extra, 0.0, 1.0) for extra in extras or [] if extra.is_file()]
+# Same envelope as Video 3D dialogue ducking (ui/src/features/scene3d/speech/audio.ts).
+DUCK_ATTACK, DUCK_RELEASE, DUCK_MARGIN = 0.12, 0.4, 0.08
+
+
+def audio_seconds(path: Path) -> float:
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                           capture_output=True, text=True, timeout=30, check=False)
+    try:
+        return float(probe.stdout.strip())
+    except ValueError:
+        return 0.0
+
+
+def duck_db(document: dict) -> float:
+    """``audioMix.duckDb``: how far music and effects dip while someone speaks (0 = off)."""
+    value = (document.get("audioMix") or {}).get("duckDb") if isinstance(document.get("audioMix"), dict) else None
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value <= 30 else 0.0
+
+
+def duck_expression(windows: list[tuple[float, float]], depth_db: float) -> str | None:
+    """A volume expression of output time: 1, down by ``depth_db`` inside each speech window, with short ramps."""
+    if not windows or depth_db <= 0:
+        return None
+    depth = 1 - 10 ** (-depth_db / 20)
+    terms = [f"min(clip((t-{start - DUCK_MARGIN:.3f})/{DUCK_ATTACK},0,1),clip(({end + DUCK_RELEASE:.3f}-t)/{DUCK_RELEASE},0,1))"
+             for start, end in windows]
+    combined = terms[0]
+    for term in terms[1:]:
+        combined = f"max({combined},{term})"
+    return f"1-{depth:.4f}*{combined}"
+
+
+def _usable_tracks(tracks: list[dict], workspace_root: Path, duration: float) -> list[tuple[Path, float, float, bool]]:
+    usable = []
     for track in tracks:
         source = workspace_root / os.path.basename(str(track.get("filename") or ""))
         start = float(track.get("startTime") or 0)
         if source.is_file() and 0 <= start < duration:
-            usable.append((source, start, max(0.0, min(2.0, float(track.get("volume", 1) or 0)))))
+            usable.append((source, start, max(0.0, min(2.0, float(track.get("volume", 1) or 0))), track.get("kind") == "speech"))
+    return usable
+
+
+def mix_audio_tracks(video: Path, tracks: list[dict], workspace_root: Path, duration: float,
+                     extras: list[Path] | None = None, duck: float = 0.0) -> Path:
+    """Mix scene audio tracks (startTime, volume) and optional extra WAVs under the silent render.
+
+    With ``duck`` (dB), every track that is not speech, and the extras, dips under the speech tracks.
+    """
+    usable = [(extra, 0.0, 1.0, False) for extra in extras or [] if extra.is_file()] + _usable_tracks(tracks, workspace_root, duration)
     if not usable:
         return video
+    windows = [(start, start + audio_seconds(source)) for source, start, _, speech in usable if speech] if duck else []
+    envelope = duck_expression(windows, duck)
     command = ["ffmpeg", "-v", "error", "-y", "-i", str(video)]
     parts, labels = [], []
-    for index, (source, start, volume) in enumerate(usable, start=1):
+    for index, (source, start, volume, speech) in enumerate(usable, start=1):
         command += ["-i", str(source)]
         delay = int(round(start * 1000))
-        parts.append(f"[{index}:a]aresample=48000,aformat=channel_layouts=stereo,volume={volume:.4f},adelay={delay}|{delay}[a{index}]")
+        ducked = f",volume='{envelope}':eval=frame" if envelope and not speech else ""
+        parts.append(f"[{index}:a]aresample=48000,aformat=channel_layouts=stereo,volume={volume:.4f},adelay={delay}|{delay}{ducked}[a{index}]")
         labels.append(f"[a{index}]")
     parts.append(f"{''.join(labels)}amix=inputs={len(labels)}:normalize=0,alimiter=limit=0.97,apad,atrim=0:{duration:.4f}[mix]")
     mixed = video.with_name("mixed.mp4")
@@ -218,21 +287,24 @@ class Scene2DExportService(World3DExportService):
     render_bridge = "__scene2dExport"
 
     def __init__(self, *, workspace_dir, registry_for, renderer=None, app_url=None, uploads_dir=None):
-        super().__init__(workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer, app_url=app_url)
-        self.uploads_dir = uploads_dir or (lambda: os.path.join(os.getcwd(), "uploads"))
+        super().__init__(workspace_dir=workspace_dir, registry_for=registry_for, renderer=renderer,
+                         app_url=app_url, uploads_dir=uploads_dir)
 
     def capabilities(self) -> dict:
         module = playwright_module()
         ready = bool(shutil.which("ffmpeg")) and module is not None and renderer_available(self.app_url, module)
         return {"version": 1, "operation": OPERATION, "realRender": "ready" if ready else "pending",
                 "renderer": "scene2d-owned-browser", "fps": [24, 30, 60], "maxDuration": 600,
-                "layerTypes": sorted(LAYER_TYPES), "audioTracks": True}
+                "layerTypes": sorted(LAYER_TYPES), "audioTracks": True,
+                "qualities": list(QUALITIES), "renderDevice": scene_render_device(),
+                "motionBlur": {"shutterDegrees": [0, 360], "default": 180}}
 
     def freeze(self, command) -> dict:
         return freeze_export_command(command)
 
     def resource_lane(self):
-        return resource_scheduler.cpu_lane("scene2d-render")
+        from services.scene_export_lane import scene2d_render_lane
+        return scene2d_render_lane()
 
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
         workspace_root = Path(self.workspace_dir(workspace))
@@ -241,10 +313,13 @@ class Scene2DExportService(World3DExportService):
             name = ref.get("filename")
             if not name:
                 continue
-            if ref.get("root") == "uploads":
+            named = ref.get("workspace", workspace)
+            if ref.get("root") == "uploads" or named == "__uploads__":
                 root = uploads_root
-            elif ref.get("workspace", workspace) == workspace:
+            elif named == workspace:
                 root = workspace_root
+            elif isinstance(named, str) and WORKSPACE_RE.fullmatch(named):
+                root = Path(self.workspace_dir(named))
             else:
                 continue
             if not (root / str(name)).is_file():
@@ -265,7 +340,8 @@ class Scene2DExportService(World3DExportService):
             return _mix_wav(encoded, fx, duration)
         if not tracks:
             return encoded
-        return mix_audio_tracks(encoded, tracks, Path(self.workspace_dir(snapshot["workspace"])), duration, extras=extras)
+        return mix_audio_tracks(encoded, tracks, Path(self.workspace_dir(snapshot["workspace"])), duration, extras=extras,
+                                duck=duck_db(snapshot["document"]))
 
     def output_name(self, snapshot: dict) -> str:
         label = re.sub(r"[^A-Za-z0-9._-]+", "-", str(snapshot["document"].get("name") or "scene")).strip("-._")[:40] or "scene"
@@ -294,7 +370,12 @@ def command_catalog() -> list[dict]:
     ids = {"type": "object", "additionalProperties": False, "properties": {"workspace": workspace, "intent_id": intent},
            "required": ["workspace", "intent_id"]}
     export_input = {"type": "object", "additionalProperties": False,
-                    "properties": {"workspace": workspace, "document": {"type": "object"}}, "required": ["workspace", "document"]}
+                    "properties": {"workspace": workspace, "document": document_schema(),
+                                   "quality": {"enum": list(QUALITIES), "default": "draft",
+                                               "description": "draft stays the current painter. final and master add motion blur and a slower encode. Video 2D also supersamples when the plan asks for it."},
+                                   "shutter": {"type": "number", "minimum": 0, "maximum": 360,
+                                               "description": "Motion blur shutter in degrees for final/master (default 180; 0 = sharp)."}},
+                    "required": ["workspace", "document"]}
 
     def entry(name, mutation, description, properties, required):
         return {"name": name, "version": 1, "domain": "scenes", "mutation": mutation, "description": description,
@@ -303,10 +384,14 @@ def command_catalog() -> list[dict]:
                                 "required": ["version", "operation", *required]}}
     return [
         entry(OPERATION, True, "Render a version 1 Video 2D scene (layers with keyframes, camera, atmosphere, screen FX, kinetic "
-              "texts and audioTracks) to MP4 on the server with the Scene Animator's own painter, on a CPU lane. Media must be "
+              "texts and audioTracks) to MP4 on the server with the Scene Animator's own painter, on a CPU lane. "
+              "audioMix {duckDb} dips every track that is not speech under the speech tracks (10 is a good start). Media must be "
               "durable workspace/example URLs. Returns a receipt; poll the receipt for the published MP4.",
               {"intent_id": intent, "input": export_input}, ["intent_id", "input"]),
-        entry(RECEIPT_OPERATION, False, "Read a Video 2D export admission and its current canonical task.", {"input": ids}, ["input"]),
+        entry(RECEIPT_OPERATION, False,
+              "Read a Video 2D export admission and its current canonical task. The returned receipt status follows "
+              "that task. When the MP4 is published, artifacts is one {name, url, workspace}. The stored admission stays queued.",
+              {"input": ids}, ["input"]),
         entry(CANCEL_OPERATION, True, "Cancel a Video 2D export by exact workspace and intent_id.", {"input": ids}, ["input"]),
     ]
 
@@ -329,4 +414,5 @@ def command_handlers(service: Scene2DExportService) -> dict:
 
 
 __all__ = ["CANCEL_OPERATION", "OPERATION", "RECEIPT_OPERATION", "Scene2DExportService", "command_catalog",
-           "command_handlers", "freeze_export_command", "media_refs", "mix_audio_tracks", "validated_document"]
+           "command_handlers", "freeze_export_command", "media_refs", "mix_audio_tracks", "project_export_receipt",
+           "validated_document"]

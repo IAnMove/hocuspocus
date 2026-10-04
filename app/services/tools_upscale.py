@@ -207,11 +207,8 @@ def _upscale_video_job(
 
 
 def _publish_upscale_outputs(*, runtime, job_id, job, out_dir, before, source_filename, source_kind, method, image_size):
-    after = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
-    new_files = sorted(
-        f for f in (after - before)
-        if not f.endswith(".meta.json") and "_uptmp" not in f
-    )
+    from services.job_lifecycle import new_media_files
+    new_files = [f for f in new_media_files(out_dir, before) if "_uptmp" not in f]
     if runtime["is_cancel_requested"](job):
         for fname in new_files:
             try:

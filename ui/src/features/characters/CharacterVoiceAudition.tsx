@@ -5,9 +5,9 @@ import type { CharacterVoice } from '../../lib/characterVoice'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 
 /** An explicit voice-only audition: no saved character or mouth rig required. */
-export function CharacterVoiceAudition({ workspace, voice }: { workspace: string; voice: CharacterVoice }) {
+export function CharacterVoiceAudition({ workspace, voice, language: spoken }: { workspace: string; voice: CharacterVoice; language?: 'es' | 'en' }) {
   const { t, i18n } = useUiTranslation('scene3dEditor')
-  const [language, setLanguage] = useState<'es' | 'en'>(i18n.resolvedLanguage?.startsWith('es') ? 'es' : 'en')
+  const [language, setLanguage] = useState<'es' | 'en'>(spoken ?? (i18n.resolvedLanguage?.startsWith('es') ? 'es' : 'en'))
   const [filename, setFilename] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false)
   const controller = useRef<AbortController | null>(null)
   const audio = useRef<HTMLAudioElement | null>(null)

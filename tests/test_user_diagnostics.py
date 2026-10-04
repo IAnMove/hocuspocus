@@ -170,6 +170,17 @@ def test_missing_receipt_uses_install_update_repair():
     assert image["repair_path"]["id"] == "install_update"
 
 
+def test_missing_optional_engine_points_to_the_advanced_menu():
+    pack = collect_report(observe=_nvidia_observe(receipts=dict(MISSING_ENGINES)))
+    model = next(item for item in pack["availability"] if item["id"] == "hunyuan3d-2.1")
+    assert model["available"] is False
+    assert model["repair_path"]["id"] == "install_optional"
+    engines = {engine["id"]: engine for engine in pack["capabilities"]["engines"]}
+    assert engines["hunyuan3d"]["optional"] is True
+    assert engines["hunyuan3d"]["repair_path"]["id"] == "install_optional"
+    assert engines["wangp"]["optional"] is False
+
+
 def test_synthetic_secrets_and_prompts_never_appear_in_the_pack():
     task = {
         "id": "task-h18",
@@ -263,11 +274,11 @@ def test_shared_environment_does_not_check_an_unsupported_platform_recipe(tmp_pa
     }))
     monkeypatch.setattr(profiles, "APP_DIR", app)
 
-    def unsupported_fingerprint(*args):
-        raise AssertionError("There is no core recipe for Linux or Windows")
+    def unrelated_fingerprint(*args):
+        raise AssertionError("A WanGP receipt is not evidence for core")
 
-    monkeypatch.setattr(profiles, "dependency_fingerprint", unsupported_fingerprint)
-    for platform in ("linux", "win32"):
+    monkeypatch.setattr(profiles, "dependency_fingerprint", unrelated_fingerprint)
+    for platform in ("linux", "win32", "darwin"):
         assert receipt_status("core", platform) == {
             "present": False, "installed": False, "fingerprint_match": False,
         }

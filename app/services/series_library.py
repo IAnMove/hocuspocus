@@ -28,7 +28,7 @@ _ASSET_PATH = re.compile(r"^(assets|outputs)/[A-Za-z0-9._/-]+$")
 EPISODE_EDITOR_FIELDS = frozenset({
     "seasonId", "number", "title", "premise", "logline",
     "targetDurationSeconds", "outline", "script", "shots",
-    "continuityIssues", "proposedCanonDelta",
+    "continuityIssues", "proposedCanonDelta", "languageVersions",
 })
 SHOT_EDITOR_FIELDS = frozenset({
     "sceneId", "order", "durationSeconds", "framing", "camera", "action",
@@ -36,7 +36,7 @@ SHOT_EDITOR_FIELDS = frozenset({
     "primarySpeakerId", "locationId", "locationVariantId",
     "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
     "continuityFromShotId", "renderStrategy", "productionMethod", "referencePolicy", "prompt",
-    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin",
+    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
 SERIES_CANON_INPUT_FIELDS = (
@@ -123,6 +123,17 @@ def validate_series_asset_uri(value: Any) -> str:
     return uri
 
 
+# Per-entity fields that stage production (2D homes, prop anchors, 3D plates) rather than describe the world.
+STAGING_FIELDS = frozenset({"layout2d"})
+
+
+def _canon_input(series: dict, key: str) -> Any:
+    value = series.get(key)
+    if key in {"characters", "locations", "props"} and isinstance(value, list):
+        return [{k: v for k, v in item.items() if k not in STAGING_FIELDS} if isinstance(item, dict) else item for item in value]
+    return value
+
+
 def series_canon_inputs_changed(current: dict, updated: dict) -> bool:
     """Compare durable production inputs without coupling canon to chat language."""
     current_canon = copy.deepcopy(current.get("canon") or {})
@@ -132,7 +143,7 @@ def series_canon_inputs_changed(current: dict, updated: dict) -> bool:
         value.pop("approvedAt", None)
     if current_canon != updated_canon:
         return True
-    if any(current.get(key) != updated.get(key) for key in SERIES_CANON_INPUT_FIELDS):
+    if any(_canon_input(current, key) != _canon_input(updated, key) for key in SERIES_CANON_INPUT_FIELDS):
         return True
     current_intent = normalize_language_intent(current.get("languageIntent"))
     updated_intent = normalize_language_intent(updated.get("languageIntent"))
@@ -367,6 +378,18 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
         "negativePrompt": _text(shot.get("negativePrompt")),
         "attempts": attempts,
     })
+    from .series_shot_plan import normalize_layout2d
+    layout = normalize_layout2d(shot.get("layout2d"))
+    if layout:
+        shot["layout2d"] = layout
+    else:
+        shot.pop("layout2d", None)
+    from .series_shot3d import normalize_scene3d
+    scene3d = normalize_scene3d(shot.get("scene3d"))
+    if scene3d:
+        shot["scene3d"] = scene3d
+    else:
+        shot.pop("scene3d", None)
     policy = shot["referencePolicy"]
     policy["mode"] = "manual" if policy.get("mode") == "manual" else "automatic"
     policy["manualIncludeAssetIds"] = _unique_ids(policy.get("manualIncludeAssetIds"))
@@ -521,6 +544,17 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
     })
     from .series_shot_dialogue import annotate_episode_shot_dialogue
     return annotate_episode_shot_dialogue(episode)
+
+
+def _normalize_episode_languages(episode: dict, project: dict) -> None:
+    """Language versions of an episode (series_language_versions); empty ones are dropped."""
+    from .series_language_versions import normalize_language_versions
+    from .series_shot_plan import language_key
+    versions = normalize_language_versions(episode.get("languageVersions"), episode.get("shots") or [], language_key(project))
+    if versions:
+        episode["languageVersions"] = versions
+    else:
+        episode.pop("languageVersions", None)
 
 
 def _validate_project_graph_ids(project: dict) -> None:
@@ -785,6 +819,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         if not isinstance(raw_episode, dict):
             continue
         episode = _normalize_episode(raw_episode, str(episode_key), index, default_season_id, canon, allowed)
+        _normalize_episode_languages(episode, project)
         if episode["seasonId"] not in season_ids:
             episode["seasonId"] = default_season_id
         episodes[episode["id"]] = episode
@@ -1345,6 +1380,14 @@ def duplicate_series_project(series: dict) -> dict:
     return duplicate
 
 
+def _approved_take_seconds(shot: dict) -> float | None:
+    """Length of the shot's approved take when it was imported (animation, 3D, imported video), else None."""
+    approved = shot.get("approvedAttemptId")
+    attempt = next((item for item in _objects(shot.get("attempts")) if item.get("id") == approved), None) if approved else None
+    seconds = ((attempt or {}).get("settings") or {}).get("sourceDurationSeconds")
+    return float(seconds) if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0 else None
+
+
 def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[dict]:
     """Merge editable shot fields while retaining server-owned render history."""
     if not isinstance(incoming_shots, list):
@@ -1377,6 +1420,10 @@ def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[d
                     merged[key] = copy.deepcopy(stored[key])
                 else:
                     merged.pop(key, None)
+            take_seconds = _approved_take_seconds(stored)
+            if take_seconds is not None and "durationSeconds" in stored:
+                # An imported or server-rendered take sets the shot's length; re-sending the shot must not reset it.
+                merged["durationSeconds"] = stored["durationSeconds"]
         else:
             merged["attempts"] = []
             merged.pop("approvedAttemptId", None)

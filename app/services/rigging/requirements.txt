@@ -14,7 +14,7 @@ lightning
 addict
 timm
 fast-simplification
-bpy==4.2
+bpy==4.2.22
 trimesh
 open3d
 pyrender

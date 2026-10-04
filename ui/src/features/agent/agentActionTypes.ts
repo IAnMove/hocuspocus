@@ -10,10 +10,15 @@ import type { AgentAction } from './agentActions'
  */
 export const AGENT_ACTION_TYPES = [
   'open_tab',
+  'lips_creator',
+  'generate_lips',
+  'world3d_templates',
+  'production_works',
   'open_story_section',
   'open_series_section',
   'prepare_video',
   'prepare_programmatic_video',
+  'speech_analysis_engine',
   'prepare_image',
   'prepare_audio',
   'download_model',

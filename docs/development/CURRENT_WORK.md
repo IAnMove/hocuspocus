@@ -1,5 +1,9 @@
 # Estado de desarrollo y punto de entrada
 
+## Plan de producción — 28 septiembre 2026
+
+La cola acepta `priority` opcional. `generation.video` versión 3 tipa MiniMax H3 (FL2VA y Ref2VA) y LTX-2.3 con fotogramas y audio conductor. `validate: true` no encola.
+
 Verificado el 7 de septiembre de 2026 contra `origin/development` **`ef5b0871`**.
 Es una fotografía con evidencia, no un sustituto de Git. Antes de reservar trabajo:
 `git fetch origin development`, consultar PR abiertos y comprobar sus archivos.
