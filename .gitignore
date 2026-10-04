@@ -153,3 +153,13 @@ app/services/rigging/env/
 
 # Per-workspace medians written when a production completes. Not a measurement to commit.
 .production-timings.json
+
+# Personal generation sessions run from scripts/ (song specs, pipeline state,
+# ffmpeg concat lists, joke-clip queues and their logs). They belong to the
+# maintainer's machine, not to the repo; scripts/verify_clean_repo.py fails if
+# one of them is tracked.
+scripts/*.log
+scripts/*_song.json
+scripts/*_pipeline.json
+scripts/*_concat.txt
+scripts/joke_*.json
