@@ -30,11 +30,16 @@ def episode_assembly_plan(series: dict[str, Any], episode: dict[str, Any]) -> li
         ), None)
         if not asset:
             raise ValueError(f"Shot {shot.get('order')} approved attempt has no video asset")
-        plan.append({
+        item = {
             "shotId": str(shot.get("id") or ""),
             "shotOrder": int(shot.get("order") or 0),
             "attemptId": approved_id,
             "assetId": str(asset.get("id") or ""),
             "uri": str(asset.get("uri") or ""),
-        })
+        }
+        metadata = asset.get("metadata") if isinstance(asset.get("metadata"), dict) else {}
+        if isinstance(metadata.get("sceneFilename"), str) and metadata["sceneFilename"]:
+            # A 2D take's scene document holds the exact line timing for subtitles.
+            item["sceneFilename"] = metadata["sceneFilename"]
+        plan.append(item)
     return copy.deepcopy(plan)

@@ -118,6 +118,10 @@ def test_router_joins_in_episode_order_and_persists_episode_asset(tmp_path):
     assert episode["latestAssemblyAssetId"] == status["assetId"]
     asset = library["seriesById"]["series-1"]["assets"][status["assetId"]]
     assert asset["metadata"]["orderedClipAssetIds"] == ["asset-1", "asset-2"]
+    # The stand-in clips are not media: finishing explains itself and never fails the join.
+    assert asset["metadata"]["loudness"]["applied"] is False and asset["metadata"]["loudness"]["reason"]
+    assert asset["metadata"]["subtitles"]["written"] is False and asset["metadata"]["subtitles"]["reason"]
+    assert "Loudness unchanged" in status["message"] and "No subtitles" in status["message"]
     joined = tmp_path / status["filename"]
     sidecar = json.loads(joined.with_suffix(".meta.json").read_text(encoding="utf-8"))
     loaded = read_asset_manifest(joined, workspace_id="default")
