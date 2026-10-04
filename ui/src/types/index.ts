@@ -635,6 +635,8 @@ export interface Scene {
     prompt?: string
     model?: string
   }>
+  /** Export mix: music, effects and ambience dip by `duckDb` while a speech track plays. */
+  audioMix?: { duckDb?: number }
   /** Authored limited-animation dialogue. Mouth layers remain ordinary layers
    * whose opacity keyframes are generated from these editable beat records. */
   dialogueBeats?: Array<{

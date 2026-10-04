@@ -177,6 +177,20 @@ def test_a_speech_job_lost_in_a_restart_is_asked_for_again_and_other_wait_errors
     assert failed["status"] == "failed" and "queue offline" in failed["items"][0]["error"], "an error is not waited on forever"
 
 
+def test_lines_are_levelled_and_music_volume_follows_its_loudness(tmp_path):
+    tools, compiled, levelled = Tools(tmp_path), [], []
+    project = library()
+    project["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][0]["layout2d"] = {"music": {"file": "theme.wav", "volume": 0.8}}
+    (tmp_path / "theme.wav").write_bytes(b"loud music")
+    render = service(tmp_path, tools, compiled, level=lambda path: levelled.append(path.rsplit("/", 1)[-1]) or 3.0,
+                     loudness_gain=lambda path: 0.25 if path.endswith("theme.wav") else 1.0)
+    render.deps.read_library = lambda _ws: project
+    finished(render, render.start("cast", "uv", "ep1", shot_ids=["s01"])["jobId"], tmp_path)
+    assert len(levelled) == 2 and all(name.startswith("ln-ep1-s01_d") for name in levelled), "every recorded line is levelled"
+    music = next(track for track in compiled[0]["shot"]["audioTracks"] if track["filename"] == "theme.wav")
+    assert music["volume"] == 0.2, "0.8 of the dialogue level, for a file 12 dB louder than dialogue"
+
+
 def test_refusals_and_speech_params():
     with pytest.raises(NativeRenderError):
         SeriesNativeRender(NativeRenderDeps(call=lambda *_: {}, workspace_dir=lambda _: "/tmp", read_library=lambda _: library(),

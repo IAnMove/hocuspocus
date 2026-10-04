@@ -1,6 +1,7 @@
 import { afterEach, test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  isMusicTrack,
   mixSceneSpeech,
   resetVoiceDecodeCache,
   soundtrackGainAt,
@@ -171,4 +172,10 @@ test('the scene tape is not a music bed: no fade and no duck against its own lip
   assert.ok(Math.abs(at(0.06) - 1) < 1e-6, `tape attack was faded to ${at(0.06)}`)
   assert.ok(Math.abs(at(2) - DUCK_LINEAR) < 1e-6)
   assert.ok(Math.abs(at(3.9) - 1) < 1e-6, `tape tail was faded to ${at(3.9)}`)
+})
+
+test('lines added by world3d.scene.talk are dialogue, other soundtrack clips are music', () => {
+  assert.equal(isMusicTrack({ key: 'soundtrack/space' }), true)
+  assert.equal(isMusicTrack({ key: 'soundtrack/talk-elon-0' }), false)
+  assert.equal(isMusicTrack({ key: 'elon/clip-1' }), false)
 })

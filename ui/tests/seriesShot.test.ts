@@ -90,6 +90,11 @@ test('a perched character sits on its prop, just in front of it, in every framin
   assert.equal(gary.transform.scale, PERCH.two.height / 100)
 })
 
+test('a shot with lines asks the export to dip music and effects under them', () => {
+  assert.deepEqual(compileSeriesShot(kits, shot()).audioMix, { duckDb: 10 })
+  assert.equal(compileSeriesShot(kits, shot({ lines: [] })).audioMix, undefined)
+})
+
 test('blinks are repeatable for a seed and stay inside the shot', () => {
   assert.deepEqual(blinkTimes('a', 12), blinkTimes('a', 12))
   assert.ok(blinkTimes('a', 12).every(time => time > 0.5 && time < 11.7))

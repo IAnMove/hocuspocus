@@ -370,6 +370,39 @@ def test_finish_media_keeps_screen_fx_when_mixing_audio_tracks(tmp_path):
     assert _tone_energy(mixed, 330) > 10 * noise
 
 
+def test_a_series_mix_dips_music_and_effects_under_speech(tmp_path):
+    from services.scene2d_export import duck_db, duck_expression
+    assert duck_db({"audioMix": {"duckDb": 10}}) == 10 and duck_db({}) == 0 and duck_db({"audioMix": {"duckDb": 99}}) == 0
+    assert duck_expression([], 10) is None and duck_expression([(1, 2)], 0) is None
+    assert duck_expression([(1, 2), (3, 4)], 10).startswith("1-0.6838*max(min(clip((t-0.920)/0.12")
+    service = _service(tmp_path)
+    root = Path(service.workspace_dir(WORKSPACE))
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    encoded = staging / "silent.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=64x36:d=2:r=24",
+                    "-pix_fmt", "yuv420p", str(encoded)], check=True)
+    _tone(root / "bed.wav", 440, duration=2)
+    _tone(root / "vo.wav", 330, duration=0.6)
+
+    def music_during_and_before(document):
+        mixed = service.finish_media({"workspace": WORKSPACE, "document": document,
+                                      "plan": {"width": 64, "height": 36, "fps": 24, "duration": 2, "count": 48}, "refs": []},
+                                     staging, encoded)
+        parts = []
+        for start, end in ((1.1, 1.5), (0.1, 0.5)):
+            part = staging / f"part-{start}.wav"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(start), "-to", str(end), "-i", str(mixed), str(part)], check=True)
+            parts.append(_tone_energy(part, 440))
+        return parts
+    tracks = [{"id": "vo", "filename": "vo.wav", "name": "vo", "kind": "speech", "startTime": 1.0, "volume": 1},
+              {"id": "bed", "filename": "bed.wav", "name": "bed", "kind": "music", "startTime": 0, "volume": 1}]
+    during, before = music_during_and_before(_document(audioTracks=tracks))
+    assert during > 0.8 * before, "without audioMix nothing dips"
+    during, before = music_during_and_before(_document(audioTracks=tracks, audioMix={"duckDb": 10}))
+    assert during < 0.15 * before, "10 dB is a tenth of the power"
+
+
 def test_scene_documents_save_2d_and_3d_revisions(tmp_path):
     workspace_dir = _workspace_dir(tmp_path)
     saved = save_document(WORKSPACE, _document(), name="Intro shot", preview=None, workspace_dir=workspace_dir)
