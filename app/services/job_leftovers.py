@@ -228,8 +228,8 @@ def command_catalog() -> list[dict]:
     return [
         _operation(
             "jobs.leftovers", False,
-            "List generation requests left in the durable queue after a restart. "
-            "They are not running. Resume or discard one by intent_id; do not submit a second copy.",
+            "List generation requests left in the durable queue after a restart, and Video 2D/3D exports a restart "
+            "interrupted. They are not running. Resume or discard one by intent_id; do not submit a second copy.",
             {"version": version, "input": _input({})}, ["version"],
         ),
         _operation(
@@ -294,6 +294,7 @@ class JobLeftovers:
         rehydrate: Callable[[dict], tuple[dict | None, bool]] | None = None,
         start: Callable[[dict], None] | None = None,
         discard_record: Callable[[dict], None] | None = None,
+        exports: Any = None,
     ):
         self.queue = queue
         self.jobs = jobs
@@ -302,6 +303,8 @@ class JobLeftovers:
         self.rehydrate = rehydrate
         self.start = start
         self.discard_record = discard_record
+        # Interrupted scene exports (services/scene_export_leftovers.py), listed beside the queue.
+        self.exports = exports
 
     def reloaded(self) -> "JobLeftovers":
         """New in-memory view of the same queue file, as after a process restart."""
@@ -312,6 +315,7 @@ class JobLeftovers:
             rehydrate=self.rehydrate,
             start=self.start,
             discard_record=self.discard_record,
+            exports=self.exports,
         )
 
     def _queue_records_unlocked(self) -> list[dict]:
@@ -381,6 +385,8 @@ class JobLeftovers:
     def list_response(self) -> dict:
         with self.lock:
             jobs = [public_job(record) for record in self._records_unlocked()]
+        if self.exports is not None:
+            jobs.extend(self.exports.records())
         return {"version": 1, "status": "completed", "operation": "jobs.leftovers", "result": {"jobs": jobs}}
 
     def status_for(self, job_id: str) -> dict | None:
@@ -414,6 +420,9 @@ class JobLeftovers:
         if record is None:
             if live is not None:
                 return self._resume_body(live, intent_id, started=False)
+            resumed = self.exports.resume(intent_id) if self.exports is not None else None
+            if resumed is not None:
+                return {"version": 1, "status": "completed", "operation": "jobs.resume", "result": resumed}
             raise _error(404, "leftover_not_found", "No leftover matches this intent_id")
         job, created = self._rehydrate(record)
         if job is None or not created:
@@ -485,6 +494,9 @@ class JobLeftovers:
             return self._discard_body(live, intent_id, discarded=False)
         record = find_leftover(self._records_unlocked(), intent_id)
         if record is None:
+            discarded = self.exports.discard(intent_id) if self.exports is not None else None
+            if discarded is not None:
+                return {"version": 1, "status": "completed", "operation": "jobs.discard", "result": discarded}
             raise _error(404, "leftover_not_found", "No leftover matches this intent_id")
         self._invoke_discard(record)
         return self._discard_body(record, intent_id, discarded=True)

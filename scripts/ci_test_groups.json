@@ -411,6 +411,7 @@
         "tests/test_wizard_workflow_executor.py",
         "tests/test_workspace_command_failures.py",
         "tests/test_world3d_export.py",
+        "tests/test_scene_export_leftovers.py",
         "tests/test_world3d_media_cache.py",
         "tests/test_montage_derive.py",
         "tests/test_montage_documents.py",

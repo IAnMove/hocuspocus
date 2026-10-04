@@ -88,6 +88,14 @@ class TaskCommandAdmission:
             return None
         return _decode_admission(row)
 
+    def command_admission_for_task(self, task_id: str) -> dict | None:
+        """The admission that created ``task_id``, for recovery lists that start from tasks."""
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM task_command_admissions WHERE task_id = ?", (task_id,)).fetchone()
+        if row is None:
+            return None
+        return _decode_admission(row)
+
     def claim_command_dispatch(self, intent_id: str, owner: str) -> bool:
         """Claim initial dispatch once, after admission and before queue effects.
 

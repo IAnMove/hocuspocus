@@ -36984,6 +36984,8 @@ def _discard_generation_leftover(record):
     _durable_generation_queue.remove(str(record.get("id") or ""))
 
 
+from services.scene_export_leftovers import SceneExportLeftovers
+
 _job_leftovers = JobLeftovers(
     queue=_durable_generation_queue,
     jobs=_jobs,
@@ -36992,6 +36994,9 @@ _job_leftovers = JobLeftovers(
     rehydrate=_queue_recovered_generation,
     start=_start_recovered_generation,
     discard_record=_discard_generation_leftover,
+    exports=SceneExportLeftovers(
+        services=[_world3d_export, _scene2d_export], list_workspaces=_list_workspaces, registry_for=_task_registry,
+    ),
 )
 _image_generation_commands.leftover_receipt_lookup = _job_leftovers.receipt_for
 _job_leftover_handlers = job_leftover_handlers(_job_leftovers)
