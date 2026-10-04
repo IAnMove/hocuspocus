@@ -30,11 +30,11 @@ def analyze_window(window, source, root):
 
 
 def command_catalog():
-    return [{"name": SETUP, "description": "Read offline CPU phoneme-engine status; install=true explicitly downloads a pinned, checksum-verified 1.26 GB optional model. Never downloads during analysis.",
+    return [{"name": SETUP, "mutation": True, "description": "Read offline CPU phoneme-engine status; install=true explicitly downloads a pinned, checksum-verified 1.26 GB optional model. Never downloads during analysis.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "input"],
                              "properties": {"version": {"const": 1, "type": "integer"}, "input": {"type": "object", "additionalProperties": False,
                                  "properties": {"install": {"type": "boolean", "default": False}}}}}},
-            {"name": CUES, "description": "CPU acoustic phonemes for a workspace voice window, with optional exact transcript CTC alignment. Returns timed vowels/consonants, confidence and native mouth cues on the source clock. Use isolated singing vocals, review low confidence, and keep soundtrack timing unchanged.",
+            {"name": CUES, "mutation": False, "description": "CPU acoustic phonemes for a workspace voice window, with optional exact transcript CTC alignment. Returns timed vowels/consonants, confidence and native mouth cues on the source clock. Use isolated singing vocals, review low confidence, and keep soundtrack timing unchanged.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "input"],
                              "properties": {"version": {"const": 1, "type": "integer"}, "input": VoiceWindow.model_json_schema()}}}]
 

@@ -1,3 +1,5 @@
+import { SPOKEN_LANGUAGES, spokenLanguage, type SpokenLanguage } from './speechLanguage'
+
 /** Public preferences only. Credentials always stay in the server configuration. */
 export type PresetCharacterVoice = {
   provider: 'local'
@@ -16,6 +18,8 @@ export type CustomCharacterVoice = {
   language: typeof CHARACTER_VOICE_LANGUAGES[number]
 }
 export type CharacterVoice = PresetCharacterVoice | CustomCharacterVoice
+/** One dedicated voice per spoken language; the kit's `voice` speaks every other language. */
+export type CharacterVoicesByLanguage = Partial<Record<SpokenLanguage, CharacterVoice>>
 export type CharacterKitRef = { id: string; workspace: string }
 export const CHARACTER_VOICES = ['vivian', 'serena', 'uncle_fu', 'dylan', 'eric', 'ryan', 'aiden', 'ono_anna', 'sohee'] as const
 
@@ -69,6 +73,33 @@ export function parseCharacterVoice(raw: unknown): CharacterVoice | undefined {
   return { provider: 'local', model: 'qwen3_tts_customvoice', voiceId: data.voiceId as string,
     ...(data.instructions ? { instructions: data.instructions as string } : {}) }
 }
+export function parseCharacterVoicesByLanguage(raw: unknown): CharacterVoicesByLanguage | undefined {
+  if (raw === undefined) return undefined
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid voices by language.')
+  const voices: CharacterVoicesByLanguage = {}
+  for (const [language, value] of Object.entries(raw)) {
+    if (!SPOKEN_LANGUAGES.includes(language as SpokenLanguage)) throw new Error(`Unsupported voice language: ${language}.`)
+    const voice = parseCharacterVoice(value)
+    if (!voice) continue
+    if (voice.model === 'qwen3_tts_base' && voice.language !== language && voice.language !== 'auto') {
+      throw new Error('A reference voice must speak the language it is assigned to.')
+    }
+    voices[language as SpokenLanguage] = voice
+  }
+  return Object.keys(voices).length ? voices : undefined
+}
+
+/** The voice that speaks `language` ("Español de España", "en", "english"…): its dedicated voice, else the default. */
+export function characterVoiceFor(
+  kit: { voice?: CharacterVoice; voicesByLanguage?: CharacterVoicesByLanguage } | undefined,
+  language?: unknown,
+): CharacterVoice | undefined {
+  const key = spokenLanguage(language)
+  return (key && kit?.voicesByLanguage?.[key]) || kit?.voice
+}
+
+export const characterVoiceLabel = (voice: CharacterVoice) => voice.model === 'qwen3_tts_base' ? voice.name : voice.voiceId
+
 export function isCharacterVoiceReady(raw: unknown): boolean {
   try { parseCharacterVoice(raw); return true } catch { return false }
 }

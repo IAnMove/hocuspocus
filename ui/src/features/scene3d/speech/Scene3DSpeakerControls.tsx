@@ -9,6 +9,7 @@ import { SpeechNumber, speechInput } from './FaceControls'
 import { CharacterDefinitionEditor } from '../../characters/CharacterDefinitionEditor'
 import { GenerateCharacterLine } from './GenerateCharacterLine'
 import { randomUuid } from '../../../lib/uuid'
+import { characterVoiceFor } from '../../../lib/characterVoice'
 
 export function Scene3DSpeakerControls(props: SpeechControlsProps) {
   const { t } = useUiTranslation('scene3dEditor')
@@ -56,7 +57,7 @@ export function Scene3DSpeakerControls(props: SpeechControlsProps) {
       }}>{t('speech.addIntervention')}</button>
       {stored.clips && clip && <label className="block text-xs">{t('speech.literalText')}<textarea className={speechInput + ' mt-1 w-full'} value={clip.text ?? ''}
         disabled={locked} maxLength={4000} onChange={event => commit({ ...stored, clips: clips.map((item, i) => i === index ? { ...item, text: event.target.value } : item) })} /></label>}
-      {stored.clips && clip && <GenerateCharacterLine key={clip.id} clip={clip} voice={props.slot.character?.voice} workspace={props.workspace}
+      {stored.clips && clip && <GenerateCharacterLine key={clip.id} clip={clip} voice={characterVoiceFor(props.slot.character, clip.language)} workspace={props.workspace}
         disabled={isLocked('voice')} onBusyChange={setVoiceBusy}
         onChange={next => { commit({ ...stored, clips: clips.map((item, i) => i === index ? next : item) }); props.onFit(next.end!) }} />}
     </details>

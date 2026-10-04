@@ -5,6 +5,8 @@ import re
 from urllib.parse import urlsplit, parse_qsl, unquote
 
 CHARACTER_VOICE_LANGUAGES = {"auto", "chinese", "english", "japanese", "korean", "german", "french", "russian", "portuguese", "spanish", "italian"}
+# A character can carry one dedicated voice per spoken language; "auto" is not a language.
+CHARACTER_VOICE_DUB_LANGUAGES = CHARACTER_VOICE_LANGUAGES - {"auto"}
 
 
 def _voice_reference_query(kind, raw):
@@ -153,3 +155,18 @@ def normalize_character_voice(value):
     if "instructions" in value and (not isinstance(value["instructions"], str) or len(value["instructions"]) > 1000):
         raise ValueError("Voice instructions are too long.")
     return dict(value)
+
+
+def normalize_character_voices_by_language(value):
+    """Optional per-language voices. ``voice`` stays the default for any other language."""
+    if not isinstance(value, dict) or len(value) > len(CHARACTER_VOICE_DUB_LANGUAGES):
+        raise ValueError("Store voices by language as an object keyed by language.")
+    result = {}
+    for language, voice in value.items():
+        if language not in CHARACTER_VOICE_DUB_LANGUAGES:
+            raise ValueError("Unsupported voice language.")
+        normalized = normalize_character_voice(voice)
+        if normalized.get("model") == "qwen3_tts_base" and normalized["language"] not in {language, "auto"}:
+            raise ValueError("A reference voice must speak the language it is assigned to.")
+        result[language] = normalized
+    return result

@@ -3,7 +3,20 @@
     "stillAlt": "Identidad de biblioteca de {{name}}",
     "ttsVoice": "TTS · Qwen3 {{voiceId}}",
     "ttsNone": "Este personaje aún no tiene voz TTS",
-    "linkedHint": "El aspecto y el TTS salen del personaje de la biblioteca. Las notas de actuación se quedan en esta historia o serie."
+    "linkedHint": "El aspecto y el TTS salen del personaje de la biblioteca. Las notas de actuación se quedan en esta historia o serie.",
+    "languageVoices": "Voces por idioma: {{voices}}",
+    "languages": {
+      "english": "Inglés",
+      "spanish": "Español",
+      "french": "Francés",
+      "german": "Alemán",
+      "italian": "Italiano",
+      "portuguese": "Portugués",
+      "japanese": "Japonés",
+      "korean": "Coreano",
+      "chinese": "Chino",
+      "russian": "Ruso"
+    }
   },
   "facePackMaker": {
     "title": "Cara para lipsync (plano de cubo)",

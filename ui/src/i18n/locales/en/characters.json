@@ -3,7 +3,20 @@
     "stillAlt": "Library identity of {{name}}",
     "ttsVoice": "TTS · Qwen3 {{voiceId}}",
     "ttsNone": "No TTS voice on this character yet",
-    "linkedHint": "Look and TTS come from the library character. Acting notes stay on this story or series."
+    "linkedHint": "Look and TTS come from the library character. Acting notes stay on this story or series.",
+    "languageVoices": "Voices by language: {{voices}}",
+    "languages": {
+      "english": "English",
+      "spanish": "Spanish",
+      "french": "French",
+      "german": "German",
+      "italian": "Italian",
+      "portuguese": "Portuguese",
+      "japanese": "Japanese",
+      "korean": "Korean",
+      "chinese": "Chinese",
+      "russian": "Russian"
+    }
   },
   "facePackMaker": {
     "title": "Lipsync face (cube plane)",

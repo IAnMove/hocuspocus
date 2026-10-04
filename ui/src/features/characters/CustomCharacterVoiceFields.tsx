@@ -6,8 +6,10 @@ import { useVoiceReferenceCapture } from './useVoiceReferenceCapture'
 const input = 'mt-1 min-h-10 w-full rounded border border-border bg-bg-primary p-2'
 const button = 'min-h-10 rounded border border-border px-3 disabled:opacity-50'
 
-export function CustomCharacterVoiceFields({ value, onChange, onBusyChange }: {
+/** `languages` narrows the selector, e.g. to one spoken language and automatic detection. */
+export function CustomCharacterVoiceFields({ value, onChange, onBusyChange, languages = CHARACTER_VOICE_LANGUAGES }: {
   value: CustomCharacterVoice; onChange: (voice: CustomCharacterVoice) => void; onBusyChange?: (busy: boolean) => void
+  languages?: readonly CustomCharacterVoice['language'][]
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const capture = useVoiceReferenceCapture(referenceAudio => onChange({ ...value, referenceAudio, transcript: '' }), onBusyChange)
@@ -26,7 +28,7 @@ export function CustomCharacterVoiceFields({ value, onChange, onBusyChange }: {
         onChange={event => onChange({ ...value, transcript: event.target.value })} /></label>
       <label className="block">{t('speech.customVoice.language')}<select className={input} value={value.language}
         onChange={event => onChange({ ...value, language: event.target.value as CustomCharacterVoice['language'] })}>
-        {CHARACTER_VOICE_LANGUAGES.map(language => <option key={language} value={language}>{t(`speech.customVoice.languages.${language}`)}</option>)}
+        {languages.map(language => <option key={language} value={language}>{t(`speech.customVoice.languages.${language}`)}</option>)}
       </select></label>
     </fieldset>
     {capture.state !== 'idle' && <div className="flex flex-wrap items-center gap-3">

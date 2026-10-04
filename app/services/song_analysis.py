@@ -179,6 +179,7 @@ def command_catalog() -> list[dict[str, Any]]:
     from services.phoneme_commands import command_catalog as phoneme_catalog
     return [{
         "name": OPERATION,
+        "mutation": True,
         "description": ("Analyze a song in the workspace on the CPU: tempo grid (period x phase search), isolated vocals and, "
                         "when lyrics are given, word-timed lines aligned to the written lyrics. Writes <song>.score.json in the "
                         "workspace and returns a short summary with a verdict (retake when the song ends mid-phrase or less "

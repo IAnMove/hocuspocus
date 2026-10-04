@@ -174,7 +174,8 @@ export type Scene3DSourceRef = {
 export type Scene3DSlot = {
   rhythm?: import('./rhythm').Scene3DSlotRhythm
   character?: { id: string; name: string; kitRef?: import('../../lib/characterVoice').CharacterKitRef;
-    libraryRevision?: number; voice?: import('../../lib/characterVoice').CharacterVoice }
+    libraryRevision?: number; voice?: import('../../lib/characterVoice').CharacterVoice
+    voicesByLanguage?: import('../../lib/characterVoice').CharacterVoicesByLanguage }
   id: string
   slot: Scene3DSlotId
   position: Vec3

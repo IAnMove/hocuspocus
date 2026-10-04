@@ -12,6 +12,7 @@ import type { CharacterKitLibrary } from '../../lib/characterKit'
 import type { CharacterKitReviewPolicy } from '../../lib/characterKitReview'
 import { applySeriesLipSync, seriesLipSyncFingerprint, seriesLipSyncIssues, seriesRestKit } from './nativeLipSync'
 import { analyzeNativeSpeech } from './nativeSpeechAnalysis'
+import { speechAnalysisLanguage } from '../../lib/speechLanguage'
 import { latestNativeTake } from './nativeTake'
 import { nativeGenerationPlan, type NativeGenerationMode } from './nativeGenerationPlan'
 import { seriesAssetUrl } from './referenceImages'
@@ -94,7 +95,8 @@ async function renderNativeShot(workspace: string, seriesId: string, episodeId: 
     ? await updateSavedLipSync(workspace, series, episode, shot, kits, bodySources)
     : await prepareNativeDraft(workspace, series, episode, shot, kits, bodySources, policy)
   useSeriesNativeBatch.setState({ phase: 'analyzing' })
-  prepared.scene = await analyzeNativeSpeech(prepared.scene, workspace, series.language)
+  // "Español de España" is a label; the analyzers need "es".
+  prepared.scene = await analyzeNativeSpeech(prepared.scene, workspace, speechAnalysisLanguage(series.spokenLanguage || series.language))
   source(workspace, seriesId, episodeId)
   useSeriesStore.getState().updateEpisode(episodeId, current => ({ ...current,
     shots: current.shots.map(item => item.id === shotId ? { ...item, durationSeconds: prepared.shot.durationSeconds } : item) }))

@@ -1,6 +1,7 @@
 import * as api from '../../api/client'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 import type { CharacterKitLibrary } from '../../lib/characterKit'
+import { characterVoiceFor } from '../../lib/characterVoice'
 import type { CharacterKitReviewPolicy } from '../../lib/characterKitReview'
 import { decodeVoice } from '../scene3d/speech/audio'
 import { buildSeriesShotScene } from './shotScene'
@@ -27,7 +28,8 @@ async function dialogueAudio(workspace: string, shot: SeriesShot, series: Series
   for (const beat of shot.dialogueBeats) {
     const character = series.characters.find(item => item.id === beat.characterId)
     const ref = character?.voiceProfile?.characterKitRef
-    const voice = ref?.workspace === workspace ? kits.kits[ref.id]?.voice : undefined
+    // The series' spoken language picks the kit's voice for that language, else its default voice.
+    const voice = ref?.workspace === workspace ? characterVoiceFor(kits.kits[ref.id], series.spokenLanguage || series.language) : undefined
     if (!voice) throw new Error(`Configure the saved voice for ${character?.name || beat.characterId} before generating this shot.`)
     const key = `hocuspocus:series-speech:${JSON.stringify([workspace, series.id, shot.id, beat.id, beat.text, voice])}`
     let filename = localStorage.getItem(key)
