@@ -61,12 +61,27 @@ def _check_version(operation, arguments):
     })
 
 
+QUEUE_PRIORITY = {
+    'type': 'integer',
+    'description': 'Optional GPU queue priority; higher runs first, omitted is 0. Within one priority the shortest '
+                   'declared output runs first, and a job that has waited 5 minutes is overtaken only by a higher priority.',
+}
+
+
+def _takes_queue_priority(operation):
+    # Lifted off the command before its strict schema (job_lifecycle.take_submission_priority).
+    name = operation['name']
+    return name.startswith('generation.') and name != 'generation.receipt' and operation.get('mutation', True)
+
+
 def _command_tool(operation):
     # HTTP carries its operation explicitly; MCP carries it as the tool name.
     # Derive the transport projection from the same source schema.
     schema = operation['inputSchema']
     schema = {**schema, 'properties': {key: value for key, value in schema['properties'].items() if key != 'operation'},
               'required': [key for key in schema['required'] if key != 'operation']}
+    if _takes_queue_priority(operation):
+        schema['properties'] = {**schema['properties'], 'priority': QUEUE_PRIORITY}
     guidance = 'Versioned command. Follow inputSchema for workspace and exact resource IDs.'
     # A catalog that forgets the flag must not take tools/list down for every
     # client; treat it as a mutation, the conservative reading.

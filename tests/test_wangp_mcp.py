@@ -415,3 +415,16 @@ def test_an_unsupported_version_names_the_versions_the_tool_accepts(tmp_path):
     assert calls == []
     assert call({'version': 2, 'input': {}})['isError'] is False
     assert len(calls) == 1
+
+
+def test_generation_tools_advertise_the_queue_priority_they_accept():
+    from routers.wangp_mcp import tool_definitions
+    schema = {'type': 'object', 'required': ['version'], 'properties': {'version': {'type': 'integer', 'const': 2}}}
+    operations = [{'name': name, 'version': 2, 'domain': 'generation', 'mutation': mutation, 'description': 'x',
+                   'inputSchema': schema} for name, mutation in
+                  (('generation.speech', True), ('generation.receipt', False), ('scenes.video2d.validate', False))]
+    tools = {tool['name']: tool for tool in tool_definitions({item['name'] for item in operations}, operations)}
+    assert tools['generation.speech']['inputSchema']['properties']['priority']['type'] == 'integer'
+    assert 'priority' not in tools['generation.receipt']['inputSchema']['properties']
+    assert 'priority' not in tools['scenes.video2d.validate']['inputSchema']['properties']
+    assert 'priority' not in schema['properties'], 'the source catalog is not mutated'
