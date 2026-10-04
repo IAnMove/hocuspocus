@@ -221,7 +221,9 @@
         "tests/test_humanoid_retarget.py",
         "tests/test_humanoid_rig_api.py",
         "tests/test_production_generation_link.py",
-        "tests/test_production_shot_regeneration.py"
+        "tests/test_production_shot_regeneration.py",
+        "tests/test_series_language_versions.py",
+        "tests/test_local_mcp.py"
       ]
     },
     {
@@ -361,9 +363,7 @@
         "tests/test_series_commands.py",
         "tests/test_series_native_render.py",
         "tests/test_series_shot_plan.py",
-        "tests/test_series_language_versions.py",
         "tests/test_series_native_render_router.py",
-        "tests/test_local_mcp.py",
         "tests/test_flat_rig.py",
         "tests/test_speech_qa.py",
         "tests/test_character_styles.py",

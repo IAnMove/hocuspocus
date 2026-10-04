@@ -10,7 +10,7 @@ class Fake:
     def __init__(self):
         self.calls = []
 
-    def start(self, workspace, series_id, episode_id, *, shot_ids=None, approve=False):
+    def start(self, workspace, series_id, episode_id, *, shot_ids=None, approve=False, language=None):
         self.calls.append(("start", workspace, series_id, episode_id, shot_ids, approve))
         return {"jobId": "native-1", "status": "queued", "items": [{"shotId": "s01", "lines": {"b": {"cues": [1, 2], "filename": "x.wav"}}}]}
 
