@@ -496,6 +496,14 @@ Scene export and the contact-sheet painter share `HOCUS_SCENE_EXPORT_CONCURRENCY
 
 Qwen is already unloaded before the next model by `generation_memory.py`. The live 17-frame Qwen-to-H3 seconds-per-step table was not measured. Do not add a second unloader.
 
+Queue and memory settings (2026-10-04):
+
+- `HOCUS_QUEUE_MAX_WAIT_SECONDS` (default 300). A generation job that has waited this long is overtaken only by a higher `priority`. `0` turns it off. `tools/list` shows `priority` on every `generation.*` tool.
+- `HOCUS_GPU_WAITER_MAX_WAIT_SECONDS` (default 120). A Video 3D export, or another coordinator ticket on the local GPU, gets the next turn when it has waited longer than the generation queue head, or this long. `0` turns it off.
+- `HOCUS_MALLOC_TRIM` (default on). Freed model memory goes back to the system after a model release and after each GPU job. `0` turns it off. Large releases are logged as `[Memory] Returned … GiB`.
+- `app/settings/server-endpoint.json` holds the bound `url`, `mcp_url` and `pid` while the server runs. Check `pid` before you trust it.
+- After a restart, `jobs.leftovers` also lists interrupted Video 2D/3D exports. Use `jobs.resume` to retry the same task and `jobs.discard` to cancel it.
+
 How to add a style preset: add an entry to `app/shared/style_presets.json`. Do not put a person or project name in it. Set `style.preset` to that id. Add the id to `PRESET_IDS` in `app/services/production_style_presets.py` only when that preset needs a check beyond filling the style fields.
 
 `music_production.py` is 688 lines. Shot windows live in `production_windows.py`. Cast, frames and the look preview live in `production_stage_frames.py`. Clip jobs live in `production_stage_clips.py`. Scenes, the package, the montage and the animatic live in `production_stage_scenes.py`. The run body lives in `production_stage_run.py`. `Production` still owns those methods and calls the modules. Wait stays at 1200 seconds with `until`. Resolution helpers, shot lock, planned enhance, and the 5 second save gate stay. The older 669-line cut was not reused.

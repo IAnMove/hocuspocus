@@ -28,22 +28,23 @@ El plan mete cada una de esas piezas en la app.
 
 ### 1A. Arreglos de los problemas detectados
 
-| Arreglo | Problema |
-|---|---|
-| Cola con anti-inanición: un trabajo que lleva más de N s esperando no puede ser adelantado. `priority` documentado en `generation.*` | P8 |
-| El render 3D no espera indefinidamente a que se vacíe la cola de la GPU | P14.2 |
-| Presupuesto de RAM antes de cargar un modelo y limpieza de cachés al cambiar de familia | P9 |
-| Una exportación 3D interrumpida se puede reanudar con su mismo `intent_id` | P9 |
-| Los efectos de pantalla sin `color` usan el color del catálogo (servidor y pintor) | P12 |
-| `jobs.wait` al agotar el tiempo devuelve el trabajo vivo con `timed_out: true`, sin error | P13 |
-| `jobs.*` aceptan `input`, como el resto de comandos | P13 |
-| `studio.key` acepta `intent_id` y un color de croma (verde, azul o magenta) | P13, P14.4 |
-| `generation.sfx` respeta `output_name`; los errores de versión dicen la versión válida | P13 |
-| El puerto efectivo del servidor se publica en `settings/server-endpoint.json` | P13 |
-| `characters.save` informa de los campos ignorados | P3 |
-| La concurrencia de exportación 2D se ajusta al número de núcleos | P14.7 |
-| El ensamblado normaliza la sonoridad (−16 LUFS) y escribe subtítulos SRT/VTT por idioma | P14.8, P14.9 |
-| Un test exige `mutation` explícito en todos los catálogos MCP | P1 |
+| Arreglo | Problema | Estado |
+|---|---|---|
+| Cola con anti-inanición: un trabajo que lleva más de N s esperando no puede ser adelantado. `priority` documentado en `generation.*` | P8 | Hecho (`HOCUS_QUEUE_MAX_WAIT_SECONDS`, 300 s) |
+| El render 3D no espera indefinidamente a que se vacíe la cola de la GPU | P14.2 | Hecho (`HOCUS_GPU_WAITER_MAX_WAIT_SECONDS`, 120 s) |
+| La memoria de los modelos liberados vuelve al sistema | P9 | Hecho (`malloc_trim`; causa medida: arenas de glibc) |
+| Presupuesto de RAM por familia de modelos antes de cargar | P9 | Pendiente: la causa medida ya está corregida |
+| Una exportación 3D interrumpida aparece en `jobs.leftovers` y se reanuda | P9 | Hecho (`jobs.resume` / `jobs.discard`) |
+| Los efectos de pantalla sin `color` usan el color del catálogo (servidor y pintor) | P12 | Hecho, con las fuentes del renderer |
+| `jobs.wait` al agotar el tiempo devuelve el trabajo vivo con `timed_out: true`, sin error | P13 | Hecho |
+| `jobs.*` aceptan `input`, como el resto de comandos | P13 | Hecho |
+| `studio.key` acepta `intent_id` y un color de croma (verde, azul o magenta) | P13, P14.4 | Hecho |
+| `generation.sfx` respeta `output_name`; los errores de versión dicen la versión válida | P13 | Hecho |
+| El puerto efectivo del servidor se publica en `settings/server-endpoint.json` | P13 | Hecho |
+| `characters.save` informa de los campos ignorados | P3 | Hecho (`ignoredFields`) |
+| La concurrencia de exportación 2D se ajusta al número de núcleos | P14.7 | Hecho (sin medir la ganancia) |
+| El ensamblado normaliza la sonoridad (−16 LUFS) y escribe subtítulos SRT/VTT por idioma | P14.8, P14.9 | Hecho, probado con los dos capítulos |
+| Un test exige `mutation` explícito en todos los catálogos MCP | P1 | Hecho (faltaban 19 en `production.*`) |
 
 ### 1B. Personajes en un clic
 
@@ -114,7 +115,7 @@ El plan mete cada una de esas piezas en la app.
 
 ## Orden y dependencias
 
-- La fase 1A no depende de nada y desbloquea trabajos largos fiables.
+- La fase 1A no depende de nada y desbloquea trabajos largos fiables. Va en su propio PR, encima del #795.
 - La fase 1B depende del #795 (`voicesByLanguage`, `characters.*`).
 - La fase 2 depende de 1B: usa el rig y las voces.
 - La fase 3 depende de la 2: el doblaje reutiliza el render en servidor.
