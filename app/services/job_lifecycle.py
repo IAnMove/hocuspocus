@@ -926,3 +926,8 @@ def generation_slot(
             generation_lock.release()
             with _generation_queue_condition:
                 _generation_queue_condition.notify_all()
+            # After the GPU is free: a job's freed buffers stay in its thread's
+            # malloc arena until trimmed (services/memory_trim.py).
+            from services.memory_trim import trim_process_heap
+
+            trim_process_heap("a generation job")

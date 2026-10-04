@@ -129,6 +129,7 @@
         "tests/test_select_local_tests.py",
         "tests/test_server_lifecycle.py",
         "tests/test_server_endpoint.py",
+        "tests/test_memory_trim.py",
         "tests/test_series_assembly.py",
         "tests/test_episode_finishing.py",
         "tests/test_series_assembly_contract.py",
