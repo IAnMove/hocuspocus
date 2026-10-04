@@ -2,6 +2,7 @@ import { durableScene3DSourceUrl, parseScene3DSourceRef } from './slotSource.ts'
 import type { Scene3DSourceRef } from './types.ts'
 import { parseImagePoses, type ImagePose } from './imagePoseSequence'
 import { loopedMediaTime, parseMediaLoop, type MediaLoop } from './mediaLoop'
+import { parseTalkingCutout, type TalkingCutout } from './talkingCutout'
 
 export type MediaScreen = MediaLoop & {
   sourceUrl: string
@@ -26,6 +27,8 @@ export type MediaScreen = MediaLoop & {
   flipY: boolean
   transparent?: boolean
   poseSequence?: ImagePose[]
+  /** A Character Kit cutout that talks: pose, mouths by cue and blink. */
+  talk?: TalkingCutout
 }
 
 export const defaultMediaScreen = (): MediaScreen => ({
@@ -95,7 +98,8 @@ export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as Partial<MediaScreen>, defaults = defaultMediaScreen()
   const poseSequence = value.media === 'video' ? undefined : parseImagePoses(value.poseSequence)
-  const sourceUrl = poseSequence?.[0].sourceUrl || durableScene3DSourceUrl(value.sourceUrl ?? '')
+  const talk = value.media === 'video' || poseSequence ? undefined : parseTalkingCutout(value.talk)
+  const sourceUrl = poseSequence?.[0].sourceUrl || talk?.base || durableScene3DSourceUrl(value.sourceUrl ?? '')
   const mode = value.mode === 'plane' ? 'plane' : 'mesh'
   return {
     sourceUrl, sourceRef: sourceUrl ? parseScene3DSourceRef(value.sourceRef) : undefined,
@@ -104,9 +108,10 @@ export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
     style: parseScreenStyle(value.style), fit: parseScreenFit(value.fit),
     start: bounded(value.start, 0, 0, 86400), speed: bounded(value.speed, 1, 0.05, 8),
     loop: value.loop !== false, flipY: value.flipY === true,
-    ...(value.transparent || poseSequence ? { transparent: true } : {}),
+    ...(value.transparent || poseSequence || talk ? { transparent: true } : {}),
     ...parseHue(value.hue),
     ...(poseSequence ? { poseSequence } : {}),
+    ...(talk ? { talk } : {}),
     ...parseMediaLoop(value),
   }
 }
@@ -129,5 +134,6 @@ export function mediaScreenMountKey(screen?: MediaScreen) {
     screen.sourceUrl, screen.media, screen.mode, screen.targetMesh, screen.anchor,
     screen.offset, screen.pitch, screen.yaw, screen.roll, screen.width, screen.height, screen.style, screen.fit, screen.flipY,
     Boolean(screen.transparent), screen.poseSequence?.map(pose => pose.sourceUrl), screen.hue ?? 0,
+    screen.talk ? [screen.talk.base, screen.talk.mouths, screen.talk.blink?.source] : null,
   ])
 }

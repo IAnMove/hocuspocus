@@ -12,6 +12,7 @@ import uuid
 from copy import deepcopy
 from pathlib import Path
 
+from services.character_kit_library import read_character_kit_library
 from services.scene_documents import get_document, save_document
 from services.world3d_template_catalog import require_card, user_template_document
 
@@ -67,6 +68,31 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     _write(workspace, scene_id, record, workspace_dir)
     viewed = _view(scene_id, record)
     viewed["warnings"] = warnings
+    return viewed
+
+
+def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
+    """Make an image object talk with a Character Kit: pose, mouths by cue, blink, and each line's audio."""
+    from services.world3d_talk import TalkError, apply_talk
+    record = _read(workspace, scene_id, workspace_dir)
+    if type(base_revision) is not int or base_revision != record["revision"]:
+        raise World3DSceneError("revision_conflict", "The scene changed since this revision. Reload before editing.", 409)
+    kit_id = changes.get("kit_id")
+    kit = (read_character_kit_library(str(workspace_dir(workspace))).get("kits") or {}).get(kit_id) if isinstance(kit_id, str) else None
+    if kit is None:
+        raise World3DSceneError("unknown_kit", f"unknown_kit:{kit_id}", 404)
+    document = record["document"]
+    slot = _target(document["slots"], changes)
+    try:
+        talked = apply_talk(document, slot, kit, changes.get("lines") or [], workspace=workspace,
+                            pose=str(changes.get("pose") or "base"), blink=changes.get("blink") is not False)
+    except TalkError as error:
+        raise World3DSceneError(error.code, str(error), error.status) from error
+    record["revision"] += 1
+    record["warnings"] = []
+    _write(workspace, scene_id, record, workspace_dir)
+    viewed = _view(scene_id, record)
+    viewed["talk"] = {key: value for key, value in talked.items() if key != "talk"}
     return viewed
 
 

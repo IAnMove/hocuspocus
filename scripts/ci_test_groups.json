@@ -189,6 +189,7 @@
         "tests/test_workspace_commands.py",
         "tests/test_workspace_registry.py",
         "tests/test_world3d_owned_render_smoke.py",
+        "tests/test_world3d_talk.py",
         "tests/test_world3d_templates.py",
         "tests/test_production_review.py",
         "tests/test_lipsync_span.py",

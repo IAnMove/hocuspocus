@@ -13,7 +13,7 @@ from services.mcp_intent import IntentConflict, check_intent_id, intent_digest, 
 from services.scene_documents import WORKSPACE_RE
 from services.world3d_scenes import (
     World3DSceneError, compile_template_document, inspect_scene, instantiate_template, patch_scene, preview_scene,
-    publish_scene, put_user_template,
+    publish_scene, put_user_template, talk_scene,
 )
 from services.world3d_template_catalog import (
     CATALOG_OPERATION, World3DTemplateError, require_card, search_templates, user_template_document,
@@ -24,7 +24,7 @@ _ID = {"type": "string", "minLength": 1, "maxLength": 120}
 _WORKSPACE = {"type": "string", "pattern": WORKSPACE_RE.pattern}
 _MUTATIONS = {
     "world3d.scene.instantiate", "world3d.scene.patch", "world3d.scene.publish",
-    "world3d.scene.apply_query", "world3d.templates.user.put",
+    "world3d.scene.apply_query", "world3d.templates.user.put", "world3d.scene.talk",
 }
 _OPERATIONS = {
     "world3d.templates.list": (False, "Search Video 3D shots. Returns at most 8 short cards unless limit is set, never the whole library.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}}, []),
@@ -34,6 +34,7 @@ _OPERATIONS = {
     "world3d.scene.instantiate": (True, "Create an editable scene from an exact template id.", {"template_id": _ID}, ["template_id"]),
     "world3d.scene.inspect": (False, "List object ids, markers, traits and the current revision.", {"scene_id": _ID}, ["scene_id"]),
     "world3d.scene.patch": (True, "Bind resources by object id, or by role only when that role is unique. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "bindings": {"type": "array"}, "camera": {"type": "object"}, "playbackSpeed": {"type": "number"}, "duration": {"type": "number"}}, ["scene_id", "base_revision"]),
+    "world3d.scene.talk": (True, "Make an image object talk as a Character Kit cutout: its approved pose, the mouth drawing for each cue (audio.mouth_cues output, Rhubarb A-H/X) and its blink. Each line has start (scene seconds), cues and optionally audio (a workspace or upload URL) that joins the scene soundtrack. Calling it again replaces that object's lines. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "object_id": _ID, "role": {"type": "string"}, "kit_id": _ID, "pose": {"type": "string", "maxLength": 120}, "blink": {"type": "boolean"}, "lines": {"type": "array", "maxItems": 24, "items": {"type": "object", "additionalProperties": False, "required": ["start", "cues"], "properties": {"start": {"type": "number", "minimum": 0, "maximum": 600}, "cues": {"type": "array", "maxItems": 10000}, "audio": {"type": ["string", "object"]}, "gain": {"type": "number", "minimum": 0, "maximum": 1}}}}}, ["scene_id", "base_revision", "kit_id", "lines"]),
     "world3d.scene.preview": (False, "Paint cheap frames of the modified revision at concrete times. The frames are this scene, not the template thumbnail.", {"scene_id": _ID, "times": {"type": "array"}, "expected_revision": {"type": "integer"}}, ["scene_id"]),
     "world3d.scene.publish": (True, "Save the working scene through the editor gallery so export reads the same document.", {"scene_id": _ID}, ["scene_id"]),
     "world3d.scene.apply_query": (True, "Search and instantiate only when the top card strictly outranks the next. Otherwise return the cards and create nothing.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}}, ["query"]),
@@ -92,6 +93,8 @@ def _effect(name, data, workspace_dir):
         return {"status": "completed", "scene": instantiate_template(data["workspace"], data["template_id"], workspace_dir)}
     if name == "world3d.scene.patch":
         return {"status": "completed", "scene": patch_scene(data["workspace"], data["scene_id"], workspace_dir, data, data["base_revision"])}
+    if name == "world3d.scene.talk":
+        return {"status": "completed", "scene": talk_scene(data["workspace"], data["scene_id"], workspace_dir, data, data["base_revision"])}
     if name == "world3d.scene.publish":
         return {"status": "completed", "scene": publish_scene(data["workspace"], data["scene_id"], workspace_dir)}
     if name == "world3d.scene.apply_query":

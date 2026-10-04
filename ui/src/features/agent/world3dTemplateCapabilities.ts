@@ -8,6 +8,7 @@ export const WORLD3D_TEMPLATE_OPERATIONS = [
   'world3d.scene.instantiate',
   'world3d.scene.inspect',
   'world3d.scene.patch',
+  'world3d.scene.talk',
   'world3d.scene.preview',
   'world3d.scene.publish',
   'world3d.scene.apply_query',
@@ -17,6 +18,7 @@ export const WORLD3D_TEMPLATE_MUTATIONS = [
   'world3d.templates.user.put',
   'world3d.scene.instantiate',
   'world3d.scene.patch',
+  'world3d.scene.talk',
   'world3d.scene.publish',
   'world3d.scene.apply_query',
 ] as const
@@ -29,6 +31,7 @@ const MOUNT_SCENE_OPERATIONS = new Set<string>([
   'world3d.scene.instantiate',
   'world3d.scene.apply_query',
   'world3d.scene.patch',
+  'world3d.scene.talk',
 ])
 
 export function shouldMountWorld3DScene(operation: string): boolean {
