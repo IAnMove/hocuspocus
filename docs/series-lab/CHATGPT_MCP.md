@@ -57,7 +57,7 @@ Para cortar el acceso: rota la clave o desactiva el acceso en Ajustes → MCP y 
 > `series.episode.produce.status` cada uno o dos minutos hasta que termine. Ante un error, lee el mensaje y corrige la
 > llamada; no inventes ids.
 
-Un encargo típico: *«Escribe y produce el capítulo 3 de Valle Inquietante: Kevin intenta… En español y en inglés, con
+Un encargo típico: *«Escribe y produce el capítulo 3 de mi serie: Ana intenta… En español y en inglés, con
 subtítulos. Enséñame el guion antes de renderizar.»*
 
 ## Límites de hoy

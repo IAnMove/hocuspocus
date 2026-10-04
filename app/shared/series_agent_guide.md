@@ -1,7 +1,7 @@
 # Making an episode in HocusPocus Series Lab (guide for agents)
 
-This is how an agent with only these MCP tools makes an episode of a 2D cutout animated series at the quality of
-*Uncanny Valley* 1x01–1x02. Everything runs locally: images, voices, lip-sync, Video 2D/3D, export and assembly.
+This is how an agent with only these MCP tools makes an episode of a 2D cutout animated series: cast, voices in
+each language, lip-sync, effects and a finished cut with subtitles. Everything runs locally: images, voices, lip-sync, Video 2D/3D, export and assembly.
 The bible that comes with this guide lists the series' real characters, kits, poses, locations, music and sounds:
 use only those ids and file names, never invent one.
 
@@ -34,23 +34,23 @@ The lower-level tools (`series.episode.create`/`update`, `series.episode.languag
 ## The script
 
 ```json
-{"title": {"es": "El vecino", "en": "The Neighbour"}, "premise": {"es": "...", "en": "..."},
- "scenes": [{"id": "cold_open", "location": "street", "variant": "street_day", "purpose": "Mark moves in"}],
+{"title": {"es": "La grapadora", "en": "The Stapler"}, "premise": {"es": "...", "en": "..."},
+ "scenes": [{"id": "cold_open", "location": "office", "variant": "office_day", "purpose": "Ana finds her desk empty"}],
  "shots": [
   {"scene": "cold_open", "framing": "title", "duration": 7,
-   "card": {"kind": "title", "es": ["VALLE INQUIETANTE", "Episodio 3"], "en": ["UNCANNY VALLEY", "Episode 3"]},
+   "card": {"kind": "title", "es": ["MI SERIE", "Episodio 3"], "en": ["MY SERIES", "Episode 3"]},
    "music": {"file": "mus-theme-es.wav", "en": "mus-theme-en.wav", "volume": 0.9}},
   {"scene": "cold_open", "framing": "two", "camera": "push",
-   "cast": [["kevin", "base", 32], {"characterId": "mark", "poseId": "wave", "x": 68, "enterFrom": "right"}],
-   "lines": [{"who": "kevin", "es": "¿Eso es un búnker?", "en": "Is that a bunker?"},
-             {"who": "mark", "es": "...Es un jardín.", "en": "...It's a garden.", "pauseBefore": 1.0}],
-   "sfx": [{"file": "sfx-truck.wav", "at": 0.2}, {"file": "sfx-pen.wav", "line": 1, "anchor": "end", "offset": 0.1}],
+   "cast": [["ana", "base", 32], {"characterId": "leo", "poseId": "wave", "x": 68, "enterFrom": "right"}],
+   "lines": [{"who": "ana", "es": "¿Quién se ha llevado mi grapadora?", "en": "Who took my stapler?"},
+             {"who": "leo", "es": "...Nadie.", "en": "...Nobody.", "pauseBefore": 1.0}],
+   "sfx": [{"file": "sfx-door.wav", "at": 0.2}, {"file": "sfx-ping.wav", "line": 1, "anchor": "end", "offset": 0.1}],
    "fx": [{"kind": "confetti", "line": 1, "duration": 1.5, "x": 70, "y": 30, "size": 40}],
-   "props": [{"file": "prop-truck-s8-key.png", "x": 12, "y": 74, "scale": 0.36}],
+   "props": [{"file": "prop-stapler.png", "x": 12, "y": 74, "scale": 0.2}],
    "timing": {"intro": 0.6, "tail": 1.0}},
-  {"scene": "mars", "kind": "3d", "lines": [{"who": "elon", "es": "...", "en": "..."}],
-   "scene3d": {"template": "user-uv-mars-elon", "quality": "final",
-               "cast": [{"characterId": "elon", "objectId": "elon", "poseId": "phone"}]}}]}
+  {"scene": "moon", "kind": "3d", "lines": [{"who": "robot", "es": "...", "en": "..."}],
+   "scene3d": {"template": "user-moon-base", "quality": "final",
+               "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}]}}]}
 ```
 
 The first language is the series' own (`es` or `spanish`); every other language in the lines becomes a version.
@@ -69,14 +69,14 @@ id as a scene id.
 What `from_script` writes on each shot, and what `series.episode.update` takes (script keys in brackets):
 
 ```json
-{"id": "e3s05", "order": 6, "sceneId": "e3_street", "locationId": "street", "locationVariantId": "street_day",
- "productionMethod": "animation_2d", "visibleCharacterIds": ["kevin", "mark"], "speakingCharacterIds": ["kevin", "mark"],
- "dialogueBeats": [{"id": "e3s05_b0", "characterId": "kevin", "text": "...", "emotion": "", "delivery": ""}],
+{"id": "e3s05", "order": 6, "sceneId": "e3_cold_open", "locationId": "office", "locationVariantId": "office_day",
+ "productionMethod": "animation_2d", "visibleCharacterIds": ["ana", "leo"], "speakingCharacterIds": ["ana", "leo"],
+ "dialogueBeats": [{"id": "e3s05_b0", "characterId": "ana", "text": "...", "emotion": "", "delivery": ""}],
  "layout2d": {
    "framing": "two", "camera": "static",
-   "cast": [{"characterId": "kevin", "poseId": "base", "x": 32}, {"characterId": "mark", "poseId": "wave", "x": 68, "enterFrom": "right"}],
-   "props": [{"file": "prop-truck-s8-key.png", "x": 12, "y": 74, "scale": 0.36}],
-   "music": {"file": "mus-bumper-a.wav", "volume": 0.6, "start": 0},
+   "cast": [{"characterId": "ana", "poseId": "base", "x": 32}, {"characterId": "leo", "poseId": "wave", "x": 68, "enterFrom": "right"}],
+   "props": [{"file": "prop-stapler.png", "x": 12, "y": 74, "scale": 0.2}],
+   "music": {"file": "mus-bumper.wav", "volume": 0.6, "start": 0},
    "card": {"kind": "title", "title": "SERIES", "body": "Episode 3 · Title"}}}
 ```
 
