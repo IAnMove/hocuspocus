@@ -21,6 +21,7 @@ WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REVISION = {"type": "integer", "minimum": 0}
 OBJECT = {"type": "object"}
+LANGUAGE = {"type": "string", "enum": ["english", "spanish", "french", "german", "italian", "portuguese", "japanese", "korean", "chinese", "russian"]}
 
 # name: (properties, required, mutation, description)
 OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
@@ -62,12 +63,13 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.render_native": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_ids": {"type": "array", "items": ID, "maxItems": 500},
-         "approve": {"type": "boolean"}},
+         "approve": {"type": "boolean"}, "language": LANGUAGE},
         ["workspace", "series_id", "episode_id"], True,
         "Render every 2D animation shot of an episode on the server, no browser needed: each line in the character's voice "
         "for the series language (checked with qa.speech, up to three takes), phonetic mouth cues, an editable Video 2D "
         "scene (framing from shot.framing or shot.layout2d, cast, sound, cards), a headless export and a take on the shot "
-        "(approve: true approves it). Returns the job; poll series.episode.render_native.status. Resumable.",
+        "(approve: true approves it). language renders a language version (its lines, the characters' voices for that "
+        "language, its own takes). Returns the job; poll series.episode.render_native.status. Resumable.",
     ),
     "series.episode.render_native.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
@@ -131,8 +133,25 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Approve one completed take for its shot. Assembly uses the approved take of every shot.",
     ),
     "series.assembly.start": (
-        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], True,
-        "Assemble the approved takes of an episode into one chapter video (shown under Capítulos). Returns a job.",
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE, "burn_subtitles": {"type": "boolean"}},
+        ["workspace", "series_id", "episode_id"], True,
+        "Assemble the approved takes of an episode into one chapter video (shown under Capítulos), at -16 LUFS with SRT/VTT "
+        "subtitles; burn_subtitles also writes a copy with them on the picture. language assembles that language version's "
+        "approved takes. Returns a job.",
+    ),
+    "series.episode.language_version.set": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE,
+          "title": {"type": "string", "maxLength": 300}, "dialogue": OBJECT, "cards": OBJECT},
+        ["workspace", "series_id", "episode_id", "language"], True,
+        "Write a language version of an episode: the same shots and line ids with their own text. dialogue maps beat id to "
+        "text; cards maps shot id to {title, body}. Approved takes and cuts of the version are kept. Returns missingLines.",
+    ),
+    "series.episode.translate": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE},
+        ["workspace", "series_id", "episode_id", "language"], True,
+        "Translate every line and card of an episode into a language version with the configured LLM (for dubbing: same "
+        "meaning and joke, similar length, numbers as words). Review it with series.get, then render it with "
+        "series.episode.render_native language.",
     ),
     "series.assembly.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
@@ -256,6 +275,8 @@ def _rig_flat_character(data: dict[str, Any], request: Callable[..., Any], **_ex
 
 def _render_native(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body: dict[str, Any] = {"workspace": data["workspace"], "approve": bool(data.get("approve"))}
+    if data.get("language"):
+        body["language"] = data["language"]
     if data.get("shot_ids"):
         body["shotIds"] = data["shot_ids"]
     path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/native-render"
@@ -367,7 +388,26 @@ def _approve_take(data: dict[str, Any], request: Callable[..., Any], **_extra: A
 
 def _start_assembly(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/assembly/start"
-    return {"job": request("POST", path, body={"workspace": data["workspace"]})}
+    body: dict[str, Any] = {"workspace": data["workspace"]}
+    if data.get("language"):
+        body["language"] = data["language"]
+    if data.get("burn_subtitles"):
+        body["burnSubtitles"] = True
+    return {"job": request("POST", path, body=body)}
+
+
+def _version_path(data: dict[str, Any]) -> str:
+    return (f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}"
+            f"/language-versions/{_quote(data['language'])}")
+
+
+def _set_language_version(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    version = {key: data[key] for key in ("title", "dialogue", "cards") if key in data}
+    return request("PUT", _version_path(data), body={"workspace": data["workspace"], "version": version})
+
+
+def _translate_episode(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return request("POST", f"{_version_path(data)}/translate", body={"workspace": data["workspace"]})
 
 
 def _assembly_status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
@@ -394,6 +434,8 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.episode.update": _update_episode,
     "series.take.approve": _approve_take,
     "series.assembly.start": _start_assembly,
+    "series.episode.language_version.set": _set_language_version,
+    "series.episode.translate": _translate_episode,
     "series.assembly.status": _assembly_status,
 }
 

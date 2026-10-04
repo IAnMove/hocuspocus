@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from services.series_jobs import SeriesJobStore
+from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_shot_bridge import run_series_shot, with_pose_sizes
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, recording_key, voice_for
 
@@ -74,6 +75,8 @@ class NativeRenderDeps:
     check_speech: bool = True
     # Sets shot.durationSeconds to the rendered length; a take shorter than its shot is refused on import.
     set_shot_duration: Callable[[str, str, str, str, float], None] | None = None
+    # Approves a take in a language version: (workspace, series, episode, language, shot, attempt).
+    set_version_take: Callable[[str, str, str, str, str, str], None] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -126,27 +129,45 @@ class SeriesNativeRender:
     def _store(self, workspace: str) -> SeriesJobStore:
         return SeriesJobStore(self.deps.workspace_dir(workspace), KIND)
 
-    def _episode(self, workspace: str, series_id: str, episode_id: str) -> tuple[dict, dict]:
+    def _episode(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> tuple[dict, dict]:
         series = (self.deps.read_library(workspace).get("seriesById") or {}).get(series_id)
         episode = (series or {}).get("episodesById", {}).get(episode_id)
         if not series or not episode:
             raise NativeRenderError("not_found", "Series episode not found", 404)
-        return series, episode
+        try:
+            return localized_view(series, episode, language)
+        except ValueError as error:
+            raise NativeRenderError("no_version", str(error), 404) from error
+
+    def _check_language(self, series: dict, episode: dict, language: str | None, shot_ids: set[str]) -> str:
+        original = language_key(series)
+        if not language or language == original:
+            return original
+        if language not in LANGUAGES:
+            raise NativeRenderError("invalid_language", f"Unknown language {language}", 400)
+        missing = missing_lines(episode, language, shot_ids)
+        if missing:
+            raise NativeRenderError("untranslated", f"{len(missing)} lines have no {language} text yet; translate the version first", 409)
+        return language
 
     def start(self, workspace: str, series_id: str, episode_id: str, *, shot_ids: list[str] | None = None,
-              approve: bool = False) -> dict[str, Any]:
-        series, episode = self._episode(workspace, series_id, episode_id)
-        shots = sorted((shot for shot in episode.get("shots") or [] if shot.get("productionMethod") == "animation_2d"
-                        and (not shot_ids or shot["id"] in shot_ids)), key=lambda shot: shot.get("order", 0))
-        if not shots:
+              approve: bool = False, language: str | None = None) -> dict[str, Any]:
+        raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
+        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if shot.get("productionMethod") == "animation_2d"
+                  and (not shot_ids or shot["id"] in shot_ids)}
+        if not wanted:
             raise NativeRenderError("no_2d_shots", "The episode has no 2D animation shots to render", 400)
+        language = self._check_language(raw_series, raw_episode, language, wanted)
+        series, episode = self._episode(workspace, series_id, episode_id, language)
+        shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
         store = self._store(workspace)
         for job in store.list():
-            if job.get("episodeId") == episode_id and job.get("status") in ("queued", "running"):
+            if job.get("episodeId") == episode_id and job.get("language") == language and job.get("status") in ("queued", "running"):
                 raise NativeRenderError("already_running", "This episode is already rendering on the server")
         job_id = f"native-{uuid.uuid4().hex[:12]}"
         job = {"jobId": job_id, "workspace": workspace, "seriesId": series_id, "episodeId": episode_id, "status": "queued",
-               "approve": bool(approve), "language": language_key(series), "current": 0, "total": len(shots),
+               "approve": bool(approve), "language": language, "original": language == language_key(raw_series),
+               "current": 0, "total": len(shots),
                "items": [{"shotId": shot["id"], "stage": "voices", "status": "queued", "lines": {}} for shot in shots],
                "createdAt": time.time(), "message": "Queued"}
         store.save(job)
@@ -231,7 +252,7 @@ class SeriesNativeRender:
                    message=f"{done} of {len(job['items'])} shots rendered" + (f"; {failed} failed, resume to retry" if failed else ""))
 
     def _render_item(self, workspace: str, job: dict, item: dict, index: int) -> None:
-        series, episode = self._episode(workspace, job["seriesId"], job["episodeId"])
+        series, episode = self._episode(workspace, job["seriesId"], job["episodeId"], job["language"])
         shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), None)
         if shot is None:
             raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
@@ -330,13 +351,18 @@ class SeriesNativeRender:
         document = self.deps.compile_shot({"mode": "shot", "kits": used, "shot": spec})
         digest = hashlib.sha1(json.dumps(document, sort_keys=True).encode()).hexdigest()[:10]
         saved = _ok(self.deps.call("scenes.document.save", {"version": 1, "intent_id": f"{job['jobId']}-{shot['id']}-{digest}", "input": {
-            "workspace": workspace, "name": f"{series['id']}-{episode['id']}-{shot['id']}"[:100], "document": document}}), "save scene")
+            "workspace": workspace, "name": self._scene_name(job, series, episode, shot), "document": document}}), "save scene")
         item.update(scene=(saved.get("result") or {}).get("name"), duration=document["duration"], digest=digest, stage="export",
                     exportIntent=f"{job['jobId']}-{shot['id']}-{digest}-export")
         exported = self.deps.call("scenes.video2d.export", {"version": 1, "intent_id": item["exportIntent"],
                                                             "input": {"workspace": workspace, "document": document}})
         _ok(exported, "export")
         self._save(workspace, job)
+
+    @staticmethod
+    def _scene_name(job: dict, series: dict, episode: dict, shot: dict) -> str:
+        suffix = "" if job.get("original", True) else f"-{job['language']}"
+        return f"{series['id']}-{episode['id']}-{shot['id']}{suffix}"[:100]
 
     def _export(self, workspace: str, job: dict, item: dict) -> None:
         while True:
@@ -354,20 +380,26 @@ class SeriesNativeRender:
                 raise NativeRenderError("cancelled", "Cancelled")
             self.deps.sleep(self.deps.poll_seconds)
 
+    def _approve(self, workspace: str, job: dict, shot_id: str, attempt_id: str) -> None:
+        if job.get("original", True):
+            _ok(self.deps.call("series.take.approve", {"version": 1, "input": {
+                "workspace": workspace, "series_id": job["seriesId"], "episode_id": job["episodeId"], "shot_id": shot_id,
+                "attempt_id": attempt_id}}), "approve take")
+        elif self.deps.set_version_take:
+            self.deps.set_version_take(workspace, job["seriesId"], job["episodeId"], job["language"], shot_id, attempt_id)
+
     def _import(self, workspace: str, job: dict, item: dict) -> None:
         if self.deps.set_shot_duration and item.get("duration"):
             self.deps.set_shot_duration(workspace, job["seriesId"], job["episodeId"], item["shotId"], float(item["duration"]))
         metadata = {"productionMethod": "animation_2d", "sceneFilename": item["scene"], "automaticDraft": True,
-                    "nativeServerRender": job["jobId"], "duration": item.get("duration")}
+                    "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"]}
         imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {
             "workspace": workspace, "series_id": job["seriesId"], "file": item["video"], "owner_type": "shot", "owner_id": item["shotId"],
             "kind": "video", "as_take": True, "metadata": metadata}}), "import take")
         attempt = (imported.get("result") or {}).get("attempt") or {}
         item.update(attemptId=attempt.get("id"), stage="done")
         if job.get("approve") and attempt.get("id"):
-            _ok(self.deps.call("series.take.approve", {"version": 1, "input": {
-                "workspace": workspace, "series_id": job["seriesId"], "episode_id": job["episodeId"], "shot_id": item["shotId"],
-                "attempt_id": attempt["id"]}}), "approve take")
+            self._approve(workspace, job, item["shotId"], attempt["id"])
             item["approved"] = True
         self._save(workspace, job)
 

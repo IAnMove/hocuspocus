@@ -284,3 +284,33 @@ def test_stale_checkpoint_is_interrupted_on_router_load_and_recoverable(tmp_path
     assert restored["status"] == "interrupted"
     assert any(item["jobId"] == stale["jobId"] and item["status"] == "interrupted" for item in recovery()["jobs"])
     assert get_task_registry(str(tmp_path)).get(stale["taskId"])["status"] == "interrupted"
+
+
+def test_a_language_version_assembles_its_own_takes_into_its_own_cut(tmp_path):
+    observed = []
+
+    def concatenate(paths, output_path):
+        observed.extend(os.path.basename(path) for path in paths)
+        shutil.copyfile(paths[0], output_path)
+        return True
+
+    endpoints, library = _client(tmp_path, concatenate)
+    series = library["seriesById"]["series-1"]
+    episode = series["episodesById"]["episode-1"]
+    for shot in episode["shots"]:
+        shot["attempts"].append({"id": f"{shot['id']}-es", "status": "completed", "outputAssetIds": ["asset-2"]})
+    episode["languageVersions"] = {"spanish": {"dialogue": {}, "cards": {},
+                                               "approvedAttemptIds": {"shot-1": "shot-1-es", "shot-2": "shot-2-es"}}}
+    start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
+    get_status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default", language="spanish"))["jobId"])
+    assert status["status"] == "completed"
+    assert observed == ["two.mp4", "two.mp4"], "the version's approved takes, in shot order"
+    episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
+    assert episode["languageVersions"]["spanish"]["latestAssemblyAssetId"] == status["assetId"]
+    assert "latestAssemblyAssetId" not in episode, "the original's cut is untouched"
+    asset = library["seriesById"]["series-1"]["assets"][status["assetId"]]
+    assert asset["metadata"]["language"] == "spanish"
+    with pytest.raises(HTTPException) as missing:
+        start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default", language="french"))
+    assert missing.value.status_code == 400

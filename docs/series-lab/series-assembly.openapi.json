@@ -189,7 +189,13 @@
               { "type": "null" }
             ]
           },
-          "burnSubtitles": { "type": "boolean", "default": false }
+          "burnSubtitles": { "type": "boolean", "default": false },
+          "language": {
+            "anyOf": [
+              { "type": "string", "minLength": 2, "maxLength": 40 },
+              { "type": "null" }
+            ]
+          }
         },
         "type": "object"
       },

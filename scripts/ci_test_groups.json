@@ -361,6 +361,7 @@
         "tests/test_series_commands.py",
         "tests/test_series_native_render.py",
         "tests/test_series_shot_plan.py",
+        "tests/test_series_language_versions.py",
         "tests/test_series_native_render_router.py",
         "tests/test_local_mcp.py",
         "tests/test_flat_rig.py",
