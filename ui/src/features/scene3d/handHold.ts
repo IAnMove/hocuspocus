@@ -32,11 +32,14 @@ export function findHandBone(root: Object3D, hand: 'left' | 'right'): Object3D |
   return exact ?? prefixed
 }
 
-/** Put `prop` on the hand bone's world pose from this frame. The bone is read after it has been posed. */
+/** Put `prop` on the hand bone's world pose from this frame. The bone is read after it has been posed.
+ * Offset is metres in the bone's world orientation, not the model's pre-fit units. */
 export function followHand(prop: Object3D, bone: Object3D, offset: readonly [number, number, number], yaw: number) {
   bone.updateWorldMatrix(true, false)
-  const point = new Vector3(offset[0], offset[1], offset[2]).applyMatrix4(bone.matrixWorld)
-  const worldQuat = new Quaternion().setFromRotationMatrix(bone.matrixWorld)
+  const worldPos = new Vector3()
+  const worldQuat = new Quaternion()
+  bone.matrixWorld.decompose(worldPos, worldQuat, new Vector3())
+  const point = new Vector3(offset[0], offset[1], offset[2]).applyQuaternion(worldQuat).add(worldPos)
   const parent = prop.parent
   if (parent) {
     parent.updateWorldMatrix(true, false)
