@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next'
 import type { ApiOutput } from '../../api/outputs'
 import { serverLevel, type RenderChoice } from '../render/renderEstimate.ts'
+import { reviewFromArtifact, type ExportReviewInput } from '../render/exportReview.ts'
 import { renderOnServer } from '../render/serverSceneExport.ts'
 import { canMutateWorld3DScene } from './exportLock.ts'
 import { exportWorld3DDocument } from './exportFlow.ts'
@@ -51,6 +52,7 @@ export async function exportWorkspaceDocument(
   onExporting: (value: boolean) => void,
   setAbort: (abort: AbortController | null) => void,
   choice: RenderChoice,
+  onReview?: (review: ExportReviewInput | null) => void,
 ) {
   if (!stage || exporting || playing) return
   const abort = new AbortController()
@@ -77,6 +79,7 @@ export async function exportWorkspaceDocument(
         onProgress: (index, total) => onNote(copy('stage.renderProgress', { index, total })),
       })
       onNote(copy('stage.renderSaved', { name: saved.name }))
+      onReview?.(reviewFromArtifact(saved))
     }
   } catch (error) {
     const aborted = abort.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')
