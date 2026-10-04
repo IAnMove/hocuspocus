@@ -141,9 +141,11 @@ def sweep_temp_dirs(prefixes: Iterable[str] = TEMP_PREFIXES, max_age_seconds: fl
 
 
 def startup_cleanup(workspaces: Iterable[str], workspace_dir: Callable[[str], str], registry_for: Callable[[str], Any],
-                    operations: Iterable[str], token_for: Callable[[str], str], log: Callable[[str], None] = print,
+                    operations: Iterable[str], token_for: Callable[[str], str], log: Callable[[str], None] | None = None,
                     temp_root: str | None = None) -> dict[str, int]:
     """Release what the last run and older versions left behind, in every workspace; one line of log."""
+    # The server's stdout is a file: flush, or the line shows up long after the thread is done.
+    log = log or (lambda message: print(message, flush=True))
     total = {"released": 0, "bytes": 0}
     if keep_export_staging():
         log("[Storage] HOCUS_KEEP_EXPORT_STAGING is set: export staging is kept")
