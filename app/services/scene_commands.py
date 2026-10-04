@@ -62,6 +62,8 @@ class FxCue(Strict):
 
 class DocumentInput(Strict):
     document: dict
+    # Document commands never read files; the workspace every other tool takes is accepted and ignored.
+    workspace: str | None = Field(default=None, min_length=1, max_length=120)
 
     @model_validator(mode='after')
     def valid_document(self):
@@ -145,6 +147,7 @@ class EffectsApply(DocumentInput):
 
 class EffectsShowcase(Strict):
     document: dict | None = None
+    workspace: str | None = Field(default=None, min_length=1, max_length=120)
     dimension: Literal['2d', '3d'] = '3d'
     sound: bool = True
     collection: Literal['all', 'anime', 'retro'] = 'all'

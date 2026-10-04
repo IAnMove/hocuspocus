@@ -23,7 +23,7 @@ def require_settings_origin(request: Request):
         raise HTTPException(403, 'Open MCP settings from the local application address.')
 
 
-def create_mcp_access_router(access):
+def create_mcp_access_router(access, on_change=None):
     router = APIRouter()
 
     @router.get('/api/v1/settings/mcp')
@@ -36,8 +36,11 @@ def create_mcp_access_router(access):
         require_settings_origin(request)
         response.headers['Cache-Control'] = 'no-store'
         try:
-            return access.update(value.enabled, value.rotate)
+            result = access.update(value.enabled, value.rotate)
         except ValueError as error:
             raise HTTPException(409, str(error)) from error
+        if on_change is not None and (value.rotate or not value.enabled):
+            on_change()  # a new or withdrawn key also ends every token issued with the old one (OAuth clients)
+        return result
 
     return router

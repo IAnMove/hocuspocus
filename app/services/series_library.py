@@ -123,6 +123,17 @@ def validate_series_asset_uri(value: Any) -> str:
     return uri
 
 
+# Per-entity fields that stage production (2D homes, prop anchors, 3D plates) rather than describe the world.
+STAGING_FIELDS = frozenset({"layout2d"})
+
+
+def _canon_input(series: dict, key: str) -> Any:
+    value = series.get(key)
+    if key in {"characters", "locations", "props"} and isinstance(value, list):
+        return [{k: v for k, v in item.items() if k not in STAGING_FIELDS} if isinstance(item, dict) else item for item in value]
+    return value
+
+
 def series_canon_inputs_changed(current: dict, updated: dict) -> bool:
     """Compare durable production inputs without coupling canon to chat language."""
     current_canon = copy.deepcopy(current.get("canon") or {})
@@ -132,7 +143,7 @@ def series_canon_inputs_changed(current: dict, updated: dict) -> bool:
         value.pop("approvedAt", None)
     if current_canon != updated_canon:
         return True
-    if any(current.get(key) != updated.get(key) for key in SERIES_CANON_INPUT_FIELDS):
+    if any(_canon_input(current, key) != _canon_input(updated, key) for key in SERIES_CANON_INPUT_FIELDS):
         return True
     current_intent = normalize_language_intent(current.get("languageIntent"))
     updated_intent = normalize_language_intent(updated.get("languageIntent"))
@@ -1363,6 +1374,14 @@ def duplicate_series_project(series: dict) -> dict:
     return duplicate
 
 
+def _approved_take_seconds(shot: dict) -> float | None:
+    """Length of the shot's approved take when it was imported (animation, 3D, imported video), else None."""
+    approved = shot.get("approvedAttemptId")
+    attempt = next((item for item in _objects(shot.get("attempts")) if item.get("id") == approved), None) if approved else None
+    seconds = ((attempt or {}).get("settings") or {}).get("sourceDurationSeconds")
+    return float(seconds) if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0 else None
+
+
 def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[dict]:
     """Merge editable shot fields while retaining server-owned render history."""
     if not isinstance(incoming_shots, list):
@@ -1395,6 +1414,10 @@ def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[d
                     merged[key] = copy.deepcopy(stored[key])
                 else:
                     merged.pop(key, None)
+            take_seconds = _approved_take_seconds(stored)
+            if take_seconds is not None and "durationSeconds" in stored:
+                # An imported or server-rendered take sets the shot's length; re-sending the shot must not reset it.
+                merged["durationSeconds"] = stored["durationSeconds"]
         else:
             merged["attempts"] = []
             merged.pop("approvedAttemptId", None)

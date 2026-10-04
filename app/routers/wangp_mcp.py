@@ -235,7 +235,7 @@ def _prepare_generate_params(params):
         params['image_mode'] = 1 if params.get('generation_mode') == 'image' else 0
 
 
-def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, command_operations=None):
+def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, command_operations=None, profiles=None, oauth=None):
     router = APIRouter()
     journal = RequestJournal(journal_path)
     token_getter = token_getter or (lambda: os.environ.get('HOCUS_MCP_TOKEN', ''))
@@ -244,8 +244,10 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
     operations_by_name = {operation['name']: operation for operation in operations}
     callable_names = LEGACY_TOOLS | operation_names
 
-    async def call_tool(name, arguments):
+    async def call_tool(name, arguments, allowed=None):
         if not isinstance(name, str) or name not in callable_names or not callable(handlers.get(name)) or not isinstance(arguments, dict):
+            raise ValueError('Unknown tool or invalid arguments')
+        if allowed is not None and name not in allowed:
             raise ValueError('Unknown tool or invalid arguments')
         if name in operation_names:
             _check_version(operations_by_name[name], arguments)
@@ -304,7 +306,10 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
             result = handlers[name]()
         return await result if inspect.isawaitable(result) else result
 
-    async def dispatch(message):
+    default_instructions = ('One queue: keep returned job IDs and poll status. Reuse request_id on retries; never assume '
+                            'generated quality from submission success.')
+
+    async def dispatch(message, allowed=None, instructions=default_instructions):
         if not isinstance(message, dict) or message.get('jsonrpc') != '2.0':
             return {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'Invalid request'}}
         if 'id' not in message:
@@ -313,17 +318,17 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         try:
             if method == 'initialize':
                 result = {'protocolVersion': PROTOCOL, 'capabilities': {'tools': {}},
-                          'serverInfo': {'name': 'hocuspocus', 'version': '1'},
-                          'instructions': 'One queue: keep returned job IDs and poll status. Reuse request_id on retries; never assume generated quality from submission success.'}
+                          'serverInfo': {'name': 'hocuspocus', 'version': '1'}, 'instructions': instructions}
             elif method == 'ping':
                 result = {}
             elif method == 'tools/list':
-                result = {'tools': tool_definitions({name for name, handler in handlers.items() if callable(handler)}, operations)}
+                available = {name for name, handler in handlers.items() if callable(handler)}
+                result = {'tools': tool_definitions(available if allowed is None else available & allowed, operations)}
             elif method == 'tools/call':
                 params = message.get('params') or {}
                 if not isinstance(params, dict):
                     raise ValueError('Tool call params must be an object')
-                value = await call_tool(params.get('name'), params.get('arguments') or {})
+                value = await call_tool(params.get('name'), params.get('arguments') or {}, allowed)
                 result = {
                     'content': _tool_content(value),
                     'isError': _tool_result_is_error(value),
@@ -345,22 +350,62 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
                 }}
             return {'jsonrpc': '2.0', 'id': request_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': str(detail)}]}}
 
-    @router.post('/api/v1/wangp/mcp', include_in_schema=False)
-    @router.post('/api/v1/mcp')
-    async def mcp(request: Request):
+    def authorize(request: Request, profile_name=None):
         token = token_getter()
         if not token:
             raise HTTPException(503, 'External agent access is disabled; configure HOCUS_MCP_TOKEN')
-        if not secrets.compare_digest(request.headers.get('authorization', ''), f'Bearer {token}'):
-            raise HTTPException(401, 'Invalid MCP credentials')
+        header = request.headers.get('authorization', '')
+        if secrets.compare_digest(header, f'Bearer {token}'):
+            return
+        # Clients that cannot hold the installation key (ChatGPT connectors) sign in with OAuth and send their own token.
+        if oauth is not None and header.startswith('Bearer ') and oauth.verify(header[7:], profile_name or 'all'):
+            return
+        challenge = {}
+        if oauth is not None:
+            challenge = {'WWW-Authenticate': f'Bearer resource_metadata="{oauth.resource_metadata_url(request, profile_name)}"'}
+        raise HTTPException(401, 'Invalid MCP credentials', headers=challenge)
+
+    def same_origin(request: Request):
         origin = request.headers.get('origin')
         if origin and origin != f'{request.url.scheme}://{request.url.netloc}':
             raise HTTPException(403, 'Origin is not permitted')
+
+    async def payload(request: Request):
         try:
-            payload = await request.json()
+            return await request.json()
         except ValueError:
+            return None
+
+    @router.post('/api/v1/wangp/mcp', include_in_schema=False)
+    @router.post('/api/v1/mcp')
+    async def mcp(request: Request):
+        authorize(request)
+        same_origin(request)
+        body = await payload(request)
+        if body is None:
             return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}, status_code=400)
-        return await mcp_payload_response(payload, dispatch)
+        return await mcp_payload_response(body, dispatch)
+
+    @router.post('/api/v1/mcp/{profile_name}')
+    async def mcp_profile(profile_name: str, request: Request):
+        """The same tools filtered to one job (see services/mcp_profiles.py), for agents such as ChatGPT."""
+        chosen = (profiles or {}).get(profile_name)
+        if chosen is None:
+            raise HTTPException(404, 'Unknown MCP profile')
+        authorize(request, profile_name)
+        same_origin(request)
+        body = await payload(request)
+        if body is None:
+            return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}, status_code=400)
+        allowed = frozenset(chosen['tools'])
+
+        async def profile_dispatch(message):
+            return await dispatch(message, allowed, chosen.get('instructions') or default_instructions)
+        return await mcp_payload_response(body, profile_dispatch)
+
+    @router.get('/api/v1/mcp/{profile_name}')
+    async def no_profile_stream(profile_name: str):
+        return Response(status_code=405, headers={'Allow': 'POST'})
 
     @router.get('/api/v1/wangp/mcp', include_in_schema=False)
     @router.get('/api/v1/mcp')

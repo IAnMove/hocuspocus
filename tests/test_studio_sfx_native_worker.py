@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from services.job_lifecycle import new_media_files
 from tests.test_studio_sfx_commands import command, setup_service
 from tests.test_image_generation_commands import _run
 
@@ -81,6 +82,7 @@ def test_admitted_worker_uses_exact_inputs_without_download_or_reprobe(
         'update_job': lambda *_args, **_kwargs: True,
         'finish_job': finish,
         'record_job_outputs': lambda target, files: target.update(outputs=files),
+        'new_media_files': new_media_files,
         '_publish_generation_sidecar_for_studio_job': lambda _job, path, metadata: sidecars.append((path, copy.deepcopy(metadata))),
     }
     module, filename = worker_source

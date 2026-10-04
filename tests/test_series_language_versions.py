@@ -112,7 +112,7 @@ def test_the_server_render_speaks_a_version_and_approves_its_own_takes(tmp_path)
     data = library()
     data["seriesById"]["uv"]["episodesById"]["ep1"]["languageVersions"] = {
         "english": {"dialogue": {"s01_d0": "Okay, Gary.", "s01_d1": "Good news."}, "cards": {}, "approvedAttemptIds": {}}}
-    tools, approved = Tools(tmp_path), []
+    tools, approved, shot_lengths, version_lengths = Tools(tmp_path), [], [], []
     english = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "aiden"}
     kits = {f"kit-{cid}": {"id": f"kit-{cid}", "name": cid, "base": {"source": "/api/v1/file/k.png", "width": 400, "height": 800}, "poses": {},
                            "voice": {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan"},
@@ -125,7 +125,8 @@ def test_the_server_render_speaks_a_version_and_approves_its_own_takes(tmp_path)
     render = SeriesNativeRender(NativeRenderDeps(
         call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: data, read_kits=lambda _ws: kits,
         compile_shot=lambda payload: {"duration": payload["shot"]["duration"], "lines": payload["shot"]["lines"]}, trim=trim,
-        sleep=lambda _s: None, poll_seconds=0, set_shot_duration=lambda *args: None, set_version_take=lambda *args: approved.append(args)))
+        sleep=lambda _s: None, poll_seconds=0, set_shot_duration=lambda *args: shot_lengths.append(args),
+        set_version_take=lambda *args: approved.append(args), set_version_duration=lambda *args: version_lengths.append(args)))
     with pytest.raises(NativeRenderError) as untranslated:
         render.start("cast", "uv", "ep1", language="english")
     assert untranslated.value.code == "untranslated", "s03 has no English line yet"
@@ -139,6 +140,9 @@ def test_the_server_render_speaks_a_version_and_approves_its_own_takes(tmp_path)
     saved = [args["input"]["name"] for tool, args in tools.calls if tool == "scenes.document.save"]
     assert saved == ["uv-ep1-s01-english"]
     assert approved == [("cast", "uv", "ep1", "english", "s01", "attempt-s01")]
+    assert shot_lengths == [] and [args[:5] for args in version_lengths] == [("cast", "uv", "ep1", "english", "s01")], \
+        "an English take sets the English length, not the shot's"
+
     assert not [tool for tool, _ in tools.calls if tool == "series.take.approve"], "the original approval is untouched"
     imported = [args["input"]["metadata"] for tool, args in tools.calls if tool == "series.asset.import"]
     assert imported[0]["language"] == "english"

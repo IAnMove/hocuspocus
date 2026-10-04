@@ -9,7 +9,8 @@ episode::
                   "approvedAttemptIds": {shotId: attemptId}, "assemblyAssetIds": [...], "latestAssemblyAssetId": "..."}}
 
 The series' own spoken language is the original and keeps using
-``shot.approvedAttemptId``. ``localized_view`` gives the render and the
+``shot.approvedAttemptId`` and ``shot.durationSeconds``; a version keeps its
+own ``durations`` (set by its takes) and may swap a shot's ``music``. ``localized_view`` gives the render and the
 assembly a copy of the series and episode in one language, so voices
 (``voicesByLanguage``), lines, cards and approved takes all switch together
 without duplicating shots. ``translation_prompt`` asks the configured LLM for
@@ -50,11 +51,33 @@ def _version(value: dict[str, Any], beats: set[str], shots: set[str], attempts: 
         "approvedAttemptIds": {shot: attempt for shot, attempt in approved.items() if attempt in attempts.get(shot, set())},
         "assemblyAssetIds": list(dict.fromkeys(assemblies)),
     }
-    if isinstance(value.get("latestAssemblyAssetId"), str) and value["latestAssemblyAssetId"] in version["assemblyAssetIds"]:
-        version["latestAssemblyAssetId"] = value["latestAssemblyAssetId"]
+    return {**version, **_optional_fields(value, version["assemblyAssetIds"], shots)}
+
+
+def _optional_fields(value: dict[str, Any], assemblies: list[str], shots: set[str]) -> dict[str, Any]:
+    found: dict[str, Any] = {}
+    if isinstance(value.get("latestAssemblyAssetId"), str) and value["latestAssemblyAssetId"] in assemblies:
+        found["latestAssemblyAssetId"] = value["latestAssemblyAssetId"]
     if isinstance(value.get("thumbnailAssetId"), str) and value["thumbnailAssetId"]:
-        version["thumbnailAssetId"] = value["thumbnailAssetId"][:200]
-    return version
+        found["thumbnailAssetId"] = value["thumbnailAssetId"][:200]
+    durations, music = _durations(value.get("durations"), shots), _music(value.get("music"), shots)
+    return {**found, **({"durations": durations} if durations else {}), **({"music": music} if music else {})}
+
+
+def _durations(value: Any, shots: set[str]) -> dict[str, float]:
+    """Seconds of each shot in this language: its own takes set it, the original keeps ``shot.durationSeconds``."""
+    if not isinstance(value, dict):
+        return {}
+    return {key: round(float(seconds), 3) for key, seconds in value.items()
+            if key in shots and isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and 0 < seconds <= 600}
+
+
+def _music(value: Any, shots: set[str]) -> dict[str, str]:
+    """A shot's music file in this language (a sung theme), replacing ``layout2d.music.file``."""
+    if not isinstance(value, dict):
+        return {}
+    return {key: str(name).strip()[:300] for key, name in value.items()
+            if key in shots and isinstance(name, str) and name.strip() and "/" not in name and ".." not in name}
 
 
 def normalize_language_versions(value: Any, shots: list[dict[str, Any]], original: str) -> dict[str, Any]:
@@ -68,14 +91,26 @@ def normalize_language_versions(value: Any, shots: list[dict[str, Any]], origina
             if language in LANGUAGES and language != original and isinstance(entry, dict)}
 
 
+def _localize_layout(shot: dict[str, Any], version: dict[str, Any]) -> None:
+    """Swap the card texts and the music file of a shot's 2D layout for the version's."""
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else None
+    if layout is None:
+        return
+    card = version["cards"].get(shot["id"])
+    if card and isinstance(layout.get("card"), dict):
+        layout["card"] = {**layout["card"], **{key: value for key, value in card.items() if value}}
+    music = (version.get("music") or {}).get(shot["id"])
+    if music and isinstance(layout.get("music"), dict):
+        layout["music"] = {**layout["music"], "file": music}
+
+
 def _localized_shot(shot: dict[str, Any], version: dict[str, Any]) -> dict[str, Any]:
     shot = copy.deepcopy(shot)
     for beat in shot.get("dialogueBeats") or []:
         beat["text"] = version["dialogue"].get(beat["id"], beat.get("text", ""))
-    card = version["cards"].get(shot["id"])
-    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else None
-    if card and layout and isinstance(layout.get("card"), dict):
-        layout["card"] = {**layout["card"], **{key: value for key, value in card.items() if value}}
+    _localize_layout(shot, version)
+    if shot["id"] in (version.get("durations") or {}):
+        shot["durationSeconds"] = version["durations"][shot["id"]]
     approved = version["approvedAttemptIds"].get(shot["id"])
     if approved:
         shot["approvedAttemptId"] = approved
@@ -95,6 +130,45 @@ def localized_view(series: dict[str, Any], episode: dict[str, Any], language: st
     view_episode = {**episode, "title": version.get("title") or episode.get("title"),
                     "shots": [_localized_shot(shot, version) for shot in episode.get("shots") or []]}
     return view_series, view_episode
+
+
+def _shot(episode: dict[str, Any], shot_id: str) -> dict[str, Any]:
+    shot = next((item for item in episode.get("shots") or [] if item.get("id") == shot_id), None)
+    if shot is None:
+        raise KeyError(shot_id)
+    return shot
+
+
+def set_version_duration(episode: dict[str, Any], language: str, shot_id: str, seconds: float) -> None:
+    """A version's take sets that version's length of the shot; the original's is untouched."""
+    _shot(episode, shot_id)
+    version = (episode.get("languageVersions") or {}).get(language)
+    if not isinstance(version, dict):
+        raise ValueError(f"The episode has no {language} version")
+    version.setdefault("durations", {})[shot_id] = round(float(seconds), 3)
+
+
+def set_version_take(episode: dict[str, Any], language: str, shot_id: str, attempt_id: str) -> None:
+    """Approve a completed take for a language version and keep its length as the version's."""
+    shot = _shot(episode, shot_id)
+    attempt = next((item for item in shot.get("attempts") or [] if item.get("id") == attempt_id), None)
+    if attempt is None or attempt.get("status") != "completed":
+        raise ValueError("Approve a completed take of this shot")
+    version = (episode.get("languageVersions") or {}).get(language)
+    if not isinstance(version, dict):
+        raise ValueError(f"The episode has no {language} version")
+    version.setdefault("approvedAttemptIds", {})[shot_id] = attempt_id
+    seconds = (attempt.get("settings") or {}).get("sourceDurationSeconds")
+    if isinstance(seconds, (int, float)) and seconds > 0:
+        version.setdefault("durations", {})[shot_id] = round(float(seconds), 3)
+
+
+def take_length_floor(series: dict[str, Any], episode: dict[str, Any] | None, shot: dict[str, Any], language: str | None) -> float:
+    """How long a new take of ``shot`` must be: the shot's length in the original, the version's own length in a version."""
+    if not language or language == language_key(series) or episode is None:
+        return float(shot.get("durationSeconds") or 0)
+    version = (episode.get("languageVersions") or {}).get(language) or {}
+    return float((version.get("durations") or {}).get(shot.get("id"), 0))
 
 
 def missing_lines(episode: dict[str, Any], language: str, shot_ids: set[str] | None = None) -> list[str]:

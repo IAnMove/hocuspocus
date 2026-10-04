@@ -77,6 +77,7 @@ class NativeRenderDeps:
     set_shot_duration: Callable[[str, str, str, str, float], None] | None = None
     # Approves a take in a language version: (workspace, series, episode, language, shot, attempt).
     set_version_take: Callable[[str, str, str, str, str, str], None] | None = None
+    set_version_duration: Callable[[str, str, str, str, str, float], None] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -405,9 +406,18 @@ class SeriesNativeRender:
         elif self.deps.set_version_take:
             self.deps.set_version_take(workspace, job["seriesId"], job["episodeId"], job["language"], shot_id, attempt_id)
 
+    def _set_length(self, workspace: str, job: dict, item: dict) -> None:
+        """The take's length becomes the shot's, in its own language only (versions keep their own durations)."""
+        if not item.get("duration"):
+            return
+        if job.get("original", True):
+            if self.deps.set_shot_duration:
+                self.deps.set_shot_duration(workspace, job["seriesId"], job["episodeId"], item["shotId"], float(item["duration"]))
+        elif self.deps.set_version_duration:
+            self.deps.set_version_duration(workspace, job["seriesId"], job["episodeId"], job["language"], item["shotId"], float(item["duration"]))
+
     def _import(self, workspace: str, job: dict, item: dict) -> None:
-        if self.deps.set_shot_duration and item.get("duration"):
-            self.deps.set_shot_duration(workspace, job["seriesId"], job["episodeId"], item["shotId"], float(item["duration"]))
+        self._set_length(workspace, job, item)
         metadata = {"productionMethod": "animation_2d", "sceneFilename": item["scene"], "automaticDraft": True,
                     "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"]}
         imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {

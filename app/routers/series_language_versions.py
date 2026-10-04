@@ -59,12 +59,13 @@ def create_series_language_versions_router(*, change_episode: EpisodeChange, rea
 
     @router.put("/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}")
     def put_language_version(series_id: str, episode_id: str, language: str, body: VersionWrite):
-        """Set a version's title, lines ({beatId: text}) or cards; takes and cuts are kept."""
+        """Set a version's title, lines ({beatId: text}), cards or music ({shotId: file}); takes, lengths and cuts are kept."""
         def merge(current: dict, _episode: dict) -> dict:
             update = body.version
             return {**current, **({"title": update["title"]} if isinstance(update.get("title"), str) else {}),
                     "dialogue": {**current.get("dialogue", {}), **(update.get("dialogue") or {})},
-                    "cards": {**current.get("cards", {}), **(update.get("cards") or {})}}
+                    "cards": {**current.get("cards", {}), **(update.get("cards") or {})},
+                    "music": {**current.get("music", {}), **(update.get("music") or {})}}
         return write(body.workspace, series_id, episode_id, language, merge)
 
     @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}/translate")

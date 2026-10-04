@@ -4,6 +4,8 @@ from __future__ import annotations
 import copy
 
 PRODUCTION_METHODS = ("generated_video", "animation_2d", "animation_3d", "imported_video")
+# Asset roles that belong to production, not to the reviewed canon (importing them leaves the canon approved).
+PRODUCTION_ROLES = frozenset({"plate3d"})
 
 
 def existing_generated_reference(series: dict, owner_type: str, owner_id: str, metadata: dict) -> dict | None:
@@ -24,7 +26,7 @@ def attach_series_import(series: dict, asset: dict, *, as_take: bool = False, so
         raise ValueError("A completed take must be a video owned by a shot")
     collection = {"character": "characters", "location": "locations", "prop": "props"}.get(owner_type)
     if collection:
-        _attach_entity_reference(series, asset, collection)
+        _attach_owned_asset(series, asset, collection)
     elif owner_type == "episode" and owner_id not in series.get("episodesById", {}):
         raise ValueError("Series episode not found")
     elif owner_type == "shot":
@@ -32,6 +34,14 @@ def attach_series_import(series: dict, asset: dict, *, as_take: bool = False, so
     elif owner_type == "series" and owner_id != series["id"]:
         raise ValueError("Series asset belongs to another project")
     series.setdefault("assets", {})[asset["id"]] = asset
+
+
+def _attach_owned_asset(series: dict, asset: dict, collection: str) -> None:
+    if (asset.get("metadata") or {}).get("referenceRole") not in PRODUCTION_ROLES:
+        _attach_entity_reference(series, asset, collection)
+    # A render artefact (a location's 3D plate) is stored for production; it is not a canon reference image.
+    elif not any(item.get("id") == asset["ownerId"] for item in series.get(collection, [])):
+        raise ValueError("Series reference subject no longer exists")
 
 
 def _attach_entity_reference(series: dict, asset: dict, collection: str) -> None:
@@ -45,7 +55,8 @@ def _attach_entity_reference(series: dict, asset: dict, collection: str) -> None
     series["canon"].update(approval="draft", approvedAt="")
 
 
-def _verified_take_media(series: dict, shot: dict, source_path: str) -> tuple[str, dict]:
+def _verified_take_media(series: dict, episode: dict, shot: dict, source_path: str, language: str | None) -> tuple[str, dict]:
+    from services.series_language_versions import take_length_floor
     from services.video_editor import probe_media
     method = series_shot_method(series, shot)
     if method == "generated_video":
@@ -53,7 +64,8 @@ def _verified_take_media(series: dict, shot: dict, source_path: str) -> tuple[st
     if any(item.get("status") in {"queued", "running", "cancelling"} for item in shot.get("attempts", [])):
         raise ValueError("Wait for this shot's render to finish before importing a take")
     media = probe_media(source_path)
-    if float(media["duration"]) + .05 < float(shot.get("durationSeconds") or 0):
+    # A language version's take is measured against that version's length, not the original's.
+    if float(media["duration"]) + .05 < take_length_floor(series, episode, shot, language):
         raise ValueError("This clip is shorter than the shot; adjust its duration before importing")
     return method, media
 
@@ -67,7 +79,8 @@ def _attach_shot_asset(series: dict, asset: dict, as_take: bool, source_path: st
     if not as_take:
         return
     episode, index, shot = found
-    method, media = _verified_take_media(series, shot, source_path)
+    language = (asset.get("metadata") or {}).get("language")
+    method, media = _verified_take_media(series, episode, shot, source_path, language if isinstance(language, str) else None)
     updated, attempt = append_shot_render_attempt(shot, manifest=shot.get("referenceManifest") or {},
         model=method, settings={"productionMethod": method, "sourceDurationSeconds": media["duration"]}, seed=None)
     updated["attempts"][-1].update(status="completed", outputAssetIds=[asset["id"]])
