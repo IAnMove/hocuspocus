@@ -22633,12 +22633,14 @@ def _run_sfx_generation(job: dict, raw_params: dict, start_time: float):
         if is_cancel_requested(job):
             return False
 
-        # Generate output filename — .mp4 when remuxing onto video, .wav for text-only
+        # Generate output filename — .mp4 when remuxing onto video, .wav for text-only.
+        # A validated output_name (stored as output_filename) replaces the prompt stem.
         seed_val = seed if seed >= 0 else int(time.time()) % 100000
         safe_prompt = "".join(c if c.isalnum() or c in " _-" else "" for c in (prompt or "sfx"))[:40].strip().replace(" ", "_")
         has_video = video_path is not None
         out_ext = ".mp4" if has_video else ".wav"
-        base_filename = f"sfx_{safe_prompt}_{seed_val}{out_ext}"
+        requested_name = raw_params.get("output_filename") or raw_params.get("output_name")
+        base_filename = requested_name or f"sfx_{safe_prompt}_{seed_val}{out_ext}"
         output_path = wgp.get_available_filename(out_dir, base_filename, force_extension=out_ext)
 
         # Run MMAudio

@@ -26,12 +26,14 @@ def worker_source():
     return ast.Module(body=[worker], type_ignores=[]), str(source)
 
 
-@pytest.mark.parametrize('guided', [False, True])
+@pytest.mark.parametrize('guided,output_name', [(False, None), (True, None), (False, 'rain-on-glass'), (True, 'rain-on-glass.wav')])
 def test_admitted_worker_uses_exact_inputs_without_download_or_reprobe(
-    tmp_path, monkeypatch, worker_source, guided,
+    tmp_path, monkeypatch, worker_source, guided, output_name,
 ):
     native, service, runtime, _weights = setup_service(tmp_path)
     request = command()
+    if output_name:
+        request['input']['output_name'] = output_name
     request['input']['params'].update({
         'guidance_scale': 3.5, 'sfx_text_weight': 0.7,
         'MMAudio_neg_prompt': '  Speech\nMusic  ',
@@ -67,7 +69,8 @@ def test_admitted_worker_uses_exact_inputs_without_download_or_reprobe(
     wgp.MMAUDIO_PERSIST_RAM = 'ram'
     wgp.get_mmaudio_settings = lambda *_args, **_kwargs: (True, None, 'none', 'large_44k_v2', 'weights')
     wgp.download_mmaudio = forbidden_download
-    wgp.get_available_filename = lambda directory, name, **_kwargs: os.path.join(directory, name)
+    wgp.get_available_filename = lambda directory, name, force_extension=None: os.path.join(
+        directory, os.path.splitext(name)[0] + (force_extension or os.path.splitext(name)[1]))
     wgp.format_time = str
     monkeypatch.setitem(sys.modules, 'postprocessing.mmaudio.mmaudio', SimpleNamespace(video_to_audio=generate))
     monkeypatch.setitem(sys.modules, 'decord', SimpleNamespace(VideoReader=lambda path: probes.append(path)))
@@ -95,6 +98,8 @@ def test_admitted_worker_uses_exact_inputs_without_download_or_reprobe(
     assert len(sidecars) == 1
     output, metadata = sidecars[0]
     assert output.endswith('.mp4' if guided else '.wav')
+    stem = Path(output).stem
+    assert stem == 'rain-on-glass' if output_name else stem.startswith('sfx_Rain_against_glass')
     assert metadata['params'] == raw_params == job['params']
     assert metadata['upload_filenames'] == ({'video_guide': 'guide.mp4'} if guided else {})
     assert completed[0][0] == 'completed'
