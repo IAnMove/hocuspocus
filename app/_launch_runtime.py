@@ -36959,6 +36959,11 @@ from services.series_commands import command_catalog as series_command_catalog, 
 _jobs_wait_handlers = jobs_wait_handlers(get_status, lambda job_id: _jobs.get(job_id))
 from services.studio_key import command_catalog as studio_key_catalog, command_handlers as studio_key_handlers
 _studio_key_handlers = studio_key_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
+from routers.character_tools import create_character_tools_router
+
+api.include_router(create_character_tools_router(
+    studio_key=_studio_key_handlers["studio.key"], speech_qa=speech_qa_handlers(_workspace_dir)["qa.speech"],
+))
 from services.clip_align import command_catalog as clip_align_catalog, command_handlers as clip_align_handlers
 _clip_align_handlers = clip_align_handlers(_workspace_dir)
 from services.montage_preview import command_catalog as montage_preview_catalog

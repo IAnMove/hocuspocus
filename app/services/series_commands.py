@@ -39,6 +39,14 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "durable workspace URLs. voice is the default voice; voicesByLanguage {english, spanish, ...} gives a "
         "language its own voice. The server drops fields it does not know and lists their paths in ignoredFields.",
     ),
+    "characters.styles": (
+        {"style": {"type": "string", "maxLength": 80}, "kind": {"enum": ["character", "pose", "prop"]},
+         "description": {"type": "string", "maxLength": 2000}},
+        [], False,
+        "List character style presets (prompt fragments, kit style, default mouth look for characters.rig.flat). "
+        "With style, kind and description, also returns the prompt, negative prompt and screen colour to generate "
+        "with: magenta when the description has green in it, else green. Key the result with studio.key in that mode.",
+    ),
     "characters.rig.flat": (
         {"workspace": WORKSPACE, "character_id": ID, "base_revision": REVISION,
          "style": {"type": "object", "properties": {
@@ -205,6 +213,17 @@ def _save_character(data: dict[str, Any], request: Callable[..., Any], **_extra:
             "ignoredFields": _ignored_fields(character, stored)}
 
 
+def _character_styles(data: dict[str, Any], _request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    from services.character_styles import style_catalog, style_prompt
+    result: dict[str, Any] = {"styles": style_catalog()["styles"], "screens": sorted(style_catalog()["screens"])}
+    if data.get("style") and data.get("kind"):
+        try:
+            result["prompt"] = style_prompt(data["style"], data["kind"], data.get("description") or "")
+        except KeyError as error:
+            raise SeriesCommandError(f"Unknown style {data['style']}", status=404) from error
+    return result
+
+
 def _rig_flat_character(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body: dict[str, Any] = {"workspace": data["workspace"], "baseRevision": data["base_revision"]}
     for key in ("style", "poses"):
@@ -322,6 +341,7 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "characters.list": _list_characters,
     "characters.get": _get_character,
     "characters.save": _save_character,
+    "characters.styles": _character_styles,
     "characters.rig.flat": _rig_flat_character,
     "series.list": _list_series,
     "series.get": _get_series,
