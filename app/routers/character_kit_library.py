@@ -56,6 +56,25 @@ def create_character_kit_library_router() -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @router.post("/api/v1/character-kits/library/kits/{kit_id}/flat-rig")
+    def rig_flat_character_kit(kit_id: str, body: dict):
+        """Wipe the painted mouths, draw nine paper mouths and a blink, and save the anchors."""
+        from services.flat_rig import FlatRigError, rig_character
+
+        workspace = str(body.get("workspace") or "")
+        poses = body.get("poses")
+        if poses is not None and (not isinstance(poses, list) or not all(isinstance(pose, str) for pose in poses)):
+            raise HTTPException(status_code=400, detail="poses must be a list of pose ids")
+        try:
+            return rig_character(_workspace_dir(workspace), workspace, kit_id, base_revision=body.get("baseRevision"),
+                                 style=body.get("style"), pose_ids=poses)
+        except FlatRigError as exc:
+            raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
+        except CharacterKitRevisionConflict as exc:
+            raise _conflict(exc) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @router.delete("/api/v1/character-kits/library/kits/{kit_id}")
     def delete_character_kit_library_item(kit_id: str, body: dict):
         """Delete one kit under the same compare-and-swap contract."""
