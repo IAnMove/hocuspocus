@@ -180,6 +180,17 @@ def test_freeze_accepts_screen_fx_sound_and_sequence_refs():
     assert error.value.detail["code"] == "missing_ref"
 
 
+def test_freeze_gives_colourless_screen_effects_their_catalog_colour():
+    # The effect painters call addColorStop(cue.color); a missing colour failed the whole render.
+    from services.scene2d_schema import EFFECT_COLORS
+    frozen = freeze_export_command(_command(document=_document(sfx=[
+        {"id": "smoke", "kind": "smoke", "start": 0, "end": 1},
+        {"id": "dust", "kind": "dust", "start": 0, "end": 1, "color": "#123456"},
+    ])))
+    cues = frozen["effective"]["input"]["snapshot"]["document"]["sfx"]
+    assert [cue["color"] for cue in cues] == [EFFECT_COLORS["smoke"], "#123456"]
+
+
 def _queued_receipt():
     return {
         "version": 1, "commandId": "scene2d-1", "operation": OPERATION, "status": "queued",

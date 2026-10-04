@@ -3,6 +3,7 @@
 import { canonicalSceneFps } from '../sceneFps'
 import { normalizeFaceBinding } from '../cutoutDialogue'
 import { parseFinish } from './finish'
+import { parseSceneFx } from '../../features/sceneFx/types'
 import { lyricFields, parseKineticTexts } from '../kineticText'
 import { parsePath, parseRhythm, parseSequence } from './motion'
 import { getSceneLayerTiming, normalizeSceneEvents, normalizeSceneKeyframes, withNormalizedSceneTiming, withSceneKeyframes } from '../sceneTimeline'
@@ -253,5 +254,8 @@ export function normalizeScene2D(raw: unknown): AnimatorScene {
   const duration = Math.min(3600, Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed })))
   const finish = parseFinish(incoming.finish)
   const rhythm = parseRhythm(incoming.rhythm)
-  return { ...incoming, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), ...(finish ? { finish } : {}), ...(rhythm ? { rhythm } : {}), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
+  // Same cue parser as the editor: catalog colour and bounded fields. Painters
+  // call addColorStop(cue.color) and failed on cues saved without a colour.
+  const sfx = parseSceneFx(incoming.sfx)
+  return { ...incoming, sfx: sfx.length ? sfx : undefined, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), ...(finish ? { finish } : {}), ...(rhythm ? { rhythm } : {}), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
 }

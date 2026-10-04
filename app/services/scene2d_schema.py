@@ -7,12 +7,24 @@ Extra keys stay allowed so a later editor field still round-trips.
 from __future__ import annotations
 
 import json
+import re
 from copy import deepcopy
 from pathlib import Path
 
 _EFFECTS = json.loads((Path(__file__).resolve().parents[1] / "shared" / "scene_effects.json").read_text(encoding="utf-8"))
 _GRAPHICS = json.loads((Path(__file__).resolve().parents[1] / "shared" / "scene_graphics.json").read_text(encoding="utf-8"))
 EFFECT_IDS = tuple(item["id"] for item in _EFFECTS)
+EFFECT_COLORS = {item["id"]: item["color"] for item in _EFFECTS}
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def fill_sfx_colors(document: dict) -> dict:
+    """Give screen-effect cues the catalog colour the editor applies; painters need one."""
+    for cue in document.get("sfx") or []:
+        if isinstance(cue, dict) and cue.get("kind") in EFFECT_COLORS and not (
+                isinstance(cue.get("color"), str) and _HEX_COLOR.match(cue["color"])):
+            cue["color"] = EFFECT_COLORS[cue["kind"]]
+    return document
 GRAPHIC_IDS = tuple(item["id"] for item in _GRAPHICS["entries"])
 FONTS = ("sans", "mono", "display", "condensed", "serif", "hand", "marker")
 HEX = {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"}

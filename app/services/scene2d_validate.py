@@ -18,7 +18,7 @@ from jsonschema.exceptions import SchemaError
 
 from services.mcp_compact import compact_scene
 from services.media_refs import parse_media_ref
-from services.scene2d_schema import FONTS, LAYER_TYPES, document_schema
+from services.scene2d_schema import FONTS, LAYER_TYPES, document_schema, fill_sfx_colors
 from services.scene2d_text_boxes import layout_warnings, lyric_placements, painted_contrast_warnings, text_placements
 
 OPERATION = "scenes.video2d.validate"
@@ -250,6 +250,7 @@ def _normalize_sfx(document: dict) -> None:
             continue
         _clamp_into(cue, ranges)
         _round_into(cue, "seed", 1, 1_000_000)
+    fill_sfx_colors(document)
 
 
 def _normalize_emitter(emitter: Any) -> None:
