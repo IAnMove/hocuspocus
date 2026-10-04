@@ -30,7 +30,7 @@ Este documento recoge cada obstáculo que apareció por el camino, en orden de i
 | 7 | Una serie tiene un solo idioma; no hay versiones de un capítulo | Hicieron falta dos series | Propuesta |
 | 8 | La cola reordena por duración declarada y deja sin turno a la voz | Las voces esperaron detrás de cada imagen nueva | **[FASE 1A]** envejecimiento y `priority` documentado |
 | 9 | El servidor llegó a 50 GB de RAM y lo mató el sistema | Cola perdida en mitad de la producción | **[FASE 1A]** causa medida y corregida; queda el presupuesto por familia |
-| 10 | TTS: ninguna voz predefinida en español; VoiceDesign no es tipo de voz | Hubo que diseñar, comprobar y clonar a mano | Propuesta |
+| 10 | TTS: ninguna voz predefinida en español; VoiceDesign no es tipo de voz | Hubo que diseñar, comprobar y clonar a mano | **[FASE 1B]** «Diseñar voz» y `qa.speech` |
 | 11 | En Video 3D los recortes 2D no pueden hablar | Diálogo en 3D solo con modelos GLB | Propuesta |
 | 12 | Efectos de pantalla sin `color` rompen el pintor | Previsualización y export fallan | **[FASE 1A]** |
 | 13 | Inconsistencias de contrato MCP | Errores evitables en cada herramienta nueva | **[FASE 1A]** salvo la miniatura 3D |
@@ -252,6 +252,23 @@ Siguen pendientes el presupuesto de RAM por familia de modelos y la agrupación 
 - Ofrecer la descarga de `qwen3_tts_base` en el momento en que se elige «voz propia».
 - Normalizar números al calcular el WER: «forty-four billion» frente a «$44 billion» disparó retomas innecesarias.
 
+**[FASE 1B] Arreglo:**
+
+- **«Diseñar voz».** Está en el Creador de personajes y en cada idioma del editor de voces.
+  - Pide descripción, idioma y una frase de muestra tranquila, y genera tres tomas de VoiceDesign con semillas distintas.
+  - Cada toma muestra su transcripción y sus métricas: WER, tono mediano y palabras por segundo.
+  - Si la descripción dice hombre o mujer, avisa cuando el tono sale de un rango típico.
+  - La toma elegida se guarda como voz de referencia (`qwen3_tts_base`) de ese idioma, con su transcripción.
+  - Si falta un modelo, ofrece descargarlo.
+- **`qa.speech`** (MCP y `POST /api/v1/qa/speech`) devuelve:
+  - transcripción con Whisper small en CPU;
+  - WER con números y porcentajes escritos en letra en los dos lados;
+  - tono mediano, ritmo y silencios en los extremos;
+  - avisos.
+- **Medidas:**
+  - Con las voces de referencia de la producción y su propio texto, el WER es de 0 a 0,1, en 1–2,5 s por toma.
+  - En una prueba real («Lola»), las tres voces femeninas salieron a 324–353 Hz, y `qa.speech` lo avisó.
+
 ## 11. Recortes 2D que hablan dentro de Video 3D (propuesta)
 
 **Síntoma.**
@@ -339,6 +356,14 @@ Pasaba con los efectos `smoke` y `dust` sin `color`.
    - generar el parpadeo con la forma exacta de cada ojo.
 
    Propuesta: llevar ese generador al Creador de personajes como «Pack de bocas planas» y «Borrar boca original». El código de referencia está en la sección de artefactos.
+
+   **[FASE 1B]**
+   - **Rig plano.** `services/flat_rig.py` (MCP `characters.rig.flat` y `POST …/kits/{id}/flat-rig`) hace todo eso en una llamada y devuelve una imagen de revisión. En los seis personajes de la producción da los mismos anclajes que el script original.
+   - **Caras que no sirven.** Rechaza una cara recortada con el fondo (`face_keyed_out`) o tan clara como los ojos (`face_too_light`).
+   - **Creador.** Con un estilo elegido, el Creador de personajes:
+     - genera tres opciones sobre croma y las recorta;
+     - guarda la elegida ya rigada;
+     - añade poses nuevas con la misma identidad.
 7. **Velocidad de exportación 2D.** Unos 5 s de CPU por segundo de vídeo a 1080p y 24 fps, con concurrencia 2 por defecto (`HOCUS_SCENE_EXPORT_CONCURRENCY`). Un capítulo de 5 minutos en dos idiomas tarda unos 45 minutos. Propuesta:
    - subir la concurrencia por defecto en máquinas con muchos núcleos (aquí había 32);
    - render incremental: reutilizar los planos que no cambian.
