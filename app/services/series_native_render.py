@@ -53,15 +53,19 @@ class NativeRenderError(RuntimeError):
         self.code, self.status = code, status
 
 
+def audio_seconds(path: str) -> float:
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                           capture_output=True, text=True, check=True, timeout=30)
+    return float(probe.stdout.strip())
+
+
 def trim_silence(source: str, target: str, pad: float = 0.06) -> float:
     """Cut leading and trailing silence, keep a short natural pad; returns the new duration."""
     flt = (f"silenceremove=start_periods=1:start_threshold=-42dB:start_silence={pad},areverse,"
            f"silenceremove=start_periods=1:start_threshold=-42dB:start_silence={pad + 0.06},areverse")
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", source, "-af", flt, "-ar", "44100", "-ac", "1", target],
                    check=True, timeout=120)
-    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", target],
-                           capture_output=True, text=True, check=True, timeout=30)
-    return float(probe.stdout.strip())
+    return audio_seconds(target)
 
 
 @dataclass
@@ -72,6 +76,7 @@ class NativeRenderDeps:
     read_kits: Callable[[str], dict]
     compile_shot: Callable[[dict], dict] = run_series_shot
     trim: Callable[[str, str], float] = trim_silence
+    probe: Callable[[str], float] = audio_seconds
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 3.0
     check_speech: bool = True
@@ -307,14 +312,31 @@ class SeriesNativeRender:
             done = item["lines"].get(beat["id"])
             if done and done.get("key") == key and os.path.isfile(os.path.join(self.deps.workspace_dir(workspace), done["filename"])):
                 continue
-            item["lines"][beat["id"]] = self._record(workspace, job, beat["id"], text, voice, key)
+            item["lines"][beat["id"]] = self._reuse(workspace, job, beat["id"], text, key) or self._record(workspace, job, beat["id"], text, voice, key)
             self._save(workspace, job)
             if self._cancelled(job["jobId"]):
                 raise NativeRenderError("cancelled", "Cancelled")
 
+    @staticmethod
+    def _stem(job: dict, beat_id: str, key: str) -> str:
+        return f"ln-{job['episodeId']}-{beat_id}-{key}"[:150]
+
+    def _reuse(self, workspace: str, job: dict, beat_id: str, text: str, key: str) -> dict[str, Any] | None:
+        """The recording an earlier render made of the same line in the same voice (its file name says so)."""
+        filename = f"{self._stem(job, beat_id, key)}.wav"
+        path = os.path.join(self.deps.workspace_dir(workspace), filename)
+        if not os.path.isfile(path):
+            return None
+        try:
+            duration = self.deps.probe(path)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None
+        cues = self._cues(workspace, filename, duration, text, job["language"])
+        return {"key": key, "filename": filename, "duration": round(duration, 3), "wer": None, "attempt": 0, "reused": True, **cues}
+
     def _record(self, workspace: str, job: dict, beat_id: str, text: str, voice: dict, key: str) -> dict[str, Any]:
         root = self.deps.workspace_dir(workspace)
-        stem = f"ln-{job['episodeId']}-{beat_id}-{key}"[:150]
+        stem = self._stem(job, beat_id, key)
         best: dict[str, Any] | None = None
         for attempt in range(MAX_TAKES):
             raw = self._speak(workspace, job, stem, text, voice, attempt)
@@ -332,14 +354,30 @@ class SeriesNativeRender:
 
     def _speak(self, workspace: str, job: dict, stem: str, text: str, voice: dict, attempt: int) -> str:
         seed = int(hashlib.sha1(f"{stem}-{attempt}".encode()).hexdigest()[:6], 16)
-        submitted = _ok(self.deps.call("generation.speech", {"version": 2, "intent_id": f"{stem}-a{attempt}"[:160], "input": {
-            "workspace": workspace, "output_name": f"{stem}-raw{attempt}", "params": speech_params(voice, text, job["language"], seed)}}), "speech")
-        job_id = _job_id(submitted)
-        if not job_id:
-            raise NativeRenderError("tool_failed", "Speech generation returned no job id", 502)
+        intent = f"{stem}-a{attempt}"
+        for _ in range(2):
+            submitted = _ok(self.deps.call("generation.speech", {"version": 2, "intent_id": intent[:160], "input": {
+                "workspace": workspace, "output_name": f"{stem}-raw{attempt}", "params": speech_params(voice, text, job["language"], seed)}}), "speech")
+            job_id = _job_id(submitted)
+            if not job_id:
+                raise NativeRenderError("tool_failed", "Speech generation returned no job id", 502)
+            name = self._wait_speech(job, job_id)
+            if name:
+                return name
+            # The intent replayed a job the server no longer knows (it restarted mid-generation): ask again.
+            intent = f"{stem}-a{attempt}-{uuid.uuid4().hex[:6]}"
+        raise NativeRenderError("tool_failed", "Speech job disappeared twice", 502)
+
+    def _wait_speech(self, job: dict, job_id: str) -> str | None:
+        """The audio file of a finished speech job; None when the server does not know the job."""
         while True:
             waited = self.deps.call("jobs.wait", {"version": 1, "input": {"job_id": job_id, "timeout_s": 120}})
-            payload = waited.get("error") if isinstance(waited.get("error"), dict) and waited["error"].get("job_id") else waited
+            error = waited.get("error") if isinstance(waited.get("error"), dict) else {}
+            if waited.get("_is_error") and not error.get("job_id"):
+                if error.get("status") == 404 or "not found" in str(error.get("message") or "").lower():
+                    return None
+                raise NativeRenderError("tool_failed", f"Waiting for speech: {error.get('message') or waited}"[:300], 502)
+            payload = error if error.get("job_id") else waited
             state = payload.get("status")
             if state == "completed":
                 name = _output_file(payload, (".wav", ".mp3", ".flac"))
