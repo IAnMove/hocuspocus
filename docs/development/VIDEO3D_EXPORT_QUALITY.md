@@ -9,7 +9,7 @@ The server export (`scenes.world3d.export`) takes an optional `quality`:
 | `final` | 1.5× | 4× | 4 subframes, 180° shutter | x264 `slow`, crf 14 |
 | `master` | 2× | 4× | 8 subframes, 180° shutter | x264 `slow`, crf 12 |
 
-The output size never changes with the level.
+A picture that already fits in 1080p keeps that size at every level, and nothing is upscaled. Draft still clamps to 1920×1080 (or 1080×1920). Final and master keep the document size up to 4K (3840×2160 or 2160×3840) and clamp anything larger. The browser export stays on the draft cap. A 4K picture uses H.264 level 5.1 at 24 or 30 fps and level 5.2 at 60 fps. 1080p encodes keep level 4.0 or 4.2 and the same ffmpeg command.
 
 - **Supersampling.** The stage paints at k× the output size. The owned renderer scales each frame down with
   `imageSmoothingQuality = 'high'`, then paints the overlays (effects, texts and lyrics) at the output size.
@@ -124,6 +124,4 @@ Real headless render (GPU, 320×180, 24 fps, 2 s): a soundtrack at gain 0.3 plus
 
 Owned by other phases of the roadmap:
 
-- 4K output and the H.264 levels (1.F3);
-- the optional ProRes master, remuxing valid uploads, and lossless editor intermediates (1.F4);
-- 4K output and the H.264 level fix stay in 1.F3. The level picker and the time estimate are the Video 3D and Scene Animator controls (1.F5): draft stays in the browser, and final or master go to the server.
+- the optional ProRes master, remuxing valid uploads, and lossless editor intermediates (1.F4).
