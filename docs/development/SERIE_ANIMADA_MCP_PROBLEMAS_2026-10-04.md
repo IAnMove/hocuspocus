@@ -27,11 +27,11 @@ Este documento recoge cada obstáculo que apareció por el camino, en orden de i
 | 4 | Una sola voz por personaje | Imposible doblar la serie | **[ARREGLADO]** (`voicesByLanguage`) |
 | 5 | Lip-sync recibía «Español de España» en vez de `es` | El motor de fonemas fallaba en series en español | **[ARREGLADO]** |
 | 6 | Sin herramientas de escena para «montar personaje» y «añadir línea con lip-sync» | El agente tuvo que ejecutar código TypeScript de la UI | **[FASE 2]** |
-| 7 | Una serie tiene un solo idioma; no hay versiones de un capítulo | Hicieron falta dos series | Propuesta |
+| 7 | Una serie tiene un solo idioma; no hay versiones de un capítulo | Hicieron falta dos series | **[FASE 3]** `episode.languageVersions` |
 | 8 | La cola reordena por duración declarada y deja sin turno a la voz | Las voces esperaron detrás de cada imagen nueva | **[FASE 1A]** envejecimiento y `priority` documentado |
 | 9 | El servidor llegó a 50 GB de RAM y lo mató el sistema | Cola perdida en mitad de la producción | **[FASE 1A]** causa medida y corregida; queda el presupuesto por familia |
 | 10 | TTS: ninguna voz predefinida en español; VoiceDesign no es tipo de voz | Hubo que diseñar, comprobar y clonar a mano | **[FASE 1B]** «Diseñar voz» y `qa.speech` |
-| 11 | En Video 3D los recortes 2D no pueden hablar | Diálogo en 3D solo con modelos GLB | Propuesta |
+| 11 | En Video 3D los recortes 2D no pueden hablar | Diálogo en 3D solo con modelos GLB | **[FASE 3]** `screen.talk` y `world3d.scene.talk` |
 | 12 | Efectos de pantalla sin `color` rompen el pintor | Previsualización y export fallan | **[FASE 1A]** |
 | 13 | Inconsistencias de contrato MCP | Errores evitables en cada herramienta nueva | **[FASE 1A]** salvo la miniatura 3D |
 | 14 | Otros problemas menores | Ver el detalle | **[FASE 1A]** 2, 4, 7, 8 y 9 |
@@ -177,6 +177,13 @@ Opcionalmente, `animate_talk {kit_id, style: bob|still|shake}` para la animació
 - Los textos de los carteles (título, cartelas) deberían salir de un diccionario por idioma.
 - Opcional: fondos con rótulos localizados, porque la pizarra «RUNWAY: 3 DAYS» quedó en inglés en la versión española.
 
+**[FASE 3] Arreglo.**
+
+- `episode.languageVersions[idioma]` guarda título, líneas por id, cartelas, tomas aprobadas, montajes y miniatura. El idioma de la serie sigue siendo el original.
+- El render en servidor y el montaje aceptan `language`: usan las líneas de la versión y la voz de cada personaje para ese idioma, y escriben sus tomas y su corte sin tocar los del original.
+- `series.episode.translate` traduce líneas y cartelas con el LLM; se revisan línea a línea en el panel «Versiones de idioma».
+- Pendiente: rótulos de fondo localizados y selector de idioma en Planos.
+
 ## 8. La cola deja sin turno a la voz (propuesta, prioridad alta)
 
 **Síntoma:**
@@ -295,6 +302,12 @@ Siguen pendientes el presupuesto de RAM por familia de modelos y la agrupación 
 - `eyes.blink`.
 
 El renderer 3D pintaría la boca activa sobre el plano del recorte, como hace el pintor 2D. Bastaría con reutilizar el kit del personaje.
+
+**[FASE 3] Arreglo.**
+
+- Un objeto `image` acepta `screen.talk`: pose, bocas por estado con su anclaje, cues, boca de reposo y parpadeo. Lo pinta `ui/src/features/scene3d/talkingCutout.ts` en el lienzo de la pantalla del recorte.
+- `world3d.scene.talk` lo construye desde el Character Kit (solo dibujos aprobados) y las líneas con sus cues. Las letras de Rhubarb se convierten en las bocas del kit con su `mouthMapping`, y el audio de cada línea pasa a la banda sonora de la escena.
+- Editar los cues repinta sin recargar las imágenes.
 
 ## 12. Efectos de pantalla sin `color` rompen el pintor (propuesta, fácil)
 
