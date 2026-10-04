@@ -193,43 +193,118 @@ def _mouth_marks(region: np.ndarray, inside: np.ndarray, eye_height: int, screen
     return (lum < skin * mark) & inside, (lum < skin * dark) & inside, background
 
 
+def _mouth_candidates(region, inside, eye_height, screen, faint, smallest):
+    """Marks darker than the skin, big enough and with the face colour around them (collars and jaws are not)."""
+    mark, dark, background = _mouth_marks(region, inside, eye_height, screen, faint)
+    face = _close(np.abs(region - background).sum(axis=2) < 60, 6)
+    labels, parts = _components(_close(mark, 3 if faint else 2))
+    good = []
+    for part in parts:
+        piece = labels[part["y0"]:part["y1"], part["x0"]:part["x1"]] == part["label"]
+        if part["size"] < smallest or not dark[part["y0"]:part["y1"], part["x0"]:part["x1"]][piece].any():
+            continue
+        ring = face[max(0, part["y0"] - 6):part["y1"] + 6, max(0, part["x0"] - 6):part["x1"] + 6]
+        if ring.mean() >= 0.55:
+            good.append({**part, "pixels": labels == part["label"]})
+    return good, background
+
+
+def _centre(part):
+    return (part["x0"] + part["x1"]) / 2, (part["y0"] + part["y1"]) / 2
+
+
+def _strokes(strict, faint):
+    """Whole strokes: a faint mark that holds a dark one is the complete line the dark pieces broke from."""
+    whole = [part for part in faint if any(part["pixels"][dark["pixels"]].any() for dark in strict)]
+    covered = [dark for dark in strict if not any(part["pixels"][dark["pixels"]].any() for part in whole)]
+    return whole + covered if strict else faint
+
+
+def _near_end(part, group, reach_x, reach_y):
+    gx0, gx1 = min(p["x0"] for p in group), max(p["x1"] for p in group)
+    gy0, gy1 = min(p["y0"] for p in group), max(p["y1"] for p in group)
+    return (part["y1"] >= gy0 - reach_y and part["y0"] <= gy1 + reach_y
+            and any(part["x1"] >= end - reach_x and part["x0"] <= end + reach_x for end in (gx0, gx1)))
+
+
+def _grow(group, pool, reach_x, reach_y, widest, hops):
+    for _ in range(hops):
+        near = [p for p in pool if _near_end(p, group, reach_x, reach_y)
+                and max(q["x1"] for q in group + [p]) - min(q["x0"] for q in group + [p]) <= widest]
+        if not near:
+            break
+        group = group + near
+        pool = [p for p in pool if all(p is not q for q in near)]
+    return group
+
+
+def _mouth_parts(strict, faint, centre, span, eye_width):
+    """The mouth: the topmost stroke near the middle, its broken pieces along the same line, then the small marks at
+    its ends (a smirk's curled end, its arrow tip, a dimple). Left behind, those show as a stray stroke beside the
+    drawn mouth. Growth only goes through an end, a little at a time, so moustaches, beards and jaws stay."""
+    strokes = [p for p in _strokes(strict, faint) if p["x1"] - p["x0"] <= eye_width * 0.95 and p["y1"] - p["y0"] <= span * 0.6]
+    if not strokes:
+        return []
+    seed = min(strokes, key=lambda part: part["y0"] + abs(_centre(part)[0] - centre) * 0.5)
+    row = [p for p in strokes + faint if p is not seed and abs(_centre(p)[1] - _centre(seed)[1]) < span * 0.14]
+    group = _grow([seed], row, eye_width * 0.1, span * 0.1, eye_width * 0.95, 8)
+    small = max(30, sum(part["size"] for part in group) * 0.35)
+    taken = {id(part) for part in group}
+    pool = [p for p in faint + strict if id(p) not in taken and p["size"] <= small
+            and p["x1"] - p["x0"] <= eye_width * 0.35 and p["y1"] - p["y0"] <= span * 0.3]
+    return _grow(group, pool, eye_width * 0.1, span * 0.22, eye_width * 0.95, 2)
+
+
 def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = False):
     """Dark marks under the eyes that the face colour surrounds (so collars and jaws are skipped)."""
     x0, _y0, x1, y1 = eyes_box
     eye_height, eye_width = y1 - eyes_box[1], x1 - x0
-    ry0, ry1 = int(y1 + eye_height * 0.12), int(y1 + eye_height * 1.35)
-    rx0, rx1 = int(x0 + eye_width * 0.05), int(x1 - eye_width * 0.05)
-    region = rgb[ry0:ry1, rx0:rx1].astype(float)
-    inside = alpha[ry0:ry1, rx0:rx1] > 200
-    if not inside.any():
-        raise FlatRigError("mouth_not_found", "No face was found under the eyes")
-    # A thin pen-line mouth breaks into tiny faint pieces: try again with a softer threshold and a smaller piece.
-    for faint, smallest in ((False, 12), (True, 5)):
-        mark, dark, background = _mouth_marks(region, inside, eye_height, screen, faint)
-        face = _close(np.abs(region - background).sum(axis=2) < 60, 6)
-        labels, parts = _components(_close(mark, 3 if faint else 2))
-        good = []
-        for part in parts:
-            piece = labels[part["y0"]:part["y1"], part["x0"]:part["x1"]] == part["label"]
-            if part["size"] < smallest or not dark[part["y0"]:part["y1"], part["x0"]:part["x1"]][piece].any():
-                continue
-            ring = face[max(0, part["y0"] - 6):part["y1"] + 6, max(0, part["x0"] - 6):part["x1"] + 6]
-            if ring.mean() >= 0.55:
-                good.append(part)
-        if good:
+    # Eyes peeking over sunglasses are short, the face under them is not: measure the face by the eyes' width too.
+    span = max(eye_height, eye_width * 0.55)
+    # A smirk's curled end can reach past the eyes' edge.
+    rx0, rx1 = max(0, int(x0 - eye_width * 0.15)), min(alpha.shape[1], int(x1 + eye_width * 0.15))
+    ry0 = int(y1 + eye_height * 0.12)
+    # The second window reaches past sunglasses' lenses.
+    for depth in sorted({int(y1 + span * 1.35), int(y1 + max(span * 1.35, eye_width * 1.1))}):
+        region = rgb[ry0:depth, rx0:rx1].astype(float)
+        inside = alpha[ry0:depth, rx0:rx1] > 200
+        if not inside.any():
+            raise FlatRigError("mouth_not_found", "No face was found under the eyes")
+        strict, background = _mouth_candidates(region, inside, eye_height, screen, False, 12)
+        # A thin pen-line mouth breaks into tiny faint pieces: a softer threshold and smaller pieces find them.
+        faint, _ = _mouth_candidates(region, inside, eye_height, screen, True, 5)
+        if strict or faint:
             break
-    if not good:
+    if not (strict or faint):
         raise FlatRigError("mouth_not_found", "No painted mouth was found under the eyes")
-    centre = (rx1 - rx0) / 2
-    good.sort(key=lambda part: part["y0"] + abs((part["x0"] + part["x1"]) / 2 - centre) * 0.5)
-    band = (good[0]["y0"] + good[0]["y1"]) / 2
-    # A smirk or a long line can break into pieces: keep every mark on the same row.
-    chosen = [part for part in good if abs((part["y0"] + part["y1"]) / 2 - band) < eye_height * 0.14]
+    parts = _mouth_parts(strict, faint, (rx1 - rx0) / 2, span, eye_width)
+    if not parts:
+        raise FlatRigError("mouth_not_found", "No painted mouth was found under the eyes")
     mask = np.zeros(alpha.shape, bool)
-    for part in chosen:
-        mask[ry0:ry1, rx0:rx1] |= labels == part["label"]
+    for part in parts:
+        mask[ry0:depth, rx0:rx1] |= part["pixels"]
     ys, xs = np.nonzero(mask)
     return (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1), mask, background
+
+
+LUMA = np.array([0.299, 0.587, 0.114])
+
+
+def eyes_covered(rgb: np.ndarray, alpha: np.ndarray, eyes_box, eyes_mask: np.ndarray) -> bool:
+    """Sunglasses: what was found as eyes is only their tops, with lenses under them far darker than the face
+    around the eyes. Such a pose must not blink. A dark face (a red book cover) is not a lens."""
+    x0, y0, x1, y1 = eyes_box
+    grow = max(4, int((y1 - y0) * 0.3))
+    ring = _dilate(eyes_mask, grow) & ~_dilate(eyes_mask, max(1, grow // 3)) & (alpha > 200)
+    ring[y1:] = False
+    below = slice(y1, min(alpha.shape[0], y1 + (y1 - y0))), slice(x0, x1)
+    lit = alpha[below] > 200
+    if not ring.any() or not lit.any():
+        return False
+    face = np.median(rgb[ring].astype(float), axis=0)
+    pixels = rgb[below][lit].astype(float)
+    lens = (np.abs(pixels - face).sum(axis=1) > 120) & (pixels @ LUMA < min(70.0, float(face @ LUMA) * 0.45))
+    return bool(lens.mean() > 0.35)
 
 
 def wipe(image: Image.Image, mask: np.ndarray, grow: int) -> Image.Image:
@@ -365,6 +440,7 @@ def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
     rgb, alpha = pixels[..., :3], pixels[..., 3]
     eyes_box, eyes_mask = find_eyes(rgb, alpha)
     ex0, ey0, ex1, ey1 = eyes_box
+    covered = eyes_covered(rgb, alpha, eyes_box, eyes_mask)
     try:
         mouth_box, mouth_mask, background = find_mouth(rgb, alpha, eyes_box, style["screen"])
         rigged, wiped = wipe(figure, mouth_mask, max(4, int((ey1 - ey0) * 0.08))), True
@@ -383,7 +459,7 @@ def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
     pad = int((ey1 - ey0) * 0.25)
     bx0, by0, bx1, by1 = max(0, ex0 - pad), max(0, ey0 - pad), min(width, ex1 + pad), min(height, ey1 + pad)
     return {
-        "image": rigged, "width": width, "height": height, "wiped": wiped,
+        "image": rigged, "width": width, "height": height, "wiped": wiped, "blinks": not covered,
         "mouth": _anchor(mx, my, sprite_width * SPRITE[1] / SPRITE[0], width, height),
         "eyes": _anchor((bx0 + bx1) / 2, (by0 + by1) / 2, by1 - by0, width, height),
         "blink": blink_sprite(rgb[by0:by1, bx0:bx1], eyes_mask[by0:by1, bx0:bx1], background, style["screen"]),
@@ -407,8 +483,9 @@ def review_sheet(poses: dict[str, dict[str, Any]], mouths: dict[str, Image.Image
     tiles = []
     for rig in poses.values():
         rest = place(rig["image"], mouths["closed"], rig["mouth"])
-        # The kit has one blink, from the base pose, placed with each pose's eye anchor.
-        talk = place(place(rig["image"], mouths["wide"], rig["mouth"]), blink, rig["eyes"])
+        # The kit has one blink, from the base pose, placed with each pose's eye anchor; covered eyes do not blink.
+        talk = place(rig["image"], mouths["wide"], rig["mouth"])
+        talk = place(talk, blink, rig["eyes"]) if rig["blinks"] else talk
         for frame in (rest, talk):
             tiles.append(frame.resize((max(1, int(frame.width * height / frame.height)), height), Image.LANCZOS))
     sheet = Image.new("RGBA", (sum(tile.width for tile in tiles) + 8 * (len(tiles) + 1), height + 16), (255, 255, 255, 255))
@@ -509,7 +586,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         target = kit["base"] if pose == "base" else kit["poses"][pose]
         target.update({"source": _url(file, workspace), "width": rig["width"], "height": rig["height"],
                        "alphaStatus": "transparent", "workspace": workspace})
-        anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"]}
+        anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"], **({} if rig["blinks"] else {"blink": False})}
     kit["anchors"] = anchors
     kit["style"] = "cutout"
     sheet = _save(review_sheet(rigs, mouths, rigs["base"]["blink"]), workspace_dir, f"kit-{kit_id}-rig-review")
@@ -522,5 +599,6 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     return {
         "revision": saved.get("revision"), "character": saved["kits"][kit_id],
         "review": _url(sheet, workspace), "unwipedPoses": unwiped,
-        "poses": {pose: {"mouth": rig["mouth"], "eyes": rig["eyes"], "wiped": rig["wiped"]} for pose, rig in rigs.items()},
+        "poses": {pose: {"mouth": rig["mouth"], "eyes": rig["eyes"], "wiped": rig["wiped"], "blinks": rig["blinks"]}
+                  for pose, rig in rigs.items()},
     }

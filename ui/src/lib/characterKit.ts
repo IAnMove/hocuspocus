@@ -65,6 +65,8 @@ export interface CharacterKit {
     /** Optional per-mouth-state placement for generated facial variants. */
     mouthStates?: Partial<Record<CharacterMouthState, CharacterFaceAnchor>>
     eyes?: CharacterFaceAnchor
+    /** false: the eyes are hidden in this pose (sunglasses), so it never blinks. */
+    blink?: boolean
   }>
   provenance: Array<Record<string, unknown>>
   /** Style + traits the user picked; Face Rig fills overlay prompts from this. */
@@ -379,7 +381,7 @@ export function mountCharacterKitLayers(
     })
   }
   const blink = kit.eyes.blink
-  if (blink?.reviewState === 'approved') {
+  if (blink?.reviewState === 'approved' && anchors?.blink !== false) {
     const eyeTransform = { ...faceTransform(anchors?.eyes ?? DEFAULT_CHARACTER_BLINK_ANCHOR), opacity: 0 }
     layers.push({
       id: `kit-${kit.id}-eyes-blink`, name: `${kit.name} Eyes blink`, type: 'overlay', source: blink.source,
