@@ -60,6 +60,7 @@ import type { PixelPalette } from './pixel/pixelPalettes'
 import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
 import { EnvironmentLighting, applyLook } from './environmentLighting'
 import { clipWeightsAt, parseClipCues, type Scene3DClipCue } from './clipCues'
+import { findHandBone, followHand, parseHold } from './handHold'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -475,6 +476,35 @@ export function paintClipCues(gpu: Pick<SlotGpu, 'root' | 'animations' | 'cues'>
   bound.mixer.update(0)
 }
 
+/** Slots whose contact shadow this frame hid because a hand is carrying them. */
+const handHeldShadows = new WeakSet<SlotGpu>()
+
+/** After every actor is posed, props with `hold` copy that frame's hand bone. No stored previous pose. */
+function carryHeldProps(world: GpuWorld, slots: readonly Scene3DSlot[]) {
+  for (const slot of slots) {
+    const gpu = world.slots.get(slot.id)
+    if (!gpu) continue
+    const hold = parseHold(slot.hold, slot.id)
+    const carrier = hold && slots.find(item => item.id === hold.carrier && item.media === 'model3d')
+    const carrierRoot = carrier ? world.slots.get(carrier.id)?.root : undefined
+    const bone = hold && carrierRoot ? findHandBone(carrierRoot, hold.hand) : undefined
+    if (!hold || !bone) {
+      releaseHandShadow(gpu, world.renderer.shadowMap.enabled)
+      continue
+    }
+    followHand(gpu.root, bone, hold.offset ?? [0, 0, 0], slot.rotationY)
+    handHeldShadows.add(gpu)
+    if (gpu.contactShadow) gpu.contactShadow.visible = false
+  }
+}
+
+/** Show the blob again only for a prop that this painter had hidden. Other slots keep the visibility paintActor chose. */
+function releaseHandShadow(gpu: SlotGpu, shadowMap: boolean) {
+  if (!handHeldShadows.has(gpu)) return
+  handHeldShadows.delete(gpu)
+  if (gpu.contactShadow && !shadowMap) gpu.contactShadow.visible = true
+}
+
 function paintSlotSequence(gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number, shotDuration: number) {
   // Invalid or missing cues release a previous sequence, so the single clip drives the model again.
   if (gpu.kind === 'model') paintClipCues(gpu, parseClipCues(slot.clips) ?? [], sceneSeconds, shotDuration)
@@ -533,6 +563,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds, document.duration)
+  carryHeldProps(world, posedSlots)
   stabilizeSceneSurfaces(document.slots, world.slots)
   paintPixelLight(world, document, posedSlots, sceneSeconds)
   const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing

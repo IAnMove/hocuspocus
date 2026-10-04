@@ -38,6 +38,7 @@ import { useStore } from '../../stores/useStore'
 import { Scene3DShotLibraryCard } from './Scene3DShotLibraryCard'
 import { remountUserTemplate, type World3DUserTemplate } from './userTemplates.ts'
 import { Scene3DAnimationControls } from './Scene3DAnimationControls'
+import { Scene3DHoldControls } from './Scene3DHoldControls'
 import { Scene3DDocumentControls } from './Scene3DDocumentControls'
 import { Scene3DTransport } from './Scene3DTransport'
 import { Scene3DTransformPanel } from './Scene3DTransformPanel'
@@ -483,6 +484,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
             slot={slot}
             selected={selectedId === slot.id}
             catalogs={catalogs}
+            slots={sceneDoc.slots}
             duration={sceneDoc.duration}
             templateId={sceneDoc.templateId}
             workspace={workspace}
@@ -643,13 +645,14 @@ function WorkspaceStageColumn({
 }
 
 function Scene3DSlotCard({
-  slot, selected, catalogs, duration, templateId, workspace,
+  slot, selected, catalogs, slots, duration, templateId, workspace,
   exporting, editingLocked, imageItems, modelItems, videoItems, meshes, nodes, t, editorT,
   onSelect, onSpeech, onAssign, onApplyScene, onBumpGeneration, liveSource,
 }: {
   slot: Scene3DSlot
   selected: boolean
   catalogs: Record<string, Scene3DClipCatalogEntry[]>
+  slots: readonly Scene3DSlot[]
   duration: number
   templateId: string
   workspace: string
@@ -706,6 +709,8 @@ function Scene3DSlotCard({
         }}
         onRemove={() => { onBumpGeneration(); onApplyScene(current => ({ ...current, slots: current.slots.filter(value => value.id !== slot.id), camera: current.camera.framing?.targetSlot === slot.id ? { ...current.camera, framing: undefined } : current.camera })) }} />
       <AppearanceControls slot={slot} disabled={editingLocked} onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
+      <Scene3DHoldControls slot={slot} slots={slots} disabled={editingLocked}
+        onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
       <Scene3DAnimationControls slot={slot} clips={catalogs[slot.id]} duration={duration} disabled={editingLocked}
         onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
       {slot.media === 'image' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => onApplyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}

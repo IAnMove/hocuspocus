@@ -2,6 +2,7 @@ import { Object3D, Raycaster, Vector2 } from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { worldAnchorOffsetFromSlotRoot, worldSfxIdFromObject } from '../sceneFx/worldRuntime'
 import { renderWorld, type GpuWorld } from './gpu'
+import { parseHold } from './handHold'
 import type { Scene3DSlot } from './types'
 import type { WorldSfx } from '../sceneFx/world'
 
@@ -81,7 +82,7 @@ export function createTransformGizmo(world: GpuWorld, onChange: (id: string, pat
       allowed = enabled
       mode = nextMode
       controls.enabled = enabled
-      if ((!slot && !worldCue) || (slot?.media === 'image' && (slot.surface === 'environment' || slot.loop?.cylinder === true)) || !enabled) { controls.pointerUp(null); controls.detach(); return }
+      if ((!slot && !worldCue) || (slot?.media === 'image' && (slot.surface === 'environment' || slot.loop?.cylinder === true)) || (slot && parseHold(slot.hold, slot.id)) || !enabled) { controls.pointerUp(null); controls.detach(); return }
       worldAxes = Boolean(worldCue)
       attachedAnchorSlotId = worldCue?.anchor?.slotId
       const id = worldCue ? WORLD_SFX_SELECT_PREFIX + worldCue.id : slot!.id
