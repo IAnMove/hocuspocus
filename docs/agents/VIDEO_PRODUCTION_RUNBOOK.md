@@ -492,7 +492,7 @@ To let someone watch the completed cut before approving it, call `production.pub
 
 `face_consistent` is the human sheet question on `production.review`. No vision model means that answer stays unreliable, and the sheet must not invent yes or no. `appearance_changed` is the separate code check. It stays unknown unless an embedding backend was injected. The field `face_consistent` stays.
 
-Scene export and the contact-sheet painter share `HOCUS_SCENE_EXPORT_CONCURRENCY`. Unset or blank is 2. A value outside 1–4 is 1. Painters bind `127.0.0.1:0`. This change does not claim a measured speedup for 21 scenes.
+Scene export and the contact-sheet painter share `HOCUS_SCENE_EXPORT_CONCURRENCY`. Unset or blank is one painter per six cores, from 2 to 6 (5 on 32 cores). A value outside 1–8 is 1. Painters bind `127.0.0.1:0`. This change does not claim a measured speedup for 21 scenes.
 
 Qwen is already unloaded before the next model by `generation_memory.py`. The live 17-frame Qwen-to-H3 seconds-per-step table was not measured. Do not add a second unloader.
 

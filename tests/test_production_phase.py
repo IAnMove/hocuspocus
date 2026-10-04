@@ -567,15 +567,19 @@ def test_apply_uses_the_previewed_plan_without_asking_again(tmp_path):
     assert "clip_job" not in calls
 
 
-def test_scene_export_lane_defaults_to_two_and_rejects_out_of_range(monkeypatch):
+def test_scene_export_lane_scales_with_cores_and_rejects_out_of_range(monkeypatch):
     monkeypatch.delenv(ENV, raising=False)
-    assert scene2d_render_lane().capacity == 2
+    for cores, expected in ((None, 2), (4, 2), (12, 2), (18, 3), (32, 5), (128, 6)):
+        monkeypatch.setattr("services.scene_export_lane.os.cpu_count", lambda cores=cores: cores)
+        assert scene2d_render_lane().capacity == expected, cores
     monkeypatch.setenv(ENV, "")
-    assert scene2d_render_lane().capacity == 2
+    assert scene2d_render_lane().capacity == 6
     monkeypatch.setenv(ENV, "nope")
     assert scene2d_render_lane().capacity == 1
-    monkeypatch.setenv(ENV, "5")
+    monkeypatch.setenv(ENV, "9")
     assert scene2d_render_lane().capacity == 1
+    monkeypatch.setenv(ENV, "8")
+    assert scene2d_render_lane().capacity == 8
     monkeypatch.setenv(ENV, "3")
     assert scene2d_render_lane().capacity == 3
 
