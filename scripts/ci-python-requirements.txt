@@ -16,6 +16,7 @@ ffmpeg-python==0.2.0
 imageio==2.37.2
 imageio-ffmpeg==0.6.0
 json_repair==0.59.5
+num2words==0.5.14
 mmgp==3.7.6
 onnxruntime==1.23.2
 pydantic==2.10.6

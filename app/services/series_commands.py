@@ -39,6 +39,27 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "durable workspace URLs. voice is the default voice; voicesByLanguage {english, spanish, ...} gives a "
         "language its own voice. The server drops fields it does not know and lists their paths in ignoredFields.",
     ),
+    "characters.styles": (
+        {"style": {"type": "string", "maxLength": 80}, "kind": {"enum": ["character", "pose", "prop"]},
+         "description": {"type": "string", "maxLength": 2000}},
+        [], False,
+        "List character style presets (prompt fragments, kit style, default mouth look for characters.rig.flat). "
+        "With style, kind and description, also returns the prompt, negative prompt and screen colour to generate "
+        "with: magenta when the description has green in it, else green. Key the result with studio.key in that mode.",
+    ),
+    "characters.rig.flat": (
+        {"workspace": WORKSPACE, "character_id": ID, "base_revision": REVISION,
+         "style": {"type": "object", "properties": {
+             "screen": {"type": "boolean"}, "smile": {"type": "number", "minimum": -1, "maximum": 1},
+             "smirk": {"type": "number", "minimum": 0, "maximum": 1}, "width": {"type": "number", "minimum": 0.3, "maximum": 0.9},
+             "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}}},
+         "poses": {"type": "array", "items": ID, "maxItems": 32}},
+        ["workspace", "character_id", "base_revision"], True,
+        "Make a flat cutout character talk: find the eyes and painted mouth on each keyed pose, wipe the mouth, "
+        "draw nine paper mouths and a blink, and save anchors on the kit. The base pose must have a transparent "
+        "background (studio.key). style: smile -1..1 (frown to grin), smirk 0..1, width, mouth_scale; screen true for "
+        "a face that is a screen. Returns the saved kit, a review image URL and unwipedPoses (no painted mouth found).",
+    ),
     "series.list": (
         {"workspace": WORKSPACE}, ["workspace"], False,
         "List Series Lab projects with their revision, language and episodes (id, number, title, shot count, status).",
@@ -192,6 +213,26 @@ def _save_character(data: dict[str, Any], request: Callable[..., Any], **_extra:
             "ignoredFields": _ignored_fields(character, stored)}
 
 
+def _character_styles(data: dict[str, Any], _request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    from services.character_styles import style_catalog, style_prompt
+    result: dict[str, Any] = {"styles": style_catalog()["styles"], "screens": sorted(style_catalog()["screens"])}
+    if data.get("style") and data.get("kind"):
+        try:
+            result["prompt"] = style_prompt(data["style"], data["kind"], data.get("description") or "")
+        except KeyError as error:
+            raise SeriesCommandError(f"Unknown style {data['style']}", status=404) from error
+    return result
+
+
+def _rig_flat_character(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {"workspace": data["workspace"], "baseRevision": data["base_revision"]}
+    for key in ("style", "poses"):
+        if key in data:
+            body[key] = data[key]
+    rigged = request("POST", f"/api/v1/character-kits/library/kits/{_quote(data['character_id'])}/flat-rig", body=body)
+    return {**rigged, "character": _kit_summary(rigged["character"])}
+
+
 def _list_series(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     listed = request("GET", "/api/v1/series", query={"workspace": data["workspace"]})
     return {"series": [_series_summary(item) for item in listed.get("series") or []]}
@@ -300,6 +341,8 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "characters.list": _list_characters,
     "characters.get": _get_character,
     "characters.save": _save_character,
+    "characters.styles": _character_styles,
+    "characters.rig.flat": _rig_flat_character,
     "series.list": _list_series,
     "series.get": _get_series,
     "series.create": _create_series,

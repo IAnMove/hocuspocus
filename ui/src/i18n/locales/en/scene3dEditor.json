@@ -303,7 +303,8 @@
       "add": "Add a voice for",
       "choose": "Choose a language",
       "addButton": "Add voice",
-      "remove": "Remove"
+      "remove": "Remove",
+      "design": "Design a voice"
     }
   },
   "title": "3D scene studio",

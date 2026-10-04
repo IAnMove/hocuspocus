@@ -87,3 +87,59 @@ export async function describeCharacterRefs(params: {
   }
   return res.json()
 }
+
+async function failure(response: Response, fallback: string): Promise<Error> {
+  const error = await response.json().catch(() => ({ detail: fallback }))
+  const detail = error.detail
+  return new Error(typeof detail === 'string' ? detail : typeof detail?.message === 'string' ? detail.message : fallback)
+}
+
+async function postJson<T>(path: string, body: unknown, fallback: string): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  if (!response.ok) throw await failure(response, fallback)
+  return response.json()
+}
+
+/** Key a workspace image on a plain screen (studio.key). The same intentId returns the same file. */
+export async function keyStudioImage(details: { workspace: string; source: string; mode: 'green' | 'blue' | 'magenta'; intentId?: string }) {
+  const reply = await postJson<{ result: { file: string; url: string; sha256: string } }>('/api/v1/studio/key', {
+    workspace: details.workspace, source: details.source, mode: details.mode,
+    ...(details.intentId ? { intent_id: details.intentId } : {}),
+  }, 'Could not remove the background')
+  return reply.result
+}
+
+export type FlatRigResult = {
+  revision: number
+  character: import('../lib/characterKit').CharacterKit
+  review: string
+  unwipedPoses: string[]
+}
+
+/** Wipe painted mouths, draw nine paper mouths and a blink, and save anchors (characters.rig.flat). */
+export async function rigFlatCharacter(details: { workspace: string; kitId: string; baseRevision: number
+  style?: Record<string, number | boolean>; poses?: string[] }): Promise<FlatRigResult> {
+  return postJson(`/api/v1/character-kits/library/kits/${encodeURIComponent(details.kitId)}/flat-rig`, {
+    workspace: details.workspace, baseRevision: details.baseRevision,
+    ...(details.style ? { style: details.style } : {}), ...(details.poses ? { poses: details.poses } : {}),
+  }, 'Could not rig the character')
+}
+
+export type SpeechCheck = {
+  transcript: string
+  wer: number
+  medianPitchHz: number | null
+  wordsPerSecond: number
+  duration: number
+  warnings: string[]
+}
+
+/** Transcript, word error rate, pitch and pace of a workspace take (qa.speech). */
+export async function checkSpeech(details: { workspace: string; file: string; text: string; language: string
+  pitchRange?: [number, number] }): Promise<SpeechCheck> {
+  const reply = await postJson<{ result: SpeechCheck }>('/api/v1/qa/speech', {
+    workspace: details.workspace, file: details.file, text: details.text, language: details.language,
+    ...(details.pitchRange ? { pitch_range: details.pitchRange } : {}),
+  }, 'Could not check the voice')
+  return reply.result
+}

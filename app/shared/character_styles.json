@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "styles": [
+    {
+      "id": "paper-cutout",
+      "label": { "en": "Paper cutout", "es": "Recorte de cartulina" },
+      "summary": {
+        "en": "Flat construction-paper characters: round head, white oval eyes, solid colours, paper texture.",
+        "es": "Personajes planos de cartulina: cabeza redonda, ojos ovalados blancos, colores lisos, textura de papel."
+      },
+      "kitStyle": "cutout",
+      "character": "Flat construction-paper cutout cartoon character, full body, front view, standing straight, arms at the sides. Big round head with skin in a natural flesh tone (never white), two large white oval eyes with small black dot pupils, a simple short painted mouth line, solid flat colours, thin dark outlines, subtle paper texture, short stubby limbs. {description}",
+      "pose": "The same character as the reference image: same face, proportions, colours and outfit, flat construction-paper cutout style, full body, front view. {description}",
+      "prop": "Flat construction-paper cutout prop, solid flat colours, thin dark outlines, subtle paper texture, front view, centred. {description}",
+      "background": "Plain flat solid {screen} background filling the whole image behind the character, nothing else in the picture. The character keeps its own colours and has no {screen} anywhere on it.",
+      "negative": "photo, realistic, 3D render, gradient shading, soft shadows, text, watermark, multiple characters, cropped body, background scenery, open mouth",
+      "rig": { "smile": 0.15, "smirk": 0.0, "width": 0.62, "mouth_scale": 0.78 }
+    }
+  ],
+  "screens": {
+    "green": "chroma-key green (#00B140)",
+    "blue": "chroma-key blue (#0047BB)",
+    "magenta": "magenta (#FF00FF)"
+  },
+  "greenWords": ["green", "verde", "lime", "lima", "emerald", "esmeralda", "olive", "oliva", "mint", "menta", "jade", "teal", "chartreuse"]
+}

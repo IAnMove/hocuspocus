@@ -109,3 +109,29 @@ def test_unknown_input_fields_are_rejected_before_any_request(tmp_path):
     with pytest.raises(HTTPException) as error:
         call(handlers, "series.get", {"workspace": "series", "series_id": "uv", "token": "nope"})
     assert error.value.status_code == 422 and not calls
+
+
+def test_rigging_a_flat_character_posts_to_the_kit_and_summarises_it(tmp_path):
+    kit = {"id": "kevin", "name": "Kevin", "base": {"source": "x"}, "poses": {}, "mouth": {"closed": {}}}
+    handlers, calls, _, _ = harness(tmp_path, [{"revision": 5, "character": kit, "review": "/api/v1/file/r.png?workspace=series",
+                                                "unwipedPoses": [], "poses": {"base": {"wiped": True}}}])
+    result = call(handlers, "characters.rig.flat", {"workspace": "series", "character_id": "kevin", "base_revision": 4,
+                                                    "style": {"smile": 0.4}})
+    method, url, body = calls[0]
+    assert (method, url) == ("POST", "http://127.0.0.1:9/api/v1/character-kits/library/kits/kevin/flat-rig")
+    assert body == {"workspace": "series", "baseRevision": 4, "style": {"smile": 0.4}}
+    assert result["result"]["revision"] == 5 and result["result"]["character"]["mouths"] == ["closed"]
+    assert result["result"]["review"].endswith("r.png?workspace=series")
+
+
+def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp_path):
+    handlers, calls, _, _ = harness(tmp_path, [])
+    listed = call(handlers, "characters.styles", {})["result"]
+    assert "paper-cutout" in [style["id"] for style in listed["styles"]] and "prompt" not in listed
+    built = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "character",
+                                                 "description": "Ana, green jacket"})["result"]["prompt"]
+    assert built["screen"] == "magenta" and "Ana, green jacket" in built["prompt"]
+    assert calls == []
+    with pytest.raises(HTTPException) as error:
+        call(handlers, "characters.styles", {"style": "oil-painting", "kind": "character"})
+    assert error.value.status_code == 404

@@ -162,7 +162,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
         if (slot && isCharacterVoiceReady(next)) onApply?.({ character: { id: slot.character?.id ?? slot.id, name: slot.character?.name ?? name, ...slot.character, voice: next } })
       }} />
       {!slot && <CharacterLanguageVoices key={`languages-${id}`} workspace={workspace} value={voicesByLanguage}
-        savedKits={Object.values(library?.kits ?? {})} onBusyChange={setVoiceBusy} onChange={setVoicesByLanguage} />}
+        savedKits={Object.values(library?.kits ?? {})} onBusyChange={setVoiceBusy} onChange={setVoicesByLanguage} characterName={name} />}
       <button data-testid="save-character" className="min-h-10 rounded border border-border px-3"
         disabled={speechBusy || !isCharacterVoiceReady(voice) || !languageVoicesReady(voicesByLanguage) || !canSaveDefinition(library, name, slot)}
         onClick={() => { void saveAll().catch(() => undefined) }}>{busy ? t('speech.busy') : t('speech.saveCharacter')}</button>

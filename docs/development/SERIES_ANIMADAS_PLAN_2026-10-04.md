@@ -75,6 +75,26 @@ El plan mete cada una de esas piezas en la app.
 
 **Aceptación:** de una descripción a un personaje que habla dos idiomas en menos de 5 clics, revisable y editable en el Creador.
 
+**Estado 1B (2026-10-04):** hecho.
+
+- Presets en `app/shared/character_styles.json`, con el primer estilo, «Recorte de cartulina».
+- «Crear desde descripción», «Pose nueva», `characters.rig.flat`, «Diseñar voz», `qa.speech` y `characters.styles`.
+- Rutas `POST /api/v1/studio/key` y `POST /api/v1/qa/speech` para la UI.
+
+**Prueba real en la instancia aislada:**
+
+- Una descripción con delantal verde da tres opciones sobre magenta, recortadas.
+- La primera opción quedó rigada sin avisos y con la boca pintada borrada.
+- Se diseñaron tres voces en español y la mejor se guardó como referencia.
+- Unos 100 s en total.
+
+En la primera prueba Qwen pintó la piel del color del croma. El preset ahora lo prohíbe, y el rig rechaza una cara recortada.
+
+**Límites conocidos:**
+
+- Con gafas, el parpadeo difumina la montura.
+- VoiceDesign tiende a voces agudas; `qa.speech` lo avisa, pero no lo corrige.
+
 ## Fase 2 — «Generar todo» en el servidor
 
 1. **`series.episode.render_native`**, en el servidor y reanudable:
