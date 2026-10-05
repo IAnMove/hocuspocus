@@ -34903,7 +34903,9 @@ def capture_video_editor_frame(body: dict):
     ).strip("_")
     safe_name = safe_name[:60] or "video_frame"
     timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    out_dir = _workspace_dir()
+    # Save beside the source workspace, not whichever one is active now.
+    workspace = body.get("workspace") if body.get("workspace") is not None else _get_active_workspace()
+    out_dir = _workspace_dir(workspace)
     os.makedirs(out_dir, exist_ok=True)
     output_name = f"{timestamp}_{safe_name}_frame.png"
     output_path = os.path.join(out_dir, output_name)
@@ -34931,11 +34933,12 @@ def capture_video_editor_frame(body: dict):
             "created_at": time.time(),
         }
         _write_video_editor_screenshot_sidecar(
-            output_path, sidecar, body.get("workspace"),
+            output_path, sidecar, workspace,
         )
         return {
             "filename": output_name,
-            "url": f"/api/v1/file/{output_name}",
+            "url": f"/api/v1/file/{output_name}?workspace={quote(workspace, safe='')}",
+            "workspace": workspace,
             **result,
         }
     except Exception as exc:
