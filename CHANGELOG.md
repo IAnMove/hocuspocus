@@ -6,6 +6,18 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Publishing a reviewed take under an exact name with `assets.upload` no longer
+overwrites or deletes the metadata of another output. Generation sidecars are
+keyed by the name before the extension, so `song.wav` and a cover `song.png`
+share `song.meta.json`: copying a take to `song.wav` replaced the cover's
+metadata with the take's, or deleted it when the take had none, and a source
+like `clip.wav` took `clip.meta.json` even when it described `clip.mp4`, so the
+copy claimed the video's prompt and seed. A sidecar is now copied only when it
+names its source file. A copy is refused with `sidecar_conflict`, before
+anything is written, when the destination's sidecar belongs to another file
+that still exists, or when it would create a sidecar that such a file would
+read as its own. A sidecar left by a deleted file is still replaced.
+
 A production or a Series render that waits for the GPU no longer waits
 forever. With `HOCUS_PRODUCTION_EXTERNAL_VRAM_MB` set, each music, image,
 speech, SFX, H3 or video export admission waited in 30-second steps for as long

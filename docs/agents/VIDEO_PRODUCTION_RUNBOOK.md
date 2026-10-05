@@ -674,4 +674,10 @@ source. To replace an existing resource, supply its current
 `destination_conflict` without replacing it. Reuse the same `intent_id` on a
 transport retry. The source remains available, bytes are copied without media
 conversion, and a generation sidecar retains provenance with the destination
-asset name. This is a CPU operation and downloads no models.
+asset name. Only a sidecar that names the source is copied: `clip.meta.json`
+written for `clip.mp4` is not the metadata of `clip.wav`. Sidecars are keyed by
+the name before the extension, so a destination that would share one with
+another output (`song.wav` beside `song.png`) returns `sidecar_conflict` and
+nothing is written when that sidecar holds the other output's metadata or the
+copy would create it; choose another name. This is a CPU
+operation and downloads no models.
