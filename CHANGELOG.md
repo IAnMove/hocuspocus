@@ -6,6 +6,10 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A Series 3D shot can ask for the toon look: `scene3d.renderLook: "toon"` (and
+optional `scene3d.toon`) draws its 3D models as cel anime with ink, so a rigged
+character or a vehicle sits with the episode's flat cutouts and painted sets.
+
 Video 3D has a toon / cel render look («Anime (cel)» in Spanish). With
 `renderLook: "toon"` the 3D model slots are drawn with flat bands of light and
 an ink outline, so rigged or static GLB characters, vehicles and props sit next

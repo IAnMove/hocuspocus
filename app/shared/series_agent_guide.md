@@ -114,6 +114,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   `grounded: true` for a character standing on the floor, and a `motion` {to, via, points, faceTravel, easing}:
   `{"objectId": "zep", "file": "zeppelin.glb", "add": true, "clip": "Fly", "position": [-6, 3, -8],
   "motion": {"to": [6, 3, -8], "faceTravel": true}}`. Mix them: 2D cutouts talk, 3D models move.
+  `"renderLook": "toon"` draws the 3D models as cel anime with an ink outline (`toon` {steps 2-4, outline 0-8 px,
+  ink #rrggbb}) so they sit with the flat cutouts and painted backgrounds; images and cutouts keep their look.
 
 ## Writing for quality
 
