@@ -101,8 +101,17 @@ class Checker:
             self.problems.append(f"{where}: location {lid} has no variant {variant}")
 
     def file(self, name: Any, where: str) -> None:
-        if not isinstance(name, str) or name not in self.files:
+        if not isinstance(name, str) or name.replace("\\", "/").strip("/") not in self.files:
             self.problems.append(f"{where}: file {name} is not in the workspace")
+
+    def voice(self, cid: str, language: str, where: str) -> None:
+        """A line in a language version needs a voice designed for that language; the default voice has the wrong accent."""
+        character = self.characters.get(cid) or {}
+        kit = self.kits.get(((character.get("voiceProfile") or {}).get("characterKitRef") or {}).get("id") or "") or {}
+        if kit and not (kit.get("voicesByLanguage") or {}).get(language):
+            problem = f"{cid} has no {language} voice (voicesByLanguage); design one in the Character Kit"
+            if problem not in self.problems:
+                self.problems.append(problem)
 
 
 class EpisodeScript:
@@ -160,6 +169,10 @@ class EpisodeScript:
                 self.checker.problems.append(f"{where}: line {index} has an unknown speaker {who}")
             elif not _line_text(line, self.original):
                 self.checker.problems.append(f"{where}: line {index} has no {self.original} text")
+            else:
+                for language in self.languages[1:]:
+                    if _line_text(line, language):
+                        self.checker.voice(str(who), language, f"{where} line {index}")
 
     def _check_files(self, shot: dict[str, Any], where: str) -> None:
         music = shot.get("music") if isinstance(shot.get("music"), dict) else {}

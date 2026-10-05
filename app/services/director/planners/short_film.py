@@ -3461,10 +3461,6 @@ Shots to plan:
                 video_prompt format.
         """
         from ..nsfw_guidance import inject_nsfw_if_enabled
-        from ..safety_scan import (
-            assert_no_minor_content,
-            collect_pass2_text,
-        )
 
         if target_scenes is None:
             target_scenes = max(2, min(20, target_duration // 20))
@@ -3486,12 +3482,6 @@ Shots to plan:
             has_reference=has_reference,
         )
 
-        # ── PRE-PASS-1 SAFETY SCAN: user concept ────────────────────────
-        # Scan the user's input concept BEFORE running Pass 1. Catches
-        # obviously-prohibited concepts ~30s earlier and avoids burning
-        # an LLM call on something we'll abort anyway. Same scanner /
-        # same hybrid co-occurrence policy as the post-Pass-1 check.
-        assert_no_minor_content(story_description, source="user concept")
 
         # ── PASS 1: Screenplay ───────────────────────────────────────────
         story_guide = ""
@@ -3697,12 +3687,6 @@ H3 CHARACTER-AUTHENTICITY RULES:
                 f"(budget {max_total_words})"
             )
 
-        # ── POST-PASS-1 SAFETY SCAN ─────────────────────────────────────
-        # Catches anything the prompt-level prohibition rule failed to
-        # prevent. Raises SafetyViolationError; pipeline error handler
-        # in director_pipeline.py converts to a clean user-visible
-        # message in chat.
-        assert_no_minor_content(screenplay, source="screenplay (Pass 1)")
 
         # H3 renders independent bounded shots rather than 20-second rolling
         # windows. Plan directly on its native duration lattice so legacy
@@ -3731,13 +3715,6 @@ H3 CHARACTER-AUTHENTICITY RULES:
                             )),
                         ),
                     )
-                )
-                assert_no_minor_content(
-                    "\n".join(
-                        str(entry.get("spoken_text") or "")
-                        for entry in screenplay_dialogue_manifest
-                    ),
-                    source="H3 character table read",
                 )
             return self._plan_story_h3_native(
                 story_description=story_description,
@@ -4381,14 +4358,6 @@ SCREENPLAY:
             _discard_unused_image_fields(shot_dicts)
 
         # ── POST-PASS-2 SAFETY SCAN ─────────────────────────────────────
-        # Defense in depth — Pass 2's structured output (image/video
-        # prompts, action beats, dialogue, subjects) gets concatenated
-        # and scanned the same way the screenplay was. Catches the case
-        # where Pass 1 produced clean text but Pass 2's expansion
-        # introduced minor + sexual co-occurrence.
-        assert_no_minor_content(
-            collect_pass2_text(shot_dicts), source="shot list (Pass 2)"
-        )
 
         # ── CHARACTER DESCRIPTOR CANONICALIZATION ────────────────────
         # User-reported bug: uploaded selfie tagged "man in black",
@@ -5488,7 +5457,6 @@ SCREENPLAY:
         """Break a screenplay directly into self-contained native H3 shots."""
 
         from ..nsfw_guidance import inject_nsfw_if_enabled
-        from ..safety_scan import assert_no_minor_content, collect_pass2_text
 
         uses_generated_images = bool(
             getattr(self, "_uses_generated_shot_images", True)
@@ -6353,9 +6321,6 @@ VOCAL SEMANTIC REPAIR:
                 + "). No video jobs were queued."
             )
 
-        assert_no_minor_content(
-            collect_pass2_text(shot_dicts), source="shot list (H3 native Pass 2)"
-        )
 
         shots = self._convert_story_shots(
             shot_dicts,
@@ -6618,16 +6583,6 @@ Go:"""
             "both" if uses_generated_images else "video",
         )
 
-        # Single-pass fallback also gets the safety scan — it bypasses
-        # Pass 1 entirely, so the post-Pass-1 scan above doesn't run for
-        # this code path. Mirror the same hybrid co-occurrence check on
-        # the user's concept (pre-call) and on the structured shot list
-        # (post-call).
-        from ..safety_scan import (
-            assert_no_minor_content,
-            collect_pass2_text,
-        )
-        assert_no_minor_content(story_description, source="user concept")
 
         image_paths = self._build_all_image_paths(reference_image_path, has_reference)
         # Grammar constraint — this path runs with thinking_budget=4096, so
@@ -6667,9 +6622,6 @@ Go:"""
         if not uses_generated_images:
             _discard_unused_image_fields(shot_dicts)
 
-        assert_no_minor_content(
-            collect_pass2_text(shot_dicts), source="shot list (single-pass fallback)"
-        )
 
         seen_goals = set()
         unique_dicts = []

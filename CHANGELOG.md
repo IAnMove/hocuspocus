@@ -6,6 +6,23 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+What comes out sounds and reads as intended. Video 2D and Video 3D exports
+share one mixer (`services/audio_mix.py`) that ends in the same limiter, and
+the browser hands the server a 32-bit float mix, so overlapping voices or a
+loud effect no longer clip in a 3D take. A `volume` of 0 silences a music or
+effect track instead of restoring the default. Music and effects may live in
+a workspace subfolder (`music/theme.wav`) and are found there by the mixer,
+the loudness balance and `from_script`. A 3D shot now plays the scene's
+ambience, stinger and music, balanced like a 2D shot and ducked under the
+dialogue by the page (`soundtrack` on `world3d.scene.patch`). A dubbed
+scene keeps its language in its name even when the name is cut to length.
+A language version is refused before anything is spoken when a speaker's kit
+has no voice designed for that language, both in `from_script check` and in
+the server render. H3 and imported takes with dialogue get subtitles in a
+mixed episode: their shot's lines are spread over the clip. The Director's
+content scanner, which aborted innocent scripts («comic strip», «son
+riding»), is gone.
+
 Intermediate files are released when their job is done. A Video 2D/3D export
 drops its frames and audio mix when the MP4 is published, a completed
 production drops the copies it put in uploads, the series render drops each raw

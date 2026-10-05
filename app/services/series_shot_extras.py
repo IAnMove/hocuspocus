@@ -23,7 +23,8 @@ from urllib.parse import quote
 EFFECT_KINDS = frozenset(item["id"] for item in json.loads(
     (Path(__file__).resolve().parents[1] / "shared" / "scene_effects.json").read_text(encoding="utf-8")))
 TIMING_DEFAULTS = {"intro": 0.35, "gap": 0.22, "tail": 0.45}
-_FILE = re.compile(r"^[^/\\\x00]{1,300}$")
+# A workspace file, in a subfolder if the user keeps one (``music/theme.wav``); never absolute, never ``..``.
+_FILE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[^\\\x00]{1,300}$")
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -55,7 +56,8 @@ def normalize_timing(value: Any) -> dict[str, Any]:
 def sfx_entry(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or not isinstance(value.get("file"), str) or not _FILE.match(value["file"]) or ".." in value["file"]:
         return None
-    return {"file": value["file"], **_when(value), "volume": _number(value.get("volume"), 0, 1) or 0.8}
+    volume = _number(value.get("volume"), 0, 1)
+    return {"file": value["file"], **_when(value), "volume": 0.8 if volume is None else volume}
 
 
 def fx_entry(value: Any) -> dict[str, Any] | None:

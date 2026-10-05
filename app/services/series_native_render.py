@@ -33,13 +33,14 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from services.audio_levels import gain_to, level_file
+from services.audio_mix import track_source
 from services.production_resource_gate import guard_workspace_mcp
 from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_shot_bridge import run_series_shot, with_pose_sizes
 from services import series_shot3d
 from services.series_shot_extras import pauses, timing_args
-from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, voice_for
+from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 
 KIND = "native"
 STAGES = ("voices", "scene", "export", "import", "done")
@@ -204,7 +205,22 @@ class SeriesNativeRender:
         missing = self._missing_kits(workspace, series, shots)
         if missing:
             raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
+        voiceless = self._missing_voices(workspace, series, shots, language, language_key(raw_series))
+        if voiceless:
+            raise NativeRenderError("no_voice", f"{', '.join(voiceless)} have no {language} voice (voicesByLanguage); "
+                                    f"design one before rendering this version", 400)
         return raw_series, language, shots
+
+    def _missing_voices(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]], language: str, original: str) -> list[str]:
+        """Speakers of a language version whose kit has no voice designed for that language (the default would be the wrong accent)."""
+        if language == original:
+            return []
+        kits = self.deps.read_kits(workspace)
+        names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
+        speakers = dict.fromkeys(beat.get("characterId") for shot in shots for beat in shot.get("dialogueBeats") or []
+                                 if str(beat.get("text") or "").strip() and beat.get("characterId"))
+        return [str(names.get(cid, cid)) for cid in speakers
+                if not ((kits.get((kit_ref(series, cid) or {}).get("id") or "") or {}).get("voicesByLanguage") or {}).get(language)]
 
     def _missing_kits(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]]) -> list[str]:
         """Names of characters seen or heard in ``shots`` without a Character Kit in the workspace (a new template's cast)."""
@@ -305,7 +321,7 @@ class SeriesNativeRender:
         three_d = shot.get("productionMethod") == "animation_3d"
         if item["stage"] == "scene":
             if three_d:
-                self._scene3d(workspace, job, item, series, shot, kits)
+                self._scene3d(workspace, job, item, series, episode, shot, kits)
             else:
                 self._scene(workspace, job, item, series, episode, shot, kits, index)
         if item["stage"] == "export":
@@ -452,11 +468,11 @@ class SeriesNativeRender:
     def _balance(self, root: str, spec: dict) -> None:
         """Music and effect volumes mean "relative to the dialogue", whatever loudness their file was made at."""
         for track in spec.get("audioTracks") or []:
-            path = os.path.join(root, os.path.basename(str(track.get("filename") or "")))
-            if track.get("kind") != "speech" and os.path.isfile(path):
-                track["volume"] = round(min(2.0, float(track.get("volume", 1)) * self.deps.loudness_gain(path)), 3)
+            path = track_source(root, track.get("filename"))
+            if track.get("kind") != "speech" and path is not None and path.is_file():
+                track["volume"] = round(min(2.0, float(track.get("volume", 1)) * self.deps.loudness_gain(str(path))), 3)
 
-    def _scene3d(self, workspace: str, job: dict, item: dict, series: dict, shot: dict, kits: dict) -> None:
+    def _scene3d(self, workspace: str, job: dict, item: dict, series: dict, episode: dict, shot: dict, kits: dict) -> None:
         """A Video 3D shot: lines timed like a 2D shot, cast objects talk as their kits, exported by the 3D exporter."""
         beats = [beat for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
         layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
@@ -465,7 +481,14 @@ class SeriesNativeRender:
         lines = [{"characterId": beat.get("characterId"), "start": start, "filename": item["lines"][beat["id"]]["filename"],
                   "cues": item["lines"][beat["id"]].get("cues") or []} for beat, (start, _end) in zip(beats, timing)]
         characters = {value["id"]: (kit_ref(series, value["id"]) or {}).get("id") for value in series.get("characters") or []}
-        scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError)
+        # The scene's ambience, stinger and music play under a 3D shot too, balanced like in a 2D shot.
+        ordered = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
+        position = next((i for i, value in enumerate(ordered) if value["id"] == shot["id"]), 0)
+        first = position == 0 or ordered[position - 1].get("sceneId") != shot.get("sceneId")
+        sound = {"audioTracks": sound_tracks(series, shot, first)}
+        self._balance(self.deps.workspace_dir(workspace), sound)
+        scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError,
+                                          tracks=sound["audioTracks"])
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
         intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export"[:160]
         _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {
@@ -479,7 +502,8 @@ class SeriesNativeRender:
     @staticmethod
     def _scene_name(job: dict, series: dict, episode: dict, shot: dict) -> str:
         suffix = "" if job.get("original", True) else f"-{job['language']}"
-        return f"{series['id']}-{episode['id']}-{shot['id']}{suffix}"[:100]
+        # The language suffix survives the length cap: a dubbed scene must not be named like the original.
+        return f"{series['id']}-{episode['id']}-{shot['id']}"[:100 - len(suffix)] + suffix
 
     def _export(self, workspace: str, job: dict, item: dict) -> None:
         while True:

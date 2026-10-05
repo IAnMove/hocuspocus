@@ -27,6 +27,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from services.asset_manifest import publish_generation_sidecar
+from services.audio_mix import mux_wav_audio  # noqa: F401 — the shared mixer, re-exported
 from services.workspace_cleanup import keep_export_staging, release_export_staging
 from services import resource_scheduler
 from services.world3d_media_cache import prepare_media_snapshot
@@ -296,19 +297,6 @@ def write_png(path: Path, width: int, height: int, rgb: tuple[int, int, int]) ->
     path.parent.mkdir(parents=True, exist_ok=True)
     header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
-
-
-def mux_wav_audio(video: Path, wav: Path, duration: float, *, label: str = "Audio mix") -> Path:
-    """Put the page's WAV mix under the silent render: AAC 192k, video copied, exactly ``duration`` long."""
-    mixed = video.with_name("fx-mixed.mp4")
-    command = ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-i", str(wav), "-filter_complex",
-               f"[1:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:{duration:.4f}[mix]",
-               "-map", "0:v:0", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-               "-t", f"{duration:.4f}", "-movflags", "+faststart", str(mixed)]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=1800, check=False)
-    if result.returncode != 0 or not mixed.is_file():
-        raise RuntimeError((f"{label} failed: " + (result.stderr or "")).strip()[-800:])
-    return mixed
 
 
 def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float,

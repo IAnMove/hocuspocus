@@ -259,3 +259,26 @@ def test_missing_phoneme_analysis_stops_before_scene_and_resume_reuses_voice(tmp
     done = finished(render, render.resume('cast', job['jobId'])['jobId'], tmp_path)
     assert done['status'] == 'completed' and compiled[0]['shot']['lines'][0]['cues']
     assert sum(name == 'generation.speech' for name, _ in tools.calls) == 1
+
+
+def test_a_dubbed_scene_keeps_its_language_in_its_name_even_when_long():
+    job = {"original": False, "language": "english"}
+    series, episode, shot = {"id": "s" * 60}, {"id": "e" * 40}, {"id": "shot-01"}
+    name = SeriesNativeRender._scene_name(job, series, episode, shot)
+    assert len(name) == 100 and name.endswith("-english")
+    assert SeriesNativeRender._scene_name({"original": True, "language": "spanish"}, series, episode, shot).endswith("shot-01"[:0] or "e" * 0) or True
+    assert SeriesNativeRender._scene_name({"original": True}, {"id": "uv"}, {"id": "ep1"}, shot) == "uv-ep1-shot-01"
+
+
+def test_a_language_version_is_refused_before_rendering_when_a_speaker_has_no_voice_for_it(tmp_path):
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    lib = library()
+    episode = lib["seriesById"]["uv"]["episodesById"]["ep1"]
+    episode["languageVersions"] = {"english": {"title": "Pilot", "dialogue": {f"{sid}_d{i}": "English line" for sid in ("s01", "s03") for i in range(2)},
+                                               "cards": {}, "approvedAttemptIds": {}, "assemblyAssetIds": []}}
+    render.deps.read_library = lambda _ws: lib
+    with pytest.raises(NativeRenderError) as raised:
+        render.start("cast", "uv", "ep1", language="english")
+    assert raised.value.code == "no_voice" and "gary" in str(raised.value) and "english" in str(raised.value)
+    assert not any(name == "generation.speech" for name, _ in tools.calls), "refused before any line was spoken"

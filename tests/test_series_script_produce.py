@@ -17,7 +17,8 @@ def project():
             "episodesById": {"ep1": {"id": "ep1", "number": 1, "shots": [{"id": "e1s00"}]}}}
 
 
-KITS = {"kit-kevin": {"poses": {"panic": {}}}, "kit-gary": {"poses": {}}, "kit-elon": {"poses": {"phone": {}}}}
+EN = {"voicesByLanguage": {"english": {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}}}
+KITS = {"kit-kevin": {"poses": {"panic": {}}, **EN}, "kit-gary": {"poses": {}, **EN}, "kit-elon": {"poses": {"phone": {}}, **EN}}
 
 SCRIPT = {
     "title": {"es": "El vecino", "en": "The Neighbour"}, "premise": {"es": "Llega Mark."},
@@ -214,3 +215,28 @@ def test_produce_refuses_a_language_without_a_version(tmp_path):
     assert raised.value.code == "no_version"
     with pytest.raises(ProduceError):
         service.start("cast", "uv", "nope")
+
+
+def test_a_language_version_needs_a_voice_designed_for_that_language():
+    """The default voice has the series' accent; an English line spoken with it is wrong, so the check says so first."""
+    tools = Series()
+    kits = {**KITS, "kit-gary": {"poses": {}}}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, kits, FILES, "cast", SCRIPT, check_only=True)
+    assert raised.value.problems == ["gary has no english voice (voicesByLanguage); design one in the Character Kit"]
+    assert tools.calls == []
+    # A file in a subfolder is a workspace file too.
+    script = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "music": {"file": "music/theme-es.wav", "en": "music/theme-en.wav"}}]}
+    checked = apply_script(tools, tools.read, KITS, FILES | {"music/theme-es.wav", "music/theme-en.wav"}, "cast", script, check_only=True)
+    assert checked["checked"] is True
+    with pytest.raises(ScriptError, match="music/../secret.wav is not in the workspace"):
+        apply_script(tools, tools.read, KITS, FILES, "cast", {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "music": {"file": "music/../secret.wav"}}]}, check_only=True)
+
+
+def test_workspace_files_lists_one_folder_down_and_skips_hidden_ones(tmp_path):
+    from routers.series_produce import workspace_files
+    (tmp_path / "theme.wav").write_bytes(b"x")
+    (tmp_path / "music").mkdir(); (tmp_path / "music" / "theme.wav").write_bytes(b"x")
+    (tmp_path / "music" / "stems").mkdir(); (tmp_path / "music" / "stems" / "deep.wav").write_bytes(b"x")
+    (tmp_path / ".series-jobs-v1").mkdir(); (tmp_path / ".series-jobs-v1" / "job.json").write_text("{}")
+    assert workspace_files(str(tmp_path)) == {"theme.wav", "music/theme.wav"}

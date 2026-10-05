@@ -34,6 +34,23 @@ class ProduceAction(BaseModel):
     workspace: str = Field(min_length=1, max_length=200)
 
 
+def workspace_files(root: str, depth: int = 1) -> set[str]:
+    """Relative paths of the workspace files a script may name, up to ``depth`` folders down (``music/theme.wav``)."""
+    found: set[str] = set()
+    base = os.path.abspath(root)
+    try:
+        for current, folders, names in os.walk(base):
+            relative = os.path.relpath(current, base)
+            level = 0 if relative == "." else relative.count(os.sep) + 1
+            folders[:] = [] if level >= depth else [folder for folder in folders if not folder.startswith(".")]
+            for name in names:
+                if not name.startswith("."):
+                    found.add(name if relative == "." else f"{relative}/{name}".replace(os.sep, "/"))
+    except OSError:
+        pass
+    return found
+
+
 def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str, dict], dict], bind_loop: Callable[[asyncio.AbstractEventLoop], None],
                                  read_library: Callable[[str], dict], read_kits: Callable[[str], dict],
                                  workspace_dir: Callable[[str], str]) -> APIRouter:
@@ -57,10 +74,7 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
             return found
 
         def run() -> dict:
-            try:
-                files = set(os.listdir(workspace_dir(body.workspace)))
-            except OSError:
-                files = set()
+            files = workspace_files(workspace_dir(body.workspace))
             return apply_script(call, read_series, read_kits(body.workspace), files, body.workspace, body.script,
                                 episode_id=body.episodeId, check_only=body.check)
 

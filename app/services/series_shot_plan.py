@@ -94,8 +94,9 @@ def _layout_card(card: Any) -> dict[str, Any]:
 def _layout_music(music: Any) -> dict[str, Any]:
     if not isinstance(music, dict) or not isinstance(music.get("file"), str) or not music["file"]:
         return {}
-    return {"music": {"file": music["file"][:300], "volume": _number(music.get("volume"), 0, 1) or 0.5,
-                      "start": _number(music.get("start"), 0, 600) or 0.0}}
+    volume, start = _number(music.get("volume"), 0, 1), _number(music.get("start"), 0, 600)
+    # 0 means silent, not "use the default".
+    return {"music": {"file": music["file"][:300], "volume": 0.5 if volume is None else volume, "start": 0.0 if start is None else start}}
 
 
 def _layout_list(value: dict, key: str, limit: int, normalize: Any) -> dict[str, list]:
