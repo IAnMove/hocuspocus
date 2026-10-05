@@ -73,12 +73,15 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "for the series language (checked with qa.speech, up to three takes), phonetic mouth cues, an editable Video 2D "
         "scene (framing from shot.framing or shot.layout2d, cast, sound, cards; the lines play with the room of the shot's "
         "location, soundDesign.roomByLocation, or its layout2d.voiceRoom), a headless export and a take on the shot "
-        "(approve: true approves it). language renders a language version (its lines, the characters' voices for that "
+        "(approve: true approves it). A shot with foley {prompt, volume} gets sound generated from its exported picture "
+        "(generation.sfx, MMAudio) mixed under its own before the take; when that fails the take is made without it and "
+        "the item has a warning. language renders a language version (its lines, the characters' voices for that "
         "language, its own takes). Returns the job; poll series.episode.render_native.status. Resumable.",
     ),
     "series.episode.render_native.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
-        "Status of a server episode render: per shot stage (voices, scene, export, import, done), line takes and errors.",
+        "Status of a server episode render: per shot stage (voices, scene, export, foley, import, done), line takes, "
+        "errors and warnings (foley left out of a take).",
     ),
     "series.episode.render_native.cancel": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
@@ -92,9 +95,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"}},
         ["workspace", "series_id", "script"], True,
         "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
-        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx, props, timing and 3D "
-        "dialogue shots. It checks every character, pose, location, file and effect against the series first and lists "
-        "all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
+        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx, props, timing, foley "
+        "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots. It checks every character, "
+        "pose, location, file and effect against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id).",
     ),
     "series.episode.produce": (
@@ -142,7 +145,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.episode.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], False,
         "Read one episode compactly: script, shots with their layout2d and lines, the last takes (id, language, seconds, "
-        "editable scene file) and its language versions. Use it instead of series.get to copy an episode's style.",
+        "editable scene file), its language versions and score. Use it instead of series.get to copy an episode's style.",
     ),
     "series.templates": (
         {"language": {"enum": ["es", "en"]}}, [], False,
@@ -173,7 +176,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Update a Series Lab project at an exact revision: the fields you send replace theirs, fields you omit keep their "
         "value (send an empty list to clear one). Changing canon inputs returns the canon to draft. soundDesign: stinger, "
         "ambienceByLocation {locationId: {file, volume}} and ambienceMode \"shot\" (each shot mixes it) or \"episode\" "
-        "(the assembly lays one bed per location run; takes stay up to date when it changes), and roomByLocation "
+        "(the assembly lays one bed per location run; takes stay up to date when it changes); ambienceDuckDb 0-24 "
+        "lowers episode-mode beds under the lines; roomByLocation "
         "{locationId: preset}, the room each location's voices are heard in: none, small_room, room, hall, cathedral, "
         "cockpit, outdoor or radio (a shot's layout2d.voiceRoom overrides it; only shots whose room changes render again).",
     ),
@@ -191,7 +195,11 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "sync_shot_dialogue": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id", "episode", "base_revision"], True,
         "Save editor fields of an episode (title, premise, script, shots with productionMethod, dialogueBeats, "
-        "visible/speaking characters, locationId, durationSeconds) at the series revision.",
+        "visible/speaking characters, locationId, durationSeconds, layout2d, scene3d, foley {prompt, volume}) at the series "
+        "revision. score: music the assembly "
+        "lays under runs of shots, [{fromShotId, toShotId | sceneId, file, volume 0.18, fadeIn 1.5, fadeOut 2.0, "
+        "duck true}]; cues may not overlap, dip 9 dB under the lines and go silent under a shot with its own music; "
+        "changing it renders no take.",
     ),
     "series.asset.import": (
         {"workspace": WORKSPACE, "series_id": ID, "file": {"type": "string", "minLength": 1, "maxLength": 300},
@@ -215,7 +223,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Assemble the approved takes of an episode into one chapter video (shown under Capítulos), at -16 LUFS with SRT/VTT "
         "subtitles; burn_subtitles also writes a copy with them on the picture. language assembles that language version's "
         "approved takes. With soundDesign.ambienceMode \"episode\" it lays each location's ambience as one continuous "
-        "bed under the cut, before the loudness. Returns a job.",
+        "bed under the cut, and the episode's score (ducked under the lines), before the loudness. Returns a job.",
     ),
     "series.episode.language_version.set": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE,

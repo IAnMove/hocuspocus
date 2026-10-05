@@ -30,6 +30,44 @@ digests exactly as before, and with rooms set only the shots with lines whose
 room changed are out of date. An unknown room in `roomByLocation`,
 `layout2d.voiceRoom` or a script is rejected.
 
+A Series Lab episode can have a score: background music that the assembly
+lays across runs of shots, so dialogue scenes are no longer bare voices. Set
+`episode.score` with `series.episode.update` to a list of cues, each
+`{"fromShotId", "toShotId", "file", "volume": 0.18, "fadeIn": 1.5,
+"fadeOut": 2.0, "duck": true}` or `{"sceneId", "file", ...}` for the shots of
+one scene. A cue plays from the cut before its first shot to the cut after its
+last on the clips actually joined, loops its file with a crossfade if it is
+shorter, fades in and out inside the cue, and is balanced against the dialogue
+like a shot's music. It dips 9 dB under every recorded line (0.25 s down
+before the line, 0.6 s back up after; lines less than 1.5 s apart share one
+dip), timed from the same lines the subtitles come from, as a deterministic
+volume envelope rather than a sidechain on the mix. A shot with its own
+`layout2d.music` keeps it, and the score is silent under that shot. The score
+is mixed after the ambience and before the -16 LUFS pass, in every clip kind
+and language version, and the cut's metadata records each cue. No take
+depends on it, so changing the score needs only a new cut. Cues that overlap
+or end before they start are rejected, and so is a new cue that names a shot
+the episode does not have; a cue left behind when a rewrite removed its shots
+is kept and skipped by the assembly, which says why. Episode-mode ambience can
+dip under the lines the same way with `soundDesign.ambienceDuckDb` (0-24 dB,
+default 0: off).
+
+A Series shot can get foley made from its own picture. Add
+`foley: {"prompt": "wooden airship creaking, wind, cannon shots", "volume": 0.5}`
+to a shot (2D or 3D; the same key works in `series.episode.from_script`), and
+the server render, after the shot's export, asks `generation.sfx` (MMAudio
+v2) for sound guided by that exported video, then mixes it under the take's
+own lines, music and effects before importing it. `volume` (above 0, up to 2,
+default 0.5) is relative to the dialogue and balanced by the generated
+sound's loudness, like a shot's music and effects; the picture is
+stream-copied. The render has a new `foley` stage, so a resume continues
+there, and the generated sound and the mixed take are kept by export digest,
+prompt and volume, so a resume or a render of the same picture reuses them and
+a new volume only mixes again. Foley never fails a shot: when MMAudio is not
+installed, fails, or is not done within 30 minutes, the take is imported
+without it and the render item shows a warning. Changing a shot's foley marks
+its take out of date; shots without foley keep the take digest they had.
+
 Series Lab can lay a location's ambience once under the whole episode instead
 of in every shot. With `soundDesign.ambienceMode: "episode"` (the default stays
 `"shot"`), shots no longer mix `ambienceByLocation`, so the bed does not

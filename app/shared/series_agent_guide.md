@@ -51,7 +51,8 @@ The lower-level tools (`series.episode.create`/`update`, `series.episode.languag
    "timing": {"intro": 0.6, "tail": 1.0}},
   {"scene": "moon", "kind": "3d", "lines": [{"who": "robot", "es": "...", "en": "..."}],
    "scene3d": {"template": "user-moon-base", "quality": "final",
-               "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}]}}]}
+               "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}]},
+   "foley": {"prompt": "servo whirs, metal footsteps on gravel", "volume": 0.5}}]}
 ```
 
 The first language is the series' own (`es` or `spanish`); every other language in the lines becomes a version.
@@ -95,6 +96,14 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - **music:** one music track per shot (a bumper at the start of a scene, a theme); a language can have its own file.
 - **sfx:** sound effects at a line's `start`/`end` (`line`, `anchor`, `offset` s) or at a second (`at`), `volume`
   0–1. Files from the bible only.
+- **foley** (on the shot, not in `layout2d` or `scene3d`; same key in the script)**:** `{"prompt": "wooden airship
+  creaking, wind, cannon shots", "volume": 0.5}`. After the shot is exported, MMAudio (`generation.sfx` with the
+  export as `video_guide`) makes sound that follows the shot's own picture, and it is mixed under the lines, music
+  and `sfx` at `volume` (above 0 up to 2, relative to the dialogue, default 0.5). Use it where hand-placed `sfx`
+  cannot follow the motion (ships, swords, creatures, explosions; 3D shots above all) and describe sounds only: the
+  take already has its voices and music. It is an extra: without MMAudio installed, or when it fails or takes over
+  30 min, the take is made without it and the render item has a `warning`; fix it and render that shot again by id.
+  A new prompt or volume makes `series.episode.produce` render that shot again.
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration`, `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` points right at 0, so a
   gun aimed left needs 180 with `x`/`y` just past the muzzle). Keep them off faces: a small burst to one side.
@@ -141,7 +150,25 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - `"episode"`: the shots leave it out and `series.assembly.start` lays one continuous bed per run of consecutive
   shots in the same location, looped with a 1 s crossfade, faded in and out over 0.8 s and crossfading into the next
   location's bed. Shots in a location without an entry (a dark title card) get none. Changing the beds renders no
-  shot: `series.episode.produce` only recuts. Switching the mode renders every shot once.
+  shot: `series.episode.produce` only recuts. Switching the mode renders every shot once. `ambienceDuckDb` (0–24,
+  default 0 = off) lowers the beds that many dB while someone speaks, like the score below.
+
+**Score (music under the whole episode).** A shot's `music` plays only in that shot, so a dialogue scene is often
+bare voices. `score` on the episode (`series.episode.update` with `episode: {"score": [...]}`) lays music cues
+across runs of shots at assembly: `{"fromShotId": "e3s04", "toShotId": "e3s12", "file": "mus-theme.wav",
+"volume": 0.18, "fadeIn": 1.5, "fadeOut": 2.0, "duck": true}`, or `{"sceneId": "e3_bar", "file": ...}` for a
+scene's shots. Use the ids `series.episode.get` shows: `from_script` names episode 3's shots `e3s00`, `e3s01`…
+and its scenes `e3_<scene id>`. Only `file` and the shots are required; the numbers shown are the defaults (volume
+0–2 relative to the dialogue, fades 0–30 s). Cues may not overlap (two cues may meet at a cut).
+
+- Each cue plays from the cut before its first shot to the cut after its last, looped with a crossfade if the file
+  is shorter, faded in and out inside the cue. Every clip kind and language version gets it.
+- With `duck` it dips 9 dB under every recorded line (0.25 s down before the line, 0.6 s back up after it; lines
+  less than 1.5 s apart share one dip). A shot with its own `music` keeps it and the score is silent under it.
+- The score is not part of any take: changing it needs only `series.assembly.start` (or `series.episode.produce`,
+  which renders no shot for it and recuts). Send `"score": []` to remove it.
+- A cue naming a shot the episode does not have is refused; one left behind when a rewrite removed its shots is
+  skipped by the assembly, which says so in the cut's `score.skipped`.
 
 `roomByLocation` (`{"<locationId>": "<preset>"}`) makes the voice sound like the place. Lines are recorded dry, so a
 monk in a stone cathedral and a captain on an open deck would sound the same; with a room the render plays a processed

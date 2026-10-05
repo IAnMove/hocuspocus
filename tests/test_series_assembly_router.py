@@ -385,3 +385,48 @@ def test_an_episode_mode_assembly_keeps_each_clips_bed_and_lays_it_while_finishi
     request = SeriesAssemblyStartRequest(workspace="default", language="spanish")
     status = _wait_for_terminal(get_status, start("series-1", "episode-1", request)["jobId"])
     assert status["status"] == "completed" and seen[-1] == seen[-2], "a language version lies on the same beds"
+
+
+def test_the_episode_score_is_kept_on_the_job_and_laid_while_finishing(tmp_path, monkeypatch):
+    import routers.series_assembly as assembly
+
+    seen = []
+
+    def finished(output_path, *_args, score=None, **_kwargs):
+        seen.append(score)
+        return {"subtitles": {"written": False, "reason": "stub"}, "loudness": {"applied": False, "reason": "stub"},
+                **({"score": {"applied": True, "cues": [{"file": "mus-theme.wav"}]}} if score else {})}
+    monkeypatch.setattr(assembly, "finish_episode", finished)
+
+    def concatenate(paths, output_path):
+        shutil.copyfile(paths[0], output_path)
+        return True
+
+    endpoints, library = _client(tmp_path, concatenate)
+    start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
+    get_status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed" and seen == [None], "no score, no score step"
+
+    episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
+    shots = {shot["id"]: shot for shot in episode["shots"]}
+    shots["shot-2"]["layout2d"] = {"music": {"file": "mus-song.wav", "volume": 0.5}}
+    episode["score"] = [{"fromShotId": "shot-1", "toShotId": "shot-2", "file": "mus-theme.wav", "volume": 0.2,
+                         "fadeIn": 1.0, "fadeOut": 2.0, "duck": True}, {"fromShotId": "shot-9", "file": "mus-x.wav"}]
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed", status
+    assert seen[-1] == {"cues": [{"file": "mus-theme.wav", "volume": 0.2, "fadeIn": 1.0, "fadeOut": 2.0, "duck": True,
+                                  "firstClip": 0, "lastClip": 1}],
+                        "music": [False, True], "skipped": ["Score cue 2: the episode has no shot shot-9"]}, "in episode order"
+    assert SeriesJobStore(str(tmp_path), "assembly").load(status["jobId"])["score"] == seen[-1], "a resume lays the same score"
+    assert library["seriesById"]["series-1"]["assets"][status["assetId"]]["metadata"]["score"]["applied"] is True
+    assert status["message"].endswith("1 score cue.")
+
+    episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
+    for shot in episode["shots"]:
+        shot["attempts"].append({"id": f"{shot['id']}-es", "status": "completed", "outputAssetIds": ["asset-2"]})
+    episode["languageVersions"] = {"spanish": {"dialogue": {}, "cards": {},
+                                               "approvedAttemptIds": {"shot-1": "shot-1-es", "shot-2": "shot-2-es"}}}
+    request = SeriesAssemblyStartRequest(workspace="default", language="spanish")
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", request)["jobId"])
+    assert status["status"] == "completed" and seen[-1] == seen[-2], "a language version lies on the same score"

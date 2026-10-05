@@ -197,6 +197,13 @@ export interface SeriesRenderAttempt {
   reviewedAt?: string
 }
 
+/** Sound generated from the shot's rendered picture (MMAudio) and mixed under its take; volume is relative to the dialogue. */
+export interface SeriesShotFoley {
+  prompt: string
+  /** Above 0 and up to 2; default 0.5. */
+  volume?: number
+}
+
 export interface SeriesShot {
   id: string
   sceneId: string
@@ -251,6 +258,7 @@ export interface SeriesShot {
   sourceDialogueIds?: string[]
   dialogueOrigin?: 'script' | 'manual'
   scriptDialogueStatus?: 'in_sync' | 'stale' | 'manual_conflict'
+  foley?: SeriesShotFoley
 }
 
 export interface SeriesCanonDeltaItem extends CanonFact {
@@ -269,7 +277,26 @@ export interface SeriesLanguageVersion {
   thumbnailAssetId?: string
 }
 
+/**
+ * One cue of an episode's score: music the assembly lays from the cut before `fromShotId` to the cut after
+ * `toShotId` (or over the shots of `sceneId`), looped if shorter and faded in and out inside the cue. With `duck` it
+ * dips 9 dB under every recorded line; it is silent under a shot with its own `layout2d.music`. Cues never overlap.
+ */
+export type SeriesScoreCue = ({ fromShotId: string; toShotId?: string; sceneId?: never } | { sceneId: string; fromShotId?: never; toShotId?: never }) & {
+  /** Workspace audio file. */
+  file: string
+  /** Level relative to the dialogue, 0–2 (default 0.18). */
+  volume?: number
+  /** Seconds, 0–30 (defaults 1.5 and 2.0). */
+  fadeIn?: number
+  fadeOut?: number
+  /** Lower it under the lines (default true). */
+  duck?: boolean
+}
+
 export interface SeriesEpisode {
+  /** Music laid under runs of shots at assembly; no take depends on it. */
+  score?: SeriesScoreCue[]
   /** Dubbed versions by spoken language (english, spanish...); the series language is the original. */
   languageVersions?: Record<string, SeriesLanguageVersion>
   latestAssemblyAssetId?: string
@@ -341,6 +368,8 @@ export interface SeriesSoundDesign {
   ambienceByLocation?: Record<string, SeriesSoundCue>
   ambienceMode?: 'shot' | 'episode'
   roomByLocation?: Record<string, SeriesVoiceRoom>
+  /** dB the episode-mode beds dip while someone speaks, 0–24 (default 0: off). */
+  ambienceDuckDb?: number
 }
 
 export interface SeriesProject {

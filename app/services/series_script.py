@@ -3,8 +3,9 @@
 An agent writes what happens; this turns it into the episode the server renders:
 ids from the episode number, scenes, shots with ``layout2d`` (cast, framing,
 camera, card, music, timed sound and screen effects, timing, props, voice room),
-``scene3d`` for Video 3D shots, the original's lines and a language version
-for every other language in the script. It checks the script against the
+``scene3d`` for Video 3D shots, ``foley`` (sound generated from the rendered
+picture), the original's lines and a language version for every other
+language in the script. It checks the script against the
 series first, so a typo in a pose, a file or a character fails here with a
 clear message instead of halfway through a render::
 
@@ -17,7 +18,8 @@ clear message instead of halfway through a render::
                 "music": {"file": "mus-theme-es.wav", "en": "mus-theme-en.wav", "volume": 0.9},
                 "sfx": [{"file": "sfx-pen.wav", "line": 1, "offset": 0.2}], "fx": [{"kind": "confetti", "line": 1}],
                 "props": [{"file": "prop-truck-key.png", "x": 12, "y": 74, "scale": 0.36}], "timing": {"intro": 1.0},
-                "voiceRoom": "cathedral", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]}}]}
+                "voiceRoom": "cathedral", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]},
+                "foley": {"prompt": "wooden airship creaking, wind", "volume": 0.5}}]}
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ from typing import Any, Callable
 
 from services.series_shot3d import normalize_scene3d
 from services.series_shot_extras import EFFECT_KINDS
+from services.series_shot_foley import normalize_foley
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, language_key
 from services.series_voice_rooms import PRESETS
 
@@ -190,6 +193,10 @@ class EpisodeScript:
         problems += [f"{where}: unknown effect {(cue or {}).get('kind')}" for cue in shot.get("fx") or [] if (cue or {}).get("kind") not in EFFECT_KINDS]
         if shot.get("card") and (shot["card"] or {}).get("kind") not in CARD_KINDS:
             problems.append(f"{where}: card kind must be one of {', '.join(CARD_KINDS)}")
+        try:
+            normalize_foley(shot.get("foley"))
+        except ValueError as error:
+            problems.append(f"{where}: {error}")
         if shot.get("kind") != "3d":
             return
         config = normalize_scene3d(shot.get("scene3d"))
@@ -242,6 +249,8 @@ class EpisodeScript:
             body["durationSeconds"] = float(shot.get("duration") or 5)
         if shot.get("kind") == "3d":
             body["scene3d"] = shot["scene3d"]
+        if shot.get("foley") is not None:
+            body["foley"] = normalize_foley(shot["foley"])
         return body
 
     def shots(self) -> list[dict[str, Any]]:

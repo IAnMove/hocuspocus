@@ -15,7 +15,7 @@ from typing import Any
 GUIDE_PATH = Path(__file__).resolve().parents[1] / "shared" / "series_agent_guide.md"
 AUDIO = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 SHOT_FIELDS = ("id", "order", "sceneId", "locationId", "locationVariantId", "productionMethod", "durationSeconds",
-               "visibleCharacterIds", "speakingCharacterIds", "layout2d", "scene3d", "approvedAttemptId")
+               "visibleCharacterIds", "speakingCharacterIds", "layout2d", "scene3d", "foley", "approvedAttemptId")
 
 
 def guide_text() -> str:
@@ -67,7 +67,7 @@ def audio_files(names: list[str]) -> dict[str, list[str]]:
     """Workspace audio a shot can use, by kind: music (mus-*), sound effects (sfx*) and the rest."""
     found: dict[str, list[str]] = {"music": [], "sfx": [], "other": []}
     for name in sorted(names):
-        if not name.lower().endswith(AUDIO) or name.startswith((".", "_", "ln-", "voice-", "uv2-", "e2e-")):
+        if not name.lower().endswith(AUDIO) or name.startswith((".", "_", "ln-", "foley-", "voice-", "uv2-", "e2e-")):
             continue
         kind = "music" if name.startswith("mus") else "sfx" if name.startswith("sfx") else "other"
         if kind != "other" or len(found["other"]) < 40:
@@ -124,4 +124,5 @@ def compact_episode(series: dict[str, Any], episode: dict[str, Any]) -> dict[str
     script = [{key: scene.get(key) for key in ("id", "order", "locationId", "purpose")} for scene in episode.get("script") or []]
     return {"id": episode["id"], "number": episode.get("number"), "title": episode.get("title"), "premise": episode.get("premise"),
             "status": episode.get("status"), "script": script, "shots": [_compact_shot(assets, shot) for shot in episode.get("shots") or []],
-            "languageVersions": versions, "latestAssemblyAssetId": episode.get("latestAssemblyAssetId")}
+            "languageVersions": versions, "latestAssemblyAssetId": episode.get("latestAssemblyAssetId"),
+            **({"score": episode["score"]} if episode.get("score") else {})}

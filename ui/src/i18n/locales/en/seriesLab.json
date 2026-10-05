@@ -737,6 +737,7 @@
       "voices": "voices",
       "scene": "scene",
       "export": "video",
+      "foley": "foley",
       "import": "take",
       "done": "done"
     }
