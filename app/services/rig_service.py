@@ -916,8 +916,8 @@ class _WorkerRefused(RuntimeError):
 
 _REFUSALS = {
     "hands_stuck": "not_humanoid: the arms touch the body or hang straight down. Use a T or A pose with a gap under each arm.",
-    "single_leg": "not_humanoid: no gap between the legs. Use a model standing with its legs apart.",
-    "legs_too_short": "not_humanoid: the legs are too short to rig (or hidden by a dress or robe).",
+    "single_leg": "not_humanoid: no gap between the legs. Use a model standing with its legs apart (a long robe is fine if the feet show under it).",
+    "legs_too_short": "not_humanoid: the legs are too short to rig (or hidden by a dress or robe with no feet showing).",
     "asymmetry": "not_humanoid: the left and right sides differ too much. Use a symmetric T or A pose.",
     "not_upright": "not_humanoid: the model does not stand upright (Y up).",
     "degenerate": "not_humanoid: the mesh is empty or broken.",

@@ -21,12 +21,20 @@ In the app: **Studios → Animate**, engine **Humanoid (standard)**. Over MCP:
 - A figurine on a base or pedestal wider than its feet is fine: the feet stand
   on the top of the base, the base moves with the hips, and the result lists
   `on_a_base`.
+- Cloth that fills those gaps is fine when it hangs off the body: a cape over
+  the shoulders and upper arms (`covered_arms`), a cape, coat tails or an open
+  robe over the legs (`covered_legs`). The arms and legs are found on the body
+  under it, and the cloth follows the shoulders or hangs from the hips.
+- A long robe or skirt down to the ankles is fine when the feet show under
+  its hem (`legs_hidden`): the legs are placed from the feet, and the robe hangs
+  from the hips and thighs, so a stride sways it instead of tearing it and a
+  bent knee does not fold it.
 
 What the engine refuses, instead of guessing a skeleton (`not_humanoid` plus a
 reason): arms against the body or hanging straight down (`hands_stuck`), arms
 raised well above the shoulders (`arms_raised`), a body turned at an angle to
-the front view (`turned`), legs together, a dress or a robe (`single_leg`),
-legs too short or hidden (`legs_too_short`), very different left and right
+the front view (`turned`), legs together, or a dress or robe down to the floor
+that hides the feet (`single_leg`), legs too short or hidden (`legs_too_short`), very different left and right
 sides (`asymmetry`), a model lying down (`not_upright`) and an empty mesh
 (`degenerate`). A GLB with Draco, meshopt or quantized geometry fails with
 `invalid_input`; export it without compression. Nothing is written when a
@@ -64,6 +72,10 @@ legs. One of one attempts was usable; five repeats were not run.
    the neck, and the arms are the thin branches left when the torso core is
    opened away. Depth for every joint comes from the mesh slice through it.
    Thresholds are fractions of the height, so a mascot and an adult both work.
+   Rays along the depth axis tell cloth from body: a pixel whose solid spans
+   all miss the slab around the body's middle plane is cloth (a cape tent with
+   air inside, a cape behind the legs, the hollow of an open robe). When cloth
+   filled a gap, the arms or legs are looked for again without it.
 2. **Skeleton.** 25 Mixamo-named bones (`Hips` … `RightToe_End`, no prefix).
    Each bone's local axes are the character's axes in a perfect T pose (+X
    left, +Y up, +Z forward); the rest rotations bend them onto the modeled
@@ -74,7 +86,11 @@ legs. One of one attempts was usable; five repeats were not run.
    never follows the arm under it and one thigh never drags the other.
    Everything above the neck notch and within the head's width belongs to the
    head and neck. Loose pieces (eyes, buttons, robot boxes) copy the weights
-   of the nearest surface.
+   of the nearest surface. Cloth below the hips and a robe that hides the legs
+   hang from the hips: the hips alone at the waist, the thighs taking over
+   lower down (about half of their swing), left and right blended across the
+   middle, and no pull from the knees. Cloth above the hips, such as a cape,
+   has its weights blurred along the surface.
 4. **Clips.** Built for this body: feet are planted with two-bone IK and kept
    on the floor, hands reach targets relative to the chest (the clap meets
    palm to palm; a shrug opens the palms upward),

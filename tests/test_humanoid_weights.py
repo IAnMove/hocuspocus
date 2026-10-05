@@ -13,18 +13,37 @@ from tests.humanoid_skinning import skin_vertices
 
 
 def _weighted(kind):
-    item = body(kind)
-    found = detect_landmarks(item["positions"], item["indices"])
-    skeleton = build_skeleton(found["points"], found["height"], found["y_min"], found["facing"], found["head_region"])
-    joints, weights = compute_weights(item["positions"], item["indices"], skeleton)
+    item, skeleton, joints, weights, _found = _draped(kind)
     return item, skeleton, joints, weights
 
 
-def _posed(skeleton, joints, weights, points, bone, degrees, axis):
+def _draped(kind):
+    item = body(kind)
+    found = detect_landmarks(item["positions"], item["indices"])
+    skeleton = build_skeleton(found["points"], found["height"], found["y_min"], found["facing"], found["head_region"], found["base"],
+                              found["robe"])
+    joints, weights = compute_weights(item["positions"], item["indices"], skeleton, found["cloth"])
+    return item, skeleton, joints, weights, found
+
+
+def _skinned(skeleton, joints, weights, points, bone, degrees, axis):
     rest = world_matrices(skeleton["bones"])
     local = skeleton["bones"][BONE_BY_NAME[bone]]["rotation"]
     posed = world_matrices(skeleton["bones"], {bone: rot.multiply(local, rot.axis_angle(axis, degrees))})
-    return np.linalg.norm(skin_vertices(points, joints, weights, rest, posed) - points, axis=1)
+    return skin_vertices(points, joints, weights, rest, posed)
+
+
+def _posed(skeleton, joints, weights, points, bone, degrees, axis):
+    return np.linalg.norm(_skinned(skeleton, joints, weights, points, bone, degrees, axis) - points, axis=1)
+
+
+def _stretch(points, moved, indices, chosen):
+    """Largest length ratio, posed over rest, of the mesh edges between ``chosen`` vertices."""
+    edges = np.concatenate((indices[:, [0, 1]], indices[:, [1, 2]], indices[:, [2, 0]]))
+    edges = edges[chosen[edges[:, 0]] & chosen[edges[:, 1]]]
+    rest = np.linalg.norm(points[edges[:, 0]] - points[edges[:, 1]], axis=1)
+    posed = np.linalg.norm(moved[edges[:, 0]] - moved[edges[:, 1]], axis=1)
+    return float((posed[rest > 1e-6] / rest[rest > 1e-6]).max())
 
 
 def _dominant(joints, weights):
@@ -93,3 +112,37 @@ def test_a_thigh_swing_does_not_drag_the_other_leg():
     left_leg = (points[:, 0] > 0.05) & (points[:, 1] < skeleton["world"]["LeftUpLeg"][1] - 0.05)
     assert left_leg.sum() > 50
     assert float(moved[left_leg].max()) < 0.005
+
+
+@pytest.mark.parametrize("kind", ("robe", "back_cape"))
+def test_a_robe_or_a_cape_over_the_legs_hangs_from_the_hips(kind):
+    item, skeleton, joints, weights, found = _draped(kind)
+    points, indices = item["positions"], item["indices"]
+    assert np.allclose(weights.sum(axis=1), 1.0, atol=1e-6)
+    world = skeleton["world"]
+    bottom = skeleton["robe"]["hem"] if skeleton["robe"] else world["LeftFoot"][1]
+    hanging = (points[:, 1] > bottom + 0.03) & (points[:, 1] < world["LeftUpLeg"][1] - 0.03)
+    if kind == "back_cape":
+        hanging &= found["cloth"]
+    assert hanging.sum() > 1000
+    stride = _skinned(skeleton, joints, weights, points, "LeftUpLeg", 40.0, [1.0, 0.0, 0.0])
+    # The plain surface weights split the cloth between the thighs and stretch an edge 10 to 14 times.
+    assert _stretch(points, stride, indices, hanging) < 3.0
+    assert float(np.linalg.norm(stride - points, axis=1)[hanging].mean()) > 0.03, "the cloth follows the stride in part"
+    knee = _posed(skeleton, joints, weights, points, "LeftLeg", 70.0, [1.0, 0.0, 0.0])
+    assert float(knee[hanging].max()) < 0.005, "a bent knee does not fold the cloth"
+    foot = (points[:, 1] < bottom - 0.02) & (points[:, 0] * skeleton["facing"] > 0.04)
+    assert float(knee[foot].min()) > 0.05, "the foot under the hem still follows the knee"
+
+
+def test_raising_an_arm_under_a_cape_lifts_its_side_only():
+    item, skeleton, joints, weights, found = _draped("cape")
+    points, indices = item["positions"], item["indices"]
+    cloth = found["cloth"]
+    raised = _skinned(skeleton, joints, weights, points, "LeftArm", -70.0, [0.0, 0.0, 1.0])
+    moved = np.linalg.norm(raised - points, axis=1)
+    near, far = cloth & (points[:, 0] > 0.25), cloth & (points[:, 0] < -0.05)
+    assert near.sum() > 200 and far.sum() > 200
+    assert float(moved[far].max()) < 0.002
+    assert float(moved[near].mean()) > 0.05, "the cape over the upper arm rises with it"
+    assert _stretch(points, raised, indices, cloth & (points[:, 0] > 0.05)) < 2.0

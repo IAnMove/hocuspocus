@@ -5,6 +5,12 @@ narrowest row under the head) and the arms (thin branches off the torso).
 Mesh cross-sections then give each joint its depth. A mesh that is not an
 upright biped with its arms clear of the body raises ``NotHumanoid``.
 Thresholds are fractions of the mesh height, so proportions do not matter.
+
+Cloth that hangs off the body (a cape, coat tails, an open robe) can fill the
+gaps under the arms or between the legs. The arms and legs are then looked for
+again on the body without that cloth, and legs hidden in a solid robe are
+placed from the feet under its hem. ``cloth`` marks the input vertices that
+lie on such cloth, for the skin weights.
 """
 
 from __future__ import annotations
@@ -14,22 +20,35 @@ import numpy as np
 from services.humanoid_rig.body_parts import (
     arm_drop,
     arm_line,
+    central_widths,
     connect_pieces,
     find_arms,
     find_legs,
     find_neck,
     leg_center,
+    leg_gap,
     leg_regions,
     require_arm_angle,
     torso_half,
 )
+from services.humanoid_rig.covering import Covering, find_covering
 from services.humanoid_rig.errors import NotHumanoid
 from services.humanoid_rig.landmark_depth import Depth
 from services.humanoid_rig.names import LANDMARK_NAMES
-from services.humanoid_rig.silhouette import front_silhouette
+from services.humanoid_rig.robe_legs import place_crotch, robe_legs
+from services.humanoid_rig.silhouette import components, front_silhouette, run_at
 
 _ASYMMETRY = 0.25
 _SIDES = (("left", 1.0), ("right", -1.0))
+# Arms found on the body under the cloth replace the plain ones when their shoulder sits this much
+# (a fraction of the body's pixel height) nearer the body axis: the cloth had been taken for torso.
+_COVERED_SHIFT = 0.02
+# ... and cloth fills at least this share of the square under the stretch of arm it hid.
+_CLOTH_BELOW = 0.15
+# Hollow cloth this tall (share of the body's pixel height) right over the gap between the feet is a robe.
+_ROBE_HOLLOW = 0.1
+# Warnings that describe the model without lowering the confidence.
+_NOTES = ("facing_back", "on_a_base", "covered_arms", "covered_legs")
 
 
 def detect_landmarks(positions: np.ndarray, indices: np.ndarray | None = None) -> dict:
@@ -37,7 +56,9 @@ def detect_landmarks(positions: np.ndarray, indices: np.ndarray | None = None) -
 
     ``positions`` is (N, 3) in metres, Y up. ``indices`` is (M, 3); without
     indices, every three positions are a triangle. A body facing -Z is turned
-    for the analysis and the landmarks are turned back.
+    for the analysis and the landmarks are turned back. Besides the landmarks,
+    ``cloth`` (N,) marks the positions on cloth that hangs off the body and
+    ``robe`` is ``{"hem": y}`` when the legs were placed inside a robe, else None.
     """
     triangles = _triangles(positions, indices)
     y_min = float(triangles[:, :, 1].min())
@@ -49,6 +70,8 @@ def detect_landmarks(positions: np.ndarray, indices: np.ndarray | None = None) -
     if facing < 0:
         triangles, vertices = _turn(triangles, pivot), _turn(vertices, pivot)
     found = _analyse(triangles, vertices, y_min, height)
+    cloud = np.asarray(positions, dtype=np.float64)
+    found["cloth"] = found.pop("covering").vertices(_turn(cloud, pivot) if facing < 0 else cloud)
     if facing < 0:
         found["points"] = {name: _turn(np.asarray(point), pivot) for name, point in found["points"].items()}
         found["head"]["x"] = 2.0 * float(pivot[0]) - found["head"]["x"]
@@ -58,24 +81,164 @@ def detect_landmarks(positions: np.ndarray, indices: np.ndarray | None = None) -
 
 def _analyse(triangles: np.ndarray, vertices: np.ndarray, y_min: float, height: float) -> dict:
     silhouette = connect_pieces(front_silhouette(triangles, height))
+    covering = find_covering(triangles, silhouette, height)
+    refused = None
+    for legs, leg_mask, notes, refusal in _leg_options(silhouette.mask, covering):
+        try:
+            found = _upper_body(silhouette, covering, legs, leg_mask, notes, vertices, y_min, height)
+        except NotHumanoid as error:
+            # Legs guessed inside a robe keep the plain refusal when the rest of the body is not found.
+            refused = refusal or error
+            continue
+        found["covering"] = covering
+        return found
+    raise refused
+
+
+def _upper_body(silhouette, covering: Covering, legs: dict, leg_mask: np.ndarray, notes: list, vertices: np.ndarray,
+                y_min: float, height: float) -> dict:
     mask = silhouette.mask
-    legs = find_legs(mask)
     neck = find_neck(mask, legs)
+    for _step in range(2 if "robe" in legs else 0):
+        legs = place_crotch(legs, neck)
+        neck = find_neck(mask, legs)
     half = torso_half(neck["widths"], legs, neck)
-    arms = find_arms(mask, legs, neck, half)
     tall = legs["top"] - legs["floor"] + 1
-    lines = {side: arm_line(mask, arms[side], tall) for side, _sign in _SIDES}
+    lines, covered = _arm_lines(mask, covering, legs, neck, half, tall)
     drops = {side: arm_drop(lines[side], sign) for side, sign in _SIDES}
     for drop in drops.values():
         require_arm_angle(drop)
+    notes = notes + (["covered_arms"] if covered else [])
     base = _base_top(legs, mask, silhouette, tall)
-    depth = Depth(vertices, silhouette, height, y_min, base)
-    points = _assemble(depth, legs, neck, half, lines, leg_regions(mask, legs))
+    depths = _depths(vertices, covering, notes, (silhouette, height, y_min, base))
+    points = _assemble(depths, legs, neck, half, lines, leg_regions(leg_mask, legs))
     _require_symmetry(points, height)
     _require_facing_front(points, height)
     head = {"y": float(points["neck"][1]), "x": float(points["neck"][0]), "half": neck["head_width"] * 0.5 * silhouette.pixel}
-    warnings = _warnings(neck, drops, points, height) + ([] if base is None else ["on_a_base"])
-    return {"points": points, "warnings": warnings, "arm_drop": float(np.mean(list(drops.values()))), "head": head, "base": base}
+    warnings = _warnings(neck, drops, points, height) + ([] if base is None else ["on_a_base"]) + notes
+    robe = {"hem": silhouette.origin[1] + legs["robe"]["hem"] * silhouette.pixel} if "robe" in legs else None
+    return {"points": points, "warnings": warnings, "arm_drop": float(np.mean(list(drops.values()))), "head": head, "base": base,
+            "robe": robe}
+
+
+def _depths(vertices: np.ndarray, covering: Covering, notes: list, frame: tuple) -> dict:
+    """Depth for the spine, legs and arms. A limb that cloth hid takes its depth from the body
+    without the cloth, so a cape behind the back does not pull the knees back."""
+    plain = Depth(vertices, *frame)
+    body = vertices[~covering.vertices(vertices)] if {"covered_arms", "covered_legs"} & set(notes) else vertices
+    if len(body) == len(vertices) or len(body) < len(vertices) // 2:
+        return {"spine": plain, "legs": plain, "arms": plain}
+    bare = Depth(body, *frame)
+    return {"spine": plain, "legs": bare if "covered_legs" in notes else plain, "arms": bare if "covered_arms" in notes else plain}
+
+
+def _leg_options(mask: np.ndarray, covering: Covering) -> list[tuple]:
+    """Ways to read the legs, best first: ``(legs, mask, notes, refusal)``.
+
+    The gap on the silhouette, unless it ends under hollow cloth (the hem of an open robe); then
+    the legs on the body behind a cape or coat; then legs inside a robe, placed from the feet; and
+    last the silhouette gap anyway. ``refusal`` replaces the error of an option that was a guess.
+    """
+    plain, first = None, None
+    try:
+        plain = find_legs(mask)
+    except NotHumanoid as refused:
+        first = refused
+    if plain is not None and not _hem_over(plain, covering):
+        return [(plain, mask, [], None)]
+    options = []
+    behind = _legs_behind(mask, covering)
+    if behind is not None:
+        options.append((behind, covering.body(mask), ["covered_legs"], None))
+    floor, top, gap = leg_gap(mask)
+    try:
+        options.append((robe_legs(mask, gap, floor, top), mask, ["legs_hidden"], first))
+    except NotHumanoid:
+        pass
+    if plain is not None:
+        options.append((plain, mask, [], None))
+    if not options:
+        raise first
+    return options
+
+
+def _hem_over(legs: dict, covering: Covering) -> bool:
+    """The gap between the feet ends under a tall hollow: the hem of an open robe, not the crotch.
+
+    The little hollow under a short skirt is not enough; the hollow of a robe reaches up to the hips.
+    """
+    tall = legs["top"] - legs["floor"] + 1
+    column = covering.mask[legs["crotch_row"]:, int(round(legs["crotch_col"]))]
+    start = np.flatnonzero(column[:max(2, int(tall * 0.03))])
+    if len(start) == 0:
+        return False
+    column = column[start[0]:]
+    hollow = int(np.argmin(column)) if not np.all(column) else len(column)
+    return hollow >= tall * _ROBE_HOLLOW
+
+
+def _legs_behind(mask: np.ndarray, covering: Covering) -> dict | None:
+    """Legs on the body without the cloth, when a pelvis closes the gap between them."""
+    if not np.any(covering.mask):
+        return None
+    body = covering.body(mask)
+    try:
+        legs = find_legs(body)
+    except NotHumanoid:
+        return None
+    pelvis = run_at(body[min(legs["crotch_row"], body.shape[0] - 1)], int(round(legs["crotch_col"])), reach=1)
+    if pelvis is None or pelvis[0] >= legs["gap"][0] or pelvis[1] <= legs["gap"][1]:
+        return None
+    return legs
+
+
+def _arm_lines(mask: np.ndarray, covering: Covering, legs: dict, neck: dict, half: float, tall: int) -> tuple[dict, bool]:
+    """Arm lines on the silhouette, or on the body under a cape where the cape had been taken for torso."""
+    lines = _lines(mask, legs, neck, half, tall)
+    covered = False
+    if np.any(covering.mask):
+        body = covering.body(mask)
+        under = _lines(body, legs, neck, None, tall)
+        for side in under:
+            if _hidden_by_cloth(lines.get(side), under[side], covering.mask, legs, tall):
+                lines[side], covered = under[side], True
+    if len(lines) < len(_SIDES):
+        raise NotHumanoid("hands_stuck")
+    return lines, covered
+
+
+def _lines(mask: np.ndarray, legs: dict, neck: dict, half: float | None, tall: int) -> dict:
+    try:
+        if half is None:
+            half = torso_half(central_widths(mask, legs["crotch_row"], legs["top"], legs["crotch_col"])[0], legs, neck)
+        arms = find_arms(mask, legs, neck, half)
+        return {side: arm_line(mask, arms[side], tall) for side, _sign in _SIDES}
+    except NotHumanoid:
+        return {}
+
+
+def _hidden_by_cloth(plain: dict | None, under: dict, cloth: np.ndarray, legs: dict, tall: int) -> bool:
+    """The arm under the cloth starts nearer the body axis, and cloth hangs below the stretch of arm it hid."""
+    if plain is not None and _reach(under, legs) >= _reach(plain, legs) - tall * _COVERED_SHIFT:
+        return False
+    inner = under["shoulder"]
+    outer = plain["shoulder"] if plain is not None else under["elbow"]
+    low_col, high_col = sorted((int(round(inner[1])), int(round(outer[1]))))
+    length = max(high_col - low_col, 2)
+    top = int(round(min(inner[0], outer[0]) - under["radius"]))
+    rows, cols = slice(max(0, top - length), max(0, top)), slice(low_col, high_col + 1)
+    below = cloth[rows, cols]
+    if below.size == 0 or float(below.mean()) < _CLOTH_BELOW:
+        return False
+    # A few specks of cloth are not a cape: the cloth reaching under the arm must be a piece of some size.
+    labels, _count = components(cloth)
+    reaching = np.unique(labels[rows, cols])
+    return int(np.isin(labels, reaching[reaching > 0]).sum()) >= 2.0 * under["radius"] ** 2
+
+
+def _reach(line: dict, legs: dict) -> float:
+    """Columns from the body axis to the shoulder."""
+    return abs(float(line["shoulder"][1]) - float(legs["crotch_col"]))
 
 
 def _base_top(legs: dict, mask: np.ndarray, silhouette, tall: int) -> float | None:
@@ -100,11 +263,13 @@ def _require_facing_front(points: dict, height: float) -> None:
         raise NotHumanoid("turned")
 
 
-def _assemble(depth: Depth, legs: dict, neck: dict, half: float, lines: dict, regions: dict) -> dict:
-    points = depth.spine(legs, neck, half)
+def _assemble(depths: dict, legs: dict, neck: dict, half: float, lines: dict, regions: dict) -> dict:
+    points = depths["spine"].spine(legs, neck, half)
+    if depths["legs"] is not depths["spine"]:
+        points["crotch"] = depths["legs"].spine(legs, neck, half)["crotch"]
     for side, _sign in _SIDES:
-        points.update(depth.leg(side, regions[side], legs, points["crotch"], leg_center))
-        points.update(depth.arm(side, lines[side]))
+        points.update(depths["legs"].leg(side, regions[side], legs, points["crotch"], leg_center))
+        points.update(depths["arms"].arm(side, lines[side]))
     _require_finite(points)
     return points
 
@@ -136,9 +301,11 @@ def _payload(found: dict, height: float, y_min: float, facing: float) -> dict:
         "facing": int(facing),
         "arm_drop": round(drop, 2),
         "pose": "t" if drop < 20.0 else "a",
-        "confidence": round(max(0.3, 1.0 - 0.15 * len([item for item in warnings if item not in ("facing_back", "on_a_base")])), 2),
+        "confidence": round(max(0.3, 1.0 - 0.15 * len([item for item in warnings if item not in _NOTES])), 2),
         "warnings": warnings,
         "head_region": dict(found["head"]),
+        "robe": found["robe"],
+        "cloth": found["cloth"],
     }
 
 

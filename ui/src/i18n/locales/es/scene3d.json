@@ -348,14 +348,17 @@
       "short_arms": "Brazos cortos: los gestos se ajustan a ellos.",
       "neck_not_found": "No hay un cuello claro: la cabeza gira desde donde se une al cuerpo.",
       "facing_back": "El modelo miraba hacia atrás; el esqueleto se giró para coincidir.",
-      "on_a_base": "El modelo está sobre una peana: los pies se apoyan en su parte de arriba y la peana sigue a la cadera."
+      "on_a_base": "El modelo está sobre una peana: los pies se apoyan en su parte de arriba y la peana sigue a la cadera.",
+      "covered_arms": "Una capa o tela suelta cubre los hombros: los brazos se buscaron en el cuerpo de debajo y la tela sigue a los hombros con suavidad.",
+      "covered_legs": "Una capa, un abrigo o una túnica abierta cae sobre las piernas: las piernas se buscaron detrás y la tela cuelga de la cadera.",
+      "legs_hidden": "Una túnica o falda larga tapa las piernas: se colocaron a partir de los pies bajo el bajo de la prenda, y la túnica cuelga de la cadera y los muslos."
     },
     "refusal": {
       "hands_stuck": "Los brazos tocan el cuerpo o caen rectos. Hace falta un hueco bajo cada brazo (pose T o A).",
       "arms_raised": "Los brazos están levantados muy por encima de los hombros. Usa una pose T o A.",
       "turned": "El modelo está girado en ángulo. Usa un modelo mirando de frente a la cámara.",
-      "single_leg": "No hay hueco entre las piernas (piernas juntas, un vestido o una túnica).",
-      "legs_too_short": "Las piernas son demasiado cortas para riguear, o no se ven.",
+      "single_leg": "No hay hueco entre las piernas (piernas juntas, o un vestido o una túnica hasta el suelo que tapa los pies).",
+      "legs_too_short": "Las piernas son demasiado cortas para riguear, o no se ven (ni siquiera los pies bajo una túnica).",
       "asymmetry": "El lado izquierdo y el derecho son demasiado distintos. Usa una pose simétrica.",
       "not_upright": "El modelo no está de pie (Y hacia arriba).",
       "degenerate": "La malla está vacía o rota."
