@@ -424,9 +424,11 @@ class SeriesNativeRender:
         found = self.deps.call("audio.mouth_cues", {"version": 1, "input": {
             "workspace": workspace, "file": filename, "start": 0, "duration": round(min(90, duration), 3), "dialogue": text,
             "language": SPEECH_CODES.get(language, "en"), "engine": "phoneme"}})
-        result = found.get("result") or {}
+        result = _ok(found, "Phoneme lip-sync").get("result") or {}
         cues = result.get("mouthCues") or result.get("cues") or []
-        return {"cues": cues, "driver": result.get("recognizer") or result.get("driver") or "wav2vec2-phoneme"} if cues else {"cues": []}
+        if not cues:
+            raise NativeRenderError("mouth_cues_missing", "Phoneme analysis returned no mouth cues; review the audio before rendering", 502)
+        return {"cues": cues, "driver": result.get("recognizer") or result.get("driver") or "wav2vec2-phoneme"}
 
     def _scene(self, workspace: str, job: dict, item: dict, series: dict, episode: dict, shot: dict, kits: dict, index: int) -> None:
         ordered = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
