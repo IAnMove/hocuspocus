@@ -170,10 +170,10 @@ def _head_candidates(rgb: np.ndarray, alpha: np.ndarray):
 def _small_face_eyes(rgb: np.ndarray, alpha: np.ndarray):
     """Find cream sclera and join fragments around a pupil inside a full-body character's face."""
     colour = rgb.astype(np.int16)
-    white = (colour.min(axis=2) > 190) & (colour.max(axis=2) - colour.min(axis=2) < 25) & (alpha > 200)
+    white = (colour.min(axis=2) > 210) & (colour.max(axis=2) - colour.min(axis=2) < 25) & (alpha > 200)
     for face in _head_candidates(rgb, alpha):
         x0, x1, y0 = face["x0"], face["x1"], face["y0"]
-        y1 = int(y0 + (face["y1"] - y0) * 0.6)
+        y1 = int(y0 + (face["y1"] - y0) * 0.8)
         region = np.zeros(alpha.shape, dtype=bool)
         region[y0:y1, x0:x1] = white[y0:y1, x0:x1]
         region = _open(_close(region, max(2, int((x1 - x0) * 0.08))), 1)
@@ -184,7 +184,7 @@ def _small_face_eyes(rgb: np.ndarray, alpha: np.ndarray):
                   [part for part in parts if (part["x0"] + part["x1"]) / 2 >= centre]]
         if not all(halves):
             continue
-        left, right = [max(half, key=lambda part: part["size"]) for half in halves]
+        left, right = [min(half, key=lambda part: (part["y0"], -part["size"])) for half in halves]
         eye_height = max(left["y1"] - left["y0"], right["y1"] - right["y0"])
         vertical = abs((left["y0"] + left["y1"]) - (right["y0"] + right["y1"])) / 2
         if vertical < eye_height * 0.8:

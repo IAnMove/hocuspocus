@@ -25,7 +25,7 @@ def _full_body_anime(eyes=True):
     draw.rectangle((263, 230, 285, 430), fill=(235, 235, 235, 255))
     if eyes:
         for x in (164, 222):
-            draw.ellipse((x, 95, x + 14, 118), fill=(212, 212, 200, 255))
+            draw.ellipse((x, 95, x + 14, 118), fill=(224, 224, 212, 255))
             draw.ellipse((x + 4, 99, x + 10, 116), fill=(15, 15, 15, 255))
     return np.array(image)
 
@@ -42,6 +42,17 @@ def test_full_body_fallback_requires_actual_eyes():
     pixels = _full_body_anime(eyes=False)
     with pytest.raises(FlatRigError, match="Two light eyes"):
         find_eyes(pixels[..., :3], pixels[..., 3])
+
+
+def test_small_eyes_keep_the_lower_sclera_for_mouth_and_blink_anchors():
+    image = Image.fromarray(_full_body_anime(eyes=False))
+    draw = ImageDraw.Draw(image)
+    for x in (164, 222):
+        draw.ellipse((x, 109, x + 14, 132), fill=(224, 224, 212, 255))
+        draw.ellipse((x + 4, 112, x + 10, 128), fill=(15, 15, 15, 255))
+    pixels = np.array(image)
+    box, _ = find_eyes(pixels[..., :3], pixels[..., 3])
+    assert box[3] >= 130
 
 
 def test_small_eye_rig_keeps_the_nose_and_wipes_the_mouth():
