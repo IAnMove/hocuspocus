@@ -8,10 +8,53 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
-from services.flat_rig import STATES, FlatRigError, draw_mouth, rig_character, rig_pose, rig_style
+from services.flat_rig import STATES, FlatRigError, draw_mouth, find_eyes, rig_character, rig_pose, rig_style
 
 SKIN = (246, 214, 170, 255)
 WORKSPACE = "cast"
+
+
+def _full_body_anime(eyes=True):
+    image = Image.new("RGBA", (400, 1100), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((140, 190, 260, 1080), fill=(25, 45, 70, 255))
+    draw.ellipse((150, 50, 250, 170), fill=(246, 204, 145, 255))
+    # Bright goggles above the face and a chrome arm must not become the eye pair.
+    draw.rectangle((153, 25, 183, 43), fill=(235, 235, 235, 255))
+    draw.rectangle((215, 25, 245, 43), fill=(235, 235, 235, 255))
+    draw.rectangle((263, 230, 285, 430), fill=(235, 235, 235, 255))
+    if eyes:
+        for x in (164, 222):
+            draw.ellipse((x, 95, x + 14, 118), fill=(212, 212, 200, 255))
+            draw.ellipse((x + 4, 99, x + 10, 116), fill=(15, 15, 15, 255))
+    return np.array(image)
+
+
+def test_full_body_small_cream_eyes_avoid_goggles_and_chrome():
+    pixels = _full_body_anime()
+    box, mask = find_eyes(pixels[..., :3], pixels[..., 3])
+    assert 160 <= box[0] < 180 and 220 < box[2] <= 240
+    assert 90 <= box[1] < box[3] <= 125
+    assert not mask[:50].any() and not mask[200:].any()
+
+
+def test_full_body_fallback_requires_actual_eyes():
+    pixels = _full_body_anime(eyes=False)
+    with pytest.raises(FlatRigError, match="Two light eyes"):
+        find_eyes(pixels[..., :3], pixels[..., 3])
+
+
+def test_small_eye_rig_keeps_the_nose_and_wipes_the_mouth():
+    image = Image.fromarray(_full_body_anime())
+    draw = ImageDraw.Draw(image)
+    draw.line((200, 123, 200, 132), fill=(30, 20, 20, 255), width=3)
+    draw.line((187, 145, 214, 145), fill=(30, 20, 20, 255), width=3)
+    rig = rig_pose(image, rig_style(None))
+    assert rig["wiped"] is True
+    # Coordinates are measured on the cropped figure, so compare the two marks there.
+    assert rig["mouth_box"][3] - rig["mouth_box"][1] < 8
+    assert np.array(rig["image"])[rig["mouth_box"][1]:rig["mouth_box"][3],
+                                    rig["mouth_box"][0]:rig["mouth_box"][2], :3].min() > 100
 
 
 def _cutout(mouth=True, eyes=True, size=(420, 760), skin=SKIN, touching=False, collar=False, pen=7, smirk=False,

@@ -150,8 +150,49 @@ def _split_touching(labels: np.ndarray, parts: list[dict[str, int]]) -> list[dic
     return found
 
 
-def find_eyes(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float = 0.55):
-    """The two largest white blobs of similar size side by side, in the top of the figure."""
+def _head_candidates(rgb: np.ndarray, alpha: np.ndarray):
+    """Warm face regions constrain the small-eye fallback; shirts and chrome are not faces."""
+    height, width = alpha.shape
+    colour = rgb.astype(np.int16)
+    skin = ((colour[..., 0] - colour[..., 2] > 35) & (colour[..., 1] - colour[..., 2] > 15)
+            & (colour[..., 0] > 150) & (alpha > 200))
+    skin[int(height * 0.4):] = False
+    _, regions = _components(_open(skin, 2))
+    for part in sorted(regions, key=lambda item: item["y0"]):
+        w, h = part["x1"] - part["x0"], part["y1"] - part["y0"]
+        centre = (part["x0"] + part["x1"]) / 2
+        if (part["size"] > width * height * 0.001 and 0.04 * width < w < 0.65 * width
+                and 0.035 * height < h < 0.23 * height and 0.1 * width < centre < 0.9 * width
+                and part["y0"] < 0.22 * height and 0.4 < w / h < 2.5):
+            yield part
+
+
+def _small_face_eyes(rgb: np.ndarray, alpha: np.ndarray):
+    """Find cream sclera and join fragments around a pupil inside a full-body character's face."""
+    colour = rgb.astype(np.int16)
+    white = (colour.min(axis=2) > 190) & (colour.max(axis=2) - colour.min(axis=2) < 25) & (alpha > 200)
+    for face in _head_candidates(rgb, alpha):
+        x0, x1, y0 = face["x0"], face["x1"], face["y0"]
+        y1 = int(y0 + (face["y1"] - y0) * 0.6)
+        region = np.zeros(alpha.shape, dtype=bool)
+        region[y0:y1, x0:x1] = white[y0:y1, x0:x1]
+        region = _open(_close(region, max(2, int((x1 - x0) * 0.08))), 1)
+        centre = (x0 + x1) // 2
+        labels, parts = _components(region)
+        parts = [part for part in parts if part["size"] > 12]
+        halves = [[part for part in parts if (part["x0"] + part["x1"]) / 2 < centre],
+                  [part for part in parts if (part["x0"] + part["x1"]) / 2 >= centre]]
+        if not all(halves):
+            continue
+        left, right = [max(half, key=lambda part: part["size"]) for half in halves]
+        eye_height = max(left["y1"] - left["y0"], right["y1"] - right["y0"])
+        vertical = abs((left["y0"] + left["y1"]) - (right["y0"] + right["y1"])) / 2
+        if vertical < eye_height * 0.8:
+            return labels, [left, right]
+    return None
+
+
+def _eye_components(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float):
     height, width = alpha.shape
     white = (rgb.min(axis=2) > 218) & (alpha > 200)
     white[int(height * top_fraction):] = False
@@ -161,7 +202,17 @@ def find_eyes(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float = 0.55):
     if len(parts) < 2 and parts and parts[0]["size"] > width * height * 0.05:
         raise FlatRigError("face_too_light", "The face is as light as the eyes; give the character a skin colour")
     if len(parts) < 2:
+        fallback = _small_face_eyes(rgb, alpha)
+        if fallback is not None:
+            labels, parts = fallback
+    if len(parts) < 2:
         raise FlatRigError("eyes_not_found", "Two light eyes were not found in the top half of the pose")
+    return labels, parts
+
+
+def find_eyes(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float = 0.55):
+    """The two largest white blobs of similar size side by side, in the top of the figure."""
+    labels, parts = _eye_components(rgb, alpha, top_fraction)
     left, right = sorted(_eye_pair(parts), key=lambda part: part["x0"])
     mask = (labels == left["label"]) | (labels == right["label"])
     grow = max(4, int((left["y1"] - left["y0"]) * 0.3))
@@ -245,7 +296,10 @@ def _mouth_parts(strict, faint, centre, span, eye_width):
     strokes = [p for p in _strokes(strict, faint) if p["x1"] - p["x0"] <= eye_width * 0.95 and p["y1"] - p["y0"] <= span * 0.6]
     if not strokes:
         return []
-    seed = min(strokes, key=lambda part: part["y0"] + abs(_centre(part)[0] - centre) * 0.5)
+    seeds = [part for part in strokes if part["x1"] - part["x0"] >= eye_width * 0.14]
+    if not seeds:
+        return []
+    seed = min(seeds, key=lambda part: part["y0"] + abs(_centre(part)[0] - centre) * 0.5)
     row = [p for p in strokes + faint if p is not seed and abs(_centre(p)[1] - _centre(seed)[1]) < span * 0.14]
     group = _grow([seed], row, eye_width * 0.1, span * 0.1, eye_width * 0.95, 8)
     small = max(30, sum(part["size"] for part in group) * 0.35)
@@ -273,11 +327,11 @@ def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = Fals
         strict, background = _mouth_candidates(region, inside, eye_height, screen, False, 12)
         # A thin pen-line mouth breaks into tiny faint pieces: a softer threshold and smaller pieces find them.
         faint, _ = _mouth_candidates(region, inside, eye_height, screen, True, 5)
-        if strict or faint:
+        parts = _mouth_parts(strict, faint, (rx1 - rx0) / 2, span, eye_width)
+        if parts:
             break
     if not (strict or faint):
         raise FlatRigError("mouth_not_found", "No painted mouth was found under the eyes")
-    parts = _mouth_parts(strict, faint, (rx1 - rx0) / 2, span, eye_width)
     if not parts:
         raise FlatRigError("mouth_not_found", "No painted mouth was found under the eyes")
     mask = np.zeros(alpha.shape, bool)
