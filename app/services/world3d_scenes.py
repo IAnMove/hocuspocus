@@ -20,7 +20,9 @@ from services.world3d_template_catalog import require_card, user_template_docume
 _ROOT = Path(__file__).resolve().parents[2]
 _EDITS = "world3d-edits"
 _COMPILED: dict[str, dict] = {}
-_SLOT_FIELDS = {"sourceUrl", "sourceRef", "clip", "position", "rotationY", "scale", "motion", "grounded", "media"}
+_SLOT_FIELDS = {"sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "media"}
+_MAX_SLOTS = 24
+_ADDED_MEDIA = ("model3d", "image")
 _SCREEN_SOURCE_FIELDS = {"sourceUrl", "sourceRef"}
 _CAMERA_FIELDS = {"family", "fov", "eye", "look", "orbitRadius", "orbitHeight", "orbitTurns", "framing", "eyeOffset", "targetOffset", "frameFormat"}
 
@@ -79,17 +81,13 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         raise World3DSceneError("revision_conflict", "The scene changed since this revision. Reload before editing.", 409)
     document = record["document"]
     warnings = []
+    _set_duration(document, changes)
     for binding in _bindings(changes):
         warnings.extend(_bind(document, binding))
     if isinstance(changes.get("camera"), dict):
         document["camera"] = {**document["camera"], **{key: deepcopy(value) for key, value in changes["camera"].items() if key in _CAMERA_FIELDS}}
     if "playbackSpeed" in changes or "playback_speed" in changes:
         document["playbackSpeed"] = _speed(changes.get("playbackSpeed", changes.get("playback_speed")))
-    if "duration" in changes:
-        duration = changes["duration"]
-        if type(duration) not in (int, float) or not 0 < duration <= 600:
-            raise World3DSceneError("invalid_duration", "duration must be between 0 and 600 seconds")
-        document["duration"] = duration
     if "soundtrack" in changes:
         _set_soundtrack(document, changes["soundtrack"], workspace)
     _set_render_look(document, changes)
@@ -206,6 +204,8 @@ def _bindings(changes: dict) -> list[dict]:
 
 
 def _bind(document: dict, binding: dict) -> list[str]:
+    if binding.get("add") is True:
+        _add_slot(document, binding)
     slot = _target(document["slots"], binding)
     warnings = _clip_warning(slot, binding)
     for key in _SLOT_FIELDS:
@@ -216,6 +216,71 @@ def _bind(document: dict, binding: dict) -> list[str]:
             slot[key] = deepcopy(binding[snake])
     _bind_screen(slot, binding)
     return warnings
+
+
+def _add_slot(document: dict, binding: dict) -> None:
+    """A new prop object (a model or a cutout) the template did not have; binding an existing id just binds it."""
+    object_id = binding.get("objectId", binding.get("object_id"))
+    if not isinstance(object_id, str) or not object_id or len(object_id) > 120:
+        raise World3DSceneError("object_required", "An added object needs an object id")
+    slots = document["slots"]
+    if any(slot.get("id") == object_id for slot in slots):
+        return
+    if len(slots) >= _MAX_SLOTS:
+        raise World3DSceneError("too_many_objects", f"A Video 3D scene holds at most {_MAX_SLOTS} objects")
+    media = binding.get("media") or "model3d"
+    if media not in _ADDED_MEDIA:
+        raise World3DSceneError("invalid_patch", "An added object is a model3d or an image")
+    slots.append({"id": object_id, "slot": "prop", "position": [0, 0, 0], "rotationY": 0, "scale": 1, "sourceUrl": "",
+                  "media": media, "clip": None, **({"surface": "cutout"} if media == "image" else {})})
+
+
+_TIMED = ("sfx", "worldSfx", "texts")
+
+
+def _set_duration(document: dict, changes: dict) -> None:
+    if "duration" not in changes:
+        return
+    duration = changes["duration"]
+    if type(duration) not in (int, float) or not 0 < duration <= 600:
+        raise World3DSceneError("invalid_duration", "duration must be between 0 and 600 seconds")
+    if changes.get("retime") is True:
+        _retime(document, duration)
+    document["duration"] = duration
+
+
+def _retime(document: dict, duration) -> None:
+    """Stretch the template's own cues (effects, world effects, texts, appearances, clip cues) to a new length.
+
+    A template authored at 8 s keeps its beats where they belong at 5 s; the soundtrack and talk tracks are not
+    scaled because they are placed by the caller.
+    """
+    old = document.get("duration")
+    if type(old) not in (int, float) or old <= 0 or type(duration) not in (int, float) or duration <= 0:
+        return
+    factor = duration / old
+    if abs(factor - 1) < 1e-6:
+        return
+    for key in _TIMED:
+        for cue in _dicts(document.get(key)):
+            _scale(cue, factor, "start", "end")
+            for frame in _dicts(cue.get("motion")) if key == "worldSfx" else []:
+                _scale(frame, factor, "time")
+    for slot in _dicts(document.get("slots")):
+        if isinstance(slot.get("appearance"), dict):
+            _scale(slot["appearance"], factor, "start", "duration")
+        for cue in _dicts(slot.get("clips")):
+            _scale(cue, factor, "start", "duration")
+
+
+def _dicts(value) -> list[dict]:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _scale(target: dict, factor: float, *keys: str) -> None:
+    for key in keys:
+        if type(target.get(key)) in (int, float):
+            target[key] = round(target[key] * factor, 3)
 
 
 def _bind_screen(slot: dict, binding: dict) -> None:
@@ -287,7 +352,7 @@ def _view(scene_id: str, record: dict) -> dict:
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document),
         "warnings": record.get("warnings") or [], "traits": _traits(document),
-        "editable": ["sourceUrl", "sourceRef", "clip", "position", "rotationY", "scale", "motion", "grounded",
+        "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded",
                      "camera", "playbackSpeed", "duration", "dressing", "light", "renderLook", "toon"],
     }
 

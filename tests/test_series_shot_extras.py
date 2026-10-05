@@ -234,3 +234,45 @@ def test_a_directional_effect_keeps_its_rotation_so_a_laser_leaves_the_gun():
     assert layout["fx"][0]["rotation"] == 180.0 and "rotation" not in layout["fx"][1]
     cues = fx_cues(layout, [(0.4, 1.4)], 3.0)
     assert cues[0]["rotation"] == 180.0 and cues[0]["x"] == 30.0
+
+
+def _glb(path, names):
+    import json as _json
+    import struct as _struct
+    body = _json.dumps({"asset": {"version": "2.0"}, "animations": [{"name": name} for name in names]}).encode()
+    body += b" " * (-len(body) % 4)
+    path.write_bytes(b"glTF" + _struct.pack("<II", 2, 20 + len(body)) + _struct.pack("<I4s", len(body), b"JSON") + body)
+
+
+def test_a_3d_shot_places_its_objects_with_the_clip_found_in_the_model(tmp_path):
+    _glb(tmp_path / "zeppelin.glb", ["Idle", "Fly"])
+    value = series_shot3d.normalize_scene3d({"template": "anime-face-off", "objects": [
+        {"objectId": "zep", "file": "zeppelin.glb", "add": True, "clip": "Fly", "clipPlayback": {"speed": 2, "loop": "yes"}, "grounded": "no",
+         "position": [0, 2, -6], "rotationY": 1.57, "motion": {"to": [5, 2, -6], "faceTravel": True, "points": [[1, 2, 3], "x"]}},
+        {"objectId": "bad", "file": "../secret.glb", "add": True},
+        {"objectId": "abs", "file": "/etc/passwd"},
+        {"objectId": "nothing"},
+        {"objectId": "hero", "file": "rayo.glb", "clip": {"index": 1, "name": "Run"}, "grounded": True},
+        {"objectId": "flat", "media": "screen", "file": "a.png"}]})
+    assert value["objects"] == [{"objectId": "zep", "media": "model3d", "file": "zeppelin.glb", "add": True, "clip": "Fly",
+                                 "clipPlayback": {"speed": 2.0}, "position": [0.0, 2.0, -6.0], "motion": {"to": [5.0, 2.0, -6.0], "faceTravel": True},
+                                 "rotationY": 1.57},
+                                {"objectId": "hero", "media": "model3d", "file": "rayo.glb", "clip": {"index": 1, "name": "Run"}, "grounded": True}]
+    value["objects"] = value["objects"][:1]
+    tools = World3D()
+    shot = {"id": "s30", "scene3d": value}
+    series_shot3d.build_scene(tools, "cast", "job", shot, [], 5, {}, {}, NativeRenderError, root=str(tmp_path))
+    patch = tools.calls[1][1]["input"]
+    assert patch["retime"] is True and patch["duration"] == 5
+    assert patch["bindings"] == [{"object_id": "zep", "media": "model3d", "add": True, "source_url": "/api/v1/file/zeppelin.glb?workspace=cast",
+                                  "clip": {"index": 1, "name": "Fly"}, "clipPlayback": {"speed": 2.0}, "position": [0.0, 2.0, -6.0],
+                                  "rotationY": 1.57, "motion": {"to": [5.0, 2.0, -6.0], "faceTravel": True}}]
+    shot["scene3d"] = {**value, "retime": False, "objects": [{**value["objects"][0], "clip": "Explode"}]}
+    try:
+        series_shot3d.build_scene(World3D(), "cast", "job", shot, [], 5, {}, {}, NativeRenderError, root=str(tmp_path))
+    except NativeRenderError as error:
+        assert error.code == "unknown_clip" and "Idle, Fly" in str(error)
+    else:
+        raise AssertionError("expected unknown_clip")
+    kept = series_shot3d.normalize_scene3d({"template": "anime-face-off", "retime": False})
+    assert kept["retime"] is False and "objects" not in kept

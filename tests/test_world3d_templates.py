@@ -457,3 +457,44 @@ def test_the_patch_tool_documents_the_render_look():
     assert fields["renderLook"]["enum"] == ["none", "n64", "toon"]
     assert set(fields["toon"]["properties"]) == {"steps", "outline", "ink"}
     assert fields["toon"]["additionalProperties"] is False
+
+
+def test_a_patch_adds_an_animated_prop_and_stretches_the_template_cues_to_the_new_length(tmp_path):
+    from services.world3d_scenes import World3DSceneError
+    workspace_dir = lambda name: str(tmp_path / name)
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"templateId": "dark-still-salt-sea", "duration": 8,
+                "slots": [{"id": "hero", "slot": "subject_1", "media": "model3d", "sourceUrl": "", "clip": None, "position": [0, 0, 0],
+                           "rotationY": 0, "scale": 1, "appearance": {"start": 2, "duration": 1, "color": "#fff"},
+                           "clips": [{"clip": {"index": 0, "name": "Run"}, "start": 4, "duration": 2, "offset": 0.5}]}],
+                "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]},
+                "sfx": [{"id": "flash", "kind": "impact_flash", "start": 4, "end": 4.4}],
+                "worldSfx": [{"id": "boom", "kind": "explosion", "start": 6, "end": 8, "motion": [{"time": 6, "scale": 1}, {"time": 8, "scale": 2}]}],
+                "texts": [{"id": "title", "text": "BAM", "start": 1, "end": 3}],
+                "soundtrack": [{"id": "scene-music", "start": 2, "offset": 0, "gain": 1, "audio": {"url": "/api/v1/file/m.wav?workspace=studio"}}]}
+    (folder / "w3d-0000abcd5678.json").write_text(json.dumps({"revision": 1, "templateId": "dark-still-salt-sea", "document": document, "warnings": []}), encoding="utf-8")
+    viewed = patch_scene("studio", "w3d-0000abcd5678", workspace_dir, {"duration": 4, "retime": True, "bindings": [
+        {"object_id": "ship", "add": True, "source_url": ROBOT, "clip": {"index": 1, "name": "Fly"},
+         "clipPlayback": {"speed": 1.5, "start": 0, "loop": True}, "position": [0, 3, -8], "motion": {"to": [6, 3, -8], "faceTravel": True}},
+        {"object_id": "poster", "add": True, "media": "image", "source_url": ROOM}]}, 1)
+    out = viewed["document"]
+    assert (out["sfx"][0]["start"], out["sfx"][0]["end"]) == (2.0, 2.2)
+    assert (out["worldSfx"][0]["start"], [frame["time"] for frame in out["worldSfx"][0]["motion"]]) == (3.0, [3.0, 4.0])
+    assert (out["texts"][0]["start"], out["texts"][0]["end"]) == (0.5, 1.5)
+    hero = out["slots"][0]
+    assert hero["appearance"]["start"] == 1.0 and hero["clips"][0] == {"clip": {"index": 0, "name": "Run"}, "start": 2.0, "duration": 1.0, "offset": 0.5}
+    assert out["soundtrack"][0]["start"] == 2, "the caller places the soundtrack"
+    ship, poster = out["slots"][1], out["slots"][2]
+    assert (ship["slot"], ship["media"], ship["sourceUrl"], ship["clip"]["name"], ship["clipPlayback"]["speed"]) == ("prop", "model3d", ROBOT, "Fly", 1.5)
+    assert ship["motion"] == {"to": [6, 3, -8], "faceTravel": True} and ship["position"] == [0, 3, -8]
+    assert (poster["media"], poster["surface"], poster["sourceUrl"]) == ("image", "cutout", ROOM)
+    again = patch_scene("studio", "w3d-0000abcd5678", workspace_dir, {"duration": 4, "retime": True, "bindings": [
+        {"object_id": "ship", "add": True, "scale": 2}]}, 2)
+    assert len(again["document"]["slots"]) == 3 and again["document"]["slots"][1]["scale"] == 2, "adding an existing id binds it"
+    assert again["document"]["sfx"][0]["start"] == 2.0, "the same length does not stretch again"
+    plain = patch_scene("studio", "w3d-0000abcd5678", workspace_dir, {"duration": 8}, 3)
+    assert plain["document"]["sfx"][0]["start"] == 2.0, "without retime the cues keep their seconds"
+    for bad in ({"object_id": "x", "add": True, "media": "screen"}, {"add": True, "media": "model3d"}):
+        with pytest.raises(World3DSceneError):
+            patch_scene("studio", "w3d-0000abcd5678", workspace_dir, {"bindings": [bad]}, 4)
