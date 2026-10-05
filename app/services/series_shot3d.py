@@ -119,8 +119,9 @@ def _motion(value: Any) -> dict[str, Any] | None:
         motion["points"] = points[:16]
     if isinstance(value.get("faceTravel"), bool):
         motion["faceTravel"] = value["faceTravel"]
-    if _number(value.get("turnTo"), -100, 100) is not None:
-        motion["turnTo"] = _number(value["turnTo"], -100, 100)
+    for key, low, high in (("turnTo", -100, 100), ("headingOffset", -6.3, 6.3)):
+        if _number(value.get(key), low, high) is not None:
+            motion[key] = _number(value[key], low, high)
     if value.get("easing") in ("linear", "smooth"):
         motion["easing"] = value["easing"]
     return motion
