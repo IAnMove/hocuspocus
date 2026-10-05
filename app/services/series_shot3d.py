@@ -5,21 +5,31 @@ where and who::
 
     shot.scene3d = {"template": "user-moon-base",             # or "scene": "<saved>.world3d.scene.json"
                     "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}],
+                    "objects": [{"objectId": "ship", "file": "ship.glb", "clip": "Fly", "add": True,
+                                 "position": [0, 2, -6], "motion": {"to": [4, 2, -6], "faceTravel": True}}],
                     "quality": "final"}
 
 and the render records its lines like any 2D shot, instantiates the scene,
-makes each cast object talk as its Character Kit cutout (``world3d.scene.talk``,
-the line audio joins the soundtrack), publishes, exports with
-``scenes.world3d.export`` and imports the MP4 as the shot's take.
+stretches the template's own effects to the shot's length, places the objects
+(3D models with their animation clip, or image cutouts; ``add`` puts one the
+template lacks), makes each cast object talk as its Character Kit cutout
+(``world3d.scene.talk``, the line audio joins the soundtrack), publishes,
+exports with ``scenes.world3d.export`` and imports the MP4 as the shot's take.
 """
 from __future__ import annotations
 
 import hashlib
+import json
+import math
 import re
+import struct
+from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
 QUALITIES = ("draft", "final")
+OBJECT_MEDIA = ("model3d", "image")
+MAX_OBJECTS = 12
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$")
 _SCENE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.scene\.json$")
 
@@ -33,7 +43,19 @@ def normalize_scene3d(value: Any) -> dict[str, Any] | None:
     if len(source) != 1:
         return None
     cast = [entry for entry in (_cast_entry(item) for item in value.get("cast") or []) if entry]
-    return {**source, "cast": cast[:8], "quality": value.get("quality") if value.get("quality") in QUALITIES else "draft"}
+    return {**source, "cast": cast[:8], **_extras(value), "quality": value.get("quality") if value.get("quality") in QUALITIES else "draft"}
+
+
+def _extras(value: dict[str, Any]) -> dict[str, Any]:
+    """Objects when there are any, and ``retime: false`` only when the shot keeps the template's seconds."""
+    extras: dict[str, Any] = {}
+    objects = [entry for entry in (_object_entry(item) for item in value.get("objects") or []) if entry] \
+        if isinstance(value.get("objects"), list) else []
+    if objects:
+        extras["objects"] = objects[:MAX_OBJECTS]
+    if value.get("retime") is False:
+        extras["retime"] = False
+    return extras
 
 
 def _valid_id(value: Any) -> bool:
@@ -44,6 +66,143 @@ def _cast_entry(entry: Any) -> dict[str, str] | None:
     if not isinstance(entry, dict) or not (_valid_id(entry.get("characterId")) and _valid_id(entry.get("objectId"))):
         return None
     return {"characterId": entry["characterId"], "objectId": entry["objectId"], **({"poseId": entry["poseId"]} if _valid_id(entry.get("poseId")) else {})}
+
+
+def _number(value: Any, low: float, high: float) -> float | None:
+    return float(value) if type(value) in (int, float) and math.isfinite(value) and low <= value <= high else None
+
+
+def _vec3(value: Any) -> list[float] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        return None
+    numbers = [_number(item, -1000, 1000) for item in value]
+    return None if None in numbers else numbers
+
+
+def _file(value: Any) -> str | None:
+    """A workspace-relative file: no absolute path, no parent segment."""
+    if not isinstance(value, str) or not 0 < len(value) <= 240 or value.startswith(("/", "~")) or "\\" in value:
+        return None
+    return value if all(part not in ("", ".", "..") for part in value.split("/")) and not re.search(r"[?#:]", value) else None
+
+
+def _clip(value: Any) -> str | dict[str, Any] | None:
+    if isinstance(value, str) and 0 < len(value) <= 200:
+        return value
+    if isinstance(value, dict) and type(value.get("index")) is int and value["index"] >= 0 \
+            and isinstance(value.get("name"), str) and 0 < len(value["name"]) <= 200:
+        return {"index": value["index"], "name": value["name"]}
+    return None
+
+
+def _motion(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict) or _vec3(value.get("to")) is None:
+        return None
+    motion: dict[str, Any] = {"to": _vec3(value["to"])}
+    if _vec3(value.get("via")) is not None:
+        motion["via"] = _vec3(value["via"])
+    points = [_vec3(item) for item in value.get("points") or []] if isinstance(value.get("points"), list) else []
+    if points and None not in points:
+        motion["points"] = points[:16]
+    if isinstance(value.get("faceTravel"), bool):
+        motion["faceTravel"] = value["faceTravel"]
+    if _number(value.get("turnTo"), -100, 100) is not None:
+        motion["turnTo"] = _number(value["turnTo"], -100, 100)
+    if value.get("easing") in ("linear", "smooth"):
+        motion["easing"] = value["easing"]
+    return motion
+
+
+def _object_entry(entry: Any) -> dict[str, Any] | None:
+    """A non-speaking object of the shot: a model (with its clip) or an image, on a template object or added."""
+    if not isinstance(entry, dict) or not _valid_id(entry.get("objectId")):
+        return None
+    media = entry.get("media") or "model3d"
+    if media not in OBJECT_MEDIA:
+        return None
+    result: dict[str, Any] = {"objectId": entry["objectId"], "media": media}
+    if _file(entry.get("file")):
+        result["file"] = entry["file"]
+    if entry.get("add") is True:
+        if "file" not in result:
+            return None
+        result["add"] = True
+    if media == "model3d":
+        result.update(_clip_fields(entry))
+    checks = {"position": _vec3, "motion": _motion, "rotationY": lambda value: _number(value, -20, 20),
+              "scale": lambda value: _number(value, 0.01, 100)}
+    result.update({key: checked for key, check in checks.items() if (checked := check(entry.get(key))) is not None})
+    return result if len(result) > 2 else None
+
+
+def _clip_fields(entry: dict[str, Any]) -> dict[str, Any]:
+    fields: dict[str, Any] = {"clip": _clip(entry.get("clip"))} if _clip(entry.get("clip")) is not None else {}
+    playback = entry.get("clipPlayback") if isinstance(entry.get("clipPlayback"), dict) else {}
+    kept = {key: number for key, low, high in (("speed", 0.05, 8), ("start", 0, 600))
+            if (number := _number(playback.get(key), low, high)) is not None}
+    if isinstance(playback.get("loop"), bool):
+        kept["loop"] = playback["loop"]
+    return {**fields, **({"clipPlayback": kept} if kept else {})}
+
+
+def glb_clip_names(path: Path) -> list[str]:
+    """The animation names of a .glb (or .gltf), in the order the renderer indexes them."""
+    try:
+        with path.open("rb") as handle:
+            if path.suffix.lower() == ".gltf":
+                data = json.loads(handle.read(64 * 1024 * 1024))
+            else:
+                header = handle.read(20)
+                if len(header) < 20 or header[:4] != b"glTF":
+                    return []
+                length, kind = struct.unpack("<I4s", header[12:20])
+                if kind != b"JSON" or length > 64 * 1024 * 1024:
+                    return []
+                data = json.loads(handle.read(length))
+    except (OSError, ValueError):
+        return []
+    return [str(item.get("name") or "") for item in data.get("animations") or [] if isinstance(item, dict)]
+
+
+def _resolve_clip(root: str | None, entry: dict[str, Any], error: Callable[..., Exception]) -> dict[str, Any]:
+    """A clip named by its name gets its index from the GLB, so a re-exported model does not silently play another clip."""
+    clip = entry["clip"]
+    if isinstance(clip, dict):
+        return clip
+    names = []
+    if root and entry.get("file"):
+        base = Path(root).resolve()
+        path = (base / entry["file"]).resolve()
+        if path.is_relative_to(base) and path.is_file():
+            names = glb_clip_names(path)
+    if clip not in names:
+        raise error("unknown_clip", f"{entry['objectId']}: no clip {clip!r} in {entry.get('file') or 'its model'}"
+                    f" (clips: {', '.join(names) or 'none'})", 400)
+    return {"index": names.index(clip), "name": clip}
+
+
+def _object_binding(workspace: str, root: str | None, entry: dict[str, Any], error: Callable[..., Exception]) -> dict[str, Any]:
+    binding: dict[str, Any] = {"object_id": entry["objectId"], "media": entry["media"], **({"add": True} if entry.get("add") else {})}
+    if entry.get("file"):
+        binding["source_url"] = f"/api/v1/file/{quote(entry['file'])}?workspace={quote(workspace)}"
+    if "clip" in entry:
+        binding["clip"] = _resolve_clip(root, entry, error)
+    for key in ("clipPlayback", "position", "rotationY", "scale", "motion"):
+        if key in entry:
+            binding[key] = entry[key]
+    return binding
+
+
+def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list[dict[str, Any]],
+           error: Callable[..., Exception]) -> dict[str, Any]:
+    """What the length patch also sets: retiming, the scene's sound and the objects."""
+    setup: dict[str, Any] = {"retime": True} if config.get("retime", True) else {}
+    if sound:
+        setup["soundtrack"] = sound
+    objects = [_object_binding(workspace, root, entry, error) for entry in config.get("objects") or []]
+    if objects:
+        setup["bindings"] = objects
+    return setup
 
 
 def wants_render(shot: dict[str, Any]) -> bool:
@@ -88,11 +247,12 @@ def _talk(call: Callable, workspace: str, stem: str, scene_id: str, revision: in
 
 def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any], lines: list[dict[str, Any]], duration: float,
                 kits: dict[str, Any], series_characters: dict[str, str], error: Callable[..., Exception],
-                tracks: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Instantiate, set the length and sound, make every cast object talk and publish; returns the published scene.
+                tracks: list[dict[str, Any]] | None = None, root: str | None = None) -> dict[str, Any]:
+    """Instantiate, set the length, sound and objects, make every cast object talk and publish; returns the published scene.
 
     ``tracks`` are the shot's ambience, stinger and music (``series_shot_plan.sound_tracks``); they join the scene
-    soundtrack, where the page ducks them under the dialogue like it does in a 2D shot.
+    soundtrack, where the page ducks them under the dialogue like it does in a 2D shot. ``root`` is the workspace
+    folder, where a clip named by name is looked up in its model.
     """
     config = normalize_scene3d(shot.get("scene3d")) or {}
     sound = [{"id": f"scene-{track['id']}", "audio": f"/api/v1/file/{quote(str(track['filename']))}?workspace={quote(workspace)}",
@@ -106,7 +266,7 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     scene_id = scene["sceneId"]
     revision = _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-length", "input": {
         "workspace": workspace, "scene_id": scene_id, "base_revision": scene["revision"], "duration": round(duration, 3),
-        **({"soundtrack": sound} if sound else {})}}), "set 3D length", error)["scene"]["revision"]
+        **_setup(workspace, root, config, sound, error)}}), "set 3D length", error)["scene"]["revision"]
     for entry in config.get("cast") or []:
         spoken = [line for line in lines if line["characterId"] == entry["characterId"]]
         kit_id = series_characters.get(entry["characterId"])

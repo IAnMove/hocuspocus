@@ -107,6 +107,13 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   template (`world3d.templates.list`, or a personal one) or a saved scene file, and which object each speaking
   character is (`objectId`). The server render records the lines like a 2D shot, makes each object talk as its
   Character Kit, exports it and imports the take. `quality`: `draft` (fast) or `final`.
+  The template's own effects, texts and clip cues are stretched to the shot's length (`"retime": false` keeps their
+  seconds). `objects` places what does not speak: a 3D model from `model3d.generate`/`model3d.animate` (`file`, its
+  `clip` by name, `clipPlayback` {speed, start, loop}) or an image cutout (`"media": "image"`), on a template object
+  (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationY` (radians, metres) and a
+  `motion` {to, via, points, faceTravel, easing} across the shot:
+  `{"objectId": "zep", "file": "zeppelin.glb", "add": true, "clip": "Fly", "position": [-6, 3, -8],
+  "motion": {"to": [6, 3, -8], "faceTravel": true}}`. Mix them: 2D cutouts talk, 3D models move.
 
 ## Writing for quality
 
