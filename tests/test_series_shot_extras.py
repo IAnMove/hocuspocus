@@ -226,3 +226,11 @@ def test_scene_sound_joins_a_3d_shot_soundtrack_balanced_and_ducked_by_the_page(
     plain = World3D()
     series_shot3d.build_scene(plain, "cast", "job", shot, lines, 4.5, {}, {"elon": "kit-elon"}, NativeRenderError)
     assert "soundtrack" not in plain.calls[3][1]["input"], "no tracks, no soundtrack patch"
+
+
+def test_a_directional_effect_keeps_its_rotation_so_a_laser_leaves_the_gun():
+    layout = normalize_layout2d({"fx": [{"kind": "laser", "line": 0, "x": 30, "y": 36, "rotation": 180},
+                                        {"kind": "laser", "line": 0, "rotation": 400}]})
+    assert layout["fx"][0]["rotation"] == 180.0 and "rotation" not in layout["fx"][1]
+    cues = fx_cues(layout, [(0.4, 1.4)], 3.0)
+    assert cues[0]["rotation"] == 180.0 and cues[0]["x"] == 30.0
