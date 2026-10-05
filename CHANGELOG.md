@@ -6,6 +6,11 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Typed H3 and LTX video (`generation.video` version 3) can be queued. Its
+commands carry content-fingerprint version 3, which the task admission store
+refused, so every real request failed with «Unsupported command fingerprint
+version» and only `validate: true` worked.
+
 Flat-rigged characters close their eyes properly in every pose. Video 2D fits
 each layer into a 16:9 box, so a blink sprite wider than that (a pair of round
 eyes is about 2.5:1) was drawn at about 70% of its anchor and the white of the
