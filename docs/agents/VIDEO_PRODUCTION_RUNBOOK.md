@@ -608,6 +608,16 @@ real registration/review HTTP and simulated media generation. It requires only
 the CPU packages in `scripts/ci-production-browser-requirements.txt`, downloads
 no models and uses isolated test ports. It does not assess visual quality.
 
+## Flat rigs for full-body cel characters
+
+`characters.rig.flat` also checks small cream-coloured eyes inside warm-toned
+face regions when its large white-eye detector finds fewer than two eyes.
+This fallback joins sclera fragments around the pupil and excludes goggles
+above the face and bright body props. Painted-mouth selection requires a
+horizontal seed wide enough for the face, so a short nose stroke is preserved.
+Review every pose's mouth and blink before production; an unsupported face or
+an ambiguous result still needs a regenerated pose.
+
 ## Comic film PRE after a restart
 
 A comic PRE that was ready before the lab stopped is still ready afterwards.
