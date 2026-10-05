@@ -111,9 +111,33 @@ def _beat_cues(beat: Any, offset: float, duration: float) -> list[dict[str, Any]
     return cues
 
 
+UNTIMED_MARGIN = 0.25
+
+
+def spread_beats(beats: Sequence[Any], duration: float) -> list[dict[str, Any]]:
+    """Beats without start/end (an H3 or imported take) share the clip by text length, inside a small margin."""
+    texts = [" ".join(str(beat.get("text") or "").split()) for beat in beats if isinstance(beat, dict)]
+    texts = [text for text in texts if text]
+    total = sum(len(text) for text in texts)
+    if not texts or duration <= 2 * UNTIMED_MARGIN or total == 0:
+        return []
+    span, cursor, timed = duration - 2 * UNTIMED_MARGIN, UNTIMED_MARGIN, []
+    for text in texts:
+        length = span * len(text) / total
+        timed.append({"text": text, "start": round(cursor, 3), "end": round(cursor + length, 3)})
+        cursor += length
+    return timed
+
+
+def _timed(beats: Sequence[Any], duration: float) -> list[Any]:
+    if beats and all(isinstance(beat, dict) and beat.get("start") is None and beat.get("end") is None for beat in beats):
+        return spread_beats(beats, duration)
+    return list(beats)
+
+
 def episode_cues(clips: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     """``clips``: ``{offset, duration, beats}`` per shot → cues on the episode timeline."""
-    cues = [cue for clip in clips for beat in clip.get("beats") or []
+    cues = [cue for clip in clips for beat in _timed(clip.get("beats") or [], float(clip["duration"]))
             for cue in _beat_cues(beat, float(clip["offset"]), float(clip["duration"]))]
     return sorted(cues, key=lambda cue: (cue["start"], cue["end"]))
 

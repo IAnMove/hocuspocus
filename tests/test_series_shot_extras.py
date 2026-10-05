@@ -203,3 +203,26 @@ def test_a_3d_take_subtitles_come_from_its_own_lines():
     assert scene_beats("/nonexistent", plan[1]["dialogueBeats"]) == beats
     cues = episode_cues([{"offset": 5.0, "duration": 2.5, "beats": scene_beats("/nonexistent", beats)}])
     assert [(cue["start"], cue["end"], cue["text"]) for cue in cues] == [(5.35, 7.0, "Desde Marte: aprobado.")]
+
+
+def test_sound_effects_keep_a_zero_volume_and_a_subfolder_but_never_leave_the_workspace():
+    layout = normalize_layout2d({"sfx": [{"file": "sfx/pen.wav", "line": 0, "volume": 0}, {"file": "../pen.wav", "line": 0},
+                                         {"file": "sfx/../../pen.wav", "line": 0}, {"file": "/etc/pen.wav", "line": 0}]})
+    assert layout["sfx"] == [{"file": "sfx/pen.wav", "line": 0, "anchor": "start", "volume": 0}]
+
+
+def test_scene_sound_joins_a_3d_shot_soundtrack_balanced_and_ducked_by_the_page():
+    tools = World3D()
+    shot = {"id": "s20", "scene3d": {"scene": "mars.world3d.scene.json", "cast": [{"characterId": "elon", "objectId": "elon", "poseId": "phone"}]}}
+    lines = [{"characterId": "elon", "start": 0.8, "filename": "ln 1.wav", "cues": []}]
+    tracks = [{"id": "ambience", "filename": "amb/mars wind.wav", "kind": "sfx", "startTime": 0, "volume": 0.3},
+              {"id": "music", "filename": "theme.wav", "kind": "music", "startTime": 1.5, "volume": 1.8}]
+    series_shot3d.build_scene(tools, "cast", "job", shot, lines, 4.5, {}, {"elon": "kit-elon"}, NativeRenderError, tracks=tracks)
+    length = tools.calls[3][1]["input"]
+    assert length["duration"] == 4.5
+    assert length["soundtrack"] == [
+        {"id": "scene-ambience", "audio": "/api/v1/file/amb/mars%20wind.wav?workspace=cast", "start": 0.0, "gain": 0.3},
+        {"id": "scene-music", "audio": "/api/v1/file/theme.wav?workspace=cast", "start": 1.5, "gain": 1.0}]
+    plain = World3D()
+    series_shot3d.build_scene(plain, "cast", "job", shot, lines, 4.5, {}, {"elon": "kit-elon"}, NativeRenderError)
+    assert "soundtrack" not in plain.calls[3][1]["input"], "no tracks, no soundtrack patch"

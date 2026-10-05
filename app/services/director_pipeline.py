@@ -8406,35 +8406,6 @@ def _run_pipeline(pid: str, resume: bool = False):
                 if clip_slots:
                     artifact_updates["_clip_video_files"] = clip_slots
             _update_pipeline(pid, **artifact_updates)
-        # Special-case the safety scanner. Don't print a stack trace for
-        # safety violations — they're a clean refusal, not a crash, and
-        # the user-visible message is purpose-built. Other exceptions
-        # keep the existing traceback dump for debugging.
-        try:
-            from services.director.safety_scan import SafetyViolationError
-        except Exception:
-            SafetyViolationError = None  # type: ignore
-        if SafetyViolationError is not None and isinstance(e, SafetyViolationError):
-            print(
-                f"[Pipeline {pid}] Safety scan blocked generation. "
-                f"source={e.source} matched={e.matched_terms}"
-            )
-            user_msg = (
-                "Generation aborted: the input contained content involving "
-                f"minors in a prohibited context (matched terms: "
-                f"{', '.join(e.matched_terms)}). The system refuses to "
-                f"generate this category of content. Please revise your "
-                f"concept to use only adult characters (18+)."
-            )
-            _update_pipeline(
-                pid, status="failed", error=user_msg,
-                _completed_at=time.time(),
-                progress={"current": 0, "total": 0,
-                          "message": "Generation aborted (safety policy)",
-                          "step": 0, "total_steps": 0},
-            )
-            _save_pipeline_state(pid)
-            return
         traceback.print_exc()
         # Tag with OOM info if applicable so the UI can surface the
         # OOM recovery banner. detect_oom returns None for non-OOM

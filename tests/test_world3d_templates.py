@@ -399,3 +399,28 @@ def test_planner_uses_a_real_id_and_refuses_a_tie():
     plain = plan_brief(_brief())
     assert "world3d_template" not in plain
     assert all(item.get("kind") != "scene3d" for item in plain["shots"])
+
+
+def test_a_scene_patch_sets_the_scene_sound_and_keeps_talk_tracks(tmp_path):
+    from services.world3d_scenes import World3DSceneError
+    workspace_dir = lambda name: str(tmp_path / name)
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"templateId": "dark-still-salt-sea", "slots": [], "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]},
+                "soundtrack": [{"id": "talk-elon-0", "audio": {"url": "/api/v1/file/ln.wav?workspace=studio", "filename": "ln.wav", "workspaceId": "studio"},
+                                "start": 0.8, "offset": 0, "gain": 1}]}
+    (folder / "w3d-0000abcd1234.json").write_text(json.dumps({"revision": 1, "templateId": "dark-still-salt-sea", "document": document, "warnings": []}), encoding="utf-8")
+    viewed = patch_scene("studio", "w3d-0000abcd1234", workspace_dir, {"soundtrack": [
+        {"id": "scene-ambience", "audio": "/api/v1/file/amb/wind.wav?workspace=studio", "start": 0, "gain": 0.3}]}, 1)
+    tracks = viewed["document"]["soundtrack"]
+    assert [track["id"] for track in tracks] == ["talk-elon-0", "scene-ambience"]
+    assert tracks[1] == {"id": "scene-ambience", "audio": {"url": "/api/v1/file/amb/wind.wav?workspace=studio", "filename": "wind.wav", "workspaceId": "studio"},
+                         "start": 0.0, "offset": 0, "gain": 0.3}
+    again = patch_scene("studio", "w3d-0000abcd1234", workspace_dir, {"soundtrack": [
+        {"id": "scene-music", "audio": "/api/v1/file/theme.wav?workspace=studio", "start": 2, "gain": 1}]}, 2)
+    assert [track["id"] for track in again["document"]["soundtrack"]] == ["talk-elon-0", "scene-music"], "scene tracks are replaced, talk stays"
+    for bad in ([{"id": "talk-x", "audio": "/api/v1/file/a.wav", "start": 0, "gain": 1}],
+                [{"id": "scene-x", "audio": "https://evil.example/a.wav", "start": 0, "gain": 1}],
+                [{"id": "scene-x", "audio": "/api/v1/file/a.wav", "start": 0, "gain": 7}], "nope"):
+        with pytest.raises(World3DSceneError):
+            patch_scene("studio", "w3d-0000abcd1234", workspace_dir, {"soundtrack": bad}, 3)
