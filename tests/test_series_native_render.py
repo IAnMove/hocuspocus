@@ -231,6 +231,52 @@ def test_a_drifting_take_is_spoken_again_and_the_best_one_kept(tmp_path):
     assert not list(tmp_path.glob("*-raw*")), "raw takes and their sidecars are intermediates"
 
 
+def _takes(tmp_path, lengths):
+    """A trim that gives each take its length in turn; None is a take with nothing left (ffprobe says N/A)."""
+    lengths = list(lengths)
+
+    def trim(source, target):
+        (tmp_path / target.rsplit("/", 1)[-1]).write_bytes(b"trimmed")
+        length = lengths.pop(0)
+        if length is None:
+            raise ValueError("could not convert string to float: 'N/A'")
+        return length
+    return trim
+
+
+def test_an_empty_or_cut_off_take_is_spoken_again_with_another_seed(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    render.deps.trim = _takes(tmp_path, [None, 0.05, 1.25])
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "completed"
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert (line["attempt"], line["duration"]) == (2, 1.25)
+    seeds = [args["input"]["params"]["seed"] for tool, args in tools.calls if tool == "generation.speech"]
+    assert len(set(seeds)) == 3, "each take asks with its own seed"
+    assert [tool for tool, _ in tools.calls].count("qa.speech") == 1, "an empty take is not worth a transcription"
+
+
+def test_a_voice_that_never_speaks_fails_the_shot_clearly(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    render.deps.trim = _takes(tmp_path, [None, 0.05, None])
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "failed" and "gave no speech for «Adiós.» in 3 takes" in done["items"][0]["error"]
+    assert not list(tmp_path.glob("ln-ep1-s03_d0-*.wav")), "no empty recording is left for a resume to reuse"
+    assert not compiled
+
+
+def test_an_empty_recording_left_by_an_older_render_is_recorded_again(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 0.05)
+    finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    spoken = [tool for tool, _ in tools.calls].count("generation.speech")
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert again["status"] == "completed" and not again["items"][0]["lines"]["s03_d0"].get("reused")
+    assert [tool for tool, _ in tools.calls].count("generation.speech") == spoken + 1
+
+
 def test_a_speech_failure_after_a_first_take_keeps_that_take_as_the_recording(tmp_path):
     tools, compiled = Tools(tmp_path, bad_first_take=True, fail_speech_at=2), []
     render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)

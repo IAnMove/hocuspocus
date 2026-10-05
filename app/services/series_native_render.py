@@ -51,6 +51,8 @@ MAX_TAKES = 3
 EXPORT_RETRIES = 3
 INTERRUPTED = "The server restarted during this render; resume to continue"
 MAX_WER = 0.34
+# A take shorter than this (per word, with a floor) is a voice that stopped before speaking, not a line.
+MIN_SECONDS_PER_WORD, MIN_LINE_SECONDS = 0.1, 0.25
 SPEECH_CODES = {"english": "en", "spanish": "es", "french": "fr", "german": "de", "italian": "it", "portuguese": "pt",
                 "japanese": "ja", "korean": "ko", "chinese": "cmn", "russian": "ru"}
 
@@ -74,6 +76,11 @@ def trim_silence(source: str, target: str, pad: float = 0.06) -> float:
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", source, "-af", flt, "-ar", "44100", "-ac", "1", target],
                    check=True, timeout=120)
     return audio_seconds(target)
+
+
+def shortest_line(text: str) -> float:
+    """The shortest plausible recording of ``text``; anything shorter is silence, a click or a cut-off take."""
+    return max(MIN_LINE_SECONDS, MIN_SECONDS_PER_WORD * len(text.split()))
 
 
 @dataclass
@@ -411,6 +418,8 @@ class SeriesNativeRender:
             duration = self.deps.probe(path)
         except (OSError, ValueError, subprocess.SubprocessError):
             return None
+        if duration < shortest_line(text):
+            return None  # an empty take an older render kept: record it again
         self.deps.level(path)
         cues = self._cues(workspace, filename, duration, text, job["language"])
         return {"key": key, "filename": filename, "duration": round(duration, 3), "wer": None, "attempt": 0, "reused": True, **cues}
@@ -424,9 +433,13 @@ class SeriesNativeRender:
             for attempt in range(MAX_TAKES):
                 raw = self._speak(workspace, job, stem, text, voice, attempt)
                 try:
-                    duration = self.deps.trim(os.path.join(root, raw), final)
+                    duration = self._trim(os.path.join(root, raw), final)
                 finally:
                     _discard(os.path.join(root, raw))  # the trimmed take is the recording; the raw one is an intermediate
+                if duration < shortest_line(text):
+                    # The voice stopped before speaking (only silence, or a click the trim kept): another seed.
+                    _discard(final)
+                    continue
                 wer = self._wer(workspace, f"{stem}.wav", text, job["language"])
                 take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer, "attempt": attempt}
                 if best is None or (wer is not None and (best["wer"] is None or wer < best["wer"])):
@@ -438,9 +451,19 @@ class SeriesNativeRender:
             # The best take so far becomes the recording even when a later attempt fails, so a resume reuses it.
             if os.path.isfile(best_path):
                 os.replace(best_path, final)
+        if best is None:
+            raise NativeRenderError("speech_empty", f"The voice gave no speech for «{text}» in {MAX_TAKES} takes; "
+                                    "try another reference voice or reword the line", 502)
         self.deps.level(final)
         cues = self._cues(workspace, best["filename"], best["duration"], text, job["language"])
         return {**best, **cues}
+
+    def _trim(self, raw: str, final: str) -> float:
+        """The trimmed take's length; 0 when nothing was left (ffprobe has no duration for an empty file)."""
+        try:
+            return self.deps.trim(raw, final)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return 0.0
 
     def _speak(self, workspace: str, job: dict, stem: str, text: str, voice: dict, attempt: int) -> str:
         seed = int(hashlib.sha1(f"{stem}-{attempt}".encode()).hexdigest()[:6], 16)

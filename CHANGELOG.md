@@ -6,6 +6,16 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A Series native render no longer keeps a voice take that came out empty. Some
+cloned voices sometimes stop before speaking a short line: the take is only
+silence, or a click of a few hundredths of a second. Trimming the silence left
+an empty file, and the shot failed with `could not convert string to float:
+'N/A'`; a click was kept as the line and then failed lip-sync. A take shorter
+than 0.1 s per word (0.25 s at least) is now spoken again with the next seed,
+before the transcription check. When all three takes are empty, the shot fails
+with `speech_empty` and names the line. An empty recording left by an older
+render is recorded again instead of reused.
+
 Publishing a reviewed take under an exact name with `assets.upload` no longer
 overwrites or deletes the metadata of another output. Generation sidecars are
 keyed by the name before the extension, so `song.wav` and a cover `song.png`
