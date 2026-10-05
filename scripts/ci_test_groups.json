@@ -387,6 +387,7 @@
         "tests/test_shared_api_bootstrap.py",
         "tests/test_speech_analysis_cache.py",
         "tests/test_speech_quality.py",
+        "tests/test_speech_reference_pauses.py",
         "tests/test_story_asset_import.py",
         "tests/test_story_lab_audio_ui.py",
         "tests/test_story_lab_resume_provider.py",
@@ -513,6 +514,10 @@
     {
       "prefix": "app/services/speech_alignment.py",
       "paths": ["tests/test_speech_alignment_parity.py"]
+    },
+    {
+      "prefix": "app/services/speech_reference_pauses.py",
+      "paths": ["tests/test_speech_reference_pauses.py"]
     },
     {
       "prefix": "app/services/production_generation_link.py",
