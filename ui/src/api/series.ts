@@ -482,8 +482,11 @@ export async function commitSeriesCanon(
 }
 
 export type SeriesServerRenderItem = {
-  shotId: string; stage: 'voices' | 'scene' | 'export' | 'import' | 'done'; status: 'queued' | 'running' | 'done' | 'failed'
+  shotId: string; stage: 'voices' | 'scene' | 'export' | 'foley' | 'import' | 'done'; status: 'queued' | 'running' | 'done' | 'failed'
   error?: string | null; attemptId?: string; approved?: boolean
+  /** Why the shot's foley was left out of its take (the take was still made). */
+  warning?: string | null
+  foley?: { prompt: string; volume: number; file: string; source: string; gain?: number; reused?: boolean }
 }
 export type SeriesServerRenderJob = {
   jobId: string; seriesId: string; episodeId: string; current: number; total: number; message?: string; activeShotId?: string | null

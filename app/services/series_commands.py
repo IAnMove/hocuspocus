@@ -72,12 +72,15 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Render every 2D animation shot of an episode on the server, no browser needed: each line in the character's voice "
         "for the series language (checked with qa.speech, up to three takes), phonetic mouth cues, an editable Video 2D "
         "scene (framing from shot.framing or shot.layout2d, cast, sound, cards), a headless export and a take on the shot "
-        "(approve: true approves it). language renders a language version (its lines, the characters' voices for that "
+        "(approve: true approves it). A shot with foley {prompt, volume} gets sound generated from its exported picture "
+        "(generation.sfx, MMAudio) mixed under its own before the take; when that fails the take is made without it and "
+        "the item has a warning. language renders a language version (its lines, the characters' voices for that "
         "language, its own takes). Returns the job; poll series.episode.render_native.status. Resumable.",
     ),
     "series.episode.render_native.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
-        "Status of a server episode render: per shot stage (voices, scene, export, import, done), line takes and errors.",
+        "Status of a server episode render: per shot stage (voices, scene, export, foley, import, done), line takes, "
+        "errors and warnings (foley left out of a take).",
     ),
     "series.episode.render_native.cancel": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
@@ -91,9 +94,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"}},
         ["workspace", "series_id", "script"], True,
         "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
-        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx, props, timing and 3D "
-        "dialogue shots. It checks every character, pose, location, file and effect against the series first and lists "
-        "all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
+        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx, props, timing, foley "
+        "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots. It checks every character, "
+        "pose, location, file and effect against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id).",
     ),
     "series.episode.produce": (
@@ -188,7 +191,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "sync_shot_dialogue": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id", "episode", "base_revision"], True,
         "Save editor fields of an episode (title, premise, script, shots with productionMethod, dialogueBeats, "
-        "visible/speaking characters, locationId, durationSeconds) at the series revision.",
+        "visible/speaking characters, locationId, durationSeconds, layout2d, scene3d, foley {prompt, volume}) at the series "
+        "revision.",
     ),
     "series.asset.import": (
         {"workspace": WORKSPACE, "series_id": ID, "file": {"type": "string", "minLength": 1, "maxLength": 300},
