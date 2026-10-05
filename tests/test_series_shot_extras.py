@@ -300,3 +300,14 @@ def test_a_3d_shot_plays_its_sound_effects_and_screen_effects_like_a_2d_shot(tmp
     length = next(args["input"] for tool, args in tools.calls if tool == "world3d.scene.patch" and "duration" in args["input"])
     assert {"id": "scene-sfx-0", "audio": "/api/v1/file/boom.wav?workspace=cast", "start": 1.25, "gain": 0.9} in length["soundtrack"]
     assert length["screenFx"] == [{"id": "shot-fx-0", "kind": "manga_impact", "start": 1.2, "end": 1.6, "x": 40.0, "y": 30.0, "size": 25.0}]
+
+
+def test_a_3d_shot_asks_for_the_toon_look_and_drops_bad_settings():
+    value = series_shot3d.normalize_scene3d({"template": "anime-face-off", "renderLook": "toon", "toon": {"steps": 2, "ink": "#AA0000"}})
+    assert (value["renderLook"], value["toon"]) == ("toon", {"steps": 2, "ink": "#aa0000"})
+    bad = series_shot3d.normalize_scene3d({"template": "anime-face-off", "renderLook": "cel", "toon": {"steps": 9}})
+    assert "renderLook" not in bad and "toon" not in bad
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", {"id": "s31", "scene3d": value}, [], 4, {}, {}, NativeRenderError)
+    patch = tools.calls[1][1]["input"]
+    assert (patch["renderLook"], patch["toon"]) == ("toon", {"steps": 2, "ink": "#aa0000"})

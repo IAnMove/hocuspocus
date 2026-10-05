@@ -7,6 +7,7 @@ where and who::
                     "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}],
                     "objects": [{"objectId": "ship", "file": "ship.glb", "clip": "Fly", "add": True, "grounded": False,
                                  "position": [0, 2, -6], "motion": {"to": [4, 2, -6], "faceTravel": True}}],
+                    "renderLook": "toon",                       # models drawn as cel anime with ink
                     "quality": "final"}
 
 and the render records its lines like any 2D shot, instantiates the scene,
@@ -55,7 +56,19 @@ def _extras(value: dict[str, Any]) -> dict[str, Any]:
         extras["objects"] = objects[:MAX_OBJECTS]
     if value.get("retime") is False:
         extras["retime"] = False
+    extras.update(_look(value))
     return extras
+
+
+def _look(value: dict[str, Any]) -> dict[str, Any]:
+    """``renderLook`` (``toon`` draws the 3D models as cel anime with ink, ``n64``, ``none``) and its ``toon`` settings."""
+    from services.world3d_look import RENDER_LOOKS, normalize_toon
+    look: dict[str, Any] = {"renderLook": value["renderLook"]} if value.get("renderLook") in (*RENDER_LOOKS, "none") else {}
+    try:
+        toon = normalize_toon(value["toon"]) if "toon" in value else {}
+    except ValueError:
+        toon = {}
+    return {**look, **({"toon": toon} if toon else {})}
 
 
 def _valid_id(value: Any) -> bool:
@@ -204,6 +217,7 @@ def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list
            error: Callable[..., Exception], effects: list[dict[str, Any]]) -> dict[str, Any]:
     """What the length patch also sets: retiming, the look, the scene's sound, the screen effects and the objects."""
     setup: dict[str, Any] = {"retime": True} if config.get("retime", True) else {}
+    setup.update({key: config[key] for key in ("renderLook", "toon") if key in config})
     if effects:
         setup["screenFx"] = effects
     if sound:
