@@ -23,8 +23,8 @@ older SHA is not review of the current HEAD. Silence is not approval.
 The current HEAD, not an earlier commit:
 
 1. Required checks all `success`: `Clean-repo guard + Python checks`,
-   `UI tests + lint + type-check + build`,
-   `UI E2E boot (Chromium + simulated API)`, `CI required`.
+   `UI tests + lint + type-check + build`, the three Playwright shards
+   `UI E2E boot (Chromium + simulated API) 1/3` … `3/3`, `CI required`.
    Cancelled, skipped, missing or failed is not success.
 2. Cursor state `reviewed_at_head` on that exact HEAD.
 3. Independent QA evidence `pass` on that exact HEAD

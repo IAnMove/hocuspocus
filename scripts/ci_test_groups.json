@@ -3,13 +3,13 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Greedy two-bin pack by pytest --collect-only nodeids on 780d3915 (3107 tests in 14.06s locally). CI #320 had no per-test durations; this is a count proxy, not wall-clock.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
   "groups": [
     {
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 1575,
+      "weight": 2686,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -31,6 +31,7 @@
         "tests/test_client_task_identity.py",
         "tests/test_code_quality_score.py",
         "tests/test_comic_director_json_recovery.py",
+        "tests/test_comic_film_pass_addendum.py",
         "tests/test_comic_movie_cinematic_adapter.py",
         "tests/test_comic_plan_resume_contract.py",
         "tests/test_comic_story_reference.py",
@@ -48,6 +49,7 @@
         "tests/test_director_stop_endpoint.py",
         "tests/test_director_v2_story_refs.py",
         "tests/test_execution_mode.py",
+        "tests/test_flat_rig.py",
         "tests/test_generation_memory.py",
         "tests/test_generation_output_name.py",
         "tests/test_generation_provenance_submission.py",
@@ -55,6 +57,9 @@
         "tests/test_generation_record.py",
         "tests/test_generation_runtime.py",
         "tests/test_example_assets.py",
+        "tests/test_krea2_features.py",
+        "tests/test_music_submission.py",
+        "tests/test_optional_imports_guarded.py",
         "tests/test_secure_download.py",
         "tests/test_asset_library.py",
         "tests/test_inpaint_preparation.py",
@@ -166,9 +171,7 @@
         "tests/test_ui_distribution.py",
         "tests/test_validate_local_wrapper.py",
         "tests/test_video2d_catalog_query.py",
-        "tests/test_video2d_compile.py",
         "tests/test_video2d_mcp_guide.py",
-        "tests/test_video2d_title_parity.py",
         "tests/test_video2d_preview.py",
         "tests/test_video_decode_metadata.py",
         "tests/test_video_editor_replacement_ui.py",
@@ -192,7 +195,6 @@
         "tests/test_world3d_talk.py",
         "tests/test_mcp_oauth.py",
         "tests/test_series_plates.py",
-        "tests/test_world3d_templates.py",
         "tests/test_production_review.py",
         "tests/test_lipsync_span.py",
         "tests/test_production_disk.py",
@@ -233,7 +235,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 1586,
+      "weight": 2674,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_templates.py",
@@ -251,7 +253,6 @@
         "tests/test_character_speech_definition.py",
         "tests/test_ci_shards.py",
         "tests/test_code_health.py",
-        "tests/test_comic_film_pass_addendum.py",
         "tests/test_core_mcp.py",
         "tests/test_core_runtime.py",
         "tests/test_core_series_assembly.py",
@@ -284,7 +285,6 @@
         "tests/test_humanoid_animation.py",
         "tests/test_image_command_restart_boundaries.py",
         "tests/test_image_generation_spec.py",
-        "tests/test_krea2_features.py",
         "tests/test_live_stats.py",
         "tests/test_llm_activity_tracking.py",
         "tests/test_llm_resource_scheduling.py",
@@ -309,7 +309,6 @@
         "tests/test_model3d_rig_task_identity.py",
         "tests/test_music_finalization.py",
         "tests/test_music_p5_http.py",
-        "tests/test_music_submission.py",
         "tests/test_music_video_pacing.py",
         "tests/test_nightly_wizard_report.py",
         "tests/test_openai_compatible_comic_llm.py",
@@ -344,6 +343,7 @@
         "tests/test_recipes_router.py",
         "tests/test_remove_background_tool.py",
         "tests/test_video2d_catalogs.py",
+        "tests/test_video2d_compile.py",
         "tests/test_video2d_edit.py",
         "tests/test_video2d_character_ops.py",
         "tests/test_video2d_graphics.py",
@@ -351,6 +351,7 @@
         "tests/test_production_wait.py",
         "tests/test_export_receipts.py",
         "tests/test_export_qa.py",
+        "tests/test_video2d_title_parity.py",
         "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",
         "tests/test_safety_scan.py",
@@ -373,7 +374,6 @@
         "tests/test_audio_levels.py",
         "tests/test_workspace_cleanup.py",
         "tests/test_series_native_render_router.py",
-        "tests/test_flat_rig.py",
         "tests/test_speech_qa.py",
         "tests/test_character_styles.py",
         "tests/test_character_tools.py",
@@ -455,7 +455,8 @@
         "tests/test_humanoid_weights.py",
         "tests/test_model3d_animate.py",
         "tests/test_lips_creator.py",
-        "tests/test_lips_creator_commands.py"
+        "tests/test_lips_creator_commands.py",
+        "tests/test_world3d_templates.py"
       ]
     }
   ],
@@ -660,6 +661,12 @@
     },
     {
       "prefix": "scripts/ci-python-requirements.txt",
+      "paths": [
+        "tests/test_ci_shards.py"
+      ]
+    },
+    {
+      "prefix": "scripts/ci-production-browser-requirements.txt",
       "paths": [
         "tests/test_ci_shards.py"
       ]
