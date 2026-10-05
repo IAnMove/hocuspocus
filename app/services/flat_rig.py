@@ -7,7 +7,9 @@ made from the base pose's own eye shapes. The result is saved on the kit.
 
 It suits flat styles with light eyes on a plain face (paper cutout, simple
 cartoon, anime eyes whose white is only a crescent beside a big iris). A face that is a screen (a laptop or robot character) uses
-``screen``: light marks on a dark screen. When no painted mouth is found the
+``screen``: light marks on a dark screen. On a face drawn as a texture (code
+glyphs, scales) the mouth is the wide mark darker than the texture's own ink,
+and it is wiped with a copy of the texture. When no painted mouth is found the
 mouth is placed under the eyes and nothing is wiped; the result says so.
 
 Ported from the agent script that rigged the six "Uncanny Valley" characters.
@@ -329,17 +331,106 @@ def _mouth_parts(strict, faint, middle, span, eye_width):
     return _grow(group, pool, eye_width * 0.1, span * 0.22, eye_width * 0.95, 2)
 
 
-def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = False):
-    """Dark marks under the eyes that the face colour surrounds (so collars and jaws are skipped)."""
+# Textured faces ---------------------------------------------------------------
+# A face drawn as a texture (falling code glyphs, scales, hatching) is light and dark everywhere: the gaps between
+# its glyphs are as dark as a pen line against the glyphs, so every mark threshold took the whole face as one mark
+# and no mouth was found, and a screen face's light marks were the glyphs, not a mouth. The animated mouth was then
+# placed under the painted one and both showed.
+
+# A share of the skin whose fine grain varies above this is a texture. A plain or paper skin is flat almost
+# everywhere: the lines drawn on it (a nose, wrinkles, a moustache, stubble) vary on under a third of it.
+TEXTURED = 0.5
+# The face's grain is measured with the eye pair resampled to this width. A texture is finer than the drawing's own
+# lines at that size; a small face's wrinkles and beard strands, a few pixels apart in the image, are not.
+GRAIN_EYES = 256
+
+
+def _grain(lum: np.ndarray, where: np.ndarray) -> float:
+    """Share of ``where`` whose 3×3 neighbourhood varies by more than paper grain or noise does."""
+    if not where.any():
+        return 0.0
+    lum = lum.astype(np.float32)
+    mean, square = cv2.blur(lum, (3, 3)), cv2.blur(lum * lum, (3, 3))
+    return float((np.sqrt(np.maximum(square - mean * mean, 0)) > 10)[where].mean())
+
+
+def _skin(lum: np.ndarray, inside: np.ndarray, size: int) -> np.ndarray:
+    """The face around its thick dark marks: where a grey closing of ``size``, a little wider than the gaps between
+    a texture's glyphs, stays light. A big flat mouth or goatee is not the skin."""
+    filled = np.where(inside, lum, np.median(lum[inside])).astype(np.float32)
+    closed = cv2.morphologyEx(filled, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size)))
+    return inside & (closed >= np.median(closed[inside]) * 0.5)
+
+
+def _face_textured(region: np.ndarray, inside: np.ndarray, eye_height: int, eye_width: int) -> bool:
+    """Whether the skin in a window under the eyes is a texture, measured with the eye pair ``GRAIN_EYES`` wide."""
+    scale = GRAIN_EYES / max(1, eye_width)
+    size = (max(1, round(region.shape[1] * scale)), max(1, round(region.shape[0] * scale)))
+    lum = cv2.resize((region @ LUMA).astype(np.float32), size,
+                     interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
+    inside = cv2.resize(inside.astype(np.uint8), size, interpolation=cv2.INTER_NEAREST) > 0
+    if not inside.any():
+        return False
+    skin = _skin(lum, inside, max(3, int(eye_height * scale * 0.12)) | 1)
+    return _grain(lum, ~_dilate(~skin, 1)) > TEXTURED
+
+
+def _textured_mouth(region: np.ndarray, inside: np.ndarray, eye_height: int, eye_width: int, centre: float):
+    """The painted mouth on a textured face. The darkest fifth of the skin (``_skin``, closed at a size from the
+    eyes) is the texture's own ink; marks under half of it and thicker than the texture's grain (an opening of the
+    same size) are what is painted on it. The mouth is one that is wide, at least twice as wide as tall (an open
+    mouth too, not a goatee), near the middle and not running off the window's sides (the face's outline or hair);
+    the topmost near the middle, as ``_mouth_seed`` takes it. Its thin ends, lost to the opening, are taken back."""
+    lum = (region @ LUMA).astype(np.float32)
+    size = max(3, int(eye_height * 0.12)) | 1
+    skin = _skin(lum, inside, size)
+    if not skin.any():
+        return []
+    black = (lum < np.percentile(lum[skin], 20) * 0.5) & inside
+    labels, parts = _components(_open(black, size // 2))
+    width, found = region.shape[1], []
+    for part in parts:
+        reach, _ = _components(black & _dilate(labels == part["label"], size))
+        pixels = np.isin(reach, np.unique(reach[labels == part["label"]]))
+        ys, xs = np.nonzero(pixels)
+        mark = {"label": part["label"], "size": int(pixels.sum()), "x0": int(xs.min()), "y0": int(ys.min()),
+                "x1": int(xs.max()) + 1, "y1": int(ys.max()) + 1, "pixels": pixels}
+        w, h = mark["x1"] - mark["x0"], mark["y1"] - mark["y0"]
+        if (eye_width * 0.25 <= w <= eye_width * 0.95 and w >= h * 2 and mark["x0"] > 0 and mark["x1"] < width
+                and abs(_centre(mark)[0] - centre) <= eye_width * 0.2):
+            found.append(mark)
+    return [min(found, key=lambda mark: mark["y0"] + abs(_centre(mark)[0] - centre) * 0.5)] if found else []
+
+
+def _mouth_window(width: int, eyes_box):
+    """Where a mouth is looked for under the eyes: its columns, top row and the two depths tried."""
     x0, _y0, x1, y1 = eyes_box
     eye_height, eye_width = y1 - eyes_box[1], x1 - x0
     # Eyes peeking over sunglasses are short, the face under them is not: measure the face by the eyes' width too.
     span = max(eye_height, eye_width * 0.55)
     # A smirk's curled end can reach past the eyes' edge.
-    rx0, rx1 = max(0, int(x0 - eye_width * 0.15)), min(alpha.shape[1], int(x1 + eye_width * 0.15))
-    ry0 = int(y1 + eye_height * 0.12)
+    rx0, rx1 = max(0, int(x0 - eye_width * 0.15)), min(width, int(x1 + eye_width * 0.15))
     # The second window reaches past sunglasses' lenses.
-    for depth in sorted({int(y1 + span * 1.35), int(y1 + max(span * 1.35, eye_width * 1.1))}):
+    depths = sorted({int(y1 + span * 1.35), int(y1 + max(span * 1.35, eye_width * 1.1))})
+    return rx0, rx1, int(y1 + eye_height * 0.12), depths
+
+
+def skin_textured(rgb: np.ndarray, alpha: np.ndarray, eyes_box) -> bool:
+    """Whether the face under the eyes, where the mouth is looked for first, is a texture."""
+    rx0, rx1, ry0, depths = _mouth_window(alpha.shape[1], eyes_box)
+    inside = alpha[ry0:depths[0], rx0:rx1] > 200
+    return bool(inside.any()) and _face_textured(rgb[ry0:depths[0], rx0:rx1].astype(float), inside,
+                                                 eyes_box[3] - eyes_box[1], eyes_box[2] - eyes_box[0])
+
+
+def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = False):
+    """Dark marks under the eyes that the face colour surrounds (so collars and jaws are skipped)."""
+    x0, _y0, x1, y1 = eyes_box
+    eye_height, eye_width = y1 - eyes_box[1], x1 - x0
+    span = max(eye_height, eye_width * 0.55)
+    rx0, rx1, ry0, depths = _mouth_window(alpha.shape[1], eyes_box)
+    windows = []
+    for depth in depths:
         region = rgb[ry0:depth, rx0:rx1].astype(float)
         inside = alpha[ry0:depth, rx0:rx1] > 200
         if not inside.any():
@@ -348,10 +439,16 @@ def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = Fals
         # A thin pen-line mouth breaks into tiny faint pieces: a softer threshold and smaller pieces find them.
         faint, _ = _mouth_candidates(region, inside, eye_height, screen, True, 5)
         parts = _mouth_parts(strict, faint, ((rx1 - rx0) / 2, y1 + eye_width * 0.1 - ry0), span, eye_width)
+        windows.append((depth, region, inside, background))
         if parts:
             break
-    if not (strict or faint):
-        raise FlatRigError("mouth_not_found", "No painted mouth was found under the eyes")
+    if not parts:
+        # Every mark found above was the texture's. Only after both windows, so a plain face keeps what they find.
+        for depth, region, inside, background in windows:
+            if _face_textured(region, inside, eye_height, eye_width):
+                parts = _textured_mouth(region, inside, eye_height, eye_width, (x0 + x1) / 2 - rx0)
+            if parts:
+                break
     if not parts:
         raise FlatRigError("mouth_not_found", "No painted mouth was found under the eyes")
     mask = np.zeros(alpha.shape, bool)
@@ -399,10 +496,56 @@ def eyes_covered(rgb: np.ndarray, alpha: np.ndarray, eyes_box, eyes_mask: np.nda
     return bool(lens.mean() > 0.35)
 
 
-def wipe(image: Image.Image, mask: np.ndarray, grow: int) -> Image.Image:
+def _texture_fill(pixels: np.ndarray, area: np.ndarray, grow: int) -> np.ndarray | None:
+    """Fill ``area`` with the face's own texture: a copy of the face just above or below it, at the offset whose
+    edge best continues the texture around the hole and whose brightness is the face's, blended in over a few pixels.
+    Inpainting smears a texture into a smooth smudge. None when no such patch of face is in the figure."""
+    rgb, alpha = pixels[..., :3].astype(np.float32), pixels[..., 3]
+    feather = max(2, grow // 2)
+    edge = _dilate(area, feather * 2) & ~area
+    rows, cols = np.nonzero(edge)
+    y0, y1, x0, x1 = int(rows.min()), int(rows.max()) + 1, int(cols.min()), int(cols.max()) + 1
+    hole, seam = area[y0:y1, x0:x1], edge[y0:y1, x0:x1]
+    held = np.flatnonzero(hole.any(axis=1))
+    tall = int(held[-1] - held[0]) + 1
+    # The copy starts clear of the hole and its edge, and stays within a few mouth heights of it.
+    near, far = tall + feather * 4, tall * 3 + feather * 4
+    sy0, sy1 = max(0, y0 - far), min(alpha.shape[0], y1 + far)
+    sx0, sx1 = max(0, x0 - grow), min(alpha.shape[1], x1 + grow)
+    search, patch = rgb[sy0:sy1, sx0:sx1], rgb[y0:y1, x0:x1]
+    # For every offset at once: the mismatch along the edge, the brightness inside and any background it would copy.
+    mismatch = cv2.matchTemplate(search, patch, cv2.TM_SQDIFF, mask=cv2.merge([seam.astype(np.float32)] * 3))
+    level = cv2.matchTemplate(search @ LUMA.astype(np.float32), hole.astype(np.float32), cv2.TM_CCORR) / hole.sum()
+    keyed = cv2.matchTemplate((alpha[sy0:sy1, sx0:sx1] <= 200).astype(np.float32), (hole | seam).astype(np.float32),
+                              cv2.TM_CCORR)
+    dy = np.arange(mismatch.shape[0])[:, None] + sy0 - y0
+    dx = np.arange(mismatch.shape[1])[None, :] + sx0 - x0
+    cost = np.sqrt(np.maximum(mismatch, 0) / (seam.sum() * 3)) + np.abs(level - float((patch @ LUMA)[seam].mean()))
+    cost[(keyed > 0.5) | (np.abs(dy) < near) | (np.abs(dy) >= far) | (np.abs(dx) > grow)] = np.inf
+    if not np.isfinite(cost).any():
+        return None
+    row, col = np.unravel_index(int(np.argmin(cost)), cost.shape)
+    shift_y, shift_x = int(dy[row, 0]), int(dx[0, col])
+    blend = cv2.GaussianBlur(_dilate(area, feather).astype(np.float32), (feather * 2 + 1, feather * 2 + 1), 0)
+    blend[area] = 1.0
+    ys, xs = np.nonzero(area | edge)
+    weight = blend[ys, xs][:, None]
+    out = pixels.copy()
+    out[ys, xs, :3] = np.round(rgb[ys + shift_y, xs + shift_x] * weight + rgb[ys, xs] * (1 - weight)).astype(np.uint8)
+    return out
+
+
+def wipe(image: Image.Image, mask: np.ndarray, grow: int, textured: bool = False) -> Image.Image:
+    """Paint the mouth out: inpainted, or filled with the face's texture when the face is ``textured``
+    (``skin_textured``)."""
     pixels = np.array(image)
+    area = _dilate(mask, grow)
+    if textured:
+        filled = _texture_fill(pixels, area, grow)
+        if filled is not None:
+            return Image.fromarray(filled)
     bgr = cv2.cvtColor(pixels[..., :3], cv2.COLOR_RGB2BGR)
-    area = _dilate(mask, grow).astype(np.uint8) * 255
+    area = area.astype(np.uint8) * 255
     pixels[..., :3] = cv2.cvtColor(cv2.inpaint(bgr, area, max(3, grow + 2), cv2.INPAINT_TELEA), cv2.COLOR_BGR2RGB)
     return Image.fromarray(pixels)
 
@@ -671,7 +814,8 @@ def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
     covered = eyes_covered(rgb, alpha, eyes_box, eyes_mask)
     try:
         mouth_box, mouth_mask, background = find_mouth(rgb, alpha, eyes_box, style["screen"])
-        rigged, wiped = wipe(figure, mouth_mask, max(4, int((ey1 - ey0) * 0.08))), True
+        grow = max(4, int((ey1 - ey0) * 0.08))
+        rigged, wiped = wipe(figure, mouth_mask, grow, skin_textured(rgb, alpha, eyes_box)), True
         mx, my = (mouth_box[0] + mouth_box[2]) / 2, (mouth_box[1] + mouth_box[3]) / 2
     except FlatRigError as error:
         if error.code != "mouth_not_found":

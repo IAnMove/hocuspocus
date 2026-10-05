@@ -6,6 +6,24 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The flat cutout rig (`characters.rig.flat`) now finds and wipes the painted
+mouth on a face drawn as a texture, such as a face made of falling code
+glyphs. On such a face the gaps between the glyphs are as dark against them as
+a pen line is against skin, so every mark under the eyes merged into one
+face-sized mark (or, with `screen`, the glyphs were the only light marks): the
+pose was reported in `unwipedPoses`, the painted mouth stayed, and the
+animated mouth was drawn under it, so the video showed two mouths. When the
+usual search finds nothing and the skin under the eyes is a texture, the
+mouth is now the wide, flat mark near the middle that is darker than the
+texture's own dark ink and thicker than its glyphs, and it is wiped with a
+copy of the face just above or below it, chosen so the texture runs on across
+the edge, instead of an inpainted smudge. The animated mouth then sits where
+the painted one was. The texture is measured with the eye pair scaled to a
+fixed width, so the wrinkles and beard strands of a small face are not taken
+for one. Plain faces are found and inpainted exactly as before: the other 104
+keyed poses of three rigged casts give the same result, with and without
+`screen`.
+
 Short lines in a cloned voice are spoken again when the reference recording
 has long pauses. Qwen3 Base continues its reference recording, and a reference
 that waits 0.5 to 1 s between sentences taught it to wait: lines of two to
