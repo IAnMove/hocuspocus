@@ -167,12 +167,15 @@ def test_loopback_only_mode_remains_credential_free(monkeypatch) -> None:
     assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 200
 
 
-def test_lan_sharing_is_credential_free_by_default(monkeypatch) -> None:
+def test_lan_sharing_requires_the_token_by_default_and_can_opt_out(monkeypatch) -> None:
     monkeypatch.setenv("PINOKIO_SHARE_LOCAL", "true")
     monkeypatch.delenv("LOREFRAME_LAN_AUTH", raising=False)
     monkeypatch.delenv("LOREFRAME_LAN_TOKEN", raising=False)
-    assert _middleware_status(_request("/api/v1/probe"))[0] == 200
-    assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 200
+    assert _middleware_status(_request("/api/v1/probe"))[0] == 401, "a device on the Wi-Fi needs the token"
+    assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 401
+    assert any("session token" in line for line in describe_lan_auth_startup())
+    monkeypatch.setenv("LOREFRAME_LAN_AUTH", "0")
+    assert _middleware_status(_request("/api/v1/probe"))[0] == 200, "opting out is explicit"
     assert describe_lan_auth_startup() == []
 
 

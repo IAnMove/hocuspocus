@@ -6,6 +6,22 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A local app without a login keeps its keys and files to itself. The server
+answers only to its own host names (IP literals, `localhost`, the machine
+name, a Cloudflare quick tunnel, `HOCUS_PUBLIC_URL`, `HOCUS_TRUSTED_HOSTS`),
+so a web page cannot reach it through a rebound domain; `/api/v1/llm/models`
+and `/api/v1/llm/load` never send the OpenAI or Grok key to a URL the caller
+supplies; served files are never content-sniffed and uploaded HTML or SVG
+download instead of running as the app; uploads keep only known media and
+document extensions (anything else is stored as `.bin`); the MCP OAuth
+endpoints cap request bodies at 64 KiB, throttle registrations per peer and
+never evict a connected client. Sharing on the LAN turns the access token on
+by default (`LOREFRAME_LAN_AUTH=0` opts out), the session cookie lasts 30 days
+and a key with non-ASCII bytes is simply wrong instead of a server error. The
+settings file (`wgp_config.json`, API keys and workspaces) is written
+atomically with owner-only permissions, and a truncated copy is set aside with
+a clear message instead of stopping the app from starting.
+
 Intermediate files are released when their job is done. A Video 2D/3D export
 drops its frames and audio mix when the MP4 is published, a completed
 production drops the copies it put in uploads, the series render drops each raw

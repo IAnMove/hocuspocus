@@ -355,7 +355,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         if not token:
             raise HTTPException(503, 'External agent access is disabled; configure HOCUS_MCP_TOKEN')
         header = request.headers.get('authorization', '')
-        if secrets.compare_digest(header, f'Bearer {token}'):
+        if secrets.compare_digest(header.encode("utf-8", "surrogateescape"), f'Bearer {token}'.encode("utf-8")):
             return
         # Clients that cannot hold the installation key (ChatGPT connectors) sign in with OAuth and send their own token.
         if oauth is not None and header.startswith('Bearer ') and oauth.verify(header[7:], profile_name or 'all'):
