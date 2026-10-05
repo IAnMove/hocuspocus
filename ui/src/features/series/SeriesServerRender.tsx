@@ -55,7 +55,7 @@ export function SeriesServerRender({ workspace, series, episode, language }: { w
         {t('serverRender.start')}</button>
       {live && <button className={secondaryButton} disabled={busy || job?.status === 'cancelling'}
         onClick={() => void act(() => controlSeriesServerRender(workspace, job!.jobId, 'cancel'))}>{t('serverRender.stop')}</button>}
-      {job && ['failed', 'cancelled'].includes(job.status) && <button className={secondaryButton} disabled={busy}
+      {job && ['failed', 'cancelled', 'interrupted'].includes(job.status) && <button className={secondaryButton} disabled={busy}
         onClick={() => void act(() => controlSeriesServerRender(workspace, job.jobId, 'resume'))}>{t('serverRender.resume')}</button>}
     </div>
     {job && <p role="status" className="text-xs">{t('serverRender.progress', { done, total: job.items.length, status: t(`serverRender.status.${job.status}`) })}</p>}

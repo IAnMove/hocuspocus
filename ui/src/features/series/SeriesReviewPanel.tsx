@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Download, Edit3, ExternalLink, Film, Loader2, Play, RotateCcw, Save, Square, X } from 'lucide-react'
 import * as api from '../../api/client'
+import { useJobAction } from './useJobAction'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
 import { orderedTimelineShots, reconcilePlaybackCursor, safeTimelineAttempt, seriesEditorCanvas } from '../../lib/orderedClipTimeline'
@@ -58,6 +59,7 @@ export function SeriesReviewPanel({
   const { t } = useUiTranslation('seriesLab')
   const setMediaFilter = useStore(state => state.setMediaFilter)
   const [error, setError] = useState<string | null>(null)
+  const jobAction = useJobAction(setError)
   const [decisions, setDecisions] = useState<Record<string, 'pending' | 'accepted' | 'rejected'>>({})
   const [approvalProgress, setApprovalProgress] = useState<{ current: number; total: number } | null>(null)
   const [playbackShotId, setPlaybackShotId] = useState<string | null>(null)
@@ -354,17 +356,17 @@ export function SeriesReviewPanel({
     {(job || episode.shots.some(shot => isSeriesGeneratedShot(series, shot))) && <SectionCard title={t('review.durableQueue')} description={t('review.durableQueueHint')}>
       <SeriesRenderActions series={series} episode={episode} busy={Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))}
         onRender={mode => void startRender(mode)} onOpenShots={onOpenShots} />
-      <div className="mt-2 flex flex-wrap gap-2">{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => {
+      <div className="mt-2 flex flex-wrap gap-2">{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} disabled={jobAction.busy} onClick={() => {
         const episodeId = episode.id
         const jobId = job.jobId
-        void api.cancelSeriesRenderJob(jobId).then(value => {
+        void jobAction.run(() => api.cancelSeriesRenderJob(jobId), value => {
           if (episodeIdRef.current === episodeId && value.jobId === jobId) setJob(value)
         })
       }}><Square size={13} />{t('review.cancelGeneration')}</button>}</div>
-      {job && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<Pill tone={job.status === 'completed' ? 'green' : job.status === 'failed' ? 'red' : 'violet'}>{job.status}</Pill><span>{job.message}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.items && <div className="mt-2 flex flex-wrap gap-1">{job.items.map(item => <Pill key={item.attemptId} tone={item.status === 'completed' ? 'green' : item.status === 'failed' ? 'red' : item.status === 'running' || item.status === 'cancelling' ? 'violet' : 'neutral'}>{item.shotId} · {item.status}</Pill>)}</div>}{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-2 ${secondaryButton}`} onClick={() => {
+      {job && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<Pill tone={job.status === 'completed' ? 'green' : job.status === 'failed' ? 'red' : 'violet'}>{job.status}</Pill><span>{job.message}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.items && <div className="mt-2 flex flex-wrap gap-1">{job.items.map(item => <Pill key={item.attemptId} tone={item.status === 'completed' ? 'green' : item.status === 'failed' ? 'red' : item.status === 'running' || item.status === 'cancelling' ? 'violet' : 'neutral'}>{item.shotId} · {item.status}</Pill>)}</div>}{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-2 ${secondaryButton}`} disabled={jobAction.busy} onClick={() => {
         const episodeId = episode.id
         const jobId = job.jobId
-        void api.resumeSeriesRenderJob(jobId).then(value => {
+        void jobAction.run(() => api.resumeSeriesRenderJob(jobId), value => {
           if (episodeIdRef.current === episodeId && value.jobId === jobId) setJob(value)
         })
       }}>{t('review.resumeIncomplete')}</button>}</div>}
@@ -454,21 +456,21 @@ export function SeriesReviewPanel({
           <button className={`mt-3 ${greenButton}`} disabled={editBusy || !isSeriesGeneratedShot(series, sourceShot)} onClick={() => void regenerateEdited()}>{editBusy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}{t('review.saveRegenerate')}</button>
         </div>
       })()}
-      {assemblyJob && <div className={`mt-3 rounded-lg border p-3 text-xs ${['failed', 'interrupted'].includes(assemblyJob.status) ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-green-500/30 bg-green-500/10 text-green-200'}`}><div className="flex flex-wrap items-center gap-2">{['queued', 'running', 'cancelling'].includes(assemblyJob.status) && <Loader2 size={13} className="animate-spin" />}<span>{assemblyJob.message}</span>{assemblyJob.filename && <a className={`ml-auto ${greenButton}`} href={api.getFileUrl(assemblyJob.filename, workspace)} download><Download size={13} />{t('review.downloadJoined')}</a>}{['queued', 'running'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => {
+      {assemblyJob && <div className={`mt-3 rounded-lg border p-3 text-xs ${['failed', 'interrupted'].includes(assemblyJob.status) ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-green-500/30 bg-green-500/10 text-green-200'}`}><div className="flex flex-wrap items-center gap-2">{['queued', 'running', 'cancelling'].includes(assemblyJob.status) && <Loader2 size={13} className="animate-spin" />}<span>{assemblyJob.message}</span>{assemblyJob.filename && <a className={`ml-auto ${greenButton}`} href={api.getFileUrl(assemblyJob.filename, workspace)} download><Download size={13} />{t('review.downloadJoined')}</a>}{['queued', 'running'].includes(assemblyJob.status) && <button className={secondaryButton} disabled={jobAction.busy} onClick={() => {
               const episodeId = episode.id
               const jobId = assemblyJob.jobId
-              void api.cancelSeriesEpisodeAssembly(jobId, workspace).then(value => {
+              void jobAction.run(() => api.cancelSeriesEpisodeAssembly(jobId, workspace), value => {
                 if (episodeIdRef.current === episodeId && value.jobId === jobId) setAssemblyJob(value)
               })
-            }}><Square size={13} />{t('review.cancelJoin')}</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => {
+            }}><Square size={13} />{t('review.cancelJoin')}</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} disabled={jobAction.busy} onClick={() => {
               const episodeId = episode.id
               const jobId = assemblyJob.jobId
-              void api.resumeSeriesEpisodeAssembly(jobId, workspace).then(value => {
+              void jobAction.run(() => api.resumeSeriesEpisodeAssembly(jobId, workspace), value => {
                 if (episodeIdRef.current === episodeId && value.jobId === jobId) setAssemblyJob(value)
               })
-            }}><RotateCcw size={13} />{t('review.resumeJoin')}</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => {
+            }}><RotateCcw size={13} />{t('review.resumeJoin')}</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} disabled={jobAction.busy} onClick={() => {
               const episodeId = episode.id
-              void api.discardSeriesEpisodeAssembly(assemblyJob.jobId, workspace).then(() => {
+              void jobAction.run(() => api.discardSeriesEpisodeAssembly(assemblyJob.jobId, workspace), () => {
                 if (episodeIdRef.current === episodeId) setAssemblyJob(null)
               })
             }}><X size={12} />{t('review.discardCheckpoint')}</button>}</div>{assemblyJob.error && <p className="mt-1 text-[10px]">{assemblyJob.error}</p>}</div>}

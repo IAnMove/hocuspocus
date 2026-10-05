@@ -6,6 +6,75 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A local app without a login keeps its keys and files to itself. The server
+answers only to its own host names (IP literals, `localhost`, the machine
+name, a Cloudflare quick tunnel, `HOCUS_PUBLIC_URL`, `HOCUS_TRUSTED_HOSTS`),
+so a web page cannot reach it through a rebound domain; `/api/v1/llm/models`
+and `/api/v1/llm/load` never send the OpenAI or Grok key to a URL the caller
+supplies; served files are never content-sniffed and uploaded HTML or SVG
+download instead of running as the app; uploads keep only known media and
+document extensions (anything else is stored as `.bin`); the MCP OAuth
+endpoints cap request bodies at 64 KiB, throttle registrations per peer and
+never evict a connected client. Sharing on the LAN turns the access token on
+by default (`LOREFRAME_LAN_AUTH=0` opts out), the session cookie lasts 30 days
+and a key with non-ASCII bytes is simply wrong instead of a server error. The
+settings file (`wgp_config.json`, API keys and workspaces) is written
+atomically with owner-only permissions, and a truncated copy is set aside with
+a clear message instead of stopping the app from starting.
+
+Long jobs no longer wait for a state that cannot come. A server render or a
+production whose job file says «running» after a restart is marked
+`interrupted` the first time anyone looks at it, and «Resume» continues it
+(the recording of each line is reused, only what is missing is spoken again);
+a new render of the same episode is no longer refused as «already running».
+A shot whose export was interrupted, discarded or forgotten by the server is
+asked for again under a new intent, up to three times, instead of waiting
+forever. The headless renderer is watched by its frames, not by the clock:
+every frame it writes now moves the task's progress bar, and when no new
+frame arrives for ten minutes (`HOCUS_RENDER_STALL_SECONDS`) the browser and
+its process group are killed and the export fails with that reason; its
+output goes to `browser.log` in the staging folder instead of a pipe nobody
+drained. A production whose cut failed recuts once per run, so «Resume» also
+recovers a failed assembly, and a render the server forgot is started again.
+`series.episode.from_script` with an `episode_id` now replaces the episode:
+shots the script no longer has are removed (`removedShots`) and a shot whose
+lines, cast, location or layout changed starts without takes instead of
+keeping a video of other content (`replaceShots` on `series.episode.update`).
+
+What comes out sounds and reads as intended. Video 2D and Video 3D exports
+share one mixer (`services/audio_mix.py`) that ends in the same limiter, and
+the browser hands the server a 32-bit float mix, so overlapping voices or a
+loud effect no longer clip in a 3D take. A `volume` of 0 silences a music or
+effect track instead of restoring the default. Music and effects may live in
+a workspace subfolder (`music/theme.wav`) and are found there by the mixer,
+the loudness balance and `from_script`. A 3D shot now plays the scene's
+ambience, stinger and music, balanced like a 2D shot and ducked under the
+dialogue by the page (`soundtrack` on `world3d.scene.patch`). A dubbed
+scene keeps its language in its name even when the name is cut to length.
+A language version is refused before anything is spoken when a speaker's kit
+has no voice designed for that language, both in `from_script check` and in
+the server render. H3 and imported takes with dialogue get subtitles in a
+mixed episode: their shot's lines are spread over the clip. The Director's
+content scanner, which aborted innocent scripts («comic strip», «son
+riding»), is gone.
+
+The LLM and H3 paths agree with each other. DeepSeek is a remote provider
+like Grok (it used to be loaded as a local GGUF and tried to download one).
+A reply the model cut at `max_tokens` is reported: a warning in the log, and
+an error (`LLMTruncatedResponse`) when JSON was asked for, instead of a half
+JSON that planners filled with fallbacks. Remote calls (OpenAI-compatible and
+Anthropic) try again after a 429 or a 5xx or a dropped connection, waiting 1,
+2 and 4 seconds (or `Retry-After`), so a transient rate limit no longer kills
+a pipeline of dozens of calls. One H3 frame lattice
+(`services/h3_frame_lattice.py`: 17n+5 frames, 124 to 345 per pass, rounded
+up) is read by the sidecar, the Series renderer, the dialogue duration
+contract and the Director's segmenter (whose continuation segments keep their
+107-frame floor, so saved pipelines regroup as before); the sidecar's own
+362-frame cap with nearest rounding is gone, so a shot that fits in one path
+fits in all. One speech
+rate (2.16 words/s, derived from the syllable estimate) replaces the
+Director's 2.1, the shot validator's 2.5 and the sidecar's separate figure.
+
 Intermediate files are released when their job is done. A Video 2D/3D export
 drops its frames and audio mix when the MP4 is published, a completed
 production drops the copies it put in uploads, the series render drops each raw

@@ -53,7 +53,9 @@
     "queued": "En cola",
     "completed": "Completado",
     "failed": "Fallido",
-    "cancelled": "Cancelado"
+    "cancelled": "Cancelado",
+    "interrupted": "Interrumpido",
+    "interruptedHint": "Guardado por una sesión anterior. Reanudar vuelve a ejecutar la cola guardada desde el principio; descartar la vacía."
   },
   "count": {
     "item_one": "{{count}} elemento",
@@ -281,5 +283,11 @@
       "conflictHint": "Ya tienes una plantilla propia con este id.",
       "done": "«{{title}}» instalada en tu biblioteca."
     }
+  },
+  "errorBoundary": {
+    "title": "Algo ha fallado en esta vista",
+    "body": "El resto de HocusPocus sigue funcionando. Recarga la página o copia el error para informarlo.",
+    "copyError": "Copiar error",
+    "copied": "Copiado"
   }
 }

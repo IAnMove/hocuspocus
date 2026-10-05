@@ -139,3 +139,9 @@ def test_props_stand_on_background_anchors_and_follow_the_framing_zoom():
     assert (wide[0]["x"], wide[0]["y"], wide[0]["scale"]) == (70.0, 80.0 - 10.0, 0.2)
     assert close[0]["scale"] == 0.3 and close[0]["x"] == background_point("close", 50, 0.7, 0.8)[0]
     assert (wide[1]["x"], wide[1]["y"]) == (30.0, 70.0)
+
+
+def test_a_volume_of_zero_means_silent_not_the_default():
+    layout = normalize_layout2d({"music": {"file": "music/theme.wav", "volume": 0, "start": 0}})
+    assert layout["music"] == {"file": "music/theme.wav", "volume": 0, "start": 0}
+    assert normalize_layout2d({"music": {"file": "theme.wav"}})["music"]["volume"] == 0.5

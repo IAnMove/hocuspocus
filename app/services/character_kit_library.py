@@ -208,6 +208,9 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
             }
         if raw_group.get("eyes") is not None:
             group["eyes"] = _anchor(raw_group["eyes"], f"{pose_id} eyes anchor")
+        # A pose whose eyes are hidden (sunglasses) keeps them still: no blink.
+        if raw_group.get("blink") is False:
+            group["blink"] = False
         anchors[pose_id] = group
 
     result: dict[str, Any] = {
