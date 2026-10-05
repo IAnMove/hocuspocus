@@ -13,7 +13,7 @@ def test_h3_duration_segments_stay_on_the_supported_lattice():
     segments = director_pipeline._minimax_h3_frame_segments(45.0)
 
     assert len(segments) == 9
-    assert all(107 <= frames <= 362 for frames in segments)
+    assert all(107 <= frames <= 345 for frames in segments)
     assert all(frames % 17 == 5 for frames in segments)
     assert abs(sum(segments) - 45 * 24) <= 17 / 2
 
