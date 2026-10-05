@@ -95,8 +95,8 @@ WARNINGS
 <h2>Inventario de pantallas</h2><p><input id="filter" aria-label="Filtrar funciones" placeholder="Buscar: música, Video 3D, Tools…"></p><div class="grid">CARDS</div>
 <script>document.querySelector('#filter').addEventListener('input',e=>{const q=e.target.value.toLowerCase();document.querySelectorAll('article').forEach(c=>c.hidden=!c.textContent.toLowerCase().includes(q))})</script></html>'''
     html = html.replace('ATTEMPTS', attempt_rows(root, errors)).replace('RESULTS', generation_rows(root, errors)).replace('CARDS', feature_cards(root, errors))
-    guide = root / 'APP_USER_GUIDE.md'
-    html = html.replace('GUIDE', f'<p><a href="{link(root, guide)}">Guía de uso y acciones del Wizard</a></p>' if guide.exists() else '')
+    guide = root / 'WIZARD_COVERAGE_AUDIT.md'
+    html = html.replace('GUIDE', f'<p><a href="{link(root, guide)}">Cobertura y acciones del Wizard</a></p>' if guide.exists() else '')
     warnings = '<h2>Evidencia incompleta</h2><ul>' + ''.join(f'<li>{escape(error)}</li>' for error in errors) + '</ul>' if errors else ''
     html = html.replace('WARNINGS', warnings)
     target = root / 'index.html'

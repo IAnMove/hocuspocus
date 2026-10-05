@@ -130,6 +130,20 @@ def resolve_minimax_key(services: dict | None, purpose: str) -> str:
     return str(values.get("minimax_api_key") or "").strip()
 
 
+def client_remote_url(provider: str, requested: str, saved: str) -> str:
+    """The URL a request may point a provider at: public providers keep the saved profile URL.
+
+    ``/api/v1/llm/models?url=`` and ``/api/v1/llm/load`` used to send the stored
+    API key of openai or grok to whatever URL the caller gave; a page in the
+    user's browser could take the key with one GET. Only ``remote``/``ollama``,
+    which carry no key, may be pointed anywhere.
+    """
+    name = str(provider or "").strip().lower()
+    if name in PUBLIC_LLM_PROVIDERS:
+        return str(saved or "")
+    return str(requested or "").strip() or str(saved or "")
+
+
 def default_url_for_provider(provider: str, current: str = "") -> str:
     if str(current or "").strip():
         return canonicalize_remote_url(current)

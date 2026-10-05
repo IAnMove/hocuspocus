@@ -67,6 +67,8 @@ from services.world3d_export import World3DExportService
 from services.workspace_registry import WorkspaceRegistry
 
 api = FastAPI(title="HocusPocus core")
+from services.host_guard import install_host_guard
+install_host_guard(api)
 api.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost|\d+\.localhost)(:\d+)?$",

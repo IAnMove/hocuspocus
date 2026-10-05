@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import unittest
 
+import pytest
+
+pytest.importorskip("torch")
+
 import torch
 
 from app.shared.utils.text_encoder_cache import TextEncoderCache

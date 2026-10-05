@@ -1,10 +1,10 @@
 """Video 3D shots with dialogue in the server render (``animation_3d`` + ``shot.scene3d``).
 
-1x02's talking Elon on Mars took seven tools per language by hand. A shot now says
+A talking character in a 3D set used to take seven tools per language by hand. A shot now says
 where and who::
 
-    shot.scene3d = {"template": "user-uv-mars-elon",          # or "scene": "<saved>.world3d.scene.json"
-                    "cast": [{"characterId": "elon", "objectId": "elon", "poseId": "phone"}],
+    shot.scene3d = {"template": "user-moon-base",             # or "scene": "<saved>.world3d.scene.json"
+                    "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}],
                     "quality": "final"}
 
 and the render records its lines like any 2D shot, instantiates the scene,
@@ -87,18 +87,26 @@ def _talk(call: Callable, workspace: str, stem: str, scene_id: str, revision: in
 
 
 def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any], lines: list[dict[str, Any]], duration: float,
-                kits: dict[str, Any], series_characters: dict[str, str], error: Callable[..., Exception]) -> dict[str, Any]:
-    """Instantiate, set the length, make every cast object talk and publish; returns the published scene."""
+                kits: dict[str, Any], series_characters: dict[str, str], error: Callable[..., Exception],
+                tracks: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Instantiate, set the length and sound, make every cast object talk and publish; returns the published scene.
+
+    ``tracks`` are the shot's ambience, stinger and music (``series_shot_plan.sound_tracks``); they join the scene
+    soundtrack, where the page ducks them under the dialogue like it does in a 2D shot.
+    """
     config = normalize_scene3d(shot.get("scene3d")) or {}
+    sound = [{"id": f"scene-{track['id']}", "audio": f"/api/v1/file/{quote(str(track['filename']))}?workspace={quote(workspace)}",
+              "start": round(float(track.get("startTime") or 0), 3), "gain": round(max(0.0, min(1.0, float(track.get("volume", 1)))), 3)}
+             for track in tracks or []]
     # Intents carry a digest of what was asked: a resumed job replays them, a changed take gets new ones.
-    digest = hashlib.sha1(repr((config, round(duration, 3), [(line["filename"], line["start"]) for line in lines])).encode()).hexdigest()[:10]
+    digest = hashlib.sha1(repr((config, round(duration, 3), [(line["filename"], line["start"]) for line in lines], sound)).encode()).hexdigest()[:10]
     stem = f"{job_id}-{shot['id']}-{digest}"
     scene = _ok(call("world3d.scene.instantiate", {"version": 1, "intent_id": f"{stem}-new", "input": {
         "workspace": workspace, "template_id": _template(call, workspace, config, error)}}), "instantiate 3D scene", error)["scene"]
     scene_id = scene["sceneId"]
     revision = _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-length", "input": {
-        "workspace": workspace, "scene_id": scene_id, "base_revision": scene["revision"], "duration": round(duration, 3)}}),
-        "set 3D length", error)["scene"]["revision"]
+        "workspace": workspace, "scene_id": scene_id, "base_revision": scene["revision"], "duration": round(duration, 3),
+        **({"soundtrack": sound} if sound else {})}}), "set 3D length", error)["scene"]["revision"]
     for entry in config.get("cast") or []:
         spoken = [line for line in lines if line["characterId"] == entry["characterId"]]
         kit_id = series_characters.get(entry["characterId"])

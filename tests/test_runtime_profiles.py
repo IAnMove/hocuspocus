@@ -151,6 +151,47 @@ def test_missing_driver_is_explicitly_unverified():
     result = profiles.select_profiles("win32", "x64", "nvidia")
     assert result["engines"]["wangp"]["warning"]
     assert result["driver"] is None
+    assert result["computeCapability"] is None
+
+
+def test_pre_turing_gpu_installs_core_with_an_explicit_reason():
+    pascal = profiles.select_profiles("linux", "x64", "nvidia", "580.82.09", "6.1")
+    assert pascal["supported"] and pascal["engines"]["core"]["supported"]
+    assert pascal["computeCapability"] == "6.1"
+    for engine in pascal["engines"].values():
+        if engine.get("cuda"):
+            assert not engine["supported"]
+            assert "older than Turing" in engine["reason"] and "6.1" in engine["reason"]
+    turing = profiles.select_profiles("win32", "x64", "nvidia", "580.82.09", "7.5")
+    assert turing["engines"]["wangp"]["supported"] and not turing["engines"]["core"]["supported"]
+    # A driver below the floor still reports the driver when the GPU itself is fine.
+    old_driver = profiles.select_profiles("linux", "x64", "nvidia", "470.10", "8.9")
+    assert "driver" in old_driver["engines"]["wangp"]["reason"]
+
+
+def test_detect_profiles_reads_compute_capability_from_nvidia_smi():
+    def nvidia_smi(command, **_kwargs):
+        field = command[1].split("=", 1)[1]
+        if field == "compute_cap" and nvidia_smi.legacy:
+            raise subprocess.CalledProcessError(2, command, stderr="Field \"compute_cap\" is not a valid field")
+        output = {"driver_version": "580.82.09\n580.82.09\n", "compute_cap": "8.9\n6.1\n"}[field]
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+
+    nvidia_smi.legacy = False
+    with patch.object(profiles.subprocess, "run", side_effect=nvidia_smi), \
+            patch.object(profiles, "installation_current", return_value=False):
+        result = profiles.detect_profiles(platform="linux", arch="x64")
+    assert result["gpu"] == "nvidia" and result["driver"] == "580.82.09"
+    assert result["computeCapability"] == "6.1"  # the weakest GPU decides
+    assert not result["engines"]["wangp"]["supported"]
+    assert "older than Turing" in result["engines"]["wangp"]["reason"]
+    assert result["engines"]["core"]["supported"]
+    nvidia_smi.legacy = True
+    with patch.object(profiles.subprocess, "run", side_effect=nvidia_smi), \
+            patch.object(profiles, "installation_current", return_value=False):
+        legacy = profiles.detect_profiles(platform="linux", arch="x64")
+    assert legacy["driver"] == "580.82.09" and legacy["computeCapability"] is None
+    assert legacy["engines"]["wangp"]["supported"]
 
 
 def test_conda_and_venv_windows_interpreters_are_not_confused(tmp_path):
@@ -397,6 +438,7 @@ def test_package_helper_ignores_inherited_destinations_and_configuration(monkeyp
     assert "--no-config" in args
     assert str(ROOT / profile["constraintFile"]) in args
     assert args.count("--constraint") == 2
+    assert args[args.index("--build-constraint") + 1] == str(ROOT / profile["constraintFile"])
     assert "PIP_TARGET" not in env and "UV_PYTHON" not in env
     assert env["PIP_CONFIG_FILE"] == os.devnull
     for override in ["--python=/foreign", "--target", "--prefix", "--system", "--user"]:
@@ -651,6 +693,9 @@ def test_install_summary_names_missing_features_and_why():
     old_driver = summary("win32", "x64", "nvidia", "470.1")
     # Engines blocked by the same driver floor share one line.
     assert any("(WanGP)" in line and "(Hunyuan3D)" in line and "528.33" in line for line in old_driver)
+    pascal = summary("linux", "x64", "nvidia", "580.82.09", "6.1")
+    assert "editing studio" in pascal[0]
+    assert any("(WanGP)" in line and "older than Turing" in line and "6.1" in line for line in pascal)
     nvidia = summary("linux", "x64", "nvidia", "580.82.09")
     assert nvidia[0].startswith("Installs the full studio")
     assert not any(line.startswith("Not available") for line in nvidia)

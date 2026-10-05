@@ -44,6 +44,34 @@ def inspect_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
     return _view(scene_id, _read(workspace, scene_id, workspace_dir))
 
 
+SCENE_TRACK_PREFIX = "scene-"
+
+
+def _set_soundtrack(document: dict, tracks, workspace: str) -> None:
+    """Replace the scene's own tracks (``scene-*``: ambience, stinger, music); talk tracks and others stay."""
+    from services.world3d_talk import TalkError, _audio
+    if not isinstance(tracks, list) or len(tracks) > 32:
+        raise World3DSceneError("invalid_soundtrack", "soundtrack must be a list of at most 32 tracks")
+    kept = [track for track in document.get("soundtrack") or [] if not str(track.get("id", "")).startswith(SCENE_TRACK_PREFIX)]
+    added = []
+    for index, track in enumerate(tracks):
+        if not isinstance(track, dict) or not isinstance(track.get("id"), str) or not track["id"].startswith(SCENE_TRACK_PREFIX):
+            raise World3DSceneError("invalid_soundtrack", f"soundtrack[{index}] needs an id starting with {SCENE_TRACK_PREFIX}")
+        try:
+            audio = _audio(track, index, workspace)
+        except TalkError as error:
+            raise World3DSceneError("invalid_soundtrack", str(error)) from error
+        if audio is None:
+            raise World3DSceneError("invalid_soundtrack", f"soundtrack[{index}] needs an audio URL")
+        start, gain = track.get("start", 0), track.get("gain", 1)
+        if type(start) not in (int, float) or not 0 <= start <= 600 or type(gain) not in (int, float) or not 0 <= gain <= 1:
+            raise World3DSceneError("invalid_soundtrack", f"soundtrack[{index}] start must be 0-600 and gain 0-1")
+        added.append({"id": track["id"][:120], "audio": audio, "start": round(float(start), 3), "offset": 0, "gain": round(float(gain), 3)})
+    if len(kept) + len(added) > 32:
+        raise World3DSceneError("too_many_tracks", "A Video 3D scene holds at most 32 soundtrack tracks")
+    document["soundtrack"] = kept + added
+
+
 def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
     record = _read(workspace, scene_id, workspace_dir)
     if type(base_revision) is not int or base_revision != record["revision"]:
@@ -61,6 +89,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         if type(duration) not in (int, float) or not 0 < duration <= 600:
             raise World3DSceneError("invalid_duration", "duration must be between 0 and 600 seconds")
         document["duration"] = duration
+    if "soundtrack" in changes:
+        _set_soundtrack(document, changes["soundtrack"], workspace)
     _retarget(document)
     record["revision"] += 1
     record["warnings"] = warnings

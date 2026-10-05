@@ -97,9 +97,17 @@ def configured_lan_token(environ: Mapping[str, str] | None = None) -> str:
 
 
 def lan_auth_enabled(environ: Mapping[str, str] | None = None) -> bool:
-    """Return whether the optional LAN token gate is explicitly enabled."""
+    """Return whether the LAN token gate is on: explicitly, or by default whenever the app is shared beyond loopback.
+
+    Sharing used to be credential-free unless LOREFRAME_LAN_AUTH was set, so any device on the Wi-Fi could read the
+    stored API keys and change settings. Set LOREFRAME_LAN_AUTH=0 to opt out knowingly.
+    """
     value = str(_environment(environ).get(LAN_AUTH_ENABLED_ENV) or "").strip().casefold()
-    return value in _TRUE_VALUES
+    if value in _TRUE_VALUES:
+        return True
+    if value in _FALSE_VALUES:
+        return False
+    return lan_share_enabled(environ)
 
 
 def get_lan_token(environ: Mapping[str, str] | None = None) -> str:
@@ -127,7 +135,7 @@ def create_session_credential(token: str) -> str:
 def verify_lan_token(candidate: str, environ: Mapping[str, str] | None = None) -> bool:
     value = str(candidate or "")
     expected = get_lan_token(environ)
-    return bool(value) and hmac.compare_digest(value, expected)
+    return bool(value) and hmac.compare_digest(value.encode("utf-8", "surrogateescape"), expected.encode("utf-8"))
 
 
 def request_is_local(request: HTTPConnection) -> bool:
@@ -167,7 +175,7 @@ def request_requires_lan_auth(
     path = str(getattr(getattr(request, "url", None), "path", "") or "")
     # The MCP endpoint and its legacy alias authenticate their own opt-in bearer token.
     # Requiring a second LAN bearer here makes external MCP clients impossible.
-    if path in {'/api/v1/mcp', '/api/v1/wangp/mcp'}:
+    if path == '/api/v1/mcp' or path.startswith('/api/v1/mcp/') or path == '/api/v1/wangp/mcp':
         return False
     if path in _AUTH_PUBLIC_PATHS:
         return False
@@ -189,7 +197,7 @@ def request_has_valid_lan_auth(
     cookies = getattr(request, "cookies", {})
     cookie = str(cookies.get(LAN_AUTH_COOKIE_NAME) or "")
     expected_cookie = create_session_credential(get_lan_token(environ))
-    return bool(cookie) and hmac.compare_digest(cookie, expected_cookie)
+    return bool(cookie) and hmac.compare_digest(cookie.encode("utf-8", "surrogateescape"), expected_cookie.encode("utf-8"))
 
 
 class LanAuthMiddleware:

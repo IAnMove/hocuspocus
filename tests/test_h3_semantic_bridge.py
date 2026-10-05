@@ -1,5 +1,8 @@
 """Math and request-boundary checks for the optional, default-off adapter."""
 import pytest
+
+pytest.importorskip("torch")
+
 import torch
 from models.minimax_h3 import semantic_bridge as bridge
 

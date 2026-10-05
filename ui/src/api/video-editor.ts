@@ -61,7 +61,9 @@ export function getVideoEditorThumbnailUrl(source: string): string {
 
 export interface VideoEditorScreenshot {
   filename: string
+  /** Includes `?workspace=`; prefer `getFileUrl(filename, workspace)` in the UI. */
   url: string
+  workspace?: string
   time: number
   width: number
   height: number

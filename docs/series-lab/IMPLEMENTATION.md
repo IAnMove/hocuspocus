@@ -1,6 +1,6 @@
 # Series Lab implementation
 
-Series Lab is a top-level Maestro workspace for persistent episodic production. Its hierarchy is:
+Series Lab is a top-level HocusPocus workspace for persistent episodic production. Its hierarchy is:
 
 `Series → Season → Episode → Scene → Shot → append-only Attempts`
 
@@ -29,19 +29,42 @@ Every new episode freezes its approved canon, entity definitions, provider/capab
 
 ## HTTP surface
 
-The `/api/v1/series` resource includes:
+The `/api/v1/series` resource (routes in `tests/fixtures/route_table.json`) includes:
 
-- series list/create/get/update/delete/duplicate and Story import;
-- episode list/create/get/update/delete;
-- canon preparation start/status/cancel/resume/apply and reviewed-canon approval;
-- one-click known-series bootstrap into an editable, unapproved bible;
-- episode planning start/status/cancel/resume/apply;
-- deterministic episode/shot reference routing;
-- render start/status/cancel/resume/discard;
-- attempt approve/reject;
-- selected CanonDelta commit.
+- series list/create/get/update/delete/duplicate and Story import; the whole library (`GET`/`PUT /series/library`); series templates (`GET /series/templates`, `POST /series/templates/{template_id}`) that create a show with its cast, places and a five-shot 2D pilot;
+- episode list/create/get/update/delete, a compact read (`GET .../episodes/{episode_id}/compact`: script, shots with layout and lines, last takes, language versions) and **episode from script** (`POST .../episodes/from-script`): one compact bilingual script becomes a whole episode after every character, pose, location, file and effect is checked against the series; `check: true` only validates, `episode_id` rewrites an episode and keeps its takes by shot id;
+- canon preparation start/status/cancel/resume/apply and reviewed-canon approval; one-click known-series bootstrap into an editable, unapproved bible;
+- episode planning start/status/cancel/resume/apply, plan recovery/discard and shot duration preview;
+- deterministic episode/shot reference routing and **reference refresh** (`POST .../episodes/{episode_id}/references/refresh`);
+- H3 render start/status/cancel/resume/recovery/discard; attempt approve/reject and bulk approve;
+- **native render** (`POST .../episodes/{episode_id}/native-render`; jobs under `/series/native-render/jobs/{job_id}` with status/cancel/resume and `/series/native-render/recovery`): every 2D animation shot rendered on the server without a browser, with each line in the character's voice for the requested language (checked with speech QA), phonetic mouth cues, an editable Video 2D scene and a take appended to the shot;
+- **language versions** (`PUT`/`DELETE .../episodes/{episode_id}/language-versions/{language}`, `POST .../language-versions/{language}/translate`): the same shots and line ids with their own text, cards, music, takes and cut;
+- assembly start/status/cancel/resume/recovery/discard (`/series/assembly/...`): the approved takes of one language cut into a chapter at -16 LUFS with SRT/VTT and an optional burned-in copy;
+- **produce** (`POST .../episodes/{episode_id}/produce`; jobs under `/series/produce/jobs/{job_id}` with status/cancel/resume): render the original and every language version with automatic approval, retry failed shots once, then assemble each language;
+- **3D location plates** (`POST`/`GET .../locations/{location_id}/plate3d`): a Video 3D scene rendered once as the silent looping background of a location; 2D shots in that location use it;
+- asset import (`POST .../assets/import`, also `asTake` for finished shot videos), selected CanonDelta commit, and the guides `GET /api/v1/series-agent/guide` (working guide) and `GET .../{series_id}/guide` (guide plus the live series bible).
 
 All mutating requests carry a workspace in their JSON body, or a workspace query parameter for DELETE. Generated video metadata records the exact effective prompt, negative prompt, H3 model, seed, settings/frame count, reference manifest, request hash, job ID, creation/submission/completion timestamps and elapsed milliseconds.
+
+## MCP surface
+
+The same operations are published as `series.*` tools on `/api/v1/mcp` and on the reduced `/api/v1/mcp/series` profile, which serves only the series tools and tells the agent to start with `series.guide`; a single-user OAuth 2.1 sign-in lets connectors such as ChatGPT connect with their own revocable token (see [CHATGPT_MCP](CHATGPT_MCP.md)). The catalog and its descriptions live in `app/services/series_commands.py`:
+
+| Tool | What it does |
+| --- | --- |
+| `series.guide` | Start here: the working guide (steps, shot format, conventions, pitfalls) and, with `series_id`, the live bible: characters with kit, poses and voices, locations with variants and anchors, workspace music and sound files, episodes so far and the next id prefix. |
+| `series.templates`, `series.create_from_template` | List the series templates (cutout satire, host explainer, office sitcom...) and create a series from one in Spanish or English, pilot included. |
+| `series.list`, `series.get`, `series.create`, `series.update`, `series.canon.approve` | Read, create and replace a Series Lab project at an exact revision; approve the reviewed canon. |
+| `series.episode.create`, `series.episode.update`, `series.episode.get` | Create an episode that freezes the approved canon, save its editor fields at the series revision, and read it compactly. |
+| `series.episode.from_script` | Write a whole episode from a compact script: scenes, shots with framing, camera, cast, bilingual lines, cards, music, timed sfx and fx, props, timing and 3D dialogue shots; `check: true` only reports problems. |
+| `series.episode.render_native` (+ `.status`, `.cancel`, `.resume`) | Render every 2D shot on the server, optionally approving takes or rendering a language version; resumable per shot stage. |
+| `series.episode.language_version.set`, `series.episode.translate` | Write a language version by hand (dialogue, cards, music per shot) or translate every line and card with the configured LLM for dubbing. |
+| `series.take.approve`, `series.asset.import` | Approve one completed take (optionally for one language version); import a workspace file as a reference image or as a finished take. |
+| `series.assembly.start`, `series.assembly.status` | Cut the approved takes of a language into a chapter with subtitles and read the job. |
+| `series.episode.produce` (+ `.status`, `.cancel`, `.resume`) | Render and cut an episode in one call: every language, automatic approval, one retry per failed shot, burned-in subtitles unless disabled; `chapters` lists the files. |
+| `series.location.plate3d` (+ `.status`) | Render a Video 3D scene or document as the looping plate of a location; when the export is ready it becomes the location video. |
+
+The same module publishes the character tools the profile also serves (`characters.list`, `characters.get`, `characters.save`, `characters.styles`, `characters.rig.flat`), next to `qa.speech` and `studio.key` from the shared catalog; `tests/test_series_commands.py` and `tests/test_local_mcp.py` keep the HTTP and MCP surfaces aligned.
 
 ## MVP boundaries
 
@@ -138,4 +161,4 @@ Dialogue-shot speech controls open the same Character Creator destination direct
 
 ## Phonetic 2D speech and resting faces
 
-Automatic 2D generation and regeneration analyze isolated recordings with the shared offline Rhubarb service. Saved scene beats retain nine-position phonetic cues and their audio/text provenance; four-state kits use compatible fallbacks. All configured visible actors use the saved mouthless base and resting mouth, including listeners and silent shots. Saving Character Creator also composes a reusable resting still. Twenty new reusable styles and ZIP downloads are included. See [speech quality, mouth packs and API](../character-kits/SPEECH_QUALITY.md).
+Automatic 2D generation and regeneration analyze isolated recordings with the shared offline Rhubarb service. Saved scene beats retain nine-position phonetic cues and their audio/text provenance; four-state kits use compatible fallbacks. All configured visible actors use the saved mouthless base and resting mouth, including listeners and silent shots. Saving Character Creator also composes a reusable resting still. Twenty-six reusable styles (twenty of them added with this work) and ZIP downloads are included. See [speech quality, mouth packs and API](../character-kits/SPEECH_QUALITY.md).

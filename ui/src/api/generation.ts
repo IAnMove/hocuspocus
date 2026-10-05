@@ -1,6 +1,6 @@
 import { rememberPrompt } from '../lib/promptHistory'
 import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ModelResourceRequirements, ScailResolutionProfile } from '../types'
-import { BASE } from './http'
+import { BASE, httpError } from './http'
 
 export interface ApiModel {
   model_type: string
@@ -51,11 +51,13 @@ export interface ApiJobStatus {
   job_id: string
   task_id?: string | null
   root_task_id?: string | null
-  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
+  /** `leftover`/`interrupted` come from the recovery queue after a restart:
+   *  the job is not running and waits for resume or discard. */
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'leftover' | 'interrupted'
   progress: number
-  step: number
-  total_steps: number
-  phase: string
+  step?: number
+  total_steps?: number
+  phase?: string
   message: string
   output_files: string[]
   error: string | null
@@ -243,7 +245,7 @@ export async function submitGeneration(params: Record<string, unknown>): Promise
 
 export async function fetchJobStatus(jobId: string): Promise<ApiJobStatus> {
   const res = await fetch(`${BASE}/api/v1/status/${encodeURIComponent(jobId)}`)
-  if (!res.ok) throw new Error('Failed to fetch job status')
+  if (!res.ok) throw await httpError(res, res.status === 404 ? 'Job not found' : 'Failed to fetch job status')
   return res.json()
 }
 

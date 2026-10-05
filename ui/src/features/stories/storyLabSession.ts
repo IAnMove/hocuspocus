@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { StoryGenerationScope } from './types'
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../../lib/safeStorage'
 
 export type StoryLabPendingDraft = {
   scope: StoryGenerationScope
@@ -84,7 +85,7 @@ export function draftPaths(result: Record<string, unknown>): string[] {
 }
 
 export function readStoryLabJobId(workspace: string, projectId: string): string {
-  return window.localStorage.getItem(storyJobKey(workspace, projectId)) || ''
+  return safeStorageGet('local', storyJobKey(workspace, projectId)) || ''
 }
 
 export function readStoryLabSessionRecord(
@@ -92,7 +93,7 @@ export function readStoryLabSessionRecord(
   projectId: string,
 ): StoryLabSessionRecord | null {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(storyResultKey(workspace, projectId)) || 'null')
+    const saved = JSON.parse(safeStorageGet('local', storyResultKey(workspace, projectId)) || 'null')
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return null
     return saved as StoryLabSessionRecord
   } catch {
@@ -114,7 +115,7 @@ export function pendingDraftFromRecord(
 }
 
 export function persistStoryLabJob(workspace: string, projectId: string, jobId: string): void {
-  window.localStorage.setItem(storyJobKey(workspace, projectId), jobId)
+  safeStorageSet('local', storyJobKey(workspace, projectId), jobId)
 }
 
 export function persistStoryLabSessionRecord(
@@ -122,12 +123,12 @@ export function persistStoryLabSessionRecord(
   projectId: string,
   record: StoryLabSessionRecord,
 ): void {
-  window.localStorage.setItem(storyResultKey(workspace, projectId), JSON.stringify(record))
+  safeStorageSet('local', storyResultKey(workspace, projectId), JSON.stringify(record))
 }
 
 export function clearStoryLabSession(workspace: string, projectId: string): void {
-  window.localStorage.removeItem(storyResultKey(workspace, projectId))
-  window.localStorage.removeItem(storyJobKey(workspace, projectId))
+  safeStorageRemove('local', storyResultKey(workspace, projectId))
+  safeStorageRemove('local', storyJobKey(workspace, projectId))
 }
 
 export function applyRecoveredStoryLabStatus(options: {

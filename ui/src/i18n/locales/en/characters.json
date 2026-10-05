@@ -449,7 +449,8 @@
       "minimaxDescribe": "MiniMax is describing the image…",
       "llmDescribe": "The internal LLM is describing the image…",
       "orbitQueued": "H3 orbit queued…",
-      "hunyuanQueued": "Hunyuan3D queued…"
+      "hunyuanQueued": "Hunyuan3D queued…",
+      "orbitInterrupted": "The orbit was interrupted by a server restart. Resume reruns the saved queue; discard clears it."
     },
     "errors": {
       "autoDescribe": "Auto-describe only works with MiniMax or the internal LLM. Type an A Prompt, or switch Settings → LLM.",

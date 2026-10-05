@@ -487,7 +487,7 @@ export type SeriesServerRenderItem = {
 }
 export type SeriesServerRenderJob = {
   jobId: string; seriesId: string; episodeId: string; current: number; total: number; message?: string; activeShotId?: string | null
-  status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'; items: SeriesServerRenderItem[]; createdAt?: number
+  status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'interrupted'; items: SeriesServerRenderItem[]; createdAt?: number
   language?: string
 }
 

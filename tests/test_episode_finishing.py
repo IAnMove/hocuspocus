@@ -15,6 +15,7 @@ from services.episode_finishing import (
     measure_loudness,
     remove_episode_subtitles,
     scene_beats,
+    spread_beats,
     srt_text,
     vtt_text,
 )
@@ -180,3 +181,14 @@ def test_burned_subtitles_are_a_second_file_and_the_clean_one_stays(tmp_path):
     result = burn_subtitles(str(folder / "episode.mp4"), "episode.srt", ffmpeg="ffmpeg")
     assert result == {"burned": True, "file": "episode_subtitled.mp4"}
     assert (folder / "episode_subtitled.mp4").stat().st_size > 0 and (folder / "episode.mp4").is_file()
+
+
+def test_lines_without_timing_share_their_clip_by_length_inside_a_margin():
+    beats = [{"text": "Hola"}, {"text": "Esto es una frase bastante más larga"}]
+    spread = spread_beats(beats, 10.0)
+    assert spread[0]["start"] == 0.25 and spread[-1]["end"] == 9.75
+    assert spread[1]["end"] - spread[1]["start"] > 5 * (spread[0]["end"] - spread[0]["start"])
+    assert spread_beats(beats, 0.3) == [] and spread_beats([{"text": " "}], 10) == []
+    cues = episode_cues([{"offset": 12.0, "duration": 10.0, "beats": beats},
+                         {"offset": 22.0, "duration": 4.0, "beats": [{"text": "Timed", "start": 1.0, "end": 2.0}]}])
+    assert cues[0]["start"] == 12.25 and cues[0]["text"] == "Hola" and cues[-1] == {"start": 23.0, "end": 24.0, "text": "Timed"}
