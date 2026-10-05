@@ -169,7 +169,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.update": (
         {"workspace": WORKSPACE, "series_id": ID, "series": OBJECT, "base_revision": REVISION},
         ["workspace", "series_id", "series", "base_revision"], True,
-        "Replace a Series Lab project at an exact revision. Changing canon inputs returns the canon to draft.",
+        "Update a Series Lab project at an exact revision: the fields you send replace theirs, fields you omit keep their "
+        "value (send an empty list to clear one). Changing canon inputs returns the canon to draft.",
     ),
     "series.canon.approve": (
         {"workspace": WORKSPACE, "series_id": ID, "base_revision": REVISION}, ["workspace", "series_id", "base_revision"], True,

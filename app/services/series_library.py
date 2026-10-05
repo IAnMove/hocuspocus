@@ -772,6 +772,13 @@ def _validate_project_graph_ids(project: dict) -> None:
                     )
 
 
+def series_put_payload(current: dict, sent: dict) -> dict:
+    """The project a ``PUT /api/v1/series/{id}`` stores: what was sent, and the current value of every top-level field
+    that was not. An agent that sent only ``allowedProductionMethods`` emptied the episodes, characters, locations
+    and assets of a finished series. To clear a field, send it empty."""
+    return {**copy.deepcopy(current), **sent}
+
+
 def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     from services.series_production import normalize_production_methods
     if not isinstance(value, dict):

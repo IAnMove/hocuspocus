@@ -27,6 +27,7 @@ from services.series_library import (
     import_story_project,
     normalize_series_project,
     read_series_library,
+    series_put_payload,
     series_canon_inputs_changed,
     validate_workspace_id,
     write_series_library,
@@ -234,7 +235,7 @@ def create_core_labs_router() -> APIRouter:
                         status_code=409,
                         detail=f"Series revision changed to {current.get('revision')}; reload before saving",
                     )
-                updated = normalize_series_project({**raw, "id": series_id}, series_id, workspace)
+                updated = normalize_series_project({**series_put_payload(current, raw), "id": series_id}, series_id, workspace)
                 if series_canon_inputs_changed(current, updated):
                     updated["canon"]["approval"] = "draft"
                     updated["canon"]["approvedAt"] = ""

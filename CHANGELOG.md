@@ -6,6 +6,11 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+`series.update` (and `PUT /api/v1/series/{id}`) keeps every top-level field it
+is not sent. It replaced the whole project, so an agent that sent only
+`allowedProductionMethods` emptied the episodes, characters, locations and
+assets of a finished series; send an empty list to clear a field.
+
 A restart keeps its port. The socket bound before the start-up banner had no
 `SO_REUSEADDR`, so the previous server's connections in TIME_WAIT blocked the
 port for a minute and the app moved to the next one (42004 instead of 42003).

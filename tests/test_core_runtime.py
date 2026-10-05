@@ -1207,6 +1207,34 @@ class CoreRuntimeTests(unittest.TestCase):
         finally:
             self._leave_temp_workspace(folder, previous)
 
+    def test_a_series_put_with_a_few_fields_keeps_the_rest_of_the_project(self):
+        """An agent sent only allowedProductionMethods and the PUT emptied the series' episodes, characters and assets."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            created = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Harbour Lights"}).json()
+            full = dict(created, characters=[{"id": "mara", "name": "Mara", "role": "keeper"}], locations=[{"id": "harbour", "name": "Harbour"}])
+            saved = self.client.put(f"/api/v1/series/{created['id']}", json={"workspace": "default", "series": full,
+                                                                              "baseRevision": created["revision"]})
+            self.assertEqual(saved.status_code, 200, saved.text)
+            current = self.client.get(f"/api/v1/series/{created['id']}", params={"workspace": "default"}).json()
+            self.assertEqual(len(current["characters"]), 1)
+            partial = self.client.put(f"/api/v1/series/{created['id']}", json={
+                "workspace": "default", "series": {"allowedProductionMethods": ["animation_2d", "imported_video"]},
+                "baseRevision": current["revision"]})
+            self.assertEqual(partial.status_code, 200, partial.text)
+            stored = partial.json()
+            self.assertEqual(stored["allowedProductionMethods"], ["animation_2d", "imported_video"])
+            self.assertEqual([item["id"] for item in stored["characters"]], ["mara"])
+            self.assertEqual([item["id"] for item in stored["locations"]], ["harbour"])
+            self.assertEqual(stored["episodesById"], current["episodesById"])
+            self.assertEqual(stored["title"], "Harbour Lights")
+            cleared = self.client.put(f"/api/v1/series/{created['id']}", json={
+                "workspace": "default", "series": {"locations": []}, "baseRevision": stored["revision"]}).json()
+            self.assertEqual(cleared["locations"], [], "an explicit empty list still clears")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
     def test_series_canon_prepare_normalizes_before_review(self):
         folder, previous = self._in_temp_workspace()
         try:
