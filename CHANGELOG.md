@@ -6,6 +6,13 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series 3D shots play their sound effects and screen effects. A 3D shot got the
+location's ambience, the stinger and its music but dropped `sfx` and `fx`, so an
+explosion or a laser in a 3D shot was silent and anime speed lines or a manga
+impact could only go on 2D shots. They are now timed on a line or at a second
+as in a 2D shot; `world3d.scene.patch` takes `screenFx` (ids `shot-*`), which
+replace the shot's earlier effects and keep the template's own.
+
 The humanoid rig accepts characters with long hair and a skirt. Hair down to the
 shoulders hides the neck in the front silhouette and a skirt makes the waist the
 narrowest row, so the waist was taken for the neck, the arms for part of the head

@@ -106,7 +106,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - **3D dialogue (`kind: "3d"` in the script, `productionMethod: animation_3d` + `scene3d` on a shot):** a Video 3D
   template (`world3d.templates.list`, or a personal one) or a saved scene file, and which object each speaking
   character is (`objectId`). The server render records the lines like a 2D shot, makes each object talk as its
-  Character Kit, exports it and imports the take. `quality`: `draft` (fast) or `final`.
+  Character Kit, exports it and imports the take. `quality`: `draft` (fast) or `final`. Its `sfx` and `fx` play
+  like in a 2D shot (screen effects drawn over the 3D frame), on a line or at a second (`at`).
   The template's own effects, texts and clip cues are stretched to the shot's length (`"retime": false` keeps their
   seconds). `objects` places what does not speak: a 3D model from `model3d.generate`/`model3d.animate` (`file`, its
   `clip` by name, `clipPlayback` {speed, start, loop}) or an image cutout (`"media": "image"`), on a template object
