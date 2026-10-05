@@ -18,6 +18,18 @@ anything is written, when the destination's sidecar belongs to another file
 that still exists, or when it would create a sidecar that such a file would
 read as its own. A sidecar left by a deleted file is still replaced.
 
+A production or a Series render that waits for the GPU no longer waits
+forever. With `HOCUS_PRODUCTION_EXTERNAL_VRAM_MB` set, each music, image,
+speech, SFX, H3 or video export admission waited in 30-second steps for as long
+as another process held the GPU, and a cancel had no effect until that process
+finished. The wait now lasts at most `HOCUS_PRODUCTION_GPU_WAIT_SECONDS`
+(default one hour; `0` keeps waiting). After that the run stops with
+`resource_gpu_busy`, naming the processes that still hold the GPU, and can be
+resumed. Cancelling a music-video production or a Series render job ends the
+wait at once. A Series render job now stops at the shot that ran out of GPU or
+disk instead of waiting again for each following shot, and a cancel during its
+last shot ends the job `cancelled` instead of `failed`.
+
 The flat cutout rig finds small painted mouths again. Since the rig started
 skipping narrow nose strokes, a mouth narrower than a talking mouth (a small
 open «o», or a short line on a small face) was skipped too: the pose kept its
