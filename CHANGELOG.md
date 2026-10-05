@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The humanoid rig accepts characters with long hair and a skirt. Hair down to the
+shoulders hides the neck in the front silhouette and a skirt makes the waist the
+narrowest row, so the waist was taken for the neck, the arms for part of the head
+and a clean T pose was refused with `not_humanoid: hands_stuck`. The neck is now
+looked for above the T-pose arm line.
+
 Video 3D has a toon / cel render look («Anime (cel)» in Spanish). With
 `renderLook: "toon"` the 3D model slots are drawn with flat bands of light and
 an ink outline, so rigged or static GLB characters, vehicles and props sit next
