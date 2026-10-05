@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import glob
 import hashlib
 import json
 import os
@@ -313,6 +314,50 @@ def _named_copy_target(source: str, folder: str, payload: dict) -> Path:
     return target
 
 
+def _same_stem_files(media: Path) -> list[str]:
+    """Other files whose sidecar is ``media``'s too: sidecars are keyed by stem, so ``song.wav`` and ``song.png``
+    both use ``song.meta.json``."""
+    return sorted(entry.name for entry in media.parent.glob(f"{glob.escape(media.stem)}.*")
+                  if entry.stem == media.stem and entry.name != media.name and entry.is_file())
+
+
+def _sidecar_owner(metadata: object, media: Path) -> str | None:
+    """The file a stem-keyed sidecar describes: the ``asset.filename`` it records. A sidecar that records none is
+    ``media``'s when no other file shares the stem; otherwise whose it is cannot be told (None)."""
+    asset = metadata.get("asset") if isinstance(metadata, dict) else None
+    recorded = asset.get("filename") if isinstance(asset, dict) else None
+    if isinstance(recorded, str) and recorded.strip():
+        return os.path.basename(recorded)
+    return None if _same_stem_files(media) else media.name
+
+
+def _sidecar_holders(meta: Path, target: Path, others: list[str]) -> list[str]:
+    """The existing files other than ``target`` whose metadata ``meta`` is."""
+    try:
+        metadata = json.loads(meta.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        metadata = None
+    owner = _sidecar_owner(metadata, target)
+    if owner is None:
+        return others
+    return [owner] if owner != target.name and (target.parent / owner).is_file() else []
+
+
+def _refuse_shared_sidecar(target: Path, content: str | None) -> None:
+    """The copy writes ``content`` as ``target``'s sidecar, or removes it when None. Neither may touch the metadata
+    of another existing output with the same stem, nor create a sidecar that output would read as its own. A
+    sidecar whose output is gone is replaced."""
+    meta = target.with_suffix(".meta.json")
+    others = _same_stem_files(target)
+    if meta.is_file():
+        holders = _sidecar_holders(meta, target, others)
+    else:
+        holders = others if content is not None else []
+    if holders:
+        raise AssetsUploadError("sidecar_conflict", f"{meta.name} is also the metadata file of {', '.join(holders)}; "
+                                "choose a destination_filename with another name before the extension", 409)
+
+
 def _file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -335,6 +380,8 @@ def _sidecar_content(source: str, target: Path, workspace: str) -> str | None:
             raise ValueError("Invalid generation sidecar")
     except (OSError, ValueError) as error:
         raise AssetsUploadError("invalid_sidecar", "Generation sidecar is unreadable", 422) from error
+    if _sidecar_owner(metadata, Path(source)) != Path(source).name:
+        return None  # It was written for another output with the same stem (clip.mp4 for clip.wav).
     metadata["asset"] = {**metadata.get("asset", {}), "filename": target.name, "uri": target.name,
                          "id": _stable_unmanaged_id(workspace, target.name)}
     metadata["copied_from"] = Path(source).name
@@ -360,6 +407,8 @@ def _copy_into_workspace(source: str, folder: str, payload: dict) -> str:
     named = "destination_filename" in payload
     target = _named_copy_target(source, folder, payload) if named else Path(folder) / unique_upload_name(Path(source).name)
     content = _sidecar_content(source, target, payload["workspace"]) if named else None
+    if named:
+        _refuse_shared_sidecar(target, content)
     temporary = target.with_name(f".{target.name}-{os.urandom(8).hex()}.tmp")
     try:
         shutil.copyfile(source, temporary)

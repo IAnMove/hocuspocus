@@ -285,3 +285,83 @@ def test_named_copy_creates_exact_name_and_requires_copy_flag(tmp_path):
     payload['copy_to_workspace'] = True
     _call(handlers, 'new-name', payload)
     assert (workspace / 'song.wav').read_bytes() == b'new'
+
+
+def _sidecar(path: Path, owner: str | None, **fields) -> None:
+    import json
+
+    path.write_text(json.dumps({**({'asset': {'filename': owner}} if owner else {}), **fields}))
+
+
+@pytest.mark.parametrize('source_sidecar', [False, True])
+@pytest.mark.parametrize('recorded_owner', ['song.png', None])
+def test_named_copy_never_overwrites_or_deletes_the_metadata_of_another_output_with_the_same_stem(
+        tmp_path, source_sidecar, recorded_owner):
+    # Sidecars are keyed by stem: song.wav would share song.meta.json with the cover song.png.
+    handlers, workspace, _ = _layout(tmp_path)
+    (workspace / 'song.png').write_bytes(tiny_png())
+    cover_meta = workspace / 'song.meta.json'
+    _sidecar(cover_meta, recorded_owner, seed=1)
+    before = cover_meta.read_bytes()
+    source = workspace / 'take.wav'; source.write_bytes(b'take')
+    if source_sidecar:
+        _sidecar(workspace / 'take.meta.json', 'take.wav', seed=7)
+    with pytest.raises(HTTPException) as caught:
+        _call(handlers, f'shared-stem-{source_sidecar}-{recorded_owner}', {
+            'workspace': 'clip', 'source': str(source), 'copy_to_workspace': True, 'destination_filename': 'song.wav'})
+    assert caught.value.status_code == 409 and caught.value.detail['code'] == 'sidecar_conflict'
+    assert 'song.png' in caught.value.detail['message']
+    assert cover_meta.read_bytes() == before and not (workspace / 'song.wav').exists()
+
+
+def test_named_copy_does_not_adopt_a_sidecar_written_for_another_output(tmp_path):
+    import json
+
+    handlers, workspace, _ = _layout(tmp_path)
+    (workspace / 'clip.mp4').write_bytes(b'video')
+    video_meta = workspace / 'clip.meta.json'
+    _sidecar(video_meta, 'clip.mp4', seed=3, prompt='a video')
+    before = video_meta.read_bytes()
+    source = workspace / 'clip.wav'; source.write_bytes(b'extracted audio')
+    _call(handlers, 'foreign-sidecar', {'workspace': 'clip', 'source': str(source), 'copy_to_workspace': True,
+                                        'destination_filename': 'voice.wav'})
+    assert (workspace / 'voice.wav').read_bytes() == b'extracted audio'
+    assert not (workspace / 'voice.meta.json').exists(), "the video's prompt and seed are not the audio's"
+    assert video_meta.read_bytes() == before
+    # A sidecar that names its own output is still carried over.
+    _sidecar(video_meta, 'clip.wav', seed=4)
+    (workspace / 'clip.mp4').unlink()
+    _call(handlers, 'own-sidecar', {'workspace': 'clip', 'source': str(source), 'copy_to_workspace': True,
+                                    'destination_filename': 'voice2.wav'})
+    assert json.loads((workspace / 'voice2.meta.json').read_text())['seed'] == 4
+
+
+def test_named_copy_replaces_a_sidecar_whose_output_is_gone(tmp_path):
+    import json
+
+    handlers, workspace, _ = _layout(tmp_path)
+    _sidecar(workspace / 'song.meta.json', 'song.png', seed=1)  # song.png was deleted; its sidecar stayed
+    source = workspace / 'take.wav'; source.write_bytes(b'take')
+    _sidecar(workspace / 'take.meta.json', 'take.wav', seed=7)
+    _call(handlers, 'orphan', {'workspace': 'clip', 'source': str(source), 'copy_to_workspace': True,
+                               'destination_filename': 'song.wav'})
+    metadata = json.loads((workspace / 'song.meta.json').read_text())
+    assert metadata['seed'] == 7 and metadata['asset']['filename'] == 'song.wav'
+
+
+def test_named_copy_does_not_create_a_sidecar_another_output_would_read_as_its_own(tmp_path):
+    import hashlib
+
+    handlers, workspace, _ = _layout(tmp_path)
+    (workspace / 'song.png').write_bytes(tiny_png())  # a cover without metadata
+    source = workspace / 'take.wav'; source.write_bytes(b'take')
+    payload = {'workspace': 'clip', 'source': str(source), 'copy_to_workspace': True, 'destination_filename': 'song.wav'}
+    _call(handlers, 'no-provenance', payload)
+    assert (workspace / 'song.wav').read_bytes() == b'take' and not (workspace / 'song.meta.json').exists()
+    # With provenance to write, song.meta.json would describe song.wav and be read as song.png's too.
+    _sidecar(workspace / 'take.meta.json', 'take.wav', seed=7)
+    payload['expected_destination_sha256'] = hashlib.sha256(b'take').hexdigest()
+    with pytest.raises(HTTPException) as caught:
+        _call(handlers, 'with-provenance', payload)
+    assert caught.value.detail['code'] == 'sidecar_conflict' and 'song.png' in caught.value.detail['message']
+    assert not (workspace / 'song.meta.json').exists()
