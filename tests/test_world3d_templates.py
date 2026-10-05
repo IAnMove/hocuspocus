@@ -501,7 +501,7 @@ def test_a_patch_adds_an_animated_prop_and_stretches_the_template_cues_to_the_ne
 
 
 ANIME_IDS = ["anime-speedline-charge", "anime-impact-frame", "anime-snap-zoom", "anime-sword-clash",
-             "anime-face-off", "anime-airship-flyby", "anime-fleet-approach", "anime-eyecatch"]
+             "anime-face-off", "anime-airship-flyby", "anime-fleet-approach", "anime-eyecatch", "anime-code-rain"]
 
 
 def test_anime_shots_are_searchable_cards_with_bindable_objects():
@@ -520,6 +520,8 @@ def test_anime_shots_are_searchable_cards_with_bindable_objects():
         "subject": "image", "rival": "image", "background": "image"}
     assert search_templates("impact frame", limit=1)[0]["id"] == "anime-impact-frame"
     assert search_templates("eyecatch", limit=1)[0]["id"] == "anime-eyecatch"
+    assert search_templates("code rain", limit=1)[0]["id"] == "anime-code-rain"
+    assert {item["id"]: item["media"] for item in cards["anime-code-rain"]["required"]} == {"subject": "image", "background": "image"}
     assert {card["id"] for card in search_templates("anime", limit=24)} >= set(ANIME_IDS)
 
 

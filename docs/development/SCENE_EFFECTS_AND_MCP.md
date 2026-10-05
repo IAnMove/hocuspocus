@@ -5,7 +5,7 @@
 Video 2.5D and Video 3D share **Scene SFX → Apply SFX showcase template**.
 The template adds a 90-second track demonstrating 30 effects, three seconds each:
 sparks, explosion, fireworks, confetti, rain, snow, embers, smoke, fog, bubbles,
-stars, portal, shockwave, lightning, speed lines, scanline, aurora and laser; plus magic circle, arcane missiles, summoning gate, black hole, ice burst, meteor shower, lightning storm, anime aura, energy orb, energy beam, sword slash, manga impact, impact flash and inverted impact frame.
+stars, portal, shockwave, lightning, speed lines, scanline, aurora, laser and code rain; plus magic circle, arcane missiles, summoning gate, black hole, ice burst, meteor shower, lightning storm, anime aura, energy orb, energy beam, sword slash, manga impact, impact flash and inverted impact frame.
 The separate magic/anime template demonstrates the 14 additions in 42 seconds.
 It preserves existing layers, actors, camera and voices, replaces the SFX track,
 and extends the scene if necessary. An empty 2D scene gets the bundled stage SVG.
@@ -25,6 +25,20 @@ at 24 fps). The negative needs the picture under it: exports paint over the fram
 and the Video 3D and Video 2D previews copy the stage while it is live.
 `speedlines` uses `intensity` for the number and weight of its lines; 1 keeps the
 original 65 hairlines.
+
+`code_rain` is digital code rain over the whole frame: columns of half-width
+katakana, digits and some Latin capitals fall, each at its own speed, with a
+near-white head and a trail that fades to `color` (`#39ff6a`) and then out; the
+glyphs change as they fall. `size` is the glyph height in % of the frame height.
+Its catalog entry has `"size": 3`, so a cue without `size` gets 3, not the 65 of the
+other effects (the showcase uses it too). `intensity` sets the density and the
+brightness; `x`, `y` and `rotation` are not used. The frames repeat over the cue:
+every column makes a whole number of trips and every glyph a whole number of
+changes between `start` and `end`, so the frame at `end` is the frame at `start`.
+A plate of N seconds (`series.location.plate3d`) loops with no seam when the cue
+lasts N seconds. The glyphs are drawn with a monospace CJK face (Noto Sans Mono CJK
+JP on Linux, MS Gothic on Windows, Osaka or Hiragino on macOS); when the browser
+draws no katakana, the rain uses digits, Latin capitals and symbols.
 
 Video 3D can also paint cues behind the world: `screenBackdrop`
 (`{"color": "#1c2f86", "sfx": [<cue>, ...]}`) is a flat colour plus the same cues,

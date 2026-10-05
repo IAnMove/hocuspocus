@@ -11,7 +11,7 @@ export function withFxShowcase<T extends { duration: number }>(document: T, coll
   layers[0].animation.duration = duration
   return { ...document, ...('layers' in document && Array.isArray(document.layers) && !document.layers.length ? { layers } : {}), duration,
     sfx: parseSceneFx(presets.map((preset, i) => ({ id: `showcase-${preset.id}`, kind: preset.id,
-      label: preset.id.replace('speedlines', 'speed lines').toUpperCase(), start: i * 3, end: i * 3 + 2.8, color: preset.color, size: 95, sound: true, seed: i + 17 }))) }
+      label: preset.id.replace('speedlines', 'speed lines').toUpperCase(), start: i * 3, end: i * 3 + 2.8, color: preset.color, size: preset.size ?? 95, sound: true, seed: i + 17 }))) }
 }
 
 /** Server/MCP showcase commands omit `document` and return a stock base. */

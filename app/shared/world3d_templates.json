@@ -28074,6 +28074,45 @@
         "anime"
       ],
       "source": "builtin"
+    },
+    {
+      "id": "anime-code-rain",
+      "titleEs": "Lluvia de código",
+      "titleEn": "Code rain",
+      "category": "cinema",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 6,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Código verde cae sobre negro detrás de una figura, que toma un tinte verde; empuje lento. Sin figura, el plano es un fondo que se repite sin corte.",
+      "lineEn": "Green code falls on black behind one figure, which takes a green tint from it; a slow push-in. Without a figure the shot is a plate that loops with no seam.",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject",
+          "role": "subject_1",
+          "media": "image"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [],
+      "tags": [
+        "anime"
+      ],
+      "source": "builtin"
     }
   ]
 }
