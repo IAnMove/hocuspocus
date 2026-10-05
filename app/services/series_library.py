@@ -28,7 +28,7 @@ _ASSET_PATH = re.compile(r"^(assets|outputs)/[A-Za-z0-9._/-]+$")
 EPISODE_EDITOR_FIELDS = frozenset({
     "seasonId", "number", "title", "premise", "logline",
     "targetDurationSeconds", "outline", "script", "shots",
-    "continuityIssues", "proposedCanonDelta", "languageVersions",
+    "continuityIssues", "proposedCanonDelta", "languageVersions", "score",
 })
 SHOT_EDITOR_FIELDS = frozenset({
     "sceneId", "order", "durationSeconds", "framing", "camera", "action",
@@ -547,6 +547,13 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
         "createdAt": _text(episode.get("createdAt"), now),
         "updatedAt": _text(episode.get("updatedAt"), now),
     })
+    # The episode's music, laid by the assembly (series_score): cues over runs of these shots, never overlapping.
+    from .series_score import normalize_score
+    score = normalize_score(episode.get("score"), shots)
+    if score:
+        episode["score"] = score
+    else:
+        episode.pop("score", None)
     from .series_shot_dialogue import annotate_episode_shot_dialogue
     return annotate_episode_shot_dialogue(episode)
 
@@ -1534,6 +1541,10 @@ def update_series_episode(
             merged[key] = copy.deepcopy(patch[key])
     if "shots" in patch:
         merged["shots"] = _merge_episode_shot_patch(current.get("shots"), patch["shots"], replace=patch.get("replaceShots") is True)
+    if "score" in patch:
+        # A cue just written must name shots the episode has; one left behind by a rewrite is only skipped at assembly.
+        from .series_score import normalize_score
+        normalize_score(merged.get("score"), merged.get("shots"), strict=True, kept=_objects(current.get("score")))
 
     from .series_shot_dialogue import annotate_episode_shot_dialogue, sync_episode_shot_dialogue
     if patch.get("syncShotDialogueFromScript") is True:

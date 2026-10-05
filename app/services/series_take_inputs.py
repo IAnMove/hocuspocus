@@ -3,7 +3,8 @@
 ``render_inputs`` fingerprints a shot in one language: its layout and lines, the location, the sound design and the
 kits of the people seen or heard. ``series_native_render`` stores it in the take's metadata (``renderInputs``) and
 ``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the episode assembly lays
-(``soundDesign.ambienceMode: "episode"``) is not part of a shot, so changing it renders nothing again.
+(``soundDesign.ambienceMode: "episode"``, ``ambienceDuckDb``) and the episode's score (``episode.score``) are not
+part of a shot, so changing them renders nothing again.
 """
 from __future__ import annotations
 

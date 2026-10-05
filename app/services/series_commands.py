@@ -141,7 +141,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.episode.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], False,
         "Read one episode compactly: script, shots with their layout2d and lines, the last takes (id, language, seconds, "
-        "editable scene file) and its language versions. Use it instead of series.get to copy an episode's style.",
+        "editable scene file), its language versions and score. Use it instead of series.get to copy an episode's style.",
     ),
     "series.templates": (
         {"language": {"enum": ["es", "en"]}}, [], False,
@@ -172,7 +172,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Update a Series Lab project at an exact revision: the fields you send replace theirs, fields you omit keep their "
         "value (send an empty list to clear one). Changing canon inputs returns the canon to draft. soundDesign: stinger, "
         "ambienceByLocation {locationId: {file, volume}} and ambienceMode \"shot\" (each shot mixes it) or \"episode\" "
-        "(the assembly lays one bed per location run; takes stay up to date when it changes).",
+        "(the assembly lays one bed per location run; takes stay up to date when it changes); ambienceDuckDb 0-24 "
+        "lowers episode-mode beds under the lines.",
     ),
     "series.canon.approve": (
         {"workspace": WORKSPACE, "series_id": ID, "base_revision": REVISION}, ["workspace", "series_id", "base_revision"], True,
@@ -188,7 +189,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "sync_shot_dialogue": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id", "episode", "base_revision"], True,
         "Save editor fields of an episode (title, premise, script, shots with productionMethod, dialogueBeats, "
-        "visible/speaking characters, locationId, durationSeconds) at the series revision.",
+        "visible/speaking characters, locationId, durationSeconds) at the series revision. score: music the assembly "
+        "lays under runs of shots, [{fromShotId, toShotId | sceneId, file, volume 0.18, fadeIn 1.5, fadeOut 2.0, "
+        "duck true}]; cues may not overlap, dip 9 dB under the lines and go silent under a shot with its own music; "
+        "changing it renders no take.",
     ),
     "series.asset.import": (
         {"workspace": WORKSPACE, "series_id": ID, "file": {"type": "string", "minLength": 1, "maxLength": 300},
@@ -212,7 +216,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Assemble the approved takes of an episode into one chapter video (shown under Capítulos), at -16 LUFS with SRT/VTT "
         "subtitles; burn_subtitles also writes a copy with them on the picture. language assembles that language version's "
         "approved takes. With soundDesign.ambienceMode \"episode\" it lays each location's ambience as one continuous "
-        "bed under the cut, before the loudness. Returns a job.",
+        "bed under the cut, and the episode's score (ducked under the lines), before the loudness. Returns a job.",
     ),
     "series.episode.language_version.set": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE,

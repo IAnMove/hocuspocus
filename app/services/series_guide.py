@@ -124,4 +124,5 @@ def compact_episode(series: dict[str, Any], episode: dict[str, Any]) -> dict[str
     script = [{key: scene.get(key) for key in ("id", "order", "locationId", "purpose")} for scene in episode.get("script") or []]
     return {"id": episode["id"], "number": episode.get("number"), "title": episode.get("title"), "premise": episode.get("premise"),
             "status": episode.get("status"), "script": script, "shots": [_compact_shot(assets, shot) for shot in episode.get("shots") or []],
-            "languageVersions": versions, "latestAssemblyAssetId": episode.get("latestAssemblyAssetId")}
+            "languageVersions": versions, "latestAssemblyAssetId": episode.get("latestAssemblyAssetId"),
+            **({"score": episode["score"]} if episode.get("score") else {})}
