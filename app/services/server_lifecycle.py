@@ -114,7 +114,14 @@ def bind_listener(host: str, preferred: int, span: int = 20) -> tuple[socket.soc
     for candidate in [preferred] + [preferred + i for i in range(1, span + 1)]:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            # No SO_REUSEADDR: a plain bind fails iff the port is truly in use.
+            # After a restart the old server's connections linger in TIME_WAIT on this port, and a plain
+            # bind fails for a minute, so the app moved to the next port (42004 instead of 42003).
+            # On POSIX, SO_REUSEADDR accepts those leftovers but still fails while another process
+            # listens (Pinokio's proxy). On Windows it would let us steal a listening port: exclusive there.
+            if os.name == "posix":
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            elif hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
             sock.bind((host, candidate))
             sock.listen(2048)
             sock.set_inheritable(True)

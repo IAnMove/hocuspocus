@@ -504,6 +504,22 @@ def _anchor(cx: float, cy: float, size: float, width: int, height: int) -> dict[
             "scale": round(size / edge, 5), "rotation": 0.0}
 
 
+# Video 2D fits every layer into a frame-shaped box: a sprite wider than 16:9 is drawn narrower than its anchor
+# height says. A pair of round eyes is ~2.5:1, so the closed lids came out at ~70% and the eyes showed around them.
+MAX_SPRITE_RATIO = 16 / 9
+
+
+def _blink_box(x0: int, y0: int, x1: int, y1: int, height: int) -> tuple[int, int, int, int]:
+    """The blink crop, grown upward and downward (transparent around the lids) until it is at most 16:9."""
+    missing = math.ceil((x1 - x0) / MAX_SPRITE_RATIO) - (y1 - y0)
+    if missing > 0:
+        top = min(y0, (missing + 1) // 2)
+        bottom = min(height - y1, missing - top)
+        y0, y1 = y0 - top, y1 + bottom
+        y0 -= min(y0, max(0, missing - top - bottom))
+    return x0, y0, x1, y1
+
+
 def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
     """Crop, find the face, wipe the painted mouth and measure anchors for one keyed pose."""
     if image.width * image.height > MAX_PIXELS:
@@ -535,7 +551,7 @@ def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
         warnings.append("stray_mark")
     sprite_width = (ex1 - ex0) * style["mouth_scale"]
     pad = int((ey1 - ey0) * 0.25)
-    bx0, by0, bx1, by1 = max(0, ex0 - pad), max(0, ey0 - pad), min(width, ex1 + pad), min(height, ey1 + pad)
+    bx0, by0, bx1, by1 = _blink_box(max(0, ex0 - pad), max(0, ey0 - pad), min(width, ex1 + pad), min(height, ey1 + pad), height)
     return {
         "image": rigged, "before": figure, "width": width, "height": height, "wiped": wiped, "blinks": not covered,
         "warnings": warnings,
@@ -575,16 +591,16 @@ def _tile(frame: Image.Image, height: int, warn: bool) -> Image.Image:
     return tile
 
 
-def review_sheet(poses: dict[str, dict[str, Any]], mouths: dict[str, Image.Image], blink: Image.Image, height: int = 360) -> Image.Image:
+def review_sheet(poses: dict[str, dict[str, Any]], mouths: dict[str, Image.Image], height: int = 360) -> Image.Image:
     """Per pose: the rig with its rest mouth, then an open mouth with the blink; below, the face before and after the
     wipe, enlarged. Poses with warnings are framed in red."""
     rows: list[list[Image.Image]] = [[], []]
     for rig in poses.values():
         warn = bool(rig.get("warnings"))
         rest = place(rig["image"], mouths["closed"], rig["mouth"])
-        # The kit has one blink, from the base pose, placed with each pose's eye anchor; covered eyes do not blink.
+        # Each pose shows its own blink at its eye anchor, as the kit plays it; covered eyes do not blink.
         talk = place(rig["image"], mouths["wide"], rig["mouth"])
-        talk = place(talk, blink, rig["eyes"]) if rig["blinks"] else talk
+        talk = place(talk, rig["blink"], rig["eyes"]) if rig["blinks"] else talk
         rows[0] += [_tile(rest, height, warn), _tile(talk, height, warn)]
         if rig.get("before") is not None and rig.get("eyes_box"):
             rows[1] += [_tile(_face_crop(rig["before"], rig), height // 2, warn), _tile(_face_crop(rig["image"], rig), height // 2, warn)]
@@ -706,11 +722,14 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         target = kit["base"] if pose == "base" else kit["poses"][pose]
         target.update({"source": _url(file, workspace), "width": rig["width"], "height": rig["height"],
                        "alphaStatus": "transparent", "workspace": workspace})
-        anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"], **({} if rig["blinks"] else {"blink": False})}
+        # Each pose closes its own eyes: the base blink, scaled to another pose's eye height, left the
+        # sclera showing wherever the eyes sit wider apart or larger than in the base.
+        own = {"blinkSource": _url(_save(rig["blink"], workspace_dir, f"kit-{kit_id}-{pose}-blink"), workspace)} if rig["blinks"] else {}
+        anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"], **own, **({} if rig["blinks"] else {"blink": False})}
     kit["anchors"] = anchors
     kit["style"] = "cutout"
     warnings = _kit_warnings(rigs)
-    sheet = _save(review_sheet(rigs, mouths, rigs["base"]["blink"]), workspace_dir, f"kit-{kit_id}-rig-review")
+    sheet = _save(review_sheet(rigs, mouths), workspace_dir, f"kit-{kit_id}-rig-review")
     unwiped = sorted(pose for pose, rig in rigs.items() if not rig["wiped"])
     kit["provenance"] = [*(kit.get("provenance") or []), {
         "method": "flat-rig", "sources": {**_original_sources(kit), **sources}, "style": look,

@@ -110,3 +110,15 @@ def test_pose_dimensions_reject_invalid_sizes(width, height):
     value["base"].update(width=width, height=height)
     with pytest.raises(ValueError, match="pixel dimension"):
         normalize_character_kit(value)
+
+
+def test_a_pose_may_carry_its_own_blink_and_a_blob_is_refused(tmp_path):
+    import pytest
+    from services.character_kit_library import normalize_character_kit
+    kit = {"id": "lola", "name": "Lola", "style": "cutout", "base": {"id": "b", "name": "Lola", "source": "/api/v1/file/b.png?workspace=w", "reviewState": "approved"},
+           "poses": {}, "mouth": {}, "eyes": {}, "anchors": {"base": {"mouth": {"offsetX": 0, "offsetY": -20, "scale": 0.05, "rotation": 0},
+                                                                     "blinkSource": "/api/v1/file/kit-lola-base-blink-1.png?workspace=w"}}}
+    assert normalize_character_kit(kit)["anchors"]["base"]["blinkSource"].endswith("blink-1.png?workspace=w")
+    kit["anchors"]["base"]["blinkSource"] = "blob:http://x/1"
+    with pytest.raises(ValueError, match="persistent"):
+        normalize_character_kit(kit)
