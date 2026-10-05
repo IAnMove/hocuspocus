@@ -141,6 +141,7 @@
         "tests/test_series_assembly.py",
         "tests/test_episode_finishing.py",
         "tests/test_series_ambience.py",
+        "tests/test_series_score.py",
         "tests/test_series_shot_foley.py",
         "tests/test_series_assembly_contract.py",
         "tests/test_series_episode_update_router.py",
@@ -524,7 +525,19 @@
         "tests/test_episode_finishing.py",
         "tests/test_series_assembly_router.py",
         "tests/test_series_shot_plan.py",
-        "tests/test_series_native_render.py"
+        "tests/test_series_native_render.py",
+        "tests/test_series_score.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_score.py",
+      "paths": [
+        "tests/test_series_score.py",
+        "tests/test_series_ambience.py",
+        "tests/test_episode_finishing.py",
+        "tests/test_series_assembly_router.py",
+        "tests/test_series_library.py",
+        "tests/test_series_episode_update_router.py"
       ]
     },
     {

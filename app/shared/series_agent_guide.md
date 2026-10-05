@@ -146,7 +146,25 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - `"episode"`: the shots leave it out and `series.assembly.start` lays one continuous bed per run of consecutive
   shots in the same location, looped with a 1 s crossfade, faded in and out over 0.8 s and crossfading into the next
   location's bed. Shots in a location without an entry (a dark title card) get none. Changing the beds renders no
-  shot: `series.episode.produce` only recuts. Switching the mode renders every shot once.
+  shot: `series.episode.produce` only recuts. Switching the mode renders every shot once. `ambienceDuckDb` (0–24,
+  default 0 = off) lowers the beds that many dB while someone speaks, like the score below.
+
+**Score (music under the whole episode).** A shot's `music` plays only in that shot, so a dialogue scene is often
+bare voices. `score` on the episode (`series.episode.update` with `episode: {"score": [...]}`) lays music cues
+across runs of shots at assembly: `{"fromShotId": "e3s04", "toShotId": "e3s12", "file": "mus-theme.wav",
+"volume": 0.18, "fadeIn": 1.5, "fadeOut": 2.0, "duck": true}`, or `{"sceneId": "e3_bar", "file": ...}` for a
+scene's shots. Use the ids `series.episode.get` shows: `from_script` names episode 3's shots `e3s00`, `e3s01`…
+and its scenes `e3_<scene id>`. Only `file` and the shots are required; the numbers shown are the defaults (volume
+0–2 relative to the dialogue, fades 0–30 s). Cues may not overlap (two cues may meet at a cut).
+
+- Each cue plays from the cut before its first shot to the cut after its last, looped with a crossfade if the file
+  is shorter, faded in and out inside the cue. Every clip kind and language version gets it.
+- With `duck` it dips 9 dB under every recorded line (0.25 s down before the line, 0.6 s back up after it; lines
+  less than 1.5 s apart share one dip). A shot with its own `music` keeps it and the score is silent under it.
+- The score is not part of any take: changing it needs only `series.assembly.start` (or `series.episode.produce`,
+  which renders no shot for it and recuts). Send `"score": []` to remove it.
+- A cue naming a shot the episode does not have is refused; one left behind when a rewrite removed its shots is
+  skipped by the assembly, which says so in the cut's `score.skipped`.
 
 ## Writing for quality
 

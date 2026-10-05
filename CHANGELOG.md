@@ -6,6 +6,28 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A Series Lab episode can have a score: background music that the assembly
+lays across runs of shots, so dialogue scenes are no longer bare voices. Set
+`episode.score` with `series.episode.update` to a list of cues, each
+`{"fromShotId", "toShotId", "file", "volume": 0.18, "fadeIn": 1.5,
+"fadeOut": 2.0, "duck": true}` or `{"sceneId", "file", ...}` for the shots of
+one scene. A cue plays from the cut before its first shot to the cut after its
+last on the clips actually joined, loops its file with a crossfade if it is
+shorter, fades in and out inside the cue, and is balanced against the dialogue
+like a shot's music. It dips 9 dB under every recorded line (0.25 s down
+before the line, 0.6 s back up after; lines less than 1.5 s apart share one
+dip), timed from the same lines the subtitles come from, as a deterministic
+volume envelope rather than a sidechain on the mix. A shot with its own
+`layout2d.music` keeps it, and the score is silent under that shot. The score
+is mixed after the ambience and before the -16 LUFS pass, in every clip kind
+and language version, and the cut's metadata records each cue. No take
+depends on it, so changing the score needs only a new cut. Cues that overlap
+or end before they start are rejected, and so is a new cue that names a shot
+the episode does not have; a cue left behind when a rewrite removed its shots
+is kept and skipped by the assembly, which says why. Episode-mode ambience can
+dip under the lines the same way with `soundDesign.ambienceDuckDb` (0-24 dB,
+default 0: off).
+
 A Series shot can get foley made from its own picture. Add
 `foley: {"prompt": "wooden airship creaking, wind, cannon shots", "volume": 0.5}`
 to a shot (2D or 3D; the same key works in `series.episode.from_script`), and
