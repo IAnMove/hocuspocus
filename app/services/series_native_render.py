@@ -10,7 +10,9 @@ the tools an agent would call (run in process, see ``local_mcp``):
    of silence, checked with ``qa.speech`` (up to three takes when the
    transcript drifts) and analysed into phonetic mouth cues.
 2. **Scene.** ``series_shot_plan`` plans framing, cast, timing, sound and
-   cards; ``series_shot_bridge`` compiles the editable Video 2D document.
+   cards; ``series_shot_bridge`` compiles the editable Video 2D document. A
+   shot in a room (``series_voice_rooms``) plays a processed copy of each
+   line, made beside the dry recording; timing and lip-sync stay the dry line's.
 3. **Take.** The scene is saved, exported headlessly
    (``scenes.video2d.export``) and imported as a take of the shot, which
    can be approved automatically. A shot with ``foley`` first gets sound
@@ -46,6 +48,7 @@ from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.series_take_inputs import render_inputs, stale_shot_ids
+from services.series_voice_rooms import RoomError, apply_room, roomed
 
 KIND = "native"
 STAGES = ("voices", "scene", "export", "foley", "import", "done")
@@ -101,6 +104,8 @@ class NativeRenderDeps:
     # Lines are levelled to the dialogue loudness; music and effects volumes are scaled by their own loudness.
     level: Callable[[str], float] = level_file
     loudness_gain: Callable[[str], float] = gain_to
+    # The copy of a recorded line in a room: (workspace folder, file name, preset) -> file name.
+    room: Callable[[str, str, str], str] = apply_room
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 3.0
     check_speech: bool = True
@@ -549,7 +554,8 @@ class SeriesNativeRender:
         ordered = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
         position = next(i for i, value in enumerate(ordered) if value["id"] == shot["id"])
         first = position == 0 or ordered[position - 1].get("sceneId") != shot.get("sceneId")
-        spec = build_shot_spec(series, episode, shot, workspace=workspace, recorded=item["lines"], first_of_scene=first)
+        spec = build_shot_spec(series, episode, shot, workspace=workspace, recorded=self._heard(workspace, series, shot, item["lines"]),
+                               first_of_scene=first)
         root = self.deps.workspace_dir(workspace)
         self._balance(root, spec)
         used = {cast["kitId"]: with_pose_sizes(kits[cast["kitId"]], root) for cast in spec["cast"] if cast["kitId"] in kits}
@@ -564,6 +570,14 @@ class SeriesNativeRender:
         _ok(exported, "export")
         self._save(workspace, job)
 
+    def _heard(self, workspace: str, series: dict, shot: dict, recorded: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """The recorded lines as the shot plays them: the room's copy of each when its location (or the shot) has a room."""
+        root = self.deps.workspace_dir(workspace)
+        try:
+            return roomed(series, shot, recorded, lambda filename, preset: self.deps.room(root, filename, preset))
+        except RoomError as error:
+            raise NativeRenderError("room_failed", f"Voice room: {error}", 502) from error
+
     def _balance(self, root: str, spec: dict) -> None:
         """Music and effect volumes mean "relative to the dialogue", whatever loudness their file was made at."""
         for track in spec.get("audioTracks") or []:
@@ -577,7 +591,8 @@ class SeriesNativeRender:
         layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
         timing, duration = plan_timing([float(item["lines"][beat["id"]]["duration"]) for beat in beats], **timing_args(layout),
                                        at_least=0.0 if beats else float(shot.get("durationSeconds") or 5), pauses=pauses(beats))
-        lines = [{"characterId": beat.get("characterId"), "start": start, "filename": item["lines"][beat["id"]]["filename"],
+        heard = self._heard(workspace, series, shot, item["lines"])
+        lines = [{"characterId": beat.get("characterId"), "start": start, "filename": heard[beat["id"]]["filename"],
                   "cues": item["lines"][beat["id"]].get("cues") or []} for beat, (start, _end) in zip(beats, timing)]
         characters = {value["id"]: (kit_ref(series, value["id"]) or {}).get("id") for value in series.get("characters") or []}
         # The scene's ambience, stinger and music play under a 3D shot too, balanced like in a 2D shot.

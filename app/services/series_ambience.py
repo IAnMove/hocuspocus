@@ -86,13 +86,14 @@ def ambience_duck_db(design: Any) -> float:
 def shot_sound_design(design: Any) -> Any:
     """The sound design a shot's render depends on. In episode mode the beds are laid at assembly, so the take does
     not depend on them; shot mode is the design as stored, so takes from before the mode keep their digest. The
-    beds' ducking is assembly-only in both modes."""
-    if not isinstance(design, dict) or not {"ambienceMode", "ambienceDuckDb"} & design.keys():
+    beds' ducking is assembly-only in both modes. The rooms are left out too: a shot depends on its own room only
+    (``series_voice_rooms.shot_room``, kept apart)."""
+    if not isinstance(design, dict):
         return design
-    left_out = {"ambienceMode", "ambienceDuckDb"}
+    left_out = {"roomByLocation", "ambienceMode", "ambienceDuckDb"} & design.keys()
     if ambience_mode(design) == "episode":
         left_out.add("ambienceByLocation")
-    return {key: value for key, value in design.items() if key not in left_out}
+    return {key: value for key, value in design.items() if key not in left_out} if left_out else design
 
 
 def _volume(entry: dict[str, Any]) -> float:

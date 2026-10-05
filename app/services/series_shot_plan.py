@@ -8,14 +8,17 @@ optional ``layout2d`` block overrides any of it explicitly:
     {"framing": "two", "camera": "push",
      "cast": [{"characterId": "kevin", "poseId": "panic", "x": 30, "motion": "shake", "enterFrom": "left"}],
      "card": {"kind": "title", "title": "...", "body": "..."},
-     "music": {"file": "mus-moral.wav", "volume": 0.45, "start": 0}}
+     "music": {"file": "mus-moral.wav", "volume": 0.45, "start": 0}, "voiceRoom": "cathedral"}
 
 Locations may carry ``layout2d.homes`` (x % per character, for continuity
 between shots) and ``layout2d.backgroundAssetId``. ``series.soundDesign``
 holds a stinger for the first shot of each scene and an ambience per
 location (laid by the episode assembly instead when ``ambienceMode`` is
-``"episode"``: ``series_ambience``). Timing follows the recorded lines:
-0.35 s in, 0.22 s between lines, 0.45 s out, at least 1.5 s.
+``"episode"``: ``series_ambience``), and the room each location's voices are
+heard in (``roomByLocation``, or ``layout2d.voiceRoom`` on one shot; the native
+render swaps the line audio for the room's copy, ``series_voice_rooms``).
+Timing follows the recorded lines: 0.35 s in, 0.22 s between lines, 0.45 s
+out, at least 1.5 s.
 """
 from __future__ import annotations
 
@@ -25,6 +28,7 @@ from urllib.parse import quote
 
 from services import series_shot_extras as extras
 from services.series_ambience import ambience_mode
+from services.series_voice_rooms import check_room
 from services.speech_language import speech_language_code
 
 FRAMINGS = ("wide", "two", "medium", "close", "insert", "title")
@@ -101,20 +105,28 @@ def _layout_music(music: Any) -> dict[str, Any]:
     return {"music": {"file": music["file"][:300], "volume": 0.5 if volume is None else volume, "start": 0.0 if start is None else start}}
 
 
+def _layout_voice_room(value: dict) -> dict[str, str]:
+    """``voiceRoom`` (a ``series_voice_rooms`` preset) for this shot's lines instead of its location's room; null clears it."""
+    if value.get("voiceRoom") is None:
+        return {}
+    check_room(value["voiceRoom"], "layout2d.voiceRoom")
+    return {"voiceRoom": value["voiceRoom"]}
+
+
 def _layout_list(value: dict, key: str, limit: int, normalize: Any) -> dict[str, list]:
     items = [entry for entry in (normalize(item) for item in (value.get(key) or [])[:limit]) if entry]
     return {key: items} if items else {}
 
 
 def normalize_layout2d(value: Any) -> dict[str, Any] | None:
-    """The editable 2D plan of a shot; unknown keys and bad values are dropped."""
+    """The editable 2D plan of a shot; unknown keys and bad values are dropped (an unknown ``voiceRoom`` is refused)."""
     if not isinstance(value, dict):
         return None
     layout = {**_choice(value, "framing", FRAMINGS), **_choice(value, "camera", ("static", "push")),
               **_layout_list(value, "cast", 8, _cast_entry), **_layout_card(value.get("card")),
               **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music")),
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
-              **_layout_list(value, "fx", 12, extras.fx_entry)}
+              **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value)}
     return layout or None
 
 
