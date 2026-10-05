@@ -12,6 +12,7 @@ import numpy as np
 from scipy import ndimage
 
 from services.humanoid_rig.errors import NotHumanoid
+from services.humanoid_rig.robe_legs import robe_regions
 from services.humanoid_rig.silhouette import Silhouette, centerline, components, disk, geodesic, run_at, runs
 
 _GAP_SEARCH = 0.10
@@ -67,6 +68,18 @@ def body_rows(mask: np.ndarray) -> tuple[int, int]:
 
 def find_legs(mask: np.ndarray) -> dict:
     """Track the background gap between the feet up to the crotch."""
+    floor, top, best = leg_gap(mask)
+    tall = top - floor + 1
+    if best is None:
+        raise NotHumanoid("single_leg")
+    if best["top"] - floor < tall * _MIN_LEG:
+        raise NotHumanoid("legs_too_short")
+    return {"floor": floor, "top": top, "crotch_row": best["top"] + 1, "crotch_col": best["col"], "gap": best["gap"],
+            "feet_row": best["start"]}
+
+
+def leg_gap(mask: np.ndarray) -> tuple[int, int, dict | None]:
+    """The floor and top rows, and the tallest gap that starts between the feet."""
     floor, top = body_rows(mask)
     tall = top - floor + 1
     best = None
@@ -75,12 +88,7 @@ def find_legs(mask: np.ndarray) -> dict:
             found = _track_gap(mask, row, gap, top)
             if best is None or found["rows"] > best["rows"]:
                 best = found
-    if best is None:
-        raise NotHumanoid("single_leg")
-    if best["top"] - floor < tall * _MIN_LEG:
-        raise NotHumanoid("legs_too_short")
-    return {"floor": floor, "top": top, "crotch_row": best["top"] + 1, "crotch_col": best["col"], "gap": best["gap"],
-            "feet_row": best["start"]}
+    return floor, top, best
 
 
 def _gaps(row: np.ndarray) -> list[tuple[int, int]]:
@@ -101,13 +109,15 @@ def _track_gap(mask: np.ndarray, row: int, gap: tuple[int, int], top: int) -> di
 
 
 def leg_regions(mask: np.ndarray, legs: dict) -> dict:
-    """Both leg components below the crotch, split at the gap."""
+    """Both leg components below the crotch, split at the gap. Legs hidden by a robe are straight bands."""
     below = mask.copy()
     below[legs["crotch_row"]:] = False
     labels, _count = components(below)
     floor_rows = slice(legs["floor"], legs["floor"] + 3)
     touching = np.unique(labels[floor_rows][labels[floor_rows] > 0])
     region = np.isin(labels, touching)
+    if "robe" in legs:
+        return {**robe_regions(mask, legs), "all": region}
     cols = np.arange(mask.shape[1])[None, :]
     return {"left": region & (cols > legs["crotch_col"]), "right": region & (cols < legs["crotch_col"]), "all": region}
 

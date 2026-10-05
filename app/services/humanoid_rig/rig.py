@@ -22,8 +22,9 @@ def rig_humanoid(source: bytes, clip_ids: list[str] | None = None, bpm: float = 
     primitives = read_primitives(bytes(source))
     positions, indices, counts = _combined(primitives)
     found = detect_landmarks(positions, indices)
-    skeleton = build_skeleton(found["points"], found["height"], found["y_min"], found["facing"], found["head_region"], found["base"])
-    joints, weights = compute_weights(positions, indices, skeleton)
+    skeleton = build_skeleton(found["points"], found["height"], found["y_min"], found["facing"], found["head_region"], found["base"],
+                              found["robe"])
+    joints, weights = compute_weights(positions, indices, skeleton, found["cloth"])
     limits = comfort_limits(positions, indices, joints, weights, skeleton)
     clips = clip_library(bpm, list(clip_ids or ["idle"]), rig_for_skeleton(skeleton, limits))
     marker = rig_marker(skeleton, limits)

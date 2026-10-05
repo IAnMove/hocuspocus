@@ -6,6 +6,24 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The humanoid rig accepts characters in capes and long robes. A cape over the
+shoulders and upper arms joined the arms to the torso in the front silhouette,
+so the shoulders were put at the cape's edge (or the model was refused with
+`not_humanoid: hands_stuck`), and a robe or skirt down to the ankles hid the
+gap between the legs (`legs_too_short`, or a crotch at the hem with the shoes
+taken for whole legs). Rays along the depth axis now tell cloth from body:
+cloth with air inside (a cape over the arms, the hollow of an open robe) or
+hanging behind the body (a hero's cape, coat tails) is set aside, and the arms
+and legs are found on the body under it (warnings `covered_arms`,
+`covered_legs`). Legs hidden in a robe are placed from the feet that show under
+its hem (`legs_hidden`); a robe down to the floor with no feet showing is still
+refused (`single_leg`). The skin weights follow: a robe, skirt or cape over the
+legs hangs from the hips and blends into both thighs across the middle without
+the knees, so a stride sways it instead of tearing it down the middle and a
+bent knee does not fold it, and a cape over the shoulders has its weights
+blurred so a raised arm stretches it smoothly. Landmarks of models without such
+cloth are unchanged.
+
 A Series 3D shot can have a narrator or a voice on the radio. A line by a character
 with no object in `scene3d.cast` stopped the render with `unbound_speaker`; it is
 now heard over the shot and ducks the music like a talking cutout.

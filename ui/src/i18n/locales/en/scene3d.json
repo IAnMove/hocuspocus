@@ -348,14 +348,17 @@
       "short_arms": "Short arms: gestures are scaled to them.",
       "neck_not_found": "No clear neck: the head turns from where it meets the body.",
       "facing_back": "The model faced backwards; the skeleton was turned to match.",
-      "on_a_base": "The model stands on a base: the feet were placed on its top and the base follows the hips."
+      "on_a_base": "The model stands on a base: the feet were placed on its top and the base follows the hips.",
+      "covered_arms": "A cape or loose cloth covers the shoulders: the arms were found on the body under it, and the cloth follows the shoulders smoothly.",
+      "covered_legs": "A cape, coat or open robe hangs over the legs: the legs were found behind it, and the cloth hangs from the hips.",
+      "legs_hidden": "A long robe or skirt hides the legs: they were placed from the feet under the hem, and the robe hangs from the hips and thighs."
     },
     "refusal": {
       "hands_stuck": "The arms touch the body or hang straight down. It needs a gap under each arm (T or A pose).",
       "arms_raised": "The arms are raised well above the shoulders. Use a T or A pose.",
       "turned": "The model is turned at an angle. Use a model facing the camera straight on.",
-      "single_leg": "There is no gap between the legs (legs together, a dress or a robe).",
-      "legs_too_short": "The legs are too short to rig, or hidden.",
+      "single_leg": "There is no gap between the legs (legs together, or a dress or robe down to the floor that hides the feet).",
+      "legs_too_short": "The legs are too short to rig, or hidden (not even the feet show under a robe).",
       "asymmetry": "The left and right sides differ too much. Use a symmetric pose.",
       "not_upright": "The model is not standing upright (Y up).",
       "degenerate": "The mesh is empty or broken."
