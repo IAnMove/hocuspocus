@@ -1,7 +1,7 @@
 # Labs ↔ Wizard action matrix (L0)
 
 Status: detailed L0 fixture/reference with L5–L12 updates; not the startup checklist.
-For current delivery state and remaining QA, read [CURRENT_WORK](CURRENT_WORK.md).
+For current delivery state, read [CHANGELOG](../../CHANGELOG.md) and the pull requests on `development`.
 The machine fixture preserves historical classifications: a frozen defect ID is
 not proof that its defect is still present after the linked fixes.
 
