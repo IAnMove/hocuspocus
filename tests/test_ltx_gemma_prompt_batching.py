@@ -8,6 +8,10 @@ from types import SimpleNamespace
 import unittest
 from typing import NamedTuple
 
+import pytest
+
+pytest.importorskip("torch")
+
 import torch
 
 
