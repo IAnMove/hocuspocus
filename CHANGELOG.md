@@ -24,6 +24,19 @@ bent knee does not fold it, and a cape over the shoulders has its weights
 blurred so a raised arm stretches it smoothly. Landmarks of models without such
 cloth are unchanged.
 
+The flat cutout rig closes anime eyes. Its blink covered only the white of each
+eye, so on an anime eye (a big dark iris against a thick upper lid, with the
+white a thin crescent beside it) the iris, the pupil and a dark corner of the
+lid showed through the closed eye, and the cover took its colour from the iris
+and lashes around it, so it came out darker than the face. Each eye is now
+covered whole: the white grows into what is drawn in and beside it (iris, pupil,
+highlights, lid and lash lines) up to the skin, then into the dark lid line
+resting on it, no thicker than that line is across the middle of the eye, so
+brows and bangs above stay. The cover takes its colour from the face pixels
+around it only. The pupils that showed on large round cartoon eyes are covered
+too, and the faint ring around each closed eye is gone. Rig the character again
+to get the new blinks.
+
 A Series 3D shot can have a narrator or a voice on the radio. A line by a character
 with no object in `scene3d.cast` stopped the render with `unbound_speaker`; it is
 now heard over the shot and ducks the music like a talking cutout.
