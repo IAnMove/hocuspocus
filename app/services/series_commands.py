@@ -71,7 +71,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         ["workspace", "series_id", "episode_id"], True,
         "Render every 2D animation shot of an episode on the server, no browser needed: each line in the character's voice "
         "for the series language (checked with qa.speech, up to three takes), phonetic mouth cues, an editable Video 2D "
-        "scene (framing from shot.framing or shot.layout2d, cast, sound, cards), a headless export and a take on the shot "
+        "scene (framing from shot.framing or shot.layout2d, cast, sound, cards; the lines play with the room of the shot's "
+        "location, soundDesign.roomByLocation, or its layout2d.voiceRoom), a headless export and a take on the shot "
         "(approve: true approves it). language renders a language version (its lines, the characters' voices for that "
         "language, its own takes). Returns the job; poll series.episode.render_native.status. Resumable.",
     ),
@@ -172,7 +173,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Update a Series Lab project at an exact revision: the fields you send replace theirs, fields you omit keep their "
         "value (send an empty list to clear one). Changing canon inputs returns the canon to draft. soundDesign: stinger, "
         "ambienceByLocation {locationId: {file, volume}} and ambienceMode \"shot\" (each shot mixes it) or \"episode\" "
-        "(the assembly lays one bed per location run; takes stay up to date when it changes).",
+        "(the assembly lays one bed per location run; takes stay up to date when it changes), and roomByLocation "
+        "{locationId: preset}, the room each location's voices are heard in: none, small_room, room, hall, cathedral, "
+        "cockpit, outdoor or radio (a shot's layout2d.voiceRoom overrides it; only shots whose room changes render again).",
     ),
     "series.canon.approve": (
         {"workspace": WORKSPACE, "series_id": ID, "base_revision": REVISION}, ["workspace", "series_id", "base_revision"], True,

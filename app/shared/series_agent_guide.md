@@ -78,7 +78,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
    "cast": [{"characterId": "ana", "poseId": "base", "x": 32}, {"characterId": "leo", "poseId": "wave", "x": 68, "enterFrom": "right"}],
    "props": [{"file": "prop-stapler.png", "x": 12, "y": 74, "scale": 0.2}],
    "music": {"file": "mus-bumper.wav", "volume": 0.6, "start": 0},
-   "card": {"kind": "title", "title": "SERIES", "body": "Episode 3 · Title"}}}
+   "card": {"kind": "title", "title": "SERIES", "body": "Episode 3 · Title"}, "voiceRoom": "cathedral"}}
 ```
 
 - **framing:** `wide` (everyone, full body), `two` (two characters), `medium` (one, waist up), `close` (one face),
@@ -104,6 +104,9 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   code backdrop behind the cast, render a location plate from the `anime-code-rain` Video 3D shot instead.
 - **timing:** `intro` (silence before the first line, default 0.35 s), `gap` (between lines, 0.22), `tail` (after the
   last, 0.45). A line's `pauseBefore` adds a dramatic beat before it.
+- **voiceRoom:** the room this shot's voices are heard in, instead of its location's (see Sound design): `none`,
+  `small_room`, `room`, `hall`, `cathedral`, `cockpit`, `outdoor` or `radio`. In a script, `"voiceRoom"` on the shot.
+  A transmission or a thought heard over the radio is a shot with `radio`; `none` keeps a shot dry in a roomed location.
 - **card:** `title` (opening), `end` (credits), `disclaimer` (white text on dark; also used for news flashes). A card
   shot has no cast and a `durationSeconds` (4–7 s) and usually `locationId` of a dark or title location.
 - **durationSeconds** (`duration`)**:** only for shots without dialogue. With dialogue, the render sets it from the voices.
@@ -128,8 +131,9 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 ## Sound design
 
 `soundDesign` on the series (`series.update`) is the sound every shot gets without the script naming it:
-`stinger` (`{file, volume}`) under the first shot of each scene, and `ambienceByLocation`
-(`{"<locationId>": {"file": "sfx-rain.wav", "volume": 0.22}}`, volume 0–2 relative to the dialogue, default 0.22).
+`stinger` (`{file, volume}`) under the first shot of each scene, `ambienceByLocation`
+(`{"<locationId>": {"file": "sfx-rain.wav", "volume": 0.22}}`, volume 0–2 relative to the dialogue, default 0.22) and
+`roomByLocation` (below).
 `ambienceMode` says where the ambience is mixed:
 
 - `"shot"` (default): each shot mixes its location's ambience from its own start. It restarts at every cut, and a
@@ -138,6 +142,26 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   shots in the same location, looped with a 1 s crossfade, faded in and out over 0.8 s and crossfading into the next
   location's bed. Shots in a location without an entry (a dark title card) get none. Changing the beds renders no
   shot: `series.episode.produce` only recuts. Switching the mode renders every shot once.
+
+`roomByLocation` (`{"<locationId>": "<preset>"}`) makes the voice sound like the place. Lines are recorded dry, so a
+monk in a stone cathedral and a captain on an open deck would sound the same; with a room the render plays a processed
+copy of each line (the dry recording is kept, and lip-sync and timing stay the dry line's):
+
+| preset | what it does |
+| --- | --- |
+| `none` | dry (the default; also overrides a location's room on one shot) |
+| `small_room` | a closet or cabin: 0.3 s of tight reverb, 12 dB under the voice |
+| `room` | an office or kitchen: 0.55 s, 9 dB under |
+| `hall` | a corridor, a lobby, a gym: 1.6 s, 7 dB under |
+| `cathedral` | stone, a cave, a vault: 3.5 s dark tail, 5 dB under (the tail rings on past the line for at most 0.8 s) |
+| `cockpit` | small, metallic and close: dense reflections within 10 ms, a band-limited voice with a presence peak |
+| `outdoor` | no reverb: a gentle low cut and one very slight, dark slap |
+| `radio` | telepathy, transmissions, a phone: 420 Hz to 3.3 kHz, lightly distorted |
+
+Every copy is levelled to the dry line, so a room never changes how loud a voice is. A shot overrides its location with
+`layout2d.voiceRoom`. Changing a room renders again only the shots with lines that hear it; a series without
+`roomByLocation` renders exactly as before. The tail of the last line is cut where the shot ends (0.45 s after it):
+give a shot in a big room `timing: {"tail": 1.0}` to let it ring out.
 
 ## Writing for quality
 

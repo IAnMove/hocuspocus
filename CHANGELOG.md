@@ -6,6 +6,30 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series Lab voices now sound like the place they are in. Lines are recorded
+dry, so a monk in a stone cathedral and a captain on an open deck sounded the
+same. `soundDesign.roomByLocation` maps a location id to a room (`none`,
+`small_room`, `room`, `hall`, `cathedral`, `cockpit`, `outdoor` or `radio`),
+and a shot's `layout2d.voiceRoom` (or `voiceRoom` in a script shot) overrides
+it. When the server render builds a shot in a room, it plays a processed copy
+of each line instead of the dry recording: a short generated impulse response
+(decaying noise, darker as it dies, with early reflections) convolved with
+ffmpeg and mixed under the voice, plus a tone filter. The cathedral rings
+for 3.5 s, 5 dB under the voice, through a dark tail; the cockpit is small and
+metallic, with dense reflections inside 10 ms and a presence peak; the outdoor
+room has no reverb, only a gentle low cut and one very slight slap; the radio
+is band-passed from 420 Hz to 3.3 kHz and lightly distorted, for telepathy and
+transmissions. The copy is made once, next to the recording and named by
+recording, room and processing version, and the dry recording is never
+touched. Timing and lip-sync stay the dry line's, and every copy is levelled to
+the dry line's loudness, so a room never makes a voice louder or quieter. The
+only thing a room adds is a tail that may ring past the end of a line, for at
+most 0.8 s, faded out. A shot that cannot get its room fails with that error
+instead of rendering dry. A series without `roomByLocation` renders and
+digests exactly as before, and with rooms set only the shots with lines whose
+room changed are out of date. An unknown room in `roomByLocation`,
+`layout2d.voiceRoom` or a script is rejected.
+
 Series Lab can lay a location's ambience once under the whole episode instead
 of in every shot. With `soundDesign.ambienceMode: "episode"` (the default stays
 `"shot"`), shots no longer mix `ambienceByLocation`, so the bed does not

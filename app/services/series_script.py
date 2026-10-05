@@ -2,7 +2,7 @@
 
 An agent writes what happens; this turns it into the episode the server renders:
 ids from the episode number, scenes, shots with ``layout2d`` (cast, framing,
-camera, card, music, timed sound and screen effects, timing, props),
+camera, card, music, timed sound and screen effects, timing, props, voice room),
 ``scene3d`` for Video 3D shots, the original's lines and a language version
 for every other language in the script. It checks the script against the
 series first, so a typo in a pose, a file or a character fails here with a
@@ -17,7 +17,7 @@ clear message instead of halfway through a render::
                 "music": {"file": "mus-theme-es.wav", "en": "mus-theme-en.wav", "volume": 0.9},
                 "sfx": [{"file": "sfx-pen.wav", "line": 1, "offset": 0.2}], "fx": [{"kind": "confetti", "line": 1}],
                 "props": [{"file": "prop-truck-key.png", "x": 12, "y": 74, "scale": 0.36}], "timing": {"intro": 1.0},
-                "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]}}]}
+                "voiceRoom": "cathedral", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]}}]}
 """
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ from typing import Any, Callable
 from services.series_shot3d import normalize_scene3d
 from services.series_shot_extras import EFFECT_KINDS
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, language_key
+from services.series_voice_rooms import PRESETS
 
 CODES = {key: code for code, key in LANGUAGE_KEYS.items()}
 CARD_KINDS = ("title", "disclaimer", "end")
@@ -150,6 +151,8 @@ class EpisodeScript:
             check.location(shot["location"], shot.get("variant"), where)
         if shot.get("framing", "wide") not in FRAMINGS:
             check.problems.append(f"{where}: framing must be one of {', '.join(FRAMINGS)}")
+        if shot.get("voiceRoom") is not None and shot["voiceRoom"] not in PRESETS:
+            check.problems.append(f"{where}: voiceRoom must be one of {', '.join(PRESETS)}")
         self._check_cast(shot, where)
         self._check_lines(shot, where)
         self._check_files(shot, where)
@@ -206,7 +209,7 @@ class EpisodeScript:
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
         if cast:
             layout["cast"] = cast
-        for key in ("props", "sfx", "fx", "timing"):
+        for key in ("props", "sfx", "fx", "timing", "voiceRoom"):
             if shot.get(key):
                 layout[key] = shot[key]
         if isinstance(shot.get("card"), dict):

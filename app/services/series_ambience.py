@@ -66,11 +66,14 @@ def check_sound_design(design: Any) -> None:
 
 def shot_sound_design(design: Any) -> Any:
     """The sound design a shot's render depends on. In episode mode the beds are laid at assembly, so the take does
-    not depend on them; shot mode is the design as stored, so takes from before the mode keep their digest."""
-    if not isinstance(design, dict) or "ambienceMode" not in design:
+    not depend on them; shot mode is the design as stored, so takes from before the mode keep their digest. The rooms
+    are left out too: a shot depends on its own room only (``series_voice_rooms.shot_room``, kept apart)."""
+    if not isinstance(design, dict):
         return design
-    left_out = {"ambienceMode", "ambienceByLocation"} if ambience_mode(design) == "episode" else {"ambienceMode"}
-    return {key: value for key, value in design.items() if key not in left_out}
+    left_out = {"roomByLocation"} if "roomByLocation" in design else set()
+    if "ambienceMode" in design:
+        left_out |= {"ambienceMode", "ambienceByLocation"} if ambience_mode(design) == "episode" else {"ambienceMode"}
+    return {key: value for key, value in design.items() if key not in left_out} if left_out else design
 
 
 def _volume(entry: dict[str, Any]) -> float:

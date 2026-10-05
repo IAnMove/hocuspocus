@@ -328,14 +328,19 @@ export interface SeriesSoundCue {
   volume?: number
 }
 
+/** A room the recorded voices are heard in: a processed copy of each line (the dry recording is kept). `none` is dry. */
+export type SeriesVoiceRoom = 'none' | 'small_room' | 'room' | 'hall' | 'cathedral' | 'cockpit' | 'outdoor' | 'radio'
+
 /**
  * Sound every shot gets without the script naming it. `ambienceMode` `shot` (default) mixes the location's ambience
  * into each shot; `episode` leaves it out of the shots and the assembly lays one continuous bed per location run.
+ * `roomByLocation` makes the voices sound like the place; a shot's `layout2d.voiceRoom` overrides it.
  */
 export interface SeriesSoundDesign {
   stinger?: SeriesSoundCue
   ambienceByLocation?: Record<string, SeriesSoundCue>
   ambienceMode?: 'shot' | 'episode'
+  roomByLocation?: Record<string, SeriesVoiceRoom>
 }
 
 export interface SeriesProject {
