@@ -8,6 +8,7 @@ export const ANIME_TEMPLATE_IDS = [
   'anime-airship-flyby',
   'anime-fleet-approach',
   'anime-eyecatch',
+  'anime-code-rain',
 ] as const
 
 export type AnimeTemplateId = typeof ANIME_TEMPLATE_IDS[number]

@@ -46,7 +46,7 @@ Selected images (single inputs, batch inputs and image references) show a small 
 
 ### Optional example media
 
-The initial installation does not include example media. **Video 3D → Shot library** keeps all advanced shot types and all 57 Pixel worlds in the main catalog (715 templates). Only 45 additional looks from eight repeated example families live under **Examples and variants**. Template availability is independent of whether its optional media is installed. Choose a collection and press **Download** after checking its size. Browsing does not download media. Downloads support progress, cancellation and offline reuse in `app/cache/examples/`; saved projects keep their existing example references. You can remove this cache while HocusPocus is stopped to reclaim space. See [optional collections](docs/development/OPTIONAL_EXAMPLES.md) for details.
+The initial installation does not include example media. **Video 3D → Shot library** keeps all advanced shot types and all 57 Pixel worlds in the main catalog (716 templates). Only 45 additional looks from eight repeated example families live under **Examples and variants**. Template availability is independent of whether its optional media is installed. Choose a collection and press **Download** after checking its size. Browsing does not download media. Downloads support progress, cancellation and offline reuse in `app/cache/examples/`; saved projects keep their existing example references. You can remove this cache while HocusPocus is stopped to reclaim space. See [optional collections](docs/development/OPTIONAL_EXAMPLES.md) for details.
 
 See [example distribution](docs/development/OPTIONAL_EXAMPLES.md) for the pinned source, integrity checks and lightweight installation options.
 

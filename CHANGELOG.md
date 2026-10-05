@@ -6,6 +6,23 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A new screen effect, `code_rain` («Lluvia de código»), paints digital code
+rain over the whole frame: columns of half-width katakana, digits and Latin
+capitals fall at their own speed, with a near-white head and a trail that fades
+to the effect colour (`#39ff6a` by default) and then out, and the glyphs change
+as they fall. `size` is the glyph height in % of the frame height (3 by
+default: the catalog entry now carries that default size), `intensity` the
+density and brightness; `x`, `y` and `rotation` are not used. It works in Video
+2D, in Series `fx`, in Video 3D `sfx` and in `screenBackdrop`. The frames are a
+pure function of seed and time and repeat over the cue: every column makes a
+whole number of trips and every glyph a whole number of changes between `start`
+and `end`, so a cue as long as a Series location plate loops with no seam. When
+the browser has no font with katakana it draws digits, Latin capitals and
+symbols. The Video 3D shot `anime-code-rain` (6 s, 1920×1080) uses it as a black
+backdrop behind an optional `subject` cutout with a slow push-in. An export now
+draws nothing for an image cutout that has no picture, so a shot whose figure
+was left empty renders as a clean plate; the editor still shows the placeholder.
+
 Publishing a reviewed take under an exact name with `assets.upload` no longer
 overwrites or deletes the metadata of another output. Generation sidecars are
 keyed by the name before the extension, so `song.wav` and a cover `song.png`

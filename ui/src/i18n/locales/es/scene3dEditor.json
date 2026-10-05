@@ -3432,6 +3432,10 @@
     "anime-eyecatch": {
       "title": "Eyecatch (cortinilla)",
       "description": "Cortinilla breve de cambio de escena: la figura llega girando desde el fondo sobre un fondo gráfico de líneas y estrellas."
+    },
+    "anime-code-rain": {
+      "title": "Lluvia de código",
+      "description": "Código verde cae sobre negro detrás de una figura, que toma un tinte verde; empuje lento. Sin figura, el plano es un fondo que se repite sin corte."
     }
   },
   "atmos": {

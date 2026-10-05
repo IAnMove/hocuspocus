@@ -8,6 +8,7 @@ import { applyRetroLook, isRetroLook } from './retroPaint'
 import { stormPainters } from './stormPaint'
 import { glow } from './energyBrush'
 import { isFrameFx, paintFrameFx } from './impactPaint'
+import { CODE_RAIN_KIND, paintCodeRain } from './codeRainPaint'
 
 type Painter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, progress: number) => void
 const tau = Math.PI * 2
@@ -111,6 +112,13 @@ const aurora: Painter = (ctx, cue, time) => {
 }
 const special: Record<string, Painter> = { portal: rings, shockwave: rings, speedlines, scanline, aurora, explosion: paintExplosion, fireworks, ...magicPainters, ...animePainters, ...stormPainters }
 
+type FramePainter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, width: number, height: number) => void
+/** Effects that fill the whole frame, painted outside the cue's x/y/size transform. */
+function framePainter(kind: string): FramePainter | undefined {
+  if (isFrameFx(kind)) return paintFrameFx
+  return kind === CODE_RAIN_KIND ? paintCodeRain : undefined
+}
+
 /** Effects that work on the picture under them: an overlay canvas copies the stage first. */
 export function needsFrameSource(kind: string) {
   return isRetroLook(kind) || kind === 'impact_invert'
@@ -150,7 +158,8 @@ export function paintSceneFx(
   for (const cue of live) {
     if (isRetroLook(cue.kind)) continue
     const time = seconds - cue.start
-    if (isFrameFx(cue.kind)) paintFrameFx(ctx, cue, time, width, height)
+    const frame = framePainter(cue.kind)
+    if (frame) frame(ctx, cue, time, width, height)
     else paintPlacedCue(ctx, cue, time, width, height)
     if (cue.label) {
       ctx.save(); ctx.font = `600 ${Math.round(height * .032)}px monospace`; ctx.textAlign = 'left'

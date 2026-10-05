@@ -228,6 +228,13 @@
     "collection": "classic"
   },
   {
+    "id": "code_rain",
+    "color": "#39ff6a",
+    "sound": "scan",
+    "collection": "classic",
+    "size": 3
+  },
+  {
     "id": "psx",
     "color": "#c4c4a8",
     "sound": "scan",
