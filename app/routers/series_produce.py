@@ -27,6 +27,7 @@ class ProduceStart(BaseModel):
     workspace: str = Field(min_length=1, max_length=200)
     languages: list[str] | None = Field(default=None, max_length=10)
     burnSubtitles: bool = True
+    rerender: bool = False
 
 
 class ProduceAction(BaseModel):
@@ -87,7 +88,8 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
     @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/produce")
     async def produce_episode(series_id: str, episode_id: str, body: ProduceStart):
         """Render the original and every language version with approval, then cut each language."""
-        return await job(service.start, body.workspace, series_id, episode_id, languages=body.languages, burn_subtitles=body.burnSubtitles)
+        return await job(service.start, body.workspace, series_id, episode_id, languages=body.languages, burn_subtitles=body.burnSubtitles,
+                         rerender=body.rerender)
 
     @router.get("/api/v1/series/produce/jobs/{job_id}")
     async def produce_status(job_id: str, workspace: str):

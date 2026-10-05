@@ -59,7 +59,11 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Make a flat cutout character talk: find the eyes and painted mouth on each keyed pose, wipe the mouth, "
         "draw nine paper mouths and a blink, and save anchors on the kit. The base pose must have a transparent "
         "background (studio.key). style: smile -1..1 (frown to grin), smirk 0..1, width, mouth_scale; screen true for "
-        "a face that is a screen. Returns the saved kit, a review image URL and unwipedPoses (no painted mouth found).",
+        "a face that is a screen. Returns the saved kit, a review image URL (each pose, and its face enlarged before and "
+        "after the wipe; poses with warnings framed in red), unwipedPoses and warnings per pose to look at before using "
+        "the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
+        "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found. A pose whose eyes are covered (sunglasses) "
+        "is saved with anchors.<pose>.blink false and never blinks.",
     ),
     "series.episode.render_native": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_ids": {"type": "array", "items": ID, "maxItems": 500},
@@ -94,11 +98,13 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.produce": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "languages": {"type": "array", "items": LANGUAGE, "maxItems": 10},
-         "burn_subtitles": {"type": "boolean"}},
+         "burn_subtitles": {"type": "boolean"}, "rerender": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id"], True,
         "Render and cut an episode in one call: the server renders the original and every language version (languages "
         "narrows it) with automatic approval, retries failed shots once, then assembles each language with subtitles burned "
-        "in (burn_subtitles false skips it). Poll series.episode.produce.status every minute or two; chapters lists the files.",
+        "in (burn_subtitles false skips it). Only shots without an approved take made from their current script, kits and "
+        "location are rendered, so producing again after a fix just renders what changed and recuts; rerender true renders "
+        "every shot again. Poll series.episode.produce.status every minute or two; chapters lists the files.",
     ),
     "series.episode.produce.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
@@ -366,7 +372,8 @@ def _from_script(data: dict[str, Any], request: Callable[..., Any], **_extra: An
 
 
 def _produce(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
-    body: dict[str, Any] = {"workspace": data["workspace"], "burnSubtitles": data.get("burn_subtitles", True) is not False}
+    body: dict[str, Any] = {"workspace": data["workspace"], "burnSubtitles": data.get("burn_subtitles", True) is not False,
+                            "rerender": data.get("rerender") is True}
     if data.get("languages"):
         body["languages"] = data["languages"]
     return {"job": request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/produce", body=body)}

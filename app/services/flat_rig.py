@@ -345,6 +345,24 @@ def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = Fals
 LUMA = np.array([0.299, 0.587, 0.114])
 
 
+def stray_marks(rgb: np.ndarray, alpha: np.ndarray, eyes_box, mouth_box) -> bool:
+    """After the wipe: a small dark mark still right beside where the painted mouth was (a smirk's curl, a dimple)
+    would show next to the drawn mouth. Marks that run out of that box (a moustache, a beard, sunglasses, the jaw
+    line) or are big belong to the character, not to the old mouth."""
+    x0, y0, x1, y1 = eyes_box
+    eye_width, span = x1 - x0, max(y1 - y0, (x1 - x0) * 0.55)
+    mx0, my0, mx1, my1 = mouth_box
+    zx0, zx1 = max(0, int(mx0 - eye_width * 0.15)), min(alpha.shape[1], int(mx1 + eye_width * 0.15))
+    zy0, zy1 = max(0, int(my0 - span * 0.15)), min(alpha.shape[0], int(my1 + span * 0.15))
+    region, inside = rgb[zy0:zy1, zx0:zx1].astype(float), alpha[zy0:zy1, zx0:zx1] > 200
+    if region.size == 0 or not inside.any():
+        return False
+    marks, _ = _mouth_candidates(region, inside, y1 - y0, False, True, 6)
+    height, width = region.shape[:2]
+    return any(part["size"] <= (eye_width * 0.12) ** 2 and part["x0"] > 0 and part["y0"] > 0
+               and part["x1"] < width and part["y1"] < height for part in marks)
+
+
 def eyes_covered(rgb: np.ndarray, alpha: np.ndarray, eyes_box, eyes_mask: np.ndarray) -> bool:
     """Sunglasses: what was found as eyes is only their tops, with lenses under them far darker than the face
     around the eyes. Such a pose must not blink. A dark face (a red book cover) is not a lens."""
@@ -510,11 +528,17 @@ def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
         ring = alpha[ey1:min(alpha.shape[0], ey1 + (ey1 - ey0)), ex0:ex1] > 200
         background = np.median(rgb[ey1:min(alpha.shape[0], ey1 + (ey1 - ey0)), ex0:ex1][ring], axis=0) if ring.any() else np.array([200, 160, 130])
     width, height = rigged.size
+    warnings = ["eyes_low"] if ey0 / height > 0.4 else []
+    if not wiped:
+        warnings.append("mouth_not_found")
+    elif stray_marks(np.array(rigged)[..., :3], alpha, eyes_box, mouth_box):
+        warnings.append("stray_mark")
     sprite_width = (ex1 - ex0) * style["mouth_scale"]
     pad = int((ey1 - ey0) * 0.25)
     bx0, by0, bx1, by1 = max(0, ex0 - pad), max(0, ey0 - pad), min(width, ex1 + pad), min(height, ey1 + pad)
     return {
-        "image": rigged, "width": width, "height": height, "wiped": wiped, "blinks": not covered,
+        "image": rigged, "before": figure, "width": width, "height": height, "wiped": wiped, "blinks": not covered,
+        "warnings": warnings,
         "mouth": _anchor(mx, my, sprite_width * SPRITE[1] / SPRITE[0], width, height),
         "eyes": _anchor((bx0 + bx1) / 2, (by0 + by1) / 2, by1 - by0, width, height),
         "blink": blink_sprite(rgb[by0:by1, bx0:bx1], eyes_mask[by0:by1, bx0:bx1], background, style["screen"]),
@@ -533,25 +557,66 @@ def place(base: Image.Image, overlay: Image.Image, anchor: dict[str, float]) -> 
     return out
 
 
+def _face_crop(image: Image.Image, rig: dict[str, Any]) -> Image.Image:
+    """The face from the eyes to below the mouth, where a wrong placement or a leftover stroke shows."""
+    x0, y0, x1, y1 = rig["eyes_box"]
+    width, span = x1 - x0, max(y1 - y0, (x1 - x0) * 0.55)
+    return image.crop((max(0, int(x0 - width * 0.25)), max(0, int(y0 - span * 0.2)),
+                       min(image.width, int(x1 + width * 0.25)), min(image.height, int(y1 + span * 1.7))))
+
+
+def _tile(frame: Image.Image, height: int, warn: bool) -> Image.Image:
+    tile = frame.resize((max(1, int(frame.width * height / frame.height)), height), Image.LANCZOS)
+    if warn:
+        framed = Image.new("RGBA", tile.size, (0, 0, 0, 0))
+        framed.alpha_composite(tile)
+        ImageDraw.Draw(framed).rectangle((0, 0, tile.width - 1, tile.height - 1), outline=(220, 30, 30, 255), width=6)
+        return framed
+    return tile
+
+
 def review_sheet(poses: dict[str, dict[str, Any]], mouths: dict[str, Image.Image], blink: Image.Image, height: int = 360) -> Image.Image:
-    """Per pose: the rig with its rest mouth, then an open mouth with the blink, on white."""
-    tiles = []
+    """Per pose: the rig with its rest mouth, then an open mouth with the blink; below, the face before and after the
+    wipe, enlarged. Poses with warnings are framed in red."""
+    rows: list[list[Image.Image]] = [[], []]
     for rig in poses.values():
+        warn = bool(rig.get("warnings"))
         rest = place(rig["image"], mouths["closed"], rig["mouth"])
         # The kit has one blink, from the base pose, placed with each pose's eye anchor; covered eyes do not blink.
         talk = place(rig["image"], mouths["wide"], rig["mouth"])
         talk = place(talk, blink, rig["eyes"]) if rig["blinks"] else talk
-        for frame in (rest, talk):
-            tiles.append(frame.resize((max(1, int(frame.width * height / frame.height)), height), Image.LANCZOS))
-    sheet = Image.new("RGBA", (sum(tile.width for tile in tiles) + 8 * (len(tiles) + 1), height + 16), (255, 255, 255, 255))
-    x = 8
-    for tile in tiles:
-        sheet.alpha_composite(tile, (x, 8))
-        x += tile.width + 8
+        rows[0] += [_tile(rest, height, warn), _tile(talk, height, warn)]
+        if rig.get("before") is not None and rig.get("eyes_box"):
+            rows[1] += [_tile(_face_crop(rig["before"], rig), height // 2, warn), _tile(_face_crop(rig["image"], rig), height // 2, warn)]
+    width = max(sum(tile.width for tile in row) + 8 * (len(row) + 1) for row in rows)
+    sheet = Image.new("RGBA", (width, height + height // 2 + 24), (255, 255, 255, 255))
+    for top, row in ((8, rows[0]), (height + 16, rows[1])):
+        x = 8
+        for tile in row:
+            sheet.alpha_composite(tile, (x, top))
+            x += tile.width + 8
     return sheet
 
 
 # A whole kit ----------------------------------------------------------------
+
+def _kit_warnings(rigs: dict[str, dict[str, Any]]) -> dict[str, list[str]]:
+    """Poses to look at before using the kit. eyes_unlike_base: the eyes found are much smaller or bigger, against the
+    figure's height, than the base pose's (another pair of light shapes, a collar, was taken for them)."""
+    def eye_size(rig: dict[str, Any]) -> float:
+        x0, _y0, x1, _y1 = rig["eyes_box"]
+        return (x1 - x0) / max(1, rig["height"])
+    base = eye_size(rigs["base"]) if rigs.get("base") else None
+    found = {}
+    for pose, rig in rigs.items():
+        codes = list(rig.get("warnings") or [])
+        if base and pose != "base" and not 0.7 <= eye_size(rig) / base <= 1.4:
+            codes.append("eyes_unlike_base")
+        rig["warnings"] = codes
+        if codes:
+            found[pose] = codes
+    return found
+
 
 def _workspace_file(source: str, workspace: str, workspace_dir: str) -> str:
     parsed = urlparse(source)
@@ -644,6 +709,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"], **({} if rig["blinks"] else {"blink": False})}
     kit["anchors"] = anchors
     kit["style"] = "cutout"
+    warnings = _kit_warnings(rigs)
     sheet = _save(review_sheet(rigs, mouths, rigs["base"]["blink"]), workspace_dir, f"kit-{kit_id}-rig-review")
     unwiped = sorted(pose for pose, rig in rigs.items() if not rig["wiped"])
     kit["provenance"] = [*(kit.get("provenance") or []), {
@@ -653,7 +719,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     saved = patch_character_kit(workspace_dir, kit_id, kit, base_revision=base_revision)
     return {
         "revision": saved.get("revision"), "character": saved["kits"][kit_id],
-        "review": _url(sheet, workspace), "unwipedPoses": unwiped,
+        "review": _url(sheet, workspace), "unwipedPoses": unwiped, "warnings": warnings,
         "poses": {pose: {"mouth": rig["mouth"], "eyes": rig["eyes"], "wiped": rig["wiped"], "blinks": rig["blinks"]}
                   for pose, rig in rigs.items()},
     }

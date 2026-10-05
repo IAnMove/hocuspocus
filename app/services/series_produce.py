@@ -6,6 +6,9 @@ that on the server with the same tools (run in process, see ``local_mcp``):
 
 1. ``series.episode.render_native`` with ``approve`` for the original, then for
    each language version. A render that ends with failed shots is resumed once.
+   Only the shots without an approved take made from their current inputs are
+   rendered (``stale_shots``), so producing again after a fix just recuts;
+   ``rerender`` renders every shot again (after a change in the render code).
 2. ``series.assembly.start`` for each language (subtitles burned in by
    default) and the chapter files when they are ready.
 
@@ -43,6 +46,8 @@ class ProduceDeps:
     call: Callable[[str, dict], dict]
     workspace_dir: Callable[[str], str]
     read_library: Callable[[str], dict]
+    # (workspace, series, episode, language) -> shot ids whose approved take is missing or out of date.
+    stale_shots: Callable[[str, str, str, str], list[str]] | None = None
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 5.0
 
@@ -78,13 +83,14 @@ class SeriesProduce:
         return original, languages
 
     def start(self, workspace: str, series_id: str, episode_id: str, *, languages: list[str] | None = None,
-              burn_subtitles: bool = True) -> dict[str, Any]:
+              burn_subtitles: bool = True, rerender: bool = False) -> dict[str, Any]:
         original, languages = self._languages(workspace, series_id, episode_id, languages)
         if any(job.get("episodeId") == episode_id and job.get("status") in ACTIVE for job in self.jobs(workspace)):
             raise ProduceError("already_running", "This episode is already being produced")
         steps = [{"kind": kind, "language": lang, "status": "queued"} for kind in ("render", "assemble") for lang in languages]
         job = {"jobId": f"produce-{uuid.uuid4().hex[:12]}", "workspace": workspace, "seriesId": series_id, "episodeId": episode_id,
-               "original": original, "languages": languages, "burnSubtitles": bool(burn_subtitles), "status": "queued",
+               "original": original, "languages": languages, "burnSubtitles": bool(burn_subtitles), "rerender": bool(rerender),
+               "status": "queued",
                "steps": steps, "chapters": {}, "createdAt": time.time(), "message": "Queued"}
         self._launch(workspace, job)
         return job
@@ -204,6 +210,13 @@ class SeriesProduce:
             data = {"series_id": job["seriesId"], "episode_id": job["episodeId"], "approve": True}
             if step["language"] != job["original"]:
                 data["language"] = step["language"]
+            if self.deps.stale_shots and not job.get("rerender"):
+                stale = self.deps.stale_shots(job["workspace"], job["seriesId"], job["episodeId"], step["language"])
+                if not stale:
+                    step["progress"] = "Every shot already has an up-to-date approved take"
+                    return
+                data["shot_ids"] = stale
+                step["shots"] = len(stale)
             step["jobId"] = _result(self.deps.call("series.episode.render_native", self._args(job, **data)), "render")["job"]["jobId"]
             self._save(job)
         while True:

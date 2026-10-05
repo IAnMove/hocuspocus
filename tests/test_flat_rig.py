@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
-from services.flat_rig import STATES, FlatRigError, draw_mouth, find_eyes, find_mouth, rig_character, rig_pose, rig_style
+from services.flat_rig import (
+    STATES, FlatRigError, _kit_warnings, draw_mouth, find_eyes, find_mouth, rig_character, rig_pose, rig_style, stray_marks,
+)
 
 SKIN = (246, 214, 170, 255)
 WORKSPACE = "cast"
@@ -156,6 +158,27 @@ def test_sunglasses_keep_the_eyes_still_and_their_mouth_is_still_wiped():
     assert rig_pose(_cutout(skin=(115, 22, 26, 255)), rig_style(None))["blinks"] is True
 
 
+def test_a_mark_left_beside_the_wiped_mouth_is_reported_but_a_moustache_is_not():
+    rig = rig_pose(_cutout(), rig_style(None))
+    assert rig["warnings"] == []
+    pixels = np.array(rig["image"])
+    x0, y0, x1, y1 = rig["mouth_box"]
+    clean = stray_marks(pixels[..., :3], pixels[..., 3], rig["eyes_box"], rig["mouth_box"])
+    dotted = pixels.copy()
+    dotted[y0 + 1:y0 + 6, x1 + 4:x1 + 9, :3] = (40, 20, 20)  # a dimple just past the mouth's end
+    moustache = pixels.copy()
+    moustache[y0 - 30:y0 - 2, x0 - 40:x1 + 40, :3] = (90, 90, 90)  # wider than the box: the character's own
+    assert clean is False and stray_marks(dotted[..., :3], dotted[..., 3], rig["eyes_box"], rig["mouth_box"]) is True
+    assert stray_marks(moustache[..., :3], moustache[..., 3], rig["eyes_box"], rig["mouth_box"]) is False
+
+
+def test_eyes_found_much_smaller_than_the_base_pose_are_reported():
+    base = {"eyes_box": [100, 200, 280, 300], "height": 1000, "warnings": []}
+    collar = {"eyes_box": [150, 440, 250, 520], "height": 1000, "warnings": ["eyes_low"]}
+    same = {"eyes_box": [90, 200, 275, 300], "height": 1000, "warnings": []}
+    assert _kit_warnings({"base": base, "wave": collar, "nod": same}) == {"wave": ["eyes_low", "eyes_unlike_base"]}
+
+
 @pytest.mark.parametrize("image, code", [
     (Image.new("RGBA", (200, 200), (0, 0, 0, 0)), "not_keyed"),
     (_cutout(eyes=False), "eyes_not_found"),
@@ -199,6 +222,7 @@ def test_a_kit_is_rigged_saved_and_can_be_rigged_again_from_its_original_poses(t
     first = rig_character(str(folder), WORKSPACE, "kevin", base_revision=1, style={"smile": 0.3})
     kit = first["character"]
     assert first["revision"] == 2 and first["unwipedPoses"] == ["shrug"]
+    assert first["warnings"] == {"shrug": ["mouth_not_found"]}
     assert sorted(kit["mouth"]) == sorted(STATES) and kit["mouthMapping"]["rest"] == "closed"
     assert kit["eyes"]["blink"]["reviewState"] == "approved"
     assert set(kit["anchors"]) == {"base", "shrug"}

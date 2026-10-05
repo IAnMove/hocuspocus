@@ -208,6 +208,24 @@ def test_resuming_a_cancelled_production_resumes_its_stopped_render(tmp_path):
     assert [tool for tool, _ in tools.calls].count("series.episode.render_native.resume") == 1, "the stopped render goes on"
 
 
+def test_producing_again_renders_only_out_of_date_shots_and_rerender_renders_them_all(tmp_path):
+    tools, stale = Production(fail_english=0), {"spanish": ["e2s03"], "english": []}
+    base = producer(tmp_path, tools)
+    service = SeriesProduce(ProduceDeps(call=tools, workspace_dir=base.deps.workspace_dir, read_library=base.deps.read_library,
+                                        stale_shots=lambda _ws, _series, _episode, language: stale[language],
+                                        sleep=lambda _s: None, poll_seconds=0))
+    done = finished(service, service.start("cast", "uv", "ep2")["jobId"])
+    assert done["status"] == "completed", done
+    renders = [data for tool, data in tools.calls if tool == "series.episode.render_native"]
+    assert renders == [{"workspace": "cast", "series_id": "uv", "episode_id": "ep2", "approve": True, "shot_ids": ["e2s03"]}]
+    assert done["steps"][1]["progress"].startswith("Every shot already has"), "nothing to render in English: straight to the cut"
+    assert sorted(done["chapters"]) == ["english", "spanish"]
+    tools.calls.clear()
+    again = finished(service, service.start("cast", "uv", "ep2", rerender=True)["jobId"])
+    assert again["status"] == "completed" and again["rerender"] is True
+    assert [("shot_ids" in data) for tool, data in tools.calls if tool == "series.episode.render_native"] == [False, False]
+
+
 def test_produce_refuses_a_language_without_a_version(tmp_path):
     service = producer(tmp_path, Production())
     with pytest.raises(ProduceError) as raised:

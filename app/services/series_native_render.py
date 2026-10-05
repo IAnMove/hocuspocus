@@ -41,6 +41,7 @@ from services.series_shot_bridge import run_series_shot, with_pose_sizes
 from services import series_shot3d
 from services.series_shot_extras import pauses, timing_args
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
+from services.series_take_inputs import render_inputs, stale_shot_ids
 
 KIND = "native"
 STAGES = ("voices", "scene", "export", "import", "done")
@@ -259,6 +260,12 @@ class SeriesNativeRender:
         self._store(workspace).save(job)
         return job
 
+    def stale_shots(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> list[str]:
+        """Shots to render in ``language``: no approved take yet, or one made from other inputs (see ``render_inputs``)."""
+        raw_series, _raw_episode = self._episode(workspace, series_id, episode_id)
+        series, episode = self._episode(workspace, series_id, episode_id, language or language_key(raw_series))
+        return stale_shot_ids(series, episode, self.deps.read_kits(workspace))
+
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
         return [self._reconcile(workspace, job) for job in self._store(workspace).list()]
 
@@ -340,6 +347,7 @@ class SeriesNativeRender:
         three_d = shot.get("productionMethod") == "animation_3d"
         for _attempt in range(EXPORT_RETRIES + 1):
             if item["stage"] == "scene":
+                item["inputs"] = render_inputs(series, shot, kits)
                 if three_d:
                     self._scene3d(workspace, job, item, series, episode, shot, kits)
                 else:
@@ -589,6 +597,7 @@ class SeriesNativeRender:
         self._set_length(workspace, job, item)
         metadata = {"productionMethod": method, "sceneFilename": item["scene"], "automaticDraft": True,
                     "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"],
+                    **({"renderInputs": item["inputs"]} if item.get("inputs") else {}),
                     **({"dialogueBeats": item["subtitles"]} if item.get("subtitles") else {})}
         imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {
             "workspace": workspace, "series_id": job["seriesId"], "file": item["video"], "owner_type": "shot", "owner_id": item["shotId"],
