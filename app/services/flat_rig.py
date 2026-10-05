@@ -6,7 +6,7 @@ and measures pose-local anchors. It then draws nine paper mouths and a blink
 made from the base pose's own eye shapes. The result is saved on the kit.
 
 It suits flat styles with light eyes on a plain face (paper cutout, simple
-cartoon). A face that is a screen (a laptop or robot character) uses
+cartoon, anime eyes whose white is only a crescent beside a big iris). A face that is a screen (a laptop or robot character) uses
 ``screen``: light marks on a dark screen. When no painted mouth is found the
 mouth is placed under the eyes and nothing is wiped; the result says so.
 
@@ -468,32 +468,152 @@ def draw_mouth(state: str, style: dict[str, Any]) -> Image.Image:
     return image.resize(SPRITE, Image.LANCZOS)
 
 
-def blink_sprite(rgb: np.ndarray, eyes: np.ndarray, fallback, screen: bool = False) -> Image.Image:
-    """Closed eyes: each eye covered with the colour around it, plus a lid line."""
+# Blink ----------------------------------------------------------------------
+# What find_eyes returns is only the white of each eye. An anime eye is mostly a big dark iris that touches a thick
+# upper lid, with the white a thin crescent beside it: covering the white alone left the iris and the lid showing
+# through a "closed" eye, and the colour taken around it (iris, lashes, hair) came out darker than the face.
+
+def _fill_holes(mask: np.ndarray) -> np.ndarray:
+    """The mask plus everything it encloses (a pupil inside the white, a highlight inside the iris)."""
+    outside = np.pad(~mask, 1, constant_values=True).astype(np.uint8)
+    _, labels = cv2.connectedComponents(outside, connectivity=4)
+    return mask | (labels[1:-1, 1:-1] != labels[0, 0])
+
+
+def _not_skin(rgb: np.ndarray, skin: np.ndarray, screen: bool) -> np.ndarray:
+    """Pixels that are not the face: far from its colour or much darker. Face shading is neither."""
+    colour = rgb.astype(float)
+    far = np.abs(colour - skin).sum(axis=2) > 120
+    # A screen face is dark itself: there only its light marks are not the face.
+    return far if screen else far | (colour @ LUMA < float(skin @ LUMA) * 0.6)
+
+
+def _upper_lid(dark: np.ndarray, opening: np.ndarray, cap: int) -> np.ndarray:
+    """The dark lid line resting on the eye (thick anime lashes): in each column, the dark run straight above the
+    opening. It is as thick as it is across the middle of the eye: a brow that joins it at a corner, or a thin
+    outline with a brow on it, adds no more than that. A brow with skin between is never reached."""
+    lid = np.zeros_like(opening)
+    cols = np.flatnonzero(opening.any(axis=0))
+    if not len(cols) or cap < 1:
+        return lid
+    tops = opening[:, cols].argmax(axis=0)
+    runs, alive = np.zeros(len(cols), int), np.ones(len(cols), bool)
+    for step in range(1, cap + 1):
+        alive &= tops - step >= 0
+        alive[alive] = dark[(tops - step)[alive], cols[alive]]
+        runs += alive
+    middle = runs[len(cols) // 5:len(cols) - len(cols) // 5]
+    thickness = min(cap, int(np.median(middle if len(middle) else runs)) + 1)
+    rows = np.arange(opening.shape[0])[:, None]
+    lid[:, cols] = (rows < tops) & (rows >= tops - np.minimum(runs, thickness))
+    return lid
+
+
+def _eye_opening(rgb: np.ndarray, alpha: np.ndarray, sclera: np.ndarray, skin: np.ndarray, x_limits: tuple[int, int],
+                 screen: bool) -> np.ndarray:
+    """One whole eye from its white: what is drawn inside the eye beside and in it (iris, pupil, highlights, the lid
+    and lash lines) up to the skin, within the white's rows and ``x_limits``; then a dark upper lid resting on it,
+    a little way up; then the holes. Brows and bangs above, and hair beside, stay outside."""
+    ys, xs = np.nonzero(sclera)
+    y0, y1, h = int(ys.min()), int(ys.max()) + 1, int(ys.max()) + 1 - int(ys.min())
+    side, x0, x1 = int(h * 0.75), int(xs.min()), int(xs.max()) + 1
+    wx0, wx1 = min(x0, max(x_limits[0], x0 - side)), max(x1, min(x_limits[1], x1 + side))
+    reach = int(h * 0.3)
+    # Below the white: the lower lid line, which can sit a few pixels under it.
+    wy0, wy1 = max(0, y0 - reach - 1), min(alpha.shape[0], y1 + max(2, int(h * 0.25)))
+    white, colour = sclera[wy0:wy1, wx0:wx1], rgb[wy0:wy1, wx0:wx1]
+    inside = (_not_skin(colour, skin, screen) & (alpha[wy0:wy1, wx0:wx1] > 200)) | white
+    # Above the white only the upper lid may be added, and only straight up: that is where brows and bangs are.
+    top = max(0, y0 - max(1, int(h * 0.1)) - wy0)
+    inside[:top] = white[:top]
+    _, labels = cv2.connectedComponents(inside.astype(np.uint8), connectivity=4)
+    opening = np.isin(labels, np.unique(labels[white]))
+    if not screen:
+        dark = (colour.astype(float) @ LUMA < float(skin @ LUMA) * 0.45) & (alpha[wy0:wy1, wx0:wx1] > 200)
+        opening |= _upper_lid(dark, opening, reach)
+    found = np.zeros(sclera.shape, bool)
+    found[wy0:wy1, wx0:wx1] = _fill_holes(opening)
+    return found
+
+
+def eye_openings(rgb: np.ndarray, alpha: np.ndarray, eyes: np.ndarray, skin, screen: bool = False) -> np.ndarray:
+    """Each eye's whole opening, labelled 1 (left) and 2 (right), grown from the whites ``find_eyes`` returns."""
+    labels, parts = _components(eyes)
+    if len(parts) == 1:
+        # Two eyes drawn touching were found as two halves of one blob (find_eyes): cut it the same way again.
+        parts = _split_touching(labels, parts)
+    parts = sorted(sorted(parts, key=lambda part: -part["size"])[:2], key=lambda part: part["x0"])
+    skin = np.asarray(skin, dtype=float)
+    found = np.zeros(eyes.shape, np.uint8)
+    for index, part in enumerate(parts):
+        # Each eye may reach up to the other one's white, not a fixed middle: eyes looking aside have both irises on
+        # the same side of their whites, one of them well past the middle between the whites.
+        limits = (parts[0]["x1"] if index else 0, parts[1]["x0"] if index == 0 and len(parts) == 2 else eyes.shape[1])
+        found[_eye_opening(rgb, alpha, labels == part["label"], skin, limits, screen) & (found == 0)] = index + 1
+    return found
+
+
+def _lid_colour(rgb: np.ndarray, alpha: np.ndarray, cover: np.ndarray, skin: np.ndarray) -> tuple[int, ...]:
+    """The face colour right around one covered eye, from face pixels only (not iris, lashes or hair)."""
+    grow = max(2, int(np.sqrt(cover.sum()) * 0.2))
+    ring = _dilate(cover, grow) & ~cover & (alpha > 200)
+    face = ring & (np.abs(rgb.astype(float) - skin).sum(axis=2) < 70)
+    local = np.median(rgb[face], axis=0) if face.sum() >= 8 else skin
+    return tuple(int(v) for v in local) + (255,)
+
+
+def _cover(opening: np.ndarray, face: np.ndarray, grow: int) -> np.ndarray:
+    """The opening and a few pixels round it, so the cover's soft edge lies on skin, not on the eye's outline: onto
+    the face, and over loose bits of the eye's lines left in that margin (lash tips, anti-aliased edges). A brow, hair
+    or a scar that reaches into the margin from outside stays, and so does the background."""
+    margin = _dilate(opening, grow) & ~opening
+    count, labels = cv2.connectedComponents((~face & ~opening).astype(np.uint8), connectivity=8)
+    loose = np.bincount(labels[margin], minlength=count) == np.bincount(labels.ravel(), minlength=count)
+    loose[0] = False
+    return opening | (margin & face) | loose[labels]
+
+
+def blink_sprite(rgb: np.ndarray, eyes: np.ndarray, fallback, screen: bool = False,
+                 alpha: np.ndarray | None = None) -> Image.Image:
+    """Closed eyes: each eye's whole opening covered with the face colour around it, plus a lid line across it.
+
+    ``eyes`` labels each eye's opening (``eye_openings``); a boolean mask is split into its parts."""
     height, width = eyes.shape
     k = 4
     image = Image.new("RGBA", (width * k, height * k), (0, 0, 0, 0))
-    labels, parts = _components(eyes)
-    parts = sorted(parts, key=lambda part: -part["size"])[:2]
-    grow = max(4, int(min(height, width) * 0.05))
+    if eyes.dtype == bool:
+        labels, parts = _components(eyes)
+        values = [part["label"] for part in sorted(parts, key=lambda part: -part["size"])[:2]]
+    else:
+        labels, values = eyes, [int(value) for value in np.unique(eyes) if value]
+    alpha = np.full(eyes.shape, 255, np.uint8) if alpha is None else alpha
+    skin = np.asarray(fallback, dtype=float)
+    face = ~_not_skin(rgb, skin, screen) & (alpha > 200)
     line = max(3, int(height * k * 0.035))
     colour = SCREEN_INK if screen else INK
-    for part in parts:
-        cover = _dilate(labels == part["label"], grow)
-        ring = _dilate(cover, grow) & ~cover
-        local = np.median(rgb[ring], axis=0) if ring.any() else np.array(fallback)
+    boxes = []
+    for value in values:
+        opening = labels == value
+        ys, xs = np.nonzero(opening)
+        boxes.append((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
+        cover = _cover(opening, face, max(2, int((ys.max() - ys.min()) * 0.08)))
         mask = Image.fromarray((cover * 255).astype(np.uint8)).resize((width * k, height * k), Image.BILINEAR)
-        image.paste(Image.new("RGBA", image.size, tuple(int(v) for v in local) + (255,)), (0, 0), mask)
+        # Composited, not pasted: a paste blends the colour with the transparent black around it, and that dark
+        # fringe showed as a ring around each closed eye.
+        layer = Image.new("RGBA", image.size, _lid_colour(rgb, alpha, cover, skin))
+        layer.putalpha(mask)
+        image.alpha_composite(layer)
     draw = ImageDraw.Draw(image)
-    for part in parts:
-        x0, x1 = part["x0"] * k, part["x1"] * k
-        lid = (part["y0"] + (part["y1"] - part["y0"]) * 0.58) * k
-        sag = (part["y1"] - part["y0"]) * k * 0.1
+    for x0, y0, x1, y1 in boxes:
+        x0, x1 = x0 * k, x1 * k
+        lid = (y0 + (y1 - y0) * 0.58) * k
+        sag = (y1 - y0) * k * 0.1
         points = [(x0 + (x1 - x0) * (0.08 + 0.84 * t / 20), lid + math.sin(math.pi * t / 20) * sag) for t in range(21)]
         draw.line(points, fill=colour, width=line, joint="curve")
         for x, y in (points[0], points[-1]):
             draw.ellipse((x - line / 2, y - line / 2, x + line / 2, y + line / 2), fill=colour)
-    return image.resize((width, height), Image.LANCZOS)
+    # Averaged down, not Lanczos: its overshoot at the cover's edge drew a light ring around each closed eye.
+    return image.resize((width, height), Image.BOX)
 
 
 # One pose -------------------------------------------------------------------
@@ -550,14 +670,19 @@ def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
     elif stray_marks(np.array(rigged)[..., :3], alpha, eyes_box, mouth_box):
         warnings.append("stray_mark")
     sprite_width = (ex1 - ex0) * style["mouth_scale"]
-    pad = int((ey1 - ey0) * 0.25)
-    bx0, by0, bx1, by1 = _blink_box(max(0, ex0 - pad), max(0, ey0 - pad), min(width, ex1 + pad), min(height, ey1 + pad), height)
+    openings = eye_openings(rgb, alpha, eyes_mask, background, style["screen"])
+    ys, xs = np.nonzero(openings)
+    # The whole openings, not just the whites: an anime iris and its lid reach past them.
+    ox0, oy0, ox1, oy1 = min(ex0, int(xs.min())), min(ey0, int(ys.min())), max(ex1, int(xs.max()) + 1), max(ey1, int(ys.max()) + 1)
+    pad = int((oy1 - oy0) * 0.25)
+    bx0, by0, bx1, by1 = _blink_box(max(0, ox0 - pad), max(0, oy0 - pad), min(width, ox1 + pad), min(height, oy1 + pad), height)
     return {
         "image": rigged, "before": figure, "width": width, "height": height, "wiped": wiped, "blinks": not covered,
         "warnings": warnings,
         "mouth": _anchor(mx, my, sprite_width * SPRITE[1] / SPRITE[0], width, height),
         "eyes": _anchor((bx0 + bx1) / 2, (by0 + by1) / 2, by1 - by0, width, height),
-        "blink": blink_sprite(rgb[by0:by1, bx0:bx1], eyes_mask[by0:by1, bx0:bx1], background, style["screen"]),
+        "blink": blink_sprite(rgb[by0:by1, bx0:bx1], openings[by0:by1, bx0:bx1], background, style["screen"],
+                              alpha[by0:by1, bx0:bx1]),
         "eyes_box": list(eyes_box), "mouth_box": list(mouth_box) if mouth_box else None,
     }
 

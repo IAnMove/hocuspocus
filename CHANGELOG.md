@@ -6,6 +6,19 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The flat cutout rig closes anime eyes. Its blink covered only the white of each
+eye, so on an anime eye (a big dark iris against a thick upper lid, with the
+white a thin crescent beside it) the iris, the pupil and a dark corner of the
+lid showed through the closed eye, and the cover took its colour from the iris
+and lashes around it, so it came out darker than the face. Each eye is now
+covered whole: the white grows into what is drawn in and beside it (iris, pupil,
+highlights, lid and lash lines) up to the skin, then into the dark lid line
+resting on it, no thicker than that line is across the middle of the eye, so
+brows and bangs above stay. The cover takes its colour from the face pixels
+around it only. The pupils that showed on large round cartoon eyes are covered
+too, and the faint ring around each closed eye is gone. Rig the character again
+to get the new blinks.
+
 The Video 3D toon look renders in the headless exporter. Hunyuan3D GLBs have no
 normals; three flat-shades PBR materials then, but not toon materials, so their
 light was NaN: a draft export came out entirely black (the bloom spread the NaN
