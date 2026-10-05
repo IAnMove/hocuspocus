@@ -6,6 +6,16 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series 3D shots mix 2D and 3D. `scene3d.objects` places what does not speak in
+a Video 3D shot: a model from `model3d.generate`/`model3d.animate` with its
+clip by name (looked up in the GLB), speed, position, scale and a path across
+the shot, or an image cutout, on a template object or added to the scene; the
+talking cast stays a Character Kit cutout. The template's effects, texts,
+appearances and clip cues are stretched to the shot's length, so an impact
+authored at 4 s of an 8 s template lands at 2.5 s of a 5 s shot instead of
+after the cut. `world3d.scene.patch` gains `add` (a new prop object),
+`clipPlayback` and `retime`.
+
 `series.update` (and `PUT /api/v1/series/{id}`) keeps every top-level field it
 is not sent. It replaced the whole project, so an agent that sent only
 `allowedProductionMethods` emptied the episodes, characters, locations and

@@ -525,7 +525,7 @@ class SeriesNativeRender:
         sound = {"audioTracks": sound_tracks(series, shot, first)}
         self._balance(self.deps.workspace_dir(workspace), sound)
         scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError,
-                                          tracks=sound["audioTracks"])
+                                          tracks=sound["audioTracks"], root=self.deps.workspace_dir(workspace))
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
         intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
         _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {
