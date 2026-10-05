@@ -27,6 +27,7 @@ import websocket as websocket_client
 
 from services.runtime_environment import isolated_environment, python_path
 from services.runtime_profiles import managed_ready
+from services import h3_frame_lattice
 
 
 # The native WanGP H3 family owns ``minimax_h3`` in Maestro Next. Keep the
@@ -214,12 +215,13 @@ MODEL_OPTIONS = {
     "fps": 24,
     # The validated quality recipe starts at 124 frames. H3's temporal grid is
     # 17n+5; publishing it lets every UI show the exact effective duration.
-    "frames_minimum": 124,
-    "frames_steps": 17,
-    "frames_maximum": 362,
-    "frame_alignment_modulus": 17,
-    "frame_alignment_remainder": 5,
-    "frame_alignment_mode": "nearest",
+    # One lattice for every path (services/h3_frame_lattice.py): 124..345 frames, rounded up.
+    "frames_minimum": h3_frame_lattice.MIN_FRAMES,
+    "frames_steps": h3_frame_lattice.STEP,
+    "frames_maximum": h3_frame_lattice.MAX_FRAMES,
+    "frame_alignment_modulus": h3_frame_lattice.STEP,
+    "frame_alignment_remainder": h3_frame_lattice.OFFSET,
+    "frame_alignment_mode": "ceil",
     "default_num_inference_steps": 20,
     "default_flow_shift": 12.0,
     "default_guidance_scale": 1.0,
@@ -723,9 +725,7 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
         width = max(32, round(width * scale / 32) * 32)
         height = max(32, round(height * scale / 32) * 32)
     requested_length = int(params.get("video_length", 124))
-    length = max(124, min(362, requested_length))
-    length = 5 + round((length - 5) / 17) * 17
-    length = max(124, min(362, length))
+    length = h3_frame_lattice.clamp(h3_frame_lattice.align_up(requested_length))
     # Keep both values in the frozen job/sidecar. This makes a rerun explain
     # why an unsupported canvas or off-grid duration was adjusted.
     params["requested_resolution"] = requested_resolution

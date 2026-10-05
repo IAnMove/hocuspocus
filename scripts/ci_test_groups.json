@@ -84,6 +84,8 @@
         "tests/test_series_episode_replace.py",
         "tests/test_owned_browser_watchdog.py",
         "tests/test_audio_mix.py",
+        "tests/test_h3_frame_lattice.py",
+        "tests/test_llm_resilience.py",
         "tests/test_language_intent.py",
         "tests/test_launcher_compatibility.py",
         "tests/test_llm_request_cancellation.py",

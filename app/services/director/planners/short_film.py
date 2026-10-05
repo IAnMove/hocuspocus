@@ -167,10 +167,9 @@ _SHOT_IMAGE_FIELDS = frozenset({
     "keyframe_prompts",
 })
 
-# H3 remains natural around two spoken words per second. A small 0.1 margin
-# avoids rejecting a 29-word line in the model's 14.375-second maximum clip
-# solely because the old floor-based budget rounded 28.75 down to 28.
-_H3_DIALOGUE_WORDS_PER_SECOND = 2.1
+# The one speech rate shared with the shot validator and the H3 sidecar's syllable
+# estimate (services/minimax_h3_duration.py), so a line that fits here fits there.
+from services.minimax_h3_duration import DEFAULT_WORDS_PER_SECOND as _H3_DIALOGUE_WORDS_PER_SECOND
 
 
 def _h3_preferred_native_durations(
