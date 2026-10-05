@@ -90,6 +90,51 @@ function PanelLoadingFallback() {
   )
 }
 
+type JobTileTone = 'active' | 'failed' | 'interrupted'
+
+function jobTileTone(job: GenerationJob): JobTileTone {
+  if (isGenerationJobInterrupted(job.status)) return 'interrupted'
+  if (job.status === 'failed' || job.status === 'cancelled') return 'failed'
+  return 'active'
+}
+
+const JOB_TILE_BORDER: Record<JobTileTone, string> = {
+  active: 'border-accent-blue/30 bg-bg-tertiary',
+  failed: 'border-red-500/30 bg-bg-tertiary',
+  interrupted: 'border-amber-400/40 bg-bg-tertiary',
+}
+
+const JOB_TILE_TEXT: Record<JobTileTone, string> = {
+  active: 'text-text-secondary',
+  failed: 'text-red-400',
+  interrupted: 'text-amber-300',
+}
+
+function jobTileTitle(job: GenerationJob, tone: JobTileTone, interruptedLabel: string): string {
+  if (tone === 'interrupted') return interruptedLabel
+  if (tone === 'failed') return job.status === 'cancelled' ? 'Cancelled' : 'Generation Failed'
+  return job.status === 'queued' ? 'Queued...' : 'Generating...'
+}
+
+/** Resume/Discard for a job the recovery queue holds after a restart. */
+function JobRecoveryActions({ busy, onResume, onDiscard }: { busy: boolean; onResume: () => void; onDiscard: () => void }) {
+  const { t: tCommon } = useUiTranslation('common')
+  return (
+    <div className="flex items-center gap-3 shrink-0 ml-2">
+      <button type="button" onClick={onDiscard} disabled={busy}
+        className="flex items-center gap-1 text-xs text-text-secondary hover:text-red-300 disabled:opacity-50">
+        <Trash2 size={12} />
+        {tCommon('actions.discard')}
+      </button>
+      <button type="button" onClick={onResume} disabled={busy}
+        className="flex items-center gap-1 text-xs text-accent-blue disabled:opacity-50">
+        {busy ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+        {tCommon('actions.resume')}
+      </button>
+    </div>
+  )
+}
+
 function stripTimeSuffix(msg: string): string {
   return msg.replace(/\s*\|\s*\d+:\d+.*$/, '').trim()
 }
@@ -132,8 +177,9 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
   const hasSteps = job.totalSteps > 0
   const progressPct = hasSteps ? (job.step / job.totalSteps) * 100 : job.progress * 100
   const phase = stripTimeSuffix(job.phase || job.message)
-  const isInterrupted = isGenerationJobInterrupted(job.status)
-  const isFailed = job.status === 'failed' || job.status === 'cancelled' || isInterrupted
+  const tone = jobTileTone(job)
+  const isInterrupted = tone === 'interrupted'
+  const isFailed = tone !== 'active'
   const errorText = job.error || job.message || (job.status === 'cancelled' ? 'Cancelled' : 'Generation failed')
   const completedPanelTimings = (job.taskTimings ?? [])
     .filter(item => typeof item.total_seconds === 'number')
@@ -151,9 +197,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
   }, [job.h3WindowPlan?.signature])
 
   return (
-    <div className={`rounded-xl border overflow-hidden ${
-      isInterrupted ? 'border-amber-400/40 bg-bg-tertiary' : isFailed ? 'border-red-500/30 bg-bg-tertiary' : 'border-accent-blue/30 bg-bg-tertiary'
-    }`}>
+    <div className={`rounded-xl border overflow-hidden ${JOB_TILE_BORDER[tone]}`}>
       <div className="w-full aspect-video flex items-center justify-center relative">
         {/* Dismiss button (top-right, failed only) */}
         {isFailed && (
@@ -166,13 +210,11 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
           </button>
         )}
         <div className="flex flex-col items-center gap-3 text-text-muted w-full max-w-md px-4">
-          <Film size={40} className={isInterrupted ? 'text-amber-300' : isFailed ? 'text-red-400' : 'animate-pulse'} />
+          <Film size={40} className={isFailed ? JOB_TILE_TEXT[tone] : 'animate-pulse'} />
 
           <div className="text-center w-full">
-            <p className={`text-sm font-medium ${isInterrupted ? 'text-amber-300' : isFailed ? 'text-red-400' : 'text-text-secondary'}`}>
-              {isInterrupted
-                ? tCommon('status.interrupted')
-                : isFailed ? (job.status === 'cancelled' ? 'Cancelled' : 'Generation Failed') : job.status === 'queued' ? 'Queued...' : 'Generating...'}
+            <p className={`text-sm font-medium ${JOB_TILE_TEXT[tone]}`}>
+              {jobTileTitle(job, tone, tCommon('status.interrupted'))}
             </p>
             {!isFailed && phase && (
               <p className="text-xs mt-1 truncate">{phase}</p>
@@ -268,18 +310,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
             : isFailed ? 'Click × to dismiss — the tile stays so you can see what failed' : phase || 'Preparing...'}
         </div>
         {isInterrupted && (
-          <div className="flex items-center gap-3 shrink-0 ml-2">
-            <button type="button" onClick={() => void discardInterrupted()} disabled={retrying}
-              className="flex items-center gap-1 text-xs text-text-secondary hover:text-red-300 disabled:opacity-50">
-              <Trash2 size={12} />
-              {tCommon('actions.discard')}
-            </button>
-            <button type="button" onClick={() => void resumeInterrupted()} disabled={retrying}
-              className="flex items-center gap-1 text-xs text-accent-blue disabled:opacity-50">
-              {retrying ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-              {tCommon('actions.resume')}
-            </button>
-          </div>
+          <JobRecoveryActions busy={retrying} onResume={() => void resumeInterrupted()} onDiscard={() => void discardInterrupted()} />
         )}
         {isFailed && job.retry && (
           <button type="button" onClick={() => void retry()} disabled={retrying}
