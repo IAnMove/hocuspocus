@@ -9,7 +9,8 @@ from PIL import Image, ImageChops, ImageDraw
 
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
 from services.flat_rig import (
-    STATES, FlatRigError, _kit_warnings, draw_mouth, find_eyes, find_mouth, rig_character, rig_pose, rig_style, stray_marks,
+    STATES, FlatRigError, _kit_warnings, crop_figure, draw_mouth, find_eyes, find_mouth, rig_character, rig_pose, rig_style,
+    skin_textured, stray_marks,
 )
 
 SKIN = (246, 214, 170, 255)
@@ -446,3 +447,70 @@ def test_a_wide_pair_of_eyes_gets_a_blink_no_wider_than_the_frame_so_video_2d_dr
     assert _blink_box(100, 200, 350, 260, 1000) == (100, 159, 350, 300)
     assert _blink_box(100, 10, 350, 70, 1000)[1] == 0, "near the top it grows downward instead"
     assert _blink_box(100, 200, 200, 260, 1000) == (100, 200, 200, 260), "a sprite already narrow enough is unchanged"
+
+
+CODE, GLYPH = (18, 58, 30, 255), (110, 230, 120, 255)
+
+
+def _code_face(mouth=True, seed=7) -> Image.Image:
+    """A face drawn as falling code: columns of light glyph strokes on a dark green face, white eyes and a black slit
+    mouth. The gaps between the glyphs are as dark against them as a pen line is against skin."""
+    rng = np.random.default_rng(seed)
+    image = _cutout(mouth=False, eyes=False, skin=CODE)
+    glyphs = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(glyphs)
+    for x in range(62, 358, 6):
+        y = 40 + int(rng.integers(0, 8))
+        while y < 380:
+            tall = int(rng.integers(4, 11))
+            draw.rectangle((x, y, x + 2, y + tall), fill=GLYPH)
+            if rng.random() < 0.4:
+                draw.rectangle((x, y + tall // 2, x + 4, y + tall // 2 + 1), fill=GLYPH)
+            y += tall + int(rng.integers(3, 7))
+    head = Image.new("L", image.size, 0)
+    ImageDraw.Draw(head).ellipse((60, 40, 360, 380), fill=255)
+    image.paste(glyphs, (0, 0), ImageChops.multiply(glyphs.split()[3], head))
+    draw = ImageDraw.Draw(image)
+    for x in (120, 220):
+        draw.ellipse((x, 120, x + 80, 220), fill=(255, 255, 255, 255))
+        draw.ellipse((x + 30, 160, x + 50, 185), fill=(10, 10, 10, 255))
+    if mouth:
+        draw.ellipse((150, 252, 270, 274), fill=(6, 6, 6, 255))
+    return image
+
+
+@pytest.mark.parametrize("screen", [False, True])
+def test_a_mouth_painted_on_a_textured_face_is_found_and_wiped_with_the_texture(screen):
+    """The bug: on a face made of code glyphs the gaps between the glyphs were taken for marks (and on a screen face,
+    the glyphs), so no mouth was found, the painted slit stayed and the animated mouth was drawn under it."""
+    rig = rig_pose(_code_face(), rig_style({"screen": screen}))
+    assert rig["wiped"] is True and "mouth_not_found" not in rig["warnings"]
+    before = np.array(rig["before"])
+    slit = (before[..., :3] @ np.array([0.299, 0.587, 0.114]) < 20) & (before[..., 3] > 200)
+    slit[:rig["eyes_box"][3]] = False  # the pupils
+    ys, xs = np.nonzero(slit)
+    x0, y0, x1, y1 = rig["mouth_box"]
+    assert abs(x0 - xs.min()) <= 2 and abs(x1 - xs.max() - 1) <= 2 and abs(y0 - ys.min()) <= 2 and abs(y1 - ys.max() - 1) <= 2
+    # The animated mouth sits where the painted one was, not under it.
+    edge = max(rig["width"], rig["height"])
+    assert abs(rig["height"] / 2 + rig["mouth"]["offsetY"] * edge / 100 - (ys.min() + ys.max()) / 2) <= 2
+    inside = _lum(rig, rig["mouth_box"])
+    assert inside.min() > 30, "no black of the slit is left"
+    # The glyphs go on through the wiped box, as varied as the face under it; inpainting smeared them into a smudge.
+    below = _lum(rig, (x0, y1 + 20, x1, y1 + 20 + (y1 - y0)))
+    assert inside.std() > below.std() * 0.7 and abs(inside.mean() - below.mean()) < below.mean() * 0.25
+
+
+def test_a_textured_face_without_a_painted_mouth_has_nothing_wiped():
+    for screen in (False, True):
+        rig = rig_pose(_code_face(mouth=False), rig_style({"screen": screen}))
+        assert rig["wiped"] is False and "mouth_not_found" in rig["warnings"]
+
+
+def test_only_a_textured_face_is_filled_with_its_texture_and_plain_faces_keep_the_inpaint():
+    """Lines drawn on a plain face (a smirk, anime lids and brows, a small full-body face) are not a texture."""
+    for image, textured in [(_cutout(), False), (_cutout(smirk=True), False), (_anime_eyes(_cutout(eyes=False)), False),
+                            (Image.fromarray(_full_body_anime()), False), (_code_face(), True)]:
+        pixels = np.array(crop_figure(image))
+        box, _ = find_eyes(pixels[..., :3], pixels[..., 3])
+        assert skin_textured(pixels[..., :3], pixels[..., 3], box) is textured
