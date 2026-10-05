@@ -247,6 +247,7 @@
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_templates.py",
+        "tests/test_flat_rig_realistic.py",
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
         "tests/test_api_workspace_security.py",
@@ -473,6 +474,13 @@
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/flat_rig.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_realistic.py"
+      ]
+    },
     {
       "prefix": "app/services/secure_download.py",
       "paths": [

@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from routers.wangp_mcp import tool_definitions
-from services.series_commands import command_catalog, command_handlers
+from services.series_commands import OPERATIONS, command_catalog, command_handlers
 
 
 class Response(io.BytesIO):
@@ -133,6 +133,18 @@ def test_rigging_a_flat_character_posts_to_the_kit_and_summarises_it(tmp_path):
     assert body == {"workspace": "series", "baseRevision": 4, "style": {"smile": 0.4}}
     assert result["result"]["revision"] == 5 and result["result"]["character"]["mouths"] == ["closed"]
     assert result["result"]["review"].endswith("r.png?workspace=series")
+
+
+def test_rigging_passes_ink_mouths_and_placement_hints_to_the_kit(tmp_path):
+    kit = {"id": "anselmo", "name": "Anselmo", "base": {"source": "x"}, "poses": {}, "mouth": {"closed": {}}}
+    handlers, calls, _, _ = harness(tmp_path, [{"revision": 2, "character": kit, "review": "r", "unwipedPoses": [],
+                                                "poses": {"base": {"wiped": False, "mouthFound": True, "face": "realistic"}}}])
+    hints = {"base": {"mouth": [44.2, 17.45]}, "busto": None}
+    call(handlers, "characters.rig.flat", {"workspace": "series", "character_id": "anselmo", "base_revision": 1,
+                                           "style": {"mouthStyle": "ink"}, "hints": hints})
+    assert calls[0][2] == {"workspace": "series", "baseRevision": 1, "style": {"mouthStyle": "ink"}, "hints": hints}
+    schema = OPERATIONS["characters.rig.flat"][0]
+    assert schema["style"]["properties"]["mouthStyle"] == {"enum": ["paper", "ink"]} and "hints" in schema
 
 
 def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp_path):

@@ -642,6 +642,40 @@ the nose's place right under the eyes, is taken as the mouth.
 Review every pose's mouth and blink before production; an unsupported face or
 an ambiguous result still needs a regenerated pose.
 
+## Flat rigs for realistic and graphic-novel faces
+
+On a face with realistic proportions the mouth is much lower than on a
+cartoon, and eye bags, wrinkles and spectacle rims are dark marks right under
+the eyes. The rig used to take one of those marks for the mouth. It wiped it
+into a smudge under an eye and placed the mouth there. `characters.rig.flat`
+now measures the face first. The face is realistic when the taller eye opening
+is at most 0.1 of the head's width at the eye rows and at most 0.3 of the eye
+pair's width. The eyes are measured on their whole whites, shaded parts
+included. On the poses at hand, realistic faces measure 0.058–0.079 and every
+cartoon or anime face measures 0.123 or more, big eyes behind round spectacles
+included. On a realistic face the mouth is the thin, roughly level pen stroke,
+0.45–1.35 eye-pair widths under the eye line, nearest the row at 0.9. Big flat
+shadows, moustaches, nostrils and beard strands are not thin strokes and are
+never taken. A cartoon face keeps the earlier search unchanged.
+
+For this art use `style.mouthStyle: "ink"`. The painted mouth is not wiped and
+is the rest shape: `closed` and `pressed` draw nothing. The other shapes are
+hard-edged openings in the painted mouth's own ink. They hang from the painted
+line and are sized from its width. Only `wide` shows a hint of teeth and
+tongue. The default stays `paper`.
+
+When a pose's eyes or mouth are still found in the wrong place, give `hints`:
+`{"<pose id>": {"mouth": [x, y], "eyes": [x, y]}}`, in % of that pose's keyed
+image before cropping. With a mouth hint, the rig takes the mark nearest that
+point, within a fifth of the eye pair. If there is no mark there, the mouth is
+placed at the point and nothing is wiped. With an eyes hint, the rig takes the
+pair of light eyes at that point anywhere in the figure, not only in its top
+half. If there is no pair there, it reports `eyes_not_found`. The kit
+provenance keeps the hints and later rigs reuse them. A pose's new hints
+replace its saved ones, and `null` clears them. The result reports per pose
+`face` (`realistic` or `cartoon`) and `mouthFound`. `unwipedPoses` lists the
+poses whose painted mouth was not found; an ink rig wipes nothing on purpose.
+
 ## Comic film PRE after a restart
 
 A comic PRE that was ready before the lab stopped is still ready afterwards.

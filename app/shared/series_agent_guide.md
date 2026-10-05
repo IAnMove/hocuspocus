@@ -13,6 +13,12 @@ use only those ids and file names, never invent one.
      base as `image_refs`) → `studio.key` → `characters.save` (approved assets) → `characters.rig.flat` → design a voice per
      language (`generation.speech` with `qwen3_tts_voicedesign`, check with `qa.speech`) → `characters.save` with
      `voicesByLanguage` → add the character to the series (`series.update`) with `voiceProfile.characterKitRef`;
+   - rig check: look at the review image `characters.rig.flat` returns. A face with realistic proportions (small
+     eyes in a wide head: graphic-novel or tenebrist art, eye bags, spectacles, moustaches) is detected, and its mouth
+     is the thin line about one eye-pair width under the eyes. For that art rig with `style: {"mouthStyle": "ink"}`:
+     the painted mouth stays as the rest shape and the open shapes are drawn in its own ink. If a pose's mouth or
+     eyes are still found in the wrong place, rig again with `hints: {"<pose id>": {"mouth": [x, y]}}` (or `"eyes"`),
+     in % of that pose's keyed image; later rigs reuse the hints, and `null` clears a pose's hints;
    - location: `generation.image` 1920x1088 in the series style → `series.update` (new location) → `series.asset.import`
      (owner_type location, reference_role environment);
    - 3D background: `world3d.templates.list` → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).

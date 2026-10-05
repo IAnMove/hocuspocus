@@ -12,6 +12,13 @@ glyphs, scales) the mouth is the wide mark darker than the texture's own ink,
 and it is wiped with a copy of the texture. When no painted mouth is found the
 mouth is placed under the eyes and nothing is wiped; the result says so.
 
+A face with realistic proportions (small eyes in a wide head, as in graphic-novel
+art with flat black shadows) has its mouth much lower and eye bags, wrinkles and
+spectacle rims right under the eyes: there the mouth is the thin, roughly level
+stroke nearest the row where such a mouth sits. Hints (a point per pose) narrow
+the eye or mouth search for anything else. With ``mouthStyle: "ink"`` the painted
+mouth is kept as the rest shape and the open shapes are drawn in its own ink.
+
 Ported from the agent script that rigged the six "Uncanny Valley" characters.
 Only OpenCV, numpy and Pillow are needed.
 """
@@ -41,6 +48,9 @@ TEETH, TONGUE = (250, 248, 240, 255), (222, 98, 110, 255)
 SCREEN_INK, SCREEN_CAVITY = (245, 250, 255, 255), (10, 22, 70, 255)
 STYLE_LIMITS = {"smile": (-1.0, 1.0, 0.15), "smirk": (0.0, 1.0, 0.0), "width": (0.3, 0.9, 0.62),
                 "mouth_scale": (0.4, 1.2, 0.78)}
+# paper: the painted mouth is wiped and nine paper mouths are drawn. ink: it is kept as the rest shape and the open
+# shapes are dark openings in its own ink.
+MOUTH_STYLES = ("paper", "ink")
 MAX_PIXELS = 16_777_216
 _CROSS = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
 
@@ -52,7 +62,8 @@ class FlatRigError(ValueError):
 
 
 def rig_style(value: Any) -> dict[str, Any]:
-    """Mouth look: ``smile`` -1..1, ``smirk`` 0..1, ``width`` and ``mouth_scale``; ``screen`` for a screen face."""
+    """Mouth look: ``smile`` -1..1, ``smirk`` 0..1, ``width`` and ``mouth_scale`` (paper mouths); ``screen`` for a
+    screen face; ``mouthStyle`` ``paper`` (default) or ``ink``."""
     raw = value if isinstance(value, dict) else {}
     style: dict[str, Any] = {"screen": raw.get("screen") is True}
     for key, (low, high, default) in STYLE_LIMITS.items():
@@ -60,7 +71,41 @@ def rig_style(value: Any) -> dict[str, Any]:
         if isinstance(number, bool) or not isinstance(number, (int, float)) or not low <= float(number) <= high:
             raise FlatRigError("invalid_style", f"style.{key} must be a number from {low} to {high}")
         style[key] = float(number)
+    mouth_style = raw.get("mouthStyle", "paper")
+    if mouth_style not in MOUTH_STYLES:
+        raise FlatRigError("invalid_style", "style.mouthStyle must be paper or ink")
+    style["mouthStyle"] = mouth_style
     return style
+
+
+HINT_KEYS = ("mouth", "eyes")
+
+
+def rig_hints(value: Any) -> dict[str, dict[str, list[float]] | None]:
+    """Placement hints per pose: ``{"<pose>": {"mouth": [x, y], "eyes": [x, y]}}`` in % of that pose image (the
+    keyed source, before cropping), 0–100. ``null`` or ``{}`` for a pose clears the hints saved for it."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or len(value) > 32:
+        raise FlatRigError("invalid_hints", "hints must be an object with at most 32 pose ids")
+    hints: dict[str, dict[str, list[float]] | None] = {}
+    for pose, hint in value.items():
+        if not isinstance(pose, str) or not pose or len(pose) > 160:
+            raise FlatRigError("invalid_hints", "hints must be keyed by pose id")
+        if hint is None or hint == {}:
+            hints[pose] = None
+            continue
+        if not isinstance(hint, dict) or any(key not in HINT_KEYS for key in hint):
+            raise FlatRigError("invalid_hints", f"hints.{pose} takes mouth and eyes points")
+        clean = {}
+        for key, point in hint.items():
+            if (not isinstance(point, (list, tuple)) or len(point) != 2
+                    or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 100
+                           for v in point)):
+                raise FlatRigError("invalid_hints", f"hints.{pose}.{key} must be [x, y] in % of the pose image, from 0 to 100")
+            clean[key] = [round(float(point[0]), 3), round(float(point[1]), 3)]
+        hints[pose] = clean
+    return hints
 
 
 # Masks ----------------------------------------------------------------------
@@ -104,15 +149,21 @@ def _clean_alpha(image: Image.Image) -> Image.Image:
     return Image.fromarray(pixels)
 
 
-def crop_figure(image: Image.Image, margin: float = 0.02) -> Image.Image:
+def _figure_box(image: Image.Image, margin: float = 0.02) -> tuple[Image.Image, tuple[int, int, int, int]]:
+    """The cleaned pose and the box ``crop_figure`` cuts from it."""
     image = _clean_alpha(image.convert("RGBA"))
     alpha = np.array(image)[..., 3]
     ys, xs = np.nonzero(alpha > 128)
     if not len(xs):
         raise FlatRigError("not_keyed", "The pose has no visible figure; key its background first")
     pad = int(max(image.size) * margin)
-    return image.crop((max(0, xs.min() - pad), max(0, ys.min() - pad),
-                       min(image.width, xs.max() + pad + 1), min(image.height, ys.max() + pad + 1)))
+    return image, (int(max(0, xs.min() - pad)), int(max(0, ys.min() - pad)),
+                   int(min(image.width, xs.max() + pad + 1)), int(min(image.height, ys.max() + pad + 1)))
+
+
+def crop_figure(image: Image.Image, margin: float = 0.02) -> Image.Image:
+    image, box = _figure_box(image, margin)
+    return image.crop(box)
 
 
 # Features -------------------------------------------------------------------
@@ -212,10 +263,65 @@ def _eye_components(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float):
     return labels, parts
 
 
-def find_eyes(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float = 0.55):
-    """The two largest white blobs of similar size side by side, in the top of the figure."""
-    labels, parts = _eye_components(rgb, alpha, top_fraction)
-    left, right = sorted(_eye_pair(parts), key=lambda part: part["x0"])
+def _hinted_pair(parts, near) -> tuple[dict[str, int], dict[str, int]] | None:
+    """The largest pair of similar light blobs side by side whose box, grown by a quarter of its width, holds ``near``.
+    The largest, not the nearest: a pupil's two highlights are a smaller pair at the same place."""
+    hx, hy = near
+    best = None
+    for i, a in enumerate(parts):
+        for b in parts[i + 1:]:
+            tall = max(a["y1"] - a["y0"], b["y1"] - b["y0"])
+            if (min(a["size"], b["size"]) / max(a["size"], b["size"]) < 0.3 or abs(_centre(a)[1] - _centre(b)[1]) > tall * 0.8
+                    or (a["x0"] < b["x1"] and b["x0"] < a["x1"])):
+                continue
+            x0, y0 = min(a["x0"], b["x0"]), min(a["y0"], b["y0"])
+            x1, y1 = max(a["x1"], b["x1"]), max(a["y1"], b["y1"])
+            grow = (x1 - x0) * 0.25
+            if x0 - grow <= hx <= x1 + grow and y0 - grow <= hy <= y1 + grow and (not best or a["size"] + b["size"] > best[0]):
+                best = (a["size"] + b["size"], a, b)
+    return (best[1], best[2]) if best else None
+
+
+def _with_fragments(labels: np.ndarray, eye: dict[str, int], parts, other: dict[str, int]) -> dict[str, int]:
+    """One eye's white and the pieces of it a pupil cut off: blobs beside it, within its height, on its rows."""
+    eye = dict(eye)
+    height = eye["y1"] - eye["y0"]
+    for part in parts:
+        if (part["label"] in (eye["label"], other["label"]) or part["y1"] <= eye["y0"] or part["y0"] >= eye["y1"]
+                or max(part["x0"] - eye["x1"], eye["x0"] - part["x1"]) > height
+                or other["x0"] < _centre(part)[0] < other["x1"]):
+            continue
+        labels[labels == part["label"]] = eye["label"]
+        eye.update(size=eye["size"] + part["size"], x0=min(eye["x0"], part["x0"]), x1=max(eye["x1"], part["x1"]),
+                   y0=min(eye["y0"], part["y0"]), y1=max(eye["y1"], part["y1"]))
+    return eye
+
+
+def _eyes_near(rgb: np.ndarray, alpha: np.ndarray, near):
+    """With an eyes hint: white or cream blobs anywhere in the figure, and the pair at the hint (``_hinted_pair``),
+    each eye with the pieces its pupil cut off. Two eyes drawn touching are cut apart only when no pair is there
+    whole: a long almond eye is not two eyes."""
+    colour = rgb.astype(np.int16)
+    white = (colour.min(axis=2) > 205) & (colour.max(axis=2) - colour.min(axis=2) < 40) & (alpha > 200)
+    labels, found = _components(_open(white, 1))
+    reach = max(alpha.shape) * 0.15
+    for parts in (found, None):
+        if parts is None:
+            parts = _split_touching(labels, found)
+        near_parts = sorted((part for part in parts if part["size"] >= 6 and abs(_centre(part)[0] - near[0]) <= reach
+                             and abs(_centre(part)[1] - near[1]) <= reach), key=lambda part: -part["size"])[:12]
+        pair = _hinted_pair(near_parts, near)
+        if pair:
+            left, right = sorted(pair, key=lambda part: part["x0"])
+            return labels, [_with_fragments(labels, left, near_parts, right), _with_fragments(labels, right, near_parts, left)]
+    raise FlatRigError("eyes_not_found", "No pair of light eyes was found at the eyes hint")
+
+
+def find_eyes(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float = 0.55, near=None):
+    """The two largest white blobs of similar size side by side, in the top of the figure. With ``near`` (an eyes
+    hint, in figure pixels) the pair at that point, anywhere in the figure."""
+    labels, parts = _eyes_near(rgb, alpha, near) if near is not None else _eye_components(rgb, alpha, top_fraction)
+    left, right = sorted(parts if near is not None else _eye_pair(parts), key=lambda part: part["x0"])
     mask = (labels == left["label"]) | (labels == right["label"])
     grow = max(4, int((left["y1"] - left["y0"]) * 0.3))
     around = _dilate(mask, grow * 2) & ~_dilate(mask, grow)
@@ -423,8 +529,183 @@ def skin_textured(rgb: np.ndarray, alpha: np.ndarray, eyes_box) -> bool:
                                                  eyes_box[3] - eyes_box[1], eyes_box[2] - eyes_box[0])
 
 
-def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = False):
-    """Dark marks under the eyes that the face colour surrounds (so collars and jaws are skipped)."""
+# Realistic faces --------------------------------------------------------------
+# Drawn with realistic proportions (graphic-novel or tenebrist art: small eyes, eye bags and wrinkles as dark strokes,
+# spectacles, moustaches, big flat black shadows), a face has its mouth far lower than a cartoon's: about 0.85–1.0 of
+# the eye pair's width under the eye line, against 0.2–0.6 on the cartoon and anime casts. Taking the topmost wide mark
+# under the eyes took an eye bag or a spectacle rim, wiped it and placed the mouth there. The flat shadows also join
+# the nose, the mouth line and the cheek (or the rims, the moustache and the beard) into one mark, so the mouth is
+# found as a thin stroke instead.
+
+# The eyes are small against the head: the taller eye opening is at most this share of the head's width at the eye
+# rows. Measured on the eyes' whole whites (``_whole_whites``): 0.058–0.079 on the realistic poses on hand, 0.109 and up
+# on every cartoon or anime one; big round eyes behind spectacles measure 0.21 ...
+REALISTIC_EYES = 0.1
+# ... and not round: at most this share of the eye pair's width (0.18–0.25 realistic, three-quarter views included;
+# 0.35 and up on round cartoon eyes, which a wide head of hair or a raised hand could make look small against the head).
+REALISTIC_EYE_HEIGHT = 0.3
+# Where the mouth is looked for and expected, in eye-pair widths under the eye line. The window starts under the eye
+# bags and spectacle rims (down to ~0.44) and above the chin.
+REALISTIC_WINDOW = (0.45, 1.35)
+REALISTIC_MOUTH = 0.9
+# A stroke is thin where its dark run down each column is at most this share of the eye pair's width: a pen line,
+# not a shadow, a moustache or a filled nostril.
+THIN_STROKE = 0.09
+
+
+def _head_width(alpha: np.ndarray, eyes_box) -> float:
+    """The figure's width at the eye rows: the median run of opaque pixels through the eye pair's middle column."""
+    x0, y0, x1, y1 = eyes_box
+    centre, widths = (x0 + x1) // 2, []
+    for y in range(y0, y1):
+        row = alpha[y] > 200
+        if not row[centre]:
+            continue
+        left = np.flatnonzero(~row[:centre])
+        right = np.flatnonzero(~row[centre:])
+        widths.append((centre + (right[0] if len(right) else row.size - centre)) - (left[-1] + 1 if len(left) else 0))
+    return float(np.median(widths)) if widths else 0.0
+
+
+def _whole_whites(rgb: np.ndarray, alpha: np.ndarray, eyes_mask: np.ndarray) -> np.ndarray:
+    """The eyes' whites with their shaded or tinted parts, which the eye search leaves out: the light, nearly grey
+    blobs that touch what it found. Taking in something light beside an eye (a collar, grey hair) only makes the eye
+    measure bigger, so a cartoon face is never taken for a realistic one by it."""
+    colour = rgb.astype(np.int16)
+    light = (colour.min(axis=2) > 190) & (colour.max(axis=2) - colour.min(axis=2) < 45) & (alpha > 200)
+    _, labels = cv2.connectedComponents(_mask(light), connectivity=8)
+    seen = np.unique(labels[eyes_mask & light])
+    return eyes_mask | np.isin(labels, seen[seen > 0])
+
+
+def eye_extent(rgb: np.ndarray, alpha: np.ndarray, eyes_box, eyes_mask: np.ndarray):
+    """The box of the eyes' whole whites. ``find_eyes`` cuts a long almond white in two (it takes it for two eyes
+    drawn touching) and may keep a half of each eye, so its box is narrower than the eye pair; a realistic face's
+    mouth is placed from this one. ``eyes_box`` when the whites run into something light much wider than the eyes."""
+    ys, xs = np.nonzero(_whole_whites(rgb, alpha, eyes_mask))
+    box = (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
+    width, height = eyes_box[2] - eyes_box[0], eyes_box[3] - eyes_box[1]
+    return box if box[2] - box[0] <= width * 1.5 and box[3] - box[1] <= max(height * 2, width * 0.5) else tuple(eyes_box)
+
+
+def face_realistic(rgb: np.ndarray, alpha: np.ndarray, eyes_box, eyes_mask: np.ndarray) -> bool:
+    """Whether the face has realistic proportions, measured from the eyes' whole openings and the head's width."""
+    x0, y0, x1, y1 = eyes_box
+    head = _head_width(alpha, eyes_box)
+    below = slice(y1, min(alpha.shape[0], y1 + (y1 - y0))), slice(x0, x1)
+    lit = alpha[below] > 200
+    if not head or not lit.any():
+        return False
+    openings = eye_openings(rgb, alpha, _whole_whites(rgb, alpha, eyes_mask), np.median(rgb[below][lit], axis=0))
+    tallest = max(int(np.ptp(np.flatnonzero((openings == value).any(axis=1)))) + 1 for value in np.unique(openings) if value)
+    whole = eye_extent(rgb, alpha, eyes_box, eyes_mask)
+    return tallest <= head * REALISTIC_EYES and tallest <= (whole[2] - whole[0]) * REALISTIC_EYE_HEIGHT
+
+
+def _thin_strokes(region: np.ndarray, inside: np.ndarray, eye_width: int, faint: bool):
+    """Dark pen strokes in ``region`` as marks, and the face colour around them: thin down each column, and a few
+    pixels long across (hair strands of a moustache or beard hanging onto the mouth line are not)."""
+    mark, _dark, background = _mouth_marks(region, inside, 0, False, faint)
+    tall = cv2.morphologyEx(_mask(mark), cv2.MORPH_OPEN, np.ones((max(3, round(eye_width * THIN_STROKE)) + 1, 1), np.uint8)) > 0
+    across = cv2.morphologyEx(_mask(mark & ~tall), cv2.MORPH_OPEN, np.ones((1, max(3, round(eye_width * 0.03))), np.uint8)) > 0
+    # A closing joins a pen line broken by a pixel or two.
+    labels, parts = _components(_close(across, 1))
+    return [{**part, "pixels": labels == part["label"]} for part in parts], background
+
+
+def _level(part, most: float = 35.0) -> bool:
+    """Whether a mark runs within ``most`` degrees of level (its pixels' principal axis) and is wider than tall. A
+    mouth drawn at a slant in a three-quarter view is level enough; a fold from the nose is not."""
+    ys, xs = np.nonzero(part["pixels"])
+    if part["x1"] - part["x0"] < part["y1"] - part["y0"] or len(xs) < 3:
+        return False
+    cov = np.cov(xs, ys)
+    return abs(math.degrees(0.5 * math.atan2(2 * cov[0, 1], cov[0, 0] - cov[1, 1]))) <= most
+
+
+def _realistic_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box):
+    """The painted mouth on a realistic face: in ``REALISTIC_WINDOW``, the level stroke (``_level``) at least a fifth
+    of the eye pair wide, near the middle and not running into the window from its top or sides (a fold from the nose, a rim, a
+    jaw line), nearest ``REALISTIC_MOUTH`` (a stroke under that row counts half as far again: a lip shadow or chin
+    crease lies under the mouth); then its broken pieces along the same line."""
+    x0, y0, x1, y1 = eyes_box
+    eye_width, line = x1 - x0, (y0 + y1) / 2
+    rx0, rx1 = max(0, int(x0 - eye_width * 0.15)), min(alpha.shape[1], int(x1 + eye_width * 0.15))
+    ry0 = int(line + eye_width * REALISTIC_WINDOW[0])
+    ry1 = min(alpha.shape[0], int(line + eye_width * REALISTIC_WINDOW[1]))
+    region, inside = rgb[ry0:ry1, rx0:rx1].astype(float), alpha[ry0:ry1, rx0:rx1] > 200
+    if ry1 - ry0 < 4 or inside.mean() < 0.2:
+        raise FlatRigError("mouth_not_found", "No face was found where the mouth is")
+    expected, middle = line + eye_width * REALISTIC_MOUTH - ry0, (x0 + x1) / 2 - rx0
+    for faint in (False, True):
+        strokes, background = _thin_strokes(region, inside, eye_width, faint)
+        level = [p for p in strokes if eye_width * 0.2 <= p["x1"] - p["x0"] <= eye_width * 0.95
+                 and p["y0"] > 0 and p["x0"] > 0 and p["x1"] < rx1 - rx0
+                 and abs(_centre(p)[0] - middle) <= eye_width * 0.4 and _level(p)]
+        if level:
+            break
+    if not level:
+        raise FlatRigError("mouth_not_found", "No painted mouth was found where a realistic face has it")
+
+    def distance(part):
+        dy = _centre(part)[1] - expected
+        return (dy * 1.5 if dy > 0 else -dy) + abs(_centre(part)[0] - middle) * 0.25
+    seed = min(level, key=distance)
+    pieces = [p for p in strokes if p is not seed and p["x1"] - p["x0"] <= eye_width * 0.5
+              and abs(_centre(p)[1] - _centre(seed)[1]) < eye_width * 0.1]
+    group = _grow([seed], pieces, eye_width * 0.1, eye_width * 0.06, eye_width * 0.95, 8)
+    return _placed(alpha.shape, group, rx0, ry0, region.shape), background
+
+
+def _placed(shape, parts, rx0: int, ry0: int, size):
+    """The marks found in a window, as a mask and box of the whole figure."""
+    mask = np.zeros(shape, bool)
+    for part in parts:
+        mask[ry0:ry0 + size[0], rx0:rx0 + size[1]] |= part["pixels"]
+    ys, xs = np.nonzero(mask)
+    return (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1), mask
+
+
+def _hinted_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool, near):
+    """With a mouth hint: in a window around it, the mark (a drawn mark the face colour surrounds, or a thin stroke)
+    nearest the hint, no farther than a fifth of the eye pair from it, and its pieces along the same line. Marks
+    wider than the eye pair or taller than half of it (shadows, a beard, a moustache) are never taken."""
+    x0, y0, x1, y1 = eyes_box
+    eye_height, eye_width = y1 - y0, x1 - x0
+    span = max(eye_height, eye_width * 0.55)
+    hx, hy = near
+    rx0, rx1 = max(0, int(hx - eye_width * 0.7)), min(alpha.shape[1], int(hx + eye_width * 0.7))
+    ry0, ry1 = max(0, int(hy - eye_width * 0.4)), min(alpha.shape[0], int(hy + eye_width * 0.4))
+    region, inside = rgb[ry0:ry1, rx0:rx1].astype(float), alpha[ry0:ry1, rx0:rx1] > 200
+    if rx1 - rx0 < 4 or ry1 - ry0 < 4 or not inside.any():
+        raise FlatRigError("mouth_not_found", "No face was found at the mouth hint")
+    strict, background = _mouth_candidates(region, inside, eye_height, screen, False, 12)
+    faint, _ = _mouth_candidates(region, inside, eye_height, screen, True, 5)
+    # A thin stroke drawn at a slant is taller than a flat mark may be; it is still a line, not a shadow.
+    thin = [] if screen else [p for p in _thin_strokes(region, inside, eye_width, False)[0] if p["y1"] - p["y0"] <= eye_width * 0.5]
+    marks = [p for p in _strokes(strict, faint) if p["y1"] - p["y0"] <= span * 0.6] + thin
+    marks = [p for p in marks if eye_width * 0.06 <= p["x1"] - p["x0"] <= eye_width * 0.95]
+    px, py = hx - rx0, hy - ry0
+
+    def gap(part):
+        return math.hypot(max(part["x0"] - px, 0, px - part["x1"]), max(part["y0"] - py, 0, py - part["y1"]))
+    marks = [p for p in marks if gap(p) <= eye_width * 0.2]
+    if not marks:
+        raise FlatRigError("mouth_not_found", "No painted mouth was found at the mouth hint")
+    seed = min(marks, key=lambda part: (round(gap(part), 1), -part["size"]))
+    row = [p for p in faint + strict if p is not seed and abs(_centre(p)[1] - _centre(seed)[1]) < span * 0.14
+           and p["x1"] - p["x0"] <= eye_width * 0.5 and p["y1"] - p["y0"] <= span * 0.3]
+    group = _grow([seed], row, eye_width * 0.1, span * 0.1, eye_width * 0.95, 8)
+    return _placed(alpha.shape, group, rx0, ry0, region.shape), background
+
+
+def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = False, *, realistic: bool = False, near=None):
+    """Dark marks under the eyes that the face colour surrounds (so collars and jaws are skipped). ``near`` (a mouth
+    hint, in figure pixels) searches only there; ``realistic`` (``face_realistic``) looks for a thin stroke lower down."""
+    if near is not None or realistic:
+        (box, mask), background = (_hinted_mouth(rgb, alpha, eyes_box, screen, near) if near is not None
+                                   else _realistic_mouth(rgb, alpha, eyes_box))
+        return box, mask, background
     x0, _y0, x1, y1 = eyes_box
     eye_height, eye_width = y1 - eyes_box[1], x1 - x0
     span = max(eye_height, eye_width * 0.55)
@@ -630,6 +911,56 @@ def draw_mouth(state: str, style: dict[str, Any]) -> Image.Image:
     return image.resize(SPRITE, Image.LANCZOS)
 
 
+# Ink mouths -----------------------------------------------------------------
+# The paper mouths are cartoon drawings: on a face inked in flat blacks they look pasted on. With mouthStyle "ink" the
+# painted mouth stays as the rest shape and each open shape is a hard-edged opening in the painted mouth's own ink,
+# hanging from it (the upper lip stays, the jaw drops), sized from its width.
+
+# The painted mouth's width is this share of an ink sprite's width; the sprite is centred on the painted mouth.
+INK_SPAN = 0.5
+# Each open shape's width and depth in painted-mouth widths. closed and pressed draw nothing: the painted mouth shows.
+INK_OPENINGS = {"small": (0.55, 0.12), "medium": (0.75, 0.28), "wide": (0.9, 0.5), "tongue": (0.65, 0.24),
+                "bite": (0.62, 0.09), "round": (0.42, 0.42), "pucker": (0.26, 0.24)}
+
+
+def ink_colour(rgb: np.ndarray, mask: np.ndarray, background) -> tuple[int, ...]:
+    """The painted mouth's ink: the median of the third of its pixels farthest from the face colour."""
+    pixels = rgb[mask].astype(float)
+    far = np.abs(pixels - np.asarray(background, dtype=float)).sum(axis=1)
+    return tuple(int(v) for v in np.median(pixels[far >= np.percentile(far, 67)], axis=0)) + (255,)
+
+
+def _mix(a, b, share: float) -> tuple[int, ...]:
+    return tuple(round(x * (1 - share) + y * share) for x, y in zip(a[:3], b[:3])) + (255,)
+
+
+def draw_ink_mouth(state: str, ink=INK, skin=(200, 160, 130)) -> Image.Image:
+    """One ink mouth sprite (512×320, transparent), drawn at 4× and averaged down. Only ``wide`` shows a hint of
+    teeth (the skin lightened) and tongue (the ink reddened)."""
+    if state not in STATES:
+        raise FlatRigError("invalid_state", f"Unknown mouth state {state}")
+    width, height, k = SPRITE[0], SPRITE[1], 4
+    image = Image.new("RGBA", (width * k, height * k), (0, 0, 0, 0))
+    if state in INK_OPENINGS:
+        draw = ImageDraw.Draw(image)
+        painted, cx, cy = width * k * INK_SPAN, width * k / 2, height * k / 2
+        w, d = (share * painted for share in INK_OPENINGS[state])
+        if state in ("round", "pucker"):
+            draw.ellipse((cx - w / 2, cy - d * 0.15, cx + w / 2, cy + d * 0.85), fill=tuple(ink))
+        else:
+            ts = [i / 30 * 2 - 1 for i in range(31)]
+            # A flat upper lip with a slight bow, a full lower one.
+            outline = [(cx + t * w / 2, cy - d * 0.06 * (1 - t * t)) for t in ts]
+            outline += [(cx + t * w / 2, cy + d * (1 - t * t) ** 0.6) for t in reversed(ts)]
+            draw.polygon(outline, fill=tuple(ink))
+            if state == "wide":
+                _paste_inside(image, outline, _mix(skin, (255, 255, 255), 0.55),
+                              (cx - w * 0.36, cy - d, cx + w * 0.36, cy + d * 0.16), "rectangle")
+                _paste_inside(image, outline, _mix(ink, (170, 60, 60), 0.4),
+                              (cx - w * 0.24, cy + d * 0.55, cx + w * 0.24, cy + d * 1.1), "ellipse")
+    return image.resize(SPRITE, Image.BOX)
+
+
 # Blink ----------------------------------------------------------------------
 # What find_eyes returns is only the white of each eye. An anime eye is mostly a big dark iris that touches a thick
 # upper lid, with the white a thin crescent beside it: covering the white alone left the iris and the lid showing
@@ -802,37 +1133,64 @@ def _blink_box(x0: int, y0: int, x1: int, y1: int, height: int) -> tuple[int, in
     return x0, y0, x1, y1
 
 
-def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
-    """Crop, find the face, wipe the painted mouth and measure anchors for one keyed pose."""
+def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[float]] | None = None) -> dict[str, Any]:
+    """Crop, find the face, wipe the painted mouth (paper mouths) and measure anchors for one keyed pose. ``hint``
+    holds the pose's ``eyes`` and ``mouth`` points in % of ``image`` (``rig_hints``)."""
     if image.width * image.height > MAX_PIXELS:
         raise FlatRigError("image_too_large", "Use a pose image up to 16 megapixels")
-    figure = crop_figure(image)
+    cleaned, crop = _figure_box(image)
+    figure = cleaned.crop(crop)
     pixels = np.array(figure)
     rgb, alpha = pixels[..., :3], pixels[..., 3]
-    eyes_box, eyes_mask = find_eyes(rgb, alpha)
+    near = {key: (min(max(point[0] / 100 * image.width - crop[0], 0), figure.width - 1),
+                  min(max(point[1] / 100 * image.height - crop[1], 0), figure.height - 1)) for key, point in (hint or {}).items()}
+    eyes_box, eyes_mask = find_eyes(rgb, alpha, near=near.get("eyes"))
     ex0, ey0, ex1, ey1 = eyes_box
     covered = eyes_covered(rgb, alpha, eyes_box, eyes_mask)
+    realistic = not style["screen"] and face_realistic(rgb, alpha, eyes_box, eyes_mask)
+    # A realistic face's mouth is looked for and placed from the eyes' whole whites; a cartoon's as it always was.
+    face_eyes = eye_extent(rgb, alpha, eyes_box, eyes_mask) if realistic else eyes_box
+    ink = style.get("mouthStyle") == "ink"
     try:
-        mouth_box, mouth_mask, background = find_mouth(rgb, alpha, eyes_box, style["screen"])
-        grow = max(4, int((ey1 - ey0) * 0.08))
-        rigged, wiped = wipe(figure, mouth_mask, grow, skin_textured(rgb, alpha, eyes_box)), True
+        mouth_box, mouth_mask, background = find_mouth(rgb, alpha, face_eyes, style["screen"], realistic=realistic,
+                                                       near=near.get("mouth"))
+        found, colour = True, ink_colour(rgb, mouth_mask, background)
+        if ink:
+            # The painted mouth is the rest shape: nothing is wiped.
+            rigged, wiped = figure, False
+        else:
+            grow = max(4, int((ey1 - ey0) * 0.08))
+            rigged, wiped = wipe(figure, mouth_mask, grow, skin_textured(rgb, alpha, eyes_box)), True
         mx, my = (mouth_box[0] + mouth_box[2]) / 2, (mouth_box[1] + mouth_box[3]) / 2
+        if ink:
+            # The openings hang from the painted line itself, not from the middle of its box (a slanted line's box
+            # is tall).
+            my = float(np.median(np.nonzero(mouth_mask)[0]))
     except FlatRigError as error:
         if error.code != "mouth_not_found":
             raise
-        # Under the eyes, where a cutout mouth sits: 0.19–0.31 of the eye-pair width on the six
-        # production characters, so its median; nothing painted to wipe.
-        rigged, wiped, mouth_box = figure, False, None
-        mx, my = (ex0 + ex1) / 2, ey1 + (ex1 - ex0) * 0.28
+        rigged, wiped, found, colour, mouth_box = figure, False, False, None, None
+        if near.get("mouth"):
+            mx, my = near["mouth"]
+        elif realistic:
+            mx, my = (face_eyes[0] + face_eyes[2]) / 2, (face_eyes[1] + face_eyes[3]) / 2 + (face_eyes[2] - face_eyes[0]) * REALISTIC_MOUTH
+        else:
+            # Under the eyes, where a cutout mouth sits: 0.19–0.31 of the eye-pair width on the six
+            # production characters, so its median; nothing painted to wipe.
+            mx, my = (ex0 + ex1) / 2, ey1 + (ex1 - ex0) * 0.28
         ring = alpha[ey1:min(alpha.shape[0], ey1 + (ey1 - ey0)), ex0:ex1] > 200
         background = np.median(rgb[ey1:min(alpha.shape[0], ey1 + (ey1 - ey0)), ex0:ex1][ring], axis=0) if ring.any() else np.array([200, 160, 130])
     width, height = rigged.size
     warnings = ["eyes_low"] if ey0 / height > 0.4 else []
-    if not wiped:
+    if not found:
         warnings.append("mouth_not_found")
-    elif stray_marks(np.array(rigged)[..., :3], alpha, eyes_box, mouth_box):
+    elif wiped and stray_marks(np.array(rigged)[..., :3], alpha, face_eyes, mouth_box):
         warnings.append("stray_mark")
-    sprite_width = (ex1 - ex0) * style["mouth_scale"]
+    if ink:
+        # The sprite holds the painted mouth (or, with none found, half the eye pair) in INK_SPAN of its width.
+        sprite_width = (mouth_box[2] - mouth_box[0] if found else (ex1 - ex0) * 0.5) / INK_SPAN
+    else:
+        sprite_width = (ex1 - ex0) * style["mouth_scale"]
     openings = eye_openings(rgb, alpha, eyes_mask, background, style["screen"])
     ys, xs = np.nonzero(openings)
     # The whole openings, not just the whites: an anime iris and its lid reach past them.
@@ -840,7 +1198,8 @@ def rig_pose(image: Image.Image, style: dict[str, Any]) -> dict[str, Any]:
     pad = int((oy1 - oy0) * 0.25)
     bx0, by0, bx1, by1 = _blink_box(max(0, ox0 - pad), max(0, oy0 - pad), min(width, ox1 + pad), min(height, oy1 + pad), height)
     return {
-        "image": rigged, "before": figure, "width": width, "height": height, "wiped": wiped, "blinks": not covered,
+        "image": rigged, "before": figure, "width": width, "height": height, "wiped": wiped, "found": found,
+        "realistic": realistic, "ink": colour, "skin": tuple(int(v) for v in background), "blinks": not covered,
         "warnings": warnings,
         "mouth": _anchor(mx, my, sprite_width * SPRITE[1] / SPRITE[0], width, height),
         "eyes": _anchor((bx0 + bx1) / 2, (by0 + by1) / 2, by1 - by0, width, height),
@@ -862,11 +1221,13 @@ def place(base: Image.Image, overlay: Image.Image, anchor: dict[str, float]) -> 
 
 
 def _face_crop(image: Image.Image, rig: dict[str, Any]) -> Image.Image:
-    """The face from the eyes to below the mouth, where a wrong placement or a leftover stroke shows."""
+    """The face from the eyes to below the mouth, where a wrong placement or a leftover stroke shows. A realistic
+    face's mouth is lower than the usual crop reaches: the crop then goes down to it."""
     x0, y0, x1, y1 = rig["eyes_box"]
     width, span = x1 - x0, max(y1 - y0, (x1 - x0) * 0.55)
+    mouth = image.height / 2 + rig["mouth"]["offsetY"] * max(image.size) / 100 if rig.get("mouth") else 0
     return image.crop((max(0, int(x0 - width * 0.25)), max(0, int(y0 - span * 0.2)),
-                       min(image.width, int(x1 + width * 0.25)), min(image.height, int(y1 + span * 1.7))))
+                       min(image.width, int(x1 + width * 0.25)), min(image.height, int(max(y1 + span * 1.7, mouth + span * 0.5)))))
 
 
 def _tile(frame: Image.Image, height: int, warn: bool) -> Image.Image:
@@ -961,12 +1322,49 @@ def _original_sources(kit: dict[str, Any]) -> dict[str, str]:
     return {}
 
 
+def _saved_hints(kit: dict[str, Any]) -> dict[str, dict[str, list[float]]]:
+    """The hints the last rig used, so a re-rig places each pose the same way. A provenance edited by hand into
+    something that is not hints is ignored rather than blocking every later rig."""
+    for entry in reversed(kit.get("provenance") or []):
+        if entry.get("method") == "flat-rig":
+            try:
+                return {pose: hint for pose, hint in rig_hints(entry.get("hints")).items() if hint}
+            except FlatRigError:
+                return {}
+    return {}
+
+
+def _kit_hints(kit: dict[str, Any], hints: Any) -> dict[str, dict[str, list[float]]]:
+    """The saved hints with this call's on top: a pose's hints replace its saved ones, and null or {} clears them."""
+    asked = rig_hints(hints)
+    poses = {"base", *(kit.get("poses") or {})}
+    unknown = sorted(pose for pose in asked if pose not in poses)
+    if unknown:
+        raise FlatRigError("unknown_pose", f"Hints name poses the character does not have: {', '.join(unknown)}")
+    merged = {pose: hint for pose, hint in _saved_hints(kit).items() if pose in poses}
+    for pose, hint in asked.items():
+        if hint:
+            merged[pose] = hint
+        else:
+            merged.pop(pose, None)
+    return merged
+
+
+def _kit_mouths(rigs: dict[str, dict[str, Any]], look: dict[str, Any]) -> dict[str, Image.Image]:
+    """Paper mouths, or ink mouths in the base pose's painted ink (another pose's when the base has no painted mouth)."""
+    if look.get("mouthStyle") != "ink":
+        return {state: draw_mouth(state, look) for state in STATES}
+    painted = [rig for pose, rig in sorted(rigs.items(), key=lambda item: item[0] != "base") if rig.get("ink")]
+    ink, skin = (painted[0]["ink"], painted[0]["skin"]) if painted else (INK, (200, 160, 130))
+    return {state: draw_ink_mouth(state, ink, skin) for state in STATES}
+
+
 def _overlay(kit_id: str, name: str, label: str, file: str, workspace: str) -> dict[str, Any]:
     return {"id": f"{kit_id}-{label}"[:120], "name": f"{name} {label}"[:240], "source": _url(file, workspace),
             "kind": "overlay", "alphaStatus": "transparent", "reviewState": "approved", "workspace": workspace}
 
 
-def _rig_poses(kit: dict[str, Any], style, workspace: str, workspace_dir: str, pose_ids):
+def _rig_poses(kit: dict[str, Any], style, workspace: str, workspace_dir: str, pose_ids, hints=None):
     originals = _original_sources(kit)
     assets = {"base": kit.get("base"), **(kit.get("poses") or {})}
     wanted = list(pose_ids) if pose_ids else [pose for pose, asset in assets.items() if asset]
@@ -982,22 +1380,24 @@ def _rig_poses(kit: dict[str, Any], style, workspace: str, workspace_dir: str, p
         sources[pose] = originals[pose] if rigged and originals.get(pose) else current
         with Image.open(_workspace_file(sources[pose], workspace, workspace_dir)) as image:
             try:
-                rigs[pose] = rig_pose(image, style)
+                rigs[pose] = rig_pose(image, style, (hints or {}).get(pose))
             except FlatRigError as error:
                 raise FlatRigError(error.code, f"Pose {pose}: {error}", error.status) from error
     return rigs, sources
 
 
 def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revision: int,
-                  style: Any = None, pose_ids: list[str] | None = None) -> dict[str, Any]:
-    """Rig the kit's base and poses, write the images to the workspace and save the kit."""
+                  style: Any = None, pose_ids: list[str] | None = None, hints: Any = None) -> dict[str, Any]:
+    """Rig the kit's base and poses, write the images to the workspace and save the kit. ``hints`` (``rig_hints``)
+    are kept in the provenance with the ones saved before, and a later rig reuses them."""
     library = read_character_kit_library(workspace_dir)
     kit = copy.deepcopy((library.get("kits") or {}).get(kit_id))
     if kit is None:
         raise FlatRigError("character_not_found", "Character not found", 404)
     look = rig_style(style)
-    rigs, sources = _rig_poses(kit, look, workspace, workspace_dir, pose_ids)
-    mouths = {state: draw_mouth(state, look) for state in STATES}
+    placed = _kit_hints(kit, hints)
+    rigs, sources = _rig_poses(kit, look, workspace, workspace_dir, pose_ids, placed)
+    mouths = _kit_mouths(rigs, look)
     name = kit.get("name") or kit_id
     kit["mouth"] = {state: _overlay(kit_id, name, f"mouth-{state}", _save(mouths[state], workspace_dir, f"kit-{kit_id}-mouth-{state}"), workspace)
                     for state in STATES}
@@ -1018,15 +1418,18 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     kit["style"] = "cutout"
     warnings = _kit_warnings(rigs)
     sheet = _save(review_sheet(rigs, mouths), workspace_dir, f"kit-{kit_id}-rig-review")
-    unwiped = sorted(pose for pose, rig in rigs.items() if not rig["wiped"])
+    # Poses whose painted mouth was not found (with ink mouths nothing is wiped on purpose).
+    unwiped = sorted(pose for pose, rig in rigs.items() if not rig["found"])
     kit["provenance"] = [*(kit.get("provenance") or []), {
-        "method": "flat-rig", "sources": {**_original_sources(kit), **sources}, "style": look,
+        "method": "flat-rig", "sources": {**_original_sources(kit), **sources}, "style": look, "hints": placed,
         "unwipedPoses": unwiped, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }]
     saved = patch_character_kit(workspace_dir, kit_id, kit, base_revision=base_revision)
     return {
         "revision": saved.get("revision"), "character": saved["kits"][kit_id],
         "review": _url(sheet, workspace), "unwipedPoses": unwiped, "warnings": warnings,
-        "poses": {pose: {"mouth": rig["mouth"], "eyes": rig["eyes"], "wiped": rig["wiped"], "blinks": rig["blinks"]}
+        "poses": {pose: {"mouth": rig["mouth"], "eyes": rig["eyes"], "wiped": rig["wiped"], "mouthFound": rig["found"],
+                         "face": "realistic" if rig["realistic"] else "cartoon", "blinks": rig["blinks"],
+                         **({"hints": placed[pose]} if pose in placed else {})}
                   for pose, rig in rigs.items()},
     }
