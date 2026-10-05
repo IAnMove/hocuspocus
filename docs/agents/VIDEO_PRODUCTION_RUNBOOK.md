@@ -617,3 +617,15 @@ canvas of 1280×704. A deterministic render that fails reports the end of the
 ffmpeg log and keeps the full log on the pipeline. Accepting a reviewed test
 clip records the person who requested that acceptance, the channel, and the
 attestation note. The review checkbox is not filled in by playback.
+
+## Publishing a reviewed take with an exact resource name
+
+A script can retain its original resource names after an audio or image retake.
+Use `assets.upload` with `source`, `copy_to_workspace: true` and
+`destination_filename` in the same workspace. The extension must match the
+source. To replace an existing resource, supply its current
+`expected_destination_sha256`; a stale or missing hash returns
+`destination_conflict` without replacing it. Reuse the same `intent_id` on a
+transport retry. The source remains available, bytes are copied without media
+conversion, and a generation sidecar retains provenance with the destination
+asset name. This is a CPU operation and downloads no models.
