@@ -3,7 +3,7 @@
 ``series.guide`` returns ``shared/series_agent_guide.md`` (how to work with the
 tools, the shot format, the house conventions, the pitfalls) and a bible built
 from the live data: characters with their kits, poses and voices, locations
-with variants, anchors and plates, the music and sound files in the
+with variants, anchors, set layers and plates, the music and sound files in the
 workspace, and the episodes so far. ``compact_episode`` gives one episode
 without the render history noise, for copying an earlier episode's style.
 """
@@ -44,7 +44,7 @@ def _location(location: dict[str, Any]) -> dict[str, Any]:
     entry = {"id": location["id"], "name": location.get("name"), "description": location.get("description"),
              "variants": [variant.get("id") for variant in location.get("variants") or [] if variant.get("id")],
              "hasImage": bool(location.get("referenceAssetIds") or layout.get("backgroundAssetId") or layout.get("plateAssetId"))}
-    for key in ("homes", "anchors"):
+    for key in ("homes", "anchors", "layers", "castDepth"):
         if layout.get(key):
             entry[key] = layout[key]
     if layout.get("plateAssetId"):

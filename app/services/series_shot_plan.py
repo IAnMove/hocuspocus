@@ -11,7 +11,9 @@ optional ``layout2d`` block overrides any of it explicitly:
      "music": {"file": "mus-moral.wav", "volume": 0.45, "start": 0}, "voiceRoom": "cathedral"}
 
 Locations may carry ``layout2d.homes`` (x % per character, for continuity
-between shots) and ``layout2d.backgroundAssetId``. ``series.soundDesign``
+between shots), ``layout2d.backgroundAssetId`` and ``layout2d.layers``: images
+and looping videos at a depth behind or in front of the cast, which a camera
+push moves by depth (``series_layers``; a shot's own list replaces them). ``series.soundDesign``
 holds a stinger for the first shot of each scene and an ambience per
 location (laid by the episode assembly instead when ``ambienceMode`` is
 ``"episode"``: ``series_ambience``), and the room each location's voices are
@@ -28,6 +30,7 @@ from urllib.parse import quote
 
 from services import series_shot_extras as extras
 from services.series_ambience import ambience_mode
+from services.series_layers import layer_kind, layout_layers, shot_layers
 from services.series_voice_rooms import check_room
 from services.speech_language import speech_language_code
 
@@ -119,14 +122,15 @@ def _layout_list(value: dict, key: str, limit: int, normalize: Any) -> dict[str,
 
 
 def normalize_layout2d(value: Any) -> dict[str, Any] | None:
-    """The editable 2D plan of a shot; unknown keys and bad values are dropped (an unknown ``voiceRoom`` is refused)."""
+    """The editable 2D plan of a shot; unknown keys and bad values are dropped (an unknown ``voiceRoom`` or a bad layer
+    is refused). ``layers: []`` is kept: it turns the location's layers off for this shot."""
     if not isinstance(value, dict):
         return None
     layout = {**_choice(value, "framing", FRAMINGS), **_choice(value, "camera", ("static", "push")),
               **_layout_list(value, "cast", 8, _cast_entry), **_layout_card(value.get("card")),
               **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music")),
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
-              **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value)}
+              **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value), **layout_layers(value, "layout2d")}
     return layout or None
 
 
@@ -320,6 +324,25 @@ def plan_props(series: dict[str, Any], shot: dict[str, Any], framing: str, focus
     return props
 
 
+def plan_layers(series: dict[str, Any], shot: dict[str, Any], framing: str, focus: float, workspace: str) -> dict[str, Any]:
+    """The set's layers placed on the framed background, with the cast's depth, or nothing (the spec stays as it was)."""
+    location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None)
+    layers, cast_depth = shot_layers(location, shot)
+    zoom = BACKGROUND_ZOOM.get(framing, 1.0)
+    planned = []
+    for index, layer in enumerate(layers):
+        found = _asset_url(series, layer["assetId"], workspace) if layer.get("assetId") else (
+            f"/api/v1/file/{quote(layer['file'])}?workspace={quote(workspace)}", layer_kind(layer["file"]))
+        if not found:
+            continue
+        x, y = background_point(framing, focus, layer["x"] / 100, layer["y"] / 100)
+        planned.append({"id": f"layer-{index + 1}", "name": f"{'Front' if layer['front'] else 'Back'} layer {index + 1}",
+                        "source": found[0], "kind": found[1], "x": x, "y": y, "scale": round(layer["scale"] * zoom, 4),
+                        "opacity": layer["opacity"], "depth": layer["depth"], "front": layer["front"],
+                        **({"drift": layer["drift"]} if layer.get("drift") else {})})
+    return {"layers": planned, "castDepth": cast_depth} if planned else {}
+
+
 def _disclaimer_texts(title: str, body: str, duration: float) -> list[dict[str, Any]]:
     fade = {"preset": "fade", "duration": 0.5}
     texts = [_text("card-title", title, 0.3, duration - 0.3, 30, 8, font="condensed", enter=fade, exit=fade)] if title else []
@@ -418,6 +441,7 @@ def _with_set(spec: dict[str, Any], series: dict[str, Any], shot: dict[str, Any]
     props = plan_props(series, shot, spec["framing"], focus, workspace)
     if props:
         spec["props"] = props
+    spec.update(plan_layers(series, shot, spec["framing"], focus, workspace))
     return spec
 
 

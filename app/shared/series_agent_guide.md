@@ -14,7 +14,8 @@ use only those ids and file names, never invent one.
      language (`generation.speech` with `qwen3_tts_voicedesign`, check with `qa.speech`) → `characters.save` with
      `voicesByLanguage` → add the character to the series (`series.update`) with `voiceProfile.characterKitRef`;
    - location: `generation.image` 1920x1088 in the series style → `series.update` (new location) → `series.asset.import`
-     (owner_type location, reference_role environment);
+     (owner_type location, reference_role environment); for depth, also make its planes as separate keyed images (a
+     pillar or a bed frame in front, columns behind the cast) and list them in its `layout2d.layers` (below);
    - 3D background: `world3d.templates.list` → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
    After changing characters or locations, `series.canon.approve` (episodes freeze the approved canon).
 3. **Write the episode:** `series.episode.from_script` with the whole script (format below), every language in the
@@ -78,6 +79,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
    "framing": "two", "camera": "static",
    "cast": [{"characterId": "ana", "poseId": "base", "x": 32}, {"characterId": "leo", "poseId": "wave", "x": 68, "enterFrom": "right"}],
    "props": [{"file": "prop-stapler.png", "x": 12, "y": 74, "scale": 0.2}],
+   "layers": [{"file": "fg-plant.png", "depth": 0.95, "front": true, "x": 8, "y": 62, "scale": 0.9}],
    "music": {"file": "mus-bumper.wav", "volume": 0.6, "start": 0},
    "card": {"kind": "title", "title": "SERIES", "body": "Episode 3 · Title"}, "voiceRoom": "cathedral"}}
 ```
@@ -93,6 +95,18 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - **props:** a workspace image (`file`, keyed with `studio.key`) or a series asset (`assetId`), at `x`/`y` (%) and
   `scale` (fraction of the frame height), or on a location `anchor` from the bible (it then stands on that point in
   every framing).
+- **layers (a set in depth):** a location's `layout2d.layers` (`series.update`) are drawn over its background in
+  every 2D shot there, at most 8: `{"assetId" | "file", "depth": 0.3, "front": false, "opacity": 1, "x": 50, "y": 50,
+  "scale": 1, "drift": 0}`. `depth` 0 is the background's far plane, 1 the nearest; the cast stands at `castDepth`
+  (default 0.6, on the location or the shot). `front: true` draws the layer in front of the cast (a pillar, a candle,
+  a bed frame, fog in the foreground; default depth 0.9); the others go behind it, farthest first (default 0.3). Use
+  PNGs with alpha (`studio.key`) or looping mp4/webm videos. `x`/`y` (%) put the layer's centre on the background, so
+  it keeps its spot in every framing; `scale` is a fraction of the frame height (1 fills the frame with a
+  frame-sized image). With layers a `push` moves every plane by its depth: the far wall grows less than the cast,
+  the pillar in front more, so the push reads as depth. `drift` (frame px per second, negative to the left) slides a
+  layer on its own, also in a static shot: fog or smoke, with a `scale` of 1.2 or more so its edge stays out of the
+  frame. A shot's `layers` replace its location's (in a script, `"layers"` and `"castDepth"` on the shot) and `[]`
+  turns them off. A bad layer is refused. Changing a location's layers renders again only its 2D shots that draw them.
 - **music:** one music track per shot (a bumper at the start of a scene, a theme); a language can have its own file.
 - **sfx:** sound effects at a line's `start`/`end` (`line`, `anchor`, `offset` s) or at a second (`at`), `volume`
   0–1. Files from the bible only.

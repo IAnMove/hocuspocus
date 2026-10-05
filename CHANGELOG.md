@@ -6,6 +6,26 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series Lab 2D shots can now have a set in layers, so a slow push reads as depth.
+Before, a shot had one background and the camera push scaled the whole frame,
+which looked flat. A location's `layout2d.layers` holds up to 8 images with
+alpha or looping mp4/webm videos (`assetId` or `file`). Each one has a `depth`
+from 0 (the background's far plane) to 1 (nearest), plus `front`, `opacity`,
+`x`/`y` and `scale`. Layers with `front: true` (a pillar, a candle, a bed frame,
+fog in the foreground) are drawn in front of the cast. The others go behind it,
+above the background, farthest first. `x`/`y` place a layer on the background,
+so it keeps its spot when a tighter framing zooms and pans the background. With
+layers, the push moves every plane by its depth. The far wall grows less than
+the cast and a near pillar grows more, linearly in depth. The cast stands at
+`castDepth` (default 0.6). `drift` (frame pixels per second) slides a layer on
+its own, which suits fog. A shot's own `layout2d.layers` replace its location's,
+and `[]` turns them off. The same keys work on a `from_script` shot. A bad layer
+is refused when it is saved or checked. The renderer has a new layer flag,
+`parallaxZoom`, which lets a layer take only its parallax share of the camera
+zoom; layers without it render as before. A shot without layers compiles to a
+byte-identical document and keeps its take digest. When a location's layers
+change, only its 2D shots that draw them are marked out of date.
+
 A new collection of screen effects, `cinematic` («Luz de cine y película»),
 grades the whole frame for candle-lit, tenebrist scenes. `candlelight` («Luz de
 vela») is a warm key light from a flame at `x`/`y`: the picture is lit by colour

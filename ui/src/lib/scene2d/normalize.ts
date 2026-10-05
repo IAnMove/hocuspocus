@@ -163,6 +163,11 @@ function normalizeVisuals(raw: RawLayer, isCamera: boolean, isEffect: boolean) {
   }
 }
 
+/** ``parallaxZoom`` is kept only as ``true`` on a visual layer; anything else is dropped. */
+function parallaxZoomField(raw: RawLayer, isCamera: boolean): { parallaxZoom?: true } {
+  return !isCamera && raw.parallaxZoom === true ? { parallaxZoom: true } : {}
+}
+
 function layerPath(rawLayer: RawLayer) {
   const path = parsePath(rawLayer.animation?.path)
   return path ? { path } : {}
@@ -177,9 +182,10 @@ function layerExtras(rawLayer: RawLayer) {
   return { ...(sequence ? { sequence } : {}), ...(beatPulse ? { beatPulse } : {}) }
 }
 
-function layerWithoutFocus(raw: RawLayer): Omit<RawLayer, 'focus'> {
+function layerWithoutFocus(raw: RawLayer): Omit<RawLayer, 'focus' | 'parallaxZoom'> {
   const rest = { ...raw }
   delete rest.focus
+  delete rest.parallaxZoom
   return rest
 }
 
@@ -205,6 +211,7 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
     faceBinding: normalizeFaceBinding(rawLayer.faceBinding),
     relationship: normalizeRelationship(rawLayer, isCamera, context.visualIds),
     ...normalizeVisuals(rawLayer, isCamera, isEffect),
+    ...parallaxZoomField(rawLayer, isCamera),
     transform,
     animation: {
       ...rawLayer.animation,

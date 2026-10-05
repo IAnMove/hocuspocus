@@ -1,7 +1,8 @@
 // Headless Series shot compiler. The server plans a shot (framing, cast, recorded lines) and this
 // module builds the editable Video 2D document with the editor's own Character Kit mounting and
 // mouth compiler. It does not save, export or fetch. Layout and limited animation come from the
-// "Uncanny Valley" production, where they were tuned by eye on a full episode.
+// "Uncanny Valley" production, where they were tuned by eye on a full episode. A layered set
+// (series_layers.py) gives the background and each layer its share of the camera push by depth.
 import { mountCharacterKitLayers, type CharacterKit } from '../src/lib/characterKit.ts'
 import { rebuildCutoutDialogueLayers } from '../src/lib/cutoutDialogue.ts'
 import { parseMouthCues } from '../src/features/scene3d/speech/track.ts'
@@ -25,10 +26,22 @@ export type LineSpec = {
   cues?: unknown; driver?: string; visible?: boolean; volume?: number; name?: string
 }
 export type PropSpec = { id: string; name: string; source: string; x: number; y: number; scale: number; z?: number }
+/** A layer of the set, placed on the framed background by the planner (``series_shot_plan.plan_layers``). */
+export type SetLayerSpec = {
+  id: string; name: string; source: string; kind: 'image' | 'video'; x: number; y: number; scale: number; opacity?: number
+  /** 0 is the far plane of the background (moves least), 1 the nearest. */
+  depth: number
+  /** Drawn in front of the cast (a pillar, a candle, fog in the foreground); otherwise behind it, above the background. */
+  front?: boolean
+  /** Idle drift in frame pixels per second, negative to the left (fog, smoke). */
+  drift?: number
+}
 export type ShotSpec = {
   name: string; workspace: string; width: number; height: number; fps: 24 | 30 | 60; duration: number
   framing: Framing; background?: { source: string; kind: 'image' | 'video'; focusX?: number }
   cast: CastSpec[]; lines: LineSpec[]; props?: PropSpec[]
+  /** Set layers; with any, the background and the layers respond to the camera by depth, the cast standing at castDepth. */
+  layers?: SetLayerSpec[]; castDepth?: number
   audioTracks?: NonNullable<Scene['audioTracks']>; texts?: Scene['texts']; sfx?: Scene['sfx']; finish?: Scene['finish']
   camera?: 'static' | 'push'; narrative?: Scene['narrative']
 }
@@ -48,6 +61,10 @@ const FEET = 94
 /** Medium shots and close-ups cut the body below the frame: the figure must end past this line (% of frame height), so not even the shoes show. */
 const CROP_LINE = 112
 export const BACKGROUND_ZOOM: Record<Framing, number> = { wide: 1, two: 1.12, medium: 1.28, close: 1.5, insert: 1, title: 1 }
+/** Camera response of the base background, the far plane of a set (depth 0). The cast takes the full move (1). */
+export const FAR_PARALLAX = 0.2
+/** Depth of the cast among a set's layers when neither the location nor the shot gives one. */
+export const CAST_DEPTH = 0.6
 
 function poseAsset(kit: CharacterKit, poseId: string) {
   const asset = poseId === 'base' ? kit.base : kit.poses[poseId]
@@ -113,7 +130,9 @@ export function perchTransforms(size: { width: number; height: number }, framing
     prop: { x, y: round(propY), scale: round(propScale) } }
 }
 
-export function backgroundLayer(background: NonNullable<ShotSpec['background']>, framing: Framing, duration: number): SceneLayer {
+/** The full-frame background, zoomed and panned by the framing. In a layered set it is the far plane (depth 0) and
+ * takes only its parallax share of the camera zoom. */
+export function backgroundLayer(background: NonNullable<ShotSpec['background']>, framing: Framing, duration: number, layered = false): SceneLayer {
   const zoom = BACKGROUND_ZOOM[framing]
   const focus = background.focusX ?? 50
   const span = 50 * (zoom - 1)
@@ -121,10 +140,36 @@ export function backgroundLayer(background: NonNullable<ShotSpec['background']>,
   const transform = { x: round(x), y: 50, scale: zoom, opacity: 1, rotation: 0 }
   return {
     id: 'background', name: 'Background', type: background.kind, source: background.source, visible: true, locked: false, z: 0,
-    fill: true, parallax: 0.2, transform,
+    fill: true, parallax: FAR_PARALLAX, transform,
     animation: { start: { ...transform }, end: { ...transform }, duration, curve: 'linear',
       ...(background.kind === 'video' ? { loop: true, offset: 0, speed: 1 } : {}) },
+    ...(layered ? { parallaxZoom: true } : {}),
   } as SceneLayer
+}
+
+/** Camera response (pan and zoom) of a set layer: linear in depth, the background's at 0 and the cast's (1) at its
+ * own depth, at most 2. A push grows a layer at depth d by (zoom - 1) * this, so far layers grow less than the cast. */
+export function depthParallax(depth: number, castDepth = CAST_DEPTH): number {
+  return round(Math.min(2, FAR_PARALLAX + (1 - FAR_PARALLAX) * depth / Math.max(0.1, castDepth)))
+}
+
+/** One set layer at its depth's share of the camera move; drift slides it on its own (frame px per second). */
+export function setLayer(layer: SetLayerSpec, z: number, duration: number, width: number, castDepth: number): SceneLayer {
+  const transform = { x: layer.x, y: layer.y, scale: layer.scale, opacity: layer.opacity ?? 1, rotation: 0 }
+  const end = layer.drift ? { ...transform, x: round(layer.x + layer.drift / width * 100 * duration) } : transform
+  return {
+    id: layer.id, name: layer.name, type: layer.kind, source: layer.source, visible: true, locked: false, z: round(z), fill: false,
+    parallax: depthParallax(layer.depth, castDepth), parallaxZoom: true, transform,
+    animation: { start: { ...transform }, end: { ...end }, duration, curve: 'linear',
+      ...(layer.kind === 'video' ? { loop: true, offset: 0, speed: 1 } : {}) },
+  } as SceneLayer
+}
+
+/** The set's layers on one side of the cast, farthest first, from z ``from`` in steps of ``step``. */
+function setLayers(shot: ShotSpec, front: boolean, from: number, step: number): SceneLayer[] {
+  const castDepth = shot.castDepth ?? CAST_DEPTH
+  return (shot.layers ?? []).filter(layer => Boolean(layer.front) === front).sort((a, b) => a.depth - b.depth)
+    .map((layer, index) => setLayer(layer, from + index * step, shot.duration, shot.width, castDepth))
 }
 
 function key(id: string, time: number, pose: Pose, curve: SceneKeyframe['curve'] = 'linear'): SceneKeyframe {
@@ -241,12 +286,16 @@ function propLayer(prop: PropSpec, duration: number): SceneLayer {
     parallax: 1, transform, animation: { start: { ...transform }, end: { ...transform }, duration, curve: 'linear' } } as SceneLayer
 }
 
-/** One editable Video 2D shot: background, props, mounted cast, recorded lines with mouths, camera and finish. */
+/** One editable Video 2D shot: background, set layers behind the cast, props, mounted cast, set layers in front of it,
+ * recorded lines with mouths, camera and finish. */
 export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: ShotSpec): Scene {
   const viewport = { width: shot.width, height: shot.height }
   const aspect = shot.width / shot.height
   const layers: SceneLayer[] = []
-  if (shot.background) layers.push(backgroundLayer(shot.background, shot.framing, shot.duration))
+  const layered = Boolean(shot.layers?.length)
+  if (shot.background) layers.push(backgroundLayer(shot.background, shot.framing, shot.duration, layered))
+  // Behind the cast and the props (z 8), above the background (z 0).
+  layers.push(...setLayers(shot, false, 1, 0.5))
   for (const prop of shot.props ?? []) layers.push(propLayer(prop, shot.duration))
   const mouthIds = new Map<string, string[]>()
   shot.cast.forEach((cast, index) => {
@@ -265,6 +314,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     mouthIds.set(cast.kitId, mounted.mouthIds)
     layers.push(...mounted.layers)
   })
+  if (layered) layers.push(...setLayers(shot, true, Math.max(0, ...layers.map(layer => layer.z)) + 1, 1))
   if (shot.camera === 'push') layers.push(cameraLayer(shot.duration))
   const dialogueBeats = shot.lines.map(line => lineBeat(line, mouthIds.get(line.kitId) ?? []))
   return {
