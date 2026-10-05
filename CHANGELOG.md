@@ -6,6 +6,25 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Long jobs no longer wait for a state that cannot come. A server render or a
+production whose job file says «running» after a restart is marked
+`interrupted` the first time anyone looks at it, and «Resume» continues it
+(the recording of each line is reused, only what is missing is spoken again);
+a new render of the same episode is no longer refused as «already running».
+A shot whose export was interrupted, discarded or forgotten by the server is
+asked for again under a new intent, up to three times, instead of waiting
+forever. The headless renderer is watched by its frames, not by the clock:
+every frame it writes now moves the task's progress bar, and when no new
+frame arrives for ten minutes (`HOCUS_RENDER_STALL_SECONDS`) the browser and
+its process group are killed and the export fails with that reason; its
+output goes to `browser.log` in the staging folder instead of a pipe nobody
+drained. A production whose cut failed recuts once per run, so «Resume» also
+recovers a failed assembly, and a render the server forgot is started again.
+`series.episode.from_script` with an `episode_id` now replaces the episode:
+shots the script no longer has are removed (`removedShots`) and a shot whose
+lines, cast, location or layout changed starts without takes instead of
+keeping a video of other content (`replaceShots` on `series.episode.update`).
+
 Intermediate files are released when their job is done. A Video 2D/3D export
 drops its frames and audio mix when the MP4 is published, a completed
 production drops the copies it put in uploads, the series render drops each raw
