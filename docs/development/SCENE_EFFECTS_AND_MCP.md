@@ -5,8 +5,8 @@
 Video 2.5D and Video 3D share **Scene SFX → Apply SFX showcase template**.
 The template adds a 90-second track demonstrating 30 effects, three seconds each:
 sparks, explosion, fireworks, confetti, rain, snow, embers, smoke, fog, bubbles,
-stars, portal, shockwave, lightning, speed lines, scanline, aurora and laser; plus magic circle, arcane missiles, summoning gate, black hole, ice burst, meteor shower, lightning storm, anime aura, energy orb, energy beam, sword slash and manga impact.
-The separate magic/anime template demonstrates the 12 additions in 36 seconds.
+stars, portal, shockwave, lightning, speed lines, scanline, aurora and laser; plus magic circle, arcane missiles, summoning gate, black hole, ice burst, meteor shower, lightning storm, anime aura, energy orb, energy beam, sword slash, manga impact, impact flash and inverted impact frame.
+The separate magic/anime template demonstrates the 14 additions in 42 seconds.
 It preserves existing layers, actors, camera and voices, replaces the SFX track,
 and extends the scene if necessary. An empty 2D scene gets the bundled stage SVG.
 Save the resulting scene JSON to reuse it with other assets.
@@ -14,6 +14,23 @@ Save the resulting scene JSON to reuse it with other assets.
 Each cue has start/end, position in screen percent, size, intensity, rotation, color, seed,
 and optional sound/volume. These are canvas overlays in screen space, including
 in the 3D editor; they do not simulate volumetric particles or physical collisions.
+
+`impact_flash` and `impact_invert` are anime impact frames. They cover the whole
+picture whatever their size: `x`/`y` place the vanishing point of the focus lines,
+`size` the clear circle around it, `intensity` the number of lines. A flash is a
+frame in `color` (white by default), then that frame crossed by ink lines, then a
+release; the inverted frame is the negative of the picture, then the negative with
+lines in `color`. Give them 2–4 frames (`end - start` = frames / fps, 0.083–0.167 s
+at 24 fps). The negative needs the picture under it: exports paint over the frame,
+and the Video 3D and Video 2D previews copy the stage while it is live.
+`speedlines` uses `intensity` for the number and weight of its lines; 1 keeps the
+original 65 hairlines.
+
+Video 3D can also paint cues behind the world: `screenBackdrop`
+(`{"color": "#1c2f86", "sfx": [<cue>, ...]}`) is a flat colour plus the same cues,
+drawn as the frame background, so radial `speedlines` there are focus lines behind
+the characters. An image slot with `surface: "environment"` is drawn first and the
+cues over it. Every object in the world, flat cutouts included, stays in front.
 
 Video 3D also stores a separate `worldSfx` track in meters. Portal, magic circle,
 summoning gate, lightning, energy beam, laser, orb, aura, missiles and shockwave

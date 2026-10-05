@@ -44,13 +44,21 @@ function explicitSlot(binding, index) {
 function bindSubject(document, config) {
   const current = document.slots.find(slot => slot.slot === 'subject_1' || slot.id === 'subject_1')
   if (!current) throw new Error('subject_slot_missing')
-  const next = { ...current, sourceUrl: config.subject, clip: config.clip ?? current.clip ?? null }
+  const next = { ...current, sourceUrl: config.subject, media: subjectMedia(config.subject, current.media), clip: config.clip ?? current.clip ?? null }
   if (config.motion !== undefined) next.motion = config.motion
   if (config.position !== undefined) next.position = config.position
   if (config.scale !== undefined) next.scale = config.scale
   if (config.rotationY !== undefined) next.rotationY = config.rotationY
   if (config.grounded !== undefined) next.grounded = config.grounded
   document.slots = document.slots.map(slot => slot.id === current.id ? next : slot)
+}
+
+/** A GLB in a cutout's slot becomes a model and a picture in a model's slot a cutout; anything else keeps the slot's media. */
+function subjectMedia(url, media) {
+  const path = String(url).split(/[?#]/)[0].toLowerCase()
+  if (/\.(glb|gltf)$/.test(path)) return 'model3d'
+  if (/\.(png|jpe?g|webp|gif|avif)$/.test(path) && media === 'model3d') return 'image'
+  return media
 }
 
 function applyRequestedFrame(document, config) {

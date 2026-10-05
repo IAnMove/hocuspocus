@@ -364,7 +364,8 @@
     "creative": "Creative",
     "perspective": "Perspectives",
     "animated": "Living backgrounds",
-    "pixel": "Pixel worlds"
+    "pixel": "Pixel worlds",
+    "anime": "Anime"
   },
   "setting": {
     "sea": "Sea",
@@ -3399,6 +3400,38 @@
     "cine-ultraviolet": {
       "title": "Ultraviolet",
       "description": "Look. A violet key and a close, slightly high face."
+    },
+    "anime-speedline-charge": {
+      "title": "Speed-line charge",
+      "description": "One figure over animated focus lines; the camera snaps from a medium shot to the face and shakes as it lands."
+    },
+    "anime-impact-frame": {
+      "title": "Impact frame",
+      "description": "A hit lands: two negative frames, three white frames with ink focus lines, a starburst and a camera shake that dies away."
+    },
+    "anime-snap-zoom": {
+      "title": "Snap zoom",
+      "description": "A full figure, then a crash push to the eyes in under a third of a second, with speed lines during the move."
+    },
+    "anime-sword-clash": {
+      "title": "Sword clash",
+      "description": "Two fighters rush in from both edges and cross at the centre: a slash, a shockwave, a white impact frame and a hard shake."
+    },
+    "anime-face-off": {
+      "title": "Face-off",
+      "description": "Two rivals stare each other down in close-up on the left and right halves, over dark focus lines; a slow push and a flash."
+    },
+    "anime-airship-flyby": {
+      "title": "Airship flyby",
+      "description": "A vehicle flies across a painted sky on a gentle arc while the camera tracks it and clouds stream past."
+    },
+    "anime-fleet-approach": {
+      "title": "Fleet approach",
+      "description": "Four copies of one vehicle break out of a cloud bank in a staggered formation and come at the camera."
+    },
+    "anime-eyecatch": {
+      "title": "Eyecatch",
+      "description": "A short scene-change card: the figure spins in from the distance over a graphic backdrop of focus lines and stars."
     }
   },
   "atmos": {

@@ -98,6 +98,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration`, `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` points right at 0, so a
   gun aimed left needs 180 with `x`/`y` just past the muzzle). Keep them off faces: a small burst to one side.
+  `impact_flash` (a white frame, then ink focus lines) and `impact_invert` (the negative of the frame) cover the
+  whole picture: give them 2–4 frames (`duration` 0.08–0.17 s at 24 fps) right on the hit.
 - **timing:** `intro` (silence before the first line, default 0.35 s), `gap` (between lines, 0.22), `tail` (after the
   last, 0.45). A line's `pauseBefore` adds a dramatic beat before it.
 - **card:** `title` (opening), `end` (credits), `disclaimer` (white text on dark; also used for news flashes). A card

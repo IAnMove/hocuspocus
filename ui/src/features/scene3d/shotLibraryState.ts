@@ -2,7 +2,7 @@ import { SCENE3D_TEMPLATES, type Scene3DTemplateFilter, type Scene3DTemplateId }
 import { TEMPLATE_SETTINGS, type TemplateSetting } from './templateFilters'
 
 /** Shot types in the library's sidebar, in the order people browse them. */
-export const LIBRARY_CATEGORIES = ['pixel', 'animated', 'perspective', 'creative', 'dark-fantasy', 'psx', 'action', 'cinema', 'drive', 'space', 'music', 'product'] as const satisfies readonly Scene3DTemplateFilter[]
+export const LIBRARY_CATEGORIES = ['pixel', 'animated', 'perspective', 'creative', 'dark-fantasy', 'psx', 'anime', 'action', 'cinema', 'drive', 'space', 'music', 'product'] as const satisfies readonly Scene3DTemplateFilter[]
 
 /** What the sidebar can show: recent shots, everything, one type, or the user's own scenarios. */
 export type LibraryCategory = 'recent' | 'all' | 'mine' | typeof LIBRARY_CATEGORIES[number]

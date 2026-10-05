@@ -500,6 +500,71 @@ def test_a_patch_adds_an_animated_prop_and_stretches_the_template_cues_to_the_ne
             patch_scene("studio", "w3d-0000abcd5678", workspace_dir, {"bindings": [bad]}, 4)
 
 
+ANIME_IDS = ["anime-speedline-charge", "anime-impact-frame", "anime-snap-zoom", "anime-sword-clash",
+             "anime-face-off", "anime-airship-flyby", "anime-fleet-approach", "anime-eyecatch"]
+
+
+def test_anime_shots_are_searchable_cards_with_bindable_objects():
+    cards = {card["id"]: card for card in builtin_cards()}
+    assert set(ANIME_IDS) <= set(cards)
+    for template_id in ANIME_IDS:
+        card = cards[template_id]
+        assert card["tags"] == ["anime"]
+        assert card["width"] == 1920 and card["height"] == 1080 and 2.5 <= card["duration"] <= 6
+        assert {item["id"] for item in card["required"]} >= {"background"}
+    fleet = cards["anime-fleet-approach"]["required"]
+    ships = [item for item in fleet if item["media"] == "model3d"]
+    assert [item["id"] for item in ships] == ["vehicle_1", "vehicle_2", "vehicle_3", "vehicle_4"]
+    assert {item["role"] for item in ships} == {"prop"}
+    assert {item["id"]: item["media"] for item in cards["anime-sword-clash"]["required"]} == {
+        "subject": "image", "rival": "image", "background": "image"}
+    assert search_templates("impact frame", limit=1)[0]["id"] == "anime-impact-frame"
+    assert search_templates("eyecatch", limit=1)[0]["id"] == "anime-eyecatch"
+    assert {card["id"] for card in search_templates("anime", limit=24)} >= set(ANIME_IDS)
+
+
+def test_a_camera_patch_sets_shake_and_rejects_a_bad_window(tmp_path):
+    from services.world3d_scenes import World3DSceneError
+    workspace_dir = lambda name: str(tmp_path / name)
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"templateId": "anime-impact-frame", "slots": [],
+                "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]}}
+    (folder / "w3d-00000000beef.json").write_text(json.dumps({"revision": 1, "templateId": "anime-impact-frame", "document": document,
+                                                                 "warnings": []}), encoding="utf-8")
+    shake = [{"start": 1.25, "end": 2.6, "amplitude": 0.09, "frequency": 20, "seed": 7, "decay": 3.2}]
+    viewed = patch_scene("studio", "w3d-00000000beef", workspace_dir, {"camera": {"shake": shake}}, 1)
+    assert viewed["document"]["camera"]["shake"] == shake
+    assert viewed["document"]["camera"]["fov"] == 40
+    for bad in ("no", [{"start": 2, "end": 1, "amplitude": 0.1, "frequency": 10}], [{"start": 0, "end": 1, "amplitude": 3, "frequency": 10}],
+                [{"start": 0, "end": 1, "amplitude": 0.1, "frequency": 10, "seed": 1.5}], [{"start": 0, "end": 1, "amplitude": 0.1}],
+                [{"start": 0, "end": 1, "amplitude": 0.1, "frequency": 10, "roll": 2}], [shake[0]] * 17):
+        with pytest.raises(World3DSceneError) as error:
+            patch_scene("studio", "w3d-00000000beef", workspace_dir, {"camera": {"shake": bad}}, 2)
+        assert error.value.code == "invalid_camera_shake"
+    assert inspect_scene("studio", "w3d-00000000beef", workspace_dir)["revision"] == 2
+    cleared = patch_scene("studio", "w3d-00000000beef", workspace_dir, {"camera": {"shake": []}}, 2)
+    assert cleared["document"]["camera"]["shake"] == []
+
+
+def test_retime_stretches_shake_windows_and_backdrop_cues(tmp_path):
+    workspace_dir = lambda name: str(tmp_path / name)
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"templateId": "anime-impact-frame", "duration": 3, "slots": [],
+                "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0],
+                           "shake": [{"start": 1.25, "end": 2.6, "amplitude": 0.09, "frequency": 20, "decay": 3}]},
+                "screenBackdrop": {"color": "#251a3c", "sfx": [{"id": "lines", "kind": "speedlines", "start": 1.25, "end": 2.6}]}}
+    (folder / "w3d-0000feedbeef.json").write_text(json.dumps({"revision": 1, "templateId": "anime-impact-frame", "document": document,
+                                                                 "warnings": []}), encoding="utf-8")
+    out = patch_scene("studio", "w3d-0000feedbeef", workspace_dir, {"duration": 6, "retime": True}, 1)["document"]
+    shake = out["camera"]["shake"][0]
+    assert (shake["start"], shake["end"], shake["decay"], shake["amplitude"]) == (2.5, 5.2, 1.5, 0.09)
+    assert (out["screenBackdrop"]["sfx"][0]["start"], out["screenBackdrop"]["sfx"][0]["end"]) == (2.5, 5.2)
+    kept = patch_scene("studio", "w3d-0000feedbeef", workspace_dir, {"duration": 3}, 2)["document"]
+    assert kept["camera"]["shake"][0]["start"] == 2.5, "without retime the windows keep their seconds"
+
+
 def test_a_patch_puts_the_shot_screen_effects_over_the_template_ones(tmp_path):
     from services.world3d_scenes import World3DSceneError
     workspace_dir = lambda name: str(tmp_path / name)

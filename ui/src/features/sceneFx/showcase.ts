@@ -28,8 +28,8 @@ export function showcaseCollectionFrom(document: unknown): FxShowcaseCollection 
   const cues = document && typeof document === 'object' && !Array.isArray(document)
     ? (document as { sfx?: { kind?: string }[] }).sfx : undefined
   const kinds = Array.isArray(cues) ? cues.map(cue => cue?.kind).filter((kind): kind is string => Boolean(kind)) : []
-  if (kinds.length > 0 && kinds.length <= 12 && kinds.every(kind => anime.has(kind))) return 'anime'
-  if (kinds.length > 0 && kinds.length <= 12 && kinds.every(kind => retro.has(kind))) return 'retro'
+  if (kinds.length > 0 && kinds.length <= anime.size && kinds.every(kind => anime.has(kind))) return 'anime'
+  if (kinds.length > 0 && kinds.length <= retro.size && kinds.every(kind => retro.has(kind))) return 'retro'
   return 'all'
 }
 

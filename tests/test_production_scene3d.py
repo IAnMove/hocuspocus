@@ -198,6 +198,16 @@ def test_real_native_template_compiler_keeps_the_toon_look():
     assert doc["renderLook"] == "toon"
     assert doc["toon"] == {"steps": 2, "outline": 4.5, "ink": "#203040"}
 
+@pytest.mark.skipif(not (Path(__file__).resolve().parents[1] / "ui/node_modules/tsx/dist/loader.mjs").is_file(), reason="UI dependencies not installed in Python-only CI")
+def test_a_subject_glb_replaces_an_anime_cutout_and_keeps_the_shake():
+    doc = compile_document(shot(template="anime-impact-frame"), 3)
+    subject = next(slot for slot in doc["slots"] if slot["id"] == "subject")
+    assert subject["media"] == "model3d" and subject["sourceUrl"].endswith("tree.glb?workspace=test")
+    assert doc["camera"]["shake"][0]["start"] == 1.25
+    assert doc["screenBackdrop"]["sfx"][0]["kind"] == "speedlines"
+    cutout = compile_document(shot(template="anime-impact-frame", subject="/api/v1/file/hero.png?workspace=test"), 3)
+    assert next(slot for slot in cutout["slots"] if slot["id"] == "subject")["media"] == "image"
+
 
 def test_uncertain_admission_resumes_with_the_exact_same_intent(tmp_path):
     production = Production(tmp_path)

@@ -180,6 +180,18 @@
     "collection": "anime"
   },
   {
+    "id": "impact_flash",
+    "color": "#fffbea",
+    "sound": "impact",
+    "collection": "anime"
+  },
+  {
+    "id": "impact_invert",
+    "color": "#ffffff",
+    "sound": "impact",
+    "collection": "anime"
+  },
+  {
     "id": "fire",
     "color": "#ff6a22",
     "sound": "crackle",

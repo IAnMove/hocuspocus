@@ -24,7 +24,12 @@ _SLOT_FIELDS = {"sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "r
 _MAX_SLOTS = 24
 _ADDED_MEDIA = ("model3d", "image")
 _SCREEN_SOURCE_FIELDS = {"sourceUrl", "sourceRef"}
-_CAMERA_FIELDS = {"family", "fov", "eye", "look", "orbitRadius", "orbitHeight", "orbitTurns", "framing", "eyeOffset", "targetOffset", "frameFormat"}
+_CAMERA_FIELDS = {"family", "fov", "eye", "look", "orbitRadius", "orbitHeight", "orbitTurns", "framing", "eyeOffset", "targetOffset", "frameFormat",
+                  "shake"}
+# Same bounds as ui/src/features/scene3d/cameraShake.ts; the editor rejects a document outside them.
+_SHAKE_RANGES = {"start": (0, 600), "end": (0, 600), "amplitude": (0, 2), "frequency": (0, 60), "decay": (0, 60), "seed": (0, 1_000_000)}
+_SHAKE_REQUIRED = {"start", "end", "amplitude", "frequency"}
+_SHAKE_WINDOWS = 16
 
 
 class World3DSceneError(ValueError):
@@ -127,6 +132,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     for binding in _bindings(changes):
         warnings.extend(_bind(document, binding))
     if isinstance(changes.get("camera"), dict):
+        if "shake" in changes["camera"]:
+            _check_shake(changes["camera"]["shake"])
         document["camera"] = {**document["camera"], **{key: deepcopy(value) for key, value in changes["camera"].items() if key in _CAMERA_FIELDS}}
     if "playbackSpeed" in changes or "playback_speed" in changes:
         document["playbackSpeed"] = _speed(changes.get("playbackSpeed", changes.get("playback_speed")))
@@ -143,6 +150,30 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     viewed = _view(scene_id, record)
     viewed["warnings"] = warnings
     return viewed
+
+
+def _number_in(value, low: float, high: float) -> bool:
+    return type(value) in (int, float) and low <= value <= high
+
+
+def _valid_shake_window(window) -> bool:
+    if not isinstance(window, dict) or not _SHAKE_REQUIRED <= set(window) or set(window) - set(_SHAKE_RANGES):
+        return False
+    if not all(_number_in(window[key], *_SHAKE_RANGES[key]) for key in window):
+        return False
+    if "seed" in window and type(window["seed"]) is not int:
+        return False
+    return window["end"] > window["start"] and window["amplitude"] > 0 and window["frequency"] > 0
+
+
+def _check_shake(shake) -> None:
+    """``camera.shake``: at most 16 windows ``{start, end, amplitude, frequency, seed?, decay?}`` in scene seconds."""
+    if not isinstance(shake, list) or len(shake) > _SHAKE_WINDOWS:
+        raise World3DSceneError("invalid_camera_shake", f"camera.shake must be a list of at most {_SHAKE_WINDOWS} windows")
+    for index, window in enumerate(shake):
+        if not _valid_shake_window(window):
+            raise World3DSceneError("invalid_camera_shake", f"camera.shake[{index}] needs start < end within 0-600 s, amplitude 0-2 m, "
+                                    "frequency 0-60 Hz, and optional integer seed and decay 0-60")
 
 
 def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
@@ -315,6 +346,17 @@ def _retime(document: dict, duration) -> None:
             _scale(slot["appearance"], factor, "start", "duration")
         for cue in _dicts(slot.get("clips")):
             _scale(cue, factor, "start", "duration")
+    _retime_camera_and_backdrop(document, factor)
+
+
+def _retime_camera_and_backdrop(document: dict, factor: float) -> None:
+    """Shake windows and backdrop effects are template beats too; a shake keeps its shape (decay per second scales back)."""
+    for window in _dicts((document.get("camera") or {}).get("shake")):
+        _scale(window, factor, "start", "end")
+        if type(window.get("decay")) in (int, float):
+            window["decay"] = round(min(60, window["decay"] / factor), 3)
+    for cue in _dicts((document.get("screenBackdrop") or {}).get("sfx")):
+        _scale(cue, factor, "start", "end")
 
 
 def _dicts(value) -> list[dict]:

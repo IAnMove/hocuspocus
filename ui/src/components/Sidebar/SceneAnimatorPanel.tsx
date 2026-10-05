@@ -8,7 +8,7 @@ import { presentSceneDocument, useSceneDocumentHandoff } from '../../features/sc
 import { galleryWorkspaceEpoch, galleryWorkspaceName } from '../../stores/gallerySlice'
 import { SceneFxControls } from '../../features/sceneFx/SceneFxControls'
 import { SceneFxOverlay } from '../../features/sceneFx/SceneFxOverlay'
-import { isRetroLook } from '../../features/sceneFx/retroPaint'
+import { needsFrameSource } from '../../features/sceneFx/paint'
 import { adoptPreparedSceneDocument, withFxShowcase } from '../../features/sceneFx/showcase'
 import { KineticTextControls } from '../common/KineticTextControls'
 import { Scene2DTemplateDialog } from '../../features/scene2d/Scene2DTemplateDialog'
@@ -1441,7 +1441,7 @@ export function SceneAnimatorPanel() {
       : findLayerElement(canvasRef.current, layer.id) as HTMLVideoElement | HTMLImageElement | null,
   )
   const sceneSecondsNow = progress * scene.duration
-  const retroLive = (scene.sfx ?? []).some(cue => isRetroLook(cue.kind) && sceneSecondsNow >= cue.start && sceneSecondsNow < cue.end)
+  const retroLive = (scene.sfx ?? []).some(cue => needsFrameSource(cue.kind) && sceneSecondsNow >= cue.start && sceneSecondsNow < cue.end)
   useEffect(() => {
     if (!retroLive) return
     const canvas = retroCanvasRef.current

@@ -12,6 +12,7 @@ import type { GpuWorld } from './gpu'
 import type { Scene3DDocument } from './types'
 import { cinematicReflectorVisible } from './cinematicSettings'
 import { BackdropFloor } from './backdropFloor'
+import { ScreenBackdropPainter } from './screenBackdropPainter'
 import { createPixelPass, syncPixelPass } from './pixel/pixelPass'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import type { Pass } from 'three/addons/postprocessing/Pass.js'
@@ -49,6 +50,7 @@ export class CinematicRuntime {
   private document?: Scene3DDocument
   private world: GpuWorld
   private backdropFloor: BackdropFloor
+  private screenBackdrop = new ScreenBackdropPainter()
   private quality: ExportRenderQuality = DRAFT_RENDER
   constructor(world: GpuWorld) {
     this.world = world; this.backdropFloor = new BackdropFloor(world)
@@ -105,7 +107,7 @@ export class CinematicRuntime {
     }
     this.world.scene.add(root); this.platform = root
   }
-  private syncBackground(doc: Scene3DDocument) {
+  private syncBackground(doc: Scene3DDocument, seconds: number) {
     const { world } = this
     const slot = doc.slots.find(s => s.surface === 'environment' && s.media === 'image')
     const texture = slot ? world.slots.get(slot.id)?.loopTexture ?? undefined : undefined
@@ -113,11 +115,20 @@ export class CinematicRuntime {
       this.background?.dispose(); this.source = texture; this.background = texture?.clone()
       if (this.background) this.background.needsUpdate = true
     }
-    world.scene.background = this.background ?? new Color(world.pixelPalette?.sky[0] ?? 0x10141c)
+    world.scene.background = this.backgroundFor(doc, seconds)
     this.fitBackground()
     for (const s of doc.slots) if (s.surface === 'environment') {
       const gpu = world.slots.get(s.id); if (gpu) gpu.root.visible = false
     }
+  }
+  /** The painted screen backdrop (over the environment plate), else the plate, else the set colour. */
+  private backgroundFor(doc: Scene3DDocument, seconds: number): Texture | Color {
+    if (doc.screenBackdrop) {
+      const frame = this.world.renderer.getDrawingBufferSize(new Vector2())
+      const painted = this.screenBackdrop.paint(doc.screenBackdrop, seconds, frame.x, frame.y, this.source)
+      if (painted) return painted
+    }
+    return this.background ?? new Color(this.world.pixelPalette?.sky[0] ?? 0x10141c)
   }
   private fitBackground() {
     const { world } = this
@@ -162,7 +173,7 @@ export class CinematicRuntime {
   }
   sync(doc: Scene3DDocument, seconds: number) {
     this.document = doc
-    this.syncBackground(doc); this.syncStage(doc)
+    this.syncBackground(doc, seconds); this.syncStage(doc)
     const active = Boolean(doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld || isAtmosDressing(doc?.dressing))
     // Tone mapping lives in applyLook so a previous scene's look cannot stick on this renderer.
     if (!active) { this.road?.sync(false, undefined, seconds); return }
@@ -247,6 +258,7 @@ export class CinematicRuntime {
   dispose() {
     this.road?.dispose()
     this.backdropFloor.dispose()
+    this.screenBackdrop.dispose()
     this.background?.dispose()
     this.composer?.passes.forEach(pass => pass.dispose()); this.composer?.dispose()
     this.mirror?.removeFromParent(); this.mirror?.geometry.dispose(); this.mirror?.dispose()

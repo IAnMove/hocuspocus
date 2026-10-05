@@ -1,6 +1,6 @@
 {
   "title": "Efectos SFX",
-  "help": "Efectos visuales sobre el encuadre 2D y 3D, con sonido local opcional. Las demos sustituyen los SFX y amplían la duración: 3 s por efecto; magia/anime 36 s; consolas retro 30 s. Conservan los actores, la cámara y el audio.",
+  "help": "Efectos visuales sobre el encuadre 2D y 3D, con sonido local opcional. Las demos sustituyen los SFX y amplían la duración: 3 s por efecto; magia/anime 42 s; consolas retro 30 s. Conservan los actores, la cámara y el audio.",
   "effect": "Efecto",
   "color": "Color",
   "sound": "Sonido",
@@ -47,6 +47,8 @@
     "energy_beam": "Rayo de energía",
     "sword_slash": "Corte de espada",
     "manga_impact": "Impacto manga",
+    "impact_flash": "Destello de impacto",
+    "impact_invert": "Impacto en negativo",
     "fire": "Fuego",
     "shield": "Escudo de energía",
     "tornado": "Tornado",
