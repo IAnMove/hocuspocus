@@ -15,6 +15,7 @@ import traceback
 import uuid
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -385,7 +386,9 @@ def _capture_video_editor_frame(body: dict) -> dict:
 
     safe_name = _safe_media_stem(body.get("name") or "video_frame", "video_frame")
     timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    out_dir = _runtime.workspace_dir()
+    # Save beside the source workspace, not whichever one is active now.
+    workspace = body.get("workspace") if body.get("workspace") is not None else _runtime.get_active_workspace()
+    out_dir = _runtime.workspace_dir(workspace)
     os.makedirs(out_dir, exist_ok=True)
     output_name, output_path = _unique_workspace_file(
         out_dir, f"{timestamp}_{safe_name}_frame", ".png",
@@ -407,8 +410,13 @@ def _capture_video_editor_frame(body: dict) -> dict:
             "generation_mode": "image",
             "created_at": time.time(),
         }
-        _write_video_editor_screenshot_sidecar(output_path, sidecar, body.get("workspace"))
-        return {"filename": output_name, "url": f"/api/v1/file/{output_name}", **result}
+        _write_video_editor_screenshot_sidecar(output_path, sidecar, workspace)
+        return {
+            "filename": output_name,
+            "url": f"/api/v1/file/{output_name}?workspace={quote(workspace, safe='')}",
+            "workspace": workspace,
+            **result,
+        }
     except Exception as exc:
         try:
             if os.path.isfile(output_path):

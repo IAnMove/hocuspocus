@@ -343,7 +343,9 @@ export interface GenerationJob {
   /** Canonical Activity identity; distinct from the backend polling job id. */
   taskId?: string
   rootTaskId?: string
-  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
+  /** `leftover`/`interrupted`: saved by a previous server process and not
+   *  running; the tile offers resume or discard. */
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'leftover' | 'interrupted'
   progress: number
   step: number
   totalSteps: number

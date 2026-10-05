@@ -1,5 +1,6 @@
 import { rememberPrompt } from '../lib/promptHistory'
 import { BASE } from './http'
+import { safeStorageSet } from '../lib/safeStorage'
 
 async function quickVideoBatchResponse(response: Promise<Response>, fallback: string) {
   const resolved = await response
@@ -263,7 +264,7 @@ export async function generateStorySection(params: {
     workspace: params.workspace,
     source: 'generation',
   })
-  window.localStorage.setItem('maestro-last-story-plan-job', accepted.jobId)
+  safeStorageSet('local', 'maestro-last-story-plan-job', accepted.jobId)
   onProgress?.(accepted)
   const cancelRemote = () => {
     void fetch(
@@ -304,7 +305,7 @@ export async function generateStorySection(params: {
       if (status.status === 'completed') {
         const result = status.result?.result
         if (!result) throw new Error('Story Lab job completed without a draft')
-        window.localStorage.setItem('maestro-last-story-plan-result', JSON.stringify({
+        safeStorageSet('local', 'maestro-last-story-plan-result', JSON.stringify({
           jobId: accepted.jobId,
           projectId: params.project.id,
           scope: params.scope,
@@ -602,7 +603,7 @@ export async function resumeStoryGeneration(
     }
     if (status.status === 'completed') {
       if (!status.result?.result) throw new Error('Story Lab job completed without a draft')
-      window.localStorage.setItem('maestro-last-story-plan-result', JSON.stringify({
+      safeStorageSet('local', 'maestro-last-story-plan-result', JSON.stringify({
         jobId,
         result: status.result.result,
       }))

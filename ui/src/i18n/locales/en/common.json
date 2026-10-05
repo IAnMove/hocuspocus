@@ -53,7 +53,9 @@
     "queued": "Queued",
     "completed": "Completed",
     "failed": "Failed",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "interrupted": "Interrupted",
+    "interruptedHint": "Saved by a previous session. Resume reruns the saved queue from the start; discard clears it."
   },
   "count": {
     "item_one": "{{count}} item",
@@ -281,5 +283,11 @@
       "conflictHint": "You already have your own template with this id.",
       "done": "“{{title}}” installed in your library."
     }
+  },
+  "errorBoundary": {
+    "title": "Something went wrong in this view",
+    "body": "The rest of HocusPocus keeps working. Reload the page, or copy the error to report it.",
+    "copyError": "Copy error",
+    "copied": "Copied"
   }
 }

@@ -16,7 +16,7 @@ import { h3ModelSwitchSettings, projectStudioH3RequestParams, restoreSemanticBri
 import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
 import { beginWangpRestore, editingInputsChanged, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
-import { create } from 'zustand'
+import { create, type StoreApi } from 'zustand'
 import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanJob, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
@@ -28,7 +28,8 @@ import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedV
 import { installedPreferredModel } from '../lib/preferredModels'
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
 import { createActivityPublicationGate } from '../lib/activityPublication'
-import { isGenerationJobActive } from '../lib/generationJobState'
+import { isGenerationJobActive, isGenerationJobInterrupted, isGenerationJobSettled } from '../lib/generationJobState'
+import { isHttpStatus } from '../api/http'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
 import { llmActivityPreview } from '../lib/llmActivityPreview'
 import { createDeveloperModeSlice } from './developerModeSlice'
@@ -129,6 +130,69 @@ function _downloadTimestampMs(value: number | null | undefined): number | null {
   const timestamp = Number(value)
   if (!Number.isFinite(timestamp) || timestamp <= 0) return null
   return timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp
+}
+
+const RECONNECT_POLL_MS = 2000
+// Consecutive failed polls before the tile says the connection is lost.
+const RECONNECT_OFFLINE_AFTER = 3
+const RECONNECT_OFFLINE_MESSAGE = 'Connection lost — retrying…'
+
+function _jobStatusPatch(job: GenerationJob, status: api.ApiJobStatus): GenerationJob {
+  return {
+    ...job,
+    status: status.status,
+    progress: status.progress / 100,
+    step: status.step ?? 0,
+    totalSteps: status.total_steps ?? 0,
+    phase: status.phase ?? '',
+    message: status.message,
+    outputFiles: status.output_files,
+    error: status.error,
+    oomInfo: status.oom_info ?? null,
+    taskTimings: status.task_timings ?? [],
+    h3WindowPlan: status.h3_window_plan ?? job.h3WindowPlan ?? null,
+    ..._jobTimingPatch(status),
+  }
+}
+
+/** Follow a job restored on page load. A backend restart or a proxy 502
+ *  keeps the tile and retries with backoff; only a 404 means the job is gone. */
+function _pollReconnectedJob(
+  jobId: string,
+  set: StoreApi<AppState>['setState'],
+  get: StoreApi<AppState>['getState'],
+): void {
+  let failures = 0
+  const patchJob = (update: (job: GenerationJob) => GenerationJob) =>
+    set(s => ({ jobs: s.jobs.map(j => j.id === jobId ? update(j) : j) }))
+  const tick = async () => {
+    if (!get().jobs.some(j => j.id === jobId)) return
+    try {
+      const status = await api.fetchJobStatus(jobId)
+      failures = 0
+      patchJob(j => _jobStatusPatch(j, status))
+      if (isGenerationJobInterrupted(status.status)) {
+        set(s => withJobs(s.jobs))
+        return
+      }
+      if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
+        set(s => removeJob(s.jobs, j => j.id === jobId))
+        void get().maybeRefreshGallery({ message: 'New output ready' })
+        return
+      }
+    } catch (reason) {
+      if (isHttpStatus(reason, 404)) {
+        set(s => removeJob(s.jobs, j => j.id === jobId))
+        return
+      }
+      failures += 1
+      if (failures >= RECONNECT_OFFLINE_AFTER) {
+        patchJob(j => ({ ...j, phase: RECONNECT_OFFLINE_MESSAGE, message: RECONNECT_OFFLINE_MESSAGE }))
+      }
+    }
+    window.setTimeout(() => void tick(), RECONNECT_POLL_MS * 2 ** Math.min(failures, 4))
+  }
+  window.setTimeout(() => void tick(), RECONNECT_POLL_MS)
 }
 
 function _jobTimingPatch(status: api.ApiJobStatus): Partial<GenerationJob> {
@@ -4194,8 +4258,8 @@ export const useStore = create<AppState>((set, get) => {
           set(st => ({
             jobs: st.jobs.map(j => j.id !== result.job_id ? j : {
               ...j, status: status.status, progress: status.progress / 100,
-              step: status.step, totalSteps: status.total_steps,
-              phase: status.phase, message: status.message,
+              step: status.step ?? 0, totalSteps: status.total_steps ?? 0,
+              phase: status.phase ?? '', message: status.message,
               outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
               ..._jobTimingPatch(status),
             }),
@@ -4208,7 +4272,7 @@ export const useStore = create<AppState>((set, get) => {
               return removeJob(st.jobs, j => j.id === result.job_id)
             })
             void get().maybeRefreshGallery({ message: 'New output ready' })
-          } else if (status.status === 'failed' || status.status === 'cancelled') {
+          } else if (isGenerationJobSettled(status.status)) {
             clearInterval(pollInterval)
             // Keep the terminal tile visible so the user can inspect or dismiss it.
             set(st => withJobs(st.jobs))
@@ -4389,8 +4453,8 @@ export const useStore = create<AppState>((set, get) => {
             set(s => ({
               jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
                 ...j, status: status.status, progress: status.progress / 100,
-                step: status.step, totalSteps: status.total_steps,
-                phase: status.phase, message: status.message,
+                step: status.step ?? 0, totalSteps: status.total_steps ?? 0,
+                phase: status.phase ?? '', message: status.message,
                 outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
                 ..._jobTimingPatch(status),
               }),
@@ -4403,7 +4467,7 @@ export const useStore = create<AppState>((set, get) => {
                 return withJobs(remaining)
               })
               void get().maybeRefreshGallery({ message: 'New output ready' })
-            } else if (status.status === 'failed' || status.status === 'cancelled') {
+            } else if (isGenerationJobSettled(status.status)) {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
@@ -4537,8 +4601,8 @@ export const useStore = create<AppState>((set, get) => {
             set(s => ({
               jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
                 ...j, status: status.status, progress: status.progress / 100,
-                step: status.step, totalSteps: status.total_steps,
-                phase: status.phase, message: status.message,
+                step: status.step ?? 0, totalSteps: status.total_steps ?? 0,
+                phase: status.phase ?? '', message: status.message,
                 outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
                 ..._jobTimingPatch(status),
               }),
@@ -4551,7 +4615,7 @@ export const useStore = create<AppState>((set, get) => {
                 return withJobs(remaining)
               })
               void get().maybeRefreshGallery({ message: 'New output ready' })
-            } else if (status.status === 'failed' || status.status === 'cancelled') {
+            } else if (isGenerationJobSettled(status.status)) {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
@@ -4639,9 +4703,9 @@ export const useStore = create<AppState>((set, get) => {
                 ...j,
                 status: status.status,
                 progress: status.progress / 100,
-                step: status.step,
-                totalSteps: status.total_steps,
-                phase: status.phase,
+                step: status.step ?? 0,
+                totalSteps: status.total_steps ?? 0,
+                phase: status.phase ?? '',
                 message: status.message,
                 outputFiles: status.output_files,
                 error: status.error,
@@ -4657,7 +4721,7 @@ export const useStore = create<AppState>((set, get) => {
                 return withJobs(remaining)
               })
               void get().maybeRefreshGallery({ message: 'New output ready' })
-            } else if (status.status === 'failed' || status.status === 'cancelled') {
+            } else if (isGenerationJobSettled(status.status)) {
               clearInterval(pollInterval)
               set(s => withJobs(s.jobs))
             }
@@ -4755,8 +4819,8 @@ export const useStore = create<AppState>((set, get) => {
             set(s => ({
               jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
                 ...j, status: status.status, progress: status.progress / 100,
-                step: status.step, totalSteps: status.total_steps,
-                phase: status.phase, message: status.message,
+                step: status.step ?? 0, totalSteps: status.total_steps ?? 0,
+                phase: status.phase ?? '', message: status.message,
                 outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
                 ..._jobTimingPatch(status),
               }),
@@ -4769,7 +4833,7 @@ export const useStore = create<AppState>((set, get) => {
                 return withJobs(remaining)
               })
               void get().maybeRefreshGallery({ message: 'New output ready' })
-            } else if (status.status === 'failed' || status.status === 'cancelled') {
+            } else if (isGenerationJobSettled(status.status)) {
               clearInterval(pollInterval)
               set(s => withJobs(s.jobs))
             }
@@ -4888,8 +4952,8 @@ export const useStore = create<AppState>((set, get) => {
             set(s => ({
               jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
                 ...j, status: status.status, progress: status.progress / 100,
-                step: status.step, totalSteps: status.total_steps,
-                phase: status.phase, message: status.message,
+                step: status.step ?? 0, totalSteps: status.total_steps ?? 0,
+                phase: status.phase ?? '', message: status.message,
                 outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
                 ..._jobTimingPatch(status),
               }),
@@ -4902,7 +4966,7 @@ export const useStore = create<AppState>((set, get) => {
                 return withJobs(remaining)
               })
               void get().maybeRefreshGallery({ message: 'New output ready' })
-            } else if (status.status === 'failed' || status.status === 'cancelled') {
+            } else if (isGenerationJobSettled(status.status)) {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
@@ -5625,9 +5689,9 @@ export const useStore = create<AppState>((set, get) => {
               ...j,
               status: status.status,
               progress: status.progress / 100,
-              step: status.step,
-              totalSteps: status.total_steps,
-              phase: status.phase,
+              step: status.step ?? 0,
+              totalSteps: status.total_steps ?? 0,
+              phase: status.phase ?? '',
               message: status.message,
               outputFiles: status.output_files,
               error: status.error,
@@ -5651,7 +5715,7 @@ export const useStore = create<AppState>((set, get) => {
               return withJobs(remaining)
             })
             void get().maybeRefreshGallery({ message: 'New output ready' })
-          } else if (status.status === 'failed' || status.status === 'cancelled') {
+          } else if (isGenerationJobSettled(status.status)) {
             clearInterval(pollInterval)
             // Keep the failed/cancelled job in the queue so its placeholder
             // card stays visible with the error message. User dismisses via
@@ -5751,40 +5815,7 @@ export const useStore = create<AppState>((set, get) => {
           }))
         if (newJobs.length > 0) {
           set(s => withJobs([...s.jobs, ...newJobs]))
-          // Start polling for each reconnected job
-          newJobs.forEach(job => {
-            const pollInterval = setInterval(async () => {
-              try {
-                const status = await api.fetchJobStatus(job.id)
-                set(s => ({
-                  jobs: s.jobs.map(j => j.id !== job.id ? j : {
-                    ...j,
-                    status: status.status,
-                    progress: status.progress / 100,
-                    step: status.step,
-                    totalSteps: status.total_steps,
-                    phase: status.phase,
-                    message: status.message,
-                    outputFiles: status.output_files,
-                    error: status.error,
-                    oomInfo: status.oom_info ?? null,
-                    taskTimings: status.task_timings ?? [],
-                    h3WindowPlan: status.h3_window_plan ?? j.h3WindowPlan ?? null,
-                    ..._jobTimingPatch(status),
-                  }),
-                }))
-                if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
-                  clearInterval(pollInterval)
-                  set(s => removeJob(s.jobs, j => j.id === job.id))
-                  void get().maybeRefreshGallery({ message: 'New output ready' })
-                }
-              } catch {
-                // Job may have been cleaned up
-                clearInterval(pollInterval)
-                set(s => removeJob(s.jobs, j => j.id === job.id))
-              }
-            }, 2000)
-          })
+          newJobs.forEach(job => _pollReconnectedJob(job.id, set, get))
           console.log(`[Queue] Reconnected to ${newJobs.length} active job(s)`)
         }
       }
