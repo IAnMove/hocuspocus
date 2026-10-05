@@ -57,6 +57,9 @@ class FxCue(Strict):
         if self.kind not in PRESETS or self.end <= self.start:
             raise ValueError('Use a catalog effect and an end later than start')
         self.color = self.color or PRESETS[self.kind]['color']
+        # An effect with its own size scale (code rain: glyph height in %) has its own default.
+        if 'size' not in self.model_fields_set and 'size' in PRESETS[self.kind]:
+            self.size = PRESETS[self.kind]['size']
         return self
 
 
@@ -208,7 +211,7 @@ def _effects(value):
         presets = [item for item in CATALOG if value.collection == 'all' or item['collection'] == value.collection]
         document['duration'] = max(document['duration'], len(presets) * 3)
         cues = [FxCue(id=f"showcase-{item['id']}", kind=item['id'], start=i * 3, end=i * 3 + 2.8,
-                      size=95, seed=i + 17, sound=value.sound, label=item['id'].replace('speedlines', 'speed lines').title()).model_dump() for i, item in enumerate(presets)]
+                      size=item.get('size', 95), seed=i + 17, sound=value.sound, label=item['id'].replace('speedlines', 'speed lines').title()).model_dump() for i, item in enumerate(presets)]
         document['sfx'] = cues
         return document
     # `replace` only rewrites the tracks present in the request. A screen-only

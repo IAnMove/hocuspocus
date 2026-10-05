@@ -1,5 +1,5 @@
 import { useUiTranslation } from '../../i18n'
-import { FX_CATALOG, parseSceneFx, type SceneFx } from './types'
+import { FX_CATALOG, parseSceneFx, switchFxKind, type SceneFx } from './types'
 
 export function SceneFxControls({ cues = [], duration, disabled, onChange, onShowcase }: {
   cues?: SceneFx[]; duration: number; disabled?: boolean; onChange: (cues: SceneFx[]) => void; onShowcase: (collection?: 'all' | 'anime' | 'retro') => void
@@ -13,7 +13,7 @@ export function SceneFxControls({ cues = [], duration, disabled, onChange, onSho
     <fieldset disabled={disabled} className="space-y-3 disabled:opacity-50">
       {cues.map(cue => <div key={cue.id} className="space-y-2 rounded border border-border p-2">
         <div className="flex flex-wrap items-center gap-3">
-          <label>{t('effect')}<select value={cue.kind} onChange={e => update(cue.id, { kind: e.target.value, color: FX_CATALOG.find(item => item.id === e.target.value)!.color })} className="ml-2 rounded border border-border bg-bg-tertiary p-2">{collections.map(collection => <optgroup key={collection} label={t(`collections.${collection}`)}>{FX_CATALOG.filter(item => item.collection === collection).map(item => <option key={item.id} value={item.id}>{t(`presets.${item.id}`, { defaultValue: item.id })}</option>)}</optgroup>)}</select></label>
+          <label>{t('effect')}<select value={cue.kind} onChange={e => update(cue.id, switchFxKind(cue, e.target.value))} className="ml-2 rounded border border-border bg-bg-tertiary p-2">{collections.map(collection => <optgroup key={collection} label={t(`collections.${collection}`)}>{FX_CATALOG.filter(item => item.collection === collection).map(item => <option key={item.id} value={item.id}>{t(`presets.${item.id}`, { defaultValue: item.id })}</option>)}</optgroup>)}</select></label>
           <label>{t('color')}<input type="color" value={cue.color} onChange={e => update(cue.id, { color: e.target.value })} /></label>
           <label><input type="checkbox" checked={cue.sound} onChange={e => update(cue.id, { sound: e.target.checked })} /> {t('sound')}</label>
         </div>

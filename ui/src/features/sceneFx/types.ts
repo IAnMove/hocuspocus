@@ -1,6 +1,9 @@
 import catalog from '../../../../app/shared/scene_effects.json' with { type: 'json' }
 
-export const FX_CATALOG = catalog
+/** `size` on an entry is that effect's default cue size (code rain: glyph height in %). */
+export const FX_CATALOG: ReadonlyArray<{ id: string; color: string; sound: string; collection: string; size?: number }> = catalog
+/** A cue's size when it gives none. */
+export const DEFAULT_FX_SIZE = 65
 export type SceneFx = {
   id: string; kind: string; label?: string; start: number; end: number
   x: number; y: number; size: number; intensity: number; color: string
@@ -22,12 +25,21 @@ export function parseSceneFx(raw: unknown): SceneFx[] {
     if (end <= start || ids.has(id)) return []
     ids.add(id)
     return [{ id, kind: preset.id, ...(typeof value.label === 'string' ? { label: value.label.slice(0, 80) } : {}), start, end, x: number(value.x, 50, 0, 100), y: number(value.y, 50, 0, 100),
-      size: number(value.size, 65, 1, 200), intensity: number(value.intensity, 1, .1, 2),
+      size: number(value.size, preset.size ?? DEFAULT_FX_SIZE, 1, 200), intensity: number(value.intensity, 1, .1, 2),
       rotation: number(value.rotation, 0, -180, 180),
       color: typeof value.color === 'string' && /^#[\da-f]{6}$/i.test(value.color) ? value.color : preset.color,
       seed: Math.round(number(value.seed, index + 1, 1, 1000000)), sound: value.sound === true,
       volume: number(value.volume, .25, 0, 1) }]
   })
+}
+/** A cue switched to another effect takes that effect's colour, and its default size when
+ * either effect has a size of its own (a code-rain glyph height is not a burst size). */
+export function switchFxKind(cue: Pick<SceneFx, 'kind'>, kind: string): Partial<SceneFx> {
+  const next = FX_CATALOG.find(item => item.id === kind)
+  if (!next) return {}
+  const previous = FX_CATALOG.find(item => item.id === cue.kind)
+  const resize = next.size !== undefined || previous?.size !== undefined
+  return { kind, color: next.color, ...(resize ? { size: next.size ?? DEFAULT_FX_SIZE } : {}) }
 }
 export function sceneFxFields(raw: unknown): { sfx?: SceneFx[] } {
   const sfx = parseSceneFx(raw)

@@ -75,6 +75,13 @@ const cloud = (id: string, x: number, y: number, z: number, scale: number, end: 
   { id, kind: 'fog', start: 0, end, position: { x, y, z }, scale, intensity, color: '#ffffff' }
 )
 
+/** Two layers of code rain over the whole shot: small dim glyphs far away, larger bright ones
+ * near. Each cue spans the whole shot, so its frames repeat after `end` and a plate loops. */
+const codeRain = (end: number) => [
+  { id: 'rain-far', kind: 'code_rain', start: 0, end, size: 1.9, intensity: 0.75, color: '#1c9a43', seed: 23 },
+  { id: 'rain-near', kind: 'code_rain', start: 0, end, size: 3.2, intensity: 1, color: '#39ff6a', seed: 41 },
+]
+
 const IMPACT = 1.25
 /** The rushes cover 6.1 m each with smoothstep easing and cross at x = 0 when 3p² − 2p³ = 4.2 / 6.1,
  * p ≈ 0.6285 of 4 s; frame 60 at 24 fps is within 3 cm of it. */
@@ -278,6 +285,26 @@ const SPECS: Record<AnimeTemplateId, AnimeSpec> = {
     copy: copy(
       { title: 'Eyecatch', description: 'A short scene-change card: the figure spins in from the distance over a graphic backdrop of focus lines and stars.', requirements: [`${CUTOUT_EN} (subject)`, 'Optional title text', PLATE_EN] },
       { title: 'Eyecatch (cortinilla)', description: 'Cortinilla breve de cambio de escena: la figura llega girando desde el fondo sobre un fondo gráfico de líneas y estrellas.', requirements: [`${CUTOUT_ES} (protagonista)`, 'Texto de título opcional', PLATE_ES] },
+    ),
+  },
+  'anime-code-rain': {
+    category: 'cinema', duration: 6, light: light([0.1, -0.45, -0.9], 1.3, '#b8ffcb'),
+    // A medium shot that pushes in slowly to the chest, the head in the upper third.
+    camera: cam('establishment', [0, 1.5, 1.9], [0, 1.45, 0], 36, {
+      framing: {
+        targetSlot: 'subject', anchor: 'head', relativeToFacing: false,
+        from: [0, -0.14, 1.9], to: [0, -0.09, 1.45], lookFrom: [0, -0.18, 0], lookTo: [0, -0.12, 0],
+      },
+    }),
+    // The tint is the green spill of the code on an unlit cutout; a GLB in its place takes the green light.
+    slots: [cutout('subject', 'subject_1', [0, 0, 0], { imageLook: { unlit: true, tint: '#d4ffdd' } }), plate()],
+    aliases: { subject: 'subject', background: 'background' },
+    backdrop: { color: '#000000', sfx: codeRain(6) },
+    worldSfx: [],
+    sfx: [],
+    copy: copy(
+      { title: 'Code rain', description: 'Green code falls on black behind one figure, which takes a green tint from it; a slow push-in. Without a figure the shot is a plate that loops with no seam.', requirements: [`${CUTOUT_EN} (subject, optional)`, 'Optional background image (environment plate under the rain)'] },
+      { title: 'Lluvia de código', description: 'Código verde cae sobre negro detrás de una figura, que toma un tinte verde; empuje lento. Sin figura, el plano es un fondo que se repite sin corte.', requirements: [`${CUTOUT_ES} (protagonista, opcional)`, 'Imagen de fondo opcional (plano de entorno bajo la lluvia)'] },
     ),
   },
 }

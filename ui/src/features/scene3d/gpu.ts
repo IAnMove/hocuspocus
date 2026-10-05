@@ -114,6 +114,8 @@ export type GpuWorld = {
   pixelPalette?: PixelPalette | null
   /** Supersampling and composer MSAA of a server export; absent in preview and draft. */
   exportRender?: ExportRenderQuality
+  /** Set while an export paints frames (any quality); the editor preview leaves it unset. */
+  exporting?: boolean
   /** Environment light of scenes that ask for it (`document.lighting`). */
   lighting?: EnvironmentLighting
   /** Cel shading and ink of model slots (`renderLook: 'toon'`), created on the first scene that asks for it. */
@@ -567,6 +569,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds, document.duration)
+  hideEmptyCutoutsInExport(world, document.slots)
   carryHeldProps(world, posedSlots)
   stabilizeSceneSurfaces(document.slots, world.slots)
   paintPixelLight(world, document, posedSlots, sceneSeconds)
@@ -586,6 +589,17 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)
   renderFrame(world, document, sceneSeconds)
+}
+
+/** An image cutout with no picture is an editor placeholder. An export draws nothing in its
+ * place, so a shot whose figure was left empty still renders as a clean plate. */
+export function hideEmptyCutoutsInExport(world: GpuWorld, slots: readonly Scene3DSlot[]) {
+  if (!world.exporting) return
+  for (const slot of slots) {
+    const empty = slot.media === 'image' && slot.surface === 'cutout' && !slot.sourceUrl && !slot.screen?.sourceUrl
+    const gpu = empty ? world.slots.get(slot.id) : undefined
+    if (gpu) gpu.root.visible = false
+  }
 }
 
 function paintWorldSfx(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number, posedSlots: readonly Scene3DSlot[]) {
@@ -704,6 +718,7 @@ function applyMeshShadows(root: Object3D, enabled: boolean, cast: boolean) {
 
 export function setWorldExportQuality(world: GpuWorld, enabled: boolean, render: ExportRenderQuality = DRAFT_RENDER) {
   world.exportRender = enabled && (render.samples > 0 || render.supersample > 1) ? { ...render } : undefined
+  world.exporting = enabled
   world.cinema?.setRenderQuality(world.exportRender)
   world.renderer.shadowMap.enabled = enabled
   world.renderer.shadowMap.type = PCFSoftShadowMap

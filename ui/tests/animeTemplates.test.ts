@@ -26,8 +26,8 @@ const en = JSON.parse(readFileSync(join(HERE, '../src/i18n/locales/en/scene3dEdi
 const es = JSON.parse(readFileSync(join(HERE, '../src/i18n/locales/es/scene3dEditor.json'), 'utf8'))
 const SCREEN_KINDS = new Set(FX_CATALOG.map(item => item.id))
 
-test('eight anime shots are registered, tagged, translated and free of project assets', () => {
-  assert.equal(ANIME_TEMPLATE_IDS.length, 8)
+test('nine anime shots are registered, tagged, translated and free of project assets', () => {
+  assert.equal(ANIME_TEMPLATE_IDS.length, 9)
   assert.doesNotMatch(SOURCE, /\.glb['"]|\.png['"]|\/examples\//)
   for (const id of ANIME_TEMPLATE_IDS) {
     assert.ok(isAnimeTemplateId(id))

@@ -26,7 +26,7 @@ The Wizard action is `world3d_templates` with operation `world3d.scene.apply_que
 
 ## Anime shots
 
-Eight shots of classic 1980s TV-anime tricks carry the tag `anime` (search `anime`, or the library's **Anime** filter). They are 1920×1080 at 24 fps, have no set (the floor is off) and paint their look behind the world with `screenBackdrop`. Every character object starts as an empty flat cutout (`media: image`, `surface: cutout`, `imageLook.unlit`); vehicles start as empty GLBs. Every shot also has an optional `background` image (`surface: environment`): bound, it becomes the picture under the speed lines; empty, the backdrop colour shows. It is listed in `pending` like any empty object.
+Nine shots of classic TV-anime and film tricks carry the tag `anime` (search `anime`, or the library's **Anime** filter). They are 1920×1080 at 24 fps, have no set (the floor is off) and paint their look behind the world with `screenBackdrop`. Every character object starts as an empty flat cutout (`media: image`, `surface: cutout`, `imageLook.unlit`); vehicles start as empty GLBs. Every shot also has an optional `background` image (`surface: environment`): bound, it becomes the picture under the speed lines; empty, the backdrop colour shows. It is listed in `pending` like any empty object.
 
 | id | s | objects (id → role, media) | what happens |
 | --- | --- | --- | --- |
@@ -38,6 +38,9 @@ Eight shots of classic 1980s TV-anime tricks carry the tag `anime` (search `anim
 | `anime-airship-flyby` | 6 | `vehicle` → subject_1, model3d | The vehicle flies a gentle arc from x −16 to 16 m; the camera tracks it while clouds stream past. |
 | `anime-fleet-approach` | 6 | `vehicle_1` … `vehicle_4` → prop, model3d | Four copies leave a cloud bank at about 2 s in a staggered formation and come at the camera; a rumble from 4.6 s. |
 | `anime-eyecatch` | 3 | `subject` → subject_1, image | A scene-change card: the figure spins in twice from the distance over yellow focus lines and stars. |
+| `anime-code-rain` | 6 | `subject` → subject_1, image (optional) | Green code rain (`code_rain`, two layers) on a black backdrop for the whole shot, behind a green-tinted cutout; a slow push from a medium shot to the chest. |
+
+`anime-code-rain` with no figure is a plate: an export draws nothing for an image cutout with no picture, and the rain repeats exactly over each backdrop cue, which spans the shot. For a `series.location.plate3d` of N seconds, patch the working scene first with `{"duration": N, "retime": true}` so the cues span N seconds, then render the plate with `seconds: N`; it loops with no seam. With a figure, a Character Kit cutout can talk in front of the rain (`world3d.scene.talk`, or a Series `scene3d` shot whose cast uses `objectId: "subject"`).
 
 Bind a cutout (a transparent full-body PNG works best; the camera frames the head at 86% of the image height):
 

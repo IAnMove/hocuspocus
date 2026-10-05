@@ -23,8 +23,8 @@ def showcase(service, dimension='3d'):
 def test_both_templates_use_all_catalog_effects_and_are_replayable(service):
     for dimension in ('2d', '3d'):
         doc = showcase(service, dimension)
-        assert doc['duration'] == 144
-        assert len(doc['sfx']) == 48
+        assert doc['duration'] == 147
+        assert len(doc['sfx']) == 49
         assert all(cue['sound'] and cue['label'] for cue in doc['sfx'])
         assert doc == showcase(service, dimension)
         assert ('slots' in doc) == (dimension == '3d')
@@ -39,7 +39,7 @@ def test_apply_replaces_exact_cue_preserving_scene_and_caller(service):
     assert original == before
     assert first == service.execute(command)
     actual = first['result']['document']
-    assert len(actual['sfx']) == 48
+    assert len(actual['sfx']) == 49
     assert actual['sfx'][3] == cue
     assert actual['slots'] == original['slots']
     assert not first['result']['saved'] and not first['result']['exported']
@@ -138,7 +138,20 @@ def test_speech_rejects_paths_and_unknown_character_before_analysis(service):
 
 def test_shared_catalog_remains_a_packaged_resource():
     path = Path(__file__).parents[1] / 'app/shared/scene_effects.json'
-    assert len(json.loads(path.read_text())) == 48
+    assert len(json.loads(path.read_text())) == 49
+
+
+def test_code_rain_takes_its_own_default_size_and_keeps_a_given_one(service):
+    original = showcase(service)
+    rain = next(cue for cue in original['sfx'] if cue['kind'] == 'code_rain')
+    assert rain['size'] == 3 and rain['color'] == '#39ff6a', 'the showcase uses the glyph height, not a burst size'
+    assert all(cue['size'] == 95 for cue in original['sfx'] if cue['kind'] != 'code_rain')
+    cues = [{'id': 'rain', 'kind': 'code_rain', 'start': 0, 'end': 6}, {'id': 'big', 'kind': 'code_rain', 'start': 0, 'end': 6, 'size': 8},
+            {'id': 'burst', 'kind': 'sparks', 'start': 0, 'end': 1}]
+    applied = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                               'input': {'document': original, 'cues': cues, 'replace': True}})['result']['document']
+    sizes = {cue['id']: cue['size'] for cue in applied['sfx']}
+    assert (sizes['rain'], sizes['big'], sizes['burst']) == (3, 8, 65)
 
 
 def test_speech_append_preserves_previous_voice_and_rejects_overlap():
@@ -173,7 +186,7 @@ def test_anime_showcase_uses_42_seconds_and_preserves_longer_authored_scenes(ser
     assert service.execute(command)['result']['document']['duration'] == 72
 
 
-@pytest.mark.parametrize('collection,seconds', [('anime', 42), ('retro', 30), ('all', 144)])
+@pytest.mark.parametrize('collection,seconds', [('anime', 42), ('retro', 30), ('all', 147)])
 def test_default_2d_showcase_has_no_longer_background_tail(service, collection, seconds):
     scene = service.execute({'version': 1, 'operation': 'scenes.effects.showcase',
                              'input': {'dimension': '2d', 'collection': collection}})['result']['document']
