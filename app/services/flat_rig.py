@@ -248,7 +248,8 @@ def _mouth_candidates(region, inside, eye_height, screen, faint, smallest):
     """Marks darker than the skin, big enough and with the face colour around them (collars and jaws are not)."""
     mark, dark, background = _mouth_marks(region, inside, eye_height, screen, faint)
     face = _close(np.abs(region - background).sum(axis=2) < 60, 6)
-    labels, parts = _components(_close(mark, 3 if faint else 2))
+    closing = min(3 if faint else 2, max(1, eye_height // 30))
+    labels, parts = _components(_close(mark, closing))
     good = []
     for part in parts:
         piece = labels[part["y0"]:part["y1"], part["x0"]:part["x1"]] == part["label"]

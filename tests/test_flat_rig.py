@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
-from services.flat_rig import STATES, FlatRigError, draw_mouth, find_eyes, rig_character, rig_pose, rig_style
+from services.flat_rig import STATES, FlatRigError, draw_mouth, find_eyes, find_mouth, rig_character, rig_pose, rig_style
 
 SKIN = (246, 214, 170, 255)
 WORKSPACE = "cast"
@@ -53,6 +53,16 @@ def test_small_eyes_keep_the_lower_sclera_for_mouth_and_blink_anchors():
     pixels = np.array(image)
     box, _ = find_eyes(pixels[..., :3], pixels[..., 3])
     assert box[3] >= 130
+
+
+def test_small_face_mouth_does_not_merge_with_a_nearby_moustache():
+    image = Image.fromarray(_full_body_anime())
+    draw = ImageDraw.Draw(image)
+    draw.line((151, 139, 249, 139), fill=(110, 110, 105, 255), width=2)
+    draw.line((187, 144, 214, 144), fill=(30, 20, 20, 255), width=2)
+    pixels = np.array(image)
+    box, _, _ = find_mouth(pixels[..., :3], pixels[..., 3], (164, 95, 236, 118))
+    assert box[0] >= 185 and box[2] <= 216 and box[1] >= 142
 
 
 def test_small_eye_rig_keeps_the_nose_and_wipes_the_mouth():
