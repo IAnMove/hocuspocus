@@ -6,6 +6,19 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Flat-rigged characters close their eyes properly in every pose. Video 2D fits
+each layer into a 16:9 box, so a blink sprite wider than that (a pair of round
+eyes is about 2.5:1) was drawn at about 70% of its anchor and the white of the
+eye showed around the lids; the rig now grows the blink crop vertically to at
+most 16:9. The rig also drew a blink for each pose but the kit kept only the
+base one and scaled it onto the others by eye height, so wherever a pose had
+its eyes wider apart or larger the white of the eye showed around the lids.
+Each pose now stores its own closed eyes (`anchors.<pose>.blinkSource`), used
+by Video 2D, Video 3D talk and the rig review sheet; kits rigged before keep
+the old behaviour until they are rigged again. Series shot effects keep
+`rotation`, so a laser can leave the muzzle of a gun aimed left instead of
+always firing right.
+
 Native Series renders again on an install without the optional phoneme
 model. Since #821 every line with dialogue failed there; the render now asks
 `audio.mouth_cues` for `engine: "auto"` (phonemes when installed, Rhubarb

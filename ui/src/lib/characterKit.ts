@@ -67,6 +67,8 @@ export interface CharacterKit {
     eyes?: CharacterFaceAnchor
     /** false: the eyes are hidden in this pose (sunglasses), so it never blinks. */
     blink?: boolean
+    /** This pose's own closed eyes (flat rig); without it the kit blink is scaled onto the pose. */
+    blinkSource?: string
   }>
   provenance: Array<Record<string, unknown>>
   /** Style + traits the user picked; Face Rig fills overlay prompts from this. */
@@ -384,7 +386,7 @@ export function mountCharacterKitLayers(
   if (blink?.reviewState === 'approved' && anchors?.blink !== false) {
     const eyeTransform = { ...faceTransform(anchors?.eyes ?? DEFAULT_CHARACTER_BLINK_ANCHOR), opacity: 0 }
     layers.push({
-      id: `kit-${kit.id}-eyes-blink`, name: `${kit.name} Eyes blink`, type: 'overlay', source: blink.source,
+      id: `kit-${kit.id}-eyes-blink`, name: `${kit.name} Eyes blink`, type: 'overlay', source: anchors?.blinkSource ?? blink.source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: eyeTransform,
       animation: { start: { ...eyeTransform, opacity: 0 }, end: { ...eyeTransform, opacity: 0 }, duration, curve: 'hold' },
       faceBinding: { poseLayerId, role: 'blink', state: 'blink' },
