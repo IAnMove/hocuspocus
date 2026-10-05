@@ -211,6 +211,12 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
         # A pose whose eyes are hidden (sunglasses) keeps them still: no blink.
         if raw_group.get("blink") is False:
             group["blink"] = False
+        elif raw_group.get("blinkSource") is not None:
+            # The pose's own closed eyes (flat rig); without it the kit's blink is scaled onto the pose.
+            source = _text(raw_group["blinkSource"], f"{pose_id} blink source", 1200, required=True)
+            if source.startswith("blob:"):
+                raise ValueError(f"{pose_id} blink source must be persistent, not a browser blob URL")
+            group["blinkSource"] = source
         anchors[pose_id] = group
 
     result: dict[str, Any] = {

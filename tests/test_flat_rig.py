@@ -226,6 +226,11 @@ def test_a_kit_is_rigged_saved_and_can_be_rigged_again_from_its_original_poses(t
     assert sorted(kit["mouth"]) == sorted(STATES) and kit["mouthMapping"]["rest"] == "closed"
     assert kit["eyes"]["blink"]["reviewState"] == "approved"
     assert set(kit["anchors"]) == {"base", "shrug"}
+    # Each pose closes its own eyes: a file of its own, next to the kit's (base) blink.
+    blinks = {pose: kit["anchors"][pose]["blinkSource"] for pose in ("base", "shrug")}
+    assert len(set(blinks.values())) == 2 and all("-blink-" in source for source in blinks.values())
+    for source in blinks.values():
+        assert (folder / source.split("/api/v1/file/")[1].split("?")[0]).is_file()
     assert kit["base"]["source"] != "/api/v1/file/kevin-keyed.png?workspace=cast"
     for asset in [kit["base"], kit["poses"]["shrug"], kit["eyes"]["blink"], *kit["mouth"].values()]:
         name = asset["source"].split("/api/v1/file/")[1].split("?")[0]
@@ -265,6 +270,7 @@ def test_a_pose_in_sunglasses_is_saved_without_a_blink(tmp_path):
     rigged = rig_character(str(folder), WORKSPACE, "kevin", base_revision=library["revision"] + 1)
     anchors = rigged["character"]["anchors"]
     assert anchors["cool"]["blink"] is False and "blink" not in anchors["base"]
+    assert "blinkSource" not in anchors["cool"] and anchors["base"]["blinkSource"].startswith("/api/v1/file/")
     assert rigged["poses"]["cool"]["blinks"] is False
 
 
@@ -299,3 +305,16 @@ def test_the_http_route_rigs_and_reports_errors_with_a_code(tmp_path):
     bad = client.post(path, json={"workspace": WORKSPACE, "baseRevision": 2, "style": {"width": 2}})
     assert bad.status_code == 422 and bad.json()["detail"]["code"] == "invalid_style"
     assert json.loads((folder / ".character-kit-library-v1.json").read_text())["revision"] == 2
+
+
+def test_a_pose_blink_covers_its_own_eyes_where_the_base_blink_would_not(tmp_path):
+    """The bug: the base blink, scaled by eye height onto a pose whose eyes sit wider, left the sclera showing."""
+    from services.flat_rig import place
+    wide = _cutout(size=(520, 760))
+    base_rig, wide_rig = rig_pose(_cutout(), rig_style(None)), rig_pose(wide, rig_style(None))
+    def white_left(rig, blink):
+        x0, y0, x1, y1 = rig["eyes_box"]
+        closed = np.array(place(rig["image"], blink, rig["eyes"]))[y0:y1, x0:x1, :3]
+        return int((closed.min(axis=2) > 235).sum())
+    assert white_left(wide_rig, wide_rig["blink"]) == 0, "its own blink closes both eyes"
+    assert white_left(wide_rig, wide_rig["blink"]) <= white_left(wide_rig, base_rig["blink"])

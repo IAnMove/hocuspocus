@@ -310,7 +310,8 @@ export function lockFaceRigEyePlacement(
     ...kit,
     anchors: {
       ...kit.anchors,
-      [normalizedPoseId]: { mouth: normalizeFaceRigAnchor(current.mouth), mouthStates: current.mouthStates, eyes: nextAnchor },
+      // Spread first: the pose keeps its own blink (blinkSource) and a hidden-eyes flag (blink: false).
+      [normalizedPoseId]: { ...current, mouth: normalizeFaceRigAnchor(current.mouth), mouthStates: current.mouthStates, eyes: nextAnchor },
     },
     ...(record ? {
       provenance: [...kit.provenance, {
@@ -335,8 +336,9 @@ export function setFaceRigAnchor(
   const nextAnchor = normalizeFaceRigAnchor(anchor)
   const current = kit.anchors[normalizedPoseId] ?? kit.anchors.base ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
   const nextPoseAnchors = isFaceRigEyeState(state)
-    ? { mouth: normalizeFaceRigAnchor(current.mouth), mouthStates: current.mouthStates, eyes: nextAnchor }
+    ? { ...current, mouth: normalizeFaceRigAnchor(current.mouth), mouthStates: current.mouthStates, eyes: nextAnchor }
     : {
+      ...current,
       mouth: normalizeFaceRigAnchor(current.mouth ?? nextAnchor),
       mouthStates: { ...current.mouthStates, [state]: nextAnchor },
       eyes: current.eyes,
