@@ -6,6 +6,15 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The Video 3D toon look renders in the headless exporter. Hunyuan3D GLBs have no
+normals; three flat-shades PBR materials then, but not toon materials, so their
+light was NaN: a draft export came out entirely black (the bloom spread the NaN
+over the frame) and a final export drew every model as a black silhouette.
+Those meshes now borrow smooth normals for the toon draw. Toon models also get
+the scene's environment light back as flat fill, so scenes lit mostly by the
+room environment keep their colours, and the ink no longer shows as black
+specks through holes in scanned meshes.
+
 The humanoid rig accepts characters with long hair and a skirt. Hair down to the
 shoulders hides the neck in the front silhouette and a skirt makes the waist the
 narrowest row, so the waist was taken for the neck, the arms for part of the head

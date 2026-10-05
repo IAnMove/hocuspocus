@@ -78,8 +78,17 @@ toon?: { steps?: 2..4, outline?: 0..8, ink?: '#rrggbb' }   // defaults: 3 bands,
   `color`, `emissive`, `emissiveMap`, `alphaMap`, opacity and transparency, `side`, vertex colours, skinning and morph
   targets. Normal, roughness and metalness maps are dropped on purpose: cels are flat. A shared `DataTexture` gradient
   with `NearestFilter` gives `steps` hard bands; the darkest is 30 % light and the others are spaced evenly up to full
-  light, so shadows are not black. Toon materials take no environment (IBL) light. Unlit (`MeshBasicMaterial`) GLB
-  materials stay unlit.
+  light, so shadows are not black. Unlit (`MeshBasicMaterial`) GLB materials stay unlit.
+- **Environment light.** `MeshToonMaterial` takes no environment map, so a scene lit mostly by `lighting.environment`
+  would leave toon models dark. The toon copy adds the environment back as flat indirect light: π × 1.2 ×
+  `scene.environmentIntensity`. 1.2 is the diffuse light a white surface gets from the generated room at intensity 1,
+  measured on a sphere and a box from three sides. A white toon surface then gets about the light a white PBR surface
+  gets from the room, without its direction. Metalness is ignored, so metallic Hunyuan3D textures keep their colour.
+- **Models without normals.** Hunyuan3D GLBs have no `NORMAL` attribute. three flat-shades PBR, Lambert and Phong
+  materials in that case, but not `MeshToonMaterial`: its normal would be zero and the light NaN. Without a FINITE
+  pass (draft export), the bloom then spreads the NaN over the whole frame and the frame is black; with it (final),
+  the models are black silhouettes. For the draw, such a geometry borrows the welded outline normals as `normal`,
+  so the cel shading is smooth; they are removed again right after.
 - **Ink.** An inverted hull: a second `Mesh`, or a `SkinnedMesh` bound to the same skeleton and bind matrix, shares the
   geometry and morph weights and is drawn back faces only in the ink colour. Its vertex shader pushes each vertex
   across the screen along a normal averaged over every face at that position, so hard edges and UV seams do not
@@ -88,6 +97,9 @@ toon?: { steps?: 2..4, outline?: 0..8, ink?: '#rrggbb' }   // defaults: 3 bands,
     the same. It does not depend on the model's scale, units or bones.
   - Lines keep their width up to 6 m from the camera and thin with distance beyond that, down to 35 % of the width.
   - The hull sits 0.15 % of its distance behind the surface, so it never covers a front face.
+  - Hull faces turned more than about 127° away from the camera (cosine below −0.6) draw no ink. The line comes
+    from faces near the silhouette; faces turned away only show through holes and open seams of scanned meshes, as
+    black specks.
   - No ink on transparent materials with opacity below 1, alpha-tested or alpha-hashed materials (glass, hair cards)
     or materials with an `alphaMap`; a mesh with several materials hides only those groups. A model that is
     materializing (`slot.appearance`) gets ink only once it has fully arrived.

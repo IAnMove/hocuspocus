@@ -43,6 +43,9 @@ const INK_REACH = 6
 const INK_FLOOR = 0.35
 /** The hull sits this fraction of its distance behind the surface, so it never covers a front face. */
 const INK_DEPTH = 0.0015
+/** Hull faces turned further from the camera than this (cosine) are dropped. The line comes from faces near the
+ * silhouette; faces turned away only show through holes and open seams of a scanned mesh, as black specks. */
+const INK_AWAY = -0.6
 export const OUTLINE_NORMAL = 'toonOutlineNormal'
 const HEX = /^#[0-9a-f]{6}$/i
 
@@ -128,11 +131,34 @@ function programKey(source: LitMaterial): string {
   ].join('|')
 }
 
+/** Diffuse light a white surface gets from the generated room environment at intensity 1. Measured on a sphere and
+ * a box seen from three sides (0.19 to 0.47 at intensity 0.25, about 0.3 on average). */
+const ROOM_FILL = 1.2
+
+/** Flat ambient irradiance that gives a toon surface the diffuse light a PBR surface gets from the environment.
+ * MeshToonMaterial takes no environment map, so without it a scene lit mostly by its environment goes dark. */
+export function environmentFill(intensity: number): number {
+  return Math.PI * ROOM_FILL * Math.max(0, intensity)
+}
+
+export type ToonFill = { value: Color }
+
+/** Adds `fill` as indirect diffuse light after three's own lights. */
+export function withEnvironmentFill(shader: { uniforms: Record<string, unknown>; fragmentShader: string }, fill: ToonFill) {
+  shader.uniforms.toonFill = fill
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform vec3 toonFill;')
+    .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse += toonFill * BRDF_Lambert( material.diffuseColor );')
+}
+
 /** A toon copy that also runs the authored material's shader patches (speech faces, materialization). */
-export function toonMaterialFor(source: LitMaterial): MeshToonMaterial {
+export function toonMaterialFor(source: LitMaterial, fill: ToonFill = { value: new Color(0) }): MeshToonMaterial {
   const toon = new MeshToonMaterial()
-  toon.onBeforeCompile = (shader, renderer) => source.onBeforeCompile(shader, renderer)
-  toon.customProgramCacheKey = () => `toon:${source.customProgramCacheKey()}`
+  toon.onBeforeCompile = (shader, renderer) => {
+    source.onBeforeCompile(shader, renderer)
+    withEnvironmentFill(shader, fill)
+  }
+  toon.customProgramCacheKey = () => `toon-fill:${source.customProgramCacheKey()}`
   mirror(source, toon)
   return toon
 }
@@ -207,6 +233,7 @@ export const INK_VERTEX = /* glsl */`
 #include <logdepthbuf_pars_vertex>
 attribute vec3 ${OUTLINE_NORMAL};
 uniform float inkWidth;
+varying float inkFacing;
 void main() {
   #include <morphinstance_vertex>
   vec3 objectNormal = ${OUTLINE_NORMAL};
@@ -219,9 +246,11 @@ void main() {
   #include <project_vertex>
   mvPosition.xyz *= 1.0 + ${INK_DEPTH};
   gl_Position = projectionMatrix * mvPosition;
+  vec3 viewNormal = normalize(normalMatrix * objectNormal);
+  inkFacing = dot(viewNormal, normalize(-mvPosition.xyz));
   // Push the hull out across the screen: the same width for any model scale or frame size.
   float aspect = projectionMatrix[1][1] / projectionMatrix[0][0];
-  vec2 across = (projectionMatrix * vec4(normalize(normalMatrix * objectNormal), 0.0)).xy * vec2(aspect, 1.0);
+  vec2 across = (projectionMatrix * vec4(viewNormal, 0.0)).xy * vec2(aspect, 1.0);
   float span = length(across);
   if (span > 1e-5) {
     float reach = clamp(${INK_REACH.toFixed(1)} / max(gl_Position.w, 1e-3), ${INK_FLOOR}, 1.0);
@@ -233,10 +262,12 @@ void main() {
 
 export const INK_FRAGMENT = /* glsl */`
 uniform vec3 inkColor;
+varying float inkFacing;
 #include <common>
 #include <fog_pars_fragment>
 #include <logdepthbuf_pars_fragment>
 void main() {
+  if (inkFacing < ${INK_AWAY.toFixed(2)}) discard;
   #include <logdepthbuf_fragment>
   gl_FragColor = vec4(inkColor, 1.0);
   #include <tonemapping_fragment>
@@ -286,8 +317,17 @@ function followMesh(hull: Mesh, mesh: Mesh) {
   if (skinned.skeleton !== source.skeleton || !skinned.bindMatrix.equals(source.bindMatrix)) skinned.bind(source.skeleton, source.bindMatrix)
 }
 
+/** three flat-shades PBR, Lambert and Phong materials whose geometry has no normals (GLTFLoader leaves Hunyuan3D
+ * meshes so), but not toon materials: their normal would be zero and the light NaN, which bloom then spreads over
+ * the whole frame. Such a geometry borrows the welded outline normals for the draw; returns it to take them back. */
+function lendNormals(geometry: BufferGeometry): BufferGeometry | undefined {
+  if (geometry.getAttribute('normal')) return undefined
+  geometry.setAttribute('normal', outlineNormals(geometry))
+  return geometry
+}
+
 type Converted = { toon: MeshToonMaterial; key: string; pass: number }
-type Swap = { mesh: Mesh; material: Mesh['material']; hull?: Mesh }
+type Swap = { mesh: Mesh; material: Mesh['material']; hull?: Mesh; normals?: BufferGeometry }
 
 export class ToonLook {
   private settings: ToonSettings | null = null
@@ -298,11 +338,14 @@ export class ToonLook {
   private ink?: ShaderMaterial
   private hidden?: MeshBasicMaterial
   private pass = 0
+  private fill: ToonFill = { value: new Color(0) }
 
-  /** Settings and model roots for the next draws; null switches the look off and frees what it created. */
-  sync(settings: ToonSettings | null, targets: readonly ToonTarget[]) {
+  /** Settings and model roots for the next draws; null switches the look off and frees what it created.
+   * `environment` is the scene's environment light intensity (0 without one), given back to toon surfaces as fill. */
+  sync(settings: ToonSettings | null, targets: readonly ToonTarget[], environment = 0) {
     this.settings = settings
     this.targets = settings ? targets : []
+    this.fill.value.setScalar(environmentFill(environment))
     if (!settings) this.dispose()
   }
 
@@ -318,6 +361,7 @@ export class ToonLook {
       for (const swap of swaps) {
         swap.mesh.material = swap.material
         swap.hull?.removeFromParent()
+        swap.normals?.deleteAttribute('normal')
       }
       this.sweep()
     }
@@ -347,7 +391,7 @@ export class ToonLook {
       const changed = Array.isArray(toon) ? toon.some((item, index) => item !== (material as Material[])[index]) : toon !== material
       if (!changed && !hull) continue
       mesh.material = toon
-      swaps.push({ mesh, material, hull })
+      swaps.push({ mesh, material, hull, normals: changed ? lendNormals(mesh.geometry) : undefined })
     }
     return swaps
   }
@@ -356,7 +400,7 @@ export class ToonLook {
     if (!isLitMaterial(source)) return source
     let entry = this.converted.get(source)
     if (!entry) {
-      entry = { toon: toonMaterialFor(source), key: programKey(source), pass: 0 }
+      entry = { toon: toonMaterialFor(source, this.fill), key: programKey(source), pass: 0 }
       this.converted.set(source, entry)
     }
     if (entry.pass !== this.pass) {
