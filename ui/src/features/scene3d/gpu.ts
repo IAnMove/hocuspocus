@@ -629,7 +629,9 @@ function syncToonLook(world: GpuWorld, document: Scene3DDocument, sceneSeconds: 
   const settings = resolveToon(document)
   if (!settings && !world.toon) return
   world.toon ??= new ToonLook()
-  world.toon.sync(settings, settings ? toonTargets(world, document, sceneSeconds) : [])
+  // Toon materials take no environment map; the look gives its diffuse light back as flat fill.
+  const environment = world.scene.environment ? world.scene.environmentIntensity : 0
+  world.toon.sync(settings, settings ? toonTargets(world, document, sceneSeconds) : [], environment)
 }
 
 /** Model slots only: image cutouts, backdrops, screens and sets keep their authored look. */

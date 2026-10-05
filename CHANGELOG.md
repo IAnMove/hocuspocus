@@ -6,6 +6,15 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The Video 3D toon look renders in the headless exporter. Hunyuan3D GLBs have no
+normals; three flat-shades PBR materials then, but not toon materials, so their
+light was NaN: a draft export came out entirely black (the bloom spread the NaN
+over the frame) and a final export drew every model as a black silhouette.
+Those meshes now borrow smooth normals for the toon draw. Toon models also get
+the scene's environment light back as flat fill, so scenes lit mostly by the
+room environment keep their colours, and the ink no longer shows as black
+specks through holes in scanned meshes.
+
 Video 3D has eight anime shots (tag `anime`, 1920×1080 at 24 fps) for the
 classic 1980s TV-anime tricks: `anime-speedline-charge`, `anime-impact-frame`,
 `anime-snap-zoom`, `anime-sword-clash`, `anime-face-off`, `anime-airship-flyby`,
