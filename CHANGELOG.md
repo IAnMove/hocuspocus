@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A restart keeps its port. The socket bound before the start-up banner had no
+`SO_REUSEADDR`, so the previous server's connections in TIME_WAIT blocked the
+port for a minute and the app moved to the next one (42004 instead of 42003).
+It is set on POSIX, which still refuses a port another process listens on;
+Windows binds exclusively.
+
 Native Series renders again on an install without the optional phoneme
 model. Since #821 every line with dialogue failed there; the render now asks
 `audio.mouth_cues` for `engine: "auto"` (phonemes when installed, Rhubarb
