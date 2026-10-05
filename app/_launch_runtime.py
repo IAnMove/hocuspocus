@@ -24653,6 +24653,10 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                         try:
                             expected_args = set(inspect.signature(wgp.generate_video).parameters.keys())
                             filtered_params = {k: v for k, v in params.items() if k in expected_args}
+                            # A cloned voice hears its reference with long pauses shortened
+                            # (a cached copy; the job and the user's file keep the original).
+                            from services.speech_reference_pauses import tighten_clone_references
+                            tighten_clone_references(filtered_params, base_model_type=wgp.get_base_model_type)
                             plugin_data = task.get('plugin_data', {})
                             # Model downloads are blocking inside hf-hub. Bind
                             # their byte-progress loop to this exact job's

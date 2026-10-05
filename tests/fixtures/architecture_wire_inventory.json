@@ -380,6 +380,12 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
+      "file": "tests/test_speech_reference_pauses.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
+    },
+    {
       "file": "tests/test_story_lab_audio_ui.py",
       "target": "ui/src/stores/useStore.ts",
       "classification": "fragile_source",

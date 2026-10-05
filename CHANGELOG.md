@@ -6,6 +6,25 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Short lines in a cloned voice are spoken again when the reference recording
+has long pauses. Qwen3 Base continues its reference recording, and a reference
+that waits 0.5 to 1 s between sentences taught it to wait: lines of two to
+four words came back as 0.05 s of a click or only silence, in every take and
+with every seed, while the same recording with its pauses shortened spoke them
+all. Before the model reads a Qwen3 Base reference
+(`audio_guide`, and `audio_guide2` for the second speaker), the generation
+worker now shortens every pause longer than 0.3 s to 0.25 s, half kept on each
+side, and the silence at the start and end to 0.25 s. No speech is cut, so the
+reference transcript stays valid. Silence is anything under -35 dBFS and at
+least 30 dB under the recording's peak, so a quiet recording keeps its quiet
+words. The shortened copy is a WAV in `cache/voice-references/`, keyed by the
+recording's bytes, and every later line reuses it; the user's file, the job
+parameters and the generation metadata keep the original. A reference without
+long pauses is used as it is, and when ffmpeg is missing or fails the original
+is used. This covers every path that clones a voice: Series native renders,
+`generation.speech`, Character Kit auditions and a designed voice used as a
+reference.
+
 Video 3D clouds, fog and smoke (`worldSfx` `fog`, `smoke`, `dust` and every
 other effect drawn with the shared effect noise) no longer show hard square
 blocks on NVIDIA GPUs, with or without the toon look. The noise hashed each
