@@ -276,3 +276,14 @@ def test_a_3d_shot_places_its_objects_with_the_clip_found_in_the_model(tmp_path)
         raise AssertionError("expected unknown_clip")
     kept = series_shot3d.normalize_scene3d({"template": "anime-face-off", "retime": False})
     assert kept["retime"] is False and "objects" not in kept
+
+
+def test_a_3d_shot_asks_for_the_toon_look_and_drops_bad_settings():
+    value = series_shot3d.normalize_scene3d({"template": "anime-face-off", "renderLook": "toon", "toon": {"steps": 2, "ink": "#AA0000"}})
+    assert (value["renderLook"], value["toon"]) == ("toon", {"steps": 2, "ink": "#aa0000"})
+    bad = series_shot3d.normalize_scene3d({"template": "anime-face-off", "renderLook": "cel", "toon": {"steps": 9}})
+    assert "renderLook" not in bad and "toon" not in bad
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", {"id": "s31", "scene3d": value}, [], 4, {}, {}, NativeRenderError)
+    patch = tools.calls[1][1]["input"]
+    assert (patch["renderLook"], patch["toon"]) == ("toon", {"steps": 2, "ink": "#aa0000"})
