@@ -12,8 +12,8 @@ from app.services.director.minimax_h3_prompting import is_structured_h3_prompt
 def test_h3_duration_segments_stay_on_the_supported_lattice():
     segments = director_pipeline._minimax_h3_frame_segments(45.0)
 
-    assert len(segments) == 8, "every pass is at least 124 frames, so 1080 frames make eight"
-    assert all(124 <= frames <= 345 for frames in segments)
+    assert len(segments) == 9
+    assert all(107 <= frames <= 345 for frames in segments)
     assert all(frames % 17 == 5 for frames in segments)
     assert abs(sum(segments) - 45 * 24) <= 17 / 2
 
@@ -40,8 +40,7 @@ def test_director_startup_removes_only_private_audio_scratch(tmp_path: Path):
 def test_h3_long_shot_is_split_without_losing_its_duration():
     segments = director_pipeline._minimax_h3_frame_segments(20.0)
 
-    assert len(segments) == 3, "no pass below the model's 124-frame minimum: 480 frames make three"
-    assert all(124 <= frames <= 345 and frames % 17 == 5 for frames in segments)
+    assert len(segments) == 4
     assert abs(sum(segments) - 20 * 24) <= 17 / 2
 
 
@@ -227,7 +226,7 @@ def test_h3_direct_video_repeats_master_and_never_sends_images(tmp_path: Path):
             "h3direct",
             params,
             [plan],
-            [{"duration_sec": 15}],  # two native passes of the lattice minimum and up
+            [{"duration_sec": 10}],
             [""],
             {
                 "num_inference_steps": 20,

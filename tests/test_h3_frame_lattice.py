@@ -23,7 +23,8 @@ def test_every_path_reads_the_same_numbers():
     assert (handler._H3_MIN_FRAMES, handler._H3_MAX_FRAMES, handler._H3_FRAME_STEP) == (124, 345, 17)
     assert quantize_h3_frames(15, reference_mode=False) == 345 and quantize_h3_frames(10.0, reference_mode=True) == 243
     segments = director_pipeline._minimax_h3_frame_segments(45.0)
-    assert all(124 <= frames <= 345 and frames % 17 == 5 for frames in segments)
+    assert all(director_pipeline.CONTINUATION_MIN_FRAMES <= frames <= 345 and frames % 17 == 5 for frames in segments)
+    assert max(director_pipeline._minimax_h3_frame_segments(300.0, target_frames=400)) == 345, "the ceiling is the lattice's"
     del definition
 
 

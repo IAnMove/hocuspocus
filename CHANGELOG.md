@@ -15,9 +15,11 @@ Anthropic) try again after a 429 or a 5xx or a dropped connection, waiting 1,
 2 and 4 seconds (or `Retry-After`), so a transient rate limit no longer kills
 a pipeline of dozens of calls. One H3 frame lattice
 (`services/h3_frame_lattice.py`: 17n+5 frames, 124 to 345 per pass, rounded
-up) is read by the sidecar, the Series renderer, the Director's segmenter and
-the dialogue duration contract; the sidecar's own 362-frame cap with nearest
-rounding is gone, so a shot that fits in one path fits in all. One speech
+up) is read by the sidecar, the Series renderer, the dialogue duration
+contract and the Director's segmenter (whose continuation segments keep their
+107-frame floor, so saved pipelines regroup as before); the sidecar's own
+362-frame cap with nearest rounding is gone, so a shot that fits in one path
+fits in all. One speech
 rate (2.16 words/s, derived from the syllable estimate) replaces the
 Director's 2.1, the shot validator's 2.5 and the sidecar's separate figure.
 

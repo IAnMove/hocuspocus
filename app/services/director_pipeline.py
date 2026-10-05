@@ -12171,6 +12171,10 @@ def _run_comic_renderer_pipeline(
     return [final_name]
 
 
+# A Director continuation segment may be one latent step below the 124-frame recipe floor.
+CONTINUATION_MIN_FRAMES = 107
+
+
 def _minimax_h3_frame_segments(
     duration_sec: float,
     fps: int = 24,
@@ -12178,14 +12182,15 @@ def _minimax_h3_frame_segments(
 ) -> list[int]:
     """Split a requested duration into H3's 17n+5 frame lattice.
 
-    Every native pass stays inside 124..345 frames (services/h3_frame_lattice.py).
+    Segments share the lattice and its 345-frame ceiling (services/h3_frame_lattice.py).
     Director targets the model's recommended 124-frame (~5.2 s) clip length
     instead of filling the 15 s maximum: shorter segments follow a small
     sequence of actions much more reliably and make continuity failures
-    cheaper to reroll.
+    cheaper to reroll. Continuation segments may go down to 107 frames, as
+    they always have: saved pipelines are regrouped by these segment counts.
     """
     from services import h3_frame_lattice
-    minimum, maximum, step, offset = (h3_frame_lattice.MIN_FRAMES, h3_frame_lattice.MAX_FRAMES,
+    minimum, maximum, step, offset = (CONTINUATION_MIN_FRAMES, h3_frame_lattice.MAX_FRAMES,
                                       h3_frame_lattice.STEP, h3_frame_lattice.OFFSET)
     requested = max(minimum, round(max(0.0, float(duration_sec)) * fps))
     target_frames = max(minimum, min(maximum, int(target_frames or 124)))
