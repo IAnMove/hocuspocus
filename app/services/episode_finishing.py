@@ -7,12 +7,15 @@ scene document holds the exact text and timing of its lines (``dialogueBeats``).
 1. Subtitles: ``<episode>.srt`` and ``<episode>.vtt`` from the beats of each
    approved take, placed with the clip offsets the join used (freeze tail plus
    dissolve, or a hard cut when the join fell back to one).
-2. Loudness: two ffmpeg ``loudnorm`` passes apply one linear gain to -16 LUFS
+2. Ambience: with ``soundDesign.ambienceMode: "episode"``, one continuous
+   bed per run of shots in a location, laid under the joined audio at the
+   clips' real places on the timeline (``series_ambience``).
+3. Loudness: two ffmpeg ``loudnorm`` passes apply one linear gain to -16 LUFS
    integrated, under a -1 dBTP ceiling after AAC. Video is stream-copied.
-3. Thumbnail: ``<episode>.thumb.jpg``, a frame of the first shot after the
+4. Thumbnail: ``<episode>.thumb.jpg``, a frame of the first shot after the
    opening one (a series opens on its title card), for lists and publishing.
 
-Neither step fails the assembly. A step that cannot run says why.
+No step fails the assembly. A step that cannot run says why.
 """
 from __future__ import annotations
 
@@ -25,8 +28,12 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+from services import series_ambience
+from services.audio_levels import gain_to
+from services.audio_mix import track_source
 from services.media_dimensions import probe_video_size
 from services.mix_concat import (
+    HOLD_TAIL_SEC,
     _run_ffmpeg_command,
     hold_crossfade_offsets,
     hold_crossfade_output_seconds,
@@ -63,6 +70,14 @@ def join_offsets(durations: Sequence[float], joined_duration: float | None) -> t
     if joined_duration is None or abs(joined_duration - dissolve_total) <= abs(joined_duration - elapsed):
         return hold_crossfade_offsets(durations), "dissolve"
     return cut, "cut"
+
+
+def join_spans(durations: Sequence[float], joined_duration: float | None) -> tuple[list[tuple[float, float]], str]:
+    """Where each clip plays on the joined timeline, ``(start, end)``: a dissolve overlaps a clip's held tail with
+    the next clip's start."""
+    offsets, join = join_offsets(durations, joined_duration)
+    lengths = [max(0.1, float(duration)) + HOLD_TAIL_SEC if join == "dissolve" else float(duration) for duration in durations]
+    return [(offset, offset + length) for offset, length in zip(offsets, lengths)], join
 
 
 def _chunks(text: str) -> list[str]:
@@ -205,6 +220,39 @@ def write_episode_subtitles(
     }
 
 
+# Ambience -------------------------------------------------------------------
+
+def lay_ambience(
+    output_path: str, clip_paths: Sequence[str], ambience: Sequence[dict[str, Any]], *, workspace_dir: str, ffmpeg: str,
+    abort_callback: Callable[[], bool] | None = None, level: Callable[[str], float] = gain_to,
+) -> dict[str, Any]:
+    """Episode-mode beds (``ambience``: each clip's location and entry) under the joined audio, before the loudness."""
+    durations = [probe_duration_seconds(path, ffmpeg) for path in clip_paths]
+    joined = probe_duration_seconds(output_path, ffmpeg)
+    if any(duration is None for duration in durations) or not joined:
+        return {"applied": False, "reason": "The clip durations could not be read"}
+    spans, join = join_spans(durations, joined)
+    resolved = {name: track_source(workspace_dir, name) for name in {item["file"] for item in ambience if item.get("file")}}
+    sources = {name: str(path) for name, path in resolved.items() if path is not None and path.is_file()}
+    seconds = {name: probe_duration_seconds(path, ffmpeg) for name, path in sources.items()}
+    missing = sorted(name for name in resolved if not seconds.get(name))
+    # A missing file leaves its run silent, and the beds around it fade out instead of crossfading into it.
+    shots = [item if item.get("file") not in missing else {"locationId": item.get("locationId")} for item in ambience]
+    beds = series_ambience.plan_beds(shots, spans, seconds)
+    report: dict[str, Any] = {"mode": "episode", **({"missing": missing} if missing else {})}
+    if not beds:
+        reason = (f"Ambience files not found in the workspace: {', '.join(missing)}" if missing
+                  else "No shot's location has an ambience in soundDesign.ambienceByLocation")
+        return {"applied": False, "reason": reason, **report}
+    gains = {name: level(sources[name]) for name in {bed.file for bed in beds}}
+    laid = series_ambience.mix_beds(
+        output_path, beds, [sources[bed.file] for bed in beds], [gains[bed.file] for bed in beds], ffmpeg=ffmpeg,
+        has_audio=probe_has_audio(output_path, ffmpeg), duration=joined, abort_callback=abort_callback)
+    if not laid:
+        return {"applied": False, "reason": "ffmpeg could not mix the ambience beds", **report}
+    return {"applied": True, "join": join, "beds": [bed.report() for bed in beds], **report}
+
+
 # Loudness -------------------------------------------------------------------
 
 def _loudnorm(measured: dict[str, Any] | None = None) -> str:
@@ -335,21 +383,26 @@ def write_episode_thumbnail(output_path: str, clip_paths: Sequence[str], *, ffmp
 def finish_episode(
     output_path: str, clip_paths: Sequence[str], scene_filenames: Sequence[Any], *, workspace_dir: str,
     abort_callback: Callable[[], bool] | None = None, burn: bool = False,
+    ambience: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """``ambience`` (``series_ambience.clip_ambience``) lays episode-mode beds before the loudness pass."""
     ffmpeg = ffmpeg_binary()
     if not ffmpeg:
         reason = {"reason": "ffmpeg is not installed"}
-        return {"subtitles": {"written": False, **reason}, "loudness": {"applied": False, **reason}}
+        finished = {"subtitles": {"written": False, **reason}, "loudness": {"applied": False, **reason}}
+        return {**finished, "ambience": {"applied": False, **reason}} if ambience is not None else finished
+    steps: list[tuple[str, Callable[[], dict[str, Any]]]] = [("subtitles", lambda: write_episode_subtitles(
+        output_path, clip_paths, scene_filenames, workspace_dir=workspace_dir, ffmpeg=ffmpeg))]
+    if ambience is not None:
+        steps.append(("ambience", lambda: lay_ambience(
+            output_path, clip_paths, ambience, workspace_dir=workspace_dir, ffmpeg=ffmpeg, abort_callback=abort_callback)))
+    steps.append(("loudness", lambda: normalize_loudness(output_path, ffmpeg=ffmpeg, abort_callback=abort_callback)))
     finished: dict[str, Any] = {}
-    for key, step in (
-        ("subtitles", lambda: write_episode_subtitles(
-            output_path, clip_paths, scene_filenames, workspace_dir=workspace_dir, ffmpeg=ffmpeg)),
-        ("loudness", lambda: normalize_loudness(output_path, ffmpeg=ffmpeg, abort_callback=abort_callback)),
-    ):
+    for key, step in steps:
         try:
             finished[key] = step()
         except Exception as error:  # A finishing step never costs the joined episode.
-            finished[key] = {"applied" if key == "loudness" else "written": False, "reason": str(error)}
+            finished[key] = {"written" if key == "subtitles" else "applied": False, "reason": str(error)}
     subtitles = finished["subtitles"]
     if burn and subtitles.get("written"):
         try:
@@ -373,7 +426,13 @@ def finishing_note(finished: dict[str, Any]) -> str:
         text = f"{subtitles['cueCount']} subtitle cues."
     else:
         text = f"No subtitles: {subtitles.get('reason', 'not written')}."
-    return f"{sound} {text}"
+    beds = finished.get("ambience")
+    if beds is None:
+        return f"{sound} {text}"
+    if beds.get("applied"):
+        count = len(beds.get("beds") or [])
+        return f"{sound} {text} {count} ambience bed{'' if count == 1 else 's'}."
+    return f"{sound} {text} No ambience beds: {beds.get('reason', 'not laid')}."
 
 
 def remove_episode_subtitles(output_path: str) -> None:

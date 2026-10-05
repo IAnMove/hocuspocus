@@ -322,6 +322,22 @@ export interface SeriesProviderSettings {
   videoCapabilities?: Record<string, unknown>
 }
 
+/** A workspace sound and its level relative to the dialogue (0–2). */
+export interface SeriesSoundCue {
+  file: string
+  volume?: number
+}
+
+/**
+ * Sound every shot gets without the script naming it. `ambienceMode` `shot` (default) mixes the location's ambience
+ * into each shot; `episode` leaves it out of the shots and the assembly lays one continuous bed per location run.
+ */
+export interface SeriesSoundDesign {
+  stinger?: SeriesSoundCue
+  ambienceByLocation?: Record<string, SeriesSoundCue>
+  ambienceMode?: 'shot' | 'episode'
+}
+
 export interface SeriesProject {
   allowedProductionMethods?: SeriesProductionMethod[]
   version: 1
@@ -365,6 +381,7 @@ export interface SeriesProject {
   episodesById: Record<string, SeriesEpisode>
   assets: Record<string, SeriesAsset>
   provider: SeriesProviderSettings
+  soundDesign?: SeriesSoundDesign
   createdAt: string
   updatedAt: string
   [key: string]: unknown

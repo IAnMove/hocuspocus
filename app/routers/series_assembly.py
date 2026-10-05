@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.asset_manifest import publish_generation_sidecar
 from services.episode_finishing import finish_episode, finishing_note, remove_episode_subtitles
+from services.series_ambience import clip_ambience
 from services.series_assembly import episode_assembly_plan
 from services.series_language_versions import localized_view
 from services.series_jobs import SeriesJobStore
@@ -400,11 +401,14 @@ def create_series_assembly_router(
                 raise RuntimeError("ffmpeg could not join the approved Series clips")
             if not os.path.isfile(output_path):
                 raise RuntimeError("Series assembly finished without an output file")
-            update(job_id, stage="finishing", message="Evening the loudness and writing subtitles…")
+            ambience = job.get("ambience")
+            update(job_id, stage="finishing", message=(
+                "Laying the ambience, evening the loudness and writing subtitles…" if ambience is not None
+                else "Evening the loudness and writing subtitles…"))
             finishing = finish_episode(
                 output_path, clip_paths, [item.get("dialogueBeats") or item.get("sceneFilename") for item in job.get("clips", [])],
                 workspace_dir=output_directory, abort_callback=token.is_cancelled,
-                burn=bool(job.get("burnSubtitles")),
+                burn=bool(job.get("burnSubtitles")), ambience=ambience,
             )
             if token.is_cancelled():
                 _remove_assembly_artifacts(output_path)
@@ -451,6 +455,7 @@ def create_series_assembly_router(
                         ],
                         "loudness": finishing["loudness"],
                         "subtitles": {**finishing["subtitles"], "language": job.get("language") or series.get("spokenLanguage") or series.get("language")},
+                        **({"ambience": finishing["ambience"]} if "ambience" in finishing else {}),
                         **({"language": job["language"]} if job.get("language") else {}),
                         "createdAt": completed_at,
                     },
@@ -527,6 +532,8 @@ def create_series_assembly_router(
             try:
                 view_series, view_episode = localized_view(series, episode, payload.language)
                 clips = episode_assembly_plan(view_series, view_episode)
+                # Episode-mode ambience is laid at the join: each clip's location and bed, kept for a resume.
+                ambience = clip_ambience(view_series, view_episode, clips)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             language = payload.language if view_series is not series else None
@@ -574,6 +581,7 @@ def create_series_assembly_router(
                     "current": 0,
                     "total": len(clips),
                     "clips": clips,
+                    **({"ambience": ambience} if ambience is not None else {}),
                     "burnSubtitles": bool(payload.burnSubtitles),
                     "language": language,
                     "message": "Episode assembly queued.",

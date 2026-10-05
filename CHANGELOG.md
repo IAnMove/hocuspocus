@@ -6,6 +6,23 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series Lab can lay a location's ambience once under the whole episode instead
+of in every shot. With `soundDesign.ambienceMode: "episode"` (the default stays
+`"shot"`), shots no longer mix `ambienceByLocation`, so the bed does not
+restart at every cut, and their takes no longer depend on it: a new file or
+level for a location needs only a new cut, not new takes. The episode
+assembly lays one continuous bed per run of consecutive shots in the same
+location, placed on the clips actually joined (probed, with the freeze-tail
+dissolve or the hard-cut fallback accounted for). A file shorter than its run
+loops with a 1 s crossfade at each seam; a bed fades in and out over 0.8 s
+inside its run and crossfades with the next location's bed, centred on the
+cut. Its `volume` (default 0.22) is balanced against the dialogue like a
+shot's, and the beds are mixed before the -16 LUFS pass. Shots in a location
+without an entry get none, and every clip kind and language version gets the
+same beds. A series in shot mode renders and digests exactly as before;
+switching the mode renders every shot once. The cut's metadata records the
+beds, and `ambienceMode` other than `"shot"` or `"episode"` is rejected.
+
 The flat cutout rig (`characters.rig.flat`) now finds and wipes the painted
 mouth on a face drawn as a texture, such as a face made of falling code
 glyphs. On such a face the gaps between the glyphs are as dark against them as

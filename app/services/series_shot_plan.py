@@ -13,8 +13,9 @@ optional ``layout2d`` block overrides any of it explicitly:
 Locations may carry ``layout2d.homes`` (x % per character, for continuity
 between shots) and ``layout2d.backgroundAssetId``. ``series.soundDesign``
 holds a stinger for the first shot of each scene and an ambience per
-location. Timing follows the recorded lines: 0.35 s in, 0.22 s between
-lines, 0.45 s out, at least 1.5 s.
+location (laid by the episode assembly instead when ``ambienceMode`` is
+``"episode"``: ``series_ambience``). Timing follows the recorded lines:
+0.35 s in, 0.22 s between lines, 0.45 s out, at least 1.5 s.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from typing import Any
 from urllib.parse import quote
 
 from services import series_shot_extras as extras
+from services.series_ambience import ambience_mode
 from services.speech_language import speech_language_code
 
 FRAMINGS = ("wide", "two", "medium", "close", "insert", "title")
@@ -343,7 +345,8 @@ def card_texts(card: dict[str, Any], duration: float, portrait: bool = False) ->
 def sound_tracks(series: dict[str, Any], shot: dict[str, Any], first_of_scene: bool) -> list[dict[str, Any]]:
     design = series.get("soundDesign") if isinstance(series.get("soundDesign"), dict) else {}
     tracks = []
-    ambience = (design.get("ambienceByLocation") or {}).get(shot.get("locationId") or "")
+    # In episode mode the assembly lays the location's ambience once, across the cuts.
+    ambience = (design.get("ambienceByLocation") or {}).get(shot.get("locationId") or "") if ambience_mode(design) == "shot" else None
     if isinstance(ambience, dict) and ambience.get("file"):
         tracks.append({"id": "ambience", "filename": ambience["file"], "name": "Ambience", "kind": "sfx", "startTime": 0,
                        "volume": float(ambience.get("volume", 0.22))})
