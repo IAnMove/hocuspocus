@@ -6,6 +6,45 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The flat rig (`characters.rig.flat`) now handles faces drawn with realistic
+proportions, such as graphic-novel or tenebrist art with flat black shadows,
+eye bags drawn as strokes, round spectacles and moustaches. It was tuned on
+cartoons, where the mouth sits just under the eyes, so it took the first dark
+mark under the eyes: an eye bag or the lower rim of the spectacles. It wiped
+that mark into a smudge under an eye and anchored the mouth there, 15–45 px
+above the real one. The rig now measures each face first. A face is realistic
+when the taller eye opening, measured on the eyes' whole whites, is at most
+0.1 of the head's width at the eye rows and at most 0.3 of the eye pair's
+width. On the poses at hand, realistic faces measure 0.058–0.079 and cartoon
+or anime faces 0.123 or more. On a realistic face the mouth is the thin,
+roughly level pen stroke 0.45–1.35 eye-pair widths under the eye line, nearest
+0.9. A stroke is thin when its dark run down each column is short and it is a
+few pixels long across, so flat shadows, moustaches, nostrils and beard
+strands are never taken. The search and the fallback placement use the eyes'
+whole whites, because the eye search cuts a long almond white in two. Bolívar's
+mouth anchor moves from −35.4 to −31.9 % (on the line between his lips) and
+Anselmo's from −31.7 to −32.5 % (the slit under his moustache, not the top of
+his chin tuft). Cartoon faces keep the earlier search. On every keyed pose in
+the Plus Ultra, Uncanny Valley and Moncloa Park workspaces, rigged with and
+without `screen`, and on the kit sources rigged with their recorded styles,
+only those four realistic poses change. Every other run keeps the same boxes,
+anchors, warnings and rigged image.
+
+`style.mouthStyle: "ink"` is the mouth for this art; the default stays
+`paper`. The painted mouth is not wiped and is the rest shape, so `closed`
+and `pressed` draw nothing. The other shapes are hard-edged openings in the
+painted mouth's own ink, sampled from it. They hang from the painted line and
+are sized from its width. Only `wide` shows a hint of teeth and tongue. The
+blink and eye anchors do not change. Placement hints fix what the search still
+gets wrong: `hints: {"<pose id>": {"mouth": [x, y], "eyes": [x, y]}}`, in %
+of that pose's keyed image before cropping. With a mouth hint, the rig takes
+the mark nearest the point, or places the mouth there and wipes nothing.
+With an eyes hint, it takes the pair of light eyes at the point anywhere in
+the figure. The kit provenance keeps the hints and later rigs reuse them;
+`null` clears a pose's hints. The result reports per pose `face` (`realistic`
+or `cartoon`) and `mouthFound`. `unwipedPoses` still lists the poses whose
+painted mouth was not found.
+
 Series Lab 2D shots can now have a set in layers, so a slow push reads as depth.
 Before, a shot had one background and the camera push scaled the whole frame,
 which looked flat. A location's `layout2d.layers` holds up to 8 images with

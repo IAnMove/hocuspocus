@@ -53,15 +53,25 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "style": {"type": "object", "properties": {
              "screen": {"type": "boolean"}, "smile": {"type": "number", "minimum": -1, "maximum": 1},
              "smirk": {"type": "number", "minimum": 0, "maximum": 1}, "width": {"type": "number", "minimum": 0.3, "maximum": 0.9},
-             "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}}},
+             "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink"]}}},
+         "hints": {"type": "object", "maxProperties": 32, "additionalProperties": {"anyOf": [{"type": "null"}, {
+             "type": "object", "additionalProperties": False, "properties": {
+                 "mouth": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 100}, "minItems": 2, "maxItems": 2},
+                 "eyes": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 100}, "minItems": 2, "maxItems": 2}}}]}},
          "poses": {"type": "array", "items": ID, "maxItems": 32}},
         ["workspace", "character_id", "base_revision"], True,
         "Make a flat cutout character talk: find the eyes and painted mouth on each keyed pose, wipe the mouth, "
         "draw nine paper mouths and a blink, and save anchors on the kit. The base pose must have a transparent "
-        "background (studio.key). style: smile -1..1 (frown to grin), smirk 0..1, width, mouth_scale; screen true for "
-        "a face that is a screen. Returns the saved kit, a review image URL (each pose, and its face enlarged before and "
-        "after the wipe; poses with warnings framed in red), unwipedPoses and warnings per pose to look at before using "
-        "the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
+        "background (studio.key). style: smile -1..1 (frown to grin), smirk 0..1, width, mouth_scale (paper mouths); screen "
+        "true for a face that is a screen; mouthStyle ink for realistic or graphic-novel art: the painted mouth is kept "
+        "as the rest shape (nothing wiped) and the open shapes are drawn in its own ink, sized from it. A face with "
+        "realistic proportions (small eyes in a wide head) is detected and its mouth taken lower down, past eye bags and "
+        "spectacles. hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y]}} in % of that pose image (before "
+        "cropping) search only there; a mouth hint with no mark there places the mouth at it, nothing wiped. Hints are "
+        "kept and reused by later rigs; null clears a pose's. Returns the saved kit, a review image URL (each pose, and "
+        "its face enlarged before and after the wipe; poses with warnings framed in red), unwipedPoses (no painted "
+        "mouth found), per pose face (realistic or cartoon) and mouthFound, and warnings per pose to look at before "
+        "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
         "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found. A pose whose eyes are covered (sunglasses) "
         "is saved with anchors.<pose>.blink false and never blinks.",
     ),
@@ -357,7 +367,7 @@ def _character_styles(data: dict[str, Any], _request: Callable[..., Any], **_ext
 
 def _rig_flat_character(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body: dict[str, Any] = {"workspace": data["workspace"], "baseRevision": data["base_revision"]}
-    for key in ("style", "poses"):
+    for key in ("style", "poses", "hints"):
         if key in data:
             body[key] = data[key]
     rigged = request("POST", f"/api/v1/character-kits/library/kits/{_quote(data['character_id'])}/flat-rig", body=body)

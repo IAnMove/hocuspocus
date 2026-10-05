@@ -396,6 +396,17 @@ The response includes `filename`, public `source`, `original`, `width`,
 - Trying Face Rig from Character Creator object mode; it is rejected on purpose.
 - Confusing an output-folder token in these routes with a Workspace collection
   ID. The latter is metadata and does not select files.
+- Rigging realistic or graphic-novel art (small eyes, eye bags, spectacles,
+  flat black shadows) with the paper mouths. The flat rig
+  (`POST /api/v1/character-kits/library/kits/{id}/flat-rig`,
+  `characters.rig.flat`) detects such a face and finds its mouth lower down.
+  The cartoon paper mouths still clash with the art: send
+  `style: {"mouthStyle": "ink"}`. The painted mouth then stays as the rest
+  shape, and the open shapes are drawn in its own ink. If a pose's mouth or
+  eyes are found in the wrong place, send
+  `hints: {"<pose id>": {"mouth": [x, y], "eyes": [x, y]}}`, in % of that
+  pose's keyed image. The kit provenance keeps them for later rigs, and `null`
+  clears a pose's hints. See `docs/agents/VIDEO_PRODUCTION_RUNBOOK.md`.
 
 ---
 
