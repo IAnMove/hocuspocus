@@ -114,7 +114,9 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   seconds). `objects` places what does not speak: a 3D model from `model3d.generate`/`model3d.animate` (`file`, its
   `clip` by name, `clipPlayback` {speed, start, loop}) or an image cutout (`"media": "image"`), on a template object
   (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationY` (radians, metres),
-  `grounded: true` for a character standing on the floor, and a `motion` {to, via, points, faceTravel, easing}:
+  `grounded: true` for a character standing on the floor, and a `motion` {to, via, points, faceTravel, headingOffset,
+  easing}. `faceTravel` turns the model's +Z along the path; a generated ship or airship whose nose is its -X needs
+  `headingOffset: 1.5708` (+X: -1.5708, -Z: 3.1416):
   `{"objectId": "zep", "file": "zeppelin.glb", "add": true, "clip": "Fly", "position": [-6, 3, -8],
   "motion": {"to": [6, 3, -8], "faceTravel": true}}`. Mix them: 2D cutouts talk, 3D models move.
   `"renderLook": "toon"` draws the 3D models as cel anime with an ink outline (`toon` {steps 2-4, outline 0-8 px,
