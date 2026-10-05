@@ -18,6 +18,17 @@ wait at once. A Series render job now stops at the shot that ran out of GPU or
 disk instead of waiting again for each following shot, and a cancel during its
 last shot ends the job `cancelled` instead of `failed`.
 
+The flat cutout rig finds small painted mouths again. Since the rig started
+skipping narrow nose strokes, a mouth narrower than a talking mouth (a small
+open «o», or a short line on a small face) was skipped too: the pose kept its
+painted mouth under the talking mouths and was reported as `mouth_not_found`. A
+mouth wide enough for the face is still preferred, so a nose above it stays.
+When there is none, the largest small mark in the middle of the face, below the
+nose's place right under the eyes and not upright, is taken as the mouth, and
+nothing beside it is wiped with it. A nose stroke, a nose right under the eyes
+and marks off to the side (a jaw line, stubble) are never taken, so an already
+rigged pose still gets no wipe. Rig the character again to wipe such a mouth.
+
 The humanoid rig accepts characters in capes and long robes. A cape over the
 shoulders and upper arms joined the arms to the torso in the front silhouette,
 so the shoulders were put at the cape's edge (or the model was refused with
