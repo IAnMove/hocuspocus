@@ -80,6 +80,55 @@ def test_small_eye_rig_keeps_the_nose_and_wipes_the_mouth():
                                     rig["mouth_box"][0]:rig["mouth_box"][2], :3].min() > 100
 
 
+def _small_o_face(o_mouth=True, nose_dot=False, ring=False) -> Image.Image:
+    """The cutout face with a small open «o» mouth, much narrower than a talking mouth, and an optional nose dot
+    right under the eyes."""
+    image = _cutout(mouth=False)
+    draw = ImageDraw.Draw(image)
+    if nose_dot:
+        draw.ellipse((204, 226, 216, 235), fill=(120, 70, 50, 255))
+    if o_mouth:
+        draw.ellipse((200, 250, 220, 274), fill=(150, 60, 60, 255) if ring else (60, 20, 25, 255),
+                     outline=(40, 20, 20, 255) if ring else None, width=3)
+    return image
+
+
+def _lum(rig, box) -> np.ndarray:
+    x0, y0, x1, y1 = box
+    return np.array(rig["image"])[y0:y1, x0:x1, :3] @ np.array([0.299, 0.587, 0.114])
+
+
+@pytest.mark.parametrize("ring", [False, True])
+def test_a_small_round_o_mouth_is_found_and_wiped(ring):
+    rig = rig_pose(_small_o_face(ring=ring, nose_dot=True), rig_style(None))
+    assert rig["wiped"] is True and "mouth_not_found" not in rig["warnings"]
+    x0, y0, x1, y1 = rig["mouth_box"]
+    assert x1 - x0 < 30 and y1 - y0 < 30, "only the «o», not the nose above it"
+    assert _lum(rig, rig["mouth_box"]).min() > 120, "no painted mouth is left to show under the paper mouths"
+    # The nose dot right under the eyes stays.
+    assert _lum(rig, (x0, rig["eyes_box"][3], x1, y0)).min() < 120
+
+
+def test_a_small_o_mouth_under_a_nose_stroke_on_a_full_body_figure_is_wiped_and_the_nose_kept():
+    image = Image.fromarray(_full_body_anime())
+    draw = ImageDraw.Draw(image)
+    draw.line((200, 123, 200, 132), fill=(30, 20, 20, 255), width=3)
+    draw.ellipse((196, 140, 205, 150), fill=(60, 20, 25, 255))
+    rig = rig_pose(image, rig_style(None))
+    assert rig["wiped"] is True
+    x0, y0, x1, y1 = rig["mouth_box"]
+    assert x1 - x0 <= 12 and y1 - y0 <= 12
+    assert _lum(rig, rig["mouth_box"]).min() > 100
+    assert _lum(rig, (x0, rig["eyes_box"][3], x1, y0)).min() < 80, "the nose stroke above the mouth stays"
+
+
+def test_a_nose_alone_is_not_taken_for_a_small_mouth():
+    # An already rigged pose: its mouth is gone, only the nose is left under the eyes.
+    for image in (_small_o_face(o_mouth=False, nose_dot=True), _cutout(mouth=False)):
+        rig = rig_pose(image, rig_style(None))
+        assert rig["wiped"] is False and rig["warnings"] == ["mouth_not_found"]
+
+
 def _cutout(mouth=True, eyes=True, size=(420, 760), skin=SKIN, touching=False, collar=False, pen=7, smirk=False,
             sunglasses=False) -> Image.Image:
     """A paper-cutout figure on a transparent background: round head, white eyes, a painted mouth, a body."""

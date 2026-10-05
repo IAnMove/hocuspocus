@@ -628,8 +628,10 @@ no models and uses isolated test ports. It does not assess visual quality.
 `characters.rig.flat` also checks small cream-coloured eyes inside warm-toned
 face regions when its large white-eye detector finds fewer than two eyes.
 This fallback joins sclera fragments around the pupil and excludes goggles
-above the face and bright body props. Painted-mouth selection requires a
+above the face and bright body props. Painted-mouth selection prefers a
 horizontal seed wide enough for the face, so a short nose stroke is preserved.
+Without one, a small round «o» or short line in the middle of the face, below
+the nose's place right under the eyes, is taken as the mouth.
 Review every pose's mouth and blink before production; an unsupported face or
 an ambiguous result still needs a regenerated pose.
 

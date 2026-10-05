@@ -290,19 +290,38 @@ def _grow(group, pool, reach_x, reach_y, widest, hops):
     return group
 
 
-def _mouth_parts(strict, faint, centre, span, eye_width):
-    """The mouth: the topmost stroke near the middle, its broken pieces along the same line, then the small marks at
+# A mouth stroke at least this share of the eye pair's width is wide enough for the face; a nose mark is narrower.
+WIDE_MOUTH = 0.14
+
+
+def _mouth_seed(strokes, middle, eye_width):
+    """The stroke the mouth grows from. ``middle`` is the face's middle column and the row a tenth of the eye pair's
+    width under the eyes. A stroke wide enough for the face wins (the topmost near the middle), so a nose mark above
+    the mouth stays. Without one, the largest small mark in the middle, under that row and not upright, is the mouth:
+    a small round «o» or a short line. A narrow upright stroke or a mark right under the eyes is a nose, and a mark
+    off to the side is a jaw line or stubble, so none of them is ever taken."""
+    centre, nose = middle
+    wide = [part for part in strokes if part["x1"] - part["x0"] >= eye_width * WIDE_MOUTH]
+    if wide:
+        return min(wide, key=lambda part: part["y0"] + abs(_centre(part)[0] - centre) * 0.5)
+    small = [part for part in strokes if part["x1"] - part["x0"] >= max(eye_width * 0.06, (part["y1"] - part["y0"]) * 0.75)
+             and abs(_centre(part)[0] - centre) <= eye_width * 0.2 and _centre(part)[1] >= nose]
+    return max(small, key=lambda part: part["size"], default=None)
+
+
+def _mouth_parts(strict, faint, middle, span, eye_width):
+    """The mouth: the stroke from ``_mouth_seed``, its broken pieces along the same line, then the small marks at
     its ends (a smirk's curled end, its arrow tip, a dimple). Left behind, those show as a stray stroke beside the
     drawn mouth. Growth only goes through an end, a little at a time, so moustaches, beards and jaws stay."""
     strokes = [p for p in _strokes(strict, faint) if p["x1"] - p["x0"] <= eye_width * 0.95 and p["y1"] - p["y0"] <= span * 0.6]
-    if not strokes:
+    seed = _mouth_seed(strokes, middle, eye_width)
+    if seed is None:
         return []
-    seeds = [part for part in strokes if part["x1"] - part["x0"] >= eye_width * 0.14]
-    if not seeds:
-        return []
-    seed = min(seeds, key=lambda part: part["y0"] + abs(_centre(part)[0] - centre) * 0.5)
     row = [p for p in strokes + faint if p is not seed and abs(_centre(p)[1] - _centre(seed)[1]) < span * 0.14]
     group = _grow([seed], row, eye_width * 0.1, span * 0.1, eye_width * 0.95, 8)
+    if seed["x1"] - seed["x0"] < eye_width * WIDE_MOUTH:
+        # A small mouth has no curled ends to take: both its ends are near the middle, under the nose.
+        return group
     small = max(30, sum(part["size"] for part in group) * 0.35)
     taken = {id(part) for part in group}
     pool = [p for p in faint + strict if id(p) not in taken and p["size"] <= small
@@ -328,7 +347,7 @@ def find_mouth(rgb: np.ndarray, alpha: np.ndarray, eyes_box, screen: bool = Fals
         strict, background = _mouth_candidates(region, inside, eye_height, screen, False, 12)
         # A thin pen-line mouth breaks into tiny faint pieces: a softer threshold and smaller pieces find them.
         faint, _ = _mouth_candidates(region, inside, eye_height, screen, True, 5)
-        parts = _mouth_parts(strict, faint, (rx1 - rx0) / 2, span, eye_width)
+        parts = _mouth_parts(strict, faint, ((rx1 - rx0) / 2, y1 + eye_width * 0.1 - ry0), span, eye_width)
         if parts:
             break
     if not (strict or faint):
