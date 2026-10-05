@@ -82,3 +82,31 @@ test('the root boundary offers no retry', { concurrency: false }, async () => {
     globalThis.fetch = previousFetch
   }
 })
+
+test('a new tab clears a shown error without remounting a panel that keeps working', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { AppErrorBoundary } = await import('../src/components/AppErrorBoundary.tsx')
+  const previousError = console.error
+  const previousFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('{}')
+  console.error = () => {}
+  let mounts = 0
+  function Worker() {
+    React.useEffect(() => { mounts += 1 }, [])
+    return <p>working</p>
+  }
+  try {
+    const view = render(<AppErrorBoundary scope="lips" resetKey="studio:lips"><Worker /></AppErrorBoundary>)
+    view.rerender(<AppErrorBoundary scope="characters" resetKey="studio:characters"><Worker /></AppErrorBoundary>)
+    assert.ok(screen.getByText('working'))
+    assert.equal(mounts, 1, 'switching tabs must not restart a running sequence')
+    view.rerender(<AppErrorBoundary scope="characters" resetKey="studio:characters"><Explodes when /></AppErrorBoundary>)
+    assert.ok(screen.getByRole('alert'))
+    view.rerender(<AppErrorBoundary scope="lips" resetKey="studio:lips"><Worker /></AppErrorBoundary>)
+    assert.ok(screen.getByText('working'), 'the next tab starts without the old error')
+  } finally {
+    cleanup()
+    globalThis.fetch = previousFetch
+    console.error = previousError
+  }
+})

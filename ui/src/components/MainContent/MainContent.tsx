@@ -770,7 +770,7 @@ export function MainContent() {
       {/* Content area: feed + thumbnails */}
       <div className={`flex-1 flex min-h-0 min-w-0 overflow-hidden relative ${workspaceSurface === 'generate' ? 'flex-col xl:flex-row' : 'flex-row'}`}>
         <Suspense fallback={<PanelLoadingFallback />}>
-        <AppErrorBoundary key={`${workspaceSurface}:${mediaFilter}`} scope={mediaFilter} className="flex-1 min-w-0 overflow-y-auto">
+        <AppErrorBoundary resetKey={`${workspaceSurface}:${mediaFilter}`} scope={mediaFilter} className="flex-1 min-w-0 overflow-y-auto">
         {(mediaFilter === 'lips' || lipsBusy) && <div hidden={mediaFilter !== 'lips'} className="flex-1 min-w-0 overflow-y-auto p-3 md:p-6">
           <LipsCreatorPanel onBusyChange={setLipsBusy} />
         </div>}

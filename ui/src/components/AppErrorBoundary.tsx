@@ -7,6 +7,11 @@ type Props = {
   children: ReactNode
   /** Names the failing area in the log; also enables "Try again", which remounts it. */
   scope?: string
+  /**
+   * A new value clears a shown error (the user moved to another tab) without remounting healthy children:
+   * a `key` would remount them, and a panel kept alive while it works (Lips Creator) would stop.
+   */
+  resetKey?: string
   className?: string
 }
 
@@ -21,6 +26,10 @@ class Boundary extends Component<Props, State> {
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
     reportUiError(error, this.props.scope ? `boundary:${this.props.scope}` : 'boundary', info.componentStack)
+  }
+
+  componentDidUpdate(previous: Props): void {
+    if (this.state.failed && previous.resetKey !== this.props.resetKey) this.setState({ failed: false, error: null })
   }
 
   render(): ReactNode {
