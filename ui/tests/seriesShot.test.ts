@@ -53,6 +53,19 @@ test('a vertical frame draws people smaller against its height so two fit side b
   assert.equal(close.scale, 1.1)
 })
 
+test('medium shots and close-ups never show the feet: a wide pose in a vertical frame is enlarged, eyes on the line', () => {
+  const wide = kit('wolf')
+  wide.poses.arms = asset('wolf-arms', 'image', { width: 900, height: 1000 })
+  for (const framing of ['medium', 'close'] as const) {
+    const pose = personTransform(wide, 'arms', framing, 50, 9 / 16)
+    // The arms pose is width-limited in a 9:16 frame; its bottom must still end below the frame.
+    const height = pose.scale * 100 * (9 / 16) / 0.9
+    assert.ok(pose.y + height / 2 >= 111.9, `${framing}: bottom ${pose.y + height / 2}`)
+  }
+  // A narrow pose in a wide frame already crops its feet, so nothing changes.
+  assert.equal(personTransform(kits.kevin, 'base', 'medium', 50, 16 / 9).scale, 1.22)
+})
+
 test('a planned shot compiles to an editable scene with mounted kits, phonetic mouths, motion and camera', () => {
   const scene = compileSeriesShot(kits, shot())
   const background = scene.layers.find(layer => layer.id === 'background')!

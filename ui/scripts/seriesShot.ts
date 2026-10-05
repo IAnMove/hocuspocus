@@ -45,6 +45,8 @@ export const FRAMING_PORTRAIT: typeof FRAMING = {
   wide: { scale: 0.42, eye: null }, two: { scale: 0.55, eye: null }, medium: { scale: 0.78, eye: 30 }, close: { scale: 1.1, eye: 38 },
 }
 const FEET = 94
+/** Medium shots and close-ups cut the body below the frame: the figure must end past this line (% of frame height), so not even the shoes show. */
+const CROP_LINE = 112
 export const BACKGROUND_ZOOM: Record<Framing, number> = { wide: 1, two: 1.12, medium: 1.28, close: 1.5, insert: 1, title: 1 }
 
 function poseAsset(kit: CharacterKit, poseId: string) {
@@ -71,8 +73,18 @@ function eyeFraction(kit: CharacterKit, poseId: string, size: { width: number; h
 export function personTransform(kit: CharacterKit, poseId: string, framing: Framing, x: number, aspect: number, boost = 1): Pose {
   const preset = (aspect < 1 ? FRAMING_PORTRAIT : FRAMING)[framing === 'insert' || framing === 'title' ? 'wide' : framing]
   const size = poseAsset(kit, poseId)
-  const scale = preset.scale * boost
-  const height = drawnHeight(size, scale, aspect)
+  let scale = preset.scale * boost
+  let height = drawnHeight(size, scale, aspect)
+  if (framing === 'medium' || framing === 'close') {
+    // A wide pose (open arms, a tail) in a narrow vertical frame is drawn smaller to fit the width, and a medium shot or
+    // close-up would then show the whole body with its feet in mid-air. Enlarge it, eyes on the same line, until the
+    // feet leave the frame.
+    const needed = (CROP_LINE - preset.eye) / (1 - eyeFraction(kit, poseId, size))
+    if (height < needed) {
+      scale *= needed / height
+      height = needed
+    }
+  }
   const y = preset.eye === null ? FEET - height / 2 + height * 0.015 : preset.eye + (0.5 - eyeFraction(kit, poseId, size)) * height
   return { x, y: round(y), scale: round(scale) }
 }
