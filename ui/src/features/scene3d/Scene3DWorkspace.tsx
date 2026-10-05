@@ -1,4 +1,5 @@
 import { ExampleDownloads } from './ExampleDownloads'
+import { useDocumentRoundtrip } from './documentRoundtrip'
 import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
 import { exampleCollections } from './templateCatalog'
 import { CinematicControls, AppearanceControls } from './CinematicControls'
@@ -354,7 +355,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     adoptMountedScene(remountUserTemplate(pack, sceneDoc, keepAssets), pack.id)
   }
 
-  const roundtrip = Boolean(parseScene3DDocument(JSON.parse(JSON.stringify(sceneDoc))))
+  const roundtrip = useDocumentRoundtrip(sceneDoc)
 
   const exportScene = async () => {
     const target = session.captureForSave()

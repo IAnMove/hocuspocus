@@ -11,6 +11,7 @@ import { useStore } from '../../stores/useStore'
 import { AssetInput } from '../asset-picker/AssetInput.tsx'
 import { useWorkspaceImageOutputs } from '../../lib/labsImagePick'
 import { safeStorageGet } from '../../lib/safeStorage'
+import { useRequestEpoch } from '../../hooks/useRequestEpoch'
 import type { PlannedClip } from '../../types'
 import { forEachComicPanelCapture } from './export'
 import {
@@ -1991,6 +1992,7 @@ export function ComicVideoPreflightPanel({
   const [status, setStatus] = useState<api.PipelineStatus | null>(null)
   const [drafts, setDrafts] = useState<PreviewDraft[]>([])
   const [loading, setLoading] = useState(true)
+  const beginPreviewLoad = useRequestEpoch()
   const [dirty, setDirty] = useState(false)
   const dirtyRef = useRef(false)
   const [waiverReason, setWaiverReason] = useState('')
@@ -2099,6 +2101,9 @@ export function ComicVideoPreflightPanel({
   ])
 
   const loadPreview = async (requestedId?: string | null) => {
+    // Switching comic or workspace starts a newer load; this one must not
+    // publish the other comic's PRE into state or storage.
+    const stale = beginPreviewLoad()
     setLoading(true)
     try {
       const candidates: string[] = []
@@ -2107,6 +2112,7 @@ export function ComicVideoPreflightPanel({
       if (remembered && !candidates.includes(remembered)) candidates.push(remembered)
       try {
         const listed = await api.fetchPipelineList()
+        if (stale()) return
         listed.pipelines
           .filter(item =>
             item.pipeline_type === 'comic_movie'
@@ -2121,6 +2127,7 @@ export function ComicVideoPreflightPanel({
       for (const candidate of candidates) {
         try {
           const recovered = await api.fetchPipelineStatus(candidate)
+          if (stale()) return
           if (recovered.status !== 'preview_ready') continue
           const serverDrafts = normalizePreviewDrafts(recovered.preview_clips || [])
           const fingerprint = recovered.preview_fingerprint || ''
@@ -2169,7 +2176,7 @@ export function ComicVideoPreflightPanel({
       setWaiverReason('')
       setReviewedTestIndices([])
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 

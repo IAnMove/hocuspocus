@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, BookOpen, FileText, Loader2, Play, Square } from 'lucide-react'
 import * as api from '../../api/client'
+import { useJobAction } from './useJobAction'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { Pill, SectionCard, SeriesField, seriesStatusLabel } from './components'
 import { SeriesEpisodeProposalReview } from './SeriesEpisodeProposalReview'
@@ -26,6 +27,7 @@ export function SeriesEpisodePanel({
   const [job, setJob] = useState<SeriesJobStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const jobAction = useJobAction(setError)
   const episodeIdRef = useRef(episode.id)
   const activeJob = job
     && job.episodeId === episode.id
@@ -138,7 +140,7 @@ export function SeriesEpisodePanel({
         <button className={primaryButton} disabled={busy || jobBusy} onClick={() => void start('complete')}><Play size={13} />{t('episode.generateComplete')}</button>
         <button className={secondaryButton} disabled={busy || !episode.script.length || jobBusy} onClick={() => void start('shots')}><Play size={13} />{t('episode.regenerateShots')}</button>
         {onAdaptToComic && <button className={secondaryButton} disabled={busy || jobBusy} onClick={() => void onAdaptToComic()}><BookOpen size={13} />{t('episode.adaptToComic')}</button>}
-        {job && job.episodeId === episode.id && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesPlanJob(job.jobId).then(value => {
+        {job && job.episodeId === episode.id && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.cancelSeriesPlanJob(job.jobId), value => {
           if (episodeIdRef.current === episode.id && value.episodeId === episode.id) setJob(value)
         })}><Square size={13} />{t('episode.cancelJob')}</button>}
       </div>
@@ -146,7 +148,7 @@ export function SeriesEpisodePanel({
         <div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<Pill tone={job.status === 'completed' ? 'green' : job.status === 'failed' ? 'red' : 'violet'}>{seriesStatusLabel(t, job.status)}</Pill><span>{job.message}</span><span className="ml-auto">{job.current}/{job.total}</span></div>
         {job.error && <p className="mt-2 text-[11px] text-red-300">{job.error}</p>}
         {job.status === 'completed' && job.episodeResult && <SeriesEpisodeProposalReview key={job.jobId} workspace={workspace} currentEpisode={episode} proposal={job.episodeResult} series={series} busy={busy} onApply={apply} />}
-        {(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} onClick={() => void api.resumeSeriesPlanJob(job.jobId).then(value => {
+        {(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.resumeSeriesPlanJob(job.jobId), value => {
           if (episodeIdRef.current === episode.id && value.episodeId === episode.id) setJob(value)
         })}>{t('episode.resumeStages')}</button>}
       </div>}
