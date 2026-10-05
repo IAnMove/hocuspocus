@@ -236,3 +236,26 @@ def test_refusals_and_speech_params():
     assert no_kits.value.code == "missing_kits" and "gary" in str(no_kits.value) and "kevin" not in str(no_kits.value)
     preset = speech_params(GARY, "one two three", "english", 7)
     assert preset["model_mode"] == "ryan" and preset["priority"] == 10 and preset["duration_seconds"] == 5
+
+
+@pytest.mark.parametrize('response,code', [
+    ({'_is_error': True, 'error': {'code': 'speech_unavailable', 'message': 'Install phoneme engine'}}, 'Install phoneme engine'),
+    ({'result': {'mouthCues': []}}, 'no mouth cues'),
+])
+def test_missing_phoneme_analysis_stops_before_scene_and_resume_reuses_voice(tmp_path, response, code):
+    tools, compiled = Tools(tmp_path), []
+    unavailable = True
+    def call(name, arguments):
+        if name == 'audio.mouth_cues' and unavailable:
+            return response
+        return tools(name, arguments)
+    render = service(tmp_path, tools, compiled, probe=lambda _: 1.25)
+    render.deps.call = call
+    job = render.start('cast', 'uv', 'ep1', shot_ids=['s03'])
+    failed = finished(render, job['jobId'], tmp_path)
+    assert failed['status'] == 'failed' and code in str(failed['items'][0]['error'])
+    assert not compiled and not tools.exports
+    unavailable = False
+    done = finished(render, render.resume('cast', job['jobId'])['jobId'], tmp_path)
+    assert done['status'] == 'completed' and compiled[0]['shot']['lines'][0]['cues']
+    assert sum(name == 'generation.speech' for name, _ in tools.calls) == 1

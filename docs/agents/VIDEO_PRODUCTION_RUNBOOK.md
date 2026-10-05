@@ -628,6 +628,16 @@ ffmpeg log and keeps the full log on the pipeline. Accepting a reviewed test
 clip records the person who requested that acceptance, the channel, and the
 attestation note. The review checkbox is not filled in by playback.
 
+## Native Series requires acoustic mouth cues
+
+Native Series requests the shared CPU phoneme engine with the recorded line's
+exact transcript. If analysis fails or returns no cues, rendering stops before
+building the scene; it does not silently replace audio alignment with text
+rhythm. Check `audio.phonemes.setup` and install through that tool when needed,
+then resume the native job. Its already recorded voice is reused. Inspect each
+line's `cueCount` in `series.episode.render_native.status` before approving the
+visual result.
+
 ## Publishing a reviewed take with an exact resource name
 
 A script can retain its original resource names after an audio or image retake.
