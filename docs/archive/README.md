@@ -2,7 +2,7 @@
 
 Estos documentos conservan decisiones, requisitos y evidencia de sesiones previas.
 **No son instrucciones vigentes ni una lista de tareas pendientes.** Empieza por
-[CURRENT_WORK](../development/CURRENT_WORK.md). No leas este árbol rutinariamente.
+[docs/README](../README.md). No leas este árbol rutinariamente.
 Archivar no significa que todas las propuestas estén implementadas o canceladas.
 
 - [Ola F1–F12 de arquitectura](2026-09-06/architecture-wave/EXECUTION_BASELINE.md):

@@ -65,3 +65,4 @@ Conexión y token: [Scene SFX, speech and MCP](development/SCENE_EFFECTS_AND_MCP
 - Series con un agente de chat: [series-lab/CHATGPT_MCP](series-lab/CHATGPT_MCP.md).
 - Tutorial dentro de la app (guía de mantenimiento): [help/HELP_OVERLAY](help/HELP_OVERLAY.md).
 - Instalación, requisitos y API HTTP con ejemplos: [README](../README.md).
+- Índice de toda la documentación: [docs/README](README.md).
