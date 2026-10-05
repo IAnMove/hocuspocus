@@ -461,14 +461,19 @@ class SeriesNativeRender:
         return None if checked.get("_is_error") else (checked.get("result") or {}).get("wer")
 
     def _cues(self, workspace: str, filename: str, duration: float, text: str, language: str) -> dict[str, Any]:
+        # "auto" uses the optional phoneme engine when it is installed and Rhubarb otherwise, so an install without
+        # the 1.3 GB phoneme model still renders with acoustic lip-sync; the line records which engine drew it.
         found = self.deps.call("audio.mouth_cues", {"version": 1, "input": {
             "workspace": workspace, "file": filename, "start": 0, "duration": round(min(90, duration), 3), "dialogue": text,
-            "language": SPEECH_CODES.get(language, "en"), "engine": "phoneme"}})
-        result = _ok(found, "Phoneme lip-sync").get("result") or {}
+            "language": SPEECH_CODES.get(language, "en"), "engine": "auto"}})
+        result = _ok(found, "Lip-sync analysis").get("result") or {}
         cues = result.get("mouthCues") or result.get("cues") or []
         if not cues:
-            raise NativeRenderError("mouth_cues_missing", "Phoneme analysis returned no mouth cues; review the audio before rendering", 502)
-        return {"cues": cues, "driver": result.get("recognizer") or result.get("driver") or "wav2vec2-phoneme"}
+            raise NativeRenderError("mouth_cues_missing", "Lip-sync analysis returned no mouth cues; review the audio before rendering", 502)
+        engine = result.get("engine")
+        return {"cues": cues, "driver": result.get("recognizer") or result.get("driver") or engine or "wav2vec2-phoneme",
+                **({"engine": engine} if engine else {}),
+                **({"fallbackReason": result["fallbackReason"]} if result.get("fallbackReason") else {})}
 
     def _scene(self, workspace: str, job: dict, item: dict, series: dict, episode: dict, shot: dict, kits: dict, index: int) -> None:
         ordered = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
