@@ -29,7 +29,10 @@ from services.series_shot_plan import language_key
 
 KIND = "produce"
 RENDER_RETRIES = 1
+# A cut that fails is made again once per run (a resume gives another run), like a render.
+ASSEMBLY_RETRIES = 1
 ACTIVE = ("queued", "running", "cancelling")
+INTERRUPTED = "The server restarted during this production; resume to continue"
 
 
 class ProduceError(RuntimeError):
@@ -82,22 +85,37 @@ class SeriesProduce:
     def start(self, workspace: str, series_id: str, episode_id: str, *, languages: list[str] | None = None,
               burn_subtitles: bool = True, rerender: bool = False) -> dict[str, Any]:
         original, languages = self._languages(workspace, series_id, episode_id, languages)
-        store = self._store(workspace)
-        if any(job.get("episodeId") == episode_id and job.get("status") in ACTIVE for job in store.list()):
+        if any(job.get("episodeId") == episode_id and job.get("status") in ACTIVE for job in self.jobs(workspace)):
             raise ProduceError("already_running", "This episode is already being produced")
         steps = [{"kind": kind, "language": lang, "status": "queued"} for kind in ("render", "assemble") for lang in languages]
         job = {"jobId": f"produce-{uuid.uuid4().hex[:12]}", "workspace": workspace, "seriesId": series_id, "episodeId": episode_id,
                "original": original, "languages": languages, "burnSubtitles": bool(burn_subtitles), "rerender": bool(rerender),
                "status": "queued",
                "steps": steps, "chapters": {}, "createdAt": time.time(), "message": "Queued"}
-        store.save(job)
-        self._launch(workspace, job["jobId"])
+        self._launch(workspace, job)
         return job
+
+    def jobs(self, workspace: str) -> list[dict[str, Any]]:
+        return [self._reconcile(workspace, job) for job in self._store(workspace).list()]
 
     def status(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self._store(workspace).load(job_id)
         if not job:
             raise ProduceError("not_found", "Production job not found", 404)
+        return self._reconcile(workspace, job)
+
+    def _reconcile(self, workspace: str, job: dict) -> dict:
+        """A production that says it is running without a live thread here was cut by a restart: interrupted, once."""
+        if job.get("status") not in ACTIVE:
+            return job
+        thread = self._threads.get(job["jobId"])
+        if thread is not None and (thread.ident is None or thread.is_alive()):
+            return job
+        for step in job.get("steps") or []:
+            if step.get("status") == "running":
+                step["status"] = "queued"
+        job.update(status="interrupted", message=INTERRUPTED, finishedAt=time.time())
+        self._store(workspace).save(job)
         return job
 
     def cancel(self, workspace: str, job_id: str) -> dict[str, Any]:
@@ -120,11 +138,12 @@ class SeriesProduce:
             if step["status"] != "done":
                 step.update(status="queued", error=None, retries=0)
         job.update(status="queued", message="Resuming", error=None)
-        self._store(workspace).save(job)
-        self._launch(workspace, job_id)
+        self._launch(workspace, job)
         return job
 
-    def _launch(self, workspace: str, job_id: str) -> None:
+    def _launch(self, workspace: str, job: dict) -> None:
+        """Save the job and run it on a thread; the thread is registered before the save so a reader never sees an orphan."""
+        job_id = job["jobId"]
         with self._lock:
             running = self._threads.get(job_id)
             if running and running.is_alive():
@@ -132,7 +151,8 @@ class SeriesProduce:
             self._cancel.discard(job_id)
             thread = threading.Thread(target=self._run, args=(workspace, job_id), name=f"series-produce-{job_id}", daemon=True)
             self._threads[job_id] = thread
-            thread.start()
+        self._store(workspace).save(job)
+        thread.start()
 
     # Worker --------------------------------------------------------------
 
@@ -172,8 +192,13 @@ class SeriesProduce:
                    message=f"Rendered and cut in {', '.join(job['languages'])}")
 
     def _wait(self, job: dict, step: dict, tool: str) -> dict[str, Any]:
+        """The step's job when it stops; ``{"status": "unknown"}`` when the server no longer knows it."""
         while True:
-            current = _result(self.deps.call(tool, self._args(job, job_id=step["jobId"])), tool)["job"]
+            reply = self.deps.call(tool, self._args(job, job_id=step["jobId"]))
+            error = reply.get("error") if isinstance(reply, dict) and reply.get("_is_error") else None
+            if isinstance(error, dict) and (error.get("status") == 404 or error.get("code") == "not_found"):
+                return {"status": "unknown", "message": f"{step['kind']} job {step['jobId']} is gone"}
+            current = _result(reply, tool)["job"]
             step["progress"] = current.get("message")
             self._save(job)
             if current.get("status") not in ACTIVE:
@@ -199,10 +224,15 @@ class SeriesProduce:
             if render["status"] == "completed":
                 return
             failed = [f"{item['shotId']}: {item.get('error')}" for item in render.get("items") or [] if item.get("status") == "failed"]
-            # A failed or stopped render is resumed (once per run): resuming a production resumes its render.
+            # A failed, stopped or interrupted render is resumed (once per run): resuming a production resumes its render.
             if self._cancelled(job["jobId"]) or step.get("retries", 0) >= RENDER_RETRIES:
                 raise ProduceError("render_failed", "; ".join(failed[:4]) or render.get("message") or render["status"])
             step["retries"] = step.get("retries", 0) + 1
+            if render["status"] == "unknown":
+                # The server forgot the render (a restart with a lost store): ask for a new one.
+                step["jobId"] = None
+                self._save(job)
+                return self._render(job, step)
             _result(self.deps.call("series.episode.render_native.resume", self._args(job, job_id=step["jobId"])), "resume render")
 
     def _assemble(self, job: dict, step: dict) -> None:
@@ -214,7 +244,12 @@ class SeriesProduce:
             self._save(job)
         cut = self._wait(job, step, "series.assembly.status")
         if cut.get("status") != "completed":
-            raise ProduceError("assembly_failed", cut.get("error") or cut.get("message") or cut.get("status"))
+            # A failed, interrupted or forgotten cut is made again (once per run): resuming a production recuts.
+            if self._cancelled(job["jobId"]) or step.get("retries", 0) >= ASSEMBLY_RETRIES:
+                raise ProduceError("assembly_failed", cut.get("error") or cut.get("message") or cut.get("status"))
+            step.update(retries=step.get("retries", 0) + 1, jobId=None)
+            self._save(job)
+            return self._assemble(job, step)
         job["chapters"][step["language"]] = self._chapter(job, cut)
 
     def _chapter(self, job: dict, cut: dict) -> dict[str, Any]:

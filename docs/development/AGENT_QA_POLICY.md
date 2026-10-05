@@ -28,7 +28,7 @@ The workflow already emits these names. They were not removed.
 
 1. `Clean-repo guard + Python checks`
 2. `UI tests + lint + type-check + build`
-3. `UI E2E boot (Chromium + simulated API)`
+3. `UI E2E boot (Chromium + simulated API) 1/3`, `2/3` and `3/3` (Playwright shards)
 4. `CI required`
 
 Python tests are duration-sharded as `Python tests A` and `Python tests B`.

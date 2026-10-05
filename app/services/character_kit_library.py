@@ -22,6 +22,8 @@ CHARACTER_KIT_LIBRARY_FILENAME = ".character-kit-library-v1.json"
 LIPS_CREATOR_LIBRARY_FILENAME = ".lips-creator-library-v1.json"
 MAX_CHARACTER_KITS = 100
 MAX_LIBRARY_BYTES = 20 * 1024 * 1024
+# Snapshots of earlier revisions kept next to the library (one file per save).
+HISTORY_REVISIONS = 10
 _LOCK = threading.RLock()
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 _STYLES = {"cutout", "children-illustration", "anime-2d"}
@@ -292,6 +294,22 @@ def _revision(value: Any) -> int:
     return value
 
 
+def _prune_history(path: str, keep: int = HISTORY_REVISIONS) -> None:
+    """Drop the oldest ``<library>.v<N>.json`` snapshots beyond the last ``keep`` revisions."""
+    folder, base = os.path.dirname(path) or ".", os.path.basename(path)
+    pattern = re.compile(re.escape(base) + r"\.v(\d+)\.json$")
+    found = []
+    for name in os.listdir(folder):
+        match = pattern.fullmatch(name)
+        if match:
+            found.append((int(match.group(1)), name))
+    for _revision, name in sorted(found)[:-keep] if keep > 0 else sorted(found):
+        try:
+            os.remove(os.path.join(folder, name))
+        except OSError:
+            pass
+
+
 def write_character_kit_library(workspace_dir: str, value: Any, *, base_revision: int, library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> dict[str, Any]:
     expected = _revision(base_revision)
     library = normalize_character_kit_library(value)
@@ -306,12 +324,13 @@ def write_character_kit_library(workspace_dir: str, value: Any, *, base_revision
         os.makedirs(workspace_dir, exist_ok=True)
         path = character_kit_library_path(workspace_dir, library_filename)
         temporary = f"{path}.{uuid.uuid4().hex}.tmp"
-        # Keep the previous authored revision; never silently discard calibration.
+        # Keep the previous authored revisions (the last HISTORY_REVISIONS); calibration is never lost silently.
         if current["revision"] > 0:
             history = f"{path}.v{current['revision']}.json"
             if not os.path.exists(history):
                 with open(history, "x", encoding="utf-8") as handle:
                     json.dump(current, handle, ensure_ascii=False, allow_nan=False)
+            _prune_history(path)
         try:
             with open(temporary, "w", encoding="utf-8") as handle:
                 handle.write(encoded)

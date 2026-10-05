@@ -60,6 +60,8 @@ _TRANSFORMER_WORKING_VRAM_MB = 10 * 1024
 # pass remains inside this native limit. Continuation uses a 17*n+1 overlap:
 # complete 17-frame chunks carry motion history and the final frame is the
 # ordinary FL2VA boundary anchor.
+# Literals on purpose: tests load this handler's helpers by AST without its imports.
+# They must equal services/h3_frame_lattice.py (tests/test_h3_frame_lattice.py checks).
 _H3_MIN_FRAMES = 124
 _H3_MAX_FRAMES = 345
 

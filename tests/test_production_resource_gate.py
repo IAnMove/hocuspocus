@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.production_resource_gate import external_gpu_jobs, guard_mcp
+from services.production_resource_gate import external_gpu_jobs, guard_mcp, guard_workspace_mcp
 
 
 def test_own_resident_model_is_excluded_but_external_jobs_above_limit_wait():
@@ -86,3 +86,34 @@ def test_low_disk_stops_and_disabled_or_cpu_calls_do_not_probe(tmp_path, monkeyp
     monkeypatch.delenv('HOCUS_PRODUCTION_EXTERNAL_VRAM_MB')
     guarded('generation.music', {})
     assert len(commands) == 1 and len(submitted) == 2
+
+
+@pytest.mark.parametrize('operation', ['generation.speech', 'generation.sfx'])
+def test_workspace_audio_generation_waits_before_admission(tmp_path, monkeypatch, operation):
+    monkeypatch.setenv('HOCUS_PRODUCTION_EXTERNAL_VRAM_MB', '2048')
+    monkeypatch.setenv('HOCUS_PRODUCTION_MIN_FREE_GB', '15')
+    reports = iter(['99999999, 6000', '99999999, 1176'])
+    submitted, waits, roots = [], [], []
+    def run(command, **_):
+        if command[0] == 'df':
+            roots.append(command[-1])
+            return SimpleNamespace(stdout='Filesystem\nlocal 16G')
+        return SimpleNamespace(stdout=next(reports))
+    guarded = guard_workspace_mcp(lambda *args: submitted.append(args), lambda ws: tmp_path / ws,
+                                  run=run, usage=lambda _: SimpleNamespace(free=16 * 1024 ** 3),
+                                  sleep=lambda seconds: waits.append(seconds))
+    guarded(operation, {'version': 2, 'input': {'workspace': 'anime'}})
+    assert waits == [30] and len(submitted) == 1
+    assert roots == [str(tmp_path / 'anime')] * 2
+
+
+def test_workspace_gate_requires_scope_only_for_resource_admissions():
+    submitted = []
+    def no_workspace(_):
+        raise AssertionError('Receipt polling must not resolve a workspace')
+    guarded = guard_workspace_mcp(lambda *args: submitted.append(args), no_workspace)
+    guarded('jobs.wait', {'version': 1, 'input': {'job_id': 'job-1'}})
+    assert len(submitted) == 1
+    with pytest.raises(ValueError, match='resource_workspace_required'):
+        guarded('generation.speech', {'version': 2, 'input': {}})
+    assert len(submitted) == 1

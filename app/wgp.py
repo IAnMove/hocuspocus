@@ -2699,7 +2699,16 @@ if not Path(config_load_filename).is_file():
 else:
     with open(config_load_filename, "r", encoding="utf-8") as reader:
         text = reader.read()
-    server_config = json.loads(text)
+    try:
+        server_config = json.loads(text)
+    except ValueError as _config_error:
+        # A truncated file (crash mid-save) must not stop the app from starting at all.
+        _aside = f"{config_load_filename}.corrupt-{int(time.time())}"
+        os.replace(config_load_filename, _aside)
+        raise SystemExit(
+            f"[HocusPocus] {config_load_filename} is not valid JSON ({_config_error}). "
+            f"It was moved to {_aside}; Start again to recreate it, then restore your API keys from the copy."
+        ) from _config_error
 
 server_config.setdefault("prompt_enhancer_quantization", "quanto_int8")
 

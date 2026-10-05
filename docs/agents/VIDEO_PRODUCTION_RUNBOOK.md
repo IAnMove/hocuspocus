@@ -386,13 +386,20 @@ changes. A retake updates its revision so the following resume keeps the new cli
 
 An isolated runtime can set `HOCUS_PRODUCTION_MIN_FREE_GB=15` and
 `HOCUS_PRODUCTION_EXTERNAL_VRAM_MB=2048` in its process environment. Before each
-music/image/H3 or native video export admission, the runner invokes `df -h` and
+music/image/speech/SFX/H3 or native video export admission, the runner invokes `df -h` and
 `nvidia-smi`. It waits in 30-second intervals while another GPU process exceeds
 the limit; its own resident model is excluded. A disk shortfall stops the
 resumable production with `resource_disk_low`, without deleting files. The agent
 must propose a cleanup and wait for the user's approval before resuming.
 These opt-in checks leave other instances untouched. They require the named
 local commands when enabled; absent commands fail before admission.
+
+Series Lab's native renderer applies the same checks to each speech and export
+call in `series.episode.render_native` and the render stage of
+`series.episode.produce`. The UI, MCP and wizard share that renderer. Disk is
+measured on the episode workspace, including every speech retry. Status polling
+and CPU speech checks do not wait for the GPU. CPU video exports check disk
+without waiting for an unrelated GPU generation.
 
 
 ### Rig an existing model through MCP
@@ -601,6 +608,16 @@ real registration/review HTTP and simulated media generation. It requires only
 the CPU packages in `scripts/ci-production-browser-requirements.txt`, downloads
 no models and uses isolated test ports. It does not assess visual quality.
 
+## Flat rigs for full-body cel characters
+
+`characters.rig.flat` also checks small cream-coloured eyes inside warm-toned
+face regions when its large white-eye detector finds fewer than two eyes.
+This fallback joins sclera fragments around the pupil and excludes goggles
+above the face and bright body props. Painted-mouth selection requires a
+horizontal seed wide enough for the face, so a short nose stroke is preserved.
+Review every pose's mouth and blink before production; an unsupported face or
+an ambiguous result still needs a regenerated pose.
+
 ## Comic film PRE after a restart
 
 A comic PRE that was ready before the lab stopped is still ready afterwards.
@@ -610,3 +627,27 @@ canvas of 1280×704. A deterministic render that fails reports the end of the
 ffmpeg log and keeps the full log on the pipeline. Accepting a reviewed test
 clip records the person who requested that acceptance, the channel, and the
 attestation note. The review checkbox is not filled in by playback.
+
+## Native Series requires acoustic mouth cues
+
+Native Series analyses each recorded line with `audio.mouth_cues` and
+`engine: "auto"`: the shared CPU phoneme engine when it is installed, Rhubarb
+otherwise. If analysis fails or returns no cues, rendering stops before
+building the scene; it does not silently replace audio alignment with text
+rhythm. Each line in `series.episode.render_native.status` reports its
+`engine`, its `cueCount` and, when Rhubarb drew it, `fallbackReason:
+phoneme_not_installed`. For sung or vowel-heavy lines install the phoneme
+engine with `audio.phonemes.setup` and resume the job: recorded voices are
+reused. Inspect `cueCount` before approving the visual result.
+
+## Publishing a reviewed take with an exact resource name
+
+A script can retain its original resource names after an audio or image retake.
+Use `assets.upload` with `source`, `copy_to_workspace: true` and
+`destination_filename` in the same workspace. The extension must match the
+source. To replace an existing resource, supply its current
+`expected_destination_sha256`; a stale or missing hash returns
+`destination_conflict` without replacing it. Reuse the same `intent_id` on a
+transport retry. The source remains available, bytes are copied without media
+conversion, and a generation sidecar retains provenance with the destination
+asset name. This is a CPU operation and downloads no models.

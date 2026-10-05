@@ -2,6 +2,9 @@
 import json
 
 import pytest
+
+pytest.importorskip("torch")
+
 import torch
 from mmgp import offload, quant_router
 from shared.qtypes import int8_convrot

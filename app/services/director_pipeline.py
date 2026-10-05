@@ -8406,35 +8406,6 @@ def _run_pipeline(pid: str, resume: bool = False):
                 if clip_slots:
                     artifact_updates["_clip_video_files"] = clip_slots
             _update_pipeline(pid, **artifact_updates)
-        # Special-case the safety scanner. Don't print a stack trace for
-        # safety violations — they're a clean refusal, not a crash, and
-        # the user-visible message is purpose-built. Other exceptions
-        # keep the existing traceback dump for debugging.
-        try:
-            from services.director.safety_scan import SafetyViolationError
-        except Exception:
-            SafetyViolationError = None  # type: ignore
-        if SafetyViolationError is not None and isinstance(e, SafetyViolationError):
-            print(
-                f"[Pipeline {pid}] Safety scan blocked generation. "
-                f"source={e.source} matched={e.matched_terms}"
-            )
-            user_msg = (
-                "Generation aborted: the input contained content involving "
-                f"minors in a prohibited context (matched terms: "
-                f"{', '.join(e.matched_terms)}). The system refuses to "
-                f"generate this category of content. Please revise your "
-                f"concept to use only adult characters (18+)."
-            )
-            _update_pipeline(
-                pid, status="failed", error=user_msg,
-                _completed_at=time.time(),
-                progress={"current": 0, "total": 0,
-                          "message": "Generation aborted (safety policy)",
-                          "step": 0, "total_steps": 0},
-            )
-            _save_pipeline_state(pid)
-            return
         traceback.print_exc()
         # Tag with OOM info if applicable so the UI can surface the
         # OOM recovery banner. detect_oom returns None for non-OOM
@@ -12171,6 +12142,10 @@ def _run_comic_renderer_pipeline(
     return [final_name]
 
 
+# A Director continuation segment may be one latent step below the 124-frame recipe floor.
+CONTINUATION_MIN_FRAMES = 107
+
+
 def _minimax_h3_frame_segments(
     duration_sec: float,
     fps: int = 24,
@@ -12178,12 +12153,16 @@ def _minimax_h3_frame_segments(
 ) -> list[int]:
     """Split a requested duration into H3's 17n+5 frame lattice.
 
-    Open H3 accepts 107..362 frames per request. Director targets the model's
-    recommended 124-frame (~5.2 s) clip length instead of filling the 15 s
-    maximum: shorter segments follow a small sequence of actions much more
-    reliably and make continuity failures cheaper to reroll.
+    Segments share the lattice and its 345-frame ceiling (services/h3_frame_lattice.py).
+    Director targets the model's recommended 124-frame (~5.2 s) clip length
+    instead of filling the 15 s maximum: shorter segments follow a small
+    sequence of actions much more reliably and make continuity failures
+    cheaper to reroll. Continuation segments may go down to 107 frames, as
+    they always have: saved pipelines are regrouped by these segment counts.
     """
-    minimum, maximum, step, offset = 107, 362, 17, 5
+    from services import h3_frame_lattice
+    minimum, maximum, step, offset = (CONTINUATION_MIN_FRAMES, h3_frame_lattice.MAX_FRAMES,
+                                      h3_frame_lattice.STEP, h3_frame_lattice.OFFSET)
     requested = max(minimum, round(max(0.0, float(duration_sec)) * fps))
     target_frames = max(minimum, min(maximum, int(target_frames or 124)))
     count = max(1, round(requested / target_frames))

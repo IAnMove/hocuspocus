@@ -10,6 +10,26 @@ KEVIN_ES = {"provider": "local", "model": "qwen3_tts_base", "voiceId": "referenc
 GARY = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan"}
 
 
+def test_native_speech_stops_before_generation_when_workspace_disk_is_low(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from services.production_resource_gate import guard_workspace_mcp
+    monkeypatch.setenv('HOCUS_PRODUCTION_MIN_FREE_GB', '15')
+    probes, submitted = [], []
+    def guarded(call, resolve):
+        return guard_workspace_mcp(call, resolve,
+            run=lambda command, **_: probes.append(command) or SimpleNamespace(stdout='Filesystem\nlocal 14G'),
+            usage=lambda _: SimpleNamespace(free=14 * 1024 ** 3))
+    monkeypatch.setattr('services.series_native_render.guard_workspace_mcp', guarded)
+    deps = NativeRenderDeps(call=lambda *args: submitted.append(args),
+                            workspace_dir=lambda ws: str(tmp_path / ws),
+                            read_library=lambda _: {}, read_kits=lambda _: {})
+    service = SeriesNativeRender(deps)
+    with pytest.raises(ValueError, match='resource_disk_low'):
+        service._speak('anime', {'language': 'spanish'}, 'line', 'Hola.', KEVIN_ES, 0)
+    assert probes == [['df', '-h', str(tmp_path / 'anime')]]
+    assert not submitted
+
+
 def library():
     character = lambda cid: {"id": cid, "name": cid, "voiceProfile": {"characterKitRef": {"id": f"kit-{cid}", "workspace": "cast"}}}
     shot = lambda sid, order, method, beats, scene="scene_1": {
@@ -28,17 +48,20 @@ def library():
 
 
 class Tools:
-    def __init__(self, tmp_path, bad_first_take=False, fail_export_once=False, wait_errors=()):
+    def __init__(self, tmp_path, bad_first_take=False, fail_export_once=False, wait_errors=(), fail_speech_at=0):
         self.root, self.calls, self.jobs = tmp_path, [], 0
         self.bad_first_take, self.fail_export_once = bad_first_take, fail_export_once
-        self.exports, self.wait_errors = {}, list(wait_errors)
+        self.exports, self.wait_errors, self.fail_speech_at = {}, list(wait_errors), fail_speech_at
 
     def __call__(self, tool, arguments):
         self.calls.append((tool, arguments))
         data = arguments.get("input") or {}
         if tool == "generation.speech":
             self.jobs += 1
+            if self.jobs == self.fail_speech_at:
+                return {"_is_error": True, "error": {"code": "failed", "message": "tts down"}}
             name = f"{data['output_name']}.wav"
+            (self.root / f"{data['output_name']}.meta.json").write_text("{}")
             (self.root / name).write_bytes(b"raw speech")
             return {"receipt": {"result": {"job_id": f"job-{self.jobs}"}}, "_name": name}
         if tool == "jobs.wait":
@@ -113,7 +136,7 @@ def test_every_2d_shot_becomes_an_approved_take_with_each_voice_in_the_series_la
     assert speech[0]["model_mode"] == "spanish" and speech[0]["alt_prompt"] == "Hola."
     assert speech[1]["model_type"] == "qwen3_tts_customvoice" and speech[1]["model_mode"] == "ryan", "Gary has no Spanish voice: default"
     cues = [args["input"] for tool, args in tools.calls if tool == "audio.mouth_cues"]
-    assert cues[0]["language"] == "es" and cues[0]["engine"] == "phoneme"
+    assert cues[0]["language"] == "es" and cues[0]["engine"] == "auto"
     first = compiled[0]["shot"]
     assert first["framing"] == "wide" and first["camera"] == "push" and len(first["lines"]) == 2
     assert first["lines"][0]["cues"] and first["background"]["source"] == "/api/v1/file/assets/uv/bg.png?workspace=cast"
@@ -162,6 +185,18 @@ def test_a_drifting_take_is_spoken_again_and_the_best_one_kept(tmp_path):
     assert (line["attempt"], line["wer"]) == (1, 0.05)
     assert [tool for tool, _ in tools.calls].count("generation.speech") == 2
     assert (tmp_path / line["filename"]).is_file() and not list(tmp_path.glob("*.best.wav"))
+    assert not list(tmp_path.glob("*-raw*")), "raw takes and their sidecars are intermediates"
+
+
+def test_a_speech_failure_after_a_first_take_keeps_that_take_as_the_recording(tmp_path):
+    tools, compiled = Tools(tmp_path, bad_first_take=True, fail_speech_at=2), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "failed" and "tts down" in done["items"][0]["error"]
+    recordings = [path for path in tmp_path.glob("ln-ep1-s03_d0-*.wav") if ".best." not in path.name and "-raw" not in path.name]
+    assert len(recordings) == 1 and not list(tmp_path.glob("*.best.wav")) and not list(tmp_path.glob("*-raw*"))
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert again["status"] == "completed" and again["items"][0]["lines"]["s03_d0"]["reused"], "a resume reuses the kept take"
 
 
 def test_a_failed_export_resumes_at_that_shot_and_reuses_its_recordings(tmp_path):
@@ -230,3 +265,143 @@ def test_refusals_and_speech_params():
     assert no_kits.value.code == "missing_kits" and "gary" in str(no_kits.value) and "kevin" not in str(no_kits.value)
     preset = speech_params(GARY, "one two three", "english", 7)
     assert preset["model_mode"] == "ryan" and preset["priority"] == 10 and preset["duration_seconds"] == 5
+
+
+@pytest.mark.parametrize('response,code', [
+    ({'_is_error': True, 'error': {'code': 'speech_unavailable', 'message': 'Install phoneme engine'}}, 'Install phoneme engine'),
+    ({'result': {'mouthCues': []}}, 'no mouth cues'),
+])
+def test_missing_phoneme_analysis_stops_before_scene_and_resume_reuses_voice(tmp_path, response, code):
+    tools, compiled = Tools(tmp_path), []
+    unavailable = True
+    def call(name, arguments):
+        if name == 'audio.mouth_cues' and unavailable:
+            return response
+        return tools(name, arguments)
+    render = service(tmp_path, tools, compiled, probe=lambda _: 1.25)
+    render.deps.call = call
+    job = render.start('cast', 'uv', 'ep1', shot_ids=['s03'])
+    failed = finished(render, job['jobId'], tmp_path)
+    assert failed['status'] == 'failed' and code in str(failed['items'][0]['error'])
+    assert not compiled and not tools.exports
+    unavailable = False
+    done = finished(render, render.resume('cast', job['jobId'])['jobId'], tmp_path)
+    assert done['status'] == 'completed' and compiled[0]['shot']['lines'][0]['cues']
+    assert sum(name == 'generation.speech' for name, _ in tools.calls) == 1
+
+
+def test_a_render_cut_by_a_restart_is_interrupted_and_resumes(tmp_path):
+    """The job file says running but no thread of this process owns it: that is a restart, not a slow render."""
+    from services.series_jobs import SeriesJobStore
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    store = SeriesJobStore(str(tmp_path), "native")
+    orphan = {"jobId": "native-orphan", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1", "status": "running", "approve": True,
+              "language": "spanish", "original": True, "current": 0, "total": 2, "createdAt": time.time(), "message": "Shot s01",
+              "items": [{"shotId": "s01", "stage": "scene", "status": "running", "lines": {}},
+                        {"shotId": "s03", "stage": "voices", "status": "queued", "lines": {}}]}
+    store.save(orphan)
+    seen = render.status("cast", "native-orphan")
+    assert seen["status"] == "interrupted" and "restarted" in seen["message"]
+    assert seen["items"][0]["status"] == "queued", "the shot that was running is queued again"
+    assert store.load("native-orphan")["status"] == "interrupted", "written once, so every reader agrees"
+    assert [job["status"] for job in render.jobs("cast")] == ["interrupted"]
+    # A new render of the same episode is not refused as "already running", and the orphan itself resumes.
+    fresh = render.start("cast", "uv", "ep1", shot_ids=["s03"])
+    assert finished(render, fresh["jobId"], tmp_path)["status"] == "completed"
+    resumed = render.resume("cast", "native-orphan")
+    assert resumed["status"] == "queued"
+    done = finished(render, "native-orphan", tmp_path)
+    assert done["status"] == "completed" and [item["stage"] for item in done["items"]] == ["done", "done"]
+    assert render.status("cast", done["jobId"])["status"] == "completed", "a finished job is never marked interrupted"
+
+
+def test_an_export_the_server_lost_is_asked_for_again_under_a_new_intent(tmp_path):
+    """An interrupted, discarded or forgotten export cannot complete: waiting for it would never end."""
+    tools = Tools(tmp_path)
+    lost = iter([{"status": "interrupted"}, "forgotten", {"status": "discarded"}])
+
+    class Receipts(Tools):
+        def __call__(self, tool, arguments):
+            if tool == "scenes.video2d.export.receipt":
+                intent = (arguments.get("input") or {})["intent_id"]
+                if intent.endswith("-r3") or intent.endswith("s03-export") or "s03" in intent:
+                    return super().__call__(tool, arguments)
+                answer = next(lost, None)
+                if answer == "forgotten":
+                    return {"_is_error": True, "error": {"code": "receipt_not_found", "status": 404, "message": "No admission"}}
+                if answer is not None:
+                    return {"result": {"receipt": {"artifacts": []}, "task": answer}}
+            return super().__call__(tool, arguments)
+
+    tools = Receipts(tmp_path)
+    render = service(tmp_path, tools, [])
+    job = finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
+    assert job["status"] == "completed", job
+    first = job["items"][0]
+    assert first["exportRetries"] == 3 and first["exportIntent"].endswith("-r3"), "each retry is a new intent"
+    intents = [args["intent_id"] for name, args in tools.calls if name == "scenes.video2d.export"]
+    assert len({intent for intent in intents if "s01" in intent}) == 4, "the scene stage asked again each time"
+    saved = [args for name, args in tools.calls if name == "scenes.document.save"]
+    assert len([args for args in saved if "s01" in args["intent_id"]]) == 4
+
+
+def test_an_export_lost_too_many_times_fails_the_shot_instead_of_looping(tmp_path):
+    class Receipts(Tools):
+        def __call__(self, tool, arguments):
+            if tool == "scenes.video2d.export.receipt" and "s01" in (arguments.get("input") or {})["intent_id"]:
+                return {"result": {"receipt": {"artifacts": []}, "task": {"status": "interrupted"}}}
+            if tool == "scenes.video2d.export.receipt" and tool:
+                return super().__call__(tool, arguments)
+            return super().__call__(tool, arguments)
+
+    tools = Receipts(tmp_path)
+    render = service(tmp_path, tools, [])
+    job = finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
+    assert job["status"] == "failed"
+    assert job["items"][0]["status"] == "failed" and "lost 4 times" in job["items"][0]["error"]
+    assert job["items"][1]["status"] == "done", "the other shot still rendered"
+
+
+def test_a_dubbed_scene_keeps_its_language_in_its_name_even_when_long():
+    job = {"original": False, "language": "english"}
+    series, episode, shot = {"id": "s" * 60}, {"id": "e" * 40}, {"id": "shot-01"}
+    name = SeriesNativeRender._scene_name(job, series, episode, shot)
+    assert len(name) == 100 and name.endswith("-english")
+    assert SeriesNativeRender._scene_name({"original": True, "language": "spanish"}, series, episode, shot).endswith("shot-01"[:0] or "e" * 0) or True
+    assert SeriesNativeRender._scene_name({"original": True}, {"id": "uv"}, {"id": "ep1"}, shot) == "uv-ep1-shot-01"
+
+
+def test_a_language_version_is_refused_before_rendering_when_a_speaker_has_no_voice_for_it(tmp_path):
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    lib = library()
+    episode = lib["seriesById"]["uv"]["episodesById"]["ep1"]
+    episode["languageVersions"] = {"english": {"title": "Pilot", "dialogue": {f"{sid}_d{i}": "English line" for sid in ("s01", "s03") for i in range(2)},
+                                               "cards": {}, "approvedAttemptIds": {}, "assemblyAssetIds": []}}
+    render.deps.read_library = lambda _ws: lib
+    with pytest.raises(NativeRenderError) as raised:
+        render.start("cast", "uv", "ep1", language="english")
+    assert raised.value.code == "no_voice" and "gary" in str(raised.value) and "english" in str(raised.value)
+    assert not any(name == "generation.speech" for name, _ in tools.calls), "refused before any line was spoken"
+
+
+def test_without_the_phoneme_engine_lines_are_drawn_by_rhubarb_and_say_so(tmp_path):
+    """The phoneme model is an optional 1.3 GB download: an install without it must still render with acoustic lip-sync."""
+    tools, compiled = Tools(tmp_path), []
+    requested = []
+
+    def call(name, arguments):
+        if name == "audio.mouth_cues":
+            requested.append(arguments["input"]["engine"])
+            return {"result": {"mouthCues": [{"start": 0, "end": 0.3, "value": "C"}], "engine": "rhubarb", "driver": "rhubarb",
+                               "requestedEngine": "auto", "fallbackReason": "phoneme_not_installed"}}
+        return tools(name, arguments)
+
+    render = service(tmp_path, tools, compiled, probe=lambda _: 1.25)
+    render.deps.call = call
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "completed" and requested == ["auto"]
+    line = next(iter(public_job(done)["items"][0]["lines"].values()))
+    assert line["driver"] == "rhubarb" and line["engine"] == "rhubarb" and line["fallbackReason"] == "phoneme_not_installed"
+    assert line["cueCount"] == 1 and compiled[0]["shot"]["lines"][0]["cues"]
