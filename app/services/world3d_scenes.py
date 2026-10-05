@@ -122,6 +122,20 @@ def _screen_fx_entry(index: int, cue, kinds: frozenset) -> dict:
     return entry
 
 
+VOICE_OVER_PREFIX = "talk-voiceover-"
+
+
+def _set_voice_over(document: dict, lines, workspace: str) -> None:
+    """Speech with no talking object (a narrator, a voice on the radio): it ducks the music like a talking cutout."""
+    from services.world3d_talk import TalkError, _replace_tracks
+    if not isinstance(lines, list) or len(lines) > 24 or any(not isinstance(line, dict) for line in lines):
+        raise World3DSceneError("invalid_voice_over", "voiceOver must be a list of at most 24 lines {audio, start, gain}")
+    try:
+        _replace_tracks(document, VOICE_OVER_PREFIX, lines, workspace)
+    except TalkError as error:
+        raise World3DSceneError(error.code, str(error), error.status) from error
+
+
 def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
     record = _read(workspace, scene_id, workspace_dir)
     if type(base_revision) is not int or base_revision != record["revision"]:
@@ -141,6 +155,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         _set_soundtrack(document, changes["soundtrack"], workspace)
     if "screenFx" in changes:
         _set_screen_fx(document, changes["screenFx"])
+    if "voiceOver" in changes:
+        _set_voice_over(document, changes["voiceOver"], workspace)
     _set_render_look(document, changes)
     _retarget(document)
     record["revision"] += 1

@@ -586,3 +586,23 @@ def test_a_patch_puts_the_shot_screen_effects_over_the_template_ones(tmp_path):
         with pytest.raises(World3DSceneError) as caught:
             patch_scene("studio", "w3d-0000000fx001", workspace_dir, {"screenFx": bad}, 3)
         assert caught.value.code == "invalid_screen_fx"
+
+
+def test_a_voice_over_ducks_the_music_like_a_talking_object_and_replaces_the_previous_one(tmp_path):
+    from services.world3d_scenes import World3DSceneError
+    workspace_dir = lambda name: str(tmp_path / name)
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"templateId": "two-shot", "slots": [], "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]},
+                "soundtrack": [{"id": "scene-music", "start": 0, "offset": 0, "gain": 0.5, "audio": {"url": "/api/v1/file/m.wav?workspace=studio"}}]}
+    (folder / "w3d-0000000v0ce1.json").write_text(json.dumps({"revision": 1, "templateId": "two-shot", "document": document, "warnings": []}), encoding="utf-8")
+    viewed = patch_scene("studio", "w3d-0000000v0ce1", workspace_dir, {"voiceOver": [
+        {"audio": "/api/v1/file/narrator.wav?workspace=studio", "start": 0.4}, {"audio": "/api/v1/file/radio.wav?workspace=studio", "start": 2.5, "gain": 0.8}]}, 1)
+    tracks = viewed["document"]["soundtrack"]
+    assert [track["id"] for track in tracks] == ["scene-music", "talk-voiceover-0", "talk-voiceover-1"], "talk-* tracks duck the music"
+    assert (tracks[1]["start"], tracks[2]["gain"]) == (0.4, 0.8)
+    again = patch_scene("studio", "w3d-0000000v0ce1", workspace_dir, {"voiceOver": [{"audio": "/api/v1/file/n2.wav?workspace=studio", "start": 1}]}, 2)
+    assert [track["id"] for track in again["document"]["soundtrack"]] == ["scene-music", "talk-voiceover-0"]
+    for bad in ("nope", [{"audio": "https://evil.example/a.wav", "start": 0}], [{"start": 0}] * 25):
+        with pytest.raises(World3DSceneError):
+            patch_scene("studio", "w3d-0000000v0ce1", workspace_dir, {"voiceOver": bad}, 3)
