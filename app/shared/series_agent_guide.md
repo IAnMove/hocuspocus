@@ -51,7 +51,8 @@ The lower-level tools (`series.episode.create`/`update`, `series.episode.languag
    "timing": {"intro": 0.6, "tail": 1.0}},
   {"scene": "moon", "kind": "3d", "lines": [{"who": "robot", "es": "...", "en": "..."}],
    "scene3d": {"template": "user-moon-base", "quality": "final",
-               "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}]}}]}
+               "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}]},
+   "foley": {"prompt": "servo whirs, metal footsteps on gravel", "volume": 0.5}}]}
 ```
 
 The first language is the series' own (`es` or `spanish`); every other language in the lines becomes a version.
@@ -95,6 +96,14 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - **music:** one music track per shot (a bumper at the start of a scene, a theme); a language can have its own file.
 - **sfx:** sound effects at a line's `start`/`end` (`line`, `anchor`, `offset` s) or at a second (`at`), `volume`
   0–1. Files from the bible only.
+- **foley** (on the shot, not in `layout2d` or `scene3d`; same key in the script)**:** `{"prompt": "wooden airship
+  creaking, wind, cannon shots", "volume": 0.5}`. After the shot is exported, MMAudio (`generation.sfx` with the
+  export as `video_guide`) makes sound that follows the shot's own picture, and it is mixed under the lines, music
+  and `sfx` at `volume` (above 0 up to 2, relative to the dialogue, default 0.5). Use it where hand-placed `sfx`
+  cannot follow the motion (ships, swords, creatures, explosions; 3D shots above all) and describe sounds only: the
+  take already has its voices and music. It is an extra: without MMAudio installed, or when it fails or takes over
+  30 min, the take is made without it and the render item has a `warning`; fix it and render that shot again by id.
+  A new prompt or volume makes `series.episode.produce` render that shot again.
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration`, `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` points right at 0, so a
   gun aimed left needs 180 with `x`/`y` just past the muzzle). Keep them off faces: a small burst to one side.

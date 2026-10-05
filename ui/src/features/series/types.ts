@@ -197,6 +197,13 @@ export interface SeriesRenderAttempt {
   reviewedAt?: string
 }
 
+/** Sound generated from the shot's rendered picture (MMAudio) and mixed under its take; volume is relative to the dialogue. */
+export interface SeriesShotFoley {
+  prompt: string
+  /** Above 0 and up to 2; default 0.5. */
+  volume?: number
+}
+
 export interface SeriesShot {
   id: string
   sceneId: string
@@ -251,6 +258,7 @@ export interface SeriesShot {
   sourceDialogueIds?: string[]
   dialogueOrigin?: 'script' | 'manual'
   scriptDialogueStatus?: 'in_sync' | 'stale' | 'manual_conflict'
+  foley?: SeriesShotFoley
 }
 
 export interface SeriesCanonDeltaItem extends CanonFact {

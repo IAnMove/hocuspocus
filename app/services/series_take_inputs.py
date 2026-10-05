@@ -3,7 +3,9 @@
 ``render_inputs`` fingerprints a shot in one language: its layout and lines, the location, the sound design and the
 kits of the people seen or heard. ``series_native_render`` stores it in the take's metadata (``renderInputs``) and
 ``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the episode assembly lays
-(``soundDesign.ambienceMode: "episode"``) is not part of a shot, so changing it renders nothing again.
+(``soundDesign.ambienceMode: "episode"``) is not part of a shot, so changing it renders nothing again. A shot's
+``foley`` is, so a new prompt or volume renders that shot again; a shot without one keeps the digest it had before
+foley existed.
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ _KIT_VOLATILE = ("createdAt", "updatedAt", "provenance")
 
 def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any]) -> str:
     """Fingerprint of everything a shot's render depends on: its layout and lines in this language, the location, the
-    sound design and the kits of the people seen or heard. It is kept on the take, so a production renders again only
+    sound design, its foley and the kits of the people seen or heard. It is kept on the take, so a production renders again only
     the shots whose inputs changed (a 3D template edited in place is not seen: render those shots by id)."""
     beats = [[beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
              for beat in shot.get("dialogueBeats") or []]
@@ -37,6 +39,7 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
         "characters": {cid: (characters.get(cid) or {}).get("layout2d") for cid in people},
         "kits": {kid: {key: value for key, value in (kits.get(kid) or {}).items() if key not in _KIT_VOLATILE}
                  for kid in kit_ids.values() if kid},
+        **({"foley": shot["foley"]} if shot.get("foley") else {}),
     }
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
