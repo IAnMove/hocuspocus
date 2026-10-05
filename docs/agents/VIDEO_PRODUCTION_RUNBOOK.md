@@ -630,13 +630,15 @@ attestation note. The review checkbox is not filled in by playback.
 
 ## Native Series requires acoustic mouth cues
 
-Native Series requests the shared CPU phoneme engine with the recorded line's
-exact transcript. If analysis fails or returns no cues, rendering stops before
+Native Series analyses each recorded line with `audio.mouth_cues` and
+`engine: "auto"`: the shared CPU phoneme engine when it is installed, Rhubarb
+otherwise. If analysis fails or returns no cues, rendering stops before
 building the scene; it does not silently replace audio alignment with text
-rhythm. Check `audio.phonemes.setup` and install through that tool when needed,
-then resume the native job. Its already recorded voice is reused. Inspect each
-line's `cueCount` in `series.episode.render_native.status` before approving the
-visual result.
+rhythm. Each line in `series.episode.render_native.status` reports its
+`engine`, its `cueCount` and, when Rhubarb drew it, `fallbackReason:
+phoneme_not_installed`. For sung or vowel-heavy lines install the phoneme
+engine with `audio.phonemes.setup` and resume the job: recorded voices are
+reused. Inspect `cueCount` before approving the visual result.
 
 ## Publishing a reviewed take with an exact resource name
 

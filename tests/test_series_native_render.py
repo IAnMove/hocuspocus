@@ -136,7 +136,7 @@ def test_every_2d_shot_becomes_an_approved_take_with_each_voice_in_the_series_la
     assert speech[0]["model_mode"] == "spanish" and speech[0]["alt_prompt"] == "Hola."
     assert speech[1]["model_type"] == "qwen3_tts_customvoice" and speech[1]["model_mode"] == "ryan", "Gary has no Spanish voice: default"
     cues = [args["input"] for tool, args in tools.calls if tool == "audio.mouth_cues"]
-    assert cues[0]["language"] == "es" and cues[0]["engine"] == "phoneme"
+    assert cues[0]["language"] == "es" and cues[0]["engine"] == "auto"
     first = compiled[0]["shot"]
     assert first["framing"] == "wide" and first["camera"] == "push" and len(first["lines"]) == 2
     assert first["lines"][0]["cues"] and first["background"]["source"] == "/api/v1/file/assets/uv/bg.png?workspace=cast"
@@ -355,3 +355,24 @@ def test_a_language_version_is_refused_before_rendering_when_a_speaker_has_no_vo
         render.start("cast", "uv", "ep1", language="english")
     assert raised.value.code == "no_voice" and "gary" in str(raised.value) and "english" in str(raised.value)
     assert not any(name == "generation.speech" for name, _ in tools.calls), "refused before any line was spoken"
+
+
+def test_without_the_phoneme_engine_lines_are_drawn_by_rhubarb_and_say_so(tmp_path):
+    """The phoneme model is an optional 1.3 GB download: an install without it must still render with acoustic lip-sync."""
+    tools, compiled = Tools(tmp_path), []
+    requested = []
+
+    def call(name, arguments):
+        if name == "audio.mouth_cues":
+            requested.append(arguments["input"]["engine"])
+            return {"result": {"mouthCues": [{"start": 0, "end": 0.3, "value": "C"}], "engine": "rhubarb", "driver": "rhubarb",
+                               "requestedEngine": "auto", "fallbackReason": "phoneme_not_installed"}}
+        return tools(name, arguments)
+
+    render = service(tmp_path, tools, compiled, probe=lambda _: 1.25)
+    render.deps.call = call
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "completed" and requested == ["auto"]
+    line = next(iter(public_job(done)["items"][0]["lines"].values()))
+    assert line["driver"] == "rhubarb" and line["engine"] == "rhubarb" and line["fallbackReason"] == "phoneme_not_installed"
+    assert line["cueCount"] == 1 and compiled[0]["shot"]["lines"][0]["cues"]

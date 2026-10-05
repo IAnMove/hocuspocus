@@ -6,6 +6,13 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Native Series renders again on an install without the optional phoneme
+model. Since #821 every line with dialogue failed there; the render now asks
+`audio.mouth_cues` for `engine: "auto"` (phonemes when installed, Rhubarb
+otherwise) and each line reports the engine that drew it and, for Rhubarb,
+`fallbackReason: phoneme_not_installed`. A line without any mouth cue still
+stops the shot.
+
 A local app without a login keeps its keys and files to itself. The server
 answers only to its own host names (IP literals, `localhost`, the machine
 name, a Cloudflare quick tunnel, `HOCUS_PUBLIC_URL`, `HOCUS_TRUSTED_HOSTS`),
