@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A restart keeps its port. The socket bound before the start-up banner had no
+`SO_REUSEADDR`, so the previous server's connections in TIME_WAIT blocked the
+port for a minute and the app moved to the next one (42004 instead of 42003).
+It is set on POSIX, which still refuses a port another process listens on;
+Windows binds exclusively.
+
 Typed H3 and LTX video (`generation.video` version 3) can be queued. Its
 commands carry content-fingerprint version 3, which the task admission store
 refused, so every real request failed with «Unsupported command fingerprint
