@@ -293,5 +293,50 @@
     "color": "#887ecb",
     "sound": "pop",
     "collection": "retro"
+  },
+  {
+    "id": "candlelight",
+    "color": "#ffb35c",
+    "sound": "crackle",
+    "collection": "cinematic",
+    "size": 45
+  },
+  {
+    "id": "vignette",
+    "color": "#000000",
+    "sound": "wind",
+    "collection": "cinematic",
+    "size": 60
+  },
+  {
+    "id": "film_grain",
+    "color": "#d8d0c0",
+    "sound": "crackle",
+    "collection": "cinematic",
+    "size": 100
+  },
+  {
+    "id": "light_rays",
+    "color": "#ffd27a",
+    "sound": "rise",
+    "collection": "cinematic",
+    "size": 120,
+    "x": 28,
+    "y": 0,
+    "rotation": 62
+  },
+  {
+    "id": "glitch",
+    "color": "#39ff6a",
+    "sound": "scan",
+    "collection": "cinematic",
+    "size": 6
+  },
+  {
+    "id": "canvas",
+    "color": "#efdcb8",
+    "sound": "wind",
+    "collection": "cinematic",
+    "size": 100
   }
 ]

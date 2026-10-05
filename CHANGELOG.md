@@ -26,6 +26,32 @@ zoom; layers without it render as before. A shot without layers compiles to a
 byte-identical document and keeps its take digest. When a location's layers
 change, only its 2D shots that draw them are marked out of date.
 
+A new collection of screen effects, `cinematic` («Luz de cine y película»),
+grades the whole frame for candle-lit, tenebrist scenes. `candlelight` («Luz de
+vela») is a warm key light from a flame at `x`/`y`: the picture is lit by colour
+dodge inside a pool of light (`size`, the radius in % of the frame height, 45 by
+default), a glow is screened near the flame and the frame darkens slightly away
+from it; a flicker of three layers of smooth noise near 1.6, 3.7 and 7.9 Hz
+(at most ±16 %, no strobe) makes the flame breathe and sway. `vignette`
+(«Viñeta») darkens the edges in `color` (black), `size` how far in it reaches.
+`film_grain` («Grano de película») is monochrome grain, new on every frame and
+drawn with `overlay` around mid grey, so the picture keeps its mean; `size` is
+the grain size in % of the standard. `light_rays` («Rayos de luz») are soft
+god rays from `x`/`y` pointing at `rotation` (from high on the left by default),
+`size` long, that sway and shimmer slowly. `glitch` corrupts the frame in
+bursts: tears that move bands of the real picture sideways with red and blue
+split apart, displaced and noisy blocks, and green phosphor lines and flashes.
+`canvas` («Lienzo pintado») multiplies a woven-cloth and brush-stroke texture
+with a warm tint over the frame. `intensity` sets the strength of each. They
+work in Video 2D, in Series `fx`, in Video 3D `sfx` and in `screenBackdrop`;
+the previews copy the stage for the ones that blend with it, so they look as in
+the export. The frames are a pure function of seed and time and repeat over the
+cue, so a plate as long as the cue loops with no seam. A catalog entry can now
+carry its own default `x`, `y` and `rotation` as well as `size` (light rays use
+it); the editor, `scenes.effects.apply` and both showcases honour them, and the
+"all" showcase grows to 55 effects and 165 seconds. A showcase label in a very
+dark colour (the black vignette) is drawn in white.
+
 Series Lab voices now sound like the place they are in. Lines are recorded
 dry, so a monk in a stone cathedral and a captain on an open deck sounded the
 same. `soundDesign.roomByLocation` maps a location id to a room (`none`,

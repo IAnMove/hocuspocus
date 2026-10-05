@@ -9,6 +9,7 @@ import { stormPainters } from './stormPaint'
 import { glow } from './energyBrush'
 import { isFrameFx, paintFrameFx } from './impactPaint'
 import { CODE_RAIN_KIND, paintCodeRain } from './codeRainPaint'
+import { blendsWithFrame, cinematicPainter } from './cinematicPaint'
 
 type Painter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, progress: number) => void
 const tau = Math.PI * 2
@@ -116,12 +117,18 @@ type FramePainter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, 
 /** Effects that fill the whole frame, painted outside the cue's x/y/size transform. */
 function framePainter(kind: string): FramePainter | undefined {
   if (isFrameFx(kind)) return paintFrameFx
-  return kind === CODE_RAIN_KIND ? paintCodeRain : undefined
+  return kind === CODE_RAIN_KIND ? paintCodeRain : cinematicPainter(kind)
 }
 
 /** Effects that work on the picture under them: an overlay canvas copies the stage first. */
 export function needsFrameSource(kind: string) {
-  return isRetroLook(kind) || kind === 'impact_invert'
+  return isRetroLook(kind) || kind === 'impact_invert' || blendsWithFrame(kind)
+}
+
+/** The showcase label in the cue colour, or white when that colour is too dark to read. */
+function labelColor(color: string) {
+  const [r, g, b] = [1, 3, 5].map(offset => parseInt(color.slice(offset, offset + 2), 16) / 255)
+  return .2126 * r + .7152 * g + .0722 * b < .25 ? '#ffffff' : color
 }
 
 /** One cue around its x/y, scaled by size and turned by rotation. */
@@ -165,7 +172,7 @@ export function paintSceneFx(
       ctx.save(); ctx.font = `600 ${Math.round(height * .032)}px monospace`; ctx.textAlign = 'left'
       const x = width * .045, y = height * .09
       ctx.fillStyle = '#0c1020'; ctx.fillRect(x - 12, y - height * .032, ctx.measureText(cue.label).width + 24, height * .046)
-      ctx.fillStyle = cue.color; ctx.fillText(cue.label, x, y); ctx.restore()
+      ctx.fillStyle = labelColor(cue.color); ctx.fillText(cue.label, x, y); ctx.restore()
     }
   }
 }
