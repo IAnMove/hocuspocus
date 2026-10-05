@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
 from services.flat_rig import (
@@ -318,6 +318,71 @@ def test_a_pose_blink_covers_its_own_eyes_where_the_base_blink_would_not(tmp_pat
         return int((closed.min(axis=2) > 235).sum())
     assert white_left(wide_rig, wide_rig["blink"]) == 0, "its own blink closes both eyes"
     assert white_left(wide_rig, wide_rig["blink"]) <= white_left(wide_rig, base_rig["blink"])
+
+
+IRIS, PUPIL, LID, BROW = (30, 40, 110, 255), (10, 12, 45, 255), (60, 20, 50, 255), (95, 55, 25, 255)
+
+
+def _anime_eyes(image: Image.Image) -> Image.Image:
+    """Anime eyes looking aside: a big dark iris fills most of each eye and touches a thick upper lid, so the white is
+    only a crescent beside it; a highlight in the iris, a thin lower lid, and a brow above with skin between."""
+    draw = ImageDraw.Draw(image)
+    for x in (120, 220):
+        opening = (x, 120, x + 80, 220)
+        draw.ellipse(opening, fill=(255, 255, 255, 255))
+        clip = Image.new("L", image.size, 0)
+        ImageDraw.Draw(clip).ellipse(opening, fill=255)
+        iris = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        ImageDraw.Draw(iris).ellipse((x + 26, 112, x + 96, 228), fill=IRIS)
+        ImageDraw.Draw(iris).ellipse((x + 46, 145, x + 76, 195), fill=PUPIL)
+        image.paste(iris, (0, 0), ImageChops.multiply(iris.split()[3], clip))
+        draw.ellipse((x + 40, 138, x + 52, 150), fill=(255, 255, 255, 255))
+        draw.arc((x - 4, 116, x + 84, 226), 195, 345, fill=LID, width=14)
+        draw.arc(opening, 40, 140, fill=LID, width=3)
+        draw.line((x + 4, 96, x + 76, 90), fill=BROW, width=7)
+    return image
+
+
+def test_an_anime_eye_closes_over_its_whole_iris_and_lid_in_the_face_colour():
+    """The bug: the blink covered only the white crescent, so the iris, pupil and lid showed through closed eyes, and
+    the colour taken around the crescent (iris, lid) came out darker than the face."""
+    from services.flat_rig import place
+    rig = rig_pose(_anime_eyes(_cutout(eyes=False)), rig_style(None))
+    assert rig["blinks"] is True and rig["wiped"] is True
+    before = np.array(rig["image"])[..., :3].astype(int)
+    closed = np.array(place(rig["image"], rig["blink"], rig["eyes"]))[..., :3].astype(int)
+    face = slice(0, rig["eyes_box"][3] + 30)  # the head down to the mouth (the pose is cropped to the figure)
+    painted = lambda pixels: (pixels[..., 2] - pixels[..., 1] > 15) & (pixels @ np.array([0.299, 0.587, 0.114]) < 150)
+    assert painted(before[face]).sum() > 5000, "the iris, pupil and lid are there with the eyes open"
+    assert painted(closed[face]).sum() == 0, "no iris, pupil or lid pixel shows through the closed eyes"
+    assert (closed[face].min(axis=2) > 235).sum() == 0, "nor any of the white"
+    sprite = np.array(rig["blink"])
+    cover = np.median(sprite[sprite[..., 3] == 255][:, :3], axis=0)
+    assert np.abs(cover - np.array(SKIN[:3])).sum() <= 12, f"the lids are the face colour, not {cover}"
+    brow = np.all(before == BROW[:3], axis=2)
+    assert brow.sum() > 500 and np.array_equal(closed[brow], before[brow]), "the brows stay as they are"
+
+
+def test_a_screen_face_closes_its_light_eyes_in_the_screen_colour_with_a_light_lid():
+    """A laptop's face keeps its blink: light eyes on a dark screen, covered in the screen colour."""
+    from services.flat_rig import SCREEN_INK, place
+    screen = (18, 30, 80, 255)
+    image = Image.new("RGBA", (420, 760), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((110, 360, 310, 740), fill=(90, 90, 95, 255))
+    draw.rounded_rectangle((50, 40, 370, 360), radius=20, fill=(60, 60, 66, 255))
+    draw.rectangle((70, 60, 350, 340), fill=screen)
+    for x in (120, 230):
+        draw.rounded_rectangle((x, 120, x + 70, 200), radius=18, fill=(240, 245, 255, 255))
+        draw.ellipse((x + 25, 140, x + 45, 175), fill=screen)
+    rig = rig_pose(image, rig_style({"screen": True}))
+    sprite = np.array(rig["blink"])
+    assert np.array_equal(np.median(sprite[sprite[..., 3] == 255][:, :3], axis=0), screen[:3])
+    lid = np.abs(sprite[..., :3].astype(int) - SCREEN_INK[:3]).sum(axis=2) < 30
+    assert (lid & (sprite[..., 3] == 255)).sum() > 100, "a light lid line, not a dark one"
+    x0, y0, x1, y1 = rig["eyes_box"]
+    lit = lambda frame: int((np.array(frame)[y0:y1, x0:x1, :3].min(axis=2) > 200).sum())
+    assert lit(place(rig["image"], rig["blink"], rig["eyes"])) < lit(rig["image"]) * 0.15, "only the lids are light"
 
 
 def test_a_wide_pair_of_eyes_gets_a_blink_no_wider_than_the_frame_so_video_2d_draws_it_full_size():
