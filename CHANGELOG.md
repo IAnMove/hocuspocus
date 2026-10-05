@@ -6,6 +6,11 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A Series 3D shot can have a narrator or a voice on the radio. A line by a character
+with no object in `scene3d.cast` stopped the render with `unbound_speaker`; it is
+now heard over the shot and ducks the music like a talking cutout.
+`world3d.scene.patch` takes `voiceOver` [{audio, start, gain}].
+
 The Video 3D toon look renders in the headless exporter. Hunyuan3D GLBs have no
 normals; three flat-shades PBR materials then, but not toon materials, so their
 light was NaN: a draft export came out entirely black (the bloom spread the NaN
