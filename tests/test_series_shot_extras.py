@@ -311,3 +311,11 @@ def test_a_3d_shot_asks_for_the_toon_look_and_drops_bad_settings():
     series_shot3d.build_scene(tools, "cast", "job", {"id": "s31", "scene3d": value}, [], 4, {}, {}, NativeRenderError)
     patch = tools.calls[1][1]["input"]
     assert (patch["renderLook"], patch["toon"]) == ("toon", {"steps": 2, "ink": "#aa0000"})
+
+
+def test_a_3d_object_keeps_a_heading_offset_for_a_model_whose_nose_is_not_plus_z():
+    value = series_shot3d.normalize_scene3d({"template": "user-sky", "objects": [
+        {"objectId": "ship", "file": "ship.glb", "add": True, "motion": {"to": [0, 2, -30], "faceTravel": True, "headingOffset": 1.5708}},
+        {"objectId": "bad", "file": "ship.glb", "add": True, "motion": {"to": [0, 2, -30], "headingOffset": 40}}]})
+    assert value["objects"][0]["motion"] == {"to": [0.0, 2.0, -30.0], "faceTravel": True, "headingOffset": 1.5708}
+    assert "headingOffset" not in value["objects"][1]["motion"]

@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A Video 3D model that follows its path (`motion.faceTravel`) can say where its nose
+is: `motion.headingOffset` (radians) is added to the travel heading. Generated
+ships and airships often point their nose along -X, so they flew sideways;
+`headingOffset: 1.5708` makes them fly nose first, also on waypoint curves.
+Series `scene3d.objects` keep it.
+
 The Video 3D toon look renders in the headless exporter. Hunyuan3D GLBs have no
 normals; three flat-shades PBR materials then, but not toon materials, so their
 light was NaN: a draft export came out entirely black (the bloom spread the NaN

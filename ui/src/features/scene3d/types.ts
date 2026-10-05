@@ -151,6 +151,8 @@ export type Scene3DMotion = {
   /** Waypoints between the start and `to`, walked on a centripetal Catmull-Rom curve. */
   points?: Vec3[]
   faceTravel?: boolean
+  /** Radians added to the travel heading when `faceTravel` is on: the model's nose is not its +Z (PI / 2 for a nose at -X). */
+  headingOffset?: number
   turnTo?: number
   easing?: 'linear' | 'smooth'
   /** A baked humanoid walk of this path with planted feet; while it matches, the clip moves the model. */
