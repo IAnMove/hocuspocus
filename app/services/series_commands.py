@@ -94,11 +94,13 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.produce": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "languages": {"type": "array", "items": LANGUAGE, "maxItems": 10},
-         "burn_subtitles": {"type": "boolean"}},
+         "burn_subtitles": {"type": "boolean"}, "rerender": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id"], True,
         "Render and cut an episode in one call: the server renders the original and every language version (languages "
         "narrows it) with automatic approval, retries failed shots once, then assembles each language with subtitles burned "
-        "in (burn_subtitles false skips it). Poll series.episode.produce.status every minute or two; chapters lists the files.",
+        "in (burn_subtitles false skips it). Only shots without an approved take made from their current script, kits and "
+        "location are rendered, so producing again after a fix just renders what changed and recuts; rerender true renders "
+        "every shot again. Poll series.episode.produce.status every minute or two; chapters lists the files.",
     ),
     "series.episode.produce.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
@@ -366,7 +368,8 @@ def _from_script(data: dict[str, Any], request: Callable[..., Any], **_extra: An
 
 
 def _produce(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
-    body: dict[str, Any] = {"workspace": data["workspace"], "burnSubtitles": data.get("burn_subtitles", True) is not False}
+    body: dict[str, Any] = {"workspace": data["workspace"], "burnSubtitles": data.get("burn_subtitles", True) is not False,
+                            "rerender": data.get("rerender") is True}
     if data.get("languages"):
         body["languages"] = data["languages"]
     return {"job": request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/produce", body=body)}

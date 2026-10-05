@@ -25,8 +25,9 @@ use only those ids and file names, never invent one.
    with subtitles burned in. Poll `series.episode.produce.status` every minute or two; `chapters` lists the files.
 5. **Look and fix:** `series.episode.get` lists each take's editable scene (`sceneFilename`): `scenes.video2d.preview`
    it, or open it with `scenes.document.get`. Fix a shot by changing the script and sending it again with `episode_id`
-   (takes are kept by shot id), then `series.episode.render_native` with `shot_ids` (and `language`), and
-   `series.episode.produce` again to recut.
+   (takes are kept by shot id), then `series.episode.produce` again: it renders only the shots whose script, kits or
+   location changed since their approved take, and recuts. `rerender: true` renders every shot again; a 3D template
+   edited in place is not detected, so render those shots with `series.episode.render_native` and `shot_ids`.
 
 The lower-level tools (`series.episode.create`/`update`, `series.episode.language_version.set`,
 `series.episode.render_native`, `series.assembly.start`) do the same steps one by one.

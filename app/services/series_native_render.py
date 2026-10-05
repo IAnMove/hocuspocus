@@ -213,6 +213,22 @@ class SeriesNativeRender:
             self._threads[job_id] = thread
             thread.start()
 
+    def stale_shots(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> list[str]:
+        """Shots to render in ``language``: no approved take yet, or one made from other inputs (see ``render_inputs``)."""
+        raw_series, _raw_episode = self._episode(workspace, series_id, episode_id)
+        series, episode = self._episode(workspace, series_id, episode_id, language or language_key(raw_series))
+        kits, assets = self.deps.read_kits(workspace), series.get("assets") or {}
+        stale = []
+        for shot in sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0)):
+            if not series_shot3d.wants_render(shot):
+                continue
+            attempt = next((item for item in shot.get("attempts") or [] if item.get("id") == shot.get("approvedAttemptId")), None)
+            outputs = (attempt or {}).get("outputAssetIds") or []
+            kept = ((assets.get(outputs[0]) or {}).get("metadata") or {}).get("renderInputs") if outputs else None
+            if not kept or kept != render_inputs(series, shot, kits):
+                stale.append(shot["id"])
+        return stale
+
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
         return self._store(workspace).list()
 
@@ -293,6 +309,7 @@ class SeriesNativeRender:
             self._save(workspace, job)
         three_d = shot.get("productionMethod") == "animation_3d"
         if item["stage"] == "scene":
+            item["inputs"] = render_inputs(series, shot, kits)
             if three_d:
                 self._scene3d(workspace, job, item, series, shot, kits)
             else:
@@ -499,6 +516,7 @@ class SeriesNativeRender:
         self._set_length(workspace, job, item)
         metadata = {"productionMethod": method, "sceneFilename": item["scene"], "automaticDraft": True,
                     "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"],
+                    **({"renderInputs": item["inputs"]} if item.get("inputs") else {}),
                     **({"dialogueBeats": item["subtitles"]} if item.get("subtitles") else {})}
         imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {
             "workspace": workspace, "series_id": job["seriesId"], "file": item["video"], "owner_type": "shot", "owner_id": item["shotId"],
@@ -509,6 +527,36 @@ class SeriesNativeRender:
             self._approve(workspace, job, item["shotId"], attempt["id"])
             item["approved"] = True
         self._save(workspace, job)
+
+
+# What a shot's picture and sound depend on, besides the render code itself.
+_SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId", "visibleCharacterIds", "scene3d")
+_KIT_VOLATILE = ("createdAt", "updatedAt", "provenance")
+
+
+def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any]) -> str:
+    """Fingerprint of everything a shot's render depends on: its layout and lines in this language, the location, the
+    sound design and the kits of the people seen or heard. It is kept on the take, so a production renders again only
+    the shots whose inputs changed (a 3D template edited in place is not seen: render those shots by id)."""
+    beats = [[beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
+             for beat in shot.get("dialogueBeats") or []]
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    scene3d = shot.get("scene3d") if isinstance(shot.get("scene3d"), dict) else {}
+    people = sorted({*(shot.get("visibleCharacterIds") or []), *(beat[1] for beat in beats),
+                     *(entry.get("characterId") for entry in layout.get("cast") or [] if isinstance(entry, dict)),
+                     *(entry.get("characterId") for entry in scene3d.get("cast") or [] if isinstance(entry, dict))} - {None, ""})
+    characters = {item.get("id"): item for item in series.get("characters") or []}
+    kit_ids = {cid: (kit_ref(series, cid) or {}).get("id") for cid in people}
+    payload = {
+        "shot": {key: shot.get(key) for key in _SHOT_INPUTS}, "beats": beats,
+        "duration": None if beats else shot.get("durationSeconds"), "language": series.get("spokenLanguage"),
+        "location": next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None),
+        "sound": series.get("soundDesign"),
+        "characters": {cid: (characters.get(cid) or {}).get("layout2d") for cid in people},
+        "kits": {kid: {key: value for key, value in (kits.get(kid) or {}).items() if key not in _KIT_VOLATILE}
+                 for kid in kit_ids.values() if kid},
+    }
+    return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
 def public_job(job: dict[str, Any]) -> dict[str, Any]:

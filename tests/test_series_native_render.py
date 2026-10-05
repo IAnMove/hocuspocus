@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from services.series_native_render import NativeRenderDeps, NativeRenderError, SeriesNativeRender, public_job, speech_params
+from services.series_native_render import NativeRenderDeps, NativeRenderError, SeriesNativeRender, public_job, render_inputs, speech_params
 
 KEVIN_ES = {"provider": "local", "model": "qwen3_tts_base", "voiceId": "reference", "name": "Kevin ES",
             "referenceAudio": "/api/v1/file/kevin-es.wav?workspace=cast", "transcript": "Hola.", "language": "spanish"}
@@ -123,6 +123,35 @@ def test_every_2d_shot_becomes_an_approved_take_with_each_voice_in_the_series_la
     assert all(item["approved"] for item in done["items"])
     assert [(args[3], args[4] > 1.5) for args in tools.durations] == [("s01", True), ("s03", True)], "each shot takes its rendered length"
     assert all("cues" not in line for item in public_job(done)["items"] for line in item["lines"].values())
+
+
+def test_takes_keep_their_render_inputs_and_only_changed_shots_are_out_of_date(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    finished(render, render.start("cast", "uv", "ep1", approve=True)["jobId"], tmp_path)
+    kept = {args["input"]["owner_id"]: args["input"]["metadata"]["renderInputs"] for tool, args in tools.calls if tool == "series.asset.import"}
+    assert sorted(kept) == ["s01", "s03"] and all(len(value) == 16 for value in kept.values())
+
+    kits = render.deps.read_kits("cast")
+    data = library()
+    series = data["seriesById"]["uv"]
+    episode = series["episodesById"]["ep1"]
+    for shot in episode["shots"]:
+        if shot["id"] in kept:
+            assert kept[shot["id"]] == render_inputs(series, shot, kits), "the stale check sees what the render saw"
+            shot.update(attempts=[{"id": f"a-{shot['id']}", "outputAssetIds": [f"take-{shot['id']}"]}], approvedAttemptId=f"a-{shot['id']}")
+            series["assets"][f"take-{shot['id']}"] = {"metadata": {"renderInputs": kept[shot["id"]]}}
+    checker = SeriesNativeRender(NativeRenderDeps(call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: data,
+                                                  read_kits=lambda _ws: kits))
+    assert checker.stale_shots("cast", "uv", "ep1") == [], "every approved take is up to date"
+    episode["shots"][2]["dialogueBeats"][0]["text"] = "Hasta luego."
+    assert checker.stale_shots("cast", "uv", "ep1") == ["s03"], "a changed line renders that shot only"
+    kits["kit-kevin"]["updatedAt"] = "later"
+    assert checker.stale_shots("cast", "uv", "ep1") == ["s03"], "saving a kit without changing it renders nothing more"
+    kits["kit-kevin"]["base"] = {**kits["kit-kevin"]["base"], "source": "/api/v1/file/k2.png"}
+    assert checker.stale_shots("cast", "uv", "ep1") == ["s01", "s03"], "a new drawing of Kevin renders every shot he is in"
+    del series["assets"]["take-s01"]["metadata"]["renderInputs"]
+    assert "s01" in checker.stale_shots("cast", "uv", "ep1"), "a take from before the inputs were kept counts as out of date"
 
 
 def test_a_drifting_take_is_spoken_again_and_the_best_one_kept(tmp_path):
