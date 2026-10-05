@@ -5,7 +5,7 @@
 Video 2.5D and Video 3D share **Scene SFX → Apply SFX showcase template**.
 The template adds a 90-second track demonstrating 30 effects, three seconds each:
 sparks, explosion, fireworks, confetti, rain, snow, embers, smoke, fog, bubbles,
-stars, portal, shockwave, lightning, speed lines, scanline, aurora, laser and code rain; plus magic circle, arcane missiles, summoning gate, black hole, ice burst, meteor shower, lightning storm, anime aura, energy orb, energy beam, sword slash, manga impact, impact flash and inverted impact frame.
+stars, portal, shockwave, lightning, speed lines, scanline, aurora, laser and code rain; plus magic circle, arcane missiles, summoning gate, black hole, ice burst, meteor shower, lightning storm, anime aura, energy orb, energy beam, sword slash, manga impact, impact flash and inverted impact frame; plus candlelight, vignette, film grain, light rays, glitch and painted canvas.
 The separate magic/anime template demonstrates the 14 additions in 42 seconds.
 It preserves existing layers, actors, camera and voices, replaces the SFX track,
 and extends the scene if necessary. An empty 2D scene gets the bundled stage SVG.
@@ -39,6 +39,37 @@ A plate of N seconds (`series.location.plate3d`) loops with no seam when the cue
 lasts N seconds. The glyphs are drawn with a monospace CJK face (Noto Sans Mono CJK
 JP on Linux, MS Gothic on Windows, Osaka or Hiragino on macOS); when the browser
 draws no katakana, the rain uses digits, Latin capitals and symbols.
+
+### Cinematic light and film
+
+The `cinematic` collection («Luz de cine y película») has six grades for candle-lit,
+tenebrist scenes. Each covers the whole frame (it is painted outside the cue's
+x/y/size transform), so put it on the cue track for the whole shot. A catalog entry can
+carry its own `size`, `x`, `y` and `rotation`; a cue without the field gets that
+default (in the editor, in `scenes.effects.apply` and in both showcases), and switching
+a cue's kind in the editor resets those fields.
+
+| Effect | Colour | What it does | Fields |
+| --- | --- | --- | --- |
+| `candlelight` | `#ffb35c` | Warm key light from a flame. The picture is lit by colour dodge (multiplied by up to 1 / (1 − light)), so what is there takes the light; a glow is screened in the air near the flame; the frame darkens slightly away from it. The flicker is three layers of smooth noise near 1.6, 3.7 and 7.9 Hz (at most ±16 %), and the flame sways a little. | `x`/`y` the flame, `size` the radius of the pool of light in % of the frame height (45), `intensity` the light, the glow and the darkening together. |
+| `vignette` | `#000000` | Dark edges, an ellipse that fits the frame. Static. | `x`/`y` the clear centre, `size` how far in it reaches (60; at 100 it starts at the centre), `intensity` how dark the corners get (0.73 at 1). |
+| `film_grain` | — | Monochrome grain, new on every frame (60 grain frames per second, a quarter step out of phase, so 24, 25, 30, 50 and 60 fps exports never repeat one). Drawn with `overlay` around mid grey, so the picture keeps its mean; like film it shows most in the midtones. | `size` the grain in % of the standard (100: about 2 px on 1080 lines), `intensity` the amount. `x`, `y`, `rotation` and `color` are not used. |
+| `light_rays` | `#ffd27a` | God rays: a fan of soft shafts (about 34° wide) and lit air, screened over the frame, with a glow at the source. Each shaft sways over several seconds and brightens and fades over a few. | `x`/`y` where the light comes from (28, 0), `rotation` where it points (62; 0 right, 90 down), `size` the length in % of the frame height (120), `intensity` how many shafts and how bright. |
+| `glitch` | `#39ff6a` | Digital corruption in bursts (about one every 1.8 s at intensity 1, 0.16–0.5 s long): horizontal tears that move bands of the real picture sideways with red and blue split apart, a slight RGB split of the whole frame, displaced and noisy blocks, phosphor lines and flashes in `color`. The corruption changes 18 times a second; between bursts the frame is left alone. | `size` the height of the bands and blocks in % of the frame height (6), `intensity` how often and how strong. `x`, `y` and `rotation` are not used. |
+| `canvas` | `#efdcb8` | Painted canvas: woven threads of uneven thickness under brush strokes, multiplied over the frame and tinted by `color`. Static. | `size` the texture scale in % of the standard (100: threads about 4.6 px apart on 1080 lines), `intensity` the depth and the tint. |
+
+The frames are a pure function of seed and time and repeat over the cue: whatever moves
+(flicker, sway, shimmer, grain, bursts) makes a whole number of cycles between `start`
+and `end`, so the frame at `end` is the frame at `start` and a plate as long as the cue
+loops with no seam. A suggested order on the track: `candlelight`, `light_rays`,
+`vignette`, `canvas`, `film_grain` (grain last). `candlelight`, `light_rays`,
+`film_grain`, `canvas` and `glitch` need the picture under them: exports paint over the
+frame, and the Video 2D and Video 3D previews copy the stage while one of them is live,
+as for the retro looks. `vignette` only darkens and paints the same over anything. In
+`screenBackdrop.sfx`, `candlelight` and `light_rays` light the environment plate behind
+the characters without touching them. Where no off-screen canvas exists, grain and
+canvas draw nothing. A world-space `glitch` (a hologram-like world SFX) is a different
+effect that keeps its own look.
 
 Video 3D can also paint cues behind the world: `screenBackdrop`
 (`{"color": "#1c2f86", "sfx": [<cue>, ...]}`) is a flat colour plus the same cues,

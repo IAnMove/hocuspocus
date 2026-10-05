@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from routers.scene_commands import create_scene_commands_router
 from routers.wangp_mcp import create_wangp_mcp_router
-from services.scene_commands import SceneCommands, command_catalog
+from services.scene_commands import CATALOG, PRESETS, SceneCommands, command_catalog
 
 
 @pytest.fixture
@@ -23,8 +23,8 @@ def showcase(service, dimension='3d'):
 def test_both_templates_use_all_catalog_effects_and_are_replayable(service):
     for dimension in ('2d', '3d'):
         doc = showcase(service, dimension)
-        assert doc['duration'] == 147
-        assert len(doc['sfx']) == 49
+        assert doc['duration'] == 165
+        assert len(doc['sfx']) == 55
         assert all(cue['sound'] and cue['label'] for cue in doc['sfx'])
         assert doc == showcase(service, dimension)
         assert ('slots' in doc) == (dimension == '3d')
@@ -39,7 +39,7 @@ def test_apply_replaces_exact_cue_preserving_scene_and_caller(service):
     assert original == before
     assert first == service.execute(command)
     actual = first['result']['document']
-    assert len(actual['sfx']) == 49
+    assert len(actual['sfx']) == 55
     assert actual['sfx'][3] == cue
     assert actual['slots'] == original['slots']
     assert not first['result']['saved'] and not first['result']['exported']
@@ -138,20 +138,39 @@ def test_speech_rejects_paths_and_unknown_character_before_analysis(service):
 
 def test_shared_catalog_remains_a_packaged_resource():
     path = Path(__file__).parents[1] / 'app/shared/scene_effects.json'
-    assert len(json.loads(path.read_text())) == 49
+    assert len(json.loads(path.read_text())) == 55
 
 
 def test_code_rain_takes_its_own_default_size_and_keeps_a_given_one(service):
     original = showcase(service)
     rain = next(cue for cue in original['sfx'] if cue['kind'] == 'code_rain')
     assert rain['size'] == 3 and rain['color'] == '#39ff6a', 'the showcase uses the glyph height, not a burst size'
-    assert all(cue['size'] == 95 for cue in original['sfx'] if cue['kind'] != 'code_rain')
+    assert all(cue['size'] == 95 for cue in original['sfx'] if 'size' not in PRESETS[cue['kind']])
     cues = [{'id': 'rain', 'kind': 'code_rain', 'start': 0, 'end': 6}, {'id': 'big', 'kind': 'code_rain', 'start': 0, 'end': 6, 'size': 8},
             {'id': 'burst', 'kind': 'sparks', 'start': 0, 'end': 1}]
     applied = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
                                'input': {'document': original, 'cues': cues, 'replace': True}})['result']['document']
     sizes = {cue['id']: cue['size'] for cue in applied['sfx']}
     assert (sizes['rain'], sizes['big'], sizes['burst']) == (3, 8, 65)
+
+
+def test_cinematic_effects_take_their_catalog_size_and_placement_and_keep_given_ones(service):
+    pack = [item['id'] for item in CATALOG if item['collection'] == 'cinematic']
+    assert pack == ['candlelight', 'vignette', 'film_grain', 'light_rays', 'glitch', 'canvas']
+    showcase_cues = {cue['kind']: cue for cue in showcase(service)['sfx']}
+    assert {kind: showcase_cues[kind]['size'] for kind in pack} == {'candlelight': 45, 'vignette': 60, 'film_grain': 100,
+                                                                    'light_rays': 120, 'glitch': 6, 'canvas': 100}
+    rays = showcase_cues['light_rays']
+    assert (rays['x'], rays['y'], rays['rotation'], rays['color']) == (28, 0, 62, '#ffd27a')
+    cues = [{'id': 'rays', 'kind': 'light_rays', 'start': 0, 'end': 6},
+            {'id': 'aimed', 'kind': 'light_rays', 'start': 0, 'end': 6, 'x': 80, 'y': 5, 'rotation': 120, 'size': 90},
+            {'id': 'candle', 'kind': 'candlelight', 'start': 0, 'end': 6, 'x': 30, 'y': 40},
+            {'id': 'edges', 'kind': 'vignette', 'start': 0, 'end': 6, 'intensity': 1.4}]
+    applied = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                               'input': {'document': showcase(service), 'cues': cues, 'replace': True}})['result']['document']
+    placed = {cue['id']: (cue['x'], cue['y'], cue['size'], cue['rotation'], cue['intensity'], cue['color']) for cue in applied['sfx']}
+    assert placed == {'rays': (28, 0, 120, 62, 1, '#ffd27a'), 'aimed': (80, 5, 90, 120, 1, '#ffd27a'),
+                      'candle': (30, 40, 45, 0, 1, '#ffb35c'), 'edges': (50, 50, 60, 0, 1.4, '#000000')}
 
 
 def test_speech_append_preserves_previous_voice_and_rejects_overlap():
@@ -186,7 +205,7 @@ def test_anime_showcase_uses_42_seconds_and_preserves_longer_authored_scenes(ser
     assert service.execute(command)['result']['document']['duration'] == 72
 
 
-@pytest.mark.parametrize('collection,seconds', [('anime', 42), ('retro', 30), ('all', 147)])
+@pytest.mark.parametrize('collection,seconds', [('anime', 42), ('retro', 30), ('all', 165)])
 def test_default_2d_showcase_has_no_longer_background_tail(service, collection, seconds):
     scene = service.execute({'version': 1, 'operation': 'scenes.effects.showcase',
                              'input': {'dimension': '2d', 'collection': collection}})['result']['document']
