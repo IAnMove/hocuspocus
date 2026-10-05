@@ -75,6 +75,48 @@ def _set_soundtrack(document: dict, tracks, workspace: str) -> None:
     document["soundtrack"] = kept + added
 
 
+SHOT_FX_PREFIX = "shot-"
+_SCREEN_FX_NUMBERS = {"start": (0, 600), "end": (0, 600), "x": (0, 100), "y": (0, 100), "size": (1, 200), "intensity": (0.1, 2),
+                      "volume": (0, 1), "rotation": (-180, 180)}
+
+
+def _screen_fx_kinds() -> frozenset:
+    return frozenset(item["id"] for item in json.loads((_ROOT / "app/shared/scene_effects.json").read_text(encoding="utf-8")))
+
+
+def _set_screen_fx(document: dict, cues) -> None:
+    """Replace the caller's screen effects (``shot-*``: speed lines, manga impact, a flash) and keep the template's own."""
+    if not isinstance(cues, list) or len(cues) > 32:
+        raise World3DSceneError("invalid_screen_fx", "screenFx must be a list of at most 32 effects")
+    kinds = _screen_fx_kinds()
+    added = [_screen_fx_entry(index, cue, kinds) for index, cue in enumerate(cues)]
+    kept = [cue for cue in document.get("sfx") or [] if not str(cue.get("id", "")).startswith(SHOT_FX_PREFIX)]
+    if len(kept) + len(added) > 64:
+        raise World3DSceneError("too_many_screen_fx", "A Video 3D scene holds at most 64 screen effects")
+    document["sfx"] = kept + added
+
+
+def _screen_fx_entry(index: int, cue, kinds: frozenset) -> dict:
+    def refuse(message: str):
+        return World3DSceneError("invalid_screen_fx", f"screenFx[{index}] {message}")
+    if not isinstance(cue, dict) or not str(cue.get("id", "")).startswith(SHOT_FX_PREFIX) or cue.get("kind") not in kinds:
+        raise refuse(f"needs an id starting with {SHOT_FX_PREFIX} and a known kind")
+    entry = {"id": cue["id"][:120], "kind": cue["kind"]}
+    for key, (low, high) in _SCREEN_FX_NUMBERS.items():
+        value = cue.get(key)
+        if value is not None and (type(value) not in (int, float) or not low <= value <= high):
+            raise refuse(f".{key} must be {low}-{high}")
+        if value is not None:
+            entry[key] = round(float(value), 3)
+    if "start" not in entry or "end" not in entry or entry["end"] <= entry["start"]:
+        raise refuse("needs start < end")
+    if isinstance(cue.get("color"), str) and len(cue["color"]) == 7 and cue["color"].startswith("#"):
+        entry["color"] = cue["color"]
+    if isinstance(cue.get("sound"), bool):
+        entry["sound"] = cue["sound"]
+    return entry
+
+
 def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
     record = _read(workspace, scene_id, workspace_dir)
     if type(base_revision) is not int or base_revision != record["revision"]:
@@ -90,6 +132,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         document["playbackSpeed"] = _speed(changes.get("playbackSpeed", changes.get("playback_speed")))
     if "soundtrack" in changes:
         _set_soundtrack(document, changes["soundtrack"], workspace)
+    if "screenFx" in changes:
+        _set_screen_fx(document, changes["screenFx"])
     _set_render_look(document, changes)
     _retarget(document)
     record["revision"] += 1

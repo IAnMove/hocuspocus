@@ -6,6 +6,13 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series 3D shots play their sound effects and screen effects. A 3D shot got the
+location's ambience, the stinger and its music but dropped `sfx` and `fx`, so an
+explosion or a laser in a 3D shot was silent and anime speed lines or a manga
+impact could only go on 2D shots. They are now timed on a line or at a second
+as in a 2D shot; `world3d.scene.patch` takes `screenFx` (ids `shot-*`), which
+replace the shot's earlier effects and keep the template's own.
+
 Video 3D has a toon / cel render look («Anime (cel)» in Spanish). With
 `renderLook: "toon"` the 3D model slots are drawn with flat bands of light and
 an ink outline, so rigged or static GLB characters, vehicles and props sit next

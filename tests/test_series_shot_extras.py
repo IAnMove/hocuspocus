@@ -276,3 +276,27 @@ def test_a_3d_shot_places_its_objects_with_the_clip_found_in_the_model(tmp_path)
         raise AssertionError("expected unknown_clip")
     kept = series_shot3d.normalize_scene3d({"template": "anime-face-off", "retime": False})
     assert kept["retime"] is False and "objects" not in kept
+
+
+def test_a_3d_shot_plays_its_sound_effects_and_screen_effects_like_a_2d_shot(tmp_path):
+    project = series()
+    project["episodesById"] = {"ep1": {"id": "ep1", "shots": [{
+        "id": "s21", "order": 1, "sceneId": "a", "productionMethod": "animation_3d", "durationSeconds": 4,
+        "layout2d": {"sfx": [{"file": "boom.wav", "at": 1.25, "volume": 0.9}],
+                     "fx": [{"kind": "manga_impact", "at": 1.2, "duration": 0.4, "x": 40, "y": 30, "size": 25}]},
+        "scene3d": {"template": "user-sky", "quality": "draft"}}]}}
+    tools = RenderTools(tmp_path)
+    render = SeriesNativeRender(NativeRenderDeps(
+        call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: {"seriesById": {"uv": project}},
+        read_kits=lambda _ws: {}, trim=lambda source, target: 1.0, sleep=lambda _s: None, poll_seconds=0, check_speech=False,
+        set_shot_duration=lambda *args: None))
+    job = render.start("cast", "uv", "ep1", approve=True)
+    for _ in range(200):
+        job = render.status("cast", job["jobId"])
+        if job["status"] in ("completed", "failed"):
+            break
+        time.sleep(0.02)
+    assert job["status"] == "completed", job
+    length = next(args["input"] for tool, args in tools.calls if tool == "world3d.scene.patch" and "duration" in args["input"])
+    assert {"id": "scene-sfx-0", "audio": "/api/v1/file/boom.wav?workspace=cast", "start": 1.25, "gain": 0.9} in length["soundtrack"]
+    assert length["screenFx"] == [{"id": "shot-fx-0", "kind": "manga_impact", "start": 1.2, "end": 1.6, "x": 40.0, "y": 30.0, "size": 25.0}]
