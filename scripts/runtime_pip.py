@@ -37,7 +37,10 @@ def command(engine: str, arguments: list[str]) -> tuple[list[str], dict[str, str
     env["PIP_CONSTRAINT"] = str(constraints)
     args = [uv, "--no-config", "pip", *arguments, "--python", sys.executable]
     if arguments[0] == "install":
-        args.extend(["--constraint", str(constraints),
+        # isolated_environment() drops UV_* from the child, so the launcher's
+        # UV_BUILD_CONSTRAINT never reaches uv: pass the build constraint here so
+        # source builds (flash-attn, rasterizers) resolve against the same pins.
+        args.extend(["--constraint", str(constraints), "--build-constraint", str(constraints),
                      "--default-index", "https://pypi.org/simple"])
         if spec.get("cuda"):
             args.extend(["--index", f"https://download.pytorch.org/whl/cu{spec['cuda'].replace('.', '')}",

@@ -138,6 +138,14 @@ def installation_current(engine: str, platform: str) -> bool:
         return False
 
 
+# Torch cu128 wheels and their accelerators (xformers, SageAttention, Flash
+# Attention) ship kernels for compute capability 7.5 (Turing) and newer; CUDA 13
+# dropped Pascal and Volta as well. A GTX 10xx would download gigabytes and fail
+# on the first kernel. Kept here, not in profiles.json, because that file feeds
+# every engine's install fingerprint.
+COMPUTE_CAPABILITY_MINIMUM = (7, 5)
+
+
 def _cuda_reason(manifest: dict, platform: str, arch: str, gpu: str) -> str | None:
     """Why the local NVIDIA recipes cannot run on this machine, if they cannot."""
     if platform == "darwin" and arch == "arm64":
@@ -151,7 +159,8 @@ def _cuda_reason(manifest: dict, platform: str, arch: str, gpu: str) -> str | No
     return None
 
 
-def _engine_support(definition: dict, platform: str, arch: str, driver: str | None, cuda_reason: str | None, manifest: dict) -> tuple[str | None, str | None, str | None]:
+def _engine_support(definition: dict, platform: str, arch: str, driver: str | None, cuda_reason: str | None, manifest: dict,
+                    compute_capability: str | None = None) -> tuple[str | None, str | None, str | None]:
     warning = None
     minimum = None
     if not definition.get("cuda"):
@@ -164,6 +173,10 @@ def _engine_support(definition: dict, platform: str, arch: str, driver: str | No
     reason = cuda_reason
     if not reason and platform not in definition["platforms"]:
         reason = definition.get("unsupportedReason", "No compatible engine recipe.")
+    if not reason and compute_capability and _version(compute_capability)[:2] < COMPUTE_CAPABILITY_MINIMUM:
+        floor = ".".join(str(part) for part in COMPUTE_CAPABILITY_MINIMUM)
+        reason = (f"{definition['label']} needs an NVIDIA GPU of compute capability >= {floor} (Turing or newer); "
+                  f"detected {compute_capability}: GPU older than Turing, the core studio is installed instead.")
     minimum = manifest["driverMinimum"][definition["cuda"]].get(platform)
     if not reason and driver and minimum and _version(driver) < _version(minimum):
         reason = f"{definition['label']} needs NVIDIA driver >= {minimum} for CUDA {definition['cuda']} (detected {driver})."
@@ -172,7 +185,8 @@ def _engine_support(definition: dict, platform: str, arch: str, driver: str | No
     return reason, warning, minimum
 
 
-def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = None) -> dict:
+def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = None,
+                    compute_capability: str | None = None) -> dict:
     """Pure selection; unknown/unsupported capabilities never silently use CUDA.
 
     An engine with ``fallbackFor`` (core) shares its primary's environment and
@@ -185,7 +199,8 @@ def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = Non
     cuda_reason = _cuda_reason(manifest, platform, arch, gpu)
     engines = {}
     for name, definition in manifest["engines"].items():
-        reason, warning, minimum = _engine_support(definition, platform, arch, driver, cuda_reason, manifest)
+        reason, warning, minimum = _engine_support(definition, platform, arch, driver, cuda_reason, manifest,
+                                                   compute_capability)
         engines[name] = {**recipe(name, platform, arch), "supported": reason is None, "reason": reason,
                          "warning": warning, "driverMinimum": minimum}
     partners = {}
@@ -203,6 +218,7 @@ def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = Non
     ]
     return {"version": manifest["version"], "revision": manifest["revision"],
             "platform": platform, "architecture": arch, "gpu": gpu, "driver": driver,
+            "computeCapability": compute_capability,
             "supported": all(required) if required else False,
             "engines": engines}
 
@@ -276,23 +292,33 @@ def find_msvc() -> dict | None:
     return {"vcvars": str(vcvars), "toolset": toolset}
 
 
+def _nvidia_smi(field: str) -> list[str]:
+    """Numeric values of one ``--query-gpu`` field, one per GPU; empty when unavailable."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [line.strip() for line in result.stdout.splitlines()
+            if re.fullmatch(r"\d+(?:\.\d+)+", line.strip())]
+
+
 def detect_profiles(*, platform: str | None = None, arch: str | None = None,
                     gpu: str | None = None, inspect_engines: set[str] | None = None) -> dict:
     driver = None
-    try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5, check=True,
-        )
-        versions = [line.strip() for line in result.stdout.splitlines()
-                    if re.fullmatch(r"\d+(?:\.\d+)+", line.strip())]
-        if versions:
-            driver = min(versions, key=_version)
-            gpu = "nvidia"
-    except (OSError, subprocess.SubprocessError):
-        pass
+    compute_capability = None
+    versions = _nvidia_smi("driver_version")
+    if versions:
+        driver = min(versions, key=_version)
+        gpu = "nvidia"
+        # Older nvidia-smi builds reject this field: unknown stays unverified, not blocked.
+        capabilities = _nvidia_smi("compute_cap")
+        if capabilities:
+            compute_capability = min(capabilities, key=_version)
     result = select_profiles(platform or sys.platform, arch or host_platform.machine(),
-                             gpu or "unknown", driver)
+                             gpu or "unknown", driver, compute_capability)
     for name, item in result["engines"].items():
         if inspect_engines is None or name in inspect_engines:
             item["installed"] = installation_current(name, result["platform"]) if item["supported"] else False

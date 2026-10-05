@@ -298,7 +298,7 @@ Every step can also start from an existing image, video, audio file or GLB.
 | | Minimum | Recommended |
 |---|---|---|
 | **OS** | Windows 10/11 or Linux | Windows 11 or Linux |
-| **GPU** (local AI) | NVIDIA, 6 GB VRAM | RTX 3090 / 4090 / 5090, 24 GB+ |
+| **GPU** (local AI) | NVIDIA Turing or newer (compute capability 7.5: GTX 16xx / RTX 20xx and up), 6 GB VRAM | RTX 3090 / 4090 / 5090, 24 GB+ |
 | **RAM** | 16 GB | 32 GB+ |
 | **Disk** | 150 GB free | 500 GB free for a full model shelf |
 | **Python** | Installed by Pinokio | — |
@@ -309,7 +309,7 @@ Every step can also start from an existing image, video, audio file or GLB.
 | 12–16 GB | auto-tune offloads; slower |
 | 6–8 GB | works with heavy offload; keep clips short |
 
-Local AI engines use CUDA kernels, so they install only on NVIDIA x64 Windows/Linux. Install checks each computer and installs only what it can run: on AMD, Intel or CPU-only PCs, Apple Silicon, Linux ARM, or NVIDIA drivers older than the recipe minimum, it installs the core studio (projects, editors, 3D worlds, comics, remote LLM/image/music/3D providers) without Torch, and the studio hides the local engines. Intel Macs are not supported. First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D is optional and not part of the main Install, because it compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Its installer (Advanced menu) selects a compatible MSVC toolset or stops with setup instructions; Update refreshes it only where it is installed. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
+Local AI engines use CUDA kernels, so they install only on NVIDIA x64 Windows/Linux. Install checks each computer and installs only what it can run: on AMD, Intel or CPU-only PCs, Apple Silicon, Linux ARM, NVIDIA GPUs older than Turing (compute capability below 7.5, such as the GTX 10xx series), or NVIDIA drivers older than the recipe minimum, it installs the core studio (projects, editors, 3D worlds, comics, remote LLM/image/music/3D providers) without Torch, and the studio hides the local engines. Intel Macs are not supported. First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D is optional and not part of the main Install, because it compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Its installer (Advanced menu) selects a compatible MSVC toolset or stops with setup instructions; Update refreshes it only where it is installed. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
 
 For Windows Hunyuan3D, use **CUDA Toolkit 12.8** and a compatible x64 MSVC
 toolset: VS 2022 v143 (14.3x/14.4x) or VS 2019 v142, with a Windows SDK.
@@ -330,7 +330,7 @@ Local AMD ROCm, Intel and Apple MPS engines are not available yet.
 2. Discover → paste `https://github.com/IAnMove/hocuspocus`, or download from this repo.
 3. **Install**, then **Start**. The first job on each model fetches its weights.
 
-Pinokio **Install** and **Update** share Windows/Linux recipes with separate Python environments and pinned dependencies per engine. Update also rebuilds the UI. SAM (Inpaint) and UniRig are optional menu installs; UniRig currently has a Linux recipe. See [runtime profiles and recovery](docs/development/RUNTIME_PROFILES.md). Windows WanGP pins xformers 0.0.31.post1 and Flash Attention 2.7.4.post1 (with a SHA-256 pinned wheel) for the Torch 2.7.1 / CUDA 12.8 environment.
+Pinokio **Install** and **Update** share Windows/Linux recipes with separate Python environments and pinned dependencies per engine. Update also rebuilds the UI. SAM (Inpaint) and UniRig are optional menu installs; UniRig currently has a Linux recipe. See [runtime profiles and recovery](docs/development/RUNTIME_PROFILES.md). Windows WanGP pins xformers 0.0.31.post1, triton-windows 3.3.1.post19 and a prebuilt SageAttention 2.2.0 wheel for its Torch 2.7.1 / CUDA 12.8 environment; Flash Attention and torchcodec are excluded there (Linux installs a prebuilt Flash Attention 2.7.4 wheel). The per-platform locks pin exact versions, not SHA-256 hashes.
 
 **Start** verifies and repairs the React build before loading the backend. For a missing or incomplete interface, stop Start, use **Repair Web UI**, then Start again; models are preserved. Startup logs show the app version, commit, OS and React build ID for bug reports. See [React recovery and manual commands](docs/development/REACT_INSTALLATION.md).
 
