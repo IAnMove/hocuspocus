@@ -283,5 +283,11 @@
       "conflictHint": "Ya tienes una plantilla propia con este id.",
       "done": "«{{title}}» instalada en tu biblioteca."
     }
+  },
+  "errorBoundary": {
+    "title": "Algo ha fallado en esta vista",
+    "body": "El resto de HocusPocus sigue funcionando. Recarga la página o copia el error para informarlo.",
+    "copyError": "Copiar error",
+    "copied": "Copiado"
   }
 }

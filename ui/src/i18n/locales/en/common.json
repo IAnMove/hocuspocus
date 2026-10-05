@@ -283,5 +283,11 @@
       "conflictHint": "You already have your own template with this id.",
       "done": "“{{title}}” installed in your library."
     }
+  },
+  "errorBoundary": {
+    "title": "Something went wrong in this view",
+    "body": "The rest of HocusPocus keeps working. Reload the page, or copy the error to report it.",
+    "copyError": "Copy error",
+    "copied": "Copied"
   }
 }

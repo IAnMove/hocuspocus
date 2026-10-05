@@ -1,4 +1,5 @@
 import { ExampleDownloads } from './ExampleDownloads'
+import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
 import { exampleCollections } from './templateCatalog'
 import { CinematicControls, AppearanceControls } from './CinematicControls'
 import { PixelWorldControls } from './PixelWorldControls'
@@ -176,7 +177,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       applyScene(adopted.document)
       return
     }
-    sessionStorage.setItem('hocuspocus:scene-before-command:' + Date.now(), JSON.stringify(sceneDocRef.current))
+    safeStorageSet('session', 'hocuspocus:scene-before-command:' + Date.now(), JSON.stringify(sceneDocRef.current))
     bumpGeneration(); applyScene(adopted.document); setFrame(0)
     selectSlot(adopted.document.slots[0]?.id ?? 'subject_1'); setSpeechOpen(adopted.document.slots.some(slot => Boolean(slot.speech)))
   })
@@ -318,7 +319,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     const receive = () => {
       if (exportingRef.current) return
       try {
-        const next = takeSpeechProduction(workspace, sessionStorage, () => preserveSpeechDraft(workspace, sceneDocRef.current))
+        const next = takeSpeechProduction(workspace, safeSessionStorage, () => preserveSpeechDraft(workspace, sceneDocRef.current))
         if (!next) return
         bumpGeneration()
         setPlaying(false); setFrame(0)
@@ -382,7 +383,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         <span className="mt-1 block text-xs text-text-muted">{editorT('speech.productionReady')}</span>
         <button className="mt-2 underline" disabled={editingLocked} onClick={() => {
           try {
-            const raw = sessionStorage.getItem('hocuspocus:world3d-before-speech:' + workspace)
+            const raw = safeStorageGet('session', 'hocuspocus:world3d-before-speech:' + workspace)
             const previous = raw && parseScene3DDocument(JSON.parse(raw))
             if (!previous) return
             preserveSpeechDraft(workspace, sceneDoc)

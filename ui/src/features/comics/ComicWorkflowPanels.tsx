@@ -10,6 +10,7 @@ import { DirectorLoraSelector } from '../../components/SettingsDrawer/DirectorLo
 import { useStore } from '../../stores/useStore'
 import { AssetInput } from '../asset-picker/AssetInput.tsx'
 import { useWorkspaceImageOutputs } from '../../lib/labsImagePick'
+import { safeStorageGet } from '../../lib/safeStorage'
 import type { PlannedClip } from '../../types'
 import { forEachComicPanelCapture } from './export'
 import {
@@ -2002,7 +2003,7 @@ export function ComicVideoPreflightPanel({
     || waiverReason !== (status?.quality_gate?.waiver_reason || '')
     || (status?.quality_gate?.status === 'review_required' && reviewedTestIndices.length > 0)
   const frontendSourceStale = (() => {
-    const builtValue = window.localStorage.getItem(`${storageKey}:fingerprint`)
+    const builtValue = safeStorageGet('local', `${storageKey}:fingerprint`)
     // The backend fingerprint freezes the PRE itself; this companion signature
     // proves that it was built from the comic/config currently open in the UI.
     // Without both pieces of evidence a recovered PRE remains view-only.
