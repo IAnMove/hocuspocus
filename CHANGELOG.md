@@ -6,6 +6,21 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The LLM and H3 paths agree with each other. DeepSeek is a remote provider
+like Grok (it used to be loaded as a local GGUF and tried to download one).
+A reply the model cut at `max_tokens` is reported: a warning in the log, and
+an error (`LLMTruncatedResponse`) when JSON was asked for, instead of a half
+JSON that planners filled with fallbacks. Remote calls (OpenAI-compatible and
+Anthropic) try again after a 429 or a 5xx or a dropped connection, waiting 1,
+2 and 4 seconds (or `Retry-After`), so a transient rate limit no longer kills
+a pipeline of dozens of calls. One H3 frame lattice
+(`services/h3_frame_lattice.py`: 17n+5 frames, 124 to 345 per pass, rounded
+up) is read by the sidecar, the Series renderer, the Director's segmenter and
+the dialogue duration contract; the sidecar's own 362-frame cap with nearest
+rounding is gone, so a shot that fits in one path fits in all. One speech
+rate (2.16 words/s, derived from the syllable estimate) replaces the
+Director's 2.1, the shot validator's 2.5 and the sidecar's separate figure.
+
 Intermediate files are released when their job is done. A Video 2D/3D export
 drops its frames and audio mix when the MP4 is published, a completed
 production drops the copies it put in uploads, the series render drops each raw

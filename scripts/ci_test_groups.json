@@ -79,6 +79,8 @@
         "tests/test_jobs_wait.py",
         "tests/test_labs_wizard_action_matrix.py",
         "tests/test_lan_auth.py",
+        "tests/test_h3_frame_lattice.py",
+        "tests/test_llm_resilience.py",
         "tests/test_language_intent.py",
         "tests/test_launcher_compatibility.py",
         "tests/test_llm_request_cancellation.py",

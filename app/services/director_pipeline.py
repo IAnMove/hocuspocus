@@ -12178,12 +12178,15 @@ def _minimax_h3_frame_segments(
 ) -> list[int]:
     """Split a requested duration into H3's 17n+5 frame lattice.
 
-    Open H3 accepts 107..362 frames per request. Director targets the model's
-    recommended 124-frame (~5.2 s) clip length instead of filling the 15 s
-    maximum: shorter segments follow a small sequence of actions much more
-    reliably and make continuity failures cheaper to reroll.
+    Every native pass stays inside 124..345 frames (services/h3_frame_lattice.py).
+    Director targets the model's recommended 124-frame (~5.2 s) clip length
+    instead of filling the 15 s maximum: shorter segments follow a small
+    sequence of actions much more reliably and make continuity failures
+    cheaper to reroll.
     """
-    minimum, maximum, step, offset = 107, 362, 17, 5
+    from services import h3_frame_lattice
+    minimum, maximum, step, offset = (h3_frame_lattice.MIN_FRAMES, h3_frame_lattice.MAX_FRAMES,
+                                      h3_frame_lattice.STEP, h3_frame_lattice.OFFSET)
     requested = max(minimum, round(max(0.0, float(duration_sec)) * fps))
     target_frames = max(minimum, min(maximum, int(target_frames or 124)))
     count = max(1, round(requested / target_frames))

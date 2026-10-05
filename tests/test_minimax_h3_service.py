@@ -442,15 +442,17 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         }, "jobduration")
         length = workflow["10"]["inputs"]["length"]
         self.assertEqual(length % 17, 5)
-        self.assertGreaterEqual(length, 107)
-        self.assertLessEqual(length, 362)
+        self.assertGreaterEqual(length, 124)
+        self.assertLessEqual(length, 345)
 
+        # The sidecar rounds up like the handler, Series and the Director: a request never comes out shorter.
         near_default = {**h3.DEFAULTS, "prompt": "test", "video_length": 125}
-        near_workflow, _ = h3.build_workflow(near_default, "jobduration-nearest")
-        self.assertEqual(near_workflow["10"]["inputs"]["length"], 124)
+        near_workflow, _ = h3.build_workflow(near_default, "jobduration-ceil")
+        self.assertEqual(near_workflow["10"]["inputs"]["length"], 141)
         self.assertEqual(near_default["requested_video_length"], 125)
-        self.assertEqual(near_default["effective_video_length"], 124)
-        self.assertEqual(h3.MODEL_OPTIONS["frame_alignment_mode"], "nearest")
+        self.assertEqual(near_default["effective_video_length"], 141)
+        self.assertEqual(h3.MODEL_OPTIONS["frame_alignment_mode"], "ceil")
+        self.assertEqual(h3.MODEL_OPTIONS["frames_maximum"], 345)
 
     def test_oversized_resolution_is_reduced_to_open_base_canvas(self):
         workflow, _ = h3.build_workflow({
