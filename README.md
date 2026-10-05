@@ -334,7 +334,7 @@ Pinokio **Install** and **Update** share Windows/Linux recipes with separate Pyt
 
 **Start** verifies and repairs the React build before loading the backend. For a missing or incomplete interface, stop Start, use **Repair Web UI**, then Start again; models are preserved. Startup logs show the app version, commit, OS and React build ID for bug reports. See [React recovery and manual commands](docs/development/REACT_INSTALLATION.md).
 
-**Reset** removes the managed environments, vendor checkouts and UI build, including the Hunyuan model cache in `app/ckpts/model3d`. Use Install/Update to retry a failed setup; Reset is destructive.
+**Reset** removes the managed environments, vendor checkouts and UI build, including the Hunyuan model cache in `app/ckpts/model3d`, the Seed-VC checkout, SAM checkpoints and any third-party 3D runtimes under `app/services/model3d_runtimes`. Use Install/Update to retry a failed setup; Reset is destructive.
 
 To inspect the selected runtime recipes, use the URL shown by Start (replace the example host and port, including when connecting over LAN):
 

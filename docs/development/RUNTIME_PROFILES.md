@@ -151,7 +151,10 @@ error message. Child scripts explicitly return success; parents check this
 receipt because Pinokio can otherwise continue after an aborted child.
 
 **Reset is destructive:** it removes managed environments, vendor checkouts and
-the UI build, including the existing Hunyuan model cache under `app/ckpts/model3d`.
+the UI build, including the existing Hunyuan model cache under `app/ckpts/model3d`,
+the Seed-VC checkout (`app/postprocessing/seedvc`), SAM checkpoints
+(`app/services/sam/checkpoints`), manually installed 3D runtimes
+(`app/services/model3d_runtimes`) and the UI build lock (`ui/.hocus-ui-build.lock`).
 It is not necessary for routine updates or retries.
 
 Read `/api/v1/runtime-capabilities` on the running app for the selected recipes
