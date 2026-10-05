@@ -125,6 +125,20 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   `"renderLook": "toon"` draws the 3D models as cel anime with an ink outline (`toon` {steps 2-4, outline 0-8 px,
   ink #rrggbb}) so they sit with the flat cutouts and painted backgrounds; images and cutouts keep their look.
 
+## Sound design
+
+`soundDesign` on the series (`series.update`) is the sound every shot gets without the script naming it:
+`stinger` (`{file, volume}`) under the first shot of each scene, and `ambienceByLocation`
+(`{"<locationId>": {"file": "sfx-rain.wav", "volume": 0.22}}`, volume 0–2 relative to the dialogue, default 0.22).
+`ambienceMode` says where the ambience is mixed:
+
+- `"shot"` (default): each shot mixes its location's ambience from its own start. It restarts at every cut, and a
+  new file or level renders every shot of that series again.
+- `"episode"`: the shots leave it out and `series.assembly.start` lays one continuous bed per run of consecutive
+  shots in the same location, looped with a 1 s crossfade, faded in and out over 0.8 s and crossfading into the next
+  location's bed. Shots in a location without an entry (a dark title card) get none. Changing the beds renders no
+  shot: `series.episode.produce` only recuts. Switching the mode renders every shot once.
+
 ## Writing for quality
 
 - One idea per line; short lines land better and lip-sync better. Write numbers and acronyms as they are spoken.

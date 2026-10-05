@@ -2,7 +2,8 @@
 
 ``render_inputs`` fingerprints a shot in one language: its layout and lines, the location, the sound design and the
 kits of the people seen or heard. ``series_native_render`` stores it in the take's metadata (``renderInputs``) and
-``series.episode.produce`` renders only ``stale_shot_ids``.
+``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the episode assembly lays
+(``soundDesign.ambienceMode: "episode"``) is not part of a shot, so changing it renders nothing again.
 """
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import json
 from typing import Any
 
 from services import series_shot3d
+from services.series_ambience import shot_sound_design
 from services.series_shot_plan import kit_ref
 
 # What a shot's picture and sound depend on, besides the render code itself.
@@ -31,7 +33,7 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
         "shot": {key: shot.get(key) for key in _SHOT_INPUTS}, "beats": beats,
         "duration": None if beats else shot.get("durationSeconds"), "language": series.get("spokenLanguage"),
         "location": next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None),
-        "sound": series.get("soundDesign"),
+        "sound": shot_sound_design(series.get("soundDesign")),
         "characters": {cid: (characters.get(cid) or {}).get("layout2d") for cid in people},
         "kits": {kid: {key: value for key, value in (kits.get(kid) or {}).items() if key not in _KIT_VOLATILE}
                  for kid in kit_ids.values() if kid},

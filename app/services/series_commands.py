@@ -170,7 +170,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "series": OBJECT, "base_revision": REVISION},
         ["workspace", "series_id", "series", "base_revision"], True,
         "Update a Series Lab project at an exact revision: the fields you send replace theirs, fields you omit keep their "
-        "value (send an empty list to clear one). Changing canon inputs returns the canon to draft.",
+        "value (send an empty list to clear one). Changing canon inputs returns the canon to draft. soundDesign: stinger, "
+        "ambienceByLocation {locationId: {file, volume}} and ambienceMode \"shot\" (each shot mixes it) or \"episode\" "
+        "(the assembly lays one bed per location run; takes stay up to date when it changes).",
     ),
     "series.canon.approve": (
         {"workspace": WORKSPACE, "series_id": ID, "base_revision": REVISION}, ["workspace", "series_id", "base_revision"], True,
@@ -209,7 +211,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         ["workspace", "series_id", "episode_id"], True,
         "Assemble the approved takes of an episode into one chapter video (shown under Capítulos), at -16 LUFS with SRT/VTT "
         "subtitles; burn_subtitles also writes a copy with them on the picture. language assembles that language version's "
-        "approved takes. Returns a job.",
+        "approved takes. With soundDesign.ambienceMode \"episode\" it lays each location's ambience as one continuous "
+        "bed under the cut, before the loudness. Returns a job.",
     ),
     "series.episode.language_version.set": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE,

@@ -780,9 +780,11 @@ def series_put_payload(current: dict, sent: dict) -> dict:
 
 
 def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
+    from services.series_ambience import check_sound_design
     from services.series_production import normalize_production_methods
     if not isinstance(value, dict):
         raise ValueError("Every Series Lab project must be a JSON object")
+    check_sound_design(value.get("soundDesign"))
     project = copy.deepcopy(value)
     series_id = _id(project.get("id"), key)
     now = _now()

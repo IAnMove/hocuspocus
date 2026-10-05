@@ -341,3 +341,47 @@ def test_a_finished_cut_keeps_its_thumbnail_on_its_holder(tmp_path, monkeypatch)
     thumbnail = series["assets"][series["episodesById"]["episode-1"]["thumbnailAssetId"]]
     assert thumbnail["kind"] == "image" and thumbnail["isDerivedThumbnail"] is True and thumbnail["uri"].endswith(".thumb.jpg")
     assert thumbnail["metadata"]["assemblyAssetId"] == status["assetId"] and thumbnail["metadata"]["time"] == 4.2
+
+
+def test_an_episode_mode_assembly_keeps_each_clips_bed_and_lays_it_while_finishing(tmp_path, monkeypatch):
+    import routers.series_assembly as assembly
+
+    seen = []
+
+    def finished(output_path, *_args, ambience=None, **_kwargs):
+        seen.append(ambience)
+        beds = {"applied": True, "beds": [{"file": "sfx-street.wav"}]} if ambience else None
+        return {"subtitles": {"written": False, "reason": "stub"}, "loudness": {"applied": False, "reason": "stub"},
+                **({"ambience": beds} if beds else {})}
+    monkeypatch.setattr(assembly, "finish_episode", finished)
+
+    def concatenate(paths, output_path):
+        shutil.copyfile(paths[0], output_path)
+        return True
+
+    endpoints, library = _client(tmp_path, concatenate)
+    series = library["seriesById"]["series-1"]
+    shots = {shot["id"]: shot for shot in series["episodesById"]["episode-1"]["shots"]}
+    shots["shot-1"]["locationId"], shots["shot-2"]["locationId"] = "street", "void"
+    start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
+    get_status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed" and seen == [None], "shot mode: the shots carry their ambience"
+
+    series = library["seriesById"]["series-1"]
+    series["soundDesign"] = {"ambienceMode": "episode", "ambienceByLocation": {"street": {"file": "sfx-street.wav"}}}
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed", status
+    assert seen[-1] == [{"locationId": "street", "file": "sfx-street.wav", "volume": 0.22}, {"locationId": "void"}], "in episode order"
+    assert SeriesJobStore(str(tmp_path), "assembly").load(status["jobId"])["ambience"] == seen[-1], "a resume lays the same beds"
+    asset = library["seriesById"]["series-1"]["assets"][status["assetId"]]
+    assert asset["metadata"]["ambience"]["applied"] is True
+
+    episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
+    for shot in episode["shots"]:
+        shot["attempts"].append({"id": f"{shot['id']}-es", "status": "completed", "outputAssetIds": ["asset-2"]})
+    episode["languageVersions"] = {"spanish": {"dialogue": {}, "cards": {},
+                                               "approvedAttemptIds": {"shot-1": "shot-1-es", "shot-2": "shot-2-es"}}}
+    request = SeriesAssemblyStartRequest(workspace="default", language="spanish")
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", request)["jobId"])
+    assert status["status"] == "completed" and seen[-1] == seen[-2], "a language version lies on the same beds"
