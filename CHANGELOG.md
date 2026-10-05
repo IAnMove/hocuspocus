@@ -19,6 +19,11 @@ around it only. The pupils that showed on large round cartoon eyes are covered
 too, and the faint ring around each closed eye is gone. Rig the character again
 to get the new blinks.
 
+A Series 3D shot can have a narrator or a voice on the radio. A line by a character
+with no object in `scene3d.cast` stopped the render with `unbound_speaker`; it is
+now heard over the shot and ducks the music like a talking cutout.
+`world3d.scene.patch` takes `voiceOver` [{audio, start, gain}].
+
 A Video 3D model that follows its path (`motion.faceTravel`) can say where its nose
 is: `motion.headingOffset` (radians) is added to the travel heading. Generated
 ships and airships often point their nose along -X, so they flew sideways;

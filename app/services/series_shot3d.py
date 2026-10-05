@@ -209,6 +209,14 @@ def _object_binding(workspace: str, root: str | None, entry: dict[str, Any], err
     return binding
 
 
+def _voice_over(workspace: str, lines: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, Any]:
+    """Lines of characters with no object in the cast are heard over the shot (a narrator, a voice on the radio)."""
+    cast = {entry["characterId"] for entry in config.get("cast") or []}
+    heard = [{"start": line["start"], "audio": f"/api/v1/file/{quote(line['filename'])}?workspace={quote(workspace)}"}
+             for line in lines if line["characterId"] not in cast]
+    return {"voiceOver": heard} if heard else {}
+
+
 def _shot_effects(screen_fx: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     """The shot's screen effects under ``shot-`` ids, which the scene patch replaces on every render."""
     return [{**cue, "id": f"shot-{cue['id']}"} for cue in screen_fx or []]
@@ -293,14 +301,12 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     scene_id = scene["sceneId"]
     revision = _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-length", "input": {
         "workspace": workspace, "scene_id": scene_id, "base_revision": scene["revision"], "duration": round(duration, 3),
-        **_setup(workspace, root, config, sound, error, effects)}}), "set 3D length", error)["scene"]["revision"]
+        **_setup(workspace, root, config, sound, error, effects), **_voice_over(workspace, lines, config)}}),
+        "set 3D length", error)["scene"]["revision"]
     for entry in config.get("cast") or []:
         spoken = [line for line in lines if line["characterId"] == entry["characterId"]]
         kit_id = series_characters.get(entry["characterId"])
         if spoken and kit_id:
             revision = _talk(call, workspace, stem, scene_id, revision, entry, kit_id, spoken, error)
-    unbound = {line["characterId"] for line in lines} - {entry["characterId"] for entry in config.get("cast") or []}
-    if unbound:
-        raise error("unbound_speaker", f"{', '.join(sorted(unbound))} speak in {shot['id']} but have no object in scene3d.cast", 400)
     return _ok(call("world3d.scene.publish", {"version": 1, "intent_id": f"{stem}-publish-{revision}", "input": {
         "workspace": workspace, "scene_id": scene_id}}), "publish 3D scene", error)["scene"]

@@ -111,15 +111,14 @@ def test_a_3d_shot_instantiates_sets_the_length_makes_each_speaker_talk_and_publ
     assert talk["lines"] == [{"start": 0.8, "cues": lines[0]["cues"], "audio": "/api/v1/file/ln%201.wav?workspace=cast"}]
 
 
-def test_a_speaker_without_an_object_or_a_failing_tool_stops_the_shot():
+def test_a_speaker_without_an_object_is_heard_over_the_shot_and_a_failing_tool_stops_it():
     shot = {"id": "s20", "scene3d": {"template": "user-mars", "cast": []}}
-    lines = [{"characterId": "elon", "start": 0.3, "filename": "a.wav"}]
-    try:
-        series_shot3d.build_scene(World3D(), "cast", "job", shot, lines, 3, {}, {"elon": "kit-elon"}, NativeRenderError)
-    except NativeRenderError as error:
-        assert error.code == "unbound_speaker" and "elon" in str(error)
-    else:
-        raise AssertionError("expected unbound_speaker")
+    lines = [{"characterId": "elon", "start": 0.3, "filename": "a b.wav"}]
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", shot, lines, 3, {}, {"elon": "kit-elon"}, NativeRenderError)
+    length = tools.calls[1][1]["input"]
+    assert length["voiceOver"] == [{"start": 0.3, "audio": "/api/v1/file/a%20b.wav?workspace=cast"}]
+    assert not any(tool == "world3d.scene.talk" for tool, _ in tools.calls), "nobody talks on screen"
     try:
         series_shot3d.build_scene(World3D(fail="world3d.scene.instantiate"), "cast", "job", shot, [], 3, {}, {}, NativeRenderError)
     except NativeRenderError as error:
