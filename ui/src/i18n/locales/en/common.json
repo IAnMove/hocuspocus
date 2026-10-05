@@ -53,7 +53,9 @@
     "queued": "Queued",
     "completed": "Completed",
     "failed": "Failed",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "interrupted": "Interrupted",
+    "interruptedHint": "Saved by a previous session. Resume reruns the saved queue from the start; discard clears it."
   },
   "count": {
     "item_one": "{{count}} item",

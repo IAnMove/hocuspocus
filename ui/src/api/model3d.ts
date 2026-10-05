@@ -1,5 +1,5 @@
 import { randomUuid } from '../lib/uuid'
-import { BASE } from './http'
+import { BASE, httpError } from './http'
 
 // --- Native Hunyuan3D ---
 
@@ -111,13 +111,9 @@ export async function startHunyuan3DJob(params: {
 
 export async function fetchHunyuan3DJob(jobId: string): Promise<Hunyuan3DJob> {
   const res = await fetch(`${BASE}/api/v1/model3d/status/${encodeURIComponent(jobId)}`)
-  if (!res.ok) {
-    // A 404 means the job registry no longer knows this id (the backend
-    // restarted mid-generation); callers use the status to stop polling.
-    const error = new Error(res.status === 404 ? 'Hunyuan3D job not found' : 'Failed to fetch Hunyuan3D job')
-    ;(error as Error & { status?: number }).status = res.status
-    throw error
-  }
+  // A 404 means the job registry no longer knows this id (the backend
+  // restarted mid-generation); callers use the status to stop polling.
+  if (!res.ok) throw await httpError(res, res.status === 404 ? 'Hunyuan3D job not found' : 'Failed to fetch Hunyuan3D job')
   return res.json()
 }
 

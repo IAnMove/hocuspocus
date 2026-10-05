@@ -53,7 +53,9 @@
     "queued": "En cola",
     "completed": "Completado",
     "failed": "Fallido",
-    "cancelled": "Cancelado"
+    "cancelled": "Cancelado",
+    "interrupted": "Interrumpido",
+    "interruptedHint": "Guardado por una sesión anterior. Reanudar vuelve a ejecutar la cola guardada desde el principio; descartar la vacía."
   },
   "count": {
     "item_one": "{{count}} elemento",

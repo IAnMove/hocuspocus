@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo, type JSX } from 'react'
-import { Film, Play, Square, Loader2, X, BookMarked, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { Film, Play, Square, Loader2, X, BookMarked, ChevronDown, ChevronUp, RefreshCw, Trash2 } from 'lucide-react'
 import { TabFilter } from './TabFilter'
 import { visibleWorkspaceSurface } from '../../lib/navigationCategories'
 import { ThumbnailGallery } from './ThumbnailGallery'
@@ -17,6 +17,8 @@ import { MediaFeedItem } from './MediaFeedItem'
 import { useStore } from '../../stores/useStore'
 import { jobFitsGalleryFilter } from '../../lib/galleryListQuery'
 import type { GenerationJob } from '../../types'
+import { isGenerationJobInterrupted } from '../../lib/generationJobState'
+import * as api from '../../api/client'
 import { openSceneOutput } from '../../lib/sceneOutput'
 import {
   clearVideoEditorReplacementTarget,
@@ -93,17 +95,17 @@ function stripTimeSuffix(msg: string): string {
 
 export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop: () => void; onDismiss: () => void }) {
   const { t: tCommon } = useUiTranslation('common')
+  const reconnectJobs = useStore(s => s.reconnectJobs)
   const [retrying, setRetrying] = useState(false)
   const [retryError, setRetryError] = useState('')
   const retryLock = useRef(false)
-  const retry = async () => {
-    if (!job.retry || retryLock.current) return
+  const runOnce = async (action: () => Promise<void>) => {
+    if (retryLock.current) return
     retryLock.current = true
     setRetrying(true)
     setRetryError('')
     try {
-      await job.retry()
-      onDismiss()
+      await action()
     } catch (error) {
       setRetryError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -111,10 +113,26 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
       setRetrying(false)
     }
   }
+  const retry = () => runOnce(async () => {
+    if (!job.retry) return
+    await job.retry()
+    onDismiss()
+  })
+  // The recovery queue is resumed or discarded as a whole, like QueueRecoveryDialog.
+  const resumeInterrupted = () => runOnce(async () => {
+    await api.resumeGenerationQueue()
+    onDismiss()
+    await reconnectJobs()
+  })
+  const discardInterrupted = () => runOnce(async () => {
+    await api.discardGenerationQueue()
+    onDismiss()
+  })
   const hasSteps = job.totalSteps > 0
   const progressPct = hasSteps ? (job.step / job.totalSteps) * 100 : job.progress * 100
   const phase = stripTimeSuffix(job.phase || job.message)
-  const isFailed = job.status === 'failed' || job.status === 'cancelled'
+  const isInterrupted = isGenerationJobInterrupted(job.status)
+  const isFailed = job.status === 'failed' || job.status === 'cancelled' || isInterrupted
   const errorText = job.error || job.message || (job.status === 'cancelled' ? 'Cancelled' : 'Generation failed')
   const completedPanelTimings = (job.taskTimings ?? [])
     .filter(item => typeof item.total_seconds === 'number')
@@ -133,7 +151,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
 
   return (
     <div className={`rounded-xl border overflow-hidden ${
-      isFailed ? 'border-red-500/30 bg-bg-tertiary' : 'border-accent-blue/30 bg-bg-tertiary'
+      isInterrupted ? 'border-amber-400/40 bg-bg-tertiary' : isFailed ? 'border-red-500/30 bg-bg-tertiary' : 'border-accent-blue/30 bg-bg-tertiary'
     }`}>
       <div className="w-full aspect-video flex items-center justify-center relative">
         {/* Dismiss button (top-right, failed only) */}
@@ -147,11 +165,13 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
           </button>
         )}
         <div className="flex flex-col items-center gap-3 text-text-muted w-full max-w-md px-4">
-          <Film size={40} className={isFailed ? 'text-red-400' : 'animate-pulse'} />
+          <Film size={40} className={isInterrupted ? 'text-amber-300' : isFailed ? 'text-red-400' : 'animate-pulse'} />
 
           <div className="text-center w-full">
-            <p className={`text-sm font-medium ${isFailed ? 'text-red-400' : 'text-text-secondary'}`}>
-              {isFailed ? (job.status === 'cancelled' ? 'Cancelled' : 'Generation Failed') : job.status === 'queued' ? 'Queued...' : 'Generating...'}
+            <p className={`text-sm font-medium ${isInterrupted ? 'text-amber-300' : isFailed ? 'text-red-400' : 'text-text-secondary'}`}>
+              {isInterrupted
+                ? tCommon('status.interrupted')
+                : isFailed ? (job.status === 'cancelled' ? 'Cancelled' : 'Generation Failed') : job.status === 'queued' ? 'Queued...' : 'Generating...'}
             </p>
             {!isFailed && phase && (
               <p className="text-xs mt-1 truncate">{phase}</p>
@@ -242,8 +262,24 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
       {/* Bottom bar */}
       <div className="px-3 py-2 min-h-[40px] flex items-center justify-between">
         <div className="text-[11px] text-text-muted truncate flex-1">
-          {isFailed ? 'Click × to dismiss — the tile stays so you can see what failed' : phase || 'Preparing...'}
+          {isInterrupted
+            ? tCommon('status.interruptedHint')
+            : isFailed ? 'Click × to dismiss — the tile stays so you can see what failed' : phase || 'Preparing...'}
         </div>
+        {isInterrupted && (
+          <div className="flex items-center gap-3 shrink-0 ml-2">
+            <button type="button" onClick={() => void discardInterrupted()} disabled={retrying}
+              className="flex items-center gap-1 text-xs text-text-secondary hover:text-red-300 disabled:opacity-50">
+              <Trash2 size={12} />
+              {tCommon('actions.discard')}
+            </button>
+            <button type="button" onClick={() => void resumeInterrupted()} disabled={retrying}
+              className="flex items-center gap-1 text-xs text-accent-blue disabled:opacity-50">
+              {retrying ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+              {tCommon('actions.resume')}
+            </button>
+          </div>
+        )}
         {isFailed && job.retry && (
           <button type="button" onClick={() => void retry()} disabled={retrying}
             className="flex items-center gap-1 text-xs text-accent-blue disabled:opacity-50 shrink-0 ml-2">

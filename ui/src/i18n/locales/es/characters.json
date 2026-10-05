@@ -449,7 +449,8 @@
       "minimaxDescribe": "MiniMax está describiendo la imagen…",
       "llmDescribe": "El LLM interno está describiendo la imagen…",
       "orbitQueued": "Órbita H3 en cola…",
-      "hunyuanQueued": "Hunyuan3D en cola…"
+      "hunyuanQueued": "Hunyuan3D en cola…",
+      "orbitInterrupted": "Un reinicio del servidor interrumpió la órbita. Reanudar vuelve a ejecutar la cola guardada; descartar la vacía."
     },
     "errors": {
       "autoDescribe": "La descripción automática solo funciona con MiniMax o el LLM interno. Escribe un A Prompt o cambia Ajustes → LLM.",
