@@ -61,6 +61,17 @@ def test_big_ears_belong_to_the_head_and_not_to_the_arms():
     assert found["points"]["left_shoulder"][1] < region["y"]
 
 
+def test_long_hair_and_a_skirt_do_not_put_the_neck_at_the_waist():
+    item = body("long_hair_skirt")
+    found = _found(item)
+    for side in ("left", "right"):
+        for joint in ARM_JOINTS:
+            # The torso width is measured at the skirt, which pushes the shoulder out a little.
+            assert _error(found, item, f"{side}_{joint}") < (0.04 if joint == "shoulder" else 0.03), (side, joint)
+    assert found["pose"] == "t"
+    assert found["points"]["neck"][1] > item["joints"]["left_shoulder"][1], "the neck is above the arms, not at the waist"
+
+
 @pytest.mark.parametrize("kind,reason", [("arms_down", "hands_stuck"), ("legs_together", "single_leg"), ("penguin", "single_leg")])
 def test_bodies_that_cannot_be_rigged_are_refused(kind, reason):
     with pytest.raises(NotHumanoid) as caught:
