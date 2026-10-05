@@ -6,6 +6,18 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A production or a Series render that waits for the GPU no longer waits
+forever. With `HOCUS_PRODUCTION_EXTERNAL_VRAM_MB` set, each music, image,
+speech, SFX, H3 or video export admission waited in 30-second steps for as long
+as another process held the GPU, and a cancel had no effect until that process
+finished. The wait now lasts at most `HOCUS_PRODUCTION_GPU_WAIT_SECONDS`
+(default one hour; `0` keeps waiting). After that the run stops with
+`resource_gpu_busy`, naming the processes that still hold the GPU, and can be
+resumed. Cancelling a music-video production or a Series render job ends the
+wait at once. A Series render job now stops at the shot that ran out of GPU or
+disk instead of waiting again for each following shot, and a cancel during its
+last shot ends the job `cancelled` instead of `failed`.
+
 The humanoid rig accepts characters in capes and long robes. A cape over the
 shoulders and upper arms joined the arms to the torso in the front silhouette,
 so the shoulders were put at the cape's edge (or the model was refused with
