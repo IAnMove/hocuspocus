@@ -111,6 +111,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   whole picture: give them 2–4 frames (`duration` 0.08–0.17 s at 24 fps) right on the hit. `code_rain` (falling
   green code; `size` is the glyph height in %, default 3) covers the whole picture too, faces included: for a
   code backdrop behind the cast, render a location plate from the `anime-code-rain` Video 3D shot instead.
+  The cinematic grades also cover the whole picture: `candlelight` (warm flickering key light, `x`/`y` the flame,
+  `size` its radius), `vignette`, `film_grain`, `light_rays` (`x`/`y` the window, `rotation` where the light
+  goes), `glitch` (bursts of digital tearing) and `canvas` (a painted-canvas texture). Give a grade the whole shot
+  (`at` 0 and a `duration` as long as the shot); it repeats over its cue, so a plate as long as the cue loops.
 - **timing:** `intro` (silence before the first line, default 0.35 s), `gap` (between lines, 0.22), `tail` (after the
   last, 0.45). A line's `pauseBefore` adds a dramatic beat before it.
 - **voiceRoom:** the room this shot's voices are heard in, instead of its location's (see Sound design): `none`,
