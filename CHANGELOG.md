@@ -25,6 +25,19 @@ is used. This covers every path that clones a voice: Series native renders,
 `generation.speech`, Character Kit auditions and a designed voice used as a
 reference.
 
+Video 3D clouds, fog and smoke (`worldSfx` `fog`, `smoke`, `dust` and every
+other effect drawn with the shared effect noise) no longer show hard square
+blocks on NVIDIA GPUs, with or without the toon look. The noise hashed each
+lattice corner with `fract(sin(dot(p, k)) * 43758.5453)`; the GPU compiler may
+compute the same corner as `dot(i, k) + k.x` in one cell and `dot(i + 1, k)` in
+the next, and the sine turns that last-bit difference into an unrelated value,
+so the noise jumped at every cell border. The hash now mixes the integer cell
+coordinates, so two cells always agree on the corner they share. The software
+renderer was not affected. Rain, snow and spark points now also grow with the
+`scale` of their effect, as its sheets do: a `rain` cue scaled up to fill a set
+drew drops of the unscaled size, under a pixel wide a few metres away, so it
+looked empty.
+
 A Series native render no longer keeps a voice take that came out empty. Some
 cloned voices sometimes stop before speaking a short line: the take is only
 silence, or a click of a few hundredths of a second. Trimming the silence left
