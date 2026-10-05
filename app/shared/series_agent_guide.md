@@ -110,8 +110,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   The template's own effects, texts and clip cues are stretched to the shot's length (`"retime": false` keeps their
   seconds). `objects` places what does not speak: a 3D model from `model3d.generate`/`model3d.animate` (`file`, its
   `clip` by name, `clipPlayback` {speed, start, loop}) or an image cutout (`"media": "image"`), on a template object
-  (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationY` (radians, metres) and a
-  `motion` {to, via, points, faceTravel, easing} across the shot:
+  (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationY` (radians, metres),
+  `grounded: true` for a character standing on the floor, and a `motion` {to, via, points, faceTravel, easing}:
   `{"objectId": "zep", "file": "zeppelin.glb", "add": true, "clip": "Fly", "position": [-6, 3, -8],
   "motion": {"to": [6, 3, -8], "faceTravel": true}}`. Mix them: 2D cutouts talk, 3D models move.
 

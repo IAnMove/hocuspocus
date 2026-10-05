@@ -247,15 +247,18 @@ def _glb(path, names):
 def test_a_3d_shot_places_its_objects_with_the_clip_found_in_the_model(tmp_path):
     _glb(tmp_path / "zeppelin.glb", ["Idle", "Fly"])
     value = series_shot3d.normalize_scene3d({"template": "anime-face-off", "objects": [
-        {"objectId": "zep", "file": "zeppelin.glb", "add": True, "clip": "Fly", "clipPlayback": {"speed": 2, "loop": "yes"},
+        {"objectId": "zep", "file": "zeppelin.glb", "add": True, "clip": "Fly", "clipPlayback": {"speed": 2, "loop": "yes"}, "grounded": "no",
          "position": [0, 2, -6], "rotationY": 1.57, "motion": {"to": [5, 2, -6], "faceTravel": True, "points": [[1, 2, 3], "x"]}},
         {"objectId": "bad", "file": "../secret.glb", "add": True},
         {"objectId": "abs", "file": "/etc/passwd"},
         {"objectId": "nothing"},
+        {"objectId": "hero", "file": "rayo.glb", "clip": {"index": 1, "name": "Run"}, "grounded": True},
         {"objectId": "flat", "media": "screen", "file": "a.png"}]})
     assert value["objects"] == [{"objectId": "zep", "media": "model3d", "file": "zeppelin.glb", "add": True, "clip": "Fly",
                                  "clipPlayback": {"speed": 2.0}, "position": [0.0, 2.0, -6.0], "motion": {"to": [5.0, 2.0, -6.0], "faceTravel": True},
-                                 "rotationY": 1.57}]
+                                 "rotationY": 1.57},
+                                {"objectId": "hero", "media": "model3d", "file": "rayo.glb", "clip": {"index": 1, "name": "Run"}, "grounded": True}]
+    value["objects"] = value["objects"][:1]
     tools = World3D()
     shot = {"id": "s30", "scene3d": value}
     series_shot3d.build_scene(tools, "cast", "job", shot, [], 5, {}, {}, NativeRenderError, root=str(tmp_path))

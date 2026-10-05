@@ -5,7 +5,7 @@ where and who::
 
     shot.scene3d = {"template": "user-moon-base",             # or "scene": "<saved>.world3d.scene.json"
                     "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}],
-                    "objects": [{"objectId": "ship", "file": "ship.glb", "clip": "Fly", "add": True,
+                    "objects": [{"objectId": "ship", "file": "ship.glb", "clip": "Fly", "add": True, "grounded": False,
                                  "position": [0, 2, -6], "motion": {"to": [4, 2, -6], "faceTravel": True}}],
                     "quality": "final"}
 
@@ -132,6 +132,8 @@ def _object_entry(entry: Any) -> dict[str, Any] | None:
     checks = {"position": _vec3, "motion": _motion, "rotationY": lambda value: _number(value, -20, 20),
               "scale": lambda value: _number(value, 0.01, 100)}
     result.update({key: checked for key, check in checks.items() if (checked := check(entry.get(key))) is not None})
+    if isinstance(entry.get("grounded"), bool):
+        result["grounded"] = entry["grounded"]
     return result if len(result) > 2 else None
 
 
@@ -187,7 +189,7 @@ def _object_binding(workspace: str, root: str | None, entry: dict[str, Any], err
         binding["source_url"] = f"/api/v1/file/{quote(entry['file'])}?workspace={quote(workspace)}"
     if "clip" in entry:
         binding["clip"] = _resolve_clip(root, entry, error)
-    for key in ("clipPlayback", "position", "rotationY", "scale", "motion"):
+    for key in ("clipPlayback", "position", "rotationY", "scale", "motion", "grounded"):
         if key in entry:
             binding[key] = entry[key]
     return binding
