@@ -3706,6 +3706,16 @@
     "road_slope": "Slope (°)",
     "road_offset": "Continuity (s)"
   },
+  "renderLook": {
+    "title": "Render look",
+    "none": "Authored materials",
+    "n64": "Nintendo 64",
+    "toon": "Toon / cel",
+    "steps": "Light bands",
+    "outline": "Ink width (px at 1080p)",
+    "ink": "Ink color",
+    "help": "Toon / cel gives 3D model slots flat bands of light and an ink outline, so models sit next to flat cutouts and painted backgrounds. Images and cutouts keep their look. Preview and export match."
+  },
   "imageLook": {
     "title": "Image appearance",
     "tint": "Tint",

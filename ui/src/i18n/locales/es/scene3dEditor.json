@@ -3706,6 +3706,16 @@
     "road_slope": "Pendiente (°)",
     "road_offset": "Continuidad (s)"
   },
+  "renderLook": {
+    "title": "Aspecto de render",
+    "none": "Materiales del modelo",
+    "n64": "Nintendo 64",
+    "toon": "Anime (cel)",
+    "steps": "Bandas de luz",
+    "outline": "Grosor de tinta (px a 1080p)",
+    "ink": "Color de tinta",
+    "help": "Anime (cel) da a los modelos 3D bandas planas de luz y un contorno de tinta, para que convivan con recortes planos y fondos pintados. Las imágenes y los recortes no cambian. La vista previa y la exportación coinciden."
+  },
   "imageLook": {
     "title": "Aspecto de la imagen",
     "tint": "Tinte",

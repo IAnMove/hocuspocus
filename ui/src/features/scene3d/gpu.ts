@@ -1,4 +1,5 @@
 import { applyN64Look, withN64Look } from './n64Look'
+import { ToonLook, resolveToon, type ToonTarget } from './toonLook'
 import { imageCutoutMesh, poseImageCutout } from './imageCutout'
 import { CinematicRuntime } from './cinematicRuntime'
 import { MaterializationRuntime } from './materialization'
@@ -114,6 +115,8 @@ export type GpuWorld = {
   exportRender?: ExportRenderQuality
   /** Environment light of scenes that ask for it (`document.lighting`). */
   lighting?: EnvironmentLighting
+  /** Cel shading and ink of model slots (`renderLook: 'toon'`), created on the first scene that asks for it. */
+  toon?: ToonLook
 }
 
 export function clipKeyOf(clip: Scene3DSlot['clip']): string {
@@ -598,19 +601,44 @@ function paintWorldSfx(world: GpuWorld, document: Scene3DDocument, sceneSeconds:
 /** The cinematic runtime once a scene needs it (environment, world effects, pixel world, atmos), else a plain render. */
 function renderFrame(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
   const cinematic = Boolean(document.environment || document.worldSfx?.length || isAtmosDressing(document.dressing))
+  syncToonLook(world, document, sceneSeconds)
   if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment') || isAtmosDressing(document.dressing)) {
     world.cinema ??= new CinematicRuntime(world)
     world.cinema.sync(document, sceneSeconds)
     if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, document.renderLook === 'n64')
     applyLook(world.renderer, document, cinematic)
-    world.cinema.render(document)
+    drawWorld(world, () => world.cinema!.render(document))
   } else {
     if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, false)
     applyLook(world.renderer, document, cinematic)
-    world.renderer.render(world.scene, world.camera)
+    drawWorld(world, () => world.renderer.render(world.scene, world.camera))
   }
+}
+
+function syncToonLook(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
+  const settings = resolveToon(document)
+  if (!settings && !world.toon) return
+  world.toon ??= new ToonLook()
+  world.toon.sync(settings, settings ? toonTargets(world, document, sceneSeconds) : [])
+}
+
+/** Model slots only: image cutouts, backdrops, screens and sets keep their authored look. */
+function toonTargets(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number): ToonTarget[] {
+  const targets: ToonTarget[] = []
+  for (const slot of document.slots) {
+    const root = slot.media === 'model3d' ? world.slots.get(slot.id)?.root : undefined
+    // A model that is still materializing gets no ink: its hull would show the whole silhouette early.
+    if (root) targets.push({ root, outline: !slot.appearance || sceneSeconds >= slot.appearance.start + slot.appearance.duration })
+  }
+  return targets
+}
+
+/** Every draw of the world goes through here so redraws between paints keep the toon look. */
+function drawWorld(world: GpuWorld, render: () => void) {
+  if (world.toon) world.toon.draw(render)
+  else render()
 }
 
 /** Created on the first scene that asks for environment light, then kept so it can clear it again. */
@@ -732,6 +760,7 @@ export function createWorld(host: HTMLDivElement, light: Scene3DLight, fov: numb
 export function disposeWorld(world: GpuWorld) {
   world.cinema?.dispose()
   world.lighting?.dispose()
+  world.toon?.dispose()
   for (const id of [...world.slots.keys()]) dropSlot(world, id)
   if (world.scene && world.worldSfx) syncWorldSfx(world.scene, world.worldSfx, [], 0, [])
   disposeObject(world.scene)
@@ -780,6 +809,8 @@ export function poseLoadedSlot(current: SlotGpu, slot: Scene3DSlot) {
 
 /** All interaction/media redraws share preview and export postprocessing. */
 export function renderWorld(world: GpuWorld) {
-  if (world.cinema) world.cinema.render()
-  else world.renderer.render(world.scene, world.camera)
+  drawWorld(world, () => {
+    if (world.cinema) world.cinema.render()
+    else world.renderer.render(world.scene, world.camera)
+  })
 }

@@ -426,6 +426,39 @@ def test_a_scene_patch_sets_the_scene_sound_and_keeps_talk_tracks(tmp_path):
             patch_scene("studio", "w3d-0000abcd1234", workspace_dir, {"soundtrack": bad}, 3)
 
 
+def test_a_scene_patch_sets_merges_and_clears_the_render_look(tmp_path):
+    from services.world3d_scenes import World3DSceneError
+    workspace_dir = lambda name: str(tmp_path / name)
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"templateId": "two-shot", "slots": [], "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]}}
+    (folder / "w3d-00000000700e.json").write_text(json.dumps({"revision": 1, "templateId": "two-shot", "document": document, "warnings": []}), encoding="utf-8")
+    viewed = patch_scene("studio", "w3d-00000000700e", workspace_dir, {"renderLook": "toon", "toon": {"steps": 2, "ink": "#AA0000"}}, 1)
+    assert viewed["document"]["renderLook"] == "toon"
+    assert viewed["document"]["toon"] == {"steps": 2, "ink": "#aa0000"}
+    assert viewed["traits"]["renderLook"] == "toon"
+    assert {"renderLook", "toon"} <= set(viewed["editable"])
+    merged = patch_scene("studio", "w3d-00000000700e", workspace_dir, {"toon": {"outline": 4.5}}, 2)
+    assert merged["document"]["toon"] == {"steps": 2, "ink": "#aa0000", "outline": 4.5}
+    cleared = patch_scene("studio", "w3d-00000000700e", workspace_dir, {"renderLook": "none"}, 3)
+    assert "renderLook" not in cleared["document"]
+    assert cleared["document"]["toon"]["steps"] == 2, "settings stay for the next time the look is chosen"
+    for bad in ({"renderLook": "cel"}, {"toon": {"steps": 5}}, {"toon": {"outline": -1}}, {"toon": {"ink": "black"}},
+                {"toon": {"width": 2}}, {"toon": "thick"}, {"toon": {"steps": True}}):
+        with pytest.raises(World3DSceneError) as caught:
+            patch_scene("studio", "w3d-00000000700e", workspace_dir, bad, 4)
+        assert caught.value.code == "invalid_render_look"
+    assert inspect_scene("studio", "w3d-00000000700e", workspace_dir)["revision"] == 4
+
+
+def test_the_patch_tool_documents_the_render_look():
+    patch = next(item for item in command_catalog() if item["name"] == "world3d.scene.patch")
+    fields = patch["inputSchema"]["properties"]["input"]["properties"]
+    assert fields["renderLook"]["enum"] == ["none", "n64", "toon"]
+    assert set(fields["toon"]["properties"]) == {"steps", "outline", "ink"}
+    assert fields["toon"]["additionalProperties"] is False
+
+
 def test_a_patch_adds_an_animated_prop_and_stretches_the_template_cues_to_the_new_length(tmp_path):
     from services.world3d_scenes import World3DSceneError
     workspace_dir = lambda name: str(tmp_path / name)

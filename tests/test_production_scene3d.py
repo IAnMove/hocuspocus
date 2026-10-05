@@ -154,6 +154,23 @@ def test_rejects_missing_or_ambiguous_native_scene(config):
         validate_scene3d_shot({"scene3d": config})
 
 
+@pytest.mark.parametrize("config", [{"renderLook": "cel"}, {"renderLook": "toon", "toon": {"steps": 6}},
+                                    {"toon": {"ink": "black"}}, {"toon": {"width": 2}}])
+def test_refuses_unknown_render_looks_and_bad_toon_settings(config):
+    with pytest.raises(ValueError, match="renderLook|toon"):
+        validate_scene3d_shot(shot(**config))
+    with pytest.raises(ValueError, match="renderLook|toon"):
+        validate_scene3d_shot({"scene3d": {"document": {"slots": [], **config}}})
+
+
+def test_render_looks_match_the_editor():
+    import re
+    from services.world3d_look import RENDER_LOOKS
+    source = (Path(__file__).resolve().parents[1] / "ui/src/features/scene3d/types.ts").read_text(encoding="utf-8")
+    declared = re.search(r"SCENE3D_RENDER_LOOKS = \[([^\]]*)\] as const", source).group(1)
+    assert tuple(re.findall(r"'([a-z0-9]+)'", declared)) == RENDER_LOOKS
+
+
 def test_does_not_claim_rigid_models_sing():
     with pytest.raises(ValueError, match="lip-sync"):
         validate_scene3d_shot({**shot(), "sing": True})
@@ -173,6 +190,13 @@ def test_real_native_template_compiler_keeps_model_camera_atmosphere_and_motion(
     assert doc["camera"]["orbitRadius"] == 5
     assert doc["atmos"]["timeOfDay"] == "dawn"
     assert doc["rhythm"]["bpm"] == 120 and doc["rhythm"]["offset"] == 24
+
+
+@pytest.mark.skipif(not (Path(__file__).resolve().parents[1] / "ui/node_modules/tsx/dist/loader.mjs").is_file(), reason="UI dependencies not installed in Python-only CI")
+def test_real_native_template_compiler_keeps_the_toon_look():
+    doc = compile_document(shot(renderLook="toon", toon={"steps": 2, "outline": 4.5, "ink": "#203040"}), 6)
+    assert doc["renderLook"] == "toon"
+    assert doc["toon"] == {"steps": 2, "outline": 4.5, "ink": "#203040"}
 
 
 def test_uncertain_admission_resumes_with_the_exact_same_intent(tmp_path):

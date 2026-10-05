@@ -11,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 
 from services.mcp_intent import IntentConflict, check_intent_id, intent_digest, load_intent, store_intent
 from services.scene_documents import WORKSPACE_RE
+from services.world3d_look import RENDER_LOOKS
 from services.world3d_scenes import (
     World3DSceneError, compile_template_document, inspect_scene, instantiate_template, patch_scene, preview_scene,
     publish_scene, put_user_template, talk_scene,
@@ -22,6 +23,11 @@ from services.world3d_template_catalog import (
 _LOCK = threading.RLock()
 _ID = {"type": "string", "minLength": 1, "maxLength": 120}
 _WORKSPACE = {"type": "string", "pattern": WORKSPACE_RE.pattern}
+_RENDER_LOOK = {"enum": ["none", *RENDER_LOOKS], "description": "Whole-frame look. toon: cel shading and ink outlines on 3D model slots (images and cutouts unchanged). n64: low-resolution retro. none: authored materials."}
+_TOON = {"type": "object", "additionalProperties": False, "description": "Settings of renderLook toon, merged into the stored ones.", "properties": {
+    "steps": {"type": "integer", "minimum": 2, "maximum": 4, "description": "Light bands (default 3)"},
+    "outline": {"type": "number", "minimum": 0, "maximum": 8, "description": "Ink width in pixels of a 1080p frame (default 3; 0 = no ink)"},
+    "ink": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "Ink colour (default #141018)"}}}
 _MUTATIONS = {
     "world3d.scene.instantiate", "world3d.scene.patch", "world3d.scene.publish",
     "world3d.scene.apply_query", "world3d.templates.user.put", "world3d.scene.talk",
@@ -33,7 +39,7 @@ _OPERATIONS = {
     "world3d.templates.user.put": (True, "Register a personal Video 3D template in the workspace. Browser localStorage is left untouched. Ids must start with user-.", {"id": _ID, "title": {"type": "string"}, "description": {"type": "string"}, "document": {"type": "object"}}, ["id", "title", "document"]),
     "world3d.scene.instantiate": (True, "Create an editable scene from an exact template id.", {"template_id": _ID}, ["template_id"]),
     "world3d.scene.inspect": (False, "List object ids, markers, traits and the current revision.", {"scene_id": _ID}, ["scene_id"]),
-    "world3d.scene.patch": (True, "Bind resources by object id, or by role only when that role is unique. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "bindings": {"type": "array", "description": "{object_id or role, source_url, media, clip {index, name}, clipPlayback {speed, start, loop}, position, rotationY (radians), scale, motion}. add: true creates a new prop object (model3d or image cutout) with that id when the template has none."}, "camera": {"type": "object"}, "playbackSpeed": {"type": "number"}, "duration": {"type": "number"}, "retime": {"type": "boolean", "description": "With duration: stretch the template's effects, texts, appearances and clip cues to the new length."}, "soundtrack": {"type": "array", "maxItems": 32, "description": "The scene's own sound (ids scene-*: ambience, stinger, music): {id, audio (workspace or upload URL), start, gain}. Talk tracks stay."}}, ["scene_id", "base_revision"]),
+    "world3d.scene.patch": (True, "Bind resources by object id, or by role only when that role is unique. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "bindings": {"type": "array", "description": "{object_id or role, source_url, media, clip {index, name}, clipPlayback {speed, start, loop}, position, rotationY (radians), scale, motion}. add: true creates a new prop object (model3d or image cutout) with that id when the template has none."}, "camera": {"type": "object"}, "playbackSpeed": {"type": "number"}, "duration": {"type": "number"}, "retime": {"type": "boolean", "description": "With duration: stretch the template's effects, texts, appearances and clip cues to the new length."}, "soundtrack": {"type": "array", "maxItems": 32, "description": "The scene's own sound (ids scene-*: ambience, stinger, music): {id, audio (workspace or upload URL), start, gain}. Talk tracks stay."}, "renderLook": _RENDER_LOOK, "toon": _TOON}, ["scene_id", "base_revision"]),
     "world3d.scene.talk": (True, "Make an image object talk as a Character Kit cutout: its approved pose, the mouth drawing for each cue (audio.mouth_cues output, Rhubarb A-H/X) and its blink. Each line has start (scene seconds), cues and optionally audio (a workspace or upload URL) that joins the scene soundtrack. Calling it again replaces that object's lines. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "object_id": _ID, "role": {"type": "string"}, "kit_id": _ID, "pose": {"type": "string", "maxLength": 120}, "blink": {"type": "boolean"}, "lines": {"type": "array", "maxItems": 24, "items": {"type": "object", "additionalProperties": False, "required": ["start", "cues"], "properties": {"start": {"type": "number", "minimum": 0, "maximum": 600}, "cues": {"type": "array", "maxItems": 10000}, "audio": {"type": ["string", "object"]}, "gain": {"type": "number", "minimum": 0, "maximum": 1}}}}}, ["scene_id", "base_revision", "kit_id", "lines"]),
     "world3d.scene.preview": (False, "Paint cheap frames of the modified revision at concrete times. The frames are this scene, not the template thumbnail.", {"scene_id": _ID, "times": {"type": "array"}, "expected_revision": {"type": "integer"}}, ["scene_id"]),
     "world3d.scene.publish": (True, "Save the working scene through the editor gallery so export reads the same document.", {"scene_id": _ID}, ["scene_id"]),

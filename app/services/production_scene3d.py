@@ -13,13 +13,14 @@ import time
 from pathlib import Path
 
 from services.production_scene_retry import receipt_action, _artifact_name
+from services.world3d_look import check_document_look
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
 CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
-               "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "rhythm", "width", "height", "fps",
-               "playbackSpeed"}
+               "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "toon", "rhythm", "width", "height",
+               "fps", "playbackSpeed"}
 
 
 def validate_scene3d_shot(shot):
@@ -32,10 +33,20 @@ def validate_scene3d_shot(shot):
         raise ValueError("scene3d.template must be a native template id")
     if "document" in config and not isinstance(config["document"], dict):
         raise ValueError("scene3d.document must be an object")
+    _check_looks(config)
     if "template" in config and not (config.get("subject") or config.get("slots")):
         raise ValueError("A template shot needs a subject GLB or explicit slots")
     if shot.get("sing"):
         raise ValueError("scene3d does not promise H3 lip-sync; use rigid object motion or authored GLB clips")
+
+
+def _check_looks(config):
+    """renderLook and toon, as overrides or inside a full document."""
+    for looks in (config, config.get("document") or {}):
+        try:
+            check_document_look(looks)
+        except ValueError as error:
+            raise ValueError(f"scene3d: {error}") from error
 
 
 def compile_document(shot, duration):

@@ -240,10 +240,25 @@ export type Scene3DLight = {
   color: string
 }
 
+/** Whole-frame render presets. `n64`: low resolution, flat shading and close fog. `toon`: cel shading and ink outlines on model slots. */
+export const SCENE3D_RENDER_LOOKS = ['n64', 'toon'] as const
+export type Scene3DRenderLook = (typeof SCENE3D_RENDER_LOOKS)[number]
+
+/** Settings of the `toon` render look; missing values use `DEFAULT_TOON` (`toonLook.ts`). */
+export type Scene3DToon = {
+  /** Light bands of the cel shading, 2 to 4. */
+  steps?: number
+  /** Ink line width in pixels of a 1080-pixel-high frame, 0 to 8; 0 draws no line. */
+  outline?: number
+  /** Ink colour, `#rrggbb`. */
+  ink?: string
+}
+
 export type Scene3DDocument = {
   rhythm?: import('./rhythm').Scene3DRhythm
-  /** Whole-frame low-resolution, flat-shaded, close-fog look for authored models. */
-  renderLook?: 'n64'
+  renderLook?: Scene3DRenderLook
+  /** Used while `renderLook` is `toon`; kept when another look is chosen. */
+  toon?: Scene3DToon
   soundtrack?: Scene3DSoundtrack[]
   production?: { kind: 'song' | 'dialogue' | 'episode' | 'trailer'; title: string; sourceId?: string; workspace: string }
   version: 1

@@ -18,6 +18,8 @@ Search `dolly zoom`. The exact title is `cine-dolly-zoom`. Apply it, then patch 
 - bind the `background` object to a workspace image
 - send `base_revision` from the scene you just read
 
+For a cel look, add `"renderLook": "toon"` to the same patch, optionally with `"toon": {"steps": 3, "outline": 3, "ink": "#141018"}`. Only 3D model objects change: images and cutouts keep their look. `"renderLook": "none"` returns to the authored materials; `n64` is the retro look.
+
 The dolly `fovTo` and the framing target stay on the document. `world3d.scene.preview` paints that revision, not the template thumbnail. `world3d.scene.publish` writes the gallery file the editor and the exporter already share.
 
 The Wizard action is `world3d_templates` with operation `world3d.scene.apply_query` and `input.query`. The server picks the id. The action does not invent one. The reply lists the real card ids so the next turn can choose.
@@ -33,7 +35,7 @@ A brief field `world3d` or `toma` selects one shot. `world3d_subject` or `sujeto
 ## Honest limits
 
 - The production compiler drops the template soundtrack. The song belongs to the production.
-- The software preview does not fetch GLB bytes. Model slots draw colored boxes. Image slots are not drawn. A bound URL does not change those pixels. An empty `sourceUrl` stays a marker in `pending`; it is not a finished character.
+- The software preview does not fetch GLB bytes. Model slots draw colored boxes. Image slots are not drawn. A bound URL does not change those pixels. `renderLook` does not change them either; it shows in the editor and in the export. An empty `sourceUrl` stays a marker in `pending`; it is not a finished character.
 - A follow camera keeps its subject centered, so translating that subject does not move its box. Changing `camera.fov`, or moving the subject while the camera stays put, changes the preview hash. Dolly zoom's lens change is stored on `camera.framing` and is kept through save; the software eye for a follow shot does not play that lens move, so the start, middle, and end boxes can match. MCP appends PNG image blocks after the text summary. A client that only reads the text still gets the revision, the hashes, and the pending markers.
 - Video 2D `scenes.catalog` and particle rain are not the Video 3D shot `cine-rain`.
 - A crash after the scene file is written and before the intent file is stored can still leave a duplicate. A transport retry in the same process does not.
