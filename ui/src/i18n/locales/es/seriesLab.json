@@ -731,7 +731,7 @@
       "cancelling": "parando",
       "completed": "terminado",
       "failed": "algunos planos fallaron",
-      "cancelled": "parado"
+      "cancelled": "parado", "interrupted": "interrumpido por un reinicio"
     },
     "stage": {
       "voices": "voces",

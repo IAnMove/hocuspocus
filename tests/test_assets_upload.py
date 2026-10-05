@@ -218,3 +218,70 @@ def test_catalog_publishes_versioned_upload_schema():
     branches = schema["properties"]["input"]["oneOf"]
     assert {"workspace", "filename", "data_base64"} in {frozenset(branch["required"]) for branch in branches}
     assert {"workspace", "source"} in {frozenset(branch["required"]) for branch in branches}
+
+
+def test_named_copy_keeps_quality_bytes_metadata_and_idempotent_receipt(tmp_path):
+    import hashlib
+    import json
+
+    handlers, workspace, _ = _layout(tmp_path)
+    source = workspace / 'song(2).wav'; source.write_bytes(b'quality stereo source')
+    source.with_suffix('.meta.json').write_text(json.dumps({'asset': {'filename': source.name}, 'seed': 7}))
+    target = workspace / 'song.wav'; target.write_bytes(b'old take')
+    payload = {'workspace': 'clip', 'source': str(source), 'copy_to_workspace': True,
+               'destination_filename': target.name,
+               'expected_destination_sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
+    result = _call(handlers, 'publish-quality', payload)['result']
+    assert _call(handlers, 'publish-quality', payload)['result'] == result
+    assert target.read_bytes() == source.read_bytes() == b'quality stereo source'
+    assert result['url'] == '/api/v1/file/song.wav?workspace=clip'
+    metadata = json.loads(target.with_suffix('.meta.json').read_text())
+    assert metadata['seed'] == 7 and metadata['copied_from'] == source.name
+    assert metadata['asset']['filename'] == target.name
+    with pytest.raises(HTTPException) as caught:
+        _call(handlers, 'stale-replace', payload)
+    assert caught.value.status_code == 409
+    assert target.read_bytes() == b'quality stereo source'
+
+
+@pytest.mark.parametrize('destination,expected,code', [
+    ('../escape.wav', None, 'invalid_filename'),
+    ('wrong.png', None, 'invalid_filename'),
+    ('song.wav', None, 'destination_conflict'),
+    ('song.wav', 'invalid', 'invalid_command'),
+    ('song.wav', '0' * 64, 'destination_conflict'),
+])
+def test_named_copy_rejects_unsafe_or_unreviewed_replacements(tmp_path, destination, expected, code):
+    handlers, workspace, _ = _layout(tmp_path)
+    source = workspace / 'new.wav'; source.write_bytes(b'new')
+    target = workspace / 'song.wav'; target.write_bytes(b'old')
+    payload = {'workspace': 'clip', 'source': str(source), 'copy_to_workspace': True,
+               'destination_filename': destination}
+    if expected is not None:
+        payload['expected_destination_sha256'] = expected
+    with pytest.raises(HTTPException) as caught:
+        _call(handlers, 'invalid-copy', payload)
+    assert caught.value.detail['code'] == code and target.read_bytes() == b'old'
+
+
+def test_named_copy_rejects_bad_sidecar_before_publishing(tmp_path):
+    handlers, workspace, _ = _layout(tmp_path)
+    source = workspace / 'new.wav'; source.write_bytes(b'new')
+    source.with_suffix('.meta.json').write_text('not JSON')
+    with pytest.raises(HTTPException) as caught:
+        _call(handlers, 'bad-sidecar', {'workspace': 'clip', 'source': str(source),
+              'copy_to_workspace': True, 'destination_filename': 'song.wav'})
+    assert caught.value.detail['code'] == 'invalid_sidecar'
+    assert not (workspace / 'song.wav').exists()
+
+
+def test_named_copy_creates_exact_name_and_requires_copy_flag(tmp_path):
+    handlers, workspace, _ = _layout(tmp_path)
+    source = workspace / 'new.wav'; source.write_bytes(b'new')
+    payload = {'workspace': 'clip', 'source': str(source), 'destination_filename': 'song.wav'}
+    with pytest.raises(HTTPException) as caught:
+        _call(handlers, 'missing-copy-flag', payload)
+    assert caught.value.detail['code'] == 'invalid_command'
+    payload['copy_to_workspace'] = True
+    _call(handlers, 'new-name', payload)
+    assert (workspace / 'song.wav').read_bytes() == b'new'

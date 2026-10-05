@@ -58,3 +58,21 @@ def test_a_2d_take_brings_its_scene_document_for_subtitles():
     plan = episode_assembly_plan(series, episode)
     assert plan[0]["sceneFilename"] == "s01.scene.json"
     assert "sceneFilename" not in plan[1]
+
+
+def test_a_take_without_timing_brings_its_shot_lines_for_subtitles():
+    """An H3 or imported take has no scene document and no recorded timing: the shot's lines are spread at finishing."""
+    series = _series()
+    episode = {"shots": [{
+        "id": "shot-1", "order": 1, "approvedAttemptId": "attempt-1",
+        "dialogueBeats": [{"id": "b0", "characterId": "kevin", "text": "¿Oyes eso?"}, {"id": "b1", "characterId": "gary", "text": " "}],
+        "attempts": [{"id": "attempt-1", "status": "completed", "outputAssetIds": ["asset-1"]}],
+    }, {
+        "id": "shot-2", "order": 2, "approvedAttemptId": "attempt-2",
+        "attempts": [{"id": "attempt-2", "status": "completed", "outputAssetIds": ["asset-2"]}],
+    }]}
+    plan = episode_assembly_plan(series, episode)
+    assert plan[0]["dialogueBeats"] == [{"text": "¿Oyes eso?"}], "text only: no timing to copy"
+    assert "dialogueBeats" not in plan[1]
+    series["assets"]["asset-1"]["metadata"] = {"sceneFilename": "s01.scene.json"}
+    assert "dialogueBeats" not in episode_assembly_plan(series, episode)[0], "a scene document carries the real timing"

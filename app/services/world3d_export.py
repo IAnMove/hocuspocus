@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import struct
 import subprocess
@@ -27,6 +28,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from services.asset_manifest import publish_generation_sidecar
+from services.audio_mix import mux_wav_audio  # noqa: F401 — the shared mixer, re-exported
 from services.workspace_cleanup import keep_export_staging, release_export_staging
 from services import resource_scheduler
 from services.world3d_media_cache import prepare_media_snapshot
@@ -236,32 +238,102 @@ try {
 """
 
 
-def _wait_owned_browser(proc, cancelled) -> str:
-    while proc.poll() is None:
-        if cancelled():
+STALL_SECONDS_ENV = "HOCUS_RENDER_STALL_SECONDS"
+DEFAULT_STALL_SECONDS = 600.0
+
+
+def render_stall_seconds() -> float:
+    """How long the headless renderer may go without a new frame before it is killed (10 min by default).
+
+    A slow render keeps writing frames; a stuck WebGL page writes none. A 4K master
+    frame takes seconds, so ten minutes without one means the page is not coming back.
+    """
+    try:
+        value = float(os.environ.get(STALL_SECONDS_ENV) or DEFAULT_STALL_SECONDS)
+    except ValueError:
+        value = DEFAULT_STALL_SECONDS
+    return value if value > 0 else DEFAULT_STALL_SECONDS
+
+
+def _kill_tree(proc) -> None:
+    """Stop the node script and the browser it launched (its process group on POSIX)."""
+    if proc.poll() is not None:
+        return
+    try:
+        if os.name == "posix":
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        else:
             proc.terminate()
-            raise World3DExportCancelled()
-        time.sleep(0.1)
-    _stdout, stderr = proc.communicate()
-    return stderr or ""
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            if os.name == "posix":
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            else:
+                proc.kill()
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+        proc.wait(timeout=5)
+
+
+def _read_progress(staging: Path) -> tuple[int, int] | None:
+    try:
+        value = json.loads((staging / "progress.json").read_text(encoding="utf-8"))
+        return int(value["current"]), int(value["total"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _wait_owned_browser(proc, cancelled, staging: Path | None = None, progress=None, stall_seconds: float | None = None) -> None:
+    """Wait for the renderer, publishing each frame it writes; kill it when cancelled or when no frame comes for ``stall_seconds``."""
+    limit = render_stall_seconds() if stall_seconds is None else stall_seconds
+    last_change, seen = time.monotonic(), None
+    try:
+        while proc.poll() is None:
+            if cancelled():
+                raise World3DExportCancelled()
+            current = _read_progress(staging) if staging is not None else None
+            if current is not None and current != seen:
+                seen, last_change = current, time.monotonic()
+                if progress is not None:
+                    progress(*current)
+            if time.monotonic() - last_change > limit:
+                frame = f"frame {seen[0]}/{seen[1]}" if seen else "no frame yet"
+                raise RuntimeError(f"Headless render stalled: no new frame for {int(limit)} s ({frame})")
+            time.sleep(0.1)
+        final = _read_progress(staging) if staging is not None else None
+        if final is not None and final != seen and progress is not None:
+            progress(*final)
+    finally:
+        _kill_tree(proc)
 
 
 def run_owned_browser(snapshot: dict, staging: Path, cancelled, *, app_url: str, module: Path,
-                      page: str = "/world3d-render.html", bridge: str = "__world3dExport") -> list[Path]:
+                      page: str = "/world3d-render.html", bridge: str = "__world3dExport", progress=None) -> list[Path]:
     script = staging / "owned_browser.mjs"
     script.write_text(_OWNED_BROWSER_JS, encoding="utf-8")
-    proc = subprocess.Popen(
-        ["node", str(script), str(staging / "snapshot.json"), str(staging)],
-        env={**os.environ, "HOCUS_APP_URL": app_url, "PLAYWRIGHT_MODULE": str(module),
-             "HOCUS_RENDER_PAGE": page, "HOCUS_RENDER_BRIDGE": bridge,
-             "HOCUS_SCENE_RENDER_DEVICE": scene_render_device()},
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-    )
-    stderr = _wait_owned_browser(proc, cancelled)
+    log_path = staging / "browser.log"
+    # Output goes to a file: a chatty browser must not fill a pipe nobody drains and block the render.
+    with open(log_path, "w", encoding="utf-8") as log:
+        proc = subprocess.Popen(
+            ["node", str(script), str(staging / "snapshot.json"), str(staging)],
+            env={**os.environ, "HOCUS_APP_URL": app_url, "PLAYWRIGHT_MODULE": str(module),
+                 "HOCUS_RENDER_PAGE": page, "HOCUS_RENDER_BRIDGE": bridge,
+                 "HOCUS_SCENE_RENDER_DEVICE": scene_render_device()},
+            stdout=log, stderr=subprocess.STDOUT, text=True, start_new_session=(os.name == "posix"),
+        )
+    _wait_owned_browser(proc, cancelled, staging, progress)
     if proc.returncode == 2:
         raise World3DExportPending("real-render pending: no application URL for the world3d stage")
     if proc.returncode != 0:
-        raise RuntimeError(stderr.strip()[-1000:] or "Headless world3d export failed")
+        try:
+            tail = log_path.read_text(encoding="utf-8", errors="replace").strip()[-1000:]
+        except OSError:
+            tail = ""
+        raise RuntimeError(tail or "Headless world3d export failed")
     frames = sorted((staging / "frames").glob("frame_*.png"))
     if not frames:
         raise RuntimeError("Headless world3d export produced no frames")
@@ -296,19 +368,6 @@ def write_png(path: Path, width: int, height: int, rgb: tuple[int, int, int]) ->
     path.parent.mkdir(parents=True, exist_ok=True)
     header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
-
-
-def mux_wav_audio(video: Path, wav: Path, duration: float, *, label: str = "Audio mix") -> Path:
-    """Put the page's WAV mix under the silent render: AAC 192k, video copied, exactly ``duration`` long."""
-    mixed = video.with_name("fx-mixed.mp4")
-    command = ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-i", str(wav), "-filter_complex",
-               f"[1:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:{duration:.4f}[mix]",
-               "-map", "0:v:0", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-               "-t", f"{duration:.4f}", "-movflags", "+faststart", str(mixed)]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=1800, check=False)
-    if result.returncode != 0 or not mixed.is_file():
-        raise RuntimeError((f"{label} failed: " + (result.stderr or "")).strip()[-800:])
-    return mixed
 
 
 def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float,
@@ -926,7 +985,7 @@ class World3DExportService:
         rendered = self.prepare_snapshot(snapshot, cancelled)
         (staging / "snapshot.json").write_text(json.dumps(rendered, ensure_ascii=False), encoding="utf-8")
         frames = run_owned_browser(rendered, staging, cancelled, app_url=self.app_url, module=module,
-                                   page=self.render_page, bridge=self.render_bridge)
+                                   page=self.render_page, bridge=self.render_bridge, progress=progress)
         progress(len(frames), snapshot["plan"]["count"])
         return frames
 

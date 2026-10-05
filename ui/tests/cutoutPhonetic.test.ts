@@ -68,3 +68,16 @@ test('a later turn cannot erase the first turn or animate the other character', 
   for (const time of [1.6, 4.6]) assert.equal(evaluateSceneLayer(pucker, time).opacity, 1)
   assert.equal(evaluateSceneLayer(pucker, 3.5).opacity, 0)
 })
+
+test('a pose marked blink: false (sunglasses) mounts no blink layer; other poses still blink', () => {
+  const kit = createCharacterKit('Cool')
+  kit.base = { id: 'base', name: 'Cool', source: '/base.png', kind: 'image', alphaStatus: 'transparent', reviewState: 'approved' }
+  kit.poses.shades = { ...kit.base, id: 'shades', source: '/shades.png' }
+  kit.mouth.closed = { ...kit.base, id: 'closed', source: '/closed.png', kind: 'overlay' }
+  kit.eyes.blink = { ...kit.base, id: 'blink', source: '/blink.png', kind: 'overlay' }
+  const anchor = { offsetX: 0, offsetY: -20, scale: .06, rotation: 0 }
+  kit.anchors = { base: { mouth: anchor }, shades: { mouth: anchor, blink: false } }
+  const blinks = (pose: string) => mountCharacterKitLayers(kit, pose).filter(layer => layer.faceBinding?.role === 'blink').length
+  assert.equal(blinks('base'), 1)
+  assert.equal(blinks('shades'), 0)
+})

@@ -131,11 +131,6 @@ ALLOWED_PATH_FRAGMENTS = [
     "app/README.md",
     # Public safety-rules file — lists what NOT to do (responsible)
     "nsfw_off_safety_rules.md",
-    # Public minor-safety scanner — forbidden vocabulary lives in inline
-    # tuples by design (see safety_scan.py docstring) so the rule cannot
-    # be silenced by removing a data file. Verifier must not flag it.
-    "services/director/safety_scan.py",
-    "tests/test_safety_scan.py",
     "tests/test_prompt_polish_fixes.py",
     # Polish layer's regex sanitizers and LoRA-trigger-guidance text
     # legitimately mention act / anatomy vocabulary to teach the LLM when each

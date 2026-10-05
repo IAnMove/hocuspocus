@@ -25,6 +25,7 @@ from __future__ import annotations
 import atexit
 import os
 import signal
+import socket
 import sys
 import threading
 from typing import Any
@@ -100,9 +101,34 @@ def stop_with_parent() -> None:
         pass
 
 
-def run_until_stopped(app: Any, *, host: str, port: int) -> None:
+def bind_listener(host: str, preferred: int, span: int = 20) -> tuple[socket.socket, int]:
+    """Bind and listen on ``preferred`` (or the next free port within ``span``) and return the socket.
+
+    The server announces its URL before Uvicorn would bind. When Pinokio shares
+    the app on the LAN it starts a proxy on that port the moment it reads the
+    URL, and lately it won the race against our own bind ("address already in
+    use"). Binding first, and handing the socket to Uvicorn, ends the race:
+    whoever asks for the port after us simply does not get it.
+    """
+    last: OSError | None = None
+    for candidate in [preferred] + [preferred + i for i in range(1, span + 1)]:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            # No SO_REUSEADDR: a plain bind fails iff the port is truly in use.
+            sock.bind((host, candidate))
+            sock.listen(2048)
+            sock.set_inheritable(True)
+            return sock, candidate
+        except OSError as error:
+            last = error
+            sock.close()
+    raise OSError(f"no free port in {preferred}-{preferred + span}") from last
+
+
+def run_until_stopped(app: Any, *, host: str, port: int, sockets: list[socket.socket] | None = None) -> None:
     """Serve ``app`` until a stop request, then end the process (never returns
-    normally). Bind failures still raise ``OSError`` for the caller to report."""
+    normally). Bind failures still raise ``OSError`` for the caller to report.
+    With ``sockets`` (from ``bind_listener``) Uvicorn serves on them instead of binding."""
     import uvicorn
 
     class _Server(uvicorn.Server):
@@ -127,7 +153,7 @@ def run_until_stopped(app: Any, *, host: str, port: int) -> None:
             signal.signal(getattr(signal, name), server.handle_exit)
     stop_with_parent()
     try:
-        server.run()
+        server.run(sockets=sockets)
     except OSError:
         raise
     except KeyboardInterrupt:

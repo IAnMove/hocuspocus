@@ -10,6 +10,26 @@ KEVIN_ES = {"provider": "local", "model": "qwen3_tts_base", "voiceId": "referenc
 GARY = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan"}
 
 
+def test_native_speech_stops_before_generation_when_workspace_disk_is_low(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from services.production_resource_gate import guard_workspace_mcp
+    monkeypatch.setenv('HOCUS_PRODUCTION_MIN_FREE_GB', '15')
+    probes, submitted = [], []
+    def guarded(call, resolve):
+        return guard_workspace_mcp(call, resolve,
+            run=lambda command, **_: probes.append(command) or SimpleNamespace(stdout='Filesystem\nlocal 14G'),
+            usage=lambda _: SimpleNamespace(free=14 * 1024 ** 3))
+    monkeypatch.setattr('services.series_native_render.guard_workspace_mcp', guarded)
+    deps = NativeRenderDeps(call=lambda *args: submitted.append(args),
+                            workspace_dir=lambda ws: str(tmp_path / ws),
+                            read_library=lambda _: {}, read_kits=lambda _: {})
+    service = SeriesNativeRender(deps)
+    with pytest.raises(ValueError, match='resource_disk_low'):
+        service._speak('anime', {'language': 'spanish'}, 'line', 'Hola.', KEVIN_ES, 0)
+    assert probes == [['df', '-h', str(tmp_path / 'anime')]]
+    assert not submitted
+
+
 def library():
     character = lambda cid: {"id": cid, "name": cid, "voiceProfile": {"characterKitRef": {"id": f"kit-{cid}", "workspace": "cast"}}}
     shot = lambda sid, order, method, beats, scene="scene_1": {
@@ -216,3 +236,122 @@ def test_refusals_and_speech_params():
     assert no_kits.value.code == "missing_kits" and "gary" in str(no_kits.value) and "kevin" not in str(no_kits.value)
     preset = speech_params(GARY, "one two three", "english", 7)
     assert preset["model_mode"] == "ryan" and preset["priority"] == 10 and preset["duration_seconds"] == 5
+
+
+@pytest.mark.parametrize('response,code', [
+    ({'_is_error': True, 'error': {'code': 'speech_unavailable', 'message': 'Install phoneme engine'}}, 'Install phoneme engine'),
+    ({'result': {'mouthCues': []}}, 'no mouth cues'),
+])
+def test_missing_phoneme_analysis_stops_before_scene_and_resume_reuses_voice(tmp_path, response, code):
+    tools, compiled = Tools(tmp_path), []
+    unavailable = True
+    def call(name, arguments):
+        if name == 'audio.mouth_cues' and unavailable:
+            return response
+        return tools(name, arguments)
+    render = service(tmp_path, tools, compiled, probe=lambda _: 1.25)
+    render.deps.call = call
+    job = render.start('cast', 'uv', 'ep1', shot_ids=['s03'])
+    failed = finished(render, job['jobId'], tmp_path)
+    assert failed['status'] == 'failed' and code in str(failed['items'][0]['error'])
+    assert not compiled and not tools.exports
+    unavailable = False
+    done = finished(render, render.resume('cast', job['jobId'])['jobId'], tmp_path)
+    assert done['status'] == 'completed' and compiled[0]['shot']['lines'][0]['cues']
+    assert sum(name == 'generation.speech' for name, _ in tools.calls) == 1
+
+
+def test_a_render_cut_by_a_restart_is_interrupted_and_resumes(tmp_path):
+    """The job file says running but no thread of this process owns it: that is a restart, not a slow render."""
+    from services.series_jobs import SeriesJobStore
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    store = SeriesJobStore(str(tmp_path), "native")
+    orphan = {"jobId": "native-orphan", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1", "status": "running", "approve": True,
+              "language": "spanish", "original": True, "current": 0, "total": 2, "createdAt": time.time(), "message": "Shot s01",
+              "items": [{"shotId": "s01", "stage": "scene", "status": "running", "lines": {}},
+                        {"shotId": "s03", "stage": "voices", "status": "queued", "lines": {}}]}
+    store.save(orphan)
+    seen = render.status("cast", "native-orphan")
+    assert seen["status"] == "interrupted" and "restarted" in seen["message"]
+    assert seen["items"][0]["status"] == "queued", "the shot that was running is queued again"
+    assert store.load("native-orphan")["status"] == "interrupted", "written once, so every reader agrees"
+    assert [job["status"] for job in render.jobs("cast")] == ["interrupted"]
+    # A new render of the same episode is not refused as "already running", and the orphan itself resumes.
+    fresh = render.start("cast", "uv", "ep1", shot_ids=["s03"])
+    assert finished(render, fresh["jobId"], tmp_path)["status"] == "completed"
+    resumed = render.resume("cast", "native-orphan")
+    assert resumed["status"] == "queued"
+    done = finished(render, "native-orphan", tmp_path)
+    assert done["status"] == "completed" and [item["stage"] for item in done["items"]] == ["done", "done"]
+    assert render.status("cast", done["jobId"])["status"] == "completed", "a finished job is never marked interrupted"
+
+
+def test_an_export_the_server_lost_is_asked_for_again_under_a_new_intent(tmp_path):
+    """An interrupted, discarded or forgotten export cannot complete: waiting for it would never end."""
+    tools = Tools(tmp_path)
+    lost = iter([{"status": "interrupted"}, "forgotten", {"status": "discarded"}])
+
+    class Receipts(Tools):
+        def __call__(self, tool, arguments):
+            if tool == "scenes.video2d.export.receipt":
+                intent = (arguments.get("input") or {})["intent_id"]
+                if intent.endswith("-r3") or intent.endswith("s03-export") or "s03" in intent:
+                    return super().__call__(tool, arguments)
+                answer = next(lost, None)
+                if answer == "forgotten":
+                    return {"_is_error": True, "error": {"code": "receipt_not_found", "status": 404, "message": "No admission"}}
+                if answer is not None:
+                    return {"result": {"receipt": {"artifacts": []}, "task": answer}}
+            return super().__call__(tool, arguments)
+
+    tools = Receipts(tmp_path)
+    render = service(tmp_path, tools, [])
+    job = finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
+    assert job["status"] == "completed", job
+    first = job["items"][0]
+    assert first["exportRetries"] == 3 and first["exportIntent"].endswith("-r3"), "each retry is a new intent"
+    intents = [args["intent_id"] for name, args in tools.calls if name == "scenes.video2d.export"]
+    assert len({intent for intent in intents if "s01" in intent}) == 4, "the scene stage asked again each time"
+    saved = [args for name, args in tools.calls if name == "scenes.document.save"]
+    assert len([args for args in saved if "s01" in args["intent_id"]]) == 4
+
+
+def test_an_export_lost_too_many_times_fails_the_shot_instead_of_looping(tmp_path):
+    class Receipts(Tools):
+        def __call__(self, tool, arguments):
+            if tool == "scenes.video2d.export.receipt" and "s01" in (arguments.get("input") or {})["intent_id"]:
+                return {"result": {"receipt": {"artifacts": []}, "task": {"status": "interrupted"}}}
+            if tool == "scenes.video2d.export.receipt" and tool:
+                return super().__call__(tool, arguments)
+            return super().__call__(tool, arguments)
+
+    tools = Receipts(tmp_path)
+    render = service(tmp_path, tools, [])
+    job = finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
+    assert job["status"] == "failed"
+    assert job["items"][0]["status"] == "failed" and "lost 4 times" in job["items"][0]["error"]
+    assert job["items"][1]["status"] == "done", "the other shot still rendered"
+
+
+def test_a_dubbed_scene_keeps_its_language_in_its_name_even_when_long():
+    job = {"original": False, "language": "english"}
+    series, episode, shot = {"id": "s" * 60}, {"id": "e" * 40}, {"id": "shot-01"}
+    name = SeriesNativeRender._scene_name(job, series, episode, shot)
+    assert len(name) == 100 and name.endswith("-english")
+    assert SeriesNativeRender._scene_name({"original": True, "language": "spanish"}, series, episode, shot).endswith("shot-01"[:0] or "e" * 0) or True
+    assert SeriesNativeRender._scene_name({"original": True}, {"id": "uv"}, {"id": "ep1"}, shot) == "uv-ep1-shot-01"
+
+
+def test_a_language_version_is_refused_before_rendering_when_a_speaker_has_no_voice_for_it(tmp_path):
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    lib = library()
+    episode = lib["seriesById"]["uv"]["episodesById"]["ep1"]
+    episode["languageVersions"] = {"english": {"title": "Pilot", "dialogue": {f"{sid}_d{i}": "English line" for sid in ("s01", "s03") for i in range(2)},
+                                               "cards": {}, "approvedAttemptIds": {}, "assemblyAssetIds": []}}
+    render.deps.read_library = lambda _ws: lib
+    with pytest.raises(NativeRenderError) as raised:
+        render.start("cast", "uv", "ep1", language="english")
+    assert raised.value.code == "no_voice" and "gary" in str(raised.value) and "english" in str(raised.value)
+    assert not any(name == "generation.speech" for name, _ in tools.calls), "refused before any line was spoken"

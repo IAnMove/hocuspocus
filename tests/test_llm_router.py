@@ -157,3 +157,13 @@ def test_describe_image_requires_a_path():
     response = client.post("/api/v1/llm/describe-image", json={})
     assert response.status_code == 400
     assert response.json()["detail"] == "image_path is required"
+
+
+def test_list_llm_models_never_points_a_public_provider_at_a_client_url():
+    app = FastAPI()
+    app.include_router(_core_router())
+    client = TestClient(app)
+    with patch("services.llm_service.get_available_models", return_value=[]) as catalog:
+        response = client.get("/api/v1/llm/models", params={"provider": "openai", "url": "http://attacker.example/"})
+    assert response.status_code == 200
+    assert "attacker" not in str(catalog.call_args.kwargs["remote_url"]), "the stored key would have travelled there"

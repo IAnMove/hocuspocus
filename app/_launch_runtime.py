@@ -171,6 +171,30 @@ try:
 except Exception as _sweep_err:
     print(f"[Workspace] Trash sweep skipped: {_sweep_err}")
 
+def _save_server_config() -> None:
+    """Write wgp.server_config atomically with owner-only permissions.
+
+    The file holds API keys and the workspace list. open("w") truncated it
+    before writing, so a crash or two concurrent saves could leave it empty,
+    and the next start failed to import wgp.
+    """
+    path = wgp.server_config_filename
+    folder = os.path.dirname(os.path.abspath(path)) or "."
+    temporary = os.path.join(folder, f".{os.path.basename(path)}.{uuid.uuid4().hex}.tmp")
+    try:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(wgp.server_config, indent=4))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.remove(temporary)
+        except OSError:
+            pass
+
+
+
 # Performance auto-tune migration: pre-existing installs (config file
 # was loaded from disk, not freshly created) have no auto_performance
 # key in services. Default those to False so we never silently overwrite
@@ -186,8 +210,7 @@ _services = wgp.server_config.setdefault("services", {})
 if "auto_performance" not in _services:
     _services["auto_performance"] = False
     try:
-        with open(wgp.server_config_filename, "w", encoding="utf-8") as _f:
-            _f.write(json.dumps(wgp.server_config, indent=4))
+        _save_server_config()
         print("[HocusPocus Lab] Migration: existing config detected, auto_performance set to False (manual mode preserved)")
     except Exception as _e:
         print(f"[HocusPocus Lab] Migration: failed to persist auto_performance default: {_e}")
@@ -211,8 +234,7 @@ if _services.get("auto_performance") and not _services.get("auto_performance_app
                 if _k in _rec:
                     wgp.server_config[_k] = _rec[_k]
             _services["auto_performance_applied"] = True
-            with open(wgp.server_config_filename, "w", encoding="utf-8") as _f:
-                _f.write(json.dumps(wgp.server_config, indent=4))
+            _save_server_config()
             print(f"[HocusPocus Lab] First-boot auto-tune applied: {_rec.get('_recommendation_label', 'recommended profile')} "
                   f"(video_profile={_rec.get('video_profile')}, vram_safety_coefficient={_rec.get('vram_safety_coefficient')})")
         else:
@@ -340,6 +362,8 @@ def _resolve_output_move_path(base: str, relative_name: str) -> str | None:
 # https://<port>.localhost). Do NOT loosen this to `*`: browser access stays
 # intentionally same-origin even when LAN session authentication is enabled.
 _cors_origin_regex = r"^https?://(127\.0\.0\.1|localhost|\d+\.localhost)(:\d+)?$"
+from services.host_guard import install_host_guard
+install_host_guard(api)
 api.add_middleware(
     CORSMiddleware,
     allow_origin_regex=_cors_origin_regex,
@@ -1148,8 +1172,7 @@ def _persist_active_workspace(name: str, apply_save_paths: bool = True) -> str:
     services = wgp.server_config.setdefault("services", {})
     services["active_workspace"] = name
     wgp.server_config["services"] = services
-    with open(wgp.server_config_filename, "w", encoding="utf-8") as f:
-        f.write(json.dumps(wgp.server_config, indent=4))
+    _save_server_config()
     ws_dir = _workspace_dir(name)
     if apply_save_paths:
         wgp.save_path = ws_dir
@@ -6959,8 +6982,7 @@ async def update_system_config(request: Request):
         raise HTTPException(status_code=400, detail="No valid fields to update")
 
     # Persist to disk
-    with open(wgp.server_config_filename, "w", encoding="utf-8") as f:
-        f.write(json.dumps(wgp.server_config, indent=4))
+    _save_server_config()
 
     # Apply runtime side effects where possible
     if "attention_mode" in updated:
@@ -7145,8 +7167,7 @@ async def apply_system_detect():
     services["auto_performance_applied"] = True
 
     # Persist to disk
-    with open(wgp.server_config_filename, "w", encoding="utf-8") as f:
-        f.write(json.dumps(wgp.server_config, indent=4))
+    _save_server_config()
 
     # Apply runtime side effects where possible (matches update_system_config)
     if "attention_mode" in rec:
@@ -7569,8 +7590,7 @@ async def update_services_config(request: Request):
         except ValueError:
             pass
 
-    with open(wgp.server_config_filename, "w", encoding="utf-8") as f:
-        f.write(json.dumps(wgp.server_config, indent=4))
+    _save_server_config()
 
     return {"status": "ok", "updated": updated}
 
@@ -35883,6 +35903,13 @@ def delete_output(name: str, workspace: str | None = None):
     return {"deleted": name}
 
 
+UPLOAD_EXTENSIONS = frozenset({
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif",
+    ".mp4", ".mov", ".webm", ".mkv", ".m4v", ".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus",
+    ".glb", ".gltf", ".obj", ".fbx", ".json", ".txt", ".srt", ".vtt", ".lrc", ".csv", ".md", ".pdf", ".zip", ".safetensors", ".pt",
+})
+
+
 @api.post("/api/v1/upload")
 async def upload_image(file: UploadFile = File(...)):
     """Upload an image or audio/video asset. Image was the original use;
@@ -35897,6 +35924,8 @@ async def upload_image(file: UploadFile = File(...)):
     os.makedirs(upload_dir, exist_ok=True)
 
     ext = os.path.splitext(file.filename or "img.png")[1].lower() or ".png"
+    if ext not in UPLOAD_EXTENSIONS:
+        ext = ".bin"  # keeps the bytes; never a name a browser would run
     unique_name = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(upload_dir, unique_name)
 
@@ -37284,29 +37313,13 @@ def run_server():
 
     # Port resolution: Pinokio hands us a free port via SERVER_PORT, but a
     # stale prior instance or another app can still be holding it by the time
-    # we bind — and an uncaught bind failure makes the launcher report a
-    # blank "server failed to start" with no clue. Probe the requested port
-    # and fall forward to the next free one, printing what happened so the
-    # captured URL (below) matches the actual bind.
-    def _first_bindable_port(bind_host: str, preferred: int, span: int = 20):
-        import socket as _socket
-        probe_host = "127.0.0.1" if bind_host == "0.0.0.0" else bind_host
-        for candidate in [preferred] + [preferred + i for i in range(1, span + 1)]:
-            s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-            try:
-                # No SO_REUSEADDR — a plain bind fails iff the port is truly
-                # in use right now, which is exactly the check we want (and
-                # avoids the Windows REUSEADDR hijack-a-live-port behavior).
-                s.bind((probe_host, candidate))
-                return candidate
-            except OSError:
-                continue
-            finally:
-                s.close()
-        return None
-
-    resolved_port = _first_bindable_port(host, port)
-    if resolved_port is None:
+    # we bind. Bind now (falling forward to the next free port) and hand the
+    # socket to Uvicorn: the URL printed below is then already ours, so the
+    # LAN proxy Pinokio starts on reading it cannot take the port first.
+    from services.server_lifecycle import bind_listener
+    try:
+        listener, resolved_port = bind_listener(host, port)
+    except OSError:
         print(
             f"\n[HocusPocus Lab] ERROR: could not find a free port in "
             f"{port}-{port + 20}. Another app (or a stale HocusPocus Lab instance) "
@@ -37356,7 +37369,7 @@ def run_server():
 
     try:
         from services.server_lifecycle import run_until_stopped
-        run_until_stopped(api, host=host, port=port)
+        run_until_stopped(api, host=host, port=port, sockets=[listener])
     except OSError as e:
         # The probe above narrows this to a genuine race (port taken in the
         # window between probe and uvicorn's own bind). Still fail loudly and
