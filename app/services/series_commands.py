@@ -105,7 +105,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"}},
         ["workspace", "series_id", "script"], True,
         "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
-        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx, props, timing, foley "
+        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx, props, set layers, timing, foley "
         "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots. It checks every character, "
         "pose, location, file and effect against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id).",
@@ -189,7 +189,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "(the assembly lays one bed per location run; takes stay up to date when it changes); ambienceDuckDb 0-24 "
         "lowers episode-mode beds under the lines; roomByLocation "
         "{locationId: preset}, the room each location's voices are heard in: none, small_room, room, hall, cathedral, "
-        "cockpit, outdoor or radio (a shot's layout2d.voiceRoom overrides it; only shots whose room changes render again).",
+        "cockpit, outdoor or radio (a shot's layout2d.voiceRoom overrides it; only shots whose room changes render again). "
+        "A location's layout2d.layers [{assetId | file, depth 0-1 (0 far), front, opacity, x, y, scale, drift px/s}] are "
+        "images with alpha or looping videos drawn over its background in its 2D shots, behind the cast or (front true) in "
+        "front of it; a push moves each by its depth, the cast standing at layout2d.castDepth (0.6). A bad layer is refused.",
     ),
     "series.canon.approve": (
         {"workspace": WORKSPACE, "series_id": ID, "base_revision": REVISION}, ["workspace", "series_id", "base_revision"], True,
@@ -206,7 +209,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         ["workspace", "series_id", "episode_id", "episode", "base_revision"], True,
         "Save editor fields of an episode (title, premise, script, shots with productionMethod, dialogueBeats, "
         "visible/speaking characters, locationId, durationSeconds, layout2d, scene3d, foley {prompt, volume}) at the series "
-        "revision. score: music the assembly "
+        "revision. A shot's layout2d.layers replace its location's set layers ([] turns them off). score: music the assembly "
         "lays under runs of shots, [{fromShotId, toShotId | sceneId, file, volume 0.18, fadeIn 1.5, fadeOut 2.0, "
         "duck true}]; cues may not overlap, dip 9 dB under the lines and go silent under a shot with its own music; "
         "changing it renders no take.",

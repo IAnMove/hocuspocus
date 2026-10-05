@@ -84,6 +84,22 @@ export interface SeriesCharacter {
   approval: SeriesApproval
 }
 
+/** A layer of a 2D set (series_layers.py): a PNG with alpha or a looping video at a depth, 0 the background's far
+ * plane (moves least), 1 the nearest. `front` draws it over the cast. x/y (%) put its centre on the background;
+ * scale is a fraction of the frame height. A camera push moves each layer by its depth. */
+export interface SeriesSetLayer {
+  assetId?: string
+  file?: string
+  depth: number
+  front: boolean
+  opacity: number
+  x: number
+  y: number
+  scale: number
+  /** Idle drift in frame pixels per second, negative to the left (fog, smoke). */
+  drift?: number
+}
+
 export interface SeriesLocation {
   id: string
   name: string
@@ -93,8 +109,10 @@ export interface SeriesLocation {
   variants: SeriesVisualVariant[]
   currentState: Record<string, unknown>
   approval: SeriesApproval
-  /** 2D series layout: a background or 3D plate asset, character homes (x %), and the plate render state. */
-  layout2d?: { plateAssetId?: string; backgroundAssetId?: string; homes?: Record<string, number>; plate3d?: Record<string, unknown> }
+  /** 2D series layout: a background or 3D plate asset, character homes (x %), the plate render state, and set layers
+   * with the depth the cast stands at among them (default 0.6). */
+  layout2d?: { plateAssetId?: string; backgroundAssetId?: string; homes?: Record<string, number>; plate3d?: Record<string, unknown>
+    layers?: SeriesSetLayer[]; castDepth?: number }
 }
 
 export interface SeriesProp {
@@ -259,6 +277,15 @@ export interface SeriesShot {
   dialogueOrigin?: 'script' | 'manual'
   scriptDialogueStatus?: 'in_sync' | 'stale' | 'manual_conflict'
   foley?: SeriesShotFoley
+  layout2d?: SeriesShotLayout2D
+}
+
+/** A shot's 2D plan (series_shot_plan.normalize_layout2d); only the set layers are typed here. Its `layers` replace the
+ * location's and `[]` turns them off for this shot; `castDepth` overrides the location's. */
+export interface SeriesShotLayout2D {
+  layers?: SeriesSetLayer[]
+  castDepth?: number
+  [key: string]: unknown
 }
 
 export interface SeriesCanonDeltaItem extends CanonFact {

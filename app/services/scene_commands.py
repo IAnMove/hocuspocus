@@ -17,6 +17,8 @@ CATALOG = json.loads((Path(__file__).parent.parent / 'shared' / 'scene_effects.j
 PRESETS = {entry['id']: entry for entry in CATALOG}
 ANIME_COUNT = sum(1 for item in CATALOG if item['collection'] == 'anime')
 RETRO_COUNT = sum(1 for item in CATALOG if item['collection'] == 'retro')
+# Cue fields a catalog entry may set for its own effect (ui/src/features/sceneFx/types.ts FX_FIELD_DEFAULTS).
+PRESET_FIELDS = ('size', 'x', 'y', 'rotation')
 ALL_SECONDS = 3 * len(CATALOG)
 ANIME_SECONDS = 3 * ANIME_COUNT
 RETRO_SECONDS = 3 * RETRO_COUNT
@@ -57,9 +59,11 @@ class FxCue(Strict):
         if self.kind not in PRESETS or self.end <= self.start:
             raise ValueError('Use a catalog effect and an end later than start')
         self.color = self.color or PRESETS[self.kind]['color']
-        # An effect with its own size scale (code rain: glyph height in %) has its own default.
-        if 'size' not in self.model_fields_set and 'size' in PRESETS[self.kind]:
-            self.size = PRESETS[self.kind]['size']
+        # An effect with its own scale or placement has its own defaults (code rain: glyph height
+        # in %; light rays: where they come from and where they point).
+        for field in PRESET_FIELDS:
+            if field not in self.model_fields_set and field in PRESETS[self.kind]:
+                setattr(self, field, PRESETS[self.kind][field])
         return self
 
 
@@ -183,7 +187,7 @@ class SpeechPrepare(DocumentInput):
 
 OPERATIONS = {
     'scenes.speech.capabilities': (Strict, 'Read the shared UI/MCP/Wizard engine policy, CPU phoneme status, Rhubarb and local vocal-isolation availability. No model downloads or inference.'),
-    'scenes.effects.catalog': (Strict, f'List {len(CATALOG)} screen overlays plus world-space kinds in result.worldKinds (portal, magic_circle, summoning_gate, lightning, energy_beam, laser, energy_orb, anime_aura, arcane_missiles, shockwave, smoke, sparks, explosion, fire, rain, snow, fog, shield, tornado, splash, dust, ice_burst, black_hole, media_portal). Screen uses percent; world uses meters. Retro looks (psx, vhs, crt, consoles) are screen-only. No AI generation.'),
+    'scenes.effects.catalog': (Strict, f'List {len(CATALOG)} screen overlays plus world-space kinds in result.worldKinds (portal, magic_circle, summoning_gate, lightning, energy_beam, laser, energy_orb, anime_aura, arcane_missiles, shockwave, smoke, sparks, explosion, fire, rain, snow, fog, shield, tornado, splash, dust, ice_burst, black_hole, media_portal). Screen uses percent; world uses meters. Retro looks (psx, vhs, crt, consoles) are screen-only; the cinematic grades (candlelight, vignette, film_grain, light_rays, glitch, canvas) cover the whole frame. No AI generation.'),
     'scenes.effects.apply': (EffectsApply, 'Return an editable 2D/3D document with timed SFX. Screen cues go to sfx; worldCues go to worldSfx on Video3D only. Matching IDs replace in place. No save or export.'),
     'scenes.effects.showcase': (EffectsShowcase, f'Return a reusable SFX showcase: all effects {ALL_SECONDS} seconds, collection anime {ANIME_SECONDS} seconds, or collection retro {RETRO_SECONDS} seconds. Retains actors/camera and replaces only SFX. No save or export.'),
     'scenes.speech.prepare': (SpeechPrepare, 'Same lip-sync analysis as the editor and audio.mouth_cues: engine=auto prefers installed CPU phonemes, otherwise reports Rhubarb fallback. Optional engine=phoneme or rhubarb, exact text, language and isolate_vocals. Attach source-clock cues to an exact 3D speaker/clip, preserving audio and face calibration. No downloads, voice generation, save or export.'),

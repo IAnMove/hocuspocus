@@ -6,7 +6,7 @@ export function SceneFxControls({ cues = [], duration, disabled, onChange, onSho
 }) {
   const { t } = useUiTranslation('sceneFx')
   const update = (id: string, patch: Partial<SceneFx>) => onChange(parseSceneFx(cues.map(cue => cue.id === id ? { ...cue, ...patch } : cue)))
-  const collections = ['classic', 'anime', 'retro'] as const
+  const collections = ['classic', 'anime', 'retro', 'cinematic'] as const
   return <details className="rounded-lg border border-border bg-bg-primary p-3" data-testid="scene-fx-controls">
     <summary className="cursor-pointer text-sm font-semibold">{t('title')} ({cues.length})</summary>
     <p className="my-2 text-xs text-text-muted">{t('help')}</p>

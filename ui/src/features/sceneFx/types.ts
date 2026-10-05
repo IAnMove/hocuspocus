@@ -1,9 +1,14 @@
 import catalog from '../../../../app/shared/scene_effects.json' with { type: 'json' }
 
-/** `size` on an entry is that effect's default cue size (code rain: glyph height in %). */
-export const FX_CATALOG: ReadonlyArray<{ id: string; color: string; sound: string; collection: string; size?: number }> = catalog
+/** `size`, `x`, `y` or `rotation` on an entry are that effect's defaults for a cue that gives none
+ * (code rain: glyph height in %; light rays: where they come from and where they point). */
+export type FxPreset = { id: string; color: string; sound: string; collection: string; size?: number; x?: number; y?: number; rotation?: number }
+export const FX_CATALOG: ReadonlyArray<FxPreset> = catalog
 /** A cue's size when it gives none. */
 export const DEFAULT_FX_SIZE = 65
+/** The shared defaults of the fields a catalog entry can set for its own effect. */
+export const FX_FIELD_DEFAULTS = { size: DEFAULT_FX_SIZE, x: 50, y: 50, rotation: 0 } as const
+const PRESET_FIELDS = Object.keys(FX_FIELD_DEFAULTS) as Array<keyof typeof FX_FIELD_DEFAULTS>
 export type SceneFx = {
   id: string; kind: string; label?: string; start: number; end: number
   x: number; y: number; size: number; intensity: number; color: string
@@ -18,28 +23,28 @@ export function parseSceneFx(raw: unknown): SceneFx[] {
   if (!Array.isArray(raw)) return []
   const ids = new Set<string>()
   return raw.slice(0, 64).flatMap((value: Partial<SceneFx> | null, index) => {
-    const preset = catalog.find(item => item.id === value?.kind)
+    const preset = FX_CATALOG.find(item => item.id === value?.kind)
     if (!value || !preset) return []
     const start = number(value.start, 0, 0, 600), end = number(value.end, start + 2, 0, 600)
     const id = typeof value.id === 'string' && value.id ? value.id.slice(0, 160) : `fx-${index}`
     if (end <= start || ids.has(id)) return []
     ids.add(id)
-    return [{ id, kind: preset.id, ...(typeof value.label === 'string' ? { label: value.label.slice(0, 80) } : {}), start, end, x: number(value.x, 50, 0, 100), y: number(value.y, 50, 0, 100),
+    return [{ id, kind: preset.id, ...(typeof value.label === 'string' ? { label: value.label.slice(0, 80) } : {}), start, end, x: number(value.x, preset.x ?? FX_FIELD_DEFAULTS.x, 0, 100), y: number(value.y, preset.y ?? FX_FIELD_DEFAULTS.y, 0, 100),
       size: number(value.size, preset.size ?? DEFAULT_FX_SIZE, 1, 200), intensity: number(value.intensity, 1, .1, 2),
-      rotation: number(value.rotation, 0, -180, 180),
+      rotation: number(value.rotation, preset.rotation ?? FX_FIELD_DEFAULTS.rotation, -180, 180),
       color: typeof value.color === 'string' && /^#[\da-f]{6}$/i.test(value.color) ? value.color : preset.color,
       seed: Math.round(number(value.seed, index + 1, 1, 1000000)), sound: value.sound === true,
       volume: number(value.volume, .25, 0, 1) }]
   })
 }
-/** A cue switched to another effect takes that effect's colour, and its default size when
- * either effect has a size of its own (a code-rain glyph height is not a burst size). */
+/** A cue switched to another effect takes that effect's colour, and its default size, x, y and
+ * rotation where either effect has one of its own (a code-rain glyph height is not a burst size). */
 export function switchFxKind(cue: Pick<SceneFx, 'kind'>, kind: string): Partial<SceneFx> {
   const next = FX_CATALOG.find(item => item.id === kind)
   if (!next) return {}
   const previous = FX_CATALOG.find(item => item.id === cue.kind)
-  const resize = next.size !== undefined || previous?.size !== undefined
-  return { kind, color: next.color, ...(resize ? { size: next.size ?? DEFAULT_FX_SIZE } : {}) }
+  const reset = PRESET_FIELDS.filter(key => next[key] !== undefined || previous?.[key] !== undefined)
+  return { kind, color: next.color, ...Object.fromEntries(reset.map(key => [key, next[key] ?? FX_FIELD_DEFAULTS[key]])) }
 }
 export function sceneFxFields(raw: unknown): { sfx?: SceneFx[] } {
   const sfx = parseSceneFx(raw)

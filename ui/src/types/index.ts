@@ -490,8 +490,11 @@ export interface SceneLayer {
   }
   /** Camera-pan multiplier: 0 ignores camera pan, 1 follows it normally,
    *  and values above 1 create foreground parallax. Camera zoom/roll still
-   *  affect every visual layer. Ignored by camera layers. */
+   *  affect every visual layer unless `parallaxZoom` is set. Ignored by camera layers. */
   parallax?: number
+  /** A depth layer: the camera zoom also follows `parallax` (zoom 1 + (camera zoom - 1) * parallax),
+   *  so a push grows near layers more than far ones. Off, the layer takes the full camera zoom. */
+  parallaxZoom?: boolean
   beatPulse?: { amount: number; on: 'beats' | 'downbeats' }
   sequence?: import('../lib/scene2d/motion').FrameSequence
   /** Author-confirmed horizontal continuity. Enables safe loop/cylinder tools;

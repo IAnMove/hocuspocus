@@ -2,7 +2,8 @@
 
 An agent writes what happens; this turns it into the episode the server renders:
 ids from the episode number, scenes, shots with ``layout2d`` (cast, framing,
-camera, card, music, timed sound and screen effects, timing, props, voice room),
+camera, card, music, timed sound and screen effects, timing, props, voice room,
+set layers and the cast's depth among them),
 ``scene3d`` for Video 3D shots, ``foley`` (sound generated from the rendered
 picture), the original's lines and a language version for every other
 language in the script. It checks the script against the
@@ -18,6 +19,7 @@ clear message instead of halfway through a render::
                 "music": {"file": "mus-theme-es.wav", "en": "mus-theme-en.wav", "volume": 0.9},
                 "sfx": [{"file": "sfx-pen.wav", "line": 1, "offset": 0.2}], "fx": [{"kind": "confetti", "line": 1}],
                 "props": [{"file": "prop-truck-key.png", "x": 12, "y": 74, "scale": 0.36}], "timing": {"intro": 1.0},
+                "layers": [{"file": "fg-pillar.png", "depth": 0.9, "front": true, "x": 8}], "castDepth": 0.6,
                 "voiceRoom": "cathedral", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]},
                 "foley": {"prompt": "wooden airship creaking, wind", "volume": 0.5}}]}
 """
@@ -25,6 +27,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from services.series_layers import layout_layers
 from services.series_shot3d import normalize_scene3d
 from services.series_shot_extras import EFFECT_KINDS
 from services.series_shot_foley import normalize_foley
@@ -160,6 +163,7 @@ class EpisodeScript:
         self._check_lines(shot, where)
         self._check_files(shot, where)
         self._check_effects(shot, where)
+        self._check_layers(shot, where)
 
     def _check_cast(self, shot: dict[str, Any], where: str) -> None:
         for raw in shot.get("cast") or []:
@@ -205,6 +209,20 @@ class EpisodeScript:
         elif config.get("scene"):
             self.checker.file(config["scene"], f"{where} scene3d")
 
+    def _check_layers(self, shot: dict[str, Any], where: str) -> None:
+        """Set layers (a shot's own list replaces its location's; [] turns them off) and the cast's depth among them."""
+        try:
+            found = layout_layers(shot, "")
+        except ValueError as error:
+            self.checker.problems.append(f"{where}: {error}")
+            return
+        assets = self.checker.series.get("assets") or {}
+        for index, layer in enumerate(found.get("layers") or []):
+            if layer.get("file"):
+                self.checker.file(layer["file"], f"{where} layer {index}")
+            elif (assets.get(layer["assetId"]) or {}).get("kind") not in ("image", "video"):
+                self.checker.problems.append(f"{where}: layer {index} names {layer['assetId']}, not an image or video asset of the series")
+
     # Building -------------------------------------------------------------
     def _card(self, card: dict[str, Any], language: str) -> dict[str, str]:
         texts = _texts({key: value for key, value in card.items() if _language(key)})
@@ -219,6 +237,7 @@ class EpisodeScript:
         for key in ("props", "sfx", "fx", "timing", "voiceRoom"):
             if shot.get(key):
                 layout[key] = shot[key]
+        layout.update(layout_layers(shot, "layout2d"))
         if isinstance(shot.get("card"), dict):
             layout["card"] = {"kind": shot["card"].get("kind"), **self._card(shot["card"], self.original)}
         music = shot.get("music") if isinstance(shot.get("music"), dict) else None

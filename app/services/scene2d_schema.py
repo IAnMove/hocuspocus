@@ -186,7 +186,7 @@ def _layer() -> dict:
         "source": _string(), "thumbnail": _string(), "visible": {"type": "boolean"}, "z": _number(),
         "locked": {"type": "boolean"}, "missingAsset": {"type": "boolean"}, "fill": {"type": "boolean"},
         "cover": {"type": "boolean"},
-        "atmosphere": _atmosphere(), "parallax": _number(),
+        "atmosphere": _atmosphere(), "parallax": _number(), "parallaxZoom": {"type": "boolean"},
         "beatPulse": _object({"amount": _number(), "on": _enum(["beats", "downbeats"])}, ["amount", "on"]),
         "sequence": _sequence(), "seamlessHorizontal": {"type": "boolean"},
         "faceBinding": _object({

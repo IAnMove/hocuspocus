@@ -6,7 +6,9 @@ without rooms keeps the digests it had. ``series_native_render`` stores it in th
 and ``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the episode assembly lays
 (``soundDesign.ambienceMode: "episode"``, ``ambienceDuckDb``) and the episode's score (``episode.score``) are not
 part of a shot, so changing them renders nothing again. A shot's ``foley`` is, so a new prompt or volume renders
-that shot again; a shot without one keeps the digest it had before foley existed.
+that shot again; a shot without one keeps the digest it had before foley existed. A location's ``layout2d.layers``
+(``series_layers``) are seen only by its 2D shots that do not bring their own, so changing them renders just those;
+a location without layers keeps the digests it had.
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ from typing import Any
 
 from services import series_shot3d
 from services.series_ambience import shot_sound_design
+from services.series_layers import digest_location
 from services.series_shot_plan import kit_ref
 from services.series_voice_rooms import shot_room
 
@@ -33,10 +36,11 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     people = _people(shot, beats)
     characters = {item.get("id"): item for item in series.get("characters") or []}
     kit_ids = {cid: (kit_ref(series, cid) or {}).get("id") for cid in people}
+    location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None)
     payload = {
         "shot": {key: shot.get(key) for key in _SHOT_INPUTS}, "beats": beats,
         "duration": None if beats else shot.get("durationSeconds"), "language": series.get("spokenLanguage"),
-        "location": next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None),
+        "location": digest_location(location, shot),
         "sound": shot_sound_design(series.get("soundDesign")),
         "characters": {cid: (characters.get(cid) or {}).get("layout2d") for cid in people},
         "kits": {kid: {key: value for key, value in (kits.get(kid) or {}).items() if key not in _KIT_VOLATILE}
