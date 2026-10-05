@@ -115,7 +115,8 @@ def talk_block(kit: dict, lines: list[dict], *, pose: str = "base", duration: fl
     per_state = {state: dict(anchor) for state, anchor in (anchors.get("mouthStates") or {}).items() if state in mouths}
     if per_state:
         talk["mouthAnchors"] = per_state
-    return {**talk, **(_blink(kit, anchors, duration) if blink else {})}
+    # A pose with hidden eyes (sunglasses) is marked ``blink: false`` by the rig and keeps them still.
+    return {**talk, **(_blink(kit, anchors, duration) if blink and anchors.get("blink") is not False else {})}
 
 
 def _audio(line: dict, index: int, workspace: str) -> dict | None:
