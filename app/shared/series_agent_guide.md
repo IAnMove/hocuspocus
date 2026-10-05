@@ -96,7 +96,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - **sfx:** sound effects at a line's `start`/`end` (`line`, `anchor`, `offset` s) or at a second (`at`), `volume`
   0–1. Files from the bible only.
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
-  speedlines…), `duration`, `x`/`y`/`size` in %, `color`. Keep them off faces: a small burst to one side.
+  speedlines…), `duration`, `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` points right at 0, so a
+  gun aimed left needs 180 with `x`/`y` just past the muzzle). Keep them off faces: a small burst to one side.
 - **timing:** `intro` (silence before the first line, default 0.35 s), `gap` (between lines, 0.22), `tail` (after the
   last, 0.45). A line's `pauseBefore` adds a dramatic beat before it.
 - **card:** `title` (opening), `end` (credits), `disclaimer` (white text on dark; also used for news flashes). A card

@@ -101,7 +101,8 @@ def _blink(kit: dict, anchors: dict, duration: float) -> dict:
     eyes = (kit.get("eyes") or {}).get("blink")
     if not _approved(eyes):
         return {}
-    return {"blink": {"source": eyes["source"], "anchor": dict(anchors.get("eyes") or DEFAULT_BLINK)},
+    source = anchors.get("blinkSource") if isinstance(anchors.get("blinkSource"), str) else eyes["source"]
+    return {"blink": {"source": source, "anchor": dict(anchors.get("eyes") or DEFAULT_BLINK)},
             "blinks": blink_times(str(kit.get("id") or ""), duration)}
 
 

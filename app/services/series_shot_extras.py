@@ -64,7 +64,9 @@ def fx_entry(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or value.get("kind") not in EFFECT_KINDS:
         return None
     entry = {"kind": value["kind"], **_when(value), "duration": _number(value.get("duration"), 0.1, 30) or 1.0}
-    for key, low, high in (("x", 0, 100), ("y", 0, 100), ("size", 1, 200), ("intensity", 0.1, 2), ("volume", 0, 1)):
+    # rotation turns directional effects (a laser leaves the muzzle of a gun that points left: 180).
+    for key, low, high in (("x", 0, 100), ("y", 0, 100), ("size", 1, 200), ("intensity", 0.1, 2), ("volume", 0, 1),
+                           ("rotation", -180, 180)):
         if _number(value.get(key), low, high) is not None:
             entry[key] = float(value[key])
     if isinstance(value.get("color"), str) and _COLOR.match(value["color"]):
@@ -105,7 +107,7 @@ def fx_cues(layout: dict[str, Any], timing: list[tuple[float, float]], duration:
         end = round(min(duration - 0.01, start + cue.get("duration", 1.0)), 3)
         if end <= start:
             continue
-        extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume") if key in cue}
+        extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume", "rotation") if key in cue}
         cues.append({"id": f"fx-{index}", "kind": cue["kind"], "start": start, "end": end, **extra})
     return cues
 

@@ -46,6 +46,8 @@ def test_the_talk_block_uses_approved_art_anchors_and_shifted_cues():
     assert talk["blink"]["anchor"]["offsetY"] == -27 and talk["blinks"] == blink_times("lola", 8) and talk["blinks"][0] == 0.9
     assert all(2.6 <= b - a <= 4.6 for a, b in zip(talk["blinks"], talk["blinks"][1:]))
     assert "blink" not in talk_block(kit(), LINES, blink=False)
+    own = kit(); own["anchors"]["base"]["blinkSource"] = "/api/v1/file/kit-lola-base-blink-1.png?workspace=cast"
+    assert talk_block(own, LINES)["blink"]["source"] == own["anchors"]["base"]["blinkSource"], "the pose's own closed eyes"
     covered = kit()
     covered["anchors"]["base"]["blink"] = False
     assert "blink" not in talk_block(covered, LINES), "a pose in sunglasses keeps its eyes still"
