@@ -39,7 +39,7 @@ from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_shot_bridge import run_series_shot, with_pose_sizes
 from services import series_shot3d
-from services.series_shot_extras import pauses, timing_args
+from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.series_take_inputs import render_inputs, stale_shot_ids
 
@@ -522,10 +522,12 @@ class SeriesNativeRender:
         ordered = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
         position = next((i for i, value in enumerate(ordered) if value["id"] == shot["id"]), 0)
         first = position == 0 or ordered[position - 1].get("sceneId") != shot.get("sceneId")
-        sound = {"audioTracks": sound_tracks(series, shot, first)}
+        # Its sound effects and screen effects too, at a second or on a line, like in a 2D shot.
+        sound = {"audioTracks": [*sound_tracks(series, shot, first), *sfx_tracks(layout, timing, duration)]}
         self._balance(self.deps.workspace_dir(workspace), sound)
         scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError,
-                                          tracks=sound["audioTracks"], root=self.deps.workspace_dir(workspace))
+                                          tracks=sound["audioTracks"], root=self.deps.workspace_dir(workspace),
+                                          screen_fx=fx_cues(layout, timing, duration))
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
         intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
         _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {

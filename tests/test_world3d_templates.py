@@ -563,3 +563,26 @@ def test_retime_stretches_shake_windows_and_backdrop_cues(tmp_path):
     assert (out["screenBackdrop"]["sfx"][0]["start"], out["screenBackdrop"]["sfx"][0]["end"]) == (2.5, 5.2)
     kept = patch_scene("studio", "w3d-0000feedbeef", workspace_dir, {"duration": 3}, 2)["document"]
     assert kept["camera"]["shake"][0]["start"] == 2.5, "without retime the windows keep their seconds"
+
+
+def test_a_patch_puts_the_shot_screen_effects_over_the_template_ones(tmp_path):
+    from services.world3d_scenes import World3DSceneError
+    workspace_dir = lambda name: str(tmp_path / name)
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"templateId": "two-shot", "slots": [], "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]},
+                "sfx": [{"id": "template-lines", "kind": "speed_lines", "start": 0, "end": 2}]}
+    (folder / "w3d-0000000fx001.json").write_text(json.dumps({"revision": 1, "templateId": "two-shot", "document": document, "warnings": []}), encoding="utf-8")
+    viewed = patch_scene("studio", "w3d-0000000fx001", workspace_dir, {"screenFx": [
+        {"id": "shot-fx-0", "kind": "manga_impact", "start": 1.2, "end": 1.6, "x": 40, "y": 30, "size": 25, "rotation": -150, "color": "#ffffff"}]}, 1)
+    effects = viewed["document"]["sfx"]
+    assert [cue["id"] for cue in effects] == ["template-lines", "shot-fx-0"]
+    assert effects[1] == {"id": "shot-fx-0", "kind": "manga_impact", "start": 1.2, "end": 1.6, "x": 40.0, "y": 30.0, "size": 25.0,
+                          "rotation": -150.0, "color": "#ffffff"}
+    again = patch_scene("studio", "w3d-0000000fx001", workspace_dir, {"screenFx": []}, 2)
+    assert [cue["id"] for cue in again["document"]["sfx"]] == ["template-lines"], "the shot's effects are replaced, the template's stay"
+    for bad in ([{"id": "fx-0", "kind": "manga_impact", "start": 0, "end": 1}], [{"id": "shot-x", "kind": "nope", "start": 0, "end": 1}],
+                [{"id": "shot-x", "kind": "manga_impact", "start": 2, "end": 1}], [{"id": "shot-x", "kind": "manga_impact", "start": 0, "end": 1, "x": 400}]):
+        with pytest.raises(World3DSceneError) as caught:
+            patch_scene("studio", "w3d-0000000fx001", workspace_dir, {"screenFx": bad}, 3)
+        assert caught.value.code == "invalid_screen_fx"
