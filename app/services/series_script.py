@@ -287,10 +287,12 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
     if not episode_id:
         episode_id = tool("series.episode.create", {"episode": {"title": title, "premise": premise}})["episode"]["id"]
     current = read_series()
+    # The script is the whole episode: shots it no longer has are removed, and a shot whose content changed
+    # loses its takes instead of keeping a video of other lines (replaceShots).
     tool("series.episode.update", {"episode_id": episode_id, "base_revision": current["revision"], "episode": {
-        "title": title, "premise": premise, "script": built.scene_list(), "shots": shots}})
+        "title": title, "premise": premise, "script": built.scene_list(), "shots": shots, "replaceShots": True}})
     missing = {language: tool("series.episode.language_version.set", {
         "episode_id": episode_id, "language": language, **built.version(language)}).get("missingLines") or []
         for language in built.languages[1:]}
-    stale = [shot["id"] for shot in (current["episodesById"][episode_id].get("shots") or []) if shot["id"] not in summary["shots"]]
-    return {"episodeId": episode_id, **summary, "missingLines": missing, **({"staleShots": stale} if stale else {})}
+    removed = [shot["id"] for shot in (current["episodesById"][episode_id].get("shots") or []) if shot["id"] not in summary["shots"]]
+    return {"episodeId": episode_id, **summary, "missingLines": missing, **({"removedShots": removed} if removed else {})}

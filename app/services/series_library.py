@@ -39,6 +39,11 @@ SHOT_EDITOR_FIELDS = frozenset({
     "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
+# A take is a render of what the audience sees and hears; when these change under a shot id, its takes are stale.
+SHOT_CONTENT_FIELDS = frozenset({
+    "dialogueBeats", "visibleCharacterIds", "locationId", "locationVariantId", "productionMethod",
+    "framing", "camera", "layout2d", "scene3d", "wardrobeByCharacterId", "propIds",
+})
 SERIES_CANON_INPUT_FIELDS = (
     "title", "premise", "logline", "format", "language", "spokenLanguage",
     "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience",
@@ -1388,8 +1393,32 @@ def _approved_take_seconds(shot: dict) -> float | None:
     return float(seconds) if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0 else None
 
 
-def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[dict]:
-    """Merge editable shot fields while retaining server-owned render history."""
+def _beat_content(beats: Any) -> list[tuple[str, str]]:
+    return [(str(beat.get("characterId") or ""), str(beat.get("text") or "").strip())
+            for beat in beats if isinstance(beat, dict)] if isinstance(beats, list) else []
+
+
+def same_shot_content(stored: dict, incoming: dict) -> bool:
+    """True when the incoming shot shows and says what the stored one does (its takes still fit)."""
+    for key in SHOT_CONTENT_FIELDS:
+        if key not in incoming and key not in stored:
+            continue
+        before, after = stored.get(key), incoming.get(key)
+        if key == "dialogueBeats":
+            if _beat_content(before) != _beat_content(after):
+                return False
+        elif (before or None) != (after or None):
+            return False
+    return True
+
+
+def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any, *, replace: bool = False) -> list[dict]:
+    """Merge editable shot fields while retaining server-owned render history.
+
+    With ``replace`` the incoming list is the whole episode: shots it does not
+    name are removed, and a shot whose content changed starts without takes
+    (a rewritten script must not inherit takes that show other lines).
+    """
     if not isinstance(incoming_shots, list):
         raise ValueError("Episode shots patch must be an array")
     current = _objects(current_shots)
@@ -1409,6 +1438,8 @@ def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[d
 
     def merge_one(shot_id: str, raw_shot: dict) -> dict:
         stored = current_by_id.get(shot_id)
+        if replace and stored is not None and not same_shot_content(stored, raw_shot):
+            stored = None
         merged = copy.deepcopy(stored) if stored is not None else {"id": shot_id, "attempts": []}
         for key in SHOT_EDITOR_FIELDS:
             if key in raw_shot:
@@ -1432,7 +1463,7 @@ def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[d
 
     # A full collection can express ordering. A sparse patch updates shots in
     # place and cannot accidentally delete another shot (or its attempts).
-    if set(current_by_id).issubset(incoming_by_id):
+    if replace or set(current_by_id).issubset(incoming_by_id):
         return [merge_one(shot_id, incoming_by_id[shot_id]) for shot_id in incoming_order]
     result: list[dict] = []
     for stored in current:
@@ -1493,7 +1524,7 @@ def update_series_episode(
         if key in patch:
             merged[key] = copy.deepcopy(patch[key])
     if "shots" in patch:
-        merged["shots"] = _merge_episode_shot_patch(current.get("shots"), patch["shots"])
+        merged["shots"] = _merge_episode_shot_patch(current.get("shots"), patch["shots"], replace=patch.get("replaceShots") is True)
 
     from .series_shot_dialogue import annotate_episode_shot_dialogue, sync_episode_shot_dialogue
     if patch.get("syncShotDialogueFromScript") is True:

@@ -214,3 +214,77 @@ def test_produce_refuses_a_language_without_a_version(tmp_path):
     assert raised.value.code == "no_version"
     with pytest.raises(ProduceError):
         service.start("cast", "uv", "nope")
+
+
+def test_a_production_cut_by_a_restart_is_interrupted_and_resumes(tmp_path):
+    from services.series_jobs import SeriesJobStore
+    tools = Production(fail_english=0)
+    service = producer(tmp_path, tools)
+    store = SeriesJobStore(str(tmp_path), "produce")
+    store.save({"jobId": "produce-orphan", "workspace": "cast", "seriesId": "uv", "episodeId": "ep2", "original": "spanish",
+                "languages": ["spanish"], "burnSubtitles": True, "status": "running", "createdAt": time.time(), "message": "Render spanish",
+                "steps": [{"kind": "render", "language": "spanish", "status": "running", "jobId": "native-gone"},
+                          {"kind": "assemble", "language": "spanish", "status": "queued"}], "chapters": {}})
+    seen = service.status("cast", "produce-orphan")
+    assert seen["status"] == "interrupted" and "restarted" in seen["message"] and seen["steps"][0]["status"] == "queued"
+    started = service.start("cast", "uv", "ep2", languages=["spanish"])
+    assert finished(service, started["jobId"])["status"] == "completed", "the orphan does not block a new production"
+    # The render the orphan was waiting for is gone with the old server: resuming asks for a new one.
+    tools.jobs["native-gone"] = None
+
+    class Gone(Production):
+        pass
+    original_call = tools.__call__
+
+    def call(tool, arguments):
+        if tool == "series.episode.render_native.status" and arguments["input"]["job_id"] == "native-gone":
+            return {"_is_error": True, "error": {"code": "not_found", "status": 404, "message": "Render job not found"}}
+        return original_call(tool, arguments)
+    service.deps.call = call
+    done = finished(service, service.resume("cast", "produce-orphan")["jobId"])
+    assert done["status"] == "completed", done
+    assert done["steps"][0]["jobId"] == "native-spanish", "a new render replaced the one the server forgot"
+
+
+def test_a_failed_cut_is_made_again_on_resume(tmp_path):
+    class Cuts(Production):
+        """Every cut gets its own job; the first two stay failed, like a real failed assembly does."""
+
+        def __init__(self):
+            super().__init__(fail_english=0)
+            self.failures, self.cuts, self.bad = 2, 0, set()
+
+        def __call__(self, tool, arguments):
+            data = arguments["input"]
+            if tool == "series.assembly.start":
+                self.calls.append((tool, data))
+                self.cuts += 1
+                job_id = f"cut-{self.cuts}"
+                if self.failures:
+                    self.failures -= 1
+                    self.bad.add(job_id)
+                return {"result": {"job": {"jobId": job_id, "status": "queued"}}}
+            if tool == "series.assembly.status":
+                self.calls.append((tool, data))
+                if data["job_id"] in self.bad:
+                    return {"result": {"job": {"status": "failed", "error": "ffmpeg exited 1"}}}
+                return {"result": {"job": {"status": "completed", "assetId": "asset-spanish", "filename": "spanish.mp4"}}}
+            return super().__call__(tool, arguments)
+
+    tools = Cuts()
+    service = producer(tmp_path, tools)
+    failed = finished(service, service.start("cast", "uv", "ep2", languages=["spanish"])["jobId"])
+    assert failed["status"] == "failed" and "ffmpeg exited 1" in failed["steps"][1]["error"]
+    assert [tool for tool, _ in tools.calls].count("series.assembly.start") == 2, "the cut was tried again once in that run"
+    resumed = finished(service, service.resume("cast", failed["jobId"])["jobId"])
+    assert resumed["status"] == "completed" and resumed["chapters"]["spanish"]["file"] == "spanish.mp4"
+    assert [tool for tool, _ in tools.calls].count("series.assembly.start") == 3, "resume starts a new cut, not the failed one"
+
+
+def test_rewriting_an_episode_replaces_its_shots():
+    tools = Series()
+    tools.series["episodesById"]["ep1"]["shots"] = [{"id": "e1s00"}, {"id": "e1s01"}, {"id": "e1s02"}]
+    rewritten = apply_script(tools, tools.read, KITS, FILES, "cast", {**SCRIPT, "shots": SCRIPT["shots"][:1]}, episode_id="ep1")
+    update = next(data for tool, data in tools.calls if tool == "series.episode.update")
+    assert update["episode"]["replaceShots"] is True and [shot["id"] for shot in update["episode"]["shots"]] == ["e1s00"]
+    assert rewritten["removedShots"] == ["e1s01", "e1s02"]
