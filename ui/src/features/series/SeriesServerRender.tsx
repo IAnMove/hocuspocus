@@ -63,6 +63,7 @@ export function SeriesServerRender({ workspace, series, episode, language }: { w
       {job.items.map(item => <li key={item.shotId} data-testid={`server-render-${item.shotId}`}>
         <span className="font-mono">{item.shotId}</span> · {t(`serverRender.stage.${item.stage}`)}
         {item.status === 'failed' && <span className="text-red-300"> · {item.error}</span>}
+        {item.warning && <span className="text-amber-300"> · {item.warning}</span>}
       </li>)}
     </ul>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}

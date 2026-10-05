@@ -28,6 +28,22 @@ is kept and skipped by the assembly, which says why. Episode-mode ambience can
 dip under the lines the same way with `soundDesign.ambienceDuckDb` (0-24 dB,
 default 0: off).
 
+A Series shot can get foley made from its own picture. Add
+`foley: {"prompt": "wooden airship creaking, wind, cannon shots", "volume": 0.5}`
+to a shot (2D or 3D; the same key works in `series.episode.from_script`), and
+the server render, after the shot's export, asks `generation.sfx` (MMAudio
+v2) for sound guided by that exported video, then mixes it under the take's
+own lines, music and effects before importing it. `volume` (above 0, up to 2,
+default 0.5) is relative to the dialogue and balanced by the generated
+sound's loudness, like a shot's music and effects; the picture is
+stream-copied. The render has a new `foley` stage, so a resume continues
+there, and the generated sound and the mixed take are kept by export digest,
+prompt and volume, so a resume or a render of the same picture reuses them and
+a new volume only mixes again. Foley never fails a shot: when MMAudio is not
+installed, fails, or is not done within 30 minutes, the take is imported
+without it and the render item shows a warning. Changing a shot's foley marks
+its take out of date; shots without foley keep the take digest they had.
+
 Series Lab can lay a location's ambience once under the whole episode instead
 of in every shot. With `soundDesign.ambienceMode: "episode"` (the default stays
 `"shot"`), shots no longer mix `ambienceByLocation`, so the bed does not
