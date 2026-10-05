@@ -4,6 +4,7 @@ import { imageCutoutMesh, poseImageCutout } from './imageCutout'
 import { CinematicRuntime } from './cinematicRuntime'
 import { MaterializationRuntime } from './materialization'
 import { framingFov, framingPose } from './framing'
+import { shakeCamera } from './cameraShake.ts'
 import { SpeechFaceRuntime } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
 import { screenGeometry } from './screenGeometry'
@@ -575,11 +576,12 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor), target, sceneSeconds, document.duration) : null
   const rawEye = shot?.eye ?? cameraEyeAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const look = shot?.look ?? cameraLookAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
-  const eye = poseAtmos(world, document, sceneSeconds, rhythmicCameraEye(rawEye, look, sceneSeconds, document.rhythm))
+  const posed = poseAtmos(world, document, sceneSeconds, rhythmicCameraEye(rawEye, look, sceneSeconds, document.rhythm))
+  const shaken = shakeCamera(document.camera.shake, sceneSeconds, posed, look)
   world.camera.fov = framingFov(framing, document.camera.fov, sceneSeconds, document.duration)
-  world.camera.position.set(...eye)
-  world.camera.lookAt(...look)
-  if (shot) world.camera.rotateZ(shot.roll)
+  world.camera.position.set(...shaken.eye)
+  world.camera.lookAt(...shaken.look)
+  world.camera.rotateZ((shot?.roll ?? 0) + shaken.roll)
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)
@@ -598,11 +600,17 @@ function paintWorldSfx(world: GpuWorld, document: Scene3DDocument, sceneSeconds:
   })), { width: world.renderer.domElement?.width ?? document.width, height: world.renderer.domElement?.height ?? document.height })
 }
 
+/** Once created the cinematic runtime stays, so it can clear what the previous scene set. */
+function usesCinema(world: GpuWorld, document: Scene3DDocument) {
+  return Boolean(world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.screenBackdrop
+    || document.slots.some(s => s.surface === 'environment') || isAtmosDressing(document.dressing))
+}
+
 /** The cinematic runtime once a scene needs it (environment, world effects, pixel world, atmos), else a plain render. */
 function renderFrame(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
   const cinematic = Boolean(document.environment || document.worldSfx?.length || isAtmosDressing(document.dressing))
   syncToonLook(world, document, sceneSeconds)
-  if (world.cinema || document.environment || document.worldSfx?.length || document.pixelWorld || document.slots.some(s => s.surface === 'environment') || isAtmosDressing(document.dressing)) {
+  if (usesCinema(world, document)) {
     world.cinema ??= new CinematicRuntime(world)
     world.cinema.sync(document, sceneSeconds)
     if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)

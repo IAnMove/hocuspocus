@@ -10,6 +10,7 @@ import { parseRhythm } from './rhythm'
 import { normalizeScene3DSlot, parseDressing } from './documentSlot.ts'
 import { parsePixelWorld } from './pixel/pixelWorld'
 import { parseAtmosSettings } from './atmos/params.ts'
+import { screenBackdropField } from './screenBackdrop.ts'
 import { NEW_SCENE_LIGHTING, NEW_SCENE_LOOK, lightingField, lookField } from './look.ts'
 import { toonField } from './toonLook.ts'
 import { SCENE3D_RENDER_LOOKS, SCENE3D_TEMPLATE_IDS, type Scene3DDocument, type Scene3DSlot, type Scene3DTemplateId } from './types.ts'
@@ -124,7 +125,7 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const dressing = parseDressing(value.dressing)
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
-  const { pixelWorld, atmos: rawAtmos, lighting, look, toon, ...fields } = value
+  const { pixelWorld, atmos: rawAtmos, lighting, look, toon, screenBackdrop, ...fields } = value
   fields.rhythm = rhythm
-  return { ...fields, ...pixelWorldField(pixelWorld), ...atmosField(rawAtmos, dressing), ...lightingField(lighting), ...lookField(look), ...toonField(toon), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
+  return { ...fields, ...pixelWorldField(pixelWorld), ...screenBackdropField(screenBackdrop), ...atmosField(rawAtmos, dressing), ...lightingField(lighting), ...lookField(look), ...toonField(toon), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }

@@ -27707,6 +27707,373 @@
       "dependencies": [],
       "tags": [],
       "source": "builtin"
+    },
+    {
+      "id": "anime-speedline-charge",
+      "titleEs": "Carga con líneas de velocidad",
+      "titleEn": "Speed-line charge",
+      "category": "action",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 4,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Una figura sobre líneas de concentración animadas; la cámara salta de plano medio a la cara y tiembla al llegar.",
+      "lineEn": "One figure over animated focus lines; the camera snaps from a medium shot to the face and shakes as it lands.",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject",
+          "role": "subject_1",
+          "media": "image"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [
+        "worldSfx:anime_aura"
+      ],
+      "tags": [
+        "anime"
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "anime-impact-frame",
+      "titleEs": "Fotograma de impacto",
+      "titleEn": "Impact frame",
+      "category": "action",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Llega el golpe: dos fotogramas en negativo, tres en blanco con líneas de tinta, un estallido y una sacudida que se apaga.",
+      "lineEn": "A hit lands: two negative frames, three white frames with ink focus lines, a starburst and a camera shake that dies away.",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject",
+          "role": "subject_1",
+          "media": "image"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [],
+      "tags": [
+        "anime"
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "anime-snap-zoom",
+      "titleEs": "Zoom relámpago",
+      "titleEn": "Snap zoom",
+      "category": "action",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 2.5,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Figura entera y, en menos de un tercio de segundo, empujón brusco hasta los ojos, con líneas de velocidad durante el movimiento.",
+      "lineEn": "A full figure, then a crash push to the eyes in under a third of a second, with speed lines during the move.",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject",
+          "role": "subject_1",
+          "media": "image"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [],
+      "tags": [
+        "anime"
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "anime-sword-clash",
+      "titleEs": "Choque de espadas",
+      "titleEn": "Sword clash",
+      "category": "action",
+      "family": "fixed",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 4,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Dos luchadores entran a la carrera por los lados y se cruzan en el centro: tajo, onda expansiva, fotograma blanco y sacudida fuerte.",
+      "lineEn": "Two fighters rush in from both edges and cross at the centre: a slash, a shockwave, a white impact frame and a hard shake.",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "subject_2",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject",
+          "role": "subject_1",
+          "media": "image"
+        },
+        {
+          "id": "rival",
+          "role": "subject_2",
+          "media": "image"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [
+        "worldSfx:shockwave",
+        "worldSfx:sparks"
+      ],
+      "tags": [
+        "anime"
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "anime-face-off",
+      "titleEs": "Duelo de miradas",
+      "titleEn": "Face-off",
+      "category": "action",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 4,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Dos rivales se miran en primer plano, uno en cada mitad, sobre líneas oscuras; empuje lento y un destello final.",
+      "lineEn": "Two rivals stare each other down in close-up on the left and right halves, over dark focus lines; a slow push and a flash.",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "subject_2",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject",
+          "role": "subject_1",
+          "media": "image"
+        },
+        {
+          "id": "rival",
+          "role": "subject_2",
+          "media": "image"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [
+        "worldSfx:lightning"
+      ],
+      "tags": [
+        "anime"
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "anime-airship-flyby",
+      "titleEs": "Pasada de aeronave",
+      "titleEn": "Airship flyby",
+      "category": "action",
+      "family": "follow",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 6,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Un vehículo cruza un cielo pintado en un arco suave; la cámara lo sigue y las nubes pasan de largo.",
+      "lineEn": "A vehicle flies across a painted sky on a gentle arc while the camera tracks it and clouds stream past.",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "vehicle",
+          "role": "subject_1",
+          "media": "model3d"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog"
+      ],
+      "tags": [
+        "anime"
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "anime-fleet-approach",
+      "titleEs": "Llegada de la flota",
+      "titleEn": "Fleet approach",
+      "category": "action",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 6,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Cuatro copias de un mismo vehículo salen de un banco de nubes en formación escalonada y vienen hacia la cámara.",
+      "lineEn": "Four copies of one vehicle break out of a cloud bank in a staggered formation and come at the camera.",
+      "preview": null,
+      "roles": [
+        "prop",
+        "prop",
+        "prop",
+        "prop",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "vehicle_1",
+          "role": "prop",
+          "media": "model3d"
+        },
+        {
+          "id": "vehicle_2",
+          "role": "prop",
+          "media": "model3d"
+        },
+        {
+          "id": "vehicle_3",
+          "role": "prop",
+          "media": "model3d"
+        },
+        {
+          "id": "vehicle_4",
+          "role": "prop",
+          "media": "model3d"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog",
+        "worldSfx:fog"
+      ],
+      "tags": [
+        "anime"
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "anime-eyecatch",
+      "titleEs": "Eyecatch (cortinilla)",
+      "titleEn": "Eyecatch",
+      "category": "cinema",
+      "family": "fixed",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Cortinilla breve de cambio de escena: la figura llega girando desde el fondo sobre un fondo gráfico de líneas y estrellas.",
+      "lineEn": "A short scene-change card: the figure spins in from the distance over a graphic backdrop of focus lines and stars.",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject",
+          "role": "subject_1",
+          "media": "image"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [],
+      "tags": [
+        "anime"
+      ],
+      "source": "builtin"
     }
   ]
 }

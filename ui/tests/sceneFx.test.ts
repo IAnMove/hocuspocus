@@ -44,8 +44,8 @@ test('every sound has repeatable finite PCM, a non-silent body and silent edges'
 test('anime showcase preserves the scene and supports oriented energy beams', () => {
   const source = createDefaultScene3DDocument()
   const next = withFxShowcase(source, 'anime')
-  assert.equal(next.duration, 36)
-  assert.equal(next.sfx.length, 12)
+  assert.equal(next.duration, 42)
+  assert.equal(next.sfx.length, 14)
   assert.equal(next.slots, source.slots)
   assert.ok(next.sfx.some(cue => cue.kind === 'energy_beam'))
   const rotated = parseSceneFx([{ ...next.sfx[0], rotation: -45 }])
@@ -93,7 +93,7 @@ test('world SFX stay in meters and do not rewrite screen overlays', () => {
 })
 
 test('2D showcase background matches the requested collection after reopening', () => {
-  for (const [collection, seconds] of [['anime', 36], ['retro', 30], ['all', FX_CATALOG.length * 3]] as const) {
+  for (const [collection, seconds] of [['anime', 42], ['retro', 30], ['all', FX_CATALOG.length * 3]] as const) {
     const next = withFxShowcase({ version: 1 as const, name: 'FX', layers: [], width: 640, height: 360, duration: 3 }, collection)
     const reopened = parseSceneFile(serializeSceneFile(next))
     assert.equal(reopened.duration, seconds)
@@ -128,8 +128,8 @@ test('Wizard showcase without a document keeps an authored 2D scene and its loca
   assert.equal(adopted.document.layers, current.layers)
   assert.equal(adopted.document.layers[0].source, 'blob:http://localhost/user-cutout')
   assert.equal(adopted.document.name, 'Hero shot')
-  assert.equal(adopted.document.duration, 36)
-  assert.equal(adopted.document.sfx.length, 12)
+  assert.equal(adopted.document.duration, 42)
+  assert.equal(adopted.document.sfx.length, 14)
 })
 
 test('Wizard showcase without a document keeps placed 3D speakers', () => {
@@ -153,7 +153,7 @@ test('Wizard showcase without a document keeps authored world SFX on an empty Vi
   assert.equal(adopted.document.slots, current.slots)
   assert.equal(adopted.document.worldSfx, current.worldSfx)
   assert.equal(adopted.document.worldSfx?.[0].id, 'portal-1')
-  assert.equal(adopted.document.sfx.length, 12)
+  assert.equal(adopted.document.sfx.length, 14)
 })
 
 test('Wizard showcase without a document keeps authored screen media on a monitor-only stage', () => {

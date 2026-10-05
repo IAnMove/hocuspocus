@@ -1,6 +1,7 @@
 import { atmosEye, atmosFallbackLook, isAtmosDressing } from './atmos/index.ts'
 import { cylinderUvOffset, isCylinderBackdrop, wrapUnit } from './backdrop.ts'
 import { cameraEyeAtTime, cameraLookAtTime, projectPoint } from './camera.ts'
+import { shakeCamera } from './cameraShake.ts'
 import { scene3dSlotColor } from './document.ts'
 import type { Scene3DDocument, Scene3DLoop } from './types.ts'
 
@@ -63,16 +64,18 @@ export function renderScene3DSoftware(document: Scene3DDocument, sceneSeconds: n
     fillRect(frame, 0, height * 0.62, width, height, fallback.ground)
   } else fillRect(frame, 0, height * 0.62, width, height, [32, 34, 38])
   const rawEye = cameraEyeAtTime(document.camera, sceneSeconds, document.duration, document.slots)
-  const eye = fallback ? atmosEye(rawEye, sceneSeconds, document.duration, document.camera.family) : rawEye
-  const look = cameraLookAtTime(document.camera, sceneSeconds, document.duration, document.slots)
+  const posed = fallback ? atmosEye(rawEye, sceneSeconds, document.duration, document.camera.family) : rawEye
+  const { eye, look, roll } = shakeCamera(document.camera.shake, sceneSeconds, posed, cameraLookAtTime(document.camera, sceneSeconds, document.duration, document.slots))
   const aspect = width / height
   for (const slot of document.slots) {
     if (slot.media === 'image') continue
     const projected = projectPoint(slot.position, eye, look, document.camera.fov, aspect)
     if (!projected) continue
     const size = Math.max(6, 28 * slot.scale / Math.max(0.4, projected.depth))
-    const cx = projected.x * width
-    const cy = projected.y * height
+    // The camera rolls with the shake, so the picture turns the other way around its centre.
+    const dx = (projected.x - 0.5) * width, dy = (projected.y - 0.5) * height
+    const cx = width / 2 + dx * Math.cos(roll) - dy * Math.sin(roll)
+    const cy = height / 2 + dx * Math.sin(roll) + dy * Math.cos(roll)
     fillRect(frame, cx - size, cy - size * 1.6, cx + size, cy + size * 0.4, scene3dSlotColor(slot.slot))
   }
   return frame

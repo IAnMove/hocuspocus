@@ -4,6 +4,7 @@ import { useUiTranslation } from '../../i18n'
 import { ModalShell } from '../../components/common/ModalShell'
 import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
+import { animeCard } from './animeTemplates'
 import { SCENE3D_TEMPLATES, type Scene3DTemplate, type Scene3DTemplateId } from './templates'
 import { filterScene3DTemplates, settingsIn, type TemplateSetting } from './templateFilters'
 import { CORE_TEMPLATES, isCoreTemplate, templateCollections } from './templateCatalog'
@@ -184,7 +185,7 @@ function ShotPreview({ picked, current, locale }: { picked?: Pick; current?: Sce
     <p className="text-sm leading-5 text-text-secondary">{picked.pack.description || t('userTemplates.noDescription')}</p>
   </div>
   const item = SCENE3D_TEMPLATES.find(template => template.id === picked.id)
-  const card = campaignCard(picked.id, locale) ?? actionCard(picked.id, locale)
+  const card = campaignCard(picked.id, locale) ?? actionCard(picked.id, locale) ?? animeCard(picked.id, locale)
   return <div className="space-y-3" data-testid="world3d-shot-preview">
     <Scene3DTemplateThumb id={picked.id} portrait={item?.frameFormat === 'portrait'} fill />
     <h3 className="text-base font-semibold text-text-primary">{t(`template.${picked.id}.title`)}</h3>

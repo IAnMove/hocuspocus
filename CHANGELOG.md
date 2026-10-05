@@ -15,6 +15,28 @@ the scene's environment light back as flat fill, so scenes lit mostly by the
 room environment keep their colours, and the ink no longer shows as black
 specks through holes in scanned meshes.
 
+Video 3D has eight anime shots (tag `anime`, 1920×1080 at 24 fps) for the
+classic 1980s TV-anime tricks: `anime-speedline-charge`, `anime-impact-frame`,
+`anime-snap-zoom`, `anime-sword-clash`, `anime-face-off`, `anime-airship-flyby`,
+`anime-fleet-approach` and `anime-eyecatch`. Characters are empty flat cutouts
+and vehicles empty GLBs, bound by object id like any other shot; a GLB, static
+or with a clip, can take a cutout's place (with `renderLook: "toon"` it is drawn
+in cel bands to match). The objects, timings and bindings are
+in [docs/development/WORLD3D_TEMPLATES_AGENTS.md](docs/development/WORLD3D_TEMPLATES_AGENTS.md).
+They need four small engine additions, all available to every shot:
+`camera.shake` (seeded windows in scene seconds, the same in the editor, the
+MP4 export and the software preview; `world3d.scene.patch` validates it),
+`camera.framing.moveStart`/`moveEnd`/`ease: "snap"` for a crash zoom inside part
+of the shot, `screenBackdrop` (a colour and screen effects painted behind the
+world, so speed lines sit behind the characters), and the screen effects
+`impact_flash` and `impact_invert`, full-frame impact frames that Video 2D and
+Series shots can use too. The magic/anime effect showcase is now 14 effects and
+42 seconds. `speedlines` now reads `intensity` (the number and weight of the
+lines; 1 draws the original 65), and a production subject that is a GLB turns a
+cutout object into a model, and a picture turns a model object into a cutout.
+`world3d.scene.patch` with `retime` also stretches the shake windows and the
+backdrop's effects.
+
 Series 3D shots play their sound effects and screen effects. A 3D shot got the
 location's ambience, the stinger and its music but dropped `sfx` and `fx`, so an
 explosion or a laser in a 3D shot was silent and anime speed lines or a manga
