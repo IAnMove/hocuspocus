@@ -15,6 +15,8 @@ import {
   DEFAULT_TOON, INK_FRAGMENT, INK_VERTEX, OUTLINE_NORMAL, ToonLook, environmentFill, inkMaterial, isInkHull, outlineNormals,
   resolveToon,
 } from '../src/features/scene3d/toonLook.ts'
+import { parseWorldSfx } from '../src/features/sceneFx/world.ts'
+import { syncWorldSfx } from '../src/features/sceneFx/worldRuntime.ts'
 
 /** What three hands onBeforeCompile for a toon material, before includes are resolved. */
 function toonShader() {
@@ -158,6 +160,28 @@ test('image cutouts and objects outside the model roots keep their authored mate
     assert.ok(model.children[0].material instanceof MeshToonMaterial)
     assert.equal(cutout.material, cutoutMaterial)
     assert.equal(cutout.children.length, 0)
+  })
+  look.dispose()
+})
+
+test('world effect sprites (clouds, smoke, rain) keep their own shaders and get no ink', () => {
+  const scene = new Scene()
+  const model = new Group()
+  model.add(new Mesh(new BoxGeometry(), new MeshStandardMaterial()))
+  scene.add(model)
+  const nodes = new Map()
+  syncWorldSfx(scene, nodes, parseWorldSfx(['fog', 'smoke', 'rain'].map((kind, index) => ({ id: kind, kind, start: 0, end: 4, seed: index + 1 }))), 1, [])
+  const effects = []
+  for (const node of nodes.values()) node.root.traverse(object => { if (object.isMesh || object.isPoints) effects.push([object, object.material, object.children.length]) })
+  assert.ok(effects.length > 10)
+  const look = new ToonLook()
+  look.sync(settings, [{ root: model, outline: true }])
+  drawn(look, () => {
+    assert.ok(model.children[0].material instanceof MeshToonMaterial)
+    for (const [object, material, children] of effects) {
+      assert.equal(object.material, material)
+      assert.equal(object.children.length, children)
+    }
   })
   look.dispose()
 })
