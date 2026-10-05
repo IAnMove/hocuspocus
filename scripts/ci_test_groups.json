@@ -233,7 +233,8 @@
         "tests/test_production_generation_link.py",
         "tests/test_production_shot_regeneration.py",
         "tests/test_series_language_versions.py",
-        "tests/test_local_mcp.py"
+        "tests/test_local_mcp.py",
+        "tests/test_verify_clean_repo.py"
       ]
     },
     {

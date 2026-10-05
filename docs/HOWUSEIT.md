@@ -13,6 +13,6 @@ Operator guides for HocusPocus subsystems. Prefer these over inventing a second 
 ## Additional operator guides
 
 - [Image Studio intents and editing](image-studio/HOWUSEIT.md)
-- [In-app Help tutorial](help/HOWUSEIT.md)
+- [In-app Help tutorial (maintainer guide)](help/HELP_OVERLAY.md)
 - [Tijeral cut-paper example and optional downloads](cut-paper/HOWUSEIT.md)
 - [Experimental H3 30-second clips](development/H3_EXTENDED_DURATION.md)

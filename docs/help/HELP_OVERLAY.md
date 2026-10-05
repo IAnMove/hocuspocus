@@ -1,4 +1,4 @@
-# HOWUSEIT — In-app Help tutorial
+# HELP_OVERLAY — In-app Help tutorial
 
 Maintainer guide for the **How to use HocusPocus** overlay. This is the
 in-product tour, not a second copy of README and not a Wizard capability.
@@ -7,7 +7,7 @@ UI: top gallery chrome **Help** button (`aria-label` from `help:openAria`).
 Code: `ui/src/components/Help/HelpOverlay.tsx`, lazy wrapper in `ui/src/App.tsx`.
 Copy: `ui/src/i18n/locales/{en,es}/help.json`. Stills: `ui/public/help/`.
 
-Related: [operator index](../HOWUSEIT.md), [APP_USER_GUIDE](../APP_USER_GUIDE.md),
+Related: [operator index](../HOWUSEIT.md), [user guide](../APP_USER_GUIDE.md),
 [Tijeral](../cut-paper/HOWUSEIT.md).
 
 ---
