@@ -637,3 +637,15 @@ rhythm. Check `audio.phonemes.setup` and install through that tool when needed,
 then resume the native job. Its already recorded voice is reused. Inspect each
 line's `cueCount` in `series.episode.render_native.status` before approving the
 visual result.
+
+## Publishing a reviewed take with an exact resource name
+
+A script can retain its original resource names after an audio or image retake.
+Use `assets.upload` with `source`, `copy_to_workspace: true` and
+`destination_filename` in the same workspace. The extension must match the
+source. To replace an existing resource, supply its current
+`expected_destination_sha256`; a stale or missing hash returns
+`destination_conflict` without replacing it. Reuse the same `intent_id` on a
+transport retry. The source remains available, bytes are copied without media
+conversion, and a generation sidecar retains provenance with the destination
+asset name. This is a CPU operation and downloads no models.
