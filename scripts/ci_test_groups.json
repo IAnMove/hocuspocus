@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 1575,
+      "weight": 1582,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -56,6 +56,8 @@
         "tests/test_generation_runtime.py",
         "tests/test_example_assets.py",
         "tests/test_secure_download.py",
+        "tests/test_security_local.py",
+        "tests/test_host_guard.py",
         "tests/test_asset_library.py",
         "tests/test_inpaint_preparation.py",
         "tests/test_h3_benchmark_client.py",

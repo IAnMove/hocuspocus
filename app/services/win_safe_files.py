@@ -134,6 +134,10 @@ else:
 _CHUNK_SIZE = 64 * 1024  # 64 KB per chunk
 
 
+ACTIVE_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml",
+                                "application/javascript", "text/javascript", "application/ecmascript"})
+
+
 class ShareDeleteFileResponse(Response):
     """File response that opens with FILE_SHARE_DELETE on Windows so the
     file can be deleted/renamed even while we're streaming it.
@@ -173,6 +177,10 @@ class ShareDeleteFileResponse(Response):
 
         # Header-only init; body is streamed in __call__.
         super().__init__(status_code=200, media_type=self.media_type)
+        # An uploaded .html or .svg must not run as the app: no sniffing, and active types download.
+        self.headers["x-content-type-options"] = "nosniff"
+        if self.media_type.split(";", 1)[0].strip().lower() in ACTIVE_MEDIA_TYPES:
+            self.headers["content-disposition"] = "attachment"
         self._set_headers()
 
     def _set_headers(self) -> None:
