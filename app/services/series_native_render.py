@@ -43,7 +43,11 @@ from services.series_shot_plan import build_shot_spec, kit_ref, language_key, pl
 
 KIND = "native"
 STAGES = ("voices", "scene", "export", "import", "done")
+ACTIVE = ("queued", "running", "cancelling")
 MAX_TAKES = 3
+# An export the server lost (interrupted by a restart, discarded, forgotten) is asked for again under a new intent.
+EXPORT_RETRIES = 3
+INTERRUPTED = "The server restarted during this render; resume to continue"
 MAX_WER = 0.34
 SPEECH_CODES = {"english": "en", "spanish": "es", "french": "fr", "german": "de", "italian": "it", "portuguese": "pt",
                 "japanese": "ja", "korean": "ko", "chinese": "cmn", "russian": "ru"}
@@ -176,9 +180,8 @@ class SeriesNativeRender:
     def start(self, workspace: str, series_id: str, episode_id: str, *, shot_ids: list[str] | None = None,
               approve: bool = False, language: str | None = None) -> dict[str, Any]:
         raw_series, language, shots = self._preflight(workspace, series_id, episode_id, shot_ids, language)
-        store = self._store(workspace)
-        for job in store.list():
-            if job.get("episodeId") == episode_id and job.get("language") == language and job.get("status") in ("queued", "running"):
+        for job in self.jobs(workspace):
+            if job.get("episodeId") == episode_id and job.get("language") == language and job.get("status") in ACTIVE:
                 raise NativeRenderError("already_running", "This episode is already rendering on the server")
         job_id = f"native-{uuid.uuid4().hex[:12]}"
         job = {"jobId": job_id, "workspace": workspace, "seriesId": series_id, "episodeId": episode_id, "status": "queued",
@@ -186,8 +189,7 @@ class SeriesNativeRender:
                "current": 0, "total": len(shots),
                "items": [{"shotId": shot["id"], "stage": "voices", "status": "queued", "lines": {}} for shot in shots],
                "createdAt": time.time(), "message": "Queued"}
-        store.save(job)
-        self._launch(workspace, job_id)
+        self._launch(workspace, job)
         return job
 
     def _preflight(self, workspace: str, series_id: str, episode_id: str, shot_ids: list[str] | None,
@@ -214,7 +216,9 @@ class SeriesNativeRender:
                                                               *(beat.get("characterId") for beat in shot.get("dialogueBeats") or [])] if cid)
         return [str(names.get(cid, cid)) for cid in ids if (kit_ref(series, cid) or {}).get("id") not in kits]
 
-    def _launch(self, workspace: str, job_id: str) -> None:
+    def _launch(self, workspace: str, job: dict) -> None:
+        """Save the job and run it on a thread; the thread is registered before the save so a reader never sees an orphan."""
+        job_id = job["jobId"]
         with self._lock:
             running = self._threads.get(job_id)
             if running and running.is_alive():
@@ -222,16 +226,31 @@ class SeriesNativeRender:
             self._cancel.discard(job_id)
             thread = threading.Thread(target=self._run, args=(workspace, job_id), name=f"series-native-{job_id}", daemon=True)
             self._threads[job_id] = thread
-            thread.start()
+        self._store(workspace).save(job)
+        thread.start()
+
+    def _reconcile(self, workspace: str, job: dict) -> dict:
+        """A job that says it is running without a live thread here was cut by a restart: it is interrupted, once."""
+        if job.get("status") not in ACTIVE:
+            return job
+        thread = self._threads.get(job["jobId"])
+        if thread is not None and (thread.ident is None or thread.is_alive()):
+            return job
+        for item in job.get("items") or []:
+            if item.get("status") == "running":
+                item["status"] = "queued"
+        job.update(status="interrupted", message=INTERRUPTED, finishedAt=time.time())
+        self._store(workspace).save(job)
+        return job
 
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
-        return self._store(workspace).list()
+        return [self._reconcile(workspace, job) for job in self._store(workspace).list()]
 
     def status(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self._store(workspace).load(job_id)
         if not job:
             raise NativeRenderError("not_found", "Render job not found", 404)
-        return job
+        return self._reconcile(workspace, job)
 
     def cancel(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self.status(workspace, job_id)
@@ -244,7 +263,7 @@ class SeriesNativeRender:
 
     def resume(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self.status(workspace, job_id)
-        if job["status"] in ("queued", "running"):
+        if job["status"] in ACTIVE:
             return job
         for item in job["items"]:
             if item["status"] != "done":
@@ -254,8 +273,7 @@ class SeriesNativeRender:
                 # scene stage rebuilds the same document and replays the same export intent.
                 item["stage"] = "scene"
         job.update(status="queued", message="Resuming", error=None)
-        self._store(workspace).save(job)
-        self._launch(workspace, job_id)
+        self._launch(workspace, job)
         return job
 
     # Worker --------------------------------------------------------------
@@ -298,18 +316,24 @@ class SeriesNativeRender:
             raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
         kits = self.deps.read_kits(workspace)
         item["status"] = "running"
-        if item["stage"] == "voices":
+        if item["stage"] in ("voices", "scene"):
+            # Recorded lines are reused; a resume after a restart (or after a cleanup) only records what is missing.
             self._voices(workspace, job, item, series, shot, kits)
             item["stage"] = "scene"
             self._save(workspace, job)
         three_d = shot.get("productionMethod") == "animation_3d"
-        if item["stage"] == "scene":
-            if three_d:
-                self._scene3d(workspace, job, item, series, shot, kits)
-            else:
-                self._scene(workspace, job, item, series, episode, shot, kits, index)
-        if item["stage"] == "export":
-            self._export(workspace, job, item)
+        for _attempt in range(EXPORT_RETRIES + 1):
+            if item["stage"] == "scene":
+                if three_d:
+                    self._scene3d(workspace, job, item, series, shot, kits)
+                else:
+                    self._scene(workspace, job, item, series, episode, shot, kits, index)
+            if item["stage"] != "export" or self._export(workspace, job, item):
+                break
+            # The export was lost (interrupted, discarded or forgotten by the server): the scene stage asks again
+            # with a new intent instead of waiting for a state that cannot come.
+        else:
+            raise NativeRenderError("export_failed", f"The export was lost {EXPORT_RETRIES + 1} times", 502)
         if item["stage"] == "import":
             self._import(workspace, job, item, "animation_3d" if three_d else "animation_2d")
 
@@ -443,7 +467,7 @@ class SeriesNativeRender:
         saved = _ok(self.deps.call("scenes.document.save", {"version": 1, "intent_id": f"{job['jobId']}-{shot['id']}-{digest}", "input": {
             "workspace": workspace, "name": self._scene_name(job, series, episode, shot), "document": document}}), "save scene")
         item.update(scene=(saved.get("result") or {}).get("name"), duration=document["duration"], digest=digest, stage="export",
-                    exportIntent=f"{job['jobId']}-{shot['id']}-{digest}-export")
+                    exportIntent=f"{job['jobId']}-{shot['id']}-{digest}-export{self._retry_suffix(item)}")
         exported = self.deps.call("scenes.video2d.export", {"version": 1, "intent_id": item["exportIntent"],
                                                             "input": {"workspace": workspace, "document": document}})
         _ok(exported, "export")
@@ -467,7 +491,7 @@ class SeriesNativeRender:
         characters = {value["id"]: (kit_ref(series, value["id"]) or {}).get("id") for value in series.get("characters") or []}
         scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError)
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
-        intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export"[:160]
+        intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
         _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {
             "workspace": workspace, "document": scene["document"], "quality": config.get("quality", "draft")}}), "export 3D")
         # A Video 3D scene has no dialogue beats: the take carries its lines for the episode's subtitles.
@@ -481,17 +505,33 @@ class SeriesNativeRender:
         suffix = "" if job.get("original", True) else f"-{job['language']}"
         return f"{series['id']}-{episode['id']}-{shot['id']}{suffix}"[:100]
 
-    def _export(self, workspace: str, job: dict, item: dict) -> None:
+    @staticmethod
+    def _retry_suffix(item: dict) -> str:
+        retries = int(item.get("exportRetries") or 0)
+        return f"-r{retries}" if retries else ""
+
+    def _export(self, workspace: str, job: dict, item: dict) -> bool:
+        """True when the take's video is there; False when the export was lost and the scene stage must ask again."""
         while True:
             tool = item.get("exportReceipt") or "scenes.video2d.export.receipt"
             receipt = self.deps.call(tool, {"version": 1, "input": {"workspace": workspace, "intent_id": item["exportIntent"]}})
+            error = receipt.get("error") if receipt.get("_is_error") and isinstance(receipt.get("error"), dict) else None
             body = receipt.get("result") if isinstance(receipt.get("result"), dict) else receipt
             artifacts = (body.get("receipt") or {}).get("artifacts") or []
             task = body.get("task") or {}
             if artifacts:
                 item.update(video=artifacts[0]["name"], stage="import")
                 self._save(workspace, job)
-                return
+                return True
+            lost = task.get("status") in ("interrupted", "discarded") or (
+                error is not None and (error.get("status") == 404 or error.get("code") == "receipt_not_found"))
+            if lost:
+                item.update(stage="scene", exportRetries=int(item.get("exportRetries") or 0) + 1,
+                            error=f"export {task.get('status') or 'unknown'}; asking again")
+                self._save(workspace, job)
+                return False
+            if error is not None:
+                raise NativeRenderError("tool_failed", f"export receipt: {error.get('message') or error}"[:300], 502)
             if task.get("status") in ("failed", "cancelled"):
                 raise NativeRenderError("export_failed", str(task.get("error") or task.get("message") or "export failed")[:300], 502)
             if self._cancelled(job["jobId"]):
