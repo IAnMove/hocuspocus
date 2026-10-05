@@ -318,3 +318,17 @@ def test_a_pose_blink_covers_its_own_eyes_where_the_base_blink_would_not(tmp_pat
         return int((closed.min(axis=2) > 235).sum())
     assert white_left(wide_rig, wide_rig["blink"]) == 0, "its own blink closes both eyes"
     assert white_left(wide_rig, wide_rig["blink"]) <= white_left(wide_rig, base_rig["blink"])
+
+
+def test_a_wide_pair_of_eyes_gets_a_blink_no_wider_than_the_frame_so_video_2d_draws_it_full_size():
+    """Video 2D fits a layer into a 16:9 box: a 2.5:1 blink was drawn at ~70% and the sclera showed around the lids."""
+    from services.flat_rig import MAX_SPRITE_RATIO, _blink_box
+    for image in (_cutout(), _cutout(size=(520, 760))):
+        rig = rig_pose(image, rig_style(None))
+        blink = rig["blink"]
+        assert blink.width / blink.height <= MAX_SPRITE_RATIO + 0.02
+        edge = max(rig["width"], rig["height"])
+        assert abs(rig["eyes"]["scale"] * edge - blink.height) <= 1, "the anchor height is the sprite height"
+    assert _blink_box(100, 200, 350, 260, 1000) == (100, 159, 350, 300)
+    assert _blink_box(100, 10, 350, 70, 1000)[1] == 0, "near the top it grows downward instead"
+    assert _blink_box(100, 200, 200, 260, 1000) == (100, 200, 200, 260), "a sprite already narrow enough is unchanged"
