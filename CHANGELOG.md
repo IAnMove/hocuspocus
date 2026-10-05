@@ -6,6 +6,11 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+`series.update` (and `PUT /api/v1/series/{id}`) keeps every top-level field it
+is not sent. It replaced the whole project, so an agent that sent only
+`allowedProductionMethods` emptied the episodes, characters, locations and
+assets of a finished series; send an empty list to clear a field.
+
 Native Series renders again on an install without the optional phoneme
 model. Since #821 every line with dialogue failed there; the render now asks
 `audio.mouth_cues` for `engine: "auto"` (phonemes when installed, Rhubarb
