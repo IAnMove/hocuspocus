@@ -9,6 +9,10 @@ import tempfile
 import types
 import unittest
 
+import pytest
+
+pytest.importorskip("torch")
+
 import torch
 from safetensors.torch import save_file
 
