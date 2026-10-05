@@ -25,6 +25,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+from services.media_dimensions import probe_video_size
 from services.mix_concat import (
     _run_ffmpeg_command,
     hold_crossfade_offsets,
@@ -279,13 +280,21 @@ def _subtitles_filter(path: str, style: str) -> str:
     return "".join(f"\\{char}" if char in "\\'[],;" else char for char in described)
 
 
+def subtitle_style(size: tuple[int, int] | None) -> str:
+    """libass sizes SRT text against a 288-line script, so a tall frame needs a smaller font in those units.
+    Vertical video (TikTok, Reels) keeps captions above the app's bottom buttons."""
+    font, margin = (11, 62) if size and size[1] > size[0] else (20, 28)
+    return (f"FontName=DejaVu Sans,FontSize={font},PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,"
+            f"Outline=2,Shadow=0,MarginV={margin}")
+
+
 def burn_subtitles(output_path: str, srt_name: str, *, ffmpeg: str,
                    abort_callback: Callable[[], bool] | None = None) -> dict[str, Any]:
     """Write ``<episode>_subtitled.mp4`` with the subtitles drawn on the picture; the clean file stays."""
     source = os.path.abspath(output_path)
     target = f"{os.path.splitext(source)[0]}_subtitled.mp4"
     srt = os.path.join(os.path.dirname(source), srt_name).replace("\\", "/")
-    style = "FontName=DejaVu Sans,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=28"
+    style = subtitle_style(probe_video_size(source))
     command = [
         ffmpeg, "-y", "-hide_banner", "-i", source,
         "-vf", _subtitles_filter(srt, style),

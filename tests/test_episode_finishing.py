@@ -162,6 +162,14 @@ def _has_libass() -> bool:
     return " subtitles " in listed
 
 
+def test_vertical_video_gets_smaller_subtitles_above_the_app_buttons():
+    from services.episode_finishing import subtitle_style
+
+    assert "FontSize=20" in subtitle_style((1920, 1080)) and "MarginV=28" in subtitle_style(None)
+    tall = subtitle_style((1080, 1920))
+    assert "FontSize=11" in tall and "MarginV=62" in tall
+
+
 @pytest.mark.skipif(not _has_libass(), reason="ffmpeg with libass required")
 def test_burned_subtitles_are_a_second_file_and_the_clean_one_stays(tmp_path):
     from services.episode_finishing import burn_subtitles

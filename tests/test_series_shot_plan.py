@@ -4,7 +4,7 @@ import shutil
 import pytest
 
 from services.series_shot_plan import (
-    background_for, build_shot_spec, card_texts, classify_camera, classify_framing, language_key, normalize_layout2d, plan_cast,
+    background_for, build_shot_spec, card_texts, classify_camera, classify_framing, frame_size, language_key, normalize_layout2d, plan_cast,
     plan_timing, sound_tracks, spread,
 )
 
@@ -100,6 +100,18 @@ def test_a_full_shot_spec_with_lines_card_and_focus():
     card = build_shot_spec(series(), {"id": "ep1"}, {"id": "s0", "durationSeconds": 6, "layout2d": {"card": {"kind": "title", "title": "VALLE"}}},
                            workspace="cast", recorded={})
     assert card["framing"] == "title" and card["cast"] == [] and card["duration"] == 6 and card["texts"][0]["text"] == "VALLE"
+
+
+def test_a_vertical_series_plans_1080x1920_with_wider_spacing_and_smaller_cards():
+    vertical = {**series(), "provider": {"videoSettings": {"orientation": "portrait"}}}
+    assert frame_size(vertical) == (1080, 1920) and frame_size(series()) == (1920, 1080)
+    assert spread(2, portrait=True) == [25.0, 75.0] and spread(3, portrait=True) == [18.0, 50.0, 82.0]
+    shot = {"id": "s1", "framing": "two-shot", "visibleCharacterIds": ["kevin", "gary"], "dialogueBeats": []}
+    spec = build_shot_spec(vertical, {"id": "ep1"}, shot, workspace="cast", recorded={})
+    assert (spec["width"], spec["height"]) == (1080, 1920) and [item["x"] for item in spec["cast"]] == [25.0, 75.0]
+    wide = card_texts({"kind": "title", "title": "VALLE", "body": "Episodio 1"}, 5)
+    tall = card_texts({"kind": "title", "title": "VALLE", "body": "Episodio 1"}, 5, portrait=True)
+    assert [text["size"] for text in tall] == [round(text["size"] * 0.6, 2) for text in wide] and tall[0]["maxWidth"] == 90
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node required")
