@@ -7,6 +7,7 @@ import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
 import { PIXEL_TEMPLATE_IDS } from './pixel/pixelTemplateIds'
 import { ATMOS_TEMPLATE_IDS } from './atmos/registryIds.ts'
 import { TECHNIQUE_TEMPLATE_IDS } from './techniqueTemplateIds'
+import { ANIME_TEMPLATE_IDS } from './animeTemplateIds'
 import type { AtmosSetId } from './atmos/registryIds.ts'
 import type { AtmosSettings } from './atmos/params.ts'
 
@@ -128,6 +129,7 @@ export const SCENE3D_TEMPLATE_IDS = [
   'voxel-talk',
   ...ATMOS_TEMPLATE_IDS,
   ...TECHNIQUE_TEMPLATE_IDS,
+  ...ANIME_TEMPLATE_IDS,
 ] as const
 
 export type Scene3DTemplateId = (typeof SCENE3D_TEMPLATE_IDS)[number]
@@ -215,6 +217,8 @@ export type Scene3DCamera = {
   framing?: Scene3DFraming
   /** Authored cameras are landscape; portrait shots store the adapted camera. */
   frameFormat?: 'landscape' | 'portrait'
+  /** Camera shake windows in scene seconds, added after the pose is computed. */
+  shake?: import('./cameraShake').Scene3DCameraShake[]
 }
 
 export type Scene3DFraming = {
@@ -231,6 +235,11 @@ export type Scene3DFraming = {
   fovFrom?: number
   fovTo?: number
   relativeToFacing?: boolean
+  /** Fractions of the shot (0–1) that hold the move; omitted values use the whole shot. */
+  moveStart?: number
+  moveEnd?: number
+  /** `smooth` (default) eases in and out; `snap` leaves at full speed, like a crash zoom. */
+  ease?: 'smooth' | 'snap'
 }
 
 export type Scene3DLight = {
@@ -275,6 +284,8 @@ export type Scene3DDocument = {
   pixelWorld?: import('./pixel/pixelWorld').PixelWorld
   /** Spatial effects in world meters. Screen overlays stay on `sfx`. */
   worldSfx?: import('../sceneFx/world').WorldSfx[]
+  /** A flat colour and screen effects painted behind every 3D object (over an environment plate when there is one). */
+  screenBackdrop?: import('./screenBackdrop').ScreenBackdrop
   texts?: import('../../lib/kineticText').KineticText[]
   lyrics?: import('../../lib/kineticText').SceneLyrics
   /** Timeline rate; exported duration is duration / playbackSpeed. */

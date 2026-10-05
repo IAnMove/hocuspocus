@@ -364,7 +364,8 @@
     "creative": "Creativas",
     "perspective": "Perspectivas",
     "animated": "Fondos vivos",
-    "pixel": "Mundos pixel"
+    "pixel": "Mundos pixel",
+    "anime": "Anime"
   },
   "setting": {
     "sea": "Mar",
@@ -3399,6 +3400,38 @@
     "cine-ultraviolet": {
       "title": "Ultravioleta",
       "description": "Estilo. Una luz violeta y un rostro cercano, un poco desde arriba."
+    },
+    "anime-speedline-charge": {
+      "title": "Carga con líneas de velocidad",
+      "description": "Una figura sobre líneas de concentración animadas; la cámara salta de plano medio a la cara y tiembla al llegar."
+    },
+    "anime-impact-frame": {
+      "title": "Fotograma de impacto",
+      "description": "Llega el golpe: dos fotogramas en negativo, tres en blanco con líneas de tinta, un estallido y una sacudida que se apaga."
+    },
+    "anime-snap-zoom": {
+      "title": "Zoom relámpago",
+      "description": "Figura entera y, en menos de un tercio de segundo, empujón brusco hasta los ojos, con líneas de velocidad durante el movimiento."
+    },
+    "anime-sword-clash": {
+      "title": "Choque de espadas",
+      "description": "Dos luchadores entran a la carrera por los lados y se cruzan en el centro: tajo, onda expansiva, fotograma blanco y sacudida fuerte."
+    },
+    "anime-face-off": {
+      "title": "Duelo de miradas",
+      "description": "Dos rivales se miran en primer plano, uno en cada mitad, sobre líneas oscuras; empuje lento y un destello final."
+    },
+    "anime-airship-flyby": {
+      "title": "Pasada de aeronave",
+      "description": "Un vehículo cruza un cielo pintado en un arco suave; la cámara lo sigue y las nubes pasan de largo."
+    },
+    "anime-fleet-approach": {
+      "title": "Llegada de la flota",
+      "description": "Cuatro copias de un mismo vehículo salen de un banco de nubes en formación escalonada y vienen hacia la cámara."
+    },
+    "anime-eyecatch": {
+      "title": "Eyecatch (cortinilla)",
+      "description": "Cortinilla breve de cambio de escena: la figura llega girando desde el fondo sobre un fondo gráfico de líneas y estrellas."
     }
   },
   "atmos": {

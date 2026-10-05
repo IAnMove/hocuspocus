@@ -10,6 +10,7 @@ import { adaptAuthoredCameraToFrame } from './frameFormat.ts'
 import { actionTemplateDocument, ACTION_TEMPLATES, ACTION_CATEGORIES } from './actionTemplates'
 import { atmosTemplateDocument, ATMOS_TEMPLATES, ATMOS_CATEGORIES } from './atmos/templates.ts'
 import { techniqueDocument, TECHNIQUE_TEMPLATES, TECHNIQUE_CATEGORIES } from './techniqueTemplates'
+import { animeTemplateDocument, ANIME_TEMPLATES, ANIME_CATEGORIES } from './animeTemplates'
 import { createDefaultScene3DDocument, parseScene3DDocument } from './document.ts'
 import topdownCliffScene from './topdownCliffScene.json' with { type: 'json' }
 import topdownDragonPortalsScene from './topdownDragonPortalsScene.json' with { type: 'json' }
@@ -26,7 +27,7 @@ export type Scene3DTemplate = {
   frameFormat?: 'landscape' | 'portrait'
 }
 
-export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative' | 'perspective' | 'animated' | 'pixel'
+export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative' | 'perspective' | 'animated' | 'pixel' | 'anime'
 export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
 export type Scene3DTemplateFilter = Scene3DTemplateCategory | Scene3DTemplateTag
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
@@ -42,6 +43,7 @@ export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCateg
   ...ACTION_CATEGORIES,
   ...ATMOS_CATEGORIES,
   ...TECHNIQUE_CATEGORIES,
+  ...ANIME_CATEGORIES,
   'reflective-stage': 'cinema',
   'character-materialization': 'cinema',
   'blast-stage': 'cinema',
@@ -187,6 +189,7 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   ...ACTION_TEMPLATES,
   ...ATMOS_TEMPLATES,
   ...TECHNIQUE_TEMPLATES,
+  ...ANIME_TEMPLATES,
 ]
 
 const LAYOUTS: Partial<Record<Scene3DTemplateId, Partial<Record<Scene3DSlotId, Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale'>>>>> = {
@@ -378,6 +381,13 @@ function emptySlot(id: Scene3DSlotId): Scene3DSlot {
   }
 }
 
+/** Each family builds only its own ids and returns null for the others; the first match wins. */
+const FAMILY_BUILDERS: ReadonlyArray<(id: string) => Scene3DDocument | null | undefined> = [
+  creativeTemplateDocument, pixelTemplateDocument, darkFantasyTemplateDocument, actionTemplateDocument, animeTemplateDocument,
+  campaignTemplateDocument, effectsTemplateDocument, speechTemplateDocument, mediaTemplateDocument, cinematicDocument,
+  atmosTemplateDocument, techniqueDocument,
+]
+
 export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
   if (id === 'topdown-dragon-portals') {
     const scene = parseScene3DDocument(structuredClone(topdownDragonPortalsScene))
@@ -387,28 +397,10 @@ export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
     const scene = parseScene3DDocument(structuredClone(topdownCliffScene))
     if (scene) return scene
   }
-  const creative = creativeTemplateDocument(id)
-  if (creative) return creative
-  const pixel = pixelTemplateDocument(id)
-  if (pixel) return pixel
-  const fantasy = darkFantasyTemplateDocument(id)
-  if (fantasy) return fantasy
-  const action = actionTemplateDocument(id)
-  if (action) return action
-  const campaign = campaignTemplateDocument(id)
-  if (campaign) return campaign
-  const effects = effectsTemplateDocument(id)
-  if (effects) return effects
-  const speech = speechTemplateDocument(id)
-  if (speech) return speech
-  const media = mediaTemplateDocument(id)
-  if (media) return media
-  const cinematic = cinematicDocument(id)
-  if (cinematic) return cinematic
-  const atmos = atmosTemplateDocument(id)
-  if (atmos) return atmos
-  const technique = techniqueDocument(id)
-  if (technique) return technique
+  for (const build of FAMILY_BUILDERS) {
+    const built = build(id)
+    if (built) return built
+  }
   const template = SCENE3D_TEMPLATES.find(item => item.id === id)
   if (!template) throw new Error(`unknown_template:${id}`)
   const layout = LAYOUTS[template.id] ?? {}

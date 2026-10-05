@@ -7,6 +7,7 @@ import { rasterizeWorldFx, SPRITE_RECT } from './explosionSprite'
 import { applyRetroLook, isRetroLook } from './retroPaint'
 import { stormPainters } from './stormPaint'
 import { glow } from './energyBrush'
+import { isFrameFx, paintFrameFx } from './impactPaint'
 
 type Painter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, progress: number) => void
 const tau = Math.PI * 2
@@ -79,9 +80,12 @@ const rings: Painter = (ctx, cue, time, progress) => {
     ctx.globalAlpha = .8; circle(ctx, Math.cos(angle) * radius, Math.sin(angle) * radius, .003)
   }
 }
+/** Intensity scales how many lines there are and how thick: 1 is the original 65 hairlines. */
 const speedlines: Painter = (ctx, cue, time) => {
-  for (let i = 0; i < 65; i++) {
-    const angle = fxRandom(cue.seed, i) * tau, phase = (time * .7 + fxRandom(cue.seed, i + 65)) % 1
+  const count = Math.max(8, Math.round(65 * cue.intensity))
+  ctx.lineWidth = .002 * cue.intensity
+  for (let i = 0; i < count; i++) {
+    const angle = fxRandom(cue.seed, i) * tau, phase = (time * .7 + fxRandom(cue.seed, i < 65 ? i + 65 : i + 4096)) % 1
     const radius = .13 + phase * .6
     ctx.globalAlpha = Math.sin(phase * Math.PI) * .6
     line(ctx, Math.cos(angle) * radius, Math.sin(angle) * radius, Math.cos(angle) * (radius + .15), Math.sin(angle) * (radius + .15))
@@ -107,6 +111,30 @@ const aurora: Painter = (ctx, cue, time) => {
 }
 const special: Record<string, Painter> = { portal: rings, shockwave: rings, speedlines, scanline, aurora, explosion: paintExplosion, fireworks, ...magicPainters, ...animePainters, ...stormPainters }
 
+/** Effects that work on the picture under them: an overlay canvas copies the stage first. */
+export function needsFrameSource(kind: string) {
+  return isRetroLook(kind) || kind === 'impact_invert'
+}
+
+/** One cue around its x/y, scaled by size and turned by rotation. */
+function paintPlacedCue(ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, width: number, height: number) {
+  const progress = time / (cue.end - cue.start)
+  const scale = Math.min(width, height) * cue.size / 100
+  ctx.save(); ctx.translate(width * cue.x / 100, height * cue.y / 100); ctx.scale(scale, scale)
+  ctx.rotate((cue.rotation ?? 0) * Math.PI / 180)
+  ctx.fillStyle = cue.color; ctx.strokeStyle = cue.color; ctx.lineWidth = .002; ctx.lineCap = 'round'
+  if (cue.kind === 'explosion') paintExplosion(ctx, cue, time, progress)
+  else {
+    const sprite = isWorldSfxKind(cue.kind) && !stormPainters[cue.kind] && typeof ctx.drawImage === 'function' ? rasterizeWorldFx(cue, time) : null
+    if (sprite) {
+      ctx.save(); ctx.globalCompositeOperation = cue.kind === 'tornado' ? 'source-over' : 'lighter'
+      ctx.drawImage(sprite, SPRITE_RECT.x, SPRITE_RECT.y, SPRITE_RECT.width, SPRITE_RECT.height)
+      ctx.restore()
+    } else (special[cue.kind] ?? particles)(ctx, cue, time, progress)
+  }
+  ctx.restore()
+}
+
 /** Composited screen-space effects, identical in the 2D and 3D previews/exports. */
 export function paintSceneFx(
   ctx: CanvasRenderingContext2D,
@@ -117,28 +145,13 @@ export function paintSceneFx(
   source?: CanvasImageSource | null,
 ) {
   const live = cues.filter(cue => seconds >= cue.start && seconds < cue.end)
-  const looks = live.filter(cue => isRetroLook(cue.kind))
-  if (looks.length) {
-    if (source && typeof ctx.drawImage === 'function') ctx.drawImage(source, 0, 0, width, height)
-    for (const cue of looks) applyRetroLook(ctx, width, height, cue, seconds)
-  }
+  if (source && typeof ctx.drawImage === 'function' && live.some(cue => needsFrameSource(cue.kind))) ctx.drawImage(source, 0, 0, width, height)
+  for (const cue of live) if (isRetroLook(cue.kind)) applyRetroLook(ctx, width, height, cue, seconds)
   for (const cue of live) {
     if (isRetroLook(cue.kind)) continue
-    const time = seconds - cue.start, progress = time / (cue.end - cue.start)
-    const scale = Math.min(width, height) * cue.size / 100
-    ctx.save(); ctx.translate(width * cue.x / 100, height * cue.y / 100); ctx.scale(scale, scale)
-    ctx.rotate((cue.rotation ?? 0) * Math.PI / 180)
-    ctx.fillStyle = cue.color; ctx.strokeStyle = cue.color; ctx.lineWidth = .002; ctx.lineCap = 'round'
-    if (cue.kind === 'explosion') paintExplosion(ctx, cue, time, progress)
-    else {
-      const sprite = isWorldSfxKind(cue.kind) && !stormPainters[cue.kind] && typeof ctx.drawImage === 'function' ? rasterizeWorldFx(cue, time) : null
-      if (sprite) {
-        ctx.save(); ctx.globalCompositeOperation = cue.kind === 'tornado' ? 'source-over' : 'lighter'
-        ctx.drawImage(sprite, SPRITE_RECT.x, SPRITE_RECT.y, SPRITE_RECT.width, SPRITE_RECT.height)
-        ctx.restore()
-      } else (special[cue.kind] ?? particles)(ctx, cue, time, progress)
-    }
-    ctx.restore()
+    const time = seconds - cue.start
+    if (isFrameFx(cue.kind)) paintFrameFx(ctx, cue, time, width, height)
+    else paintPlacedCue(ctx, cue, time, width, height)
     if (cue.label) {
       ctx.save(); ctx.font = `600 ${Math.round(height * .032)}px monospace`; ctx.textAlign = 'left'
       const x = width * .045, y = height * .09

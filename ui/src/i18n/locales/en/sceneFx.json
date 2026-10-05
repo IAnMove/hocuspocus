@@ -1,6 +1,6 @@
 {
   "title": "Scene SFX",
-  "help": "Visual overlays for 2D and 3D with optional local sound. Demos replace SFX and extend duration: 3 s per effect; magic/anime 36 s; retro consoles 30 s. Actors, camera and audio are retained.",
+  "help": "Visual overlays for 2D and 3D with optional local sound. Demos replace SFX and extend duration: 3 s per effect; magic/anime 42 s; retro consoles 30 s. Actors, camera and audio are retained.",
   "effect": "Effect",
   "color": "Color",
   "sound": "Sound",
@@ -47,6 +47,8 @@
     "energy_beam": "Energy beam",
     "sword_slash": "Sword slash",
     "manga_impact": "Manga impact",
+    "impact_flash": "Impact flash",
+    "impact_invert": "Inverted impact frame",
     "fire": "Fire",
     "shield": "Energy shield",
     "tornado": "Tornado",
