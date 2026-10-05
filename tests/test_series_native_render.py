@@ -1,5 +1,7 @@
 """The server renders every 2D shot of an episode: voices, scene, headless export, take."""
+import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,10 +17,10 @@ def test_native_speech_stops_before_generation_when_workspace_disk_is_low(tmp_pa
     from services.production_resource_gate import guard_workspace_mcp
     monkeypatch.setenv('HOCUS_PRODUCTION_MIN_FREE_GB', '15')
     probes, submitted = [], []
-    def guarded(call, resolve):
+    def guarded(call, resolve, **options):
         return guard_workspace_mcp(call, resolve,
             run=lambda command, **_: probes.append(command) or SimpleNamespace(stdout='Filesystem\nlocal 14G'),
-            usage=lambda _: SimpleNamespace(free=14 * 1024 ** 3))
+            usage=lambda _: SimpleNamespace(free=14 * 1024 ** 3), **options)
     monkeypatch.setattr('services.series_native_render.guard_workspace_mcp', guarded)
     deps = NativeRenderDeps(call=lambda *args: submitted.append(args),
                             workspace_dir=lambda ws: str(tmp_path / ws),
@@ -28,6 +30,47 @@ def test_native_speech_stops_before_generation_when_workspace_disk_is_low(tmp_pa
         service._speak('anime', {'language': 'spanish'}, 'line', 'Hola.', KEVIN_ES, 0)
     assert probes == [['df', '-h', str(tmp_path / 'anime')]]
     assert not submitted
+
+
+def _gpu_held_by_another_process(monkeypatch, probed):
+    """Another process keeps the GPU above the limit, so every speech admission waits."""
+    from services.production_resource_gate import guard_workspace_mcp
+    monkeypatch.setenv('HOCUS_PRODUCTION_EXTERNAL_VRAM_MB', '2048')
+    monkeypatch.delenv('HOCUS_PRODUCTION_MIN_FREE_GB', raising=False)
+
+    def run(command, **_):
+        probed.set()
+        return SimpleNamespace(stdout='99999999, 6000')
+
+    monkeypatch.setattr('services.series_native_render.guard_workspace_mcp',
+                        lambda call, resolve, **options: guard_workspace_mcp(call, resolve, run=run, **options))
+
+
+def test_a_cancel_stops_a_render_that_waits_for_the_gpu(tmp_path, monkeypatch):
+    probed = threading.Event()
+    _gpu_held_by_another_process(monkeypatch, probed)
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    job = render.start("cast", "uv", "ep1")
+    assert probed.wait(5), "the first line waits for the GPU"
+    render.cancel("cast", job["jobId"])
+    done = finished(render, job["jobId"], tmp_path)
+    assert done["status"] == "cancelled" and done["message"] == "Cancelled; resume to continue"
+    assert "waiting for the GPU" in done["items"][0]["error"]
+    assert not [tool for tool, _ in tools.calls if tool == "generation.speech"]
+
+
+def test_a_render_that_waits_too_long_for_the_gpu_stops_with_a_clear_error(tmp_path, monkeypatch):
+    _gpu_held_by_another_process(monkeypatch, threading.Event())
+    monkeypatch.setenv('HOCUS_PRODUCTION_GPU_WAIT_SECONDS', '0.3')
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    done = finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
+    assert done["status"] == "failed" and done["message"].startswith("Stopped at shot s01: resource_gpu_busy")
+    # The next shot would wait for the same GPU: it is left queued for a resume.
+    assert [item["status"] for item in done["items"]] == ["failed", "queued"]
+    assert "resource_gpu_busy" in done["items"][0]["error"]
+    assert not [tool for tool, _ in tools.calls if tool == "generation.speech"]
 
 
 def library():

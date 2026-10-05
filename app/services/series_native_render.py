@@ -34,7 +34,7 @@ from typing import Any
 
 from services.audio_levels import gain_to, level_file
 from services.audio_mix import track_source
-from services.production_resource_gate import guard_workspace_mcp
+from services.production_resource_gate import ResourceUnavailable, guard_workspace_mcp
 from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_shot_bridge import run_series_shot, with_pose_sizes
@@ -148,10 +148,10 @@ def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) ->
 
 class SeriesNativeRender:
     def __init__(self, deps: NativeRenderDeps) -> None:
-        self.deps = replace(deps, call=guard_workspace_mcp(deps.call, deps.workspace_dir))
         self._threads: dict[str, threading.Thread] = {}
         self._cancel: set[str] = set()
         self._lock = threading.Lock()
+        self.deps = replace(deps, call=guard_workspace_mcp(deps.call, deps.workspace_dir, cancelled=self._worker_cancelled))
 
     # Job lifecycle -------------------------------------------------------
 
@@ -309,6 +309,12 @@ class SeriesNativeRender:
         with self._lock:
             return job_id in self._cancel
 
+    def _worker_cancelled(self) -> bool:
+        """Whether the job whose worker thread is calling was asked to stop; a wait for the GPU polls it."""
+        current = threading.current_thread()
+        with self._lock:
+            return any(thread is current and job_id in self._cancel for job_id, thread in self._threads.items())
+
     def _run(self, workspace: str, job_id: str) -> None:
         job = self.status(workspace, job_id)
         self._save(workspace, job, status="running", message="Rendering")
@@ -326,11 +332,22 @@ class SeriesNativeRender:
             except Exception as error:  # one shot must not stop the episode
                 failed += 1
                 item.update(status="failed", error=f"{type(error).__name__}: {error}"[:500])
+                if self._cancelled(job_id) or isinstance(error, ResourceUnavailable):
+                    # A cancel, or a disk or GPU the next shot would wait for too: stop here, resumable.
+                    self._stop(workspace, job, item, error)
+                    return
             self._save(workspace, job)
         done = sum(1 for item in job["items"] if item["status"] == "done")
         self._save(workspace, job, current=len(job["items"]), activeShotId=None, finishedAt=time.time(),
                    status="completed" if not failed else "failed",
                    message=f"{done} of {len(job['items'])} shots rendered" + (f"; {failed} failed, resume to retry" if failed else ""))
+
+    def _stop(self, workspace: str, job: dict, item: dict, error: Exception) -> None:
+        if self._cancelled(job["jobId"]):
+            self._save(workspace, job, status="cancelled", message="Cancelled; resume to continue")
+            return
+        self._save(workspace, job, activeShotId=None, finishedAt=time.time(), status="failed",
+                   message=f"Stopped at shot {item['shotId']}: {error}"[:300])
 
     def _render_item(self, workspace: str, job: dict, item: dict, index: int) -> None:
         series, episode = self._episode(workspace, job["seriesId"], job["episodeId"], job["language"])

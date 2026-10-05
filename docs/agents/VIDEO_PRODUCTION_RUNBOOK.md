@@ -388,8 +388,12 @@ An isolated runtime can set `HOCUS_PRODUCTION_MIN_FREE_GB=15` and
 `HOCUS_PRODUCTION_EXTERNAL_VRAM_MB=2048` in its process environment. Before each
 music/image/speech/SFX/H3 or native video export admission, the runner invokes `df -h` and
 `nvidia-smi`. It waits in 30-second intervals while another GPU process exceeds
-the limit; its own resident model is excluded. A disk shortfall stops the
-resumable production with `resource_disk_low`, without deleting files. The agent
+the limit; its own resident model is excluded. The wait lasts at most
+`HOCUS_PRODUCTION_GPU_WAIT_SECONDS` (default 3600; `0` waits without a limit).
+After that the resumable production stops with `resource_gpu_busy`, naming the
+processes that still hold the GPU. A cancel ends the wait at once. A disk
+shortfall stops the resumable production with `resource_disk_low`, without
+deleting files. The agent
 must propose a cleanup and wait for the user's approval before resuming.
 These opt-in checks leave other instances untouched. They require the named
 local commands when enabled; absent commands fail before admission.
@@ -399,7 +403,10 @@ call in `series.episode.render_native` and the render stage of
 `series.episode.produce`. The UI, MCP and wizard share that renderer. Disk is
 measured on the episode workspace, including every speech retry. Status polling
 and CPU speech checks do not wait for the GPU. CPU video exports check disk
-without waiting for an unrelated GPU generation.
+without waiting for an unrelated GPU generation. A `resource_gpu_busy` or
+`resource_disk_low` stops the render job at that shot (the next shot would wait
+for the same machine), and `series.episode.render_native.cancel` interrupts a
+GPU wait; both leave the job resumable.
 
 
 ### Rig an existing model through MCP
