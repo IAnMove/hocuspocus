@@ -1,5 +1,6 @@
 import { useUiTranslation } from '../../i18n'
-import type { Scene3DDocument, Scene3DSlot } from './types'
+import { resolveToon, type ToonSettings } from './toonLook'
+import { SCENE3D_RENDER_LOOKS, type Scene3DDocument, type Scene3DSlot } from './types'
 
 const inputClass = 'min-h-9 w-20 rounded border border-border bg-bg-tertiary px-2'
 type FloorStyle = NonNullable<NonNullable<Scene3DDocument['environment']>['floorStyle']>
@@ -28,6 +29,35 @@ export function CinematicControls({ environment, disabled, onChange }: {
       <label>{t('cinematic.bloom')} <input className={inputClass} type="number" min="0" max="1.5" step=".05" value={environment.bloom} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) onChange({ ...environment, bloom: Math.max(0, Math.min(1.5, e.target.valueAsNumber)) }) }} /></label>
     </div>}
     <p className="mt-2 text-text-muted">{t('cinematic.help')}</p>
+  </fieldset>
+}
+
+type LookFields = Pick<Scene3DDocument, 'renderLook' | 'toon'>
+
+/** The whole-frame render preset. Toon settings stay on the document when another look is chosen. */
+export function RenderLookControls({ document, disabled, onChange }: {
+  document: LookFields; disabled: boolean; onChange: (patch: LookFields) => void
+}) {
+  const { t } = useUiTranslation('scene3dEditor')
+  const toon = resolveToon({ renderLook: 'toon', toon: document.toon })!
+  const setToon = (patch: Partial<ToonSettings>) => onChange({ renderLook: 'toon', toon: { ...document.toon, ...patch } })
+  return <fieldset disabled={disabled} className="rounded-lg border border-border p-3 text-xs">
+    <label className="flex min-h-9 items-center gap-2 font-semibold">{t('renderLook.title')}
+      <select aria-label={t('renderLook.title')} className="min-h-9 rounded border border-border bg-bg-tertiary px-2 font-normal" value={document.renderLook ?? ''}
+        onChange={e => onChange({ renderLook: (e.target.value || undefined) as LookFields['renderLook'], toon: document.toon })}>
+        <option value="">{t('renderLook.none')}</option>
+        {SCENE3D_RENDER_LOOKS.map(look => <option key={look} value={look}>{t(`renderLook.${look}`)}</option>)}
+      </select>
+    </label>
+    {document.renderLook === 'toon' && <div className="flex flex-wrap items-center gap-4">
+      <label>{t('renderLook.steps')} <select aria-label={t('renderLook.steps')} className="min-h-9 rounded border border-border bg-bg-tertiary px-2" value={toon.steps} onChange={e => setToon({ steps: Number(e.target.value) })}>
+        {[2, 3, 4].map(steps => <option key={steps} value={steps}>{steps}</option>)}
+      </select></label>
+      <label>{t('renderLook.outline')} <input aria-label={t('renderLook.outline')} className={inputClass} type="number" min="0" max="8" step=".5" value={toon.outline}
+        onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) setToon({ outline: Math.max(0, Math.min(8, e.target.valueAsNumber)) }) }} /></label>
+      <label>{t('renderLook.ink')} <input aria-label={t('renderLook.ink')} type="color" value={toon.ink} onChange={e => setToon({ ink: e.target.value })} /></label>
+    </div>}
+    <p className="mt-2 text-text-muted">{t('renderLook.help')}</p>
   </fieldset>
 }
 

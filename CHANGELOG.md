@@ -6,6 +6,18 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Video 3D has a toon / cel render look («Anime (cel)» in Spanish). With
+`renderLook: "toon"` the 3D model slots are drawn with flat bands of light and
+an ink outline, so rigged or static GLB characters, vehicles and props sit next
+to flat anime cutouts and painted backgrounds instead of looking like glossy
+plastic. Images and cutouts keep their look. The outline is an inverted hull
+that follows skinned animation and morphs, keeps the same width at any model
+scale and frame size, and skips glass and alpha-cut cards. Optional
+`toon: {steps, outline, ink}` sets 2 to 4 light bands, the ink width in pixels
+of a 1080p frame and the ink colour. The editor offers it under Render look
+(where N64 can now be chosen too), agents set it with `world3d.scene.patch` or a
+production shot's `scene3d.renderLook`, and preview and export match.
+
 `series.update` (and `PUT /api/v1/series/{id}`) keeps every top-level field it
 is not sent. It replaced the whole project, so an agent that sent only
 `allowedProductionMethods` emptied the episodes, characters, locations and

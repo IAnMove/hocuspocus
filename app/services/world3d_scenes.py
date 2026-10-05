@@ -14,6 +14,7 @@ from pathlib import Path
 
 from services.character_kit_library import read_character_kit_library
 from services.scene_documents import get_document, save_document
+from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_template_catalog import require_card, user_template_document
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +92,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         document["duration"] = duration
     if "soundtrack" in changes:
         _set_soundtrack(document, changes["soundtrack"], workspace)
+    _set_render_look(document, changes)
     _retarget(document)
     record["revision"] += 1
     record["warnings"] = warnings
@@ -286,7 +288,7 @@ def _view(scene_id: str, record: dict) -> dict:
         "document": document, "objects": _objects(document), "pending": _pending(document),
         "warnings": record.get("warnings") or [], "traits": _traits(document),
         "editable": ["sourceUrl", "sourceRef", "clip", "position", "rotationY", "scale", "motion", "grounded",
-                     "camera", "playbackSpeed", "duration", "dressing", "light"],
+                     "camera", "playbackSpeed", "duration", "dressing", "light", "renderLook", "toon"],
     }
 
 
@@ -317,11 +319,27 @@ def _traits(document: dict) -> dict:
         "duration": document.get("duration"), "width": document.get("width"), "height": document.get("height"),
         "format": "portrait" if (document.get("height") or 0) > (document.get("width") or 0) else "landscape",
         "fov": camera.get("fov"), "fovTo": framing.get("fovTo"), "orbitTurns": framing.get("orbitTurns"),
-        "targetSlot": framing.get("targetSlot"), "dressing": document.get("dressing"),
+        "targetSlot": framing.get("targetSlot"), "dressing": document.get("dressing"), "renderLook": document.get("renderLook"),
         "worldSfx": [cue.get("kind") for cue in document.get("worldSfx") or [] if isinstance(cue, dict)],
         "roles": [slot.get("slot") for slot in document.get("slots") or []],
         "slotIds": [slot.get("id") for slot in document.get("slots") or []],
     }
+
+
+def _set_render_look(document: dict, changes: dict) -> None:
+    """``renderLook``: ``n64``, ``toon`` or ``none`` (authored materials). ``toon`` merges into the stored settings."""
+    try:
+        if "renderLook" in changes:
+            look = None if changes["renderLook"] in (None, "none") else changes["renderLook"]
+            check_render_look(look)
+            if look is None:
+                document.pop("renderLook", None)
+            else:
+                document["renderLook"] = look
+        if "toon" in changes:
+            document["toon"] = {**(document.get("toon") or {}), **normalize_toon(changes["toon"])}
+    except ValueError as error:
+        raise World3DSceneError("invalid_render_look", str(error)) from error
 
 
 def _speed(value) -> float:

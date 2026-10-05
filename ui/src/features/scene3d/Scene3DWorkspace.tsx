@@ -2,7 +2,7 @@ import { ExampleDownloads } from './ExampleDownloads'
 import { useDocumentRoundtrip } from './documentRoundtrip'
 import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
 import { exampleCollections } from './templateCatalog'
-import { CinematicControls, AppearanceControls } from './CinematicControls'
+import { CinematicControls, AppearanceControls, RenderLookControls } from './CinematicControls'
 import { PixelWorldControls } from './PixelWorldControls'
 import { addTv, applyScreenToAllTvs } from './pixel/pixelEdits'
 import { useSceneDocumentHandoff } from '../sceneFx/handoff'
@@ -419,6 +419,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       <Scene3DSpeechSelector slots={sceneDoc.slots} selected={selected} open={speechOpen}
         onToggle={() => { setPickTarget(undefined); setSpeechOpen(open => !open) }} onSelect={selectSlot} />
       <CinematicControls environment={sceneDoc.environment} disabled={editingLocked} onChange={environment => applyScene(current => ({ ...current, environment }))} />
+      <RenderLookControls document={sceneDoc} disabled={editingLocked} onChange={look => applyScene(current => ({ ...current, ...look }))} />
       <PixelWorldControls pixelWorld={sceneDoc.pixelWorld} dressing={sceneDoc.dressing} tvs={sceneDoc.slots.filter(slot => slot.screen?.style === 'crt').length} slots={sceneDoc.slots.length} disabled={editingLocked}
         onChange={patch => applyScene(current => ({ ...current, ...patch }))} onAddTv={() => applyScene(current => addTv(current))} />
       <SceneFxControls cues={sceneDoc.sfx} duration={sceneDoc.duration} disabled={editingLocked} onChange={sfx => applyScene(current => ({ ...current, sfx }))} onShowcase={collection => applyScene(current => withFxShowcase(current, collection))} />

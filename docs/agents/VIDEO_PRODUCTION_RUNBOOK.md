@@ -451,6 +451,21 @@ background color. Camera motion, model motion and GLB geometry stay fully 3D.
 The flag survives scene save/load and applies to both preview and server export.
 Removing it restores authored shading, texture filters and atmosphere fog.
 
+### Toon / cel render look
+
+Set `scene3d.renderLook: "toon"` (or `document.renderLook`, or `renderLook` in
+`world3d.scene.patch`) to draw 3D model slots as cels: flat light bands and an
+ink outline, so GLB characters, vehicles and props match flat anime cutouts and
+painted backgrounds. Image slots and cutouts are not changed. Optional
+`toon: {"steps": 2-4, "outline": 0-8, "ink": "#rrggbb"}` sets the number of
+light bands (default 3), the ink width in pixels of a 1080p frame (default 3;
+0 draws no line) and the ink colour (default `#141018`). Rigged models keep
+their clips: the outline follows the skeleton. Transparent and alpha-cut
+materials get no ink, and a materializing model gets its ink once it has
+arrived. Preview and export match. `renderLook: "none"` in a patch returns to
+the authored materials and keeps the `toon` settings. An unknown look or an
+out-of-range toon value is refused (`invalid_render_look`).
+
 ### Publish a completed production locally
 
 `production.publish` copies a completed production's MP4, contact sheet and

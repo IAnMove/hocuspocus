@@ -11,7 +11,7 @@ const document = config.document ? structuredClone(config.document) : documentFr
 if (config.slots) document.slots = config.slots.map(explicitSlot)
 if (config.subject) bindSubject(document, config)
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
-for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld', 'renderLook', 'rhythm']) {
+for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld', 'renderLook', 'toon', 'rhythm']) {
   if (config[key] !== undefined) document[key] = structuredClone(config[key])
 }
 applyRequestedFrame(document, config)

@@ -11,7 +11,8 @@ import { normalizeScene3DSlot, parseDressing } from './documentSlot.ts'
 import { parsePixelWorld } from './pixel/pixelWorld'
 import { parseAtmosSettings } from './atmos/params.ts'
 import { NEW_SCENE_LIGHTING, NEW_SCENE_LOOK, lightingField, lookField } from './look.ts'
-import { SCENE3D_TEMPLATE_IDS, type Scene3DDocument, type Scene3DSlot, type Scene3DTemplateId } from './types.ts'
+import { toonField } from './toonLook.ts'
+import { SCENE3D_RENDER_LOOKS, SCENE3D_TEMPLATE_IDS, type Scene3DDocument, type Scene3DSlot, type Scene3DTemplateId } from './types.ts'
 
 const SLOT_COLORS: Record<string, [number, number, number]> = {
   subject_1: [40, 140, 220],
@@ -110,7 +111,7 @@ function atmosField(raw: unknown, dressing?: string): Pick<Scene3DDocument, 'atm
 export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Partial<Scene3DDocument>
-  if (value.renderLook !== undefined && value.renderLook !== 'n64') return null
+  if (value.renderLook !== undefined && !(SCENE3D_RENDER_LOOKS as readonly unknown[]).includes(value.renderLook)) return null
   if (value.version !== 1 || value.units !== 'meters' || value.up !== 'y') return null
   if (!Array.isArray(value.slots) || !value.camera || !value.light) return null
   if (!validScene3DShape(value)) return null
@@ -123,7 +124,7 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const dressing = parseDressing(value.dressing)
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
-  const { pixelWorld, atmos: rawAtmos, lighting, look, ...fields } = value
+  const { pixelWorld, atmos: rawAtmos, lighting, look, toon, ...fields } = value
   fields.rhythm = rhythm
-  return { ...fields, ...pixelWorldField(pixelWorld), ...atmosField(rawAtmos, dressing), ...lightingField(lighting), ...lookField(look), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
+  return { ...fields, ...pixelWorldField(pixelWorld), ...atmosField(rawAtmos, dressing), ...lightingField(lighting), ...lookField(look), ...toonField(toon), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }
