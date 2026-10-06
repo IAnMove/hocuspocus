@@ -250,7 +250,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 2674,
+      "weight": 2682,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_templates.py",
@@ -487,7 +487,9 @@
         "tests/test_game_estimate.py",
         "tests/test_game_produce.py",
         "tests/test_game_frames.py",
-        "tests/test_game_sheet.py"
+        "tests/test_game_sheet.py",
+        "tests/test_game_audio.py",
+        "tests/test_game_sfxr.py"
       ]
     }
   ],
@@ -1471,6 +1473,14 @@
     {
       "prefix": "app/services/game_generators/vfx.py",
       "paths": ["tests/test_game_gen_vfx.py"]
+    },
+    {
+      "prefix": "app/services/game_audio.py",
+      "paths": ["tests/test_game_audio.py"]
+    },
+    {
+      "prefix": "app/services/game_sfxr.py",
+      "paths": ["tests/test_game_sfxr.py"]
     }
   ]
 }
