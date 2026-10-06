@@ -64,6 +64,15 @@ def test_cast_uses_homes_explicit_layout_and_character_scale():
     assert plan_cast(series(), {"visibleCharacterIds": ["kevin"]}, "close", 4)[0]["x"] == 50.0, "a lone close-up is centred"
 
 
+def test_a_cast_entry_can_keep_its_cut_edges_in_the_frame():
+    layout = normalize_layout2d({"cast": [{"characterId": "kevin", "x": 46, "edgeSnap": False}, {"characterId": "gary", "edgeSnap": True},
+                                          {"characterId": "gary", "edgeSnap": "no"}]})
+    assert layout["cast"] == [{"characterId": "kevin", "x": 46.0, "edgeSnap": False}, {"characterId": "gary"}, {"characterId": "gary"}], \
+        "snapping is the default, so only false is kept"
+    cast = plan_cast(series(), {"locationId": "garage", "layout2d": layout}, "medium", 4)
+    assert [item.get("edgeSnap") for item in cast] == [False, None, None]
+
+
 def test_cards_and_sound():
     titles = card_texts({"kind": "title", "title": "VALLE", "body": "Episodio 1"}, 5)
     assert [text["id"] for text in titles] == ["card-title", "card-body"] and titles[0]["font"] == "marker"

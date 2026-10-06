@@ -168,6 +168,16 @@ function parallaxZoomField(raw: RawLayer, isCamera: boolean): { parallaxZoom?: t
   return !isCamera && raw.parallaxZoom === true ? { parallaxZoom: true } : {}
 }
 
+const VIDEO_LOOPS = ['loop', 'hold', 'pingpong'] as const
+
+/** ``playback`` is kept only on a video layer, bounded like ``series_layers`` (start 0–3600 s, speed 0.1–4). */
+function playbackField(raw: RawLayer): { playback?: AnimatorLayer['playback'] } {
+  const value = raw.playback
+  if (raw.type !== 'video' || !value || typeof value !== 'object') return {}
+  const loop = VIDEO_LOOPS.find(item => item === value.loop) ?? 'loop'
+  return { playback: { start: boundedNumber(value.start, 0, 0, 3600), loop, speed: boundedNumber(value.speed, 1, .1, 4) } }
+}
+
 function layerPath(rawLayer: RawLayer) {
   const path = parsePath(rawLayer.animation?.path)
   return path ? { path } : {}
@@ -182,10 +192,11 @@ function layerExtras(rawLayer: RawLayer) {
   return { ...(sequence ? { sequence } : {}), ...(beatPulse ? { beatPulse } : {}) }
 }
 
-function layerWithoutFocus(raw: RawLayer): Omit<RawLayer, 'focus' | 'parallaxZoom'> {
+function layerWithoutFocus(raw: RawLayer): Omit<RawLayer, 'focus' | 'parallaxZoom' | 'playback'> {
   const rest = { ...raw }
   delete rest.focus
   delete rest.parallaxZoom
+  delete rest.playback
   return rest
 }
 
@@ -227,6 +238,7 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
     missingAsset: isCamera || isEffect ? false : Boolean(rawLayer.missingAsset || !source.trim() || context.isMissing(source)),
     ...layerExtras(rawLayer),
     ...focusFields(rawLayer),
+    ...playbackField(rawLayer),
   } as AnimatorLayer
   const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
   const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)

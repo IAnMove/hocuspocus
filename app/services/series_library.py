@@ -301,6 +301,12 @@ def _normalize_dialogue_beat(value: dict, fallback_id: str) -> dict:
         "emotion": _text(beat.get("emotion"), "natural"),
         "delivery": _text(beat.get("delivery"), "natural delivery"),
     })
+    # The room this one line is heard in (series_voice_rooms.line_rooms); null clears it, an unknown one is refused.
+    if beat.get("voiceRoom") is None:
+        beat.pop("voiceRoom", None)
+    else:
+        from services.series_voice_rooms import check_room
+        check_room(beat["voiceRoom"], "dialogueBeats.voiceRoom")
     return beat
 
 

@@ -6,7 +6,8 @@ visible characters, the location and its variant, and the dialogue. An
 optional ``layout2d`` block overrides any of it explicitly:
 
     {"framing": "two", "camera": "push",
-     "cast": [{"characterId": "kevin", "poseId": "panic", "x": 30, "motion": "shake", "enterFrom": "left"}],
+     "cast": [{"characterId": "kevin", "poseId": "panic", "x": 30, "motion": "shake", "enterFrom": "left",
+               "enterAt": 0.5, "enterDuration": 2.4, "enterGait": "walk"}],
      "card": {"kind": "title", "title": "...", "body": "..."},
      "music": {"file": "mus-moral.wav", "volume": 0.45, "start": 0}, "voiceRoom": "cathedral"}
 
@@ -28,9 +29,10 @@ import hashlib
 from typing import Any
 from urllib.parse import quote
 
+from services import series_entrances as entrances
 from services import series_shot_extras as extras
 from services.series_ambience import ambience_mode
-from services.series_layers import layer_kind, layout_layers, shot_layers
+from services.series_layers import PLAYBACK, layer_kind, layout_layers, shot_layers
 from services.series_voice_rooms import check_room
 from services.speech_language import speech_language_code
 
@@ -80,7 +82,10 @@ def _cast_entry(value: Any) -> dict[str, Any] | None:
         return None
     return {"characterId": value["characterId"][:160], **_text_field(value, "poseId", 120),
             **_numbers(value, (("x", -50, 150), ("scale", 0.2, 4))), **_choice(value, "motion", MOTIONS),
-            **_choice(value, "enterFrom", ("left", "right")), **_explicit_transform(value.get("transform"))}
+            **_choice(value, "enterFrom", ("left", "right")), **entrances.entry_fields(value),
+            **_explicit_transform(value.get("transform")),
+            # A pose cut by its image border is moved so the cut stays out of the frame; false keeps it where x puts it.
+            **({"edgeSnap": False} if value.get("edgeSnap") is False else {})}
 
 
 def _prop_entry(value: Any) -> dict[str, Any] | None:
@@ -91,7 +96,9 @@ def _prop_entry(value: Any) -> dict[str, Any] | None:
     if len(source) != 1:
         return None
     return {**source, "scale": _number(value.get("scale"), 0.01, 4) or 0.3, **_text_field(value, "anchor", 80),
-            **_numbers(value, (("x", -50, 150), ("y", -50, 150), ("z", 0, 100)))}
+            **_numbers(value, (("x", -50, 150), ("y", -50, 150), ("z", 0, 100))),
+            # Stands its lowest opaque row on the floor (``grounded`` as on a Video 3D object); y is then ignored.
+            **({"ground": True} if value.get("ground") is True or value.get("grounded") is True else {})}
 
 
 def _layout_card(card: Any) -> dict[str, Any]:
@@ -258,8 +265,11 @@ def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration
         seat = extras.perch(character, workspace)
         if seat:
             item["perch"] = seat
-    if entry.get("enterFrom") in ("left", "right"):
-        item["enter"] = {"fromX": -15.0 if entry["enterFrom"] == "left" else 115.0, "start": 0.2, "end": min(duration, 1.4)}
+    enter = entrances.entrance(entry, duration)
+    if enter:
+        item["enter"] = enter
+    if entry.get("edgeSnap") is False:
+        item["edgeSnap"] = False
     return item
 
 
@@ -299,12 +309,27 @@ def _prop_source(series: dict[str, Any], prop: dict[str, Any], workspace: str) -
     return f"/api/v1/file/{quote(prop['file'])}?workspace={quote(workspace)}"
 
 
-def _prop_position(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float, scale: float) -> tuple[float, float]:
+def _prop_anchor(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float) -> tuple[float, float] | None:
     anchor = anchors.get(prop.get("anchor", "")) if prop.get("anchor") else None
     if isinstance(anchor, dict) and all(isinstance(anchor.get(key), (int, float)) for key in ("u", "v")):
-        x, y = background_point(framing, focus, float(anchor["u"]), float(anchor["v"]))
-        return x, y - scale * 50  # the prop stands on its anchor
+        return background_point(framing, focus, float(anchor["u"]), float(anchor["v"]))
+    return None
+
+
+def _prop_position(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float, scale: float) -> tuple[float, float]:
+    point = _prop_anchor(prop, anchors, framing, focus)
+    if point:
+        return point[0], point[1] - scale * 50  # the prop stands on its anchor
     return prop.get("x", 50.0), prop.get("y", 60.0)
+
+
+def _prop_ground(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float) -> dict[str, Any]:
+    """``ground``: the compiler stands the prop's lowest opaque row on its anchor, else on the framing's floor line
+    (``seriesShot.ts`` ``floorLine``), once ``series_shot_bridge.measure_props`` has read the image."""
+    if not prop.get("ground"):
+        return {}
+    point = _prop_anchor(prop, anchors, framing, focus)
+    return {"ground": {"floor": point[1]} if point else {}}
 
 
 def plan_props(series: dict[str, Any], shot: dict[str, Any], framing: str, focus: float, workspace: str) -> list[dict[str, Any]]:
@@ -320,7 +345,8 @@ def plan_props(series: dict[str, Any], shot: dict[str, Any], framing: str, focus
         scale = round(prop.get("scale", 0.3) * zoom, 4)
         x, y = _prop_position(prop, anchors, framing, focus, scale)
         props.append({"id": f"prop-{index + 1}", "name": prop.get("anchor") or f"Prop {index + 1}", "source": source,
-                      "x": round(x, 3), "y": round(y, 3), "scale": scale, "z": prop.get("z", 8)})
+                      "x": round(x, 3), "y": round(y, 3), "scale": scale, "z": prop.get("z", 8),
+                      **_prop_ground(prop, anchors, framing, focus)})
     return props
 
 
@@ -339,7 +365,8 @@ def plan_layers(series: dict[str, Any], shot: dict[str, Any], framing: str, focu
         planned.append({"id": f"layer-{index + 1}", "name": f"{'Front' if layer['front'] else 'Back'} layer {index + 1}",
                         "source": found[0], "kind": found[1], "x": x, "y": y, "scale": round(layer["scale"] * zoom, 4),
                         "opacity": layer["opacity"], "depth": layer["depth"], "front": layer["front"],
-                        **({"drift": layer["drift"]} if layer.get("drift") else {})})
+                        **({"drift": layer["drift"]} if layer.get("drift") else {}),
+                        **({key: layer[key] for key in PLAYBACK if key in layer} if found[1] == "video" else {})})
     return {"layers": planned, "castDepth": cast_depth} if planned else {}
 
 
@@ -458,12 +485,13 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     size = size or frame_size(series)
     portrait = size[1] > size[0]
     cast = [] if framing == "title" else plan_cast(series, shot, framing, duration, workspace, portrait)
+    moves = entrances.shot_entrances(shot, duration, framing)
     title = f"{series.get('title') or series.get('id')} · {episode.get('title') or episode['id']} · {shot['id']}"
     spec = {
         "name": title[:200], "workspace": workspace, "width": size[0], "height": size[1], "fps": FPS, "duration": duration,
         "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, beats, timing, recorded, {item["characterId"] for item in cast}),
-        "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration)],
-        "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration),
+        "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration, moves)],
+        "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
         "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
     }
     return _with_set(spec, series, shot, _focus(cast, framing), workspace)
