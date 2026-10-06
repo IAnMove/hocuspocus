@@ -44,6 +44,16 @@ export function isWarpRigged(kit: CharacterKit): boolean {
   return lastRig(kit)?.style?.mouthStyle === 'warp'
 }
 
+const MOUTH_LINE_WARNINGS = new Set(['mouth_line_guessed', 'mouth_line_unsure'])
+
+/** The poses a rig flagged (its `warnings`): those whose warp mouth line is worth placing by hand in the mouth line
+ * editor, and those with another warning (eyes or a mark found in the wrong place). */
+export function flaggedRigPoses(warnings: Record<string, string[]> = {}): { mouthLine: string[]; other: string[] } {
+  const poses = (test: (code: string) => boolean) => Object.entries(warnings)
+    .filter(([, codes]) => codes.some(test)).map(([pose]) => pose).sort((a, b) => Number(b === 'base') - Number(a === 'base') || a.localeCompare(b))
+  return { mouthLine: poses(code => MOUTH_LINE_WARNINGS.has(code)), other: poses(code => !MOUTH_LINE_WARNINGS.has(code)) }
+}
+
 /** The image a pose is rigged from: the recorded original stands in for the rig's own output (as the server does). */
 export function flatRigPoseSource(kit: CharacterKit, poseId: string): string | undefined {
   const current = poseId === 'base' ? kit.base?.source : kit.poses[poseId]?.source

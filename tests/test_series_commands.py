@@ -176,6 +176,8 @@ def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp
     handlers, calls, _, _ = harness(tmp_path, [])
     listed = call(handlers, "characters.styles", {})["result"]
     assert "paper-cutout" in [style["id"] for style in listed["styles"]] and "prompt" not in listed
+    rigs = {style["id"]: style["rig"] for style in listed["styles"]}
+    assert rigs["graphic-novel"] == {"mouthStyle": "warp"}, "painted characters talk with their own drawing"
     built = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "character",
                                                  "description": "Ana, green jacket"})["result"]["prompt"]
     assert built["screen"] == "magenta" and "Ana, green jacket" in built["prompt"]

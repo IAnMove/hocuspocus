@@ -15,6 +15,7 @@ from routers import character_kit_library as router_module
 from services import face_landmarks, flat_rig_preview, flat_rig_warp
 from services.character_kit_library import normalize_character_kit, patch_character_kit, read_character_kit_library
 from services.flat_rig import FlatRigError, rig_character, rig_hints, rig_style
+from services.flat_rig_look import kit_look
 from services.flat_rig_base import STATES
 from services.world3d_talk import talk_block
 
@@ -299,6 +300,54 @@ def _client(folder):
     app = FastAPI()
     app.include_router(router_module.create_character_kit_library_router())
     return TestClient(app)
+
+
+def test_a_re_rig_keeps_the_kits_warp_mouths_unless_asked(tmp_path, monkeypatch):
+    """A pose added later, or an agent's re-rig, sends no style: the kit stays warp. A key sent wins on its own."""
+    folder = tmp_path / "cast"
+    folder.mkdir()
+    _kit(folder)
+    monkeypatch.setattr(face_landmarks, "detect", _shifted_lips)
+    first = rig_character(str(folder), "cast", "hero", base_revision=1, style={"mouthStyle": "warp", "smile": 0.4})
+    reply = _client(folder).post("/api/v1/character-kits/library/kits/hero/flat-rig",
+                                 json={"workspace": "cast", "baseRevision": first["revision"], "poses": ["base", "busto"]})
+    assert reply.status_code == 200, reply.text
+    again = reply.json()
+    assert again["style"]["mouthStyle"] == "warp" and again["style"]["smile"] == 0.4
+    assert again["poses"]["busto"]["mouthLine"]["found"] and again["character"]["anchors"]["busto"]["mouthSources"]
+    assert again["character"]["provenance"][-1]["style"] == again["style"]
+    paper = rig_character(str(folder), "cast", "hero", base_revision=again["revision"], style={"mouthStyle": "paper"})
+    assert paper["style"]["mouthStyle"] == "paper" and paper["style"]["smile"] == 0.4
+    assert "mouthSources" not in paper["character"]["anchors"]["busto"]
+
+
+def test_a_kit_made_in_the_graphic_novel_style_rigs_with_warp_mouths(tmp_path, monkeypatch):
+    folder = tmp_path / "cast"
+    folder.mkdir()
+    _kit(folder, poses=())
+    library = read_character_kit_library(str(folder))
+    made = {**library["kits"]["hero"], "provenance": [{"method": "character-style-create", "style": "graphic-novel"}]}
+    revision = patch_character_kit(str(folder), "hero", made, base_revision=library["revision"])["revision"]
+    monkeypatch.setattr(face_landmarks, "detect", _shifted_lips)
+    rigged = rig_character(str(folder), "cast", "hero", base_revision=revision)
+    assert rigged["style"]["mouthStyle"] == "warp" and rigged["character"]["anchors"]["base"]["mouthSources"]
+
+
+def test_the_kit_look_is_the_last_rig_then_the_style_preset_then_the_defaults():
+    preset = lambda style_id: {"method": "character-style-create", "style": style_id}
+    rigged = lambda style: {"method": "flat-rig", "style": style}
+    assert kit_look({}) == rig_style(None) and kit_look({})["mouthStyle"] == "paper"
+    assert kit_look({"provenance": [preset("graphic-novel")]})["mouthStyle"] == "warp"
+    assert kit_look({"provenance": [preset("paper-cutout")]})["mouthStyle"] == "paper"
+    assert kit_look({"provenance": [preset("unknown")]}) == rig_style(None)
+    # The latest decision wins: a kit made in one style and rigged in another keeps the rig's look.
+    kit = {"provenance": [preset("graphic-novel"), rigged({"mouthStyle": "ink", "smile": 0.2}), {"method": "lips"}]}
+    assert kit_look(kit)["mouthStyle"] == "ink" and kit_look(kit)["smile"] == 0.2
+    assert kit_look(kit, {"smile": -0.5}) == {**rig_style({"mouthStyle": "ink"}), "smile": -0.5}
+    # A look edited by hand into nonsense is ignored, as saved hints are; the call's own style is still checked.
+    assert kit_look({"provenance": [rigged({"mouthStyle": "clay"})]}) == rig_style(None)
+    with pytest.raises(FlatRigError):
+        kit_look(kit, {"mouthStyle": "clay"})
 
 
 def test_the_preview_warps_a_pose_at_a_point_and_saves_nothing(tmp_path, monkeypatch):
