@@ -97,7 +97,7 @@ CharacterKit
               name, referenceAudio, transcript, language }
   lookNotes?
   speech3d? { model, digest, settings? }
-  anchors { [poseId]: { mouth, mouthStates?, eyes? } }
+  anchors { [poseId]: { mouth, mouthStates?, eyes?, blink?, blinkSource?, mouthSources? } }
   provenance[]
 ```
 
@@ -107,6 +107,13 @@ the legacy physical output-folder token, not a Workspace collection ID.
 
 `alphaStatus` is `unknown`, `transparent`, or `opaque`. An image is considered
 transparent when at least 1% of pixels have alpha below 250.
+
+`anchors[pose].mouthSources` (`{state: url}`) are a pose's own mouth drawings:
+the flat rig's warp mouths, square patches cut from that pose's lower face.
+They share the review of `kit.mouth[state]`, which holds the base pose's. While
+it does, each pose mounts its own (`characterKitMouthSource`) and a pose with
+none mounts no mouth, never another pose's face. A drawing put on `kit.mouth`
+later is shared by every pose again.
 
 `mountCharacterKitLayers` parents each approved overlay to its pose, sets
 `faceBinding`, and starts with the closed mouth visible. Mounting a kit pose
@@ -402,11 +409,16 @@ The response includes `filename`, public `source`, `original`, `width`,
   `characters.rig.flat`) detects such a face and finds its mouth lower down.
   The cartoon paper mouths still clash with the art: send
   `style: {"mouthStyle": "ink"}`. The painted mouth then stays as the rest
-  shape, and the open shapes are drawn in its own ink. If a pose's mouth or
-  eyes are found in the wrong place, send
-  `hints: {"<pose id>": {"mouth": [x, y], "eyes": [x, y]}}`, in % of that
-  pose's keyed image. The kit provenance keeps them for later rigs, and `null`
-  clears a pose's hints. See `docs/agents/VIDEO_PRODUCTION_RUNBOOK.md`.
+  shape, and the open shapes are drawn in its own ink. With
+  `{"mouthStyle": "warp"}` each pose talks with its own drawing: the lower lip,
+  chin and beard move down and the gap is inked, one set of patches per pose
+  (`anchors[pose].mouthSources`). If a pose's mouth or eyes are found in the
+  wrong place, send
+  `hints: {"<pose id>": {"mouth": [x, y], "eyes": [x, y], "mouthWidth": w}}`,
+  in % of that pose's keyed image, or place the mouth line in the Face Rig's
+  **Mouth line** editor, which previews the warped states live. The kit
+  provenance keeps hints for later rigs, and `null` clears a pose's hints. See
+  `docs/agents/VIDEO_PRODUCTION_RUNBOOK.md`.
 
 ---
 

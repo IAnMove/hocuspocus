@@ -15,8 +15,11 @@ use only those ids and file names, never invent one.
      `voicesByLanguage` → add the character to the series (`series.update`) with `voiceProfile.characterKitRef`;
    - rig check: look at the review image `characters.rig.flat` returns. A face with realistic proportions (small
      eyes in a wide head: graphic-novel or tenebrist art, eye bags, spectacles, moustaches) is detected, and its mouth
-     is the thin line about one eye-pair width under the eyes. For that art rig with `style: {"mouthStyle": "ink"}`:
-     the painted mouth stays as the rest shape and the open shapes are drawn in its own ink. If a pose's mouth or
+     is the thin line about one eye-pair width under the eyes. For that art rig with `style: {"mouthStyle": "warp"}`:
+     each pose talks with its own drawing (the lower lip, chin and beard move down, the gap is inked); check each
+     pose's mouth line with `characters.rig.flat.preview` (warnings `mouth_line_guessed`, `mouth_line_unsure`) and
+     pass a better one as `hints.<pose>.mouth` (a point on the line between the lips) and `mouthWidth`.
+     `"ink"` keeps the painted mouth as the rest shape and draws the open shapes in its own ink. If a pose's mouth or
      eyes are still found in the wrong place, rig again with `hints: {"<pose id>": {"mouth": [x, y]}}` (or `"eyes"`),
      in % of that pose's keyed image; later rigs reuse the hints, and `null` clears a pose's hints;
    - location: `generation.image` 1920x1088 in the series style → `series.update` (new location) → `series.asset.import`

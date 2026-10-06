@@ -21,6 +21,7 @@ SERIES_TOOLS = frozenset({
     "series.episode.review.get", "series.episode.review.set", "series.shot.review.set",
     # Characters: one-click kits and voices.
     "characters.list", "characters.get", "characters.save", "characters.styles", "characters.rig.flat",
+    "characters.rig.flat.preview",
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
     "studio.key", "qa.speech", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",

@@ -63,3 +63,21 @@ test('the speech workshop opens on the requested pose', { concurrency: false }, 
   await waitFor(() => assert.equal((view.getByRole('combobox', { name: 'Editing pose' }) as HTMLSelectElement).value, 'busto'))
   assert.ok(view.getByTestId('speech-face-rig'))
 })
+
+test('a pose link lands on that pose\'s mouth line editor, opened, on a flat-rigged kit', { concurrency: false }, async t => {
+  const { render, cleanup, waitFor } = await import('@testing-library/react')
+  const { CharacterSpeechPreparation } = await import('../src/features/characters/CharacterSpeechPreparation')
+  const original = globalThis.fetch
+  t.after(() => { cleanup(); globalThis.fetch = original })
+  globalThis.fetch = (async () => jsonResponse({ packs: [] })) as typeof fetch
+  // Rigged with ink mouths: the editor is closed by default (it opens by itself only on warp kits).
+  const rigged = () => ({ ...library(), kits: { 'mp-ines': { ...inesKit(), provenance: [{ method: 'flat-rig', sources: {}, style: { mouthStyle: 'ink' } }] } } })
+  const services = { load: async () => rigged(), save: async () => rigged(), upload: async () => ({ filename: 'x.png', path: '/x.png', url: '/x.png' }) }
+  const scrolled: string[] = []
+  dom.window.HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) { scrolled.push(this.dataset.testid || this.tagName) }
+  const view = render(<CharacterSpeechPreparation workspace="plus-ultra" services={services as never} initialKitId="mp-ines" initialPoseId="busto" />)
+  const editor = await waitFor(() => view.getByTestId('flat-rig-mouth-line') as HTMLDetailsElement)
+  await waitFor(() => assert.equal(editor.open, true))
+  assert.match(editor.querySelector('summary')?.textContent ?? '', /busto/i)
+  assert.deepEqual(scrolled, ['flat-rig-mouth-line'], 'the view lands on the mouth line editor, not the top of the face rig')
+})

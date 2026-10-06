@@ -670,5 +670,48 @@
       "chinese": "Chinese",
       "russian": "Russian"
     }
+  },
+  "mouthLine": {
+    "title": "Mouth line · {{pose}}",
+    "intro": "These mouths are the drawing's own: the upper lip stays and the lower lip, chin and beard move down. Drag the dot onto the line between the lips and the two ends to the mouth's corners; the mouth shapes follow as you move.",
+    "notWarp": "Saving switches this character to these mouths and rigs every pose again.",
+    "noOwn": "This pose has no mouths of its own yet: place the line and save to make them.",
+    "zoomAlt": "{{name}}'s mouth, enlarged",
+    "stateAlt": "{{name}} saying {{sound}}",
+    "dot": "Point on the mouth line",
+    "left": "Left corner of the mouth",
+    "right": "Right corner of the mouth",
+    "nudge": {
+      "up": "Up",
+      "down": "Down",
+      "left": "Left",
+      "right": "Right",
+      "narrower": "Narrower",
+      "wider": "Wider"
+    },
+    "zoomOut": "Show more of the face",
+    "zoomIn": "Closer",
+    "loading": "Warping the mouths…",
+    "snapped": "The line sits on the painted line between the lips.",
+    "free": "No painted line here: the mouth opens exactly at the dot.",
+    "sounds": {
+      "rest": "rest",
+      "i": "i",
+      "e": "e",
+      "a": "a",
+      "o": "o",
+      "u": "u"
+    },
+    "undo": "Undo changes",
+    "save": "Save mouth",
+    "saving": "Rigging…",
+    "saved": "Saved the mouth of {{pose}}. Shots that use this pose keep the old mouth until they are rendered again.",
+    "previewOnly": "To save the line, open this character in Characters › Prepare 2D speech.",
+    "errors": {
+      "preview": "Could not preview the mouths.",
+      "unsaved": "Save the character's other changes first: the line is saved by rigging the saved character again.",
+      "save": "Could not save the mouth line."
+    },
+    "unsure": "The face points were unsure here (a moustache, a beard, a face seen from below): check that the line is between the lips."
   }
 }
