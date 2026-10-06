@@ -10,7 +10,7 @@ Base: `origin/development` (`b7d9962d`, incluye `415e4602`). Un bloque, un PR co
 | J3 Fotogramas | `feat/game-assets-3-frames` | #865 | en curso (borrador) | `app/services/game_frames.py`, `app/services/game_sheet.py`, `tests/test_game_frames.py`, `tests/test_game_sheet.py` |
 | J4 Audio | `feat/game-assets-4-audio` | — | pendiente | `app/services/game_audio.py`, `app/services/game_sfxr.py` |
 | J5 Imagen estática | `feat/game-assets-5-static` | #867 | en curso (borrador) | `app/services/game_tools.py`, `app/services/game_prompts.py`, `app/services/game_generators/` (`still`, `tiles`, `background`), `tests/test_game_tools.py`, `tests/test_game_prompts.py`, `tests/test_game_gen_still.py`, `tests/test_game_gen_tiles.py` |
-| J6 Animación | `feat/game-assets-6-animation` | — | en curso (borrador) | `app/services/game_generators/animation.py`, `app/services/game_generators/vfx.py`, `tests/test_game_gen_animation.py`, `tests/test_game_gen_vfx.py` |
+| J6 Animación | `feat/game-assets-6-animation` | #888 | en curso (borrador) | `app/services/game_generators/animation.py`, `app/services/game_generators/vfx.py`, `tests/test_game_gen_animation.py`, `tests/test_game_gen_vfx.py` |
 | J7 Audio gen | `feat/game-assets-7-audio-gen` | — | pendiente | `app/services/game_generators/audio.py` |
 | J8 Modelos 3D | `feat/game-assets-8-3d` | — | pendiente | `app/services/game_generators/three_d.py`, `triangle_count` en el inspector GLB |
 | J9 Lista y lote | `feat/game-assets-9-produce` | #868 | en curso (borrador) | `app/services/game_list.py`, `app/services/game_produce.py`, `app/services/game_jobs.py`, `app/services/game_estimate.py`, `app/routers/game_produce.py` |
