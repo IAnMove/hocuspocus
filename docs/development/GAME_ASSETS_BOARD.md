@@ -11,7 +11,7 @@ Base: `origin/development` (`b7d9962d`, incluye `415e4602`). Un bloque, un PR co
 | J4 Audio | `feat/game-assets-4-audio` | #866 | en curso (borrador) | `app/services/game_audio.py`, `app/services/game_sfxr.py`, `tests/test_game_audio.py`, `tests/test_game_sfxr.py` |
 | J5 Imagen estática | `feat/game-assets-5-static` | #867 | en curso (borrador) | `app/services/game_tools.py`, `app/services/game_prompts.py`, `app/services/game_generators/` (`still`, `tiles`, `background`), `tests/test_game_tools.py`, `tests/test_game_prompts.py`, `tests/test_game_gen_still.py`, `tests/test_game_gen_tiles.py` |
 | J6 Animación | `feat/game-assets-6-animation` | #888 | en curso (borrador) | `app/services/game_generators/animation.py`, `app/services/game_generators/vfx.py`, `tests/test_game_gen_animation.py`, `tests/test_game_gen_vfx.py` |
-| J7 Audio gen | `feat/game-assets-7-audio-gen` | — | pendiente | `app/services/game_generators/audio.py` |
+| J7 Audio gen | `feat/game-assets-7-audio-gen` | — | en curso (borrador) | `app/services/game_generators/audio.py`, `tests/test_game_gen_audio.py` |
 | J8 Modelos 3D | `feat/game-assets-8-3d` | — | pendiente | `app/services/game_generators/three_d.py`, `triangle_count` en el inspector GLB |
 | J9 Lista y lote | `feat/game-assets-9-produce` | #868 | en curso (borrador) | `app/services/game_list.py`, `app/services/game_produce.py`, `app/services/game_jobs.py`, `app/services/game_estimate.py`, `app/routers/game_produce.py` |
 | J10 Exportación | `feat/game-assets-10-export` | — | pendiente | `app/services/game_export.py` |

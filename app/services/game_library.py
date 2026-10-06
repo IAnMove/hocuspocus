@@ -356,14 +356,62 @@ def _seconds(raw: dict[str, Any], fallback: float) -> float:
     return float(value)
 
 
-def _spec_sfx(raw: dict[str, Any], _game: dict[str, Any]) -> dict[str, Any]:
+_RETRO_WORDS = (
+    ("pickup", ("pickup", "recoger", "moneda", "coin")),
+    ("jump", ("jump", "salto", "saltar")),
+    ("laser", ("laser",)),
+    ("hit", ("hit", "golpe", "impacto")),
+    ("powerup", ("powerup", "mejora", "potencia")),
+    ("blip", ("blip",)),
+)
+
+
+def _fold(value: Any) -> str:
+    text = unicodedata.normalize("NFD", str(value or "").casefold())
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+
+
+def _retro_preset(raw: dict[str, Any]) -> str:
+    """Earliest keyword in the description, name, id or trigger, accents folded."""
+    blob = _fold(" ".join(str(raw.get(key) or "") for key in ("description", "name", "id", "trigger")))
+    found = ""
+    at = len(blob) + 1
+    for preset, words in _RETRO_WORDS:
+        for word in words:
+            match = re.search(rf"\b{re.escape(word)}\b", blob)
+            if match and match.start() < at:
+                found = preset
+                at = match.start()
+    return found
+
+
+def _pixel_preset(game: dict[str, Any]) -> bool:
+    return str((game.get("style") or {}).get("preset") or "").startswith("pixel-")
+
+
+def _sfx_payload(raw: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
+    """Keyword fields live on the asset. A nested spec does not replace them."""
+    merged = dict(spec)
+    for key in ("id", "name", "description"):
+        if key not in merged and _text(raw.get(key)):
+            merged[key] = raw.get(key)
+    return merged
+
+
+def _spec_sfx(raw: dict[str, Any], game: dict[str, Any]) -> dict[str, Any]:
+    omitted = raw.get("engine") in (None, "")
+    engine = _choice(raw.get("engine"), ("mmaudio", "retro"), "mmaudio", "invalid_engine")
+    detected = _retro_preset(raw)
+    if omitted and _pixel_preset(game) and detected:
+        engine = "retro"
     spec: dict[str, Any] = {
         "variants": _int(raw.get("variants"), 3, 1),
         "seconds": _seconds(raw, 1.0),
-        "engine": _choice(raw.get("engine"), ("mmaudio", "retro"), "mmaudio", "invalid_engine"),
+        "engine": engine,
     }
-    if _text(raw.get("retroPreset")):
-        spec["retroPreset"] = _text(raw.get("retroPreset"))
+    preset = _text(raw.get("retroPreset")) or (detected if engine == "retro" else "")
+    if preset:
+        spec["retroPreset"] = preset
     if _text(raw.get("trigger")):
         spec["trigger"] = _text(raw.get("trigger"))
     return spec
@@ -473,7 +521,10 @@ def normalize_asset(raw: dict[str, Any], game: dict[str, Any], *, now: str) -> d
     kind = raw.get("kind")
     if kind not in KINDS:
         raise _problem("unknown_kind", kind=kind)
-    spec = _SPECS[str(kind)](raw.get("spec") if isinstance(raw.get("spec"), dict) else raw, game)
+    payload = raw.get("spec") if isinstance(raw.get("spec"), dict) else raw
+    if kind == "sfx" and isinstance(raw.get("spec"), dict):
+        payload = _sfx_payload(raw, payload)
+    spec = _SPECS[str(kind)](payload, game)
     approved = raw.get("approvedAttemptId")
     approved_id = _text(approved) or None
     return {
