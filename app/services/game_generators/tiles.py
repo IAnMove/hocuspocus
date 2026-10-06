@@ -20,6 +20,9 @@ from services.game_tools import file_ref, image, key, resolve_path
 
 _NAMES = ("tl", "t", "tr", "l", "c", "r", "bl", "b", "br")
 _PAIRS = (("tl", "t"), ("t", "tr"), ("l", "c"), ("c", "r"), ("bl", "b"), ("b", "br"))
+# Qwen-Image-2.1 inpaint at 128x128 mismatches vision slots (latent 128 vs mask 320).
+# The 1024x1024 inpaint path is the one that completes.
+_HEAL_SIDE = 1024
 
 
 def _seed(asset: dict) -> int:
@@ -150,7 +153,7 @@ class TilesetGenerator:
         sheet = _square(crop_figure(_load(ctx, keyed)), size * 3)
         cells = slice_grid(sheet, 3, 3)
         center, error, warnings = _heal_until(
-            ctx, _square(cells[4], 128), prompt, negative, "128x128", seed, (0, 1),
+            ctx, _square(cells[4], _HEAL_SIDE), prompt, negative, f"{_HEAL_SIDE}x{_HEAL_SIDE}", seed, (0, 1),
         )
         cells[4] = _square(center, size)
         painted = _post(ctx.game.get("style") or {}, _sheet(cells), screen)

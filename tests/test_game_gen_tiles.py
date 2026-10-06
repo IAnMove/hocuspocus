@@ -103,6 +103,8 @@ def test_tileset_writes_nine_named_cells(tmp_path):
     game = {"id": "bosque", "style": _style(), "assets": [asset]}
     fake = Fake([str(workspace / "grid.png"), str(workspace / "periodic.png")])
     result = REGISTRY["tileset"].run(_ctx(workspace, game, asset, fake))
+    guided = [args for tool, args in fake.calls if tool == "generation.image" and "image_guide" in args["input"]["params"]]
+    assert guided[0]["input"]["params"]["resolution"] == "1024x1024"
     payload = json.loads((workspace / "game" / "bosque" / "suelo" / "a1" / "tiles.json").read_text(encoding="utf-8"))
     assert payload["names"] == ["tl", "t", "tr", "l", "c", "r", "bl", "b", "br"]
     assert len(payload["tiles"]) == 9
