@@ -265,6 +265,28 @@ def test_a_production_cut_by_a_restart_is_interrupted_and_resumes(tmp_path):
     assert done["steps"][0]["jobId"] == "native-spanish", "a new render replaced the one the server forgot"
 
 
+@pytest.mark.parametrize("terminal", ["completed", "failed", "cancelled", "waiting"])
+def test_a_finished_production_is_not_overwritten_by_a_stale_running_read(tmp_path, terminal):
+    import threading
+    from services.series_jobs import SeriesJobStore
+
+    service = producer(tmp_path, Production(fail_english=0))
+    store = SeriesJobStore(str(tmp_path), "produce")
+    running = {"jobId": "produce-race", "status": "running", "chapters": {},
+               "steps": [{"kind": "assemble", "language": "spanish", "status": "running"}]}
+    store.save(running)
+    stale = store.load("produce-race")
+    finished_job = {**running, "kind": "produce", "status": terminal, "chapters": {"spanish": {"file": "chapter.mp4"}},
+                    "steps": [{**running["steps"][0], "status": "done"}], "message": "Worker finished"}
+    worker = threading.Thread(target=lambda: store.save(finished_job))
+    service._threads["produce-race"] = worker
+    worker.start()
+    worker.join()
+
+    assert service._reconcile("cast", stale) == finished_job
+    assert store.load("produce-race") == finished_job
+
+
 def test_a_failed_cut_is_made_again_on_resume(tmp_path):
     class Cuts(Production):
         """Every cut gets its own job; the first two stay failed, like a real failed assembly does."""

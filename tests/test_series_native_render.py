@@ -231,6 +231,11 @@ def test_takes_keep_their_render_inputs_and_only_changed_shots_are_out_of_date(t
     checker = SeriesNativeRender(NativeRenderDeps(call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: data,
                                                   read_kits=lambda _ws: kits))
     assert checker.stale_shots("cast", "uv", "ep1") == [], "every approved take is up to date"
+    first_beat = episode["shots"][0]["dialogueBeats"][0]
+    first_beat["pauseBefore"] = 2.5
+    assert checker.stale_shots("cast", "uv", "ep1") == ["s01"], "a changed pause renders the shot with its new timing"
+    first_beat["pauseBefore"] = 0
+    assert checker.stale_shots("cast", "uv", "ep1") == [], "an explicit zero keeps existing unpaused takes current"
     episode["shots"][2]["dialogueBeats"][0]["text"] = "Hasta luego."
     assert checker.stale_shots("cast", "uv", "ep1") == ["s03"], "a changed line renders that shot only"
     kits["kit-kevin"]["updatedAt"] = "later"

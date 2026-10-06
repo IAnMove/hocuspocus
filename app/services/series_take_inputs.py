@@ -10,6 +10,7 @@ part of a shot, so changing them renders nothing again. A shot's ``foley`` is, s
 that shot again; a shot without one keeps the digest it had before foley existed. A location's ``layout2d.layers``
 (``series_layers``) are seen only by its 2D shots that do not bring their own, so changing them renders just those;
 a location without layers keeps the digests it had.
+Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
 """
 from __future__ import annotations
 
@@ -20,6 +21,8 @@ from typing import Any
 from services import series_shot3d
 from services.series_ambience import shot_sound_design
 from services.series_layers import digest_location
+from services.series_shot_extras import pauses
+from services.series_scene_inputs import scene_source_digest
 from services.series_shot_plan import kit_ref
 from services.series_voice_rooms import VERSION as ROOM_VERSION, line_rooms
 
@@ -28,10 +31,10 @@ _SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId
 _KIT_VOLATILE = ("createdAt", "updatedAt", "provenance")
 
 
-def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any]) -> str:
+def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None = None) -> str:
     """Fingerprint of everything a shot's render depends on: its layout and lines in this language, the location, the
     sound design, its foley and the kits of the people seen or heard. It is kept on the take, so a production renders again only
-    the shots whose inputs changed (a 3D template edited in place is not seen: render those shots by id)."""
+    the shots whose inputs changed. ``root`` includes mutable 3D source documents in the fingerprint."""
     beats = [[beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
              for beat in shot.get("dialogueBeats") or []]
     people = _people(shot, beats)
@@ -48,10 +51,24 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
                  for kid in kit_ids.values() if kid},
         **({"foley": shot["foley"]} if shot.get("foley") else {}),
     }
+    payload.update(_extra_inputs(series, shot, root))
+    return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def _extra_inputs(series: dict, shot: dict, root: str | None) -> dict:
+    """Omit absent additions so existing dry, unpaused 2D takes keep their fingerprints."""
+    payload = {}
     rooms = line_rooms(series, shot)
     if rooms:
         payload["room"] = {"version": ROOM_VERSION, "lines": rooms}
-    return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
+    timing = pauses(shot.get("dialogueBeats") or [])
+    if any(timing):
+        payload["pauses"] = timing
+    config = series_shot3d.normalize_scene3d(shot.get("scene3d")) if shot.get("productionMethod") == "animation_3d" else None
+    source = scene_source_digest(config, root) if config else None
+    if source is not None:
+        payload["sceneSource"] = source
+    return payload
 
 
 def _people(shot: dict[str, Any], beats: list[list[Any]]) -> list[str]:
@@ -67,10 +84,10 @@ def _kept_inputs(shot: dict[str, Any], assets: dict[str, Any]) -> str | None:
     return ((assets.get(outputs[0]) or {}).get("metadata") or {}).get("renderInputs") if outputs else None
 
 
-def stale_shot_ids(series: dict[str, Any], episode: dict[str, Any], kits: dict[str, Any]) -> list[str]:
+def stale_shot_ids(series: dict[str, Any], episode: dict[str, Any], kits: dict[str, Any], root: str | None = None) -> list[str]:
     """Rendered shots of a (localized) episode with no approved take, or one made from other inputs. Takes from before
     the inputs were kept count as out of date."""
     assets = series.get("assets") or {}
     shots = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
     return [shot["id"] for shot in shots if series_shot3d.wants_render(shot)
-            and _kept_inputs(shot, assets) != render_inputs(series, shot, kits)]
+            and _kept_inputs(shot, assets) != render_inputs(series, shot, kits, root)]

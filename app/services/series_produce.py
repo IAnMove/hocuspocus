@@ -117,6 +117,11 @@ class SeriesProduce:
         thread = self._threads.get(job["jobId"])
         if thread is not None and (thread.ident is None or thread.is_alive()):
             return job
+        if thread is not None:
+            # The worker may have finished after the caller read its running checkpoint.
+            job = self._store(workspace).load(job["jobId"]) or job
+            if job.get("status") not in ACTIVE:
+                return job
         for step in job.get("steps") or []:
             if step.get("status") == "running":
                 step["status"] = "queued"
