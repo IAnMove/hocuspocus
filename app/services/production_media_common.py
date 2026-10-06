@@ -11,7 +11,9 @@ from __future__ import annotations
 import hashlib
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,8 @@ OUTPUT_NAME = {"type": "string", "minLength": 1, "maxLength": 180, "description"
     "File name for the result in the workspace (its extension is set by the tool). An existing name gets "
     "name(2).ext; nothing is overwritten.")}
 _ENVELOPE_KEYS = frozenset({"version", "input", "intent_id"})
+# The agent call a tool runs for (services/agent_activity.py), so the file's sidecar names it with its intent_id.
+_REQUEST: ContextVar[dict | None] = ContextVar("production_media_request", default=None)
 
 
 class MediaToolError(Exception):
@@ -164,17 +168,28 @@ def source_ref(path: str, workspace: str, role: str = "source") -> dict[str, str
     return {"id": asset_id, "kind": infer_asset_kind(path), "uri": os.path.basename(path), "role": role}
 
 
+def requested(operation: str) -> tuple[str, str, dict[str, Any]]:
+    """(tool, actor, sidecar fields) for a file made now: an MCP agent's call is named on the file
+    (``requested_by`` with its intent_id, as agent exports are); a user or the Wizard keep the tool's own name."""
+    from services.agent_activity import actor_label, agent_attribution, requested_by, trusted_tool
+
+    attribution = _REQUEST.get() or agent_attribution(operation)
+    # The manifest's actors are user, wizard and system: an agent is the user's tool (external_agent), as on exports.
+    return trusted_tool() or operation, "wizard" if actor_label() == "wizard" else "user", requested_by(attribution)
+
+
 def publish_sidecar(path: str, workspace: str, operation: str, mode: str, params: dict[str, Any],
                     sources: list[dict[str, str]]) -> bool:
-    """A provenance sidecar naming the tool, its parameters and its source files. Never raises."""
+    """A provenance sidecar naming the tool, its parameters, its source files and the agent that asked. Never raises."""
     from services.asset_manifest import publish_generation_sidecar_best_effort
 
+    tool, actor, asked = requested(operation)
     sidecar = {
         "params": {**params, "source": operation}, "generation_mode": mode, "created_at": time.time(),
         "inputs": sources, "parents": sources,
-        "transformations": [{"tool": operation, **params}],
+        "transformations": [{"tool": operation, **params}], **asked,
     }
-    return publish_generation_sidecar_best_effort(path, sidecar, workspace_id=workspace, tool=operation,
+    return publish_generation_sidecar_best_effort(path, sidecar, workspace_id=workspace, tool=tool, actor=actor,
                                                   capability=operation) is not None
 
 
@@ -208,12 +223,25 @@ def run_once(arguments: Any, operation: str, folder_for: Callable[[dict], str], 
     return result
 
 
+@contextmanager
+def request_scope(operation: str, arguments: Any) -> Iterator[None]:
+    """While a tool runs: the agent call it runs for (if any), for ``publish_sidecar``."""
+    from services.agent_activity import agent_attribution
+    intent = arguments.get("intent_id") if isinstance(arguments, dict) and isinstance(arguments.get("intent_id"), str) else None
+    token = _REQUEST.set(agent_attribution(operation, intent))
+    try:
+        yield
+    finally:
+        _REQUEST.reset(token)
+
+
 def handler(operation: str, run: Callable[[dict], dict], folder_for: Callable[[dict], str]):
     """An async MCP handler: runs ``run(arguments)`` off the event loop and maps errors to tool errors."""
     async def handle(arguments: Any) -> dict:
         from starlette.concurrency import run_in_threadpool
         try:
-            result = await run_in_threadpool(run_once, arguments, operation, folder_for, lambda: run(arguments))
+            with request_scope(operation, arguments):
+                result = await run_in_threadpool(run_once, arguments, operation, folder_for, lambda: run(arguments))
         except MediaToolError as exc:
             raise HTTPException(exc.status, {"code": exc.code, "message": exc.message, "retryable": False}) from exc
         return {"version": 1, "status": "completed", "operation": operation, "result": result}

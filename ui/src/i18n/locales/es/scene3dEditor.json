@@ -3991,5 +3991,19 @@
     "current": "Actual",
     "pickOne": "Elige un plano para verlo aquí.",
     "hint": "Doble clic o Intro para usar un plano directamente"
+  },
+  "workspaceTemplates": {
+    "title": "Guardadas en este workspace",
+    "help": "Plantillas que un agente, el Wizard o tú guardasteis en este workspace (world3d.templates.user.put). Elige una y pulsa «Usar este plano»: se abre como un plano editable.",
+    "objects_one": "{{count}} objeto",
+    "objects_other": "{{count}} objetos",
+    "pending_one": "{{count}} hueco vacío",
+    "pending_other": "{{count}} huecos vacíos",
+    "by": {
+      "agent": "Agente",
+      "wizard": "Wizard"
+    },
+    "invalid": "Esta plantilla del workspace no es un documento de Video 3D válido.",
+    "shotTitle": "Plantilla del workspace · {{id}}"
   }
 }

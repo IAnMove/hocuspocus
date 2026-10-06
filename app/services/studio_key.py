@@ -109,13 +109,15 @@ def command_handlers(workspace_dir, uploads_dir, find_model: Callable[[], str | 
     finder = find_model or find_isnet_model
 
     async def handle(arguments: dict) -> dict:
+        from services.production_media_common import request_scope
         try:
-            result = _key_once(arguments, workspace_dir, lambda: key_request(
-                arguments,
-                workspace_dir=workspace_dir,
-                uploads_dir=uploads_dir,
-                find_model=finder,
-            ))
+            with request_scope("studio.key", arguments):
+                result = _key_once(arguments, workspace_dir, lambda: key_request(
+                    arguments,
+                    workspace_dir=workspace_dir,
+                    uploads_dir=uploads_dir,
+                    find_model=finder,
+                ))
         except StudioKeyError as exc:
             raise HTTPException(exc.status, {
                 "code": exc.code,
@@ -162,7 +164,18 @@ def key_request(arguments, *, workspace_dir, uploads_dir, find_model: Callable[[
     suffix = ".png" if _is_image(source) else ".webm"
     destination = _destination(folder, source, suffix)
     frames = _key_file(source, destination, keyer)
-    return {**_published(destination, workspace, uploads_root, folder, frames), "report": keyer.summary()}
+    report = keyer.summary()
+    _key_sidecar(destination, source, workspace, payload, mode, report)
+    return {**_published(destination, workspace, uploads_root, folder, frames), "report": report}
+
+
+def _key_sidecar(destination: str, source: str, workspace: str, payload: dict, mode: str, report: dict) -> None:
+    """The keyed file's provenance: its source, the key's settings and report, and the agent that asked (if one did)."""
+    from services.production_media_common import publish_sidecar, source_ref
+    params = {"mode": mode, "adaptive": payload.get("adaptive", True), "despill": payload.get("despill", True),
+              "semiTransparentShare": report.get("semiTransparentShare")}
+    publish_sidecar(destination, workspace, "studio.key", "image" if _is_image(destination) else "video", params,
+                    [source_ref(source, workspace)])
 
 
 class _Keyer:

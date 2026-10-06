@@ -7664,7 +7664,7 @@ async def generate_model3d(request: Request):
     from services.generation_provenance import normalize_submission_provenance
 
     body = await request.json()
-    body["provenance"] = normalize_submission_provenance(body.pop("provenance", None))
+    body["provenance"] = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
     collection_id = body["provenance"].get("workspace_id")
     if collection_id and not _workspace_collection_registry.get(collection_id):
         raise HTTPException(status_code=400, detail="Unknown Workspace collection")
@@ -7759,7 +7759,11 @@ def rig_capabilities():
 @api.post("/api/v1/rig/generate")
 async def generate_rig(request: Request):
     from services import rig_service
+    from services.generation_provenance import normalize_submission_provenance
     body = await request.json()
+    raw_provenance, trusted = body.pop("provenance", None), getattr(request, "trusted_tool", None)
+    # A UI rig keeps its historical "rig" origin; an agent or Wizard request carries who asked.
+    provenance = normalize_submission_provenance(raw_provenance, trusted_tool=trusted) if raw_provenance or trusted else None
     workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
     _workspace_dir(workspace)
     source_name = str(body.get("source") or "").strip()
@@ -7779,6 +7783,7 @@ async def generate_rig(request: Request):
             source_path=source_path,
             output_dir=_workspace_dir(workspace),
             workspace=workspace,
+            provenance=provenance,
         )
         publisher = globals().get("_publish_generic_legacy_task")
         if callable(publisher):
@@ -37240,8 +37245,10 @@ api.include_router(create_series_plates_router(SeriesPlates(PlateDeps(
     change_series=_change_series, read_scene=_read_world3d_scene,
 )), _local_mcp.bind_loop))
 
+from services.agent_activity import AgentActivity
+_agent_activity = AgentActivity(_task_registry, _get_active_workspace)
 api.include_router(create_wangp_mcp_router(
-    token_getter=_mcp_access.token,
+    token_getter=_mcp_access.token, on_mutation=_agent_activity.record,
     handlers=(_mcp_handlers := {"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
               **wangp_agent_handlers(api), **lips_creator_handlers(_workspace_dir), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **world3d_template_handlers(_workspace_dir), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **media_options_handlers(_media_options_sources), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers, **_qa_people_handlers, **_studio_key_handlers, **_production_media_handlers, **_clip_align_handlers, **_montage_preview_handlers, **audio_analysis_handlers(_workspace_dir), **lipsync_qa_handlers(_workspace_dir), **speech_qa_handlers(_workspace_dir), **_export_qa_handlers,

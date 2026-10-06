@@ -10,9 +10,11 @@ import shutil
 import subprocess
 import uuid
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 
 from services import world3d_slot_fields as slot_fields
+from services.agent_activity import actor_label
 from services.character_kit_library import read_character_kit_library
 from services.scene_documents import get_document, save_document
 from services.world3d_look import check_render_look, normalize_toon
@@ -258,10 +260,7 @@ def publish_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
             "editor": opened.get("editor"), "document": opened["document"], "traits": traits}
 
 
-def put_user_template(workspace: str, workspace_dir, row: dict) -> dict:
-    template_id = row.get("id")
-    title = row.get("title")
-    document = row.get("document")
+def _check_user_template(template_id, title, document) -> None:
     if not isinstance(template_id, str) or not template_id.startswith("user-"):
         raise World3DSceneError("invalid_user_template", "Personal template ids start with user-")
     if template_id in {card["id"] for card in require_builtin_ids()}:
@@ -270,15 +269,29 @@ def put_user_template(workspace: str, workspace_dir, row: dict) -> dict:
         raise World3DSceneError("invalid_user_template", "A personal template needs a title")
     if not isinstance(document, dict) or not isinstance(document.get("slots"), list):
         raise World3DSceneError("invalid_user_template", "A personal template needs a Video 3D document")
+
+
+def _stamp(previous: dict) -> dict:
+    """When and by whom (agent, wizard or user) a personal template was saved; a later save keeps the creation."""
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return {"createdAt": previous.get("createdAt") or now, "updatedAt": now, "createdBy": previous.get("createdBy") or actor_label()}
+
+
+def put_user_template(workspace: str, workspace_dir, row: dict) -> dict:
+    template_id = row.get("id")
+    title = row.get("title")
+    document = row.get("document")
+    _check_user_template(template_id, title, document)
     path = Path(workspace_dir(workspace))
     path.mkdir(parents=True, exist_ok=True)
     target = path / "world3d-user-templates.json"
     current = {"templates": []}
     if target.is_file():
         current = json.loads(target.read_text(encoding="utf-8"))
+    previous = next((item for item in current.get("templates") or [] if isinstance(item, dict) and item.get("id") == template_id), {})
     rows = [item for item in current.get("templates") or [] if not (isinstance(item, dict) and item.get("id") == template_id)]
     stored = {"id": template_id, "title": title.strip()[:80], "description": str(row.get("description") or "")[:240],
-              "document": document}
+              "document": document, **_stamp(previous)}
     rows.append(stored)
     _atomic(target, {"version": 1, "templates": rows})
     return {"id": template_id, "source": "workspace", "title": stored["title"]}

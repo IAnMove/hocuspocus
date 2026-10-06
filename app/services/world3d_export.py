@@ -27,6 +27,7 @@ from urllib.parse import unquote, urlsplit
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from services.agent_activity import agent_attribution, requested_by
 from services.asset_manifest import publish_generation_sidecar
 from services.audio_mix import mux_wav_audio  # noqa: F401 — the shared mixer, re-exported
 from services.workspace_cleanup import keep_export_staging, release_export_staging
@@ -870,11 +871,13 @@ class World3DExportService:
         snapshot = frozen["effective"]["input"]["snapshot"]
         job_id = f"{self.slug}-{uuid.uuid4().hex}"
         task_id = new_task_id(self.slug)
+        fields = self._task_fields(task_id=task_id, job_id=job_id, workspace=workspace, plan=snapshot["plan"])
+        fields["metadata"].update(agent_attribution(self.operation, frozen["original"]["intent_id"]))
         admitted = registry.admit_command_task(
             intent_id=frozen["original"]["intent_id"], operation=self.operation,
             digest=frozen["fingerprint"], original=frozen["original"],
             effective=frozen["effective"], fingerprint_version=1,
-            task_fields=self._task_fields(task_id=task_id, job_id=job_id, workspace=workspace, plan=snapshot["plan"]),
+            task_fields=fields,
         )
         self._dispatch(registry, frozen["original"]["intent_id"])
         return {**admitted, "capabilities": self.capabilities()}
@@ -1022,7 +1025,8 @@ class World3DExportService:
         name = snapshot.get("outputName") or self.output_name(snapshot)
         output = Path(self.workspace_dir(workspace)) / name
         replaced = publish_export_file(encoded, output, master)
-        publish_generation_sidecar(output, self.sidecar(snapshot, name), workspace_id=workspace, tool=self.slug,
+        sidecar = {**self.sidecar(snapshot, name), **requested_by((registry.get(task_id) or {}).get("metadata"))}
+        publish_generation_sidecar(output, sidecar, workspace_id=workspace, tool=self.slug,
                                    capability=self.operation, actor="user")
         return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace, **replaced}
 
@@ -1089,6 +1093,9 @@ class World3DExportService:
             return
         if task["status"] in {"completed", "cancelled"} and status == "failed":
             return
+        if isinstance(fields.get("metadata"), dict):
+            # Keep what admission recorded (who asked for the export) beside the published output.
+            fields["metadata"] = {**(task.get("metadata") or {}), **fields["metadata"]}
         try:
             registry.update(task_id, status=status, **fields)
         except ValueError:

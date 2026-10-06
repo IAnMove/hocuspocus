@@ -409,7 +409,9 @@ def start_job(
     source_path: str,
     output_dir: str,
     workspace: str = "default",
+    provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """``provenance`` (who asked: actor, tool, capability, command) reaches the task and the GLB sidecar."""
     # Each engine has its own runtime; gate on the one actually requested.
     if str(body.get("engine") or "procedural") != "unirig":
         runtime = installation_status()
@@ -526,11 +528,27 @@ def start_job(
         "updated_at": time.time(),
         "request": request_data,
     }
+    if isinstance(provenance, dict) and provenance:
+        job["provenance"] = dict(provenance)
     with _lock:
         _jobs[job_id] = job
         initial_response = _public_job(dict(job))
     threading.Thread(target=_run_job, args=(job_id, os.path.abspath(output_dir)), daemon=True).start()
     return initial_response
+
+
+def _sidecar_origin(job: dict[str, Any]) -> dict[str, Any]:
+    """Who asked for the rig, for the GLB sidecar; an agent's MCP call stays visible on the file."""
+    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    origin = {"tool": provenance.get("tool") or "rig", "actor": provenance.get("actor"), "capability": provenance.get("capability")}
+    return {key: value for key, value in origin.items() if value}
+
+
+def _command_id(job: dict[str, Any]) -> dict[str, Any]:
+    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    return {"command_id": command["command_id"]} if command.get("command_id") else {}
 
 
 def _update_job(job_id: str, **updates: Any) -> bool:
@@ -835,6 +853,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 "generation_mode": "model3d",
                 "mode": "model3d",
                 "job_id": job_id,
+                **_command_id(current_job),
                 "task_id": _canonical_task_id(job_id),
                 "root_task_id": _canonical_task_id(job_id),
                 "created_at": time.time(),
@@ -853,7 +872,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 },
             },
             output_folder=_physical_output_folder(current_job.get("workspace")),
-            tool="rig",
+            **_sidecar_origin(current_job),
         )
         # Reuse the source's gallery preview for the rigged copy.
         source_preview = source.with_suffix(".preview.png")

@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2686,
+      "weight": 2702,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -241,6 +241,8 @@
         "tests/test_production_shot_regeneration.py",
         "tests/test_series_language_versions.py",
         "tests/test_local_mcp.py",
+        "tests/test_agent_activity.py",
+        "tests/test_recoverable_artifacts.py",
         "tests/test_verify_clean_repo.py"
       ]
     },
@@ -257,6 +259,7 @@
         "tests/test_media_compose.py",
         "tests/test_export_output_name.py",
         "tests/test_production_media_router.py",
+        "tests/test_production_media_agent_trail.py",
         "tests/test_flat_rig_realistic.py",
         "tests/test_flat_rig_guided.py",
         "tests/test_acceptance_runner.py",
@@ -537,7 +540,7 @@
     },
     {
       "prefix": "app/services/studio_key_clean.py",
-      "paths": ["tests/test_studio_key.py"]
+      "paths": ["tests/test_studio_key.py", "tests/test_production_media_agent_trail.py"]
     },
     {
       "prefix": "app/services/export_output_name.py",
@@ -545,11 +548,11 @@
     },
     {
       "prefix": "app/services/production_media_common.py",
-      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py"]
+      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py", "tests/test_production_media_agent_trail.py"]
     },
     {
       "prefix": "app/services/production_media_commands.py",
-      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py"]
+      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py", "tests/test_production_media_agent_trail.py"]
     },
     {
       "prefix": "app/routers/production_media.py",

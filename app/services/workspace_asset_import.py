@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from services.production_media_common import (
-    WORKSPACE, MediaToolError, media_url, operation_schema, read_input, sha256_file, uploads_root,
+    WORKSPACE, MediaToolError, media_url, operation_schema, read_input, requested, sha256_file, uploads_root,
     workspace_folder,
 )
 
@@ -127,6 +127,7 @@ def _sidecar(source: str, target: Path, workspace: str, provenance: dict[str, An
               or _stable_unmanaged_id(provenance["workspace"], provenance["file"]),
               "kind": (metadata.get("asset") or {}).get("kind") or "other", "uri": provenance["file"], "role": "copied_from"}
     metadata["copied_from"] = provenance
+    metadata.update(requested(OPERATION)[2])
     if isinstance(metadata.get("origin"), dict):
         metadata["origin"].update(workspace_id=workspace, output_folder=workspace)
     lineage = metadata.get("lineage")
@@ -142,12 +143,13 @@ def _fresh_sidecar(source: str, target: Path, workspace: str, provenance: dict[s
 
     parent = {"id": _stable_unmanaged_id(provenance["workspace"], provenance["file"]), "kind": infer_asset_kind(source),
               "uri": provenance["file"], "role": "copied_from"}
+    tool, actor, asked = requested(OPERATION)
     manifest = build_asset_manifest(
-        target, asset_id=_stable_unmanaged_id(workspace, target.name), workspace_id=workspace, tool=OPERATION,
-        capability=OPERATION, actor="system", execution_mode="import", parents=[parent], inputs=[parent],
+        target, asset_id=_stable_unmanaged_id(workspace, target.name), workspace_id=workspace, tool=tool,
+        capability=OPERATION, actor=actor, execution_mode="import", parents=[parent], inputs=[parent],
         transformations=[{"tool": OPERATION, **provenance}], media={"size_bytes": os.path.getsize(source)},
     )
-    return json.dumps({**manifest, "copied_from": provenance}, ensure_ascii=False, indent=2)
+    return json.dumps({**manifest, "copied_from": provenance, **asked}, ensure_ascii=False, indent=2)
 
 
 def _same_or_refused(target: Path, digest: str, overwrite: bool) -> bool:
