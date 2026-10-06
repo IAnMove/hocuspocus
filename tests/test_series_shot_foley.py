@@ -308,13 +308,11 @@ def test_a_video_take_gets_its_foley_as_a_sound_the_cut_lays_under_it(tmp_path):
     """A generated or imported take is not rendered: its foley is made from it once and kept as a sound file;
     no new take is imported and the approval stays."""
     from services.series_take_sound import plan_take_sound
-    from services.series_video_foley import missing_video_foley, sound_name
+    from services.series_video_foley import sound_name
     tools, mixes, data = FoleyTools(tmp_path), [], library()
     _video_take(data, tmp_path)
     render = foley_render(tmp_path, tools, data, mixes, probe=lambda _path: 4.0)
     episode = data["seriesById"]["uv"]["episodesById"]["ep1"]
-    assert missing_video_foley(data["seriesById"]["uv"], episode, str(tmp_path)) == ["s02"]
-    assert "s02" in render.stale_shots("cast", "uv", "ep1")
     done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s02"])["jobId"], tmp_path)
     assert done["status"] == "completed", done
     [item] = done["items"]
@@ -324,7 +322,6 @@ def test_a_video_take_gets_its_foley_as_a_sound_the_cut_lays_under_it(tmp_path):
     assert sfx["input"]["params"]["video_guide"] == "/api/v1/file/assets/uv/asset_h3.mp4?workspace=cast"
     assert sfx["input"]["params"]["duration_seconds"] == 4.0
     assert imports(tools) == {} and mixes == [], "the take is not changed and no take is imported"
-    assert missing_video_foley(data["seriesById"]["uv"], episode, str(tmp_path)) == []
     # The cut lays it: the plan carries the prompt, volume and names; a second render reuses the file.
     clips = [{"shotId": "s02"}]
     plan_take_sound(data["seriesById"]["uv"], episode, clips)

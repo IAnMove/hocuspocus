@@ -203,7 +203,7 @@ def _clip_report(info: dict[str, Any], sound: dict[str, Any], sources: list, fol
     if sound.get("foley"):
         report["foley"] = bool(foley)
         if not foley:
-            report["warning"] = "foley not made yet: render the shot (series.episode.render_native) or produce the episode"
+            report["warning"] = "foley not made yet: render the shot (series.shot.update render, or render_native with its id)"
     return report
 
 

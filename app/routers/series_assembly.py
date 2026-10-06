@@ -45,6 +45,12 @@ def _remove_assembly_artifacts(output_path: str | None) -> None:
     remove_episode_subtitles(output_path)
 
 
+def _remove_folder(path: str) -> None:
+    """The temporary folder of the clips prepared for one join (series_take_sound)."""
+    if path:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def _publish_cut(series: dict[str, Any], episode: dict[str, Any], job: dict[str, Any], asset_id: str, thumbnail: dict[str, Any]) -> None:
     """Record the cut (and its thumbnail) on the episode, or on the language version it was made for."""
     holder = episode
@@ -163,12 +169,6 @@ class SeriesAssemblyDiscardResponse(BaseModel):
     discarded: bool
     jobId: str
     outputsPreserved: bool
-
-
-def _remove_folder(path: str) -> None:
-    """The temporary folder of the clips prepared for one join (series_take_sound)."""
-    if path:
-        shutil.rmtree(path, ignore_errors=True)
 
 
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:

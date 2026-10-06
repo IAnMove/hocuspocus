@@ -21,9 +21,10 @@ WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REVISION = {"type": "integer", "minimum": 0}
 OBJECT = {"type": "object"}
-SHOT = {"anyOf": [{"type": "string", "minLength": 1, "maxLength": 160}, {"type": "integer", "minimum": 1, "maximum": 999}]}
 LANGUAGE = {"type": "string", "enum": ["english", "spanish", "french", "german", "italian", "portuguese", "japanese", "korean", "chinese", "russian"]}
 
+# A shot by id ("e1s04") or by its number in the episode (5 = the fifth shot, the #5 Series Lab shows).
+_SHOT = {"anyOf": [{"type": "string", "minLength": 1, "maxLength": 160}, {"type": "integer", "minimum": 1, "maximum": 999}]}
 # name: (properties, required, mutation, description)
 OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "characters.list": (
@@ -115,15 +116,15 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
         "[[character, pose, x, {edgeSnap: false}]] (a pose cut by its image border is otherwise moved so the cut never "
         "shows; an entrance: enterFrom left/right, enterAt and enterDuration seconds, enterGait walk with enterStep seconds), "
-        "lines {who, es, en, pauseBefore, voiceRoom}, cards, music, timed sfx and fx at a line, a "
+        "lines {who, es, en, pauseBefore, voiceRoom}, cards, music, video shots (kind video = an imported take, generated "
+        "= a MiniMax H3 take: their sfx, music, foley and clipAudio keep | drop, clipVolume, clipFit are laid at the cut), "
+        "timed sfx (in and length play only that part of the file) and fx at a line, a "
         "second or a cast member's entrance ({\"anchor\": \"enter\", \"cast\": index or id}; an sfx with \"repeat\": "
         "\"steps\" plays on every footfall; an fx duration is seconds, "
         "0.1-30 and clamped to that, or \"shot\" for the rest of the shot), props (ground true stands one on the floor), "
         "set layers (a video's start, speed and loop hold | pingpong), timing, foley "
-        "{prompt, volume} (sound generated from the rendered picture), 3D dialogue shots (scene3d.objects with clips, "
-        "hold and appearance as in series.episode.update) and video shots (kind video = an imported take, generated = a "
-        "MiniMax H3 take; their sfx, music, foley and clipAudio keep|drop / clipVolume / clipFit are laid at the cut). "
-        "An sfx's in and length play only that part of its file. It checks every character, pose, location, file, effect and "
+        "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots (scene3d.objects with clips, "
+        "hold and appearance as in series.episode.update). It checks every character, pose, location, file, effect and "
         "3D object model, clip name and hold against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id).",
     ),
@@ -269,9 +270,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Assemble the approved takes of an episode into one chapter video (shown under Capítulos), at -16 LUFS with SRT/VTT "
         "subtitles; burn_subtitles also writes a copy with them on the picture. language assembles that language version's "
         "approved takes. With soundDesign.ambienceMode \"episode\" it lays each location's ambience as one continuous "
-        "bed under the cut, and the episode's score (ducked under the lines), before the loudness. Generated and imported "
-        "takes get their shot's sfx, music and foley (keeping or dropping the clip's own sound), and every clip in "
-        "another size, frame rate or pixel aspect is conformed to the episode's (the takes are not changed). Returns a job.",
+        "bed under the cut, and the episode's score (ducked under the lines), before the loudness. Returns a job.",
     ),
     "series.episode.language_version.set": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE,
@@ -294,7 +293,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Read an episode assembly job: stage, progress, error and the chapter output when finished.",
     ),
     "series.shot.get": (
-        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": SHOT}, ["workspace", "series_id", "episode_id", "shot"],
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": _SHOT}, ["workspace", "series_id", "episode_id", "shot"],
         False,
         "Read one shot by id (e1s04) or by its number in the episode (5 = the fifth shot, the #5 Series Lab shows): its "
         "method, takes (id, status, approved) and its content in the script vocabulary of series.episode.from_script "
@@ -302,7 +301,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Read it before series.shot.update when a change depends on what is there.",
     ),
     "series.shot.update": (
-        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": SHOT, "changes": OBJECT, "append": OBJECT,
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": _SHOT, "changes": OBJECT, "append": OBJECT,
          "instruction": {"type": "string", "minLength": 1, "maxLength": 2000}, "check": {"type": "boolean"}, "render": {"type": "boolean"}, "approve": {"type": "boolean"}, "produce": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id", "shot"], True,
         "Edit one shot by instruction, by id (e1s04) or number in the episode (5 = the fifth shot): changes replaces "

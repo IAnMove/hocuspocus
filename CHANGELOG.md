@@ -6,6 +6,15 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series Lab voice rooms, looping ambience beds and looping score cues work on
+ffmpeg 6 (the one Ubuntu 24.04 ships). There every room failed with `Option not
+found`, because the convolution asked `afir` for `irnorm`, an option only
+ffmpeg 7 and later have, and a bed or cue that loops a file shorter than itself
+came out silent, because ffmpeg 6's `acrossfade` ends without the crossfade when
+both of its inputs are cut from one file. Both are now built from filters that
+every ffmpeg from 6.0 on runs alike, and they sound as before: a looped bed is
+the same sample for sample, a room the same to within a thousandth of a dB.
+
 Everything an agent did outside HocusPocus to finish a series episode is now
 done in the app, so its files can be found, redone and edited. One shot is
 edited by its number or id with `series.shot.update` ("edit the fifth shot and
@@ -28,15 +37,6 @@ keeps a full-size frame of a scene), cut a sound exactly (`audio.trim`) and copy
 a file from another workspace with its provenance
 (`assets.import_from_workspace`); Video 3D and Video 2D exports take an
 `output_name` for a stable file a set layer can name.
-
-Series Lab voice rooms, looping ambience beds and looping score cues work on
-ffmpeg 6 (the one Ubuntu 24.04 ships). There every room failed with `Option not
-found`, because the convolution asked `afir` for `irnorm`, an option only
-ffmpeg 7 and later have, and a bed or cue that loops a file shorter than itself
-came out silent, because ffmpeg 6's `acrossfade` ends without the crossfade when
-both of its inputs are cut from one file. Both are now built from filters that
-every ffmpeg from 6.0 on runs alike, and they sound as before: a looped bed is
-the same sample for sample, a room the same to within a thousandth of a dB.
 
 The light screen effects read in dark, painted frames. In a tenebrist episode
 a `shockwave` in gold, used as a prayer spreading over a city, came out as a

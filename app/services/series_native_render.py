@@ -46,7 +46,7 @@ from services.series_shot_bridge import measure_props, run_series_shot, with_pos
 from services import series_shot3d
 from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
 from services.series_sound_cuts import materialize_cuts
-from services.series_video_foley import VIDEO_METHODS, missing_video_foley, shot_foley, sound_name, take_file, video_take, wants_video_foley
+from services.series_video_foley import VIDEO_METHODS, shot_foley, sound_name, take_file, video_take, wants_video_foley
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.series_take_inputs import render_inputs, stale_shot_ids
@@ -157,6 +157,16 @@ def _output_file(status: dict, suffixes: tuple[str, ...]) -> str | None:
     return os.path.basename(path) if isinstance(path, str) and path.lower().endswith(suffixes) else None
 
 
+def _renders(shot: dict[str, Any]) -> bool:
+    """A shot the server render makes, or a generated or imported take whose foley it makes."""
+    return series_shot3d.wants_render(shot) or wants_video_foley(shot)
+
+
+def _drawn(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The shots the render draws and voices; a video take only gets its foley (its lines are in the clip)."""
+    return [shot for shot in shots if shot.get("productionMethod") not in VIDEO_METHODS]
+
+
 def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) -> dict[str, Any]:
     """Generation params for one line in one character voice (reference clone or preset)."""
     seconds = min(30, max(4, round(len(text.split()) * 0.6 + 3)))
@@ -229,11 +239,10 @@ class SeriesNativeRender:
         language = self._check_language(raw_series, raw_episode, language, wanted)
         series, episode = self._episode(workspace, series_id, episode_id, language)
         shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
-        rendered = _drawn(shots)
-        missing = self._missing_kits(workspace, series, rendered)
+        missing = self._missing_kits(workspace, series, shots)
         if missing:
             raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
-        voiceless = self._missing_voices(workspace, series, rendered, language, language_key(raw_series))
+        voiceless = self._missing_voices(workspace, series, shots, language, language_key(raw_series))
         if voiceless:
             raise NativeRenderError("no_voice", f"{', '.join(voiceless)} have no {language} voice (voicesByLanguage); "
                                     f"design one before rendering this version", 400)
@@ -243,6 +252,7 @@ class SeriesNativeRender:
         """Speakers of a language version whose kit has no voice designed for that language (the default would be the wrong accent)."""
         if language == original:
             return []
+        shots = _drawn(shots)
         kits = self.deps.read_kits(workspace)
         names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
         speakers = dict.fromkeys(beat.get("characterId") for shot in shots for beat in shot.get("dialogueBeats") or []
@@ -252,6 +262,7 @@ class SeriesNativeRender:
 
     def _missing_kits(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]]) -> list[str]:
         """Names of characters seen or heard in ``shots`` without a Character Kit in the workspace (a new template's cast)."""
+        shots = _drawn(shots)
         kits = self.deps.read_kits(workspace)
         names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
         ids = dict.fromkeys(cid for shot in shots for cid in [*(shot.get("visibleCharacterIds") or []),
@@ -296,8 +307,7 @@ class SeriesNativeRender:
         """Shots to render in ``language``: no approved take yet, or one made from other inputs (see ``render_inputs``)."""
         raw_series, _raw_episode = self._episode(workspace, series_id, episode_id)
         series, episode = self._episode(workspace, series_id, episode_id, language or language_key(raw_series))
-        foley = missing_video_foley(series, episode, self.deps.workspace_dir(workspace))
-        return [*stale_shot_ids(series, episode, self.deps.read_kits(workspace)), *foley]
+        return stale_shot_ids(series, episode, self.deps.read_kits(workspace))
 
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
         return [self._reconcile(workspace, job) for job in self._store(workspace).list()]
@@ -360,7 +370,7 @@ class SeriesNativeRender:
                 return
             self._save(workspace, job, current=index, activeShotId=item["shotId"], message=f"Shot {item['shotId']}")
             try:
-                self._render_item(workspace, job, item, index)
+                self._render_shot(workspace, job, item, index)
                 item.update(status="done", stage="done", error=None)
             except Exception as error:  # one shot must not stop the episode
                 failed += 1
@@ -382,20 +392,13 @@ class SeriesNativeRender:
         self._save(workspace, job, activeShotId=None, finishedAt=time.time(), status="failed",
                    message=f"Stopped at shot {item['shotId']}: {error}"[:300])
 
-    def _item_shot(self, workspace: str, job: dict, item: dict) -> tuple[dict, dict, dict]:
+    def _render_item(self, workspace: str, job: dict, item: dict, index: int) -> None:
         series, episode = self._episode(workspace, job["seriesId"], job["episodeId"], job["language"])
         shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), None)
         if shot is None:
             raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
-        return series, episode, shot
-
-    def _render_item(self, workspace: str, job: dict, item: dict, index: int) -> None:
-        series, episode, shot = self._item_shot(workspace, job, item)
         kits = self.deps.read_kits(workspace)
         item["status"] = "running"
-        if shot.get("productionMethod") in VIDEO_METHODS:
-            self._video_foley(workspace, job, item, series, episode, shot)
-            return
         if item["stage"] in ("voices", "scene"):
             # Recorded lines are reused; a resume after a restart (or after a cleanup) only records what is missing.
             self._voices(workspace, job, item, series, shot, kits)
@@ -734,6 +737,16 @@ class SeriesNativeRender:
             intent = f"{job['jobId']}-{name}"[:150] + f"-{uuid.uuid4().hex[:6]}"
         raise NativeRenderError("tool_failed", "Foley job disappeared twice", 502)
 
+    def _render_shot(self, workspace: str, job: dict, item: dict, index: int) -> None:
+        """A generated or imported take only gets its foley (``_video_foley``); every other shot renders."""
+        series, episode = self._episode(workspace, job["seriesId"], job["episodeId"], job["language"])
+        shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), {})
+        if shot.get("productionMethod") not in VIDEO_METHODS:
+            self._render_item(workspace, job, item, index)
+            return
+        item["status"] = "running"
+        self._video_foley(workspace, job, item, series, episode, shot)
+
     def _video_foley(self, workspace: str, job: dict, item: dict, series: dict, episode: dict, shot: dict) -> None:
         """A generated or imported take's foley (``series_video_foley``): the sound only, made once per take and prompt;
         the cut lays it under the take. Like any foley it is an extra: a failure leaves a warning, not a failed shot."""
@@ -797,16 +810,6 @@ class SeriesNativeRender:
             self._approve(workspace, job, item["shotId"], attempt["id"])
             item["approved"] = True
         self._save(workspace, job)
-
-
-def _renders(shot: dict[str, Any]) -> bool:
-    """A shot the server render makes, or a generated or imported take whose foley it makes."""
-    return series_shot3d.wants_render(shot) or wants_video_foley(shot)
-
-
-def _drawn(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The shots the render draws and voices; a video take only gets its foley (its lines are in the clip)."""
-    return [shot for shot in shots if shot.get("productionMethod") not in VIDEO_METHODS]
 
 
 def public_job(job: dict[str, Any]) -> dict[str, Any]:

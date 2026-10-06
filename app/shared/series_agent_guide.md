@@ -169,8 +169,9 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   take already has its voices and music. It is an extra: without MMAudio installed, or when it fails or takes over
   30 min, the take is made without it and the render item has a `warning`; fix it and render that shot again by id.
   A new prompt or volume makes `series.episode.produce` render that shot again. On a video take the render makes
-  only the sound (`foley-<episode>-<shot>-<key>.wav`, from that take's picture) and the cut lays it under the take;
-  `series.episode.produce` makes it when it is missing.
+  only the sound (`foley-<episode>-<shot>-<key>.wav`, from that take's picture) and the cut lays it under the take:
+  make it with `series.shot.update` (`render: true`) or `series.episode.render_native` with its `shot_ids` (a render
+  of every shot makes it too); until then the cut goes without it and its `preparedClips` says so.
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration` (seconds, 0.1–30, default 1; a value outside that range is clamped, never reset to 1;
   `"shot"` lasts until the end of the shot), `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` drawn across `x`/`y`

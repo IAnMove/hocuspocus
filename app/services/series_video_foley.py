@@ -2,8 +2,8 @@
 
 A rendered shot's ``foley`` is mixed into its take before the import. A video
 take is not rendered, so its foley is a sound layer instead:
-``series.episode.render_native`` (and so ``series.episode.produce``) runs
-``generation.sfx`` (MMAudio) with the shot's take as the video guide and keeps
+``series.episode.render_native`` (with the shot's id, or a render of every shot)
+runs ``generation.sfx`` (MMAudio) with the shot's take as the video guide and keeps
 the sound as ``foley-<episode>-<shot>-<key>.wav``. The key depends on the take's
 file and the prompt, so the same take and prompt reuse the file, a new take or
 prompt makes a new one, and the volume (relative to the dialogue) is applied at
@@ -75,20 +75,5 @@ def sound_name(take_path: str, episode_id: str, shot_id: str, foley: dict[str, A
     return f"{sound_stem(episode_id, shot_id)}-{foley_keys(_digest(take_path), foley)[0]}.wav"
 
 
-def missing_video_foley(series: dict[str, Any], episode: dict[str, Any], root: str) -> list[str]:
-    """Video shots whose foley has not been made for the take they show."""
-    missing = []
-    for shot in sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0)):
-        if not wants_video_foley(shot):
-            continue
-        asset = video_take(series, shot)
-        path = os.path.join(root, take_file(asset)) if asset else ""
-        if not path or not os.path.isfile(path):
-            continue
-        if not os.path.isfile(os.path.join(root, sound_name(path, episode["id"], shot["id"], shot_foley(shot) or {}))):
-            missing.append(shot["id"])
-    return missing
-
-
-__all__ = ["VIDEO_METHODS", "missing_video_foley", "shot_foley", "sound_name", "sound_stem", "take_file", "video_take",
+__all__ = ["VIDEO_METHODS", "shot_foley", "sound_name", "sound_stem", "take_file", "video_take",
            "wants_video_foley"]
