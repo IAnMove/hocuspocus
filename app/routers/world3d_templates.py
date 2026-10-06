@@ -52,13 +52,13 @@ def create_world3d_templates_router(workspace_dir: Callable[[str], str]) -> APIR
             raise HTTPException(error.status, detail={"code": error.code, "message": str(error)}) from error
 
     @router.get("/working-scenes")
-    def working_scene_list(workspace: str, all: bool = False):
+    def working_scene_list(workspace: str, all: bool = False, limit: int = 100):
         """Working Video 3D scenes (``w3d-…``) an agent made, newest first; only the unpublished ones unless ``all``.
 
         The Video 3D Open dialog lists them beside the saved scenes, so a scene that was never published opens too."""
         _check_workspace(workspace)
-        return {"version": 1, "workspace": workspace,
-                "scenes": working_scenes(workspace, workspace_dir, unpublished_only=not all)}
+        scenes = working_scenes(workspace, workspace_dir, unpublished_only=not all)
+        return {"version": 1, "workspace": workspace, "total": len(scenes), "scenes": scenes[:max(1, min(500, limit))]}
 
     return router
 

@@ -408,6 +408,8 @@ def test_working_scenes_list_what_was_not_published_at_its_revision(tmp_path):
     body = client.get("/api/v1/world3d/templates/working-scenes", params={"workspace": WORKSPACE}).json()
     assert [row["sceneId"] for row in body["scenes"]] and body["scenes"][0]["title"]
     assert client.get("/api/v1/world3d/templates/working-scenes", params={"workspace": "../x"}).status_code == 422
+    capped = client.get("/api/v1/world3d/templates/working-scenes", params={"workspace": WORKSPACE, "all": True, "limit": 1}).json()
+    assert len(capped["scenes"]) == 1 and capped["total"] == 4
 
 
 def test_a_published_scene_is_named_after_its_template_and_remembered(tmp_path, monkeypatch):
