@@ -2,7 +2,9 @@
 
 The bible is a summary. Listing every asset would pass 6 KB once a game holds
 hundreds of them, so counts carry the inventory and only the first assets that
-still need a human decision are named.
+still need a human decision are named. That is ``review``: a pending, failed
+or stale asset waits for production, not for a person, and must not push a
+reviewable asset out of the short list.
 """
 from __future__ import annotations
 
@@ -10,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 GUIDE_PATH = Path(__file__).resolve().parents[1] / "shared" / "game_agent_guide.md"
-_AWAITING = {"review", "pending", "generating", "failed", "stale"}
+_AWAITING = {"review"}
 _AWAITING_CAP = 40
 
 

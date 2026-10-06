@@ -65,8 +65,10 @@ PROFILES: dict[str, dict] = {
             "HocusPocus game assets: a local pack of sprites, animation, tiles, UI, audio and meshes for one game. "
             "Call game.guide first. Never approve a style or an asset unless the user asked. "
             "Describe the look by traits, not by a brand, console, studio or artist. "
-            "Measure one asset before a large batch. game.assets.from_list with check true does not write. "
-            "game.produce renders pending work; rerender only stale assets. Poll game.produce.status. "
+            "Measure one asset before a large batch. game.assets.from_list with check true does not write; "
+            "replace true deletes the assets the list leaves out. "
+            "game.produce renders pending work; rerender only stale assets. Poll game.produce.status, not jobs.wait; "
+            "409 already_running means a job for that game is still active. "
             "game.export packs approved assets only."
         ),
     },

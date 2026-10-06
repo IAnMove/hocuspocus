@@ -53,3 +53,24 @@ def test_bible_stays_under_6kb_with_500_assets():
     assert bible["style"]["pixel"]["tile"] == 16
     assert bible["references"] == [{"assetId": "heroe", "attemptId": "a1"}]
     assert "description" not in bible["awaitingApproval"][0]
+
+
+def test_bible_names_the_assets_in_review_even_behind_many_pending():
+    assets = [{"id": f"item-{index:03d}", "kind": "sprite", "status": "pending"} for index in range(60)]
+    assets.append({"id": "heroe", "kind": "character", "status": "review"})
+    bible = build_bible({"id": "bosque", "style": {}, "assets": assets})
+    assert bible["awaitingApproval"] == [{"id": "heroe", "kind": "character", "status": "review"}]
+    assert bible["awaitingMore"] == 0
+    assert bible["counts"]["sprite"]["pending"] == 60
+
+
+def test_guide_and_doc_describe_the_current_services():
+    from pathlib import Path
+
+    guide = guide_text()
+    for fact in ("-a1", "already_running", "game_exists", "revision_conflict", "seed", "presets", "unknown_option", "invalid_spec", "waiting_dependency"):
+        assert fact in guide, fact
+    doc = (Path(__file__).resolve().parents[1] / "docs" / "agents" / "GAME_ASSETS_MCP.md").read_text(encoding="utf-8")
+    assert "Reuse the same intent" not in doc and "or `jobs.wait`" not in doc
+    assert "already_running" in doc and "game_exists" in doc and "-a1" in doc
+    assert "already_running" in PROFILES["game"]["instructions"]
