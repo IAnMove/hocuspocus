@@ -725,7 +725,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const intent = world3dTemplateCommandIntent(action.operation, input)
       delete input.intent_id
       const response = await fetch('/api/v1/world3d/templates/commands', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
+        method: 'POST', headers: { 'content-type': 'application/json', 'X-Hocus-UI-Surface': 'wizard' },
         body: JSON.stringify({ operation: action.operation, version: 1, input: { workspace: active, ...input }, ...(intent ? { intent_id: intent } : {}) }),
       })
       const body = await response.json() as { status?: string; result?: Record<string, unknown>; detail?: { message?: string } }

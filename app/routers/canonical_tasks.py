@@ -76,7 +76,11 @@ def create_canonical_tasks_router(
         status: str = "active",
         root_id: str = "",
         limit: int = 200,
+        origin: str = "",
     ):
+        """``origin=agent`` keeps only work an MCP agent or the Wizard asked for (the Activity "Agents" view)."""
+        if origin not in {"", "agent"}:
+            raise HTTPException(status_code=422, detail="origin must be empty or agent")
         target = workspace_or_active(workspace)
         sync_tasks(target)
         statuses = set(ACTIVE_STATUSES) if status == "active" else (
@@ -88,6 +92,7 @@ def create_canonical_tasks_router(
             statuses=statuses,
             root_id=root_id,
             limit=limit,
+            **({"origin": origin} if origin else {}),
         )
         return {
             "workspace": target,

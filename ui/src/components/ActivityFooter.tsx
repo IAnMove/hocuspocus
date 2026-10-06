@@ -8,6 +8,8 @@ import { useActivityPanel } from '../features/activity/useActivityPanel'
 import { readHiddenHistory, writeHiddenHistory } from '../features/activity/activityHistory'
 import { ActivityDetailsPanel } from '../features/activity/ActivityDetailsPanel'
 import { ActivityCompactBar } from '../features/activity/ActivityCompactBar'
+import { filterGroupsByOrigin } from '../features/activity/agentOrigin'
+import { mergeTaskSnapshots, taskFeedKey, useAgentActivityTasks } from '../features/activity/useAgentActivityTasks'
 import { BuildBadge } from './BuildBadge'
 
 export function ActivityFooter() {
@@ -20,6 +22,9 @@ export function ActivityFooter() {
     setHiddenHistoryIds(readHiddenHistory(activeWorkspace))
   }
   const [clock, setClock] = useState(() => Date.now())
+  // "Agents": everything an MCP agent or the Wizard made, newest change first, ignoring "Clear history".
+  const [originFilter, setOriginFilter] = useState<'all' | 'agents'>('all')
+  const agentView = useAgentActivityTasks(activeWorkspace, originFilter === 'agents', taskFeedKey(tasks))
   const visibleTasks = useMemo(
     () => tasks.filter(task => !hiddenHistoryIds.has(task.id) || isLiveStatus(task.status)),
     [hiddenHistoryIds, tasks],
@@ -28,10 +33,19 @@ export function ActivityFooter() {
     () => groupActivityTasks(visibleTasks, { workspace: activeWorkspace }),
     [activeWorkspace, visibleTasks],
   )
+  const agentGroups = useMemo(
+    () => (originFilter === 'agents'
+      ? filterGroupsByOrigin(groupActivityTasks(mergeTaskSnapshots(tasks, agentView.tasks), {
+        workspace: activeWorkspace, terminalLimit: 100, order: 'updated',
+      }), 'agents')
+      : []),
+    [activeWorkspace, agentView.tasks, originFilter, tasks],
+  )
   const liveGroups = groups.filter(group => (
     group.readingState === 'prepared' || group.readingState === 'admitted' || group.readingState === 'running'
   ))
-  const panel = useActivityPanel(groups, activeWorkspace)
+  const panelGroups = originFilter === 'agents' ? agentGroups : groups
+  const panel = useActivityPanel(panelGroups, activeWorkspace)
   const primaryGroup = liveGroups[0] || groups[0] || null
   const primary = primaryGroup?.primary as CanonicalTask | undefined
 
@@ -60,10 +74,12 @@ export function ActivityFooter() {
       <ActivityDetailsPanel
         open={panel.detailsOpen}
         loading={loading}
-        loadFailed={loadFailed}
-        groups={groups}
+        loadFailed={loadFailed || agentView.failed}
+        groups={panelGroups}
         liveCount={liveGroups.length}
-        historicalCount={groups.length - liveGroups.length}
+        historicalCount={originFilter === 'agents' ? 0 : groups.length - liveGroups.length}
+        originFilter={originFilter}
+        onOriginFilterChange={setOriginFilter}
         clock={clock}
         selectedGroupId={panel.selectedGroupId}
         expandedGroupIds={panel.expandedGroupIds}

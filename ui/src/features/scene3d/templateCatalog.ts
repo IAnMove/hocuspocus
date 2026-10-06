@@ -109,6 +109,15 @@ export function templateCollections(id: Scene3DTemplateId): string[] {
   return requirements.get(id)!
 }
 
+const builtin = new Map<string, boolean>()
+/** False for ids the editor cannot build, such as a workspace template (``user-…``) an agent instantiated. */
+export function isBuiltinScene3DTemplate(id: string): boolean {
+  if (!builtin.has(id)) {
+    try { applyScene3DTemplate(id as Scene3DTemplateId); builtin.set(id, true) } catch { builtin.set(id, false) }
+  }
+  return builtin.get(id)!
+}
+
 /** Preview the composition without loading portal media, face packs or decals. */
 export function previewTemplateDocument(id: Scene3DTemplateId) {
   const doc = applyScene3DTemplate(id)

@@ -48,8 +48,10 @@ export interface CanonicalTask {
 export async function fetchCanonicalTasks(
   workspace: string,
   status: 'active' | 'all' = 'all',
+  options: { origin?: 'agent' } = {},
 ): Promise<{ workspace: string; tasks: CanonicalTask[]; latest_event_id: number }> {
-  const query = new URLSearchParams({ workspace, status, limit: '300' })
+  // origin=agent: only what an MCP agent or the Wizard asked for, so older agent work is not crowded out.
+  const query = new URLSearchParams({ workspace, status, limit: '300', ...(options.origin ? { origin: options.origin } : {}) })
   const res = await fetch(`${BASE}/api/v1/tasks?${query}`, { signal: AbortSignal.timeout(15_000) })
   if (!res.ok) throw new Error('Failed to fetch HocusPocus tasks')
   return res.json()

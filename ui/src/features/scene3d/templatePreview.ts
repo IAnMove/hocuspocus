@@ -85,7 +85,16 @@ function tick(now: number) {
   }
   const watcher = list[cursor % list.length]
   cursor++
-  const doc = previewTemplateDocument(watcher.id)
+  let doc: ReturnType<typeof previewTemplateDocument>
+  try {
+    doc = previewTemplateDocument(watcher.id)
+  } catch {
+    // A shot based on a workspace template (user-…, often an agent's) has no built-in preview.
+    // Drop that watcher and keep the shared loop alive for every other thumbnail.
+    watchers.delete(watcher)
+    raf = requestAnimationFrame(tick)
+    return
+  }
   const slots = visibleSlots(doc.slots)
   attachPreviewDressing(pack, doc.dressing)
   applyLight(pack.dir, doc.light)
