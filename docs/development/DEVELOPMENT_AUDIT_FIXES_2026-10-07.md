@@ -7,7 +7,7 @@ La revisión final de Claude queda pendiente. La rama se construye sobre `8f3a0d
 
 | Punto | Cambio concreto | Evidencia de regresión |
 |---|---|---|
-| 1 · CI de publicación | Último bloque de trabajo: verificación del entorno de medición de releases. | `tests/test_code_health.py` |
+| 1 · CI de publicación | Compara el analizador, su grafo de dependencias y los paquetes con scripts de instalación; permite retirar tipos ajenos a la medición. Los límites y los checkpoints históricos se conservan. | `tests/test_code_health.py` |
 | 2 · Guardado de aprobación | Reserva la cola antes del primer `await`, captura workspace/proyecto y descarta respuestas anteriores a la edición actual. | `ui/tests/seriesReviewConcurrency.test.ts` |
 | 3 · Notas | Conserva el borrador por workspace, serie, episodio, plano y etapa; serializa guardados incluso entre remontajes. Sólo elimina la versión confirmada. | `ui/tests/seriesApprovalNotesRecovery.test.tsx` |
 | 4 · Sondeo de renders | Los resultados de consultas y acciones antiguas no cambian el trabajo del episodio actual. | `ui/tests/seriesApprovalRenderScope.test.tsx` |

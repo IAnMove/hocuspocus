@@ -16,6 +16,9 @@ receipts verify their exact video bytes, including on download; an overwritten
 version is reported unavailable. GPU profile checks respect visible-device
 identity and report uncertain CUDA ordering explicitly. See the
 [audit corrections and regression tests](docs/development/DEVELOPMENT_AUDIT_FIXES_2026-10-07.md).
+Release code-health verification fingerprints the analyzer dependency graph
+and installation hooks, allowing unrelated type-package cleanup while keeping
+the existing budgets and historical checks.
 
 What agents and the Wizard make is easier to find, open and trace back. The
 Wizard's own changes (a Character Kit, a story, a series episode, a Video 3D
