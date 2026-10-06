@@ -19,6 +19,7 @@ import {
   wipeMouthRegion,
   faceRigGenerationRequests,
   faceRigOverlayPreviewStyle,
+  faceRigPreviewSource,
   faceRigVisemeAt,
   isFaceRigEyeState,
   lockFaceRigEyePlacement,
@@ -32,9 +33,10 @@ import {
   type FaceRigDialoguePreview,
   type FaceRigDialogueViseme,
 } from '../../lib/characterKitFaceRig'
-import { characterKitMouthSource, registerGeneratedKitPose, registerWipedKitPose, type CharacterFaceAnchor, type CharacterKit, type CharacterKitAsset, type CharacterMouthState } from '../../lib/characterKit'
+import { registerGeneratedKitPose, registerWipedKitPose, type CharacterFaceAnchor, type CharacterKit, type CharacterKitAsset, type CharacterMouthState } from '../../lib/characterKit'
 import type { FlatRigResult } from '../../api/characters'
 import { FlatRigMouthEditor } from './FlatRigMouthEditor'
+import { mouthLineBusyState, otherFaceRigWork } from '../../lib/flatRigMouth'
 import { characterKitNextStep, characterKitPoseLabel } from './characterKitGuide'
 import { FacePatchOptions, FacePatchTextureNotice } from './FacePatchOptions'
 import { useFaceRigOperationGuard } from './useFaceRigOperationGuard'
@@ -117,7 +119,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   const [traits, setTraits] = useState<string[]>([])
   const [extraNotes, setExtraNotes] = useState(kit.lookNotes ?? '')
   const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | 'pose' | 'wipe' | 'mouth-line' | null>(null)
-  const onMouthLineBusy = useCallback((busy: boolean) => setBusyState(current => busy ? 'mouth-line' : current === 'mouth-line' ? null : current), [])
+  const onMouthLineBusy = useCallback((busy: boolean) => setBusyState(current => mouthLineBusyState(current, busy)), [])
   const modelActionsDisabled = disabled || !allowModelActions || Boolean(busyState)
   const [holdBlink, setHoldBlink] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -156,8 +158,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
       ? kit.eyes.blink ?? selectedAsset
       : kit.mouth[playbackState] ?? selectedAsset
   // A warp-rigged pose shows its own mouth drawings.
-  const playbackSource = isFaceRigEyeState(playbackState) || !kit.mouth[playbackState as CharacterMouthState]
-    ? playbackAsset?.source : characterKitMouthSource(kit, poseId, playbackState as CharacterMouthState)
+  const playbackSource = faceRigPreviewSource(kit, poseId, playbackState, playbackAsset)
   const playbackAnchor = holdBlink || liveViseme ? faceRigAnchorFor(kit, poseId, playbackState) : draftAnchor
   const patchCompatible = isFacePatchCompatible(playbackAsset, poseId, poseSource)
   const patchControls = facePatchControls(kit, selectedAsset, disabled, busyState)
@@ -602,7 +603,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
       <li>{t('faceRig.steps.scene')}</li>
     </ol>
     <p className="text-xs text-amber-100">{nextStep.title}</p>
-    <FlatRigMouthEditor kit={kit} poseId={poseId} workspace={workspace} disabled={disabled || (Boolean(busyState) && busyState !== 'mouth-line')}
+    <FlatRigMouthEditor kit={kit} poseId={poseId} workspace={workspace} disabled={disabled} busy={otherFaceRigWork(busyState)}
       onRigged={onRigged} onBusyChange={onMouthLineBusy} />
     <FacePatchOptions kit={kit} poseId={poseId} state={selectedState} anchor={draftAnchor} workspace={workspace}
       disabled={patchControls.disabled} onChange={onChange} onStatus={onStatus} />
@@ -630,7 +631,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
         className={`relative aspect-square overflow-hidden rounded border border-border ${checkerboard ? 'bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px]' : 'bg-bg-primary'}`}
       >
         <img src={poseSource} alt={t('faceRig.poseAlt', { name: kit.name })} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
-        {showOverlay && playbackAsset && playbackSource && patchCompatible && <img
+        {showOverlay && playbackSource && patchCompatible && <img
           src={playbackSource}
           alt={t('faceRig.overlayAlt', { name: kit.name, state: stateLabel(playbackState) })}
           className={`absolute object-contain ${liveViseme || holdBlink ? '' : 'cursor-grab active:cursor-grabbing'}`}

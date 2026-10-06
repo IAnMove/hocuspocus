@@ -4,6 +4,7 @@ import { parseMouthCues } from '../features/scene3d/speech/track'
 import {
   DEFAULT_CHARACTER_BLINK_ANCHOR,
   DEFAULT_CHARACTER_MOUTH_ANCHOR,
+  characterKitMouthSource,
   type CharacterFaceAnchor,
   type CharacterKit,
   type CharacterKitAsset,
@@ -252,6 +253,14 @@ export function normalizeFaceRigAnchor(value?: Partial<CharacterFaceAnchor> | nu
     scale: Number.isFinite(scale) && scale > 0 ? scale : DEFAULT_FACE_RIG_ANCHOR.scale,
     rotation: Number.isFinite(Number(source.rotation)) ? Number(source.rotation) : 0,
   }
+}
+
+/** The drawing the Face Rig shows for a state on a pose: a warp-rigged pose's own mouth (characterKitMouthSource),
+ * else the asset's. */
+export function faceRigPreviewSource(kit: CharacterKit, poseId: string, state: CharacterKitFaceRigState,
+  asset?: CharacterKitAsset): string | undefined {
+  if (isFaceRigEyeState(state) || !kit.mouth[state as CharacterMouthState]) return asset?.source
+  return characterKitMouthSource(kit, poseId, state as CharacterMouthState)
 }
 
 /** A pose's anchors, or the base pose's to start from. The base's own mouth drawings (flat-rig warp mouths) are cut

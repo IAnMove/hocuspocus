@@ -16,6 +16,17 @@ export const MOUTH_LINE_PREVIEW_STATES = [
 
 export const MOUTH_WIDTH_LIMITS = [0.5, 100] as const
 
+/** The Face Rig's busy state while the mouth line editor saves: it takes the slot when it starts and frees only its own. */
+export function mouthLineBusyState<T>(current: T | 'mouth-line' | null, busy: boolean): T | 'mouth-line' | null {
+  if (busy) return 'mouth-line'
+  return current === 'mouth-line' ? null : current
+}
+
+/** Whether other Face Rig work than the mouth line editor's is running. */
+export function otherFaceRigWork(current: string | null): boolean {
+  return Boolean(current) && current !== 'mouth-line'
+}
+
 type RigEntry = { method?: unknown; sources?: Record<string, string>; hints?: Record<string, FlatRigHint>
   style?: Record<string, number | boolean | string>; mouthLines?: Record<string, FlatRigMouthLine> }
 
