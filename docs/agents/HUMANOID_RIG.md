@@ -95,7 +95,8 @@ legs. One of one attempts was usable; five repeats were not run.
    on the floor, hands reach targets relative to the chest (the clap meets
    palm to palm; a shrug opens the palms upward),
    and the arm limits measured on the mesh keep arms out of a big belly or head.
-   Every loop lasts whole beats at the chosen BPM (60–180) and closes exactly.
+   Every clip lasts whole beats at the chosen BPM (60–180), and every loop closes
+   exactly; the two holds (Kneel Pray, Crouch) end in the pose they keep instead.
 
 The rigged GLB keeps the original mesh, materials and textures. Its `Hips` node
 stores the facts later clips need in `extras.hocuspocus_humanoid` (version,
@@ -106,13 +107,41 @@ the landmarks, detected pose, confidence and warnings.
 
 | Category | Clips |
 | --- | --- |
-| Movement | Walk, Run, Jump, Sit Down (in place) |
-| Gestures | Wave, Cheer, Clap, Victory, Talk, Nod, Look Around, Bow, Point, Shrug |
+| Movement | Walk, Run, Jump, Sit Down (in place), Hover |
+| Gestures | Wave, Cheer, Clap, Victory, Talk, Nod, Look Around, Bow, Point, Shrug, Kneel Pray |
 | Dance | Dance Bounce, Dance Side, Dance Arms |
 | Standing | Idle, Breathe |
-| Action | Punch |
+| Action | Punch, Aim, Shoot, Claw, Hit, Crouch |
 
 Clip names are what Video 3D plays: a model slot uses `clip: {index, name}`.
+
+### Action clips
+
+At 120 BPM a beat lasts 0.5 s. Every id below can go in the `animations` list of `model3d.rig` or the `clips` list of
+`model3d.animate`.
+
+| Id (name) | Beats | Loop | What it does |
+| --- | --- | --- | --- |
+| `aim` (Aim) | 4 | yes | Right-handed two-handed rifle aim. The trigger hand is at the right shoulder and the support hand is forward under the barrel. The barrel points along the model's forward axis, so turn the slot toward the target. Left foot forward, knees soft, a breathing sway. The hands hold an imagined rifle: parent a rifle prop to the right hand, or keep the prop in the mesh. |
+| `shoot` (Shoot) | 2 | yes | Aim plus a recoil kick on every beat. The muzzle climbs about 4° and the shoulders snap back within a frame, then ease back within half a beat. The BPM sets the rate of fire. |
+| `claw` (Claw) | 4 | yes | A creature's slash: guard, wind-up high and out, a fast swipe across the body, then recover. The right arm strikes on beat 1 and the left on beat 3. Hunched, wide stance, feet planted. |
+| `hit` (Hit) | 4 | yes | Hit reaction from the front. The chest and head snap back in the first frames, the arms fling forward, the right foot steps back, then the body recovers to the standing pose. Play it once (`loop: false`) from the moment of the blow. |
+| `hover` (Hover) | 2 | yes | Airborne. The body bobs once per beat, as if lifted by the wing downstroke. The legs hang loose and trail a little, and the arms are held out and forward. The hips are about 0.3 leg lengths up; place the slot at flight height. Wings modeled on the back move rigidly with the spine. |
+| `kneel_pray` (Kneel Pray) | 16 | **hold** | Steps the right foot back and kneels on the right knee, then on the left, with the knees together and the toes tucked. The hands join in prayer at the chest, the head bows, and it breathes until the end. |
+| `crouch` (Crouch) | 8 | **hold** | Crouches into cover (hips down and back, heels slightly up, hands forward), peeks up over the cover at about 40 % of the clip, then ducks back down and stays. |
+
+**Holds.** `kneel_pray` and `crouch` do not loop: their last key is the pose they keep, standing still.
+- **How to play them.** Play them once: `clipPlayback.loop: false` on a slot, or `loop: false` on a sequence cue. The
+  slot then keeps the last frame.
+- **How a hold is marked.** The catalog (`humanoid_animations` in `/api/v1/rig/capabilities`), the rig and animate
+  results (`clips[].loop`) and the GLB animation (`extras.hocuspocus_loop: false`) all show `loop: false`.
+- **A shot that starts already knelt or crouched.** Start the clip after the way down with `clipPlayback.start` (or a
+  cue `offset`). For Kneel Pray, start at 27 % of its duration (about 2.2 s at 120 BPM); for Crouch, start at 60 %.
+- **Feet.** The knees rest on the floor at about the height of the standing ankle. Big-footed mascots tuck their toes
+  less, so their ankles do not rise above their knees.
+
+**A winged creature.** The rig needs real arms out in a T or A pose. A winged mesh can rig with `covered_arms`. Check
+that its wrists are on the hands and not on the wing tips. Otherwise the wings, not the arms, get the arm clips.
 
 ### Foot landings
 

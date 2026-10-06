@@ -390,7 +390,14 @@
       "look_around": "Look Around",
       "bow": "Bow",
       "point": "Point",
-      "shrug": "Shrug"
+      "shrug": "Shrug",
+      "aim": "Aim",
+      "shoot": "Shoot",
+      "claw": "Claw",
+      "hit": "Hit",
+      "hover": "Hover",
+      "kneel_pray": "Kneel Pray",
+      "crouch": "Crouch"
     },
     "humanoidClipHelp": {
       "idle": "Relaxed standing: breathing, a slow weight shift and a glance.",
@@ -412,7 +419,14 @@
       "look_around": "Turns the head and chest left, then right.",
       "bow": "A polite bow from the hips and back up.",
       "point": "Points forward with the right arm and holds.",
-      "shrug": "Shoulders up with open palms: I don't know."
+      "shrug": "Shoulders up with open palms: I don't know.",
+      "aim": "Two-handed rifle aim at shoulder height, feet in a stance, breathing sway.",
+      "shoot": "Rifle aim with a recoil kick on every beat.",
+      "claw": "A creature's claw slashes, wind-up and swipe across, alternating arms.",
+      "hit": "Staggers back a step from a blow and recovers.",
+      "hover": "Hovers in the air: body bob on each beat, legs dangling behind, arms out.",
+      "kneel_pray": "Kneels down, joins the hands in prayer, bows the head and stays. Play once.",
+      "crouch": "Crouches into cover, peeks up over it and stays down. Play once."
     },
     "animateSaved_one": "Saved {{file}} with 1 new clip",
     "animateSaved_other": "Saved {{file}} with {{count}} new clips"

@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from services.humanoid_rig import rotation as rot
+from services.humanoid_rig.clip_recipes import HOLDS
 from services.humanoid_rig.clips import FPS, clip_catalog, clip_library, default_rig, rig_for_skeleton
 from services.humanoid_rig.landmarks import detect_landmarks
 from services.humanoid_rig.motion import lowest_contact
@@ -13,7 +14,7 @@ from services.humanoid_rig.skeleton import build_skeleton
 from tests.humanoid_bodies import body
 
 PLANTED = ("idle", "breathe", "wave", "cheer", "dance_bounce", "clap", "punch", "victory", "talk", "nod",
-           "look_around", "bow", "point", "shrug", "dance_arms")
+           "look_around", "bow", "point", "shrug", "dance_arms", "aim", "shoot", "claw", "hit", "kneel_pray", "crouch")
 
 
 def _rig(kind):
@@ -33,7 +34,10 @@ def _locals(rig, clip):
 def test_catalog_lists_every_clip_with_a_category():
     catalog = clip_catalog()
     assert [item["id"] for item in catalog] == list(CLIP_IDS)
-    assert all(item["category"] and item["description"] and item["beats"] in (2, 4) for item in catalog)
+    assert all(item["category"] and item["description"] for item in catalog)
+    assert all(item["beats"] in (2, 4) and item["loop"] for item in catalog if item["id"] not in HOLDS)
+    assert {item["id"]: (item["beats"], item["loop"]) for item in catalog if item["id"] in HOLDS} == {
+        "kneel_pray": (16, False), "crouch": (8, False)}
     assert CLIP_LABELS["walk"] == "Walk" and CLIP_LABELS["dance_side"] == "Dance Side"
 
 
@@ -43,6 +47,9 @@ def test_every_clip_loops_and_lasts_whole_beats():
         assert clip["duration"] == pytest.approx(duration)
         assert clip["times"][0] == 0.0 and clip["times"][-1] == pytest.approx(duration)
         assert len(clip["times"]) == math.ceil(duration * FPS) + 1
+        assert clip["loop"] is (clip["id"] not in HOLDS)
+        if not clip["loop"]:
+            continue  # a hold ends in the pose it keeps; see test_humanoid_action_clips
         for name, track in clip["rotations"].items():
             assert abs(abs(float(track[0] @ track[-1])) - 1.0) < 1e-9, (clip["id"], name)
             assert np.allclose(np.linalg.norm(track, axis=1), 1.0, atol=1e-6)
@@ -109,7 +116,7 @@ def test_an_a_pose_body_moves_its_arms_like_a_t_pose_body():
 @pytest.mark.parametrize("kind", ("human_t", "pet"))
 def test_planted_feet_do_not_slide(kind):
     rig = _rig(kind)
-    for clip_id in ("idle", "dance_bounce", "clap", "wave", "bow"):
+    for clip_id in ("idle", "dance_bounce", "clap", "wave", "bow", "aim", "shoot", "claw", "crouch"):
         clip = clip_library(120.0, [clip_id], rig)[0]
         positions, _worlds = rig.forward(_locals(rig, clip), clip["hips_translation"])
         for side in ("Left", "Right"):
