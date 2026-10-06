@@ -239,7 +239,9 @@
         "tests/test_verify_clean_repo.py",
         "tests/test_game_library.py",
         "tests/test_game_inputs.py",
-        "tests/test_game_library_router.py"
+        "tests/test_game_library_router.py",
+        "tests/test_game_tools.py",
+        "tests/test_game_prompts.py"
       ]
     },
     {
@@ -476,7 +478,9 @@
         "tests/test_llm_resilience.py",
         "tests/test_game_pixel.py",
         "tests/test_game_image_ops.py",
-        "tests/test_game_tiles.py"
+        "tests/test_game_tiles.py",
+        "tests/test_game_gen_still.py",
+        "tests/test_game_gen_tiles.py"
       ]
     }
   ],
@@ -1396,6 +1400,34 @@
     {
       "prefix": "app/services/game_tiles.py",
       "paths": ["tests/test_game_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_tools.py",
+      "paths": ["tests/test_game_tools.py"]
+    },
+    {
+      "prefix": "app/services/game_prompts.py",
+      "paths": ["tests/test_game_prompts.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/still.py",
+      "paths": ["tests/test_game_gen_still.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/tiles.py",
+      "paths": ["tests/test_game_gen_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/background.py",
+      "paths": ["tests/test_game_gen_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/base.py",
+      "paths": ["tests/test_game_tools.py", "tests/test_game_gen_still.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/__init__.py",
+      "paths": ["tests/test_game_gen_still.py"]
     }
   ]
 }
