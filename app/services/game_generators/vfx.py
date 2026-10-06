@@ -170,7 +170,7 @@ def _run(ctx: GenContext) -> AttemptResult:
         "frames": chosen,
         "fps": _fps(ctx.asset),
         "loop": True,
-    }], cell)
+    }], cell, anchor="center")
     atlas["meta"]["image"] = "sheet.png"
     atlas["meta"]["blend"] = _blend(ctx.asset)
     return _store(ctx, sheet, atlas, chosen, {

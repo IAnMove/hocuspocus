@@ -142,3 +142,14 @@ def test_write_gif_preview_treats_low_alpha_as_transparent(tmp_path: Path):
         assert first.getpixel((0, 0))[3] == 0
         assert first.getpixel((1, 0))[3] == 0
         assert first.getpixel((0, 1))[3] == 255
+
+
+def test_pack_rows_center_anchor_keeps_effects_off_the_cell_edges():
+    frame = Image.new("RGBA", (4, 4), (255, 255, 255, 255))
+    sheet, atlas = pack_rows([{"name": "burst", "frames": [frame], "fps": 12, "loop": True}], (8, 8), anchor="center")
+    alpha = np.asarray(sheet)[:, :, 3]
+    assert alpha[0].max() == 0 and alpha[-1].max() == 0
+    assert alpha[2:6, 2:6].min() == 255
+    assert atlas["meta"]["pivot"] == {"x": 4, "y": 4}
+    with pytest.raises(ValueError):
+        pack_rows([{"name": "burst", "frames": [frame], "fps": 12}], (8, 8), anchor="top")
