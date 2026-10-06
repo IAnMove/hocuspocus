@@ -71,7 +71,11 @@ def key_screen(rgb: Any, screen: str) -> np.ndarray:
 
 
 def despill(rgba: Any, screen: str) -> np.ndarray:
-    """Pull the screen channel down on pixels whose alpha is still partial."""
+    """Pull the screen channel down on pixels whose alpha is still partial.
+
+    Magenta spill is the part of red and blue above green that both share,
+    ``min(R, B) - G``, so a red or a blue figure is not counted as spill.
+    """
     image = _as_rgba(rgba).copy()
     alpha = image[..., 3].astype(np.float32)
     fringe = alpha < 255
@@ -80,9 +84,8 @@ def despill(rgba: Any, screen: str) -> np.ndarray:
     scale = ((255.0 - alpha) / 255.0)[..., None]
     channels = image[..., :3].astype(np.float32)
     if screen == "magenta":
-        limit = channels[..., 1:2]
-        excess = np.clip(channels[..., [0, 2]] - limit, 0, None)
-        channels[..., [0, 2]] -= excess * scale
+        shared = np.minimum(channels[..., 0:1], channels[..., 2:3]) - channels[..., 1:2]
+        channels[..., [0, 2]] -= np.clip(shared, 0, None) * scale
     else:
         index = 1 if screen == "green" else 2
         others = np.maximum(channels[..., 0], channels[..., 2] if index == 1 else channels[..., 1])
@@ -92,25 +95,38 @@ def despill(rgba: Any, screen: str) -> np.ndarray:
     return image
 
 
+def _lanczos_plane(plane: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    """Lanczos resize of one float32 plane. Mode ``F`` keeps the lobes unclipped."""
+    image = Image.fromarray(np.ascontiguousarray(plane, dtype=np.float32))
+    return np.asarray(image.resize(size, Image.Resampling.LANCZOS), dtype=np.float32)
+
+
 def to_illustration(rgba: Any, height_px: int, screen: str = "magenta") -> np.ndarray:
-    """Lanczos scale on premultiplied alpha, then despill the fringe."""
+    """Lanczos scale on premultiplied alpha, then despill the fringe.
+
+    The planes are premultiplied once and resized as float images. Pillow's
+    RGBA resize premultiplies on its own, and its 8-bit planes round and clip
+    the edge, so a straight color would come back brighter than the source.
+    """
     image = _as_rgba(rgba).astype(np.float32)
-    alpha = image[..., 3:4] / 255.0
-    premultiplied = np.concatenate([image[..., :3] * alpha, image[..., 3:4]], axis=2)
-    source = Image.fromarray(np.clip(np.rint(premultiplied), 0, 255).astype(np.uint8))
-    width = max(1, int(round(source.width * (height_px / source.height))))
-    scaled = np.asarray(source.resize((width, int(height_px)), Image.Resampling.LANCZOS)).astype(np.float32)
-    scaled_alpha = scaled[..., 3:4]
-    recovered = np.zeros_like(scaled[..., :3])
-    visible = scaled_alpha[..., 0] > 0
-    recovered[visible] = scaled[..., :3][visible] * (255.0 / scaled_alpha[..., 0][visible][:, None])
-    output = np.concatenate([np.clip(np.rint(recovered), 0, 255), scaled[..., 3:4]], axis=2).astype(np.uint8)
+    size = (max(1, int(round(image.shape[1] * (height_px / image.shape[0])))), int(height_px))
+    weight = image[..., 3] / 255.0
+    alpha = _lanczos_plane(image[..., 3], size)
+    color = np.stack([_lanczos_plane(image[..., channel] * weight, size) for channel in range(3)], axis=-1)
+    output = np.zeros(alpha.shape + (4,), dtype=np.uint8)
+    output[..., 3] = np.clip(np.rint(alpha), 0, 255).astype(np.uint8)
+    visible = output[..., 3] > 0
+    straight = color[visible] * (255.0 / alpha[visible][:, None])
+    output[..., :3][visible] = np.clip(np.rint(straight), 0, 255).astype(np.uint8)
     return despill(output, screen)
 
 
 def feet_point(rgba: Any) -> tuple[float, float]:
-    """Horizontal centroid of the bottom 15 percent of the opaque figure, and its lowest row."""
-    alpha = _as_rgba(rgba)[..., 3] > 0
+    """Horizontal centroid of the bottom 15 percent of the opaque figure, and its lowest row.
+
+    Opaque means alpha >= 128, so faint Lanczos ringing under the feet is ignored.
+    """
+    alpha = _as_rgba(rgba)[..., 3] >= 128
     ys, xs = np.nonzero(alpha)
     if len(xs) == 0:
         return (0.0, 0.0)
@@ -140,8 +156,13 @@ def place_on_cell(rgba: Any, cell: tuple[int, int], pivot: tuple[float, float], 
 
 
 def dhash(rgba: Any, size: int = 8) -> int:
-    """Horizontal difference hash. ``size`` 8 yields 64 bits."""
-    gray = Image.fromarray(_as_rgba(rgba)).convert("L")
+    """Horizontal difference hash of the image over black. ``size`` 8 yields 64 bits.
+
+    Compositing first means hidden RGB under transparent pixels does not count.
+    """
+    image = _as_rgba(rgba).astype(np.float32)
+    over_black = np.rint(image[..., :3] * (image[..., 3:4] / 255.0)).astype(np.uint8)
+    gray = Image.fromarray(over_black).convert("L")
     small = np.asarray(gray.resize((size + 1, size), Image.Resampling.LANCZOS), dtype=np.int16)
     bits = (small[:, 1:] > small[:, :-1]).ravel()
     value = 0
@@ -174,12 +195,15 @@ def compose_start_frame(
     feet_x, feet_y = feet_point(resized)
     pivot = (width / 2.0, height * feet_frac)
     placed = place_on_cell(resized, (width, height), pivot, (feet_x, feet_y))
-    color = SCREEN_RGB.get(screen, SCREEN_RGB["magenta"])
-    background = np.zeros_like(placed)
-    background[..., 0] = color[0]
-    background[..., 1] = color[1]
-    background[..., 2] = color[2]
-    background[..., 3] = 255
-    mask = placed[..., 3] > 0
-    background[mask] = placed[mask]
-    return background
+    return _over_screen(placed, screen)
+
+
+def _over_screen(rgba: np.ndarray, screen: str) -> np.ndarray:
+    """Blend ``rgba`` over the flat screen color: ``fg * a + screen * (1 - a)``, alpha 255."""
+    color = np.asarray(SCREEN_RGB.get(screen, SCREEN_RGB["magenta"]), dtype=np.float32)
+    weight = rgba[..., 3:4].astype(np.float32) / 255.0
+    blended = rgba[..., :3].astype(np.float32) * weight + color * (1.0 - weight)
+    output = np.empty_like(rgba)
+    output[..., :3] = np.clip(np.rint(blended), 0, 255).astype(np.uint8)
+    output[..., 3] = 255
+    return output

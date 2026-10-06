@@ -12,8 +12,6 @@ from PIL import Image
 
 
 def _array(image: Any) -> np.ndarray:
-    if isinstance(image, Image.Image):
-        return np.asarray(image)
     return np.asarray(image)
 
 
@@ -23,18 +21,21 @@ def _as_image(original: Any, array: np.ndarray) -> Any:
     return array
 
 
-def roll_half(img: Any, axes: tuple[int, ...] = (0, 1)) -> Any:
-    """Roll by half the size on each axis. Rolling twice restores an even size."""
-    data = _array(img)
-    rolled = data
+def _roll(img: Any, axes: tuple[int, ...], sign: int) -> Any:
+    rolled = _array(img)
     for axis in axes:
-        rolled = np.roll(rolled, rolled.shape[axis] // 2, axis=axis)
+        rolled = np.roll(rolled, sign * (rolled.shape[axis] // 2), axis=axis)
     return _as_image(img, rolled)
 
 
+def roll_half(img: Any, axes: tuple[int, ...] = (0, 1)) -> Any:
+    """Roll by half the size (rounded down) on each axis."""
+    return _roll(img, axes, 1)
+
+
 def unroll(img: Any, axes: tuple[int, ...] = (0, 1)) -> Any:
-    """Inverse of ``roll_half`` for even sizes. It is the same half-roll."""
-    return roll_half(img, axes)
+    """Exact inverse of ``roll_half``, odd sizes included: roll back by the same amount."""
+    return _roll(img, axes, -1)
 
 
 def seam_mask(w: int, h: int, band: int, axes: tuple[int, ...] = (0, 1)) -> np.ndarray:

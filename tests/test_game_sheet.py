@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from services.game_sheet import pack_rows, uniform_cell, write_gif_preview
@@ -67,9 +68,11 @@ def test_pack_rows_tags_duration_and_sheet_size():
     assert atlas["frames"]["idle_0"]["frame"] == {"x": 0, "y": 8, "w": 8, "h": 8}
     assert atlas["frames"]["idle_1"]["frame"]["x"] == 8
     pixels = np.asarray(image)
-    assert tuple(int(channel) for channel in pixels[2, 2]) == (255, 0, 0, 255)
-    assert tuple(int(channel) for channel in pixels[5, 5]) == (0, 0, 255, 255)
+    # Bottom-center: the 4×4 sprite spans rows 4..7 and columns 2..5 of the 8×8 cell.
+    assert tuple(int(channel) for channel in pixels[4, 2]) == (255, 0, 0, 255)
+    assert tuple(int(channel) for channel in pixels[7, 5]) == (0, 0, 255, 255)
     assert int(pixels[0, 0, 3]) == 0
+    assert int(pixels[2, 2, 3]) == 0
 
 
 def test_write_gif_preview_scales_nearest_and_loops(tmp_path: Path):
@@ -89,3 +92,53 @@ def test_write_gif_preview_scales_nearest_and_loops(tmp_path: Path):
         assert first.getpixel((0, 0))[0] > 200
         assert first.getpixel((1, 1))[0] > 200
         assert first.getpixel((2, 2))[3] == 0
+
+
+def test_pack_rows_puts_every_frame_on_the_bottom_pivot():
+    short = _block(4, 3, (255, 0, 0, 255))
+    tall = _block(4, 7, (0, 255, 0, 255))
+    cell = uniform_cell([short, tall], grid=1, pad=1)
+    image, atlas = pack_rows([
+        {"name": "crouch", "frames": [short], "fps": 10},
+        {"name": "stand", "frames": [tall], "fps": 10},
+    ], cell)
+    alpha = np.asarray(image)[..., 3]
+    pivot_y = atlas["meta"]["pivot"]["y"]
+    for row in range(2):
+        rows = np.nonzero(alpha[row * cell[1]:(row + 1) * cell[1]].any(axis=1))[0]
+        assert int(rows[-1]) == pivot_y
+
+
+def test_pack_rows_clips_a_frame_taller_than_the_cell():
+    tall = _block(2, 6, (0, 255, 0, 255))
+    image, _ = pack_rows([
+        {"name": "top", "frames": [_block(2, 2, (0, 0, 0, 0))], "fps": 10},
+        {"name": "tall", "frames": [tall], "fps": 10},
+    ], (4, 4))
+    pixels = np.asarray(image)
+    assert int(pixels[:4, ..., 3].max()) == 0
+    assert int(pixels[4:, 1:3, 1].min()) == 255
+
+
+def test_pack_rows_rejects_duplicate_animation_names():
+    frame = _block(2, 2, (255, 0, 0, 255))
+    animations = [
+        {"name": "walk", "frames": [frame], "fps": 10},
+        {"name": "walk", "frames": [frame, frame], "fps": 10},
+    ]
+    with pytest.raises(ValueError, match="walk"):
+        pack_rows(animations, (4, 4))
+
+
+def test_write_gif_preview_treats_low_alpha_as_transparent(tmp_path: Path):
+    frame = np.zeros((2, 2, 4), dtype=np.uint8)
+    frame[0, 0] = (255, 0, 0, 40)
+    frame[0, 1] = (255, 0, 0, 127)
+    frame[1, 0] = (255, 0, 0, 128)
+    path = tmp_path / "soft.gif"
+    write_gif_preview([frame, frame], fps=10, scale=1, path=path)
+    with Image.open(path) as gif:
+        first = gif.convert("RGBA")
+        assert first.getpixel((0, 0))[3] == 0
+        assert first.getpixel((1, 0))[3] == 0
+        assert first.getpixel((0, 1))[3] == 255

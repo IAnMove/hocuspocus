@@ -16,6 +16,8 @@ _BAYER_4 = np.array(
     dtype=np.float32,
 )
 _BAYER_OFFSET = (_BAYER_4 + 0.5) / 16.0 - 0.5
+# Pixels per nearest-color pass. The N×K×3 difference array stays near 12 MB at 16 colors.
+_CHUNK = 65536
 
 
 def _as_rgba(image: Any) -> np.ndarray:
@@ -63,11 +65,23 @@ def _hex_color(rgb: np.ndarray) -> str:
     return f"#{red:02x}{green:02x}{blue:02x}"
 
 
+def _nearest(flat_lab: np.ndarray, palette_lab: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Nearest palette index and its OKLab distance per row, ``_CHUNK`` rows at a time."""
+    count = flat_lab.shape[0]
+    index = np.empty(count, dtype=np.intp)
+    distance = np.empty(count, dtype=np.float32)
+    for start in range(0, count, _CHUNK):
+        part = flat_lab[start:start + _CHUNK]
+        norms = np.linalg.norm(part[:, None, :] - palette_lab[None, :, :], axis=2)
+        index[start:start + _CHUNK] = norms.argmin(axis=1)
+        distance[start:start + _CHUNK] = norms.min(axis=1)
+    return index, distance
+
+
 def nearest_palette(rgb: np.ndarray, palette_lab: np.ndarray) -> np.ndarray:
     """Index of the nearest OKLab palette color for every RGB pixel."""
-    flat = oklab(rgb).reshape(-1, 3)
-    distance = np.linalg.norm(flat[:, None, :] - palette_lab[None, :, :], axis=2)
-    return distance.argmin(axis=1).reshape(rgb.shape[:-1])
+    index, _ = _nearest(oklab(rgb).reshape(-1, 3), palette_lab)
+    return index.reshape(rgb.shape[:-1])
 
 
 def median_cut(rgba: np.ndarray, colors: int) -> list[str]:
@@ -89,9 +103,6 @@ def median_cut(rgba: np.ndarray, colors: int) -> list[str]:
         channel = int(np.argmax(bucket.max(axis=0) - bucket.min(axis=0)))
         ordered = bucket[np.argsort(bucket[:, channel], kind="mergesort")]
         middle = len(ordered) // 2
-        if middle == 0 or middle == len(ordered):
-            buckets.append(bucket)
-            break
         buckets.append(ordered[:middle])
         buckets.append(ordered[middle:])
     found = []
@@ -103,7 +114,6 @@ def median_cut(rgba: np.ndarray, colors: int) -> list[str]:
 
 def _majority(colors: np.ndarray, opaque: np.ndarray) -> np.ndarray:
     """Replace an opaque color that matches none of its 8 neighbors with the neighbor mode."""
-    height, width = opaque.shape
     padded = np.pad(colors, 1, constant_values=-1)
     opaque_pad = np.pad(opaque, 1, constant_values=False)
     updated = colors.copy()
@@ -122,9 +132,9 @@ def _majority(colors: np.ndarray, opaque: np.ndarray) -> np.ndarray:
 
 
 def _outline(index: np.ndarray, opaque: np.ndarray, outline: str, darkest: int) -> tuple[np.ndarray, np.ndarray]:
+    """Paint ``darkest`` on every transparent pixel with an opaque 4-neighbor."""
     if outline in (None, "none", ""):
         return index, opaque
-    color = 0 if outline == "black-1px" else darkest
     if outline not in ("dark-1px", "black-1px"):
         raise ValueError(f"unknown outline {outline}")
     padded = np.pad(opaque, 1, constant_values=False)
@@ -134,21 +144,25 @@ def _outline(index: np.ndarray, opaque: np.ndarray, outline: str, darkest: int) 
     paint = ~opaque & touches
     next_index = index.copy()
     next_opaque = opaque.copy()
-    next_index[paint] = color
+    next_index[paint] = darkest
     next_opaque[paint] = True
     return next_index, next_opaque
 
 
-def bayer_dither(rgb: np.ndarray, palette: np.ndarray, strength: float) -> np.ndarray:
-    """Ordered 4×4 dither, then snap back onto the palette."""
-    if strength <= 0:
-        return rgb
+def _bayer_shift(rgb: np.ndarray, strength: float) -> np.ndarray:
+    """Add the 4×4 Bayer offset, ±32 levels at strength 1, to unsnapped RGB."""
     height, width = rgb.shape[:2]
     tile = np.tile(_BAYER_OFFSET, (height // 4 + 1, width // 4 + 1))[:height, :width]
     shifted = np.clip(rgb.astype(np.float32) + tile[..., None] * (64.0 * float(strength)), 0, 255)
+    return np.rint(shifted).astype(np.uint8)
+
+
+def bayer_dither(rgb: np.ndarray, palette: np.ndarray, strength: float) -> np.ndarray:
+    """Ordered 4×4 dither of unsnapped RGB, then snap onto the palette."""
+    if strength <= 0:
+        return rgb
     palette_lab = oklab(palette.reshape(-1, 1, 3)).reshape(-1, 3)
-    chosen = nearest_palette(np.rint(shifted).astype(np.uint8), palette_lab)
-    return palette[chosen]
+    return palette[nearest_palette(_bayer_shift(rgb, strength), palette_lab)]
 
 
 def _downscale(image: np.ndarray, scale: int) -> np.ndarray:
@@ -160,36 +174,63 @@ def _downscale(image: np.ndarray, scale: int) -> np.ndarray:
     return np.asarray(Image.fromarray(image).resize((width, height), Image.Resampling.BOX))
 
 
-def to_pixel(rgba: Any, scale: int, palette: list[str] | None, outline: str, dither: bool | float, colors: int = 16) -> np.ndarray:
-    """Reduce, quantize, clean, outline and optionally dither. See section 3.6."""
-    reduced = _downscale(_as_rgba(rgba), scale)
-    alpha = np.where(reduced[..., 3] >= 128, 255, 0).astype(np.uint8)
-    opaque = alpha == 255
+def _resolve_palette(rgb: np.ndarray, binary: np.ndarray, palette: list[str] | None, colors: int) -> np.ndarray:
     if palette:
-        palette_rgb = _parse_palette(palette)
-    else:
-        palette_rgb = _parse_palette(median_cut(np.concatenate([reduced[..., :3], alpha[..., None]], axis=2), colors))
-        if len(palette_rgb) == 0:
-            palette_rgb = np.zeros((1, 3), dtype=np.uint8)
-    palette_lab = oklab(palette_rgb.reshape(-1, 1, 3)).reshape(-1, 3)
+        return _parse_palette(palette)
+    alpha = np.where(binary, 255, 0).astype(np.uint8)
+    found = _parse_palette(median_cut(np.concatenate([rgb, alpha[..., None]], axis=2), colors))
+    return found if len(found) else np.zeros((1, 3), dtype=np.uint8)
+
+
+def _dither_strength(dither: bool | float) -> float:
+    if dither is True:
+        return 1.0
+    return max(0.0, float(dither or 0.0))
+
+
+def _interior_index(rgb: np.ndarray, opaque: np.ndarray, palette_lab: np.ndarray, strength: float) -> np.ndarray:
+    """Palette index of the opaque pixels.
+
+    With dither the Bayer offset moves the reduced RGB before the
+    nearest-color step, and the 8-neighbor majority clean is skipped so the
+    pattern survives. Without dither it is the nearest color plus that clean.
+    """
     index = np.zeros(opaque.shape, dtype=np.int16)
-    if opaque.any():
-        index[opaque] = nearest_palette(reduced[..., :3], palette_lab)[opaque]
-    count = _neighbor_count(opaque)
-    opaque = opaque & (count >= 2)
-    index = _majority(index, opaque)
-    darkest = int(np.argmin(palette_lab[:, 0])) if outline == "dark-1px" else 0
+    if not opaque.any():
+        return index
+    if strength > 0:
+        index[opaque] = nearest_palette(_bayer_shift(rgb, strength)[opaque], palette_lab)
+        return index
+    index[opaque] = nearest_palette(rgb[opaque], palette_lab)
+    return _majority(index, opaque)
+
+
+def _outline_palette(palette_rgb: np.ndarray, palette_lab: np.ndarray, outline: str) -> tuple[np.ndarray, int]:
+    """Palette for the output and the outline index: appended black, or the darkest color."""
     if outline == "black-1px":
-        palette_rgb = np.vstack([palette_rgb, np.zeros((1, 3), dtype=np.uint8)])
-        darkest = len(palette_rgb) - 1
-    index, opaque = _outline(index, opaque, outline, darkest)
-    color = palette_rgb[np.clip(index, 0, len(palette_rgb) - 1)]
-    if dither:
-        strength = 1.0 if dither is True else float(dither)
-        color = bayer_dither(color, palette_rgb, strength)
-        color[~opaque] = 0
-    output = np.concatenate([color, np.where(opaque, 255, 0).astype(np.uint8)[..., None]], axis=2)
-    return output
+        return np.vstack([palette_rgb, np.zeros((1, 3), dtype=np.uint8)]), len(palette_rgb)
+    return palette_rgb, int(np.argmin(palette_lab[:, 0]))
+
+
+def to_pixel(rgba: Any, scale: int, palette: list[str] | None, outline: str, dither: bool | float, colors: int = 16) -> np.ndarray:
+    """Reduce, quantize, clean, outline and optionally dither. See section 3.6.
+
+    Dither is applied to the reduced RGB before the nearest-palette step, so
+    it changes the interior; outline pixels always keep the outline color.
+    Transparent pixels come back as (0, 0, 0, 0).
+    """
+    reduced = _downscale(_as_rgba(rgba), scale)
+    rgb = reduced[..., :3]
+    binary = reduced[..., 3] >= 128
+    palette_rgb = _resolve_palette(rgb, binary, palette, colors)
+    palette_lab = oklab(palette_rgb.reshape(-1, 1, 3)).reshape(-1, 3)
+    opaque = binary & (_neighbor_count(binary) >= 2)
+    index = _interior_index(rgb, opaque, palette_lab, _dither_strength(dither))
+    output_rgb, darkest = _outline_palette(palette_rgb, palette_lab, outline)
+    index, visible = _outline(index, opaque, outline, darkest)
+    color = output_rgb[index]
+    color[~visible] = 0
+    return np.concatenate([color, np.where(visible, 255, 0).astype(np.uint8)[..., None]], axis=2)
 
 
 def _neighbor_count(opaque: np.ndarray) -> np.ndarray:
@@ -230,10 +271,8 @@ def pixel_metrics(rgba_before: Any, palette: list[str], screen: str = "magenta")
     palette_lab = oklab(palette_rgb.reshape(-1, 1, 3)).reshape(-1, 3)
     off_palette = 0.0
     if opaque.any():
-        flat = oklab(image[..., :3]).reshape(-1, 3)
-        distance = np.linalg.norm(flat[:, None, :] - palette_lab[None, :, :], axis=2).min(axis=1)
-        distance = distance.reshape(opaque.shape)
-        off_palette = float((distance[opaque] * 100.0 > 10.0).mean() * 100.0)
+        _, distance = _nearest(oklab(image[..., :3][opaque]), palette_lab)
+        off_palette = float((distance * 100.0 > 10.0).mean() * 100.0)
     fringe = opaque & (_neighbor_count(~opaque) > 0)
     halo = 0.0
     if fringe.any():

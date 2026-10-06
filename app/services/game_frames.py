@@ -67,18 +67,19 @@ def find_cycle(frames, fps, min_s: float = 0.4) -> tuple[int, int, float]:
 
     Thumbnails are 64px wide. RGB is premultiplied by alpha/255, then turned
     into luminance. ``loopError`` is ``D(period) / median(D)``. With no
-    qualifying minimum, the span is the whole clip and the error is high.
+    qualifying minimum, the span is the whole clip (``len(frames)``, so
+    ``sample_frames`` reaches the last frame) and the error is high.
     """
     count = len(frames)
     if count < 2:
-        return (0, max(count - 1, 0), _HIGH_LOOP_ERROR)
+        return (0, count, _HIGH_LOOP_ERROR)
     distances = _distance_from_first(frames)
     median = float(np.median(distances))
     if median <= 0:
-        return (0, count - 1, _HIGH_LOOP_ERROR)
+        return (0, count, _HIGH_LOOP_ERROR)
     period = _first_period(distances, float(min_s) * float(fps), 0.6 * median)
     if period is None:
-        return (0, count - 1, _HIGH_LOOP_ERROR)
+        return (0, count, _HIGH_LOOP_ERROR)
     return (0, int(period), float(distances[period] / median))
 
 
@@ -101,10 +102,10 @@ def drift_correct(frames, keep_vertical: bool = True):
     """Subtract a straight-line fit of the feet-x centroids. Shift by whole pixels.
 
     The centroid is the horizontal mean of the bottom 15% of opaque pixels,
-    the same measure as ``feet_point``. Only x moves. ``keep_vertical`` leaves
-    y untouched, so a jump's height stays.
+    the same measure as ``feet_point``. Only x moves, so y is always kept and
+    a jump's height stays. ``keep_vertical`` is accepted for the brief's
+    signature and has no other effect.
     """
-    _ = keep_vertical
     shifts = _drift_shifts(frames)
     return [_shift_x(frame, dx) for frame, dx in zip(frames, shifts)]
 
@@ -217,16 +218,23 @@ def _distance_from_first(frames) -> np.ndarray:
     return distances
 
 
+def _is_local_min(distances: np.ndarray, index: int) -> bool:
+    """``D(i)`` is no larger than its neighbors. The last index only has a left neighbor."""
+    value = float(distances[index])
+    if value > float(distances[index - 1]):
+        return False
+    return index == len(distances) - 1 or value <= float(distances[index + 1])
+
+
 def _first_period(distances: np.ndarray, min_index: float, limit: float) -> int | None:
-    """First local minimum at ``i >= min_index`` with ``D(i) < limit``. Skip the last index."""
-    last = len(distances) - 1
-    index = 1
-    while index < last:
-        value = float(distances[index])
-        is_min = value <= float(distances[index - 1]) and value <= float(distances[index + 1])
-        if index >= min_index and is_min and value < limit:
+    """First local minimum at ``i >= min_index`` with ``D(i) < limit``.
+
+    The last index counts, so a clip that closes exactly on its final frame
+    (``n * period + 1`` frames) is accepted.
+    """
+    for index in range(1, len(distances)):
+        if index >= min_index and float(distances[index]) < limit and _is_local_min(distances, index):
             return index
-        index += 1
     return None
 
 

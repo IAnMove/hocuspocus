@@ -49,6 +49,26 @@ def test_find_cycle_recovers_a_ten_frame_loop():
     assert error < 0.6
 
 
+def test_find_cycle_accepts_a_loop_that_closes_on_the_last_frame():
+    frames = [_moving_disk(index) for index in range(11)]
+    start, period, error = find_cycle(frames, fps=10, min_s=0.4)
+    assert (start, period) == (0, 10)
+    assert error < 0.6
+
+
+def test_find_cycle_without_a_loop_spans_every_frame():
+    single = [_moving_disk(0)]
+    start, span, error = find_cycle(single, fps=10)
+    assert (start, span, error) == (0, 1, 1.0)
+    assert len(sample_frames(single, start, span, 1)) == 1
+
+    drifting = [_moving_disk(index, period=100) for index in range(6)]
+    start, span, error = find_cycle(drifting, fps=10, min_s=0.2)
+    assert (start, span, error) == (0, 6, 1.0)
+    picked = sample_frames(drifting, start, span, 6)
+    assert picked[-1] is drifting[-1]
+
+
 def test_drift_correct_removes_linear_x_and_keeps_the_jump():
     frames = []
     for index in range(10):

@@ -25,6 +25,14 @@ def test_roll_half_then_unroll_is_identity():
     assert np.array_equal(unroll(rolled), image)
 
 
+def test_unroll_inverts_roll_half_at_odd_sizes():
+    image = np.arange(5 * 7 * 3, dtype=np.uint8).reshape(5, 7, 3)
+    for axes in ((0, 1), (0,), (1,)):
+        rolled = roll_half(image, axes)
+        assert not np.array_equal(rolled, image)
+        assert np.array_equal(unroll(rolled, axes), image)
+
+
 def test_nine_slice_finds_a_six_pixel_border():
     panel = np.zeros((40, 48, 4), dtype=np.uint8)
     panel[..., :3] = (20, 30, 40)

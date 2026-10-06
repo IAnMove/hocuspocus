@@ -1,7 +1,8 @@
 """Pack keyed cycles into a TexturePacker sheet with Aseprite frame tags.
 
 One animation is one row. Every cell is the same size: the largest frame,
-plus ``pad`` on each side, rounded up to the pixel grid.
+plus ``pad`` on each side, rounded up to the pixel grid. Frames sit
+bottom-center in their cell, so the atlas pivot is true for every height.
 """
 from __future__ import annotations
 
@@ -23,13 +24,17 @@ def uniform_cell(all_frames, grid, pad) -> tuple[int, int]:
 
 
 def pack_rows(animations, cell) -> tuple[Image.Image, dict]:
-    """Place one row per animation, centered in ``cell`` of ``(width, height)``.
+    """Place one row per animation in ``cell`` of ``(width, height)``.
 
-    The atlas is a TexturePacker hash plus Aseprite ``frameTags``. ``duration``
-    is ``round(1000 / fps)`` milliseconds. Tag ``from`` / ``to`` are inclusive
-    indices in row-major order across the whole sheet. The pivot is the bottom
-    center of the cell.
+    Each frame is centered horizontally and its bottom row sits on the bottom
+    row of the cell, which is the atlas pivot. Frames of different heights
+    therefore share the same feet line. Names must be unique: a repeated name
+    raises ``ValueError``. The atlas is a TexturePacker hash plus Aseprite
+    ``frameTags``. ``duration`` is ``round(1000 / fps)`` milliseconds. Tag
+    ``from`` / ``to`` are inclusive indices in row-major order across the
+    whole sheet.
     """
+    _check_unique_names(animations)
     cell_w, cell_h = int(cell[0]), int(cell[1])
     cols = _column_count(animations)
     rows = len(animations)
@@ -78,6 +83,15 @@ def _max_frame_size(frames) -> tuple[int, int]:
     return width, height
 
 
+def _check_unique_names(animations) -> None:
+    seen: set[str] = set()
+    for animation in animations:
+        name = str(animation["name"])
+        if name in seen:
+            raise ValueError(f"duplicate animation name {name!r}; frame keys and tags would collide")
+        seen.add(name)
+
+
 def _round_up(value: int, grid) -> int:
     size = max(0, int(value))
     step = int(grid)
@@ -113,17 +127,22 @@ def _rgba_array(frame) -> np.ndarray:
     raise ValueError("expected an RGB or RGBA frame")
 
 
-def _paste_centered(sheet: np.ndarray, frame, col: int, row: int, cell_w: int, cell_h: int) -> None:
+def _paste_bottom_center(sheet: np.ndarray, frame, col: int, row: int, cell_w: int, cell_h: int) -> None:
+    """Center the frame horizontally and put its last row on the cell's last row.
+
+    A frame larger than the cell is clipped to the cell; the bottom rows stay.
+    """
     image = _rgba_array(frame)
     src_h, src_w = image.shape[:2]
-    dst_x = col * cell_w + (cell_w - src_w) // 2
-    dst_y = row * cell_h + (cell_h - src_h) // 2
-    src_x0 = max(0, -dst_x)
-    src_y0 = max(0, -dst_y)
-    dst_x0 = max(0, dst_x)
-    dst_y0 = max(0, dst_y)
-    copy_w = min(src_w - src_x0, sheet.shape[1] - dst_x0, (col + 1) * cell_w - dst_x0)
-    copy_h = min(src_h - src_y0, sheet.shape[0] - dst_y0, (row + 1) * cell_h - dst_y0)
+    cell_x, cell_y = col * cell_w, row * cell_h
+    dst_x = cell_x + (cell_w - src_w) // 2
+    dst_y = cell_y + cell_h - src_h
+    src_x0 = max(0, cell_x - dst_x)
+    src_y0 = max(0, cell_y - dst_y)
+    dst_x0 = max(cell_x, dst_x)
+    dst_y0 = max(cell_y, dst_y)
+    copy_w = min(src_w - src_x0, sheet.shape[1] - dst_x0, cell_x + cell_w - dst_x0)
+    copy_h = min(src_h - src_y0, sheet.shape[0] - dst_y0, cell_y + cell_h - dst_y0)
     if copy_w > 0 and copy_h > 0:
         sheet[dst_y0:dst_y0 + copy_h, dst_x0:dst_x0 + copy_w] = image[
             src_y0:src_y0 + copy_h, src_x0:src_x0 + copy_w
@@ -155,7 +174,7 @@ def _pack_row(sheet, animation, row, cell_w, cell_h, cursor, frames_json, tags, 
             "direction": "forward",
         })
     for col, frame in enumerate(anim_frames):
-        _paste_centered(sheet, frame, col, row, cell_w, cell_h)
+        _paste_bottom_center(sheet, frame, col, row, cell_w, cell_h)
         frames_json[f"{name}_{col}"] = _record(col * cell_w, row * cell_h, cell_w, cell_h, duration)
         cursor += 1
     return cursor
@@ -190,9 +209,9 @@ def _scaled_rgba(frame, scale) -> Image.Image:
 
 
 def _gif_frame(image: Image.Image) -> Image.Image:
-    """Palette image with index 255 reserved for fully transparent pixels."""
+    """Palette image with index 255 reserved for pixels whose alpha is below 128."""
     rgba = image.convert("RGBA")
     colors = rgba.convert("P", palette=Image.Palette.ADAPTIVE, colors=255)
     alpha = rgba.getchannel("A")
-    colors.paste(255, mask=alpha.point(lambda value: 255 if value == 0 else 0))
+    colors.paste(255, mask=alpha.point(lambda value: 255 if value < 128 else 0))
     return colors
