@@ -158,6 +158,40 @@ def test_resume_after_the_worker_dies_does_not_repeat_finished_work(tmp_path, mo
     assert store.game["assets"][0]["attempts"][0]["id"] == finished["steps"][0]["attemptId"]
 
 
+def test_resume_requeues_steps_lost_when_the_server_shut_down(tmp_path, monkeypatch):
+    calls = []
+
+    class Quiet:
+        def estimate(self, _game, _asset):
+            return {"image": 1}
+
+        def run(self, ctx):
+            calls.append(ctx.asset["id"])
+            return AttemptResult(files={}, metrics={"attemptIds": [ctx.attempt_id]}, warnings=[], provenance={"steps": []})
+
+    store = Store([_asset("first", "item", "review"), _asset("second", "item"), _asset("third", "item")])
+    service = _service(tmp_path, store, Quiet(), monkeypatch)
+    service._store("lab").save({
+        "jobId": "game-produce-abcd1234",
+        "workspace": "lab",
+        "gameId": "bosque",
+        "status": "completed",
+        "message": "Completed with failed assets",
+        "createdAt": 1,
+        "steps": [
+            {"assetId": "first", "kind": "item", "status": "done", "attemptId": "aaa", "error": None},
+            {"assetId": "second", "kind": "item", "status": "failed", "attemptId": "bbb", "error": "CancelledError: "},
+            {"assetId": "third", "kind": "item", "status": "failed", "attemptId": "ccc", "error": "RuntimeError: Executor shutdown has been called"},
+            {"assetId": "bad", "kind": "item", "status": "failed", "attemptId": "ddd", "error": "GameToolError: missing_generator"},
+        ],
+    })
+    finished = service.resume("lab", "game-produce-abcd1234")
+    assert calls == ["second", "third"]
+    assert [step["status"] for step in finished["steps"]] == ["done", "done", "done", "failed"]
+    assert finished["steps"][0]["attemptId"] == "aaa"
+    assert finished["steps"][1]["attemptId"] == "bbb"
+
+
 def test_raw_outputs_move_after_success_without_taking_a_longer_id(tmp_path):
     (tmp_path / "hero-still.png").write_bytes(b"a")
     (tmp_path / "hero-idle-still.png").write_bytes(b"b")

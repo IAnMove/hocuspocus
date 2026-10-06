@@ -143,8 +143,10 @@ class GameProduce:
         if job.get("status") in ACTIVE:
             return job
         for step in job.get("steps") or []:
-            if step.get("status") not in _TERMINAL:
-                step.update(status="queued", error=None)
+            if step.get("status") in _TERMINAL and not _interrupted_error(step.get("error")):
+                continue
+            step.update(status="queued", error=None, reason=None)
+            _release_generating(self, job, step)
         job.update(status="queued", message="Resuming", error=None, finishedAt=None)
         self._launch(workspace, job)
         return self._store(workspace).load(job_id) or job
@@ -236,6 +238,8 @@ class GameProduce:
         try:
             result = self._generate(job, game, asset, step["attemptId"])
         except Exception as error:  # one asset fails; the batch continues. SystemExit leaves the step running.
+            if _interrupted_error(f"{type(error).__name__}: {error}"):
+                raise
             self._fail(job, step, asset, error)
             return
         self._succeed(job, step, game, asset, result, time.monotonic() - started)
@@ -385,6 +389,12 @@ def _record_elapsed(root: str, game: dict, asset: dict, candidates: Any, elapsed
         record(root, primary, elapsed)
     except OSError:
         return
+
+
+def _interrupted_error(error: Any) -> bool:
+    """A dying server, not a bad asset. Resume must run the step again."""
+    text = str(error or "")
+    return text.startswith("CancelledError") or "Executor shutdown" in text
 
 
 def _release_generating(service: GameProduce, job: dict, step: dict) -> None:
