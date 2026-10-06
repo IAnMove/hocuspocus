@@ -37243,6 +37243,9 @@ from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
 from routers.about import create_about_router
 api.include_router(create_about_router(os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))))
+from routers.game_library import create_game_library_router
+_game_library_lock = threading.RLock()
+api.include_router(create_game_library_router(workspace_dir=_workspace_dir, lock=_game_library_lock))
 
 # Optional production renderer: pass a callable that drives the existing
 # Video 3D exportFlow through a process-owned headless browser. Closing a
