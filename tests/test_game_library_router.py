@@ -62,3 +62,30 @@ def test_missing_game_is_404(tmp_path):
     assert missing.json()["detail"]["code"] == "game_not_found"
     extra = client.post("/api/v1/games", json={"workspace": "lab", "game": {"id": "bosque", "title": "Bosque"}, "extra": 1})
     assert extra.status_code == 422
+
+
+def test_existing_id_is_409_and_string_style_is_422(tmp_path):
+    client = _client(tmp_path)
+    created = client.post("/api/v1/games", json={"workspace": "lab", "game": {"id": "bosque", "title": "Bosque"}})
+    again = client.post("/api/v1/games", json={"workspace": "lab", "game": {"id": "bosque", "title": "Otro"}})
+    assert again.status_code == 409
+    assert again.json()["detail"]["code"] == "game_exists"
+    reserved = client.post("/api/v1/games", json={"workspace": "lab", "game": {"id": "presets"}})
+    assert reserved.status_code == 422
+    assert reserved.json()["detail"]["code"] == "reserved_id"
+    style = client.put("/api/v1/games/bosque", json={
+        "workspace": "lab", "base_revision": created.json()["revision"], "patch": {"style": "pixel-8"},
+    })
+    assert style.status_code == 422
+    assert style.json()["detail"]["code"] == "invalid_style"
+    assert client.get("/api/v1/games/bosque", params={"workspace": "lab"}).json()["revision"] == created.json()["revision"]
+
+
+def test_corrupt_library_is_not_a_500(tmp_path):
+    client = _client(tmp_path)
+    path = tmp_path / ".game-library-v1.json"
+    for content, status in (("{not json", 400), ('{"games": [{"id": "Not A Slug"}]}', 422)):
+        path.write_text(content, encoding="utf-8")
+        assert client.get("/api/v1/games", params={"workspace": "lab"}).status_code == status
+        assert client.get("/api/v1/games/bosque", params={"workspace": "lab"}).status_code == status
+        assert client.delete("/api/v1/games/bosque", params={"workspace": "lab"}).status_code == status

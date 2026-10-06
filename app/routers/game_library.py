@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -27,8 +28,11 @@ from services.game_library import (
 )
 
 
+# Every service error maps through ``fail``; a corrupt library file surfaces as ValueError.
+_SERVICE_ERRORS = (GameConflictError, GameValidationError, GameNotFoundError, ValueError)
+
+
 def _now() -> str:
-    from datetime import datetime, timezone
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
@@ -86,12 +90,19 @@ def create_game_library_router(*, workspace_dir: Callable[[str], str], lock: thr
 
     def fail(error: Exception) -> HTTPException:
         if isinstance(error, GameConflictError):
-            return HTTPException(status_code=409, detail={"code": "revision_conflict", "message": str(error)})
+            return HTTPException(status_code=409, detail={"code": error.code, "message": str(error)})
         if isinstance(error, GameValidationError):
             return HTTPException(status_code=422, detail={"code": error.code, "message": str(error), "problems": error.problems})
         if isinstance(error, GameNotFoundError):
             return HTTPException(status_code=404, detail={"code": error.code, "message": error.code})
         return HTTPException(status_code=400, detail={"code": "invalid_game", "message": str(error)})
+
+    def load(workspace: str) -> dict[str, Any]:
+        with lock:
+            try:
+                return read_library(workspace_dir(workspace))
+            except _SERVICE_ERRORS as error:
+                raise fail(error) from error
 
     def mutate(workspace: str, function: Callable[[dict[str, Any]], tuple[dict[str, Any], Any]]) -> Any:
         with lock:
@@ -99,7 +110,7 @@ def create_game_library_router(*, workspace_dir: Callable[[str], str], lock: thr
             try:
                 library, payload = function(read_library(directory))
                 write_library(directory, library)
-            except (GameConflictError, GameValidationError, GameNotFoundError, ValueError) as error:
+            except _SERVICE_ERRORS as error:
                 raise fail(error) from error
             return payload
 
@@ -109,8 +120,7 @@ def create_game_library_router(*, workspace_dir: Callable[[str], str], lock: thr
 
     @router.get("/api/v1/games")
     def list_games(workspace: str):
-        with lock:
-            return read_library(workspace_dir(workspace))
+        return load(workspace)
 
     @router.post("/api/v1/games", status_code=201)
     def post_game(body: GameBody):
@@ -118,8 +128,7 @@ def create_game_library_router(*, workspace_dir: Callable[[str], str], lock: thr
 
     @router.get("/api/v1/games/{game_id}")
     def get_game(game_id: str, workspace: str):
-        with lock:
-            library = read_library(workspace_dir(workspace))
+        library = load(workspace)
         for game in library["games"]:
             if game["id"] == game_id:
                 return game
@@ -131,13 +140,7 @@ def create_game_library_router(*, workspace_dir: Callable[[str], str], lock: thr
 
     @router.delete("/api/v1/games/{game_id}", status_code=204)
     def remove_game(game_id: str, workspace: str):
-        with lock:
-            directory = workspace_dir(workspace)
-            try:
-                library = delete_game(read_library(directory), game_id)
-                write_library(directory, library)
-            except GameNotFoundError as error:
-                raise fail(error) from error
+        mutate(workspace, lambda library: (delete_game(library, game_id), None))
 
     @router.post("/api/v1/games/{game_id}/style/approve")
     def post_style(game_id: str, body: StyleApproval):

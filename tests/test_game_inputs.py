@@ -61,3 +61,12 @@ def test_stale_assets_skip_locked_and_pending():
     asset["attempts"][0]["inputs"] = "old"
     assert stale_assets(game) == ["heroe"]
     assert NOW
+
+
+def test_own_reference_is_left_out_of_the_digest():
+    game = _game(_asset())
+    original = asset_inputs(game, game["assets"][0])
+    game["style"]["references"] = [{"assetId": "heroe", "attemptId": "a1"}]
+    assert asset_inputs(game, game["assets"][0]) == original
+    game["style"]["references"].append({"assetId": "slime", "attemptId": "b1"})
+    assert asset_inputs(game, game["assets"][0]) != original

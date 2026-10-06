@@ -33,6 +33,11 @@ _MODEL_KINDS = frozenset({"model3d", "character3d"})
 _AUDIO_KINDS = frozenset({"sfx", "music", "jingle", "voice"})
 
 
+def _references(style: dict[str, Any], asset_id: Any) -> list[Any]:
+    """Style references, minus the asset's own entry: approving it as a reference must not stale it."""
+    return [ref for ref in style.get("references") or [] if not (isinstance(ref, dict) and ref.get("assetId") == asset_id)]
+
+
 def asset_inputs(game: dict[str, Any], asset: dict[str, Any]) -> str:
     """16-hex sha1 of everything a generator reads for this asset."""
     style = game.get("style") if isinstance(game.get("style"), dict) else {}
@@ -53,7 +58,7 @@ def asset_inputs(game: dict[str, Any], asset: dict[str, Any]) -> str:
             dep: (by_id.get(dep) or {}).get("approvedAttemptId")
             for dep in asset.get("dependsOn") or []
         },
-        "references": style.get("references") or [],
+        "references": _references(style, asset.get("id")),
         "generator": GENERATOR_VERSION.get(str(kind), 0),
     }
     encoded = json.dumps(payload, sort_keys=True, default=str).encode()

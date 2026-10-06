@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import os
 import re
 import unicodedata
@@ -22,6 +23,7 @@ SCHEMA = "hocuspocus.game-library"
 MAX_BYTES = 50 * 1024 * 1024
 MAX_ASSETS = 500
 MAX_ATTEMPTS = 12
+MAX_ID = 64
 KINDS = (
     "character", "sprite", "animation", "item", "icon", "ui", "tile", "tileset",
     "background", "vfx", "sfx", "music", "jingle", "voice", "model3d", "character3d",
@@ -39,13 +41,18 @@ _CANDIDATES = {
     "jingle": 2, "voice": 1, "model3d": 2, "character3d": 1,
 }
 _EDITORIAL = ("name", "description", "tags", "spec", "notes", "candidates")
+# Folder names that Windows refuses, and game ids that collide with static routes.
+_RESERVED_NAMES = frozenset({"con", "prn", "aux", "nul", *(f"{port}{n}" for port in ("com", "lpt") for n in range(1, 10))})
+_RESERVED_GAME_IDS = frozenset({"presets", "produce"})
+# Style keys a preset fills in; a new preset drops them so its own defaults apply.
+_PRESET_KEYS = ("traits", "negative", "palette", "pixel", "model3d", "audio")
 
 
 class GameConflictError(ValueError):
-    """Optimistic revision does not match the stored game."""
+    """Optimistic revision does not match the stored game, or the game id is taken."""
 
-    def __init__(self, message: str = "revision conflict") -> None:
-        self.code = "revision_conflict"
+    def __init__(self, message: str = "revision conflict", code: str = "revision_conflict") -> None:
+        self.code = code
         super().__init__(message)
 
 
@@ -106,15 +113,24 @@ def _problem(code: str, **detail: Any) -> GameValidationError:
 
 def _slug(value: Any, *, field: str) -> str:
     text = str(value or "").strip().lower()
-    if not _SLUG.match(text):
+    if len(text) > MAX_ID or not _SLUG.match(text):
         raise _problem("invalid_slug", field=field, value=value)
+    if text in _RESERVED_NAMES:
+        raise _problem("reserved_id", field=field, value=text)
     return text
+
+
+def _truncate(text: str) -> str:
+    if len(text) <= MAX_ID:
+        return text
+    head = text[: MAX_ID + 1]
+    return head.rsplit("-", 1)[0] if "-" in head else text[:MAX_ID]
 
 
 def _slugify(title: str) -> str:
     folded = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
-    text = re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")
-    return text or "juego"
+    text = _truncate(re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")) or "juego"
+    return f"{text}-juego" if text in _RESERVED_NAMES else text
 
 
 def _text(value: Any, fallback: str = "") -> str:
@@ -124,6 +140,8 @@ def _text(value: Any, fallback: str = "") -> str:
 def _int(value: Any, fallback: int, minimum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return fallback
+    if isinstance(value, float) and not math.isfinite(value):
+        raise _problem("out_of_range", value=str(value), minimum=minimum)
     number = int(value)
     if number < minimum:
         raise _problem("out_of_range", value=number, minimum=minimum)
@@ -221,7 +239,7 @@ def normalize_style(raw: dict[str, Any] | None) -> dict[str, Any]:
         "screen": _choice(source.get("screen"), ("auto", "green", "magenta"), "auto", "invalid_screen"),
         "references": _references(source.get("references")),
         "model3d": _model3d(model_raw, preset.get("model3d") or {}),
-        "audio": _audio(audio_raw, {**(preset.get("audio") or {}), "musicLufs": -16, "sfxPeakDb": -1, "sampleRate": 48000}),
+        "audio": _audio(audio_raw, {"musicLufs": -16, "sfxPeakDb": -1, "sampleRate": 48000, **(preset.get("audio") or {})}),
     }
 
 
@@ -350,8 +368,8 @@ def _spec_vfx(raw: dict[str, Any], _game: dict[str, Any]) -> dict[str, Any]:
 
 def _seconds(raw: dict[str, Any], fallback: float) -> float:
     value = raw.get("seconds", fallback)
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) <= 0:
-        raise _problem("invalid_seconds", value=value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < float(value) < math.inf:
+        raise _problem("invalid_seconds", value=str(value))
     return float(value)
 
 
@@ -423,6 +441,23 @@ _SPECS = {
 }
 
 
+def _seed(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise _problem("invalid_seed", value=value)
+    number = _int(value, 0, 0)
+    if number != value:
+        raise _problem("invalid_seed", value=value)
+    return number
+
+
+def _spec(kind: str, raw: dict[str, Any], game: dict[str, Any]) -> dict[str, Any]:
+    source = raw.get("spec") if isinstance(raw.get("spec"), dict) else raw
+    spec = _SPECS[kind](source, game)
+    if source.get("seed") is not None:
+        spec["seed"] = _seed(source["seed"])
+    return spec
+
+
 def _optional_slug(value: Any) -> str:
     text = _text(value)
     if not text:
@@ -456,10 +491,15 @@ def _attempt(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _prunable(attempt: dict[str, Any], approved_id: str | None) -> bool:
+    return attempt.get("id") != approved_id and (attempt.get("decision") == "rejected" or attempt.get("status") == "failed")
+
+
 def _prune_attempts(attempts: list[dict[str, Any]], approved_id: str | None) -> list[dict[str, Any]]:
+    """Drop the oldest rejected or failed attempts beyond ``MAX_ATTEMPTS``; never the approved one."""
     kept = list(attempts)
     while len(kept) > MAX_ATTEMPTS:
-        index = next((i for i, item in enumerate(kept) if item.get("id") != approved_id and item.get("decision") == "rejected"), None)
+        index = next((i for i, item in enumerate(kept) if _prunable(item, approved_id)), None)
         if index is None:
             break
         del kept[index]
@@ -472,7 +512,7 @@ def normalize_asset(raw: dict[str, Any], game: dict[str, Any], *, now: str) -> d
     kind = raw.get("kind")
     if kind not in KINDS:
         raise _problem("unknown_kind", kind=kind)
-    spec = _SPECS[str(kind)](raw.get("spec") if isinstance(raw.get("spec"), dict) else raw, game)
+    spec = _spec(str(kind), raw, game)
     approved = raw.get("approvedAttemptId")
     approved_id = _text(approved) or None
     return {
@@ -627,8 +667,9 @@ def _check_revision(game: dict[str, Any], base_revision: int | None) -> None:
         raise GameConflictError()
 
 
-def _apply_stale(game: dict[str, Any]) -> dict[str, Any]:
-    stale = set(stale_assets(game))
+def _apply_stale(game: dict[str, Any], *, keep: str | None = None) -> dict[str, Any]:
+    """Mark stale assets; ``keep`` is an asset whose human decision must not be overridden."""
+    stale = set(stale_assets(game)) - {keep}
     updated = copy.deepcopy(game)
     for asset in updated["assets"]:
         if asset["id"] in stale:
@@ -636,23 +677,48 @@ def _apply_stale(game: dict[str, Any]) -> dict[str, Any]:
     return updated
 
 
-def _unique_id(library: dict[str, Any], wanted: str) -> str:
-    taken = {game.get("id") for game in library.get("games") or []}
-    if wanted not in taken:
-        return wanted
-    suffix = 2
-    while f"{wanted}-{suffix}" in taken:
+def _unique_id(taken: set[Any], wanted: str) -> str:
+    candidate, suffix = wanted, 2
+    while candidate in taken:
+        tail = f"-{suffix}"
+        candidate = f"{wanted[: MAX_ID - len(tail)].rstrip('-')}{tail}"
         suffix += 1
-    return f"{wanted}-{suffix}"
+    return candidate
+
+
+def _new_game_id(library: dict[str, Any], payload: dict[str, Any]) -> str:
+    """An explicit id must be free; a title-derived id gets a numeric suffix instead."""
+    taken = {game.get("id") for game in library.get("games") or []}
+    if not payload.get("id"):
+        return _unique_id(taken | _RESERVED_GAME_IDS, _slugify(_text(payload.get("title"), "juego")))
+    wanted = _slug(payload["id"], field="id")
+    if wanted in _RESERVED_GAME_IDS:
+        raise _problem("reserved_id", field="id", value=wanted)
+    if wanted in taken:
+        raise GameConflictError(f"game {wanted} already exists", code="game_exists")
+    return wanted
 
 
 def create_game(library: dict[str, Any], raw: dict[str, Any], *, now: str) -> tuple[dict[str, Any], dict[str, Any]]:
     payload = dict(raw or {})
-    payload["id"] = _unique_id(library, _slug(payload["id"], field="id") if payload.get("id") else _slugify(_text(payload.get("title"), "juego")))
+    payload["id"] = _new_game_id(library, payload)
     payload["revision"] = 0
     game = _bump(normalize_game(payload, now=now), now)
     game["createdAt"] = now
     return _replace(library, game), game
+
+
+def _merge_style(current: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    style = copy.deepcopy(current)
+    if "preset" in patch and patch["preset"] != style.get("preset"):
+        for key in _PRESET_KEYS:
+            style.pop(key, None)
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(style.get(key), dict):
+            style[key] = {**style[key], **copy.deepcopy(value)}
+        else:
+            style[key] = copy.deepcopy(value)
+    return style
 
 
 def _merge_patch(game: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
@@ -660,16 +726,10 @@ def _merge_patch(game: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     for key in ("title", "genre", "view"):
         if key in patch:
             merged[key] = patch[key]
-    if "style" in patch and isinstance(patch["style"], dict):
-        style = copy.deepcopy(merged["style"])
-        for key, value in patch["style"].items():
-            if isinstance(value, dict) and isinstance(style.get(key), dict):
-                nested = copy.deepcopy(style[key])
-                nested.update(value)
-                style[key] = nested
-            else:
-                style[key] = copy.deepcopy(value)
-        merged["style"] = style
+    if "style" in patch:
+        if not isinstance(patch["style"], dict):
+            raise _problem("invalid_style", value=str(patch["style"]))
+        merged["style"] = _merge_style(merged["style"], patch["style"])
     return merged
 
 
@@ -714,22 +774,30 @@ def _store_asset(game: dict[str, Any], asset: dict[str, Any]) -> dict[str, Any]:
     return updated
 
 
+def _edit_asset(previous: dict[str, Any], raw: dict[str, Any], game: dict[str, Any], now: str) -> dict[str, Any]:
+    """Merge the editable keys of ``raw`` into ``previous``; attempts, approval and lock stay."""
+    merged = copy.deepcopy(previous)
+    merged.update({key: raw[key] for key in _EDITORIAL if key in raw})
+    asset = normalize_asset(merged, game, now=now)
+    asset["createdAt"] = previous["createdAt"]
+    return asset
+
+
 def upsert_assets(library: dict[str, Any], game_id: str, items: list[dict[str, Any]], replace: bool, *, now: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Insert or edit ``items``. ``replace`` drops assets missing from ``items`` and follows their order."""
     game = _game(library, game_id)
     if replace:
-        game["assets"] = []
+        listed = {raw.get("id") for raw in items}
+        game["assets"] = [item for item in game["assets"] if item["id"] in listed]
+    order: list[str] = []
     for raw in items:
         previous = next((item for item in game["assets"] if item["id"] == raw.get("id")), None)
-        if previous is None:
-            asset = normalize_asset(raw, game, now=now)
-        else:
-            merged = copy.deepcopy(previous)
-            for key in _EDITORIAL:
-                if key in raw:
-                    merged[key] = raw[key]
-            asset = normalize_asset(merged, game, now=now)
-            asset["createdAt"] = previous["createdAt"]
+        asset = normalize_asset(raw, game, now=now) if previous is None else _edit_asset(previous, raw, game, now)
         game = _store_asset(game, asset)
+        order.append(asset["id"])
+    if replace:
+        rank = {asset_id: index for index, asset_id in enumerate(order)}
+        game["assets"].sort(key=lambda item: rank.get(item["id"], len(rank)))
     game = _apply_stale(_bump(game, now))
     return _replace(library, game), game
 
@@ -737,21 +805,22 @@ def upsert_assets(library: dict[str, Any], game_id: str, items: list[dict[str, A
 def update_asset(library: dict[str, Any], game_id: str, asset_id: str, patch: dict[str, Any], base_revision: int, *, now: str) -> tuple[dict[str, Any], dict[str, Any]]:
     game = _game(library, game_id)
     _check_revision(game, base_revision)
-    previous = copy.deepcopy(_asset(game, asset_id))
-    merged = copy.deepcopy(previous)
-    for key in _EDITORIAL:
-        if key in (patch or {}):
-            merged[key] = patch[key]
-    asset = normalize_asset(merged, game, now=now)
-    asset["createdAt"] = previous["createdAt"]
+    asset = _edit_asset(_asset(game, asset_id), patch or {}, game, now)
     game = _apply_stale(_bump(_store_asset(game, asset), now))
     return _replace(library, game), _asset(game, asset_id)
+
+
+def _put_attempt(attempts: list[dict[str, Any]], attempt: dict[str, Any]) -> list[dict[str, Any]]:
+    """Append ``attempt``, or replace the one with the same id in place (a resumed batch reuses ids)."""
+    if all(item["id"] != attempt["id"] for item in attempts):
+        return [*attempts, attempt]
+    return [attempt if item["id"] == attempt["id"] else item for item in attempts]
 
 
 def add_attempt(library: dict[str, Any], game_id: str, asset_id: str, attempt: dict[str, Any], *, now: str) -> tuple[dict[str, Any], dict[str, Any]]:
     game = _game(library, game_id)
     asset = _asset(game, asset_id)
-    asset["attempts"] = _prune_attempts([*asset["attempts"], _attempt(attempt)], asset.get("approvedAttemptId"))
+    asset["attempts"] = _prune_attempts(_put_attempt(asset["attempts"], _attempt(attempt)), asset.get("approvedAttemptId"))
     asset["updatedAt"] = now
     game = _bump(_store_asset(game, asset), now)
     return _replace(library, game), _asset(game, asset_id)
@@ -771,11 +840,14 @@ def approve_attempt(library: dict[str, Any], game_id: str, asset_id: str, attemp
     attempt = _attempt_of(asset, attempt_id)
     if attempt["status"] != "ok":
         raise _problem("attempt_not_ok", attemptId=attempt_id)
+    for other in asset["attempts"]:
+        if other.get("decision") == "approved":
+            other["decision"] = None
     attempt["decision"] = "approved"
     asset["approvedAttemptId"] = attempt_id
     asset["status"] = "approved"
     asset["updatedAt"] = now
-    game = _bump(_store_asset(game, asset), now)
+    game = _apply_stale(_bump(_store_asset(game, asset), now), keep=asset_id)
     return _replace(library, game), _asset(game, asset_id)
 
 
@@ -788,11 +860,11 @@ def reject_attempt(library: dict[str, Any], game_id: str, asset_id: str, attempt
     attempt = _attempt_of(asset, attempt_id)
     attempt["decision"] = "rejected"
     attempt["note"] = _text(note)
-    asset["status"] = "rejected"
     if asset.get("approvedAttemptId") == attempt_id:
         asset["approvedAttemptId"] = None
+    asset["status"] = "approved" if asset.get("approvedAttemptId") else "rejected"
     asset["updatedAt"] = now
-    game = _bump(_store_asset(game, asset), now)
+    game = _apply_stale(_bump(_store_asset(game, asset), now), keep=asset_id)
     return _replace(library, game), _asset(game, asset_id)
 
 
@@ -803,6 +875,8 @@ def lock_asset(library: dict[str, Any], game_id: str, asset_id: str, locked: boo
     asset["locked"] = bool(locked)
     asset["updatedAt"] = now
     game = _bump(_store_asset(game, asset), now)
+    if not locked:
+        game = _apply_stale(game)
     return _replace(library, game), _asset(game, asset_id)
 
 
