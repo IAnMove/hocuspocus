@@ -6,6 +6,7 @@ const TAB_FILTER: Partial<Record<string, MediaFilter>> = {
   comics: 'comics',
   story_lab: 'stories',
   series_lab: 'series',
+  game_assets: 'gameAssets',
   video_3d: 'scene3d',
   character_kit: 'characters',
   video_editor: 'videoeditor',

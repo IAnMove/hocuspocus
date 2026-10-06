@@ -82,7 +82,8 @@
     "direct3d": "Genera un recurso 3D independiente.",
     "directEdit": "Edita, cambia el estilo, rellena o sustituye un resultado.",
     "directTools": "Ejecuta herramientas de posprocesado sobre un recurso existente.",
-    "lips": "Crea bocas y vincúlalas con sonidos."
+    "lips": "Crea bocas y vincúlalas con sonidos.",
+    "gameAssets": "Sprites, animación, audio y modelos de un juego."
   },
   "search": {
     "placeholder": "Buscar...",
@@ -121,7 +122,8 @@
     "multiclip": "Multi-clip",
     "auditDev": "Auditoría interna dev",
     "favorites": "Favoritos",
-    "lips": "Lips Creator"
+    "lips": "Lips Creator",
+    "gameAssets": "Recursos de juego"
   },
   "short": {
     "all": "Todo",
@@ -149,7 +151,8 @@
     "edits": "Edit",
     "multiclip": "MC",
     "auditDev": "Audit",
-    "lips": "Lips"
+    "lips": "Lips",
+    "gameAssets": "Juego"
   },
   "filters": {
     "allWorkspaces": "Todos los Workspaces"
@@ -169,7 +172,8 @@
     "world3d": "Editor vídeo 3D",
     "animate3d": "Rig y Animate",
     "auditDev": "Auditoría interna",
-    "lips": "Lips Creator"
+    "lips": "Lips Creator",
+    "gameAssets": "Recursos de juego"
   },
   "outputFolder": {
     "option": "Salida",

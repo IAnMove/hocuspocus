@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Activity, BookOpen, Boxes, CircleHelp, Clapperboard, FolderKanban, Languages,
+  Activity, BookOpen, Boxes, CircleHelp, Clapperboard, FolderKanban, Gamepad2, Languages,
   Library, MonitorPlay, Music, Search, Settings, Sparkles, Video, WandSparkles, X,
 } from 'lucide-react'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
@@ -244,6 +244,7 @@ export function TabFilter() {
     { value: 'comics', label: t('tabs.comics'), description: t('descriptions.comics'), icon: <BookOpen size={15} />, action: () => openFilter('comics') },
     { value: 'characters', label: t('tabs.characters'), description: t('descriptions.characters'), icon: <WandSparkles size={15} />, action: () => openFilter('characters') },
     { value: 'lips', label: t('tabs.lips'), description: t('descriptions.lips'), icon: <Activity size={15} />, action: () => openFilter('lips') },
+    { value: 'gameAssets', label: t('tabs.gameAssets'), description: t('descriptions.gameAssets'), icon: <Gamepad2 size={15} />, action: () => openFilter('gameAssets') },
     { value: 'scene3d', label: t('tabs.scene3d'), description: t('descriptions.video3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('scene3d') },
     { value: 'world3d', label: t('tabs.world3d'), description: t('descriptions.world3d'), icon: <Boxes size={15} />, action: () => openFilter('world3d') },
     { value: 'character-replacement', featured: true, label: t('tabs.characterReplacement'), description: t('descriptions.characterReplacement'), icon: <WandSparkles size={15} />, action: () => openFilter('character-replacement') },

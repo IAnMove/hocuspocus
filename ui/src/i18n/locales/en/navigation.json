@@ -82,7 +82,8 @@
     "direct3d": "Generate a standalone 3D asset.",
     "directEdit": "Edit, restyle, inpaint or recast an existing result.",
     "directTools": "Run post-processing tools on an existing asset.",
-    "lips": "Create mouths and link them to sounds."
+    "lips": "Create mouths and link them to sounds.",
+    "gameAssets": "Sprites, animation, audio and models for one game."
   },
   "search": {
     "placeholder": "Search...",
@@ -121,7 +122,8 @@
     "multiclip": "Multi-clip",
     "auditDev": "Internal dev audit",
     "favorites": "Favorites",
-    "lips": "Lips Creator"
+    "lips": "Lips Creator",
+    "gameAssets": "Game assets"
   },
   "short": {
     "all": "All",
@@ -149,7 +151,8 @@
     "edits": "Edit",
     "multiclip": "MC",
     "auditDev": "Audit",
-    "lips": "Lips"
+    "lips": "Lips",
+    "gameAssets": "Game"
   },
   "filters": {
     "allWorkspaces": "All Workspaces"
@@ -169,7 +172,8 @@
     "world3d": "Video 3D editor",
     "animate3d": "Rig & Animate",
     "auditDev": "Internal audit",
-    "lips": "Lips Creator"
+    "lips": "Lips Creator",
+    "gameAssets": "Game assets"
   },
   "outputFolder": {
     "option": "Output",

@@ -305,9 +305,9 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
   assert.deepEqual(forbiddenLiterals(), [])
 })
 
-test('resources register the extraInfo, storyLab, videoEditor and help namespaces', async () => {
+test('resources register the extraInfo, storyLab, videoEditor, help and gameAssets namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots', 'productionCatalog'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots', 'productionCatalog', 'gameAssets'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)
@@ -316,6 +316,8 @@ test('resources register the extraInfo, storyLab, videoEditor and help namespace
   assert.ok('shell' in resources.es)
   assert.ok('videoEditor' in resources.en)
   assert.ok('videoEditor' in resources.es)
+  assert.ok('gameAssets' in resources.en)
+  assert.ok('gameAssets' in resources.es)
   assert.equal(resources.en.help.button, 'Help')
   assert.equal(resources.es.help.button, 'Ayuda')
 })

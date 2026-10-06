@@ -16,7 +16,7 @@ Base: `origin/development` (`b7d9962d`, incluye `415e4602`). Un bloque, un PR co
 | J9 Lista y lote | `feat/game-assets-9-produce` | #868 | en curso (borrador) | `app/services/game_list.py`, `app/services/game_produce.py`, `app/services/game_jobs.py`, `app/services/game_estimate.py`, `app/routers/game_produce.py` |
 | J10 Exportación | `feat/game-assets-10-export` | #892 | en curso (borrador) | `app/services/game_export.py`, `POST /api/v1/games/{id}/export`, `tests/test_game_export.py` |
 | J11 MCP | `feat/game-assets-11-mcp` | #893 | en curso (borrador) | `app/services/game_commands.py`, `app/services/game_guide.py`, `app/shared/game_agent_guide.md`, perfil `game`, `docs/agents/GAME_ASSETS_MCP.md` |
-| J12 UI juego | `feat/game-assets-12-ui-setup` | — | pendiente | `ui/src/features/game-assets/` (juego, estilo, reparto) |
+| J12 UI juego | `feat/game-assets-12-ui-setup` | — | en curso (borrador) | `ui/src/features/game-assets/` (juego, estilo, reparto) |
 | J13 UI lista | `feat/game-assets-13-ui-list` | — | pendiente | `GameListPanel`, `GameProducePanel` |
 | J14 UI revisión | `feat/game-assets-14-ui-review` | — | pendiente | `GameReviewPanel`, `SpriteSheetPlayer`, `AudioLoopPlayer` |
 | J15 UI prueba | `feat/game-assets-15-ui-playtest` | — | pendiente | `GamePlaytest`, `GameExportPanel` |
