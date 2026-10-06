@@ -6,6 +6,7 @@ save as the editor, so export reads that document rather than a second library.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import uuid
@@ -15,6 +16,7 @@ from pathlib import Path
 
 from services import world3d_slot_fields as slot_fields
 from services.agent_activity import actor_label
+from services.readable_names import ascii_slug
 from services.character_kit_library import read_character_kit_library
 from services.scene_documents import get_document, save_document
 from services.world3d_look import check_render_look, normalize_toon
@@ -251,13 +253,60 @@ def preview_scene(workspace: str, scene_id: str, workspace_dir, *, times=None, e
     }
 
 
+def _template_title(template_id: str, workspace: str, workspace_dir) -> str:
+    try:
+        card = require_card(template_id, workspace_dir=workspace_dir, workspace=workspace)
+    except Exception:  # noqa: BLE001 - a scene whose template is gone keeps its id as the name
+        return template_id
+    return str(card.get("titleEn") or card.get("title") or card.get("titleEs") or template_id)
+
+
+def published_name(workspace: str, scene_id: str, record: dict, workspace_dir) -> str:
+    """``Anime face-off w3d-0123456789ab``: the template's title, then the scene id that ties it to its working copy."""
+    title = ascii_slug(_template_title(str(record.get("templateId") or ""), workspace, workspace_dir), 60)
+    return f"{title}-{scene_id}" if title else scene_id
+
+
 def publish_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
     record = _read(workspace, scene_id, workspace_dir)
-    saved = save_document(workspace, record["document"], name=scene_id, preview=None, workspace_dir=workspace_dir)
+    saved = save_document(workspace, record["document"], name=published_name(workspace, scene_id, record, workspace_dir),
+                          preview=None, workspace_dir=workspace_dir)
     opened = get_document(workspace, saved["name"], workspace_dir=workspace_dir)
     traits = _traits(opened["document"])
+    # The working copy remembers what it was published as (the editor's Open dialog lists the unpublished ones).
+    record["published"] = {"file": saved["name"], "revision": record["revision"]}
+    _write(workspace, scene_id, record, workspace_dir)
     return {"sceneId": scene_id, "revision": record["revision"], "file": saved["name"], "url": saved.get("url"),
             "editor": opened.get("editor"), "document": opened["document"], "traits": traits}
+
+
+def working_scenes(workspace: str, workspace_dir, *, unpublished_only: bool = True) -> list[dict]:
+    """The working Video 3D scenes (``world3d-edits/w3d-*.json``) an agent instantiated or patched, newest first.
+
+    A scene counts as published at its current revision when ``world3d.scene.publish`` recorded that revision, or,
+    for scenes published before it recorded anything, when a ``w3d-…-<uuid>.world3d.scene.json`` file of it exists."""
+    root = Path(workspace_dir(workspace))
+    legacy = {name.split("-", 2)[0] + "-" + name.split("-", 2)[1] for name in os.listdir(root)
+              if name.startswith("w3d-") and name.endswith(".world3d.scene.json")} if root.is_dir() else set()
+    rows = []
+    for path in (root / _EDITS).glob("w3d-*.json") if (root / _EDITS).is_dir() else []:
+        scene_id = path.stem
+        try:
+            record = _read(workspace, scene_id, workspace_dir)
+            changed = path.stat().st_mtime
+        except (World3DSceneError, OSError):
+            continue
+        published = record.get("published") if isinstance(record.get("published"), dict) else None
+        current = (published or {}).get("revision") == record.get("revision") or (published is None and scene_id in legacy)
+        if unpublished_only and current:
+            continue
+        document = record["document"]
+        rows.append({"sceneId": scene_id, "revision": record.get("revision"), "templateId": record.get("templateId"),
+                     "title": _template_title(str(record.get("templateId") or ""), workspace, workspace_dir),
+                     "updatedAt": changed, "published": published, "duration": document.get("duration"),
+                     "width": document.get("width"), "height": document.get("height"),
+                     "slots": len(document.get("slots") or []), "pending": len(_pending(document))})
+    return sorted(rows, key=lambda row: -row["updatedAt"])
 
 
 def _check_user_template(template_id, title, document) -> None:

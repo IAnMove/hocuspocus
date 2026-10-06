@@ -455,6 +455,12 @@ async def trace_user_mutations(request: Request, call_next):
     return response
 
 
+# Who a loopback call (an MCP tool through these routes) or the Wizard says it is
+# for, in the caller scope: what a route records (take approvals, rig sidecars)
+# names it. Attribution only (services/agent_activity.py).
+from services.agent_activity import ActorHeaderMiddleware
+api.add_middleware(ActorHeaderMiddleware)
+
 # Registered after decorator-based middleware so Starlette places LAN auth at
 # the outside of the stack. Unauthenticated remote requests are rejected
 # before request-body tracing or endpoint work can run.
@@ -30600,12 +30606,12 @@ def discard_series_render_job(job_id: str):
 
 
 def _approve_series_version_take(workspace: str, library: dict, series: dict, episode: dict, shot_index: int, language: str,
-                                 attempt_id: str) -> dict:
+                                 attempt_id: str, approved_by: str = "user") -> dict:
     """Approve a take for a language version (its own approval and length); the original's stays as it was."""
     from services.series_language_versions import set_version_take
     shot = episode["shots"][shot_index]
     try:
-        set_version_take(episode, language, shot["id"], attempt_id)
+        set_version_take(episode, language, shot["id"], attempt_id, approved_by)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     now = _series_iso_now()
@@ -30625,9 +30631,12 @@ def _approve_series_version_take(workspace: str, library: dict, series: dict, ep
 def approve_series_shot_attempt_endpoint(
     series_id: str, episode_id: str, shot_id: str, attempt_id: str, body: dict | None = None,
 ):
+    from services.agent_activity import current_actor
     from services.series_library import approve_shot_render_attempt
 
     body = body if isinstance(body, dict) else {}
+    # Who approves: a person, an agent or the Wizard, or the server render (X-Hocus-Actor, see ActorHeaderMiddleware).
+    approved_by = current_actor()
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
         library = _read_series_workspace(workspace)
@@ -30645,10 +30654,11 @@ def approve_series_shot_attempt_endpoint(
         if isinstance(language, str) and language:
             from services.series_shot_plan import language_key
             if language != language_key(series):
-                return _approve_series_version_take(workspace, library, series, episode, shot_index, language, attempt_id)
+                return _approve_series_version_take(workspace, library, series, episode, shot_index, language, attempt_id,
+                                                    approved_by)
         try:
             episode["shots"][shot_index] = approve_shot_render_attempt(
-                episode["shots"][shot_index], attempt_id,
+                episode["shots"][shot_index], attempt_id, approved_by,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -30671,6 +30681,7 @@ def approve_series_shot_attempt_endpoint(
 def approve_series_episode_attempts_endpoint(
     series_id: str, episode_id: str, body: dict,
 ):
+    from services.agent_activity import current_actor
     from services.series_library import approve_episode_render_attempts
 
     workspace = _series_library_workspace(body.get("workspace"))
@@ -30681,7 +30692,7 @@ def approve_series_episode_attempts_endpoint(
         if not isinstance(episode, dict):
             raise HTTPException(status_code=404, detail="Series episode not found")
         try:
-            episode = approve_episode_render_attempts(episode, body.get("selections"))
+            episode = approve_episode_render_attempts(episode, body.get("selections"), current_actor())
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         now = _series_iso_now()
@@ -30785,6 +30796,7 @@ api.include_router(create_style_library_router(_style_library))
 def reject_series_shot_attempt_endpoint(
     series_id: str, episode_id: str, shot_id: str, attempt_id: str, body: dict | None = None,
 ):
+    from services.agent_activity import current_actor
     from services.series_library import reject_shot_render_attempt
 
     body = body if isinstance(body, dict) else {}
@@ -30803,7 +30815,7 @@ def reject_series_shot_attempt_endpoint(
             raise HTTPException(status_code=404, detail="Series shot not found")
         try:
             episode["shots"][shot_index] = reject_shot_render_attempt(
-                episode["shots"][shot_index], attempt_id,
+                episode["shots"][shot_index], attempt_id, current_actor(),
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -34991,6 +35003,8 @@ def _write_video_editor_export_sidecar(output_path, sidecar, workspace_id):
 
 
 def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path: str) -> None:
+    from services.agent_activity import requested_by as export_requested_by
+    from services.montage_documents import montage_link
     from services.video_editor import build_source_provenance_manifest, render_project
 
     job = _video_editor_job_snapshot(job_id)
@@ -35197,6 +35211,8 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                         for key, value in (body.get("soundtrack") or {}).items()
                         if key in {"name", "source", "trim_start", "trim_end", "volume", "loop"}
                     } or None,
+                    # The saved montage it was made from: the video's "Edit montage" opens it again.
+                    **({"montage": montage} if (montage := montage_link(body.get("montage"))) else {}),
                 },
                 "source": "video_editor",
             },
@@ -35206,6 +35222,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
             "root_task_id": str(job["root_task_id"]),
             "workspace": workspace,
             "created_at": time.time(),
+            **export_requested_by(body.get("requested_by")),
         }
         _write_video_editor_export_sidecar(output_path, sidecar, workspace)
 
@@ -35373,6 +35390,7 @@ def start_video_editor_export(body: dict):
     except LayerValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     clean_body = dict(body)
+    from services.agent_activity import agent_attribution
     clean_body.update({
         "width": width,
         "height": height,
@@ -35380,6 +35398,8 @@ def start_video_editor_export(body: dict):
         "clips": clean_clips,
         "soundtrack": clean_soundtrack,
         "layers": clean_layers,
+        # Only an MCP agent's montages.export is attributed; a body cannot claim it.
+        "requested_by": agent_attribution("montages.export"),
     })
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
@@ -37154,7 +37174,9 @@ def _set_series_shot_duration(workspace: str, series_id: str, episode_id: str, s
 def _set_series_version_take(workspace: str, series_id: str, episode_id: str, language: str, shot_id: str, attempt_id: str) -> None:
     """Approve a take in a language version; the original's approval is untouched."""
     from services.series_language_versions import set_version_take
-    _change_series_episode(workspace, series_id, episode_id, lambda _series, episode: set_version_take(episode, language, shot_id, attempt_id))
+    # Only the server render approves through here (``approve: true``): the take says so.
+    _change_series_episode(workspace, series_id, episode_id,
+                           lambda _series, episode: set_version_take(episode, language, shot_id, attempt_id, "server"))
 
 
 def _set_series_version_duration(workspace: str, series_id: str, episode_id: str, language: str, shot_id: str, seconds: float) -> None:
@@ -37234,7 +37256,9 @@ api.include_router(create_series_plates_router(SeriesPlates(PlateDeps(
 )), _local_mcp.bind_loop))
 
 from services.agent_activity import AgentActivity
+from routers.wizard_activity import create_wizard_activity_router
 _agent_activity = AgentActivity(_task_registry, _get_active_workspace)
+api.include_router(create_wizard_activity_router(_agent_activity))
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token, on_mutation=_agent_activity.record,
     handlers=(_mcp_handlers := {"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,

@@ -25,7 +25,11 @@ from urllib.parse import unquote, urlparse
 _LOGGER = logging.getLogger("loreframe.operations.agent_activity")
 
 AGENT_TOOL = "external_agent"
+WIZARD_TOOL = "wizard"
 INTERNAL_CALLER_HEADER = "x-hocus-caller"
+# Who a loopback HTTP call (an MCP tool that runs through the app's own routes) is made for.
+ACTOR_HEADER = "x-hocus-actor"
+ACTORS = ("user", "agent", "wizard", "server")
 _CALLER: ContextVar[dict | None] = ContextVar("hocus_mcp_caller", default=None)
 
 # Task controls and analysis runs change job state, not a user artifact.
@@ -40,7 +44,7 @@ _FILE_SUFFIXES = (
 )
 _FILE_KEYS = frozenset({"file", "name", "filename", "output", "output_name", "output_file", "glb", "path", "url", "audio", "image", "video"})
 _TARGET_ORDER = ("world3d_template", "world3d_scene", "scene_file", "character_kit", "series_episode", "series",
-                 "montage", "template", "workspace_collection", "file")
+                 "story", "montage", "template", "workspace_collection", "file")
 _TASK_KEYS = ("task_id", "root_task_id")
 _MAX_WALK_DEPTH = 5
 _MAX_TARGETS = 24
@@ -73,7 +77,58 @@ def actor_label() -> str:
     caller = _CALLER.get() or {}
     if is_external_agent():
         return "agent"
+    if caller.get("actor") in ("agent", "wizard"):
+        return caller["actor"]
     return "wizard" if caller.get("surface") == "wizard" else "user"
+
+
+def current_actor() -> str:
+    """Like :func:`actor_label`, and ``server`` for the server's own jobs (a Series render approving its takes)."""
+    caller = _CALLER.get() or {}
+    if not is_external_agent() and (caller.get("actor") == "server" or caller.get("internal") == "server"):
+        return "server"
+    return actor_label()
+
+
+def loopback_actor() -> str | None:
+    """The actor a loopback HTTP call carries in ``X-Hocus-Actor``: ``agent`` for an MCP client, ``wizard`` for Ask to
+    the Wizard and ``server`` for the server's own jobs (a Series render approving its takes); None for anyone else."""
+    caller = _CALLER.get()
+    if not caller:
+        return None
+    if is_external_agent():
+        return "agent"
+    if caller.get("surface") == "wizard":
+        return "wizard"
+    return "server" if caller.get("internal") == "server" else None
+
+
+def _declared_actor(headers: list[tuple[bytes, bytes]]) -> str | None:
+    values = {key.lower(): value for key, value in headers}
+    declared = values.get(ACTOR_HEADER.encode(), b"").decode("latin-1").strip().lower()
+    if declared in ACTORS and declared != "user":
+        return declared
+    surface = values.get(b"x-hocus-ui-surface", b"").decode("latin-1").strip().lower()
+    return "wizard" if surface == "wizard" else None
+
+
+class ActorHeaderMiddleware:
+    """Carry the actor a request declares (``X-Hocus-Actor`` from a loopback, ``X-Hocus-UI-Surface: wizard`` from the
+    Wizard) into the caller scope, so :func:`actor_label` and :func:`current_actor` name it in the route.
+
+    Attribution only, never a permission. It never makes a request an external agent's: the MCP dispatcher records
+    those itself (``is_external_agent`` stays False here)."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        actor = _declared_actor(scope.get("headers") or []) if scope.get("type") == "http" else None
+        if actor is None:
+            await self.app(scope, receive, send)
+            return
+        with caller_scope({"surface": "loopback", "internal": "loopback", "actor": actor}):
+            await self.app(scope, receive, send)
 
 
 def caller_from_headers(headers, profile: str | None = None) -> dict:
@@ -182,6 +237,15 @@ def _document_target(value: dict) -> dict | None:
     return None
 
 
+def _montage_target(value: dict) -> dict | None:
+    """A saved montage (``<name>.montage.json``) opens in the Video Editor; its document's name is the title."""
+    file_name = _file_name(value.get("file"))
+    if not file_name.endswith(".montage.json"):
+        return None
+    montage = value.get("montage") if isinstance(value.get("montage"), dict) else {}
+    return _target("montage", file_name, file=file_name, title=montage.get("name"))
+
+
 def _template_target(value: dict, _data: dict) -> dict | None:
     if str(value.get("id") or "").startswith("user-") and value.get("source") == "workspace":
         return _target("world3d_template", value.get("id"), title=value.get("title"))
@@ -200,13 +264,12 @@ _KEYED_TARGETS = {
     "character": lambda value, _data: _target("character_kit", value.get("id"), title=value.get("name")),
     "series": lambda value, _data: _target("series", value.get("id"), title=value.get("title")),
     "episode": _episode_target,
-    "montage": lambda value, _data: _target("montage", value.get("name"), title=value.get("title")),
 }
 
 
 def _dict_targets(key: str, value: dict, data: dict) -> list[dict | None]:
     keyed = _KEYED_TARGETS.get(key)
-    return [_scene_target(value), _document_target(value), keyed(value, data) if keyed else None]
+    return [_scene_target(value), _document_target(value), _montage_target(value), keyed(value, data) if keyed else None]
 
 
 def _entity_targets(entities: Any) -> list[dict | None]:
@@ -264,8 +327,9 @@ def _merge_targets(previous: list, current: list[dict]) -> list[dict]:
         if isinstance(item, dict) and item.get("kind") in _TARGET_ORDER and item.get("id"):
             key = (item["kind"], item["id"])
             merged[key] = {**merged.get(key, {}), **item}
-    documents = {item["file"] for item in merged.values() if item["kind"] == "scene_file" and item.get("file")}
-    kept = [item for item in merged.values() if not (item["kind"] == "file" and item.get("file") in documents)]
+    # A file another target already opens (a scene document, a montage) is not listed a second time as a plain file.
+    opened = {item["file"] for item in merged.values() if item["kind"] != "file" and item.get("file")}
+    kept = [item for item in merged.values() if not (item["kind"] == "file" and item.get("file") in opened)]
     return sorted(kept, key=lambda item: _TARGET_ORDER.index(item["kind"]))[:_MAX_TARGETS]
 
 
@@ -355,29 +419,63 @@ class AgentActivity:
         metadata.update({key: value for key, value in attribution.items() if value is not None})
         registry.update(task_id, metadata=metadata, event_type="agent.attributed", force=True)
 
+    def record_wizard(self, workspace: str, capability: str, targets: Any, command_id: str | None = None) -> dict | None:
+        """The trail row of an Ask to the Wizard change that started no job (a kit, a series, a story).
+
+        The browser runs the Wizard, so it reports the change with what it changed (``targets``); the row works like
+        an agent's: one per artifact, later changes of the same artifact update it, and its buttons open each result.
+        Returns the task, or None when no target can be opened."""
+        clean = _merge_targets([], [target for target in (_client_target(item) for item in targets or [])
+                                    if target][:_MAX_TARGETS])
+        name = str(capability or "").strip()[:120]
+        if not clean or not name:
+            return None
+        if not _WORKSPACE_RE.fullmatch(workspace or ""):
+            raise ValueError("Use a valid workspace")
+        intent = str(command_id or "").strip()[:160]
+        attribution = {"tool": WIZARD_TOOL, "capability": name, "command_id": intent or None}
+        return self._publish(self._registry_for(workspace), workspace, name, intent, attribution, clean, actor="wizard")
+
     @staticmethod
-    def _publish(registry, workspace: str, name: str, intent: str, attribution: dict, targets: list[dict]) -> None:
-        """One completed ``agent`` task per artifact; later calls on the same artifact update it."""
+    def _publish(registry, workspace: str, name: str, intent: str, attribution: dict, targets: list[dict],
+                 actor: str = "agent") -> dict:
+        """One completed ``agent`` task per artifact and actor; later calls on the same artifact update it."""
         key = f"{targets[0]['kind']}:{targets[0]['id']}" if targets else f"intent:{intent or name}"
-        task_id = "task-agent-" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:20]
+        # An agent's rows keep their historical ids; the Wizard's are its own rows for the same artifact.
+        identity = key if actor == "agent" else f"{actor}:{key}"
+        task_id = f"task-{actor}-" + hashlib.sha1(identity.encode("utf-8")).hexdigest()[:20]
         existing = registry.get(task_id)
-        fields = _change_fields(name, key, attribution, targets, (existing or {}).get("metadata") or {})
+        fields = _change_fields(name, key, attribution, targets, (existing or {}).get("metadata") or {}, actor)
         if existing is None:
-            registry.create(id=task_id, workspace=workspace, **fields)
-        else:
-            registry.update(task_id, event_type="agent.changed", force=True, **fields)
+            return registry.create(id=task_id, workspace=workspace, **fields)
+        return registry.update(task_id, event_type="agent.changed", force=True, **fields)
 
 
-def _change_fields(name: str, key: str, attribution: dict, targets: list[dict], previous: dict) -> dict:
+def _client_target(value: Any) -> dict | None:
+    """A target the browser reports for a Wizard change, checked like the ones read from a tool result."""
+    if not isinstance(value, dict) or value.get("kind") not in _TARGET_ORDER:
+        return None
+    file_name = _file_name(value.get("file")) if value.get("file") is not None else ""
+    if value.get("file") is not None and not file_name:
+        return None
+    extra = {key: value.get(key) for key in ("title", "editor", "series")}
+    return _target(value["kind"], value.get("id"), **extra, **({"file": file_name} if file_name else {}))
+
+
+_ACTOR_TITLES = {"agent": "Agent", "wizard": "Wizard"}
+
+
+def _change_fields(name: str, key: str, attribution: dict, targets: list[dict], previous: dict, actor: str = "agent") -> dict:
     """The task fields of one agent change, merged with what earlier calls on the same artifact recorded."""
     operations = dict(previous.get("operations") or {})
     operations[name] = int(operations.get(name) or 0) + 1
     all_targets = _merge_targets(previous.get("targets") or [], targets)
     refs = list(dict.fromkeys(item["file"] for item in all_targets if item.get("file")))[:_MAX_TARGETS]
     primary = next((item for item in all_targets if f"{item['kind']}:{item['id']}" == key), {})
-    metadata = {"adapter": "agent", "actor": "agent", **{field: value for field, value in attribution.items() if value is not None},
+    metadata = {"adapter": "agent", "actor": actor, **{field: value for field, value in attribution.items() if value is not None},
                 "operations": operations, "targets": all_targets, "expects_artifact": bool(refs)}
     message = " · ".join(f"{operation} ×{count}" if count > 1 else operation for operation, count in operations.items())
-    return {"kind": "agent", "workflow": name, "title": f"Agent · {primary.get('title') or primary.get('id') or name}"[:500],
+    label = _ACTOR_TITLES.get(actor, "Agent")
+    return {"kind": "agent", "workflow": name, "title": f"{label} · {primary.get('title') or primary.get('id') or name}"[:500],
             "status": "completed", "phase": "completed", "message": message[:2000], "progress": 1.0,
             "result_refs": refs, "metadata": metadata}

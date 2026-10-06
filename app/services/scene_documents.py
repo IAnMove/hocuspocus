@@ -18,6 +18,7 @@ from services.mcp_intent import IntentConflict, check_intent_id, intent_digest, 
 from services.scene2d_schema import document_schema
 from services.scene_commands import DocumentInput, command_error
 from services.scene_library import preview_png, save_world3d
+from services.scene_links import remember_saved
 
 WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 FILE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.scene\.json")
@@ -28,7 +29,8 @@ _PLACEHOLDER_SIZE = (320, 180)
 OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "scenes.document.save": (
         {"workspace": WORKSPACE, "document": document_schema(), "name": {"type": "string", "maxLength": 120},
-         "preview": {"type": "string", "description": "Optional data:image/png;base64 preview (Video 3D library)."}},
+         "preview": {"type": "string", "description": "Optional data:image/png;base64 preview shown in the gallery and the "
+                     "editors' Open dialogs. Without one, a later export of the same document gives the file its middle frame."}},
         ["workspace", "document"], True,
         "Save a version 1 Video 2D (layers) or Video 3D (slots) scene as a new immutable revision in the workspace so "
         "it opens in the matching editor. Media must already be durable workspace/example URLs. No render or export. "
@@ -101,19 +103,26 @@ def save_document(workspace: str, document: Any, *, name: str | None, preview: s
         raise SceneDocumentError("Upload local scene resources before saving")
     if _remote_sequence(valid):
         raise SceneDocumentError("Sequence frames must be durable workspace or example media")
-    if preview:
-        preview_png(preview)  # Validate even though Video 2D scenes do not store it.
+    png = preview_png(preview) if preview else None
     label = str(name or valid.get("name") or "scene")[:120]
     stem = (re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-._")[:80] or "scene") + "-" + uuid.uuid4().hex[:10]
     folder = Path(workspace_dir(workspace))
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / (stem + ".scene.json")
     temporary = folder / (stem + ".scene.json.tmp")
+    if png:
+        # A preview sent with the save is the scene's library picture, as for an editor save.
+        (folder / (stem + ".scene.preview.png")).write_bytes(png)
     with temporary.open("x", encoding="utf-8") as handle:
         handle.write(encoded)
     temporary.replace(target)
-    return {"name": target.name, "type": "scene", "workspace_id": workspace, "url": _url(target.name, workspace),
-            "editor": "video2d"}
+    # An export of this document names this file and, without a preview, gives it its middle frame (scene_links).
+    remember_saved(folder, valid, target.name)
+    saved = {"name": target.name, "type": "scene", "workspace_id": workspace, "url": _url(target.name, workspace),
+             "editor": "video2d"}
+    if png:
+        saved["thumbnail_url"] = _url(stem + ".scene.preview.png", workspace)
+    return saved
 
 
 def get_document(workspace: str, file: str, *, workspace_dir: Callable[[str], str]) -> dict[str, Any]:

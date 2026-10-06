@@ -970,7 +970,16 @@ class World3DExportService:
         (staging / "snapshot.json").write_text(
             json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
         frames = self._render_frames(snapshot, staging, token, registry, task_id)
+        # The saved scene file this document came from: the sidecar names it, and it gets a real preview (scene_links).
+        from services.scene_links import preview_from_frames, saved_scene_for
+        folder = self.workspace_dir(workspace)
+        scene_file = saved_scene_for(folder, snapshot["document"])
+        if scene_file:
+            snapshot["sceneFile"] = scene_file
         published = self._publish(snapshot, staging, frames, workspace, registry, task_id, token)
+        if scene_file:
+            preview_from_frames(folder, scene_file, frames)
+            published = {**published, "scene_file": scene_file}
         metadata = {"operation": self.operation, "quality": plan_quality(snapshot["plan"]), "output": published}
         geometry = read_geometry_report(staging)
         if geometry is not None:
@@ -1077,6 +1086,7 @@ class World3DExportService:
             "width": plan["width"], "height": plan["height"], "fps": plan["fps"],
             "duration_seconds": plan["duration"], "quality": plan_quality(plan),
             "shutter": plan.get("shutter", 0),
+            **({"scene_file": snapshot["sceneFile"]} if snapshot.get("sceneFile") else {}),
         }
         if plan.get("prores"):
             params["prores"] = True

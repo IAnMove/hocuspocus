@@ -169,7 +169,9 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
             } for index, clip in enumerate(clips)],
         },
     )
+    import services.agent_activity as agent_activity_module
     import services.asset_manifest as asset_manifest_module
+    import services.montage_documents as montage_documents_module
     import services.video_editor_layers as video_editor_layers_module
 
     services_module = _module(
@@ -182,6 +184,9 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
     monkeypatch.setitem(sys.modules, "services.video_editor", video_editor_module)
     monkeypatch.setitem(sys.modules, "services.asset_manifest", asset_manifest_module)
     monkeypatch.setitem(sys.modules, "services.video_editor_layers", video_editor_layers_module)
+    # The export names the montage it came from and the agent that asked (montage_link, requested_by).
+    monkeypatch.setitem(sys.modules, "services.agent_activity", agent_activity_module)
+    monkeypatch.setitem(sys.modules, "services.montage_documents", montage_documents_module)
 
     def workspace_dir(workspace=None) -> str:
         workspace_calls.append(workspace)

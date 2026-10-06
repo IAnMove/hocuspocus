@@ -66,8 +66,12 @@ def create_character_kit_library_router() -> APIRouter:
         if poses is not None and (not isinstance(poses, list) or not all(isinstance(pose, str) for pose in poses)):
             raise HTTPException(status_code=400, detail="poses must be a list of pose ids")
         try:
-            return rig_character(_workspace_dir(workspace), workspace, kit_id, base_revision=body.get("baseRevision"),
-                                 style=body.get("style"), pose_ids=poses, hints=body.get("hints"))
+            folder = _workspace_dir(workspace)
+            rigged = rig_character(folder, workspace, kit_id, base_revision=body.get("baseRevision"),
+                                   style=body.get("style"), pose_ids=poses, hints=body.get("hints"))
+            # Every image it wrote names the kit, the rig settings and the poses it came from (tool_sidecars).
+            from services.tool_sidecars import rig_sidecars
+            return rig_sidecars(rigged, workspace=workspace, kit_id=kit_id, folder=folder, request={"poses": poses})
         except FlatRigError as exc:
             raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
         except CharacterKitRevisionConflict as exc:

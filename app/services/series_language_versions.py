@@ -148,8 +148,10 @@ def set_version_duration(episode: dict[str, Any], language: str, shot_id: str, s
     version.setdefault("durations", {})[shot_id] = round(float(seconds), 3)
 
 
-def set_version_take(episode: dict[str, Any], language: str, shot_id: str, attempt_id: str) -> None:
-    """Approve a completed take for a language version and keep its length as the version's."""
+def set_version_take(episode: dict[str, Any], language: str, shot_id: str, attempt_id: str, approved_by: str = "user",
+                     now: str | None = None) -> None:
+    """Approve a completed take for a language version and keep its length as the version's. The take records who
+    approved it (``approvedBy``: user, agent, wizard or server, as ``series_library.REVIEWERS``)."""
     shot = _shot(episode, shot_id)
     attempt = next((item for item in shot.get("attempts") or [] if item.get("id") == attempt_id), None)
     if attempt is None or attempt.get("status") != "completed":
@@ -158,6 +160,9 @@ def set_version_take(episode: dict[str, Any], language: str, shot_id: str, attem
     if not isinstance(version, dict):
         raise ValueError(f"The episode has no {language} version")
     version.setdefault("approvedAttemptIds", {})[shot_id] = attempt_id
+    from services.series_library import REVIEWERS, _now
+    attempt.update(approvedBy=approved_by if approved_by in REVIEWERS else "user", approvedAt=now or _now(),
+                   approvedLanguage=language)
     seconds = (attempt.get("settings") or {}).get("sourceDurationSeconds")
     if isinstance(seconds, (int, float)) and seconds > 0:
         version.setdefault("durations", {})[shot_id] = round(float(seconds), 3)

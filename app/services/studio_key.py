@@ -95,12 +95,12 @@ def command_handlers(workspace_dir, uploads_dir, find_model: Callable[[], str | 
 
     async def handle(arguments: dict) -> dict:
         try:
-            result = _key_once(arguments, workspace_dir, lambda: key_request(
+            result = _key_once(arguments, workspace_dir, lambda: _with_sidecar(key_request(
                 arguments,
                 workspace_dir=workspace_dir,
                 uploads_dir=uploads_dir,
                 find_model=finder,
-            ))
+            ), arguments, workspace_dir))
         except StudioKeyError as exc:
             raise HTTPException(exc.status, {
                 "code": exc.code,
@@ -110,6 +110,13 @@ def command_handlers(workspace_dir, uploads_dir, find_model: Callable[[], str | 
         return {"version": 1, "status": "completed", "operation": "studio.key", "result": result}
 
     return {"studio.key": handle}
+
+
+def _with_sidecar(result: dict, arguments, workspace_dir) -> dict:
+    """The keyed file's sidecar: its source, screen mode and options (services/tool_sidecars.py)."""
+    from services.tool_sidecars import key_sidecar
+    payload = _input(arguments)
+    return key_sidecar(result, payload, _folder(workspace_dir, payload["workspace"]))
 
 
 def _key_once(arguments, workspace_dir, run: Callable[[], dict]) -> dict:

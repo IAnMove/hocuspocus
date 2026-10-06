@@ -276,7 +276,9 @@ class Scene2DExportService(World3DExportService):
                                 duck=duck_db(snapshot["document"]))
 
     def output_name(self, snapshot: dict) -> str:
-        label = re.sub(r"[^A-Za-z0-9._-]+", "-", str(snapshot["document"].get("name") or "scene")).strip("-._")[:40] or "scene"
+        # A Series shot is "<series> · <episode> · <shot>": the shot id survives the length cap (readable_names).
+        from services.readable_names import keep_last_label
+        label = keep_last_label(snapshot["document"].get("name") or "scene", 64) or "scene"
         return f"{time.strftime('%Y-%m-%d-%Hh%Mm%Ss')}_video2d-{label}_{uuid.uuid4().hex[:6]}.mp4"
 
     def sidecar(self, snapshot: dict, name: str) -> dict:
@@ -286,6 +288,7 @@ class Scene2DExportService(World3DExportService):
                 "model_type": "scene-animator", "generation_mode": "2d-scene-compositor",
                 "scene": snapshot["document"], "scene_recipe": {"engine": "video2d", "refs": snapshot["refs"]},
                 "width": plan["width"], "height": plan["height"], "fps": plan["fps"], "duration_seconds": plan["duration"],
+                **({"scene_file": snapshot["sceneFile"]} if snapshot.get("sceneFile") else {}),
             },
             "generation_mode": "video", "tool": self.slug, "output_filename": name,
         }
