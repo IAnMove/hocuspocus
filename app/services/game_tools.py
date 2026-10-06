@@ -365,12 +365,18 @@ def _model_file(payload: dict) -> str:
     return files[0]
 
 
-def model3d(ctx, step, *, image_path, images=None) -> str:
+def model3d(ctx, step, *, image_path, images=None, preset=None, reduce_face=None, target_face_num=None) -> str:
     """Hunyuan mesh. Waits on ``model3d.status`` and returns ``result.filename``."""
     _check(ctx)
     payload = {"workspace": ctx.workspace, "image_path": image_path}
     if images:
         payload["images"] = images
+    if preset:
+        payload["preset"] = preset
+    if reduce_face is not None:
+        payload["reduce_face"] = bool(reduce_face)
+    if target_face_num is not None:
+        payload["target_face_num"] = int(target_face_num)
     started = time.perf_counter()
     submitted = ctx.call("model3d.generate", {"version": 1, "intent_id": _intent(ctx, step), "input": payload})
     finished = _poll(ctx, "model3d.status", _job_id(submitted))
@@ -379,7 +385,7 @@ def model3d(ctx, step, *, image_path, images=None) -> str:
     return name
 
 
-def rig(ctx, step, *, source, engine="humanoid", animations=None) -> str:
+def rig(ctx, step, *, source, engine="humanoid", animations=None, rig_profile=None) -> str:
     """Rig a GLB. Waits on ``model3d.rig.status``."""
     _check(ctx)
     payload = {
@@ -388,6 +394,8 @@ def rig(ctx, step, *, source, engine="humanoid", animations=None) -> str:
         "engine": engine,
         "animations": list(animations or ["idle", "walk"]),
     }
+    if rig_profile:
+        payload["rig_profile"] = rig_profile
     started = time.perf_counter()
     submitted = ctx.call("model3d.rig", {"version": 1, "intent_id": _intent(ctx, step), "input": payload})
     job_id = _job_id(submitted)

@@ -35,6 +35,19 @@ SERIES_TOOLS = frozenset({
     "scenes.world3d.export", "scenes.world3d.export.receipt",
 })
 
+GAME_TOOLS = frozenset({
+    "game.guide", "game.presets", "game.list", "game.get", "game.create", "game.update",
+    "game.style.sheet", "game.style.approve", "game.assets.from_list", "game.asset.update",
+    "game.asset.approve", "game.asset.reject", "game.asset.lock",
+    "game.produce", "game.produce.status", "game.produce.cancel", "game.produce.resume", "game.export",
+    "generation.image", "generation.video", "generation.sfx", "generation.music", "generation.speech",
+    "studio.key",
+    "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard",
+    "characters.list", "characters.get", "characters.save",
+    "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate",
+    "media.options", "scenes.assets.inspect",
+})
+
 PROFILES: dict[str, dict] = {
     "series": {
         "tools": SERIES_TOOLS,
@@ -44,6 +57,17 @@ PROFILES: dict[str, dict] = {
             "the shot format, the house conventions and the series bible (characters with their kits, poses and voices, "
             "locations, music and sound files, episodes). Write the episode with series.episode.from_script and make it with "
             "series.episode.produce. Long jobs return an id: poll their status tool. Reuse intent_id on retries."
+        ),
+    },
+    "game": {
+        "tools": GAME_TOOLS,
+        "instructions": (
+            "HocusPocus game assets: a local pack of sprites, animation, tiles, UI, audio and meshes for one game. "
+            "Call game.guide first. Never approve a style or an asset unless the user asked. "
+            "Describe the look by traits, not by a brand, console, studio or artist. "
+            "Measure one asset before a large batch. game.assets.from_list with check true does not write. "
+            "game.produce renders pending work; rerender only stale assets. Poll game.produce.status. "
+            "game.export packs approved assets only."
         ),
     },
 }

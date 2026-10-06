@@ -62,6 +62,7 @@ def test_kind_defaults_and_walk_action():
         "assets": [
             {"id": "heroe", "kind": "character", "name": "Héroe"},
             {"id": "heroe-walk", "kind": "animation", "spec": {"character": "heroe", "action": "andar"}},
+            {"id": "heroe-idle", "kind": "animation", "spec": {"character": "heroe", "action": "idle"}},
             {"id": "moneda", "kind": "item"},
             {"id": "icono", "kind": "icon"},
             {"id": "boton", "kind": "ui"},
@@ -91,15 +92,41 @@ def test_kind_defaults_and_walk_action():
     assert walk["spec"]["frames"] == 8
     assert walk["spec"]["fps"] == 12
     assert walk["spec"]["loop"] is True
-    assert walk["spec"]["method"] == "h3"
+    assert walk["spec"]["method"] == "strip"
+    assert by_id["heroe-idle"]["spec"]["method"] == "h3"
     assert walk["spec"]["mirror"] is True
     assert walk["dependsOn"] == ["heroe"]
     assert by_id["moneda"]["spec"]["sizePx"] == 32
     assert by_id["boton"]["spec"]["nineSlice"] is True
     assert by_id["suelo"]["spec"]["layout"] == "platform-3x3"
     assert by_id["cielo"]["spec"]["method"] == "separate"
+    assert by_id["salto"]["spec"]["engine"] == "retro"
+    assert by_id["salto"]["spec"]["retroPreset"] == "jump"
     assert by_id["voz"]["dependsOn"] == ["heroe"]
     assert by_id["heroe3d"]["spec"]["profile"] == "humanoid"
+
+
+def test_sfx_engine_follows_pixel_keywords_unless_it_is_explicit():
+    pixel = normalize_game({
+        "id": "bosque", "title": "Bosque",
+        "assets": [
+            {"id": "moneda", "kind": "sfx", "name": "Moneda", "spec": {"seconds": 0.4}},
+            {"id": "viento", "kind": "sfx", "description": "a white gust", "spec": {"engine": "mmaudio"}},
+            {"id": "rayo", "kind": "sfx", "description": "un láser corto"},
+        ],
+    }, now=NOW)
+    by_id = {asset["id"]: asset for asset in pixel["assets"]}
+    assert by_id["moneda"]["spec"]["engine"] == "retro"
+    assert by_id["moneda"]["spec"]["retroPreset"] == "pickup"
+    assert "name" not in by_id["moneda"]["spec"]
+    assert by_id["viento"]["spec"]["engine"] == "mmaudio"
+    assert "retroPreset" not in by_id["viento"]["spec"]
+    assert by_id["rayo"]["spec"]["retroPreset"] == "laser"
+    painted = normalize_game({
+        "id": "bosque", "title": "Bosque", "style": {"preset": "cartoon-flat"},
+        "assets": [{"id": "salto", "kind": "sfx"}],
+    }, now=NOW)
+    assert painted["assets"][0]["spec"]["engine"] == "mmaudio"
 
 
 def test_dependency_cycle_is_rejected():

@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.game_export import export_game
 from services.game_library import (
     GameConflictError,
     GameNotFoundError,
@@ -83,6 +84,11 @@ class AssetLock(BaseModel):
     workspace: str = Field(min_length=1, max_length=200)
     locked: bool
     base_revision: int | None = None
+
+
+class ExportBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace: str = Field(min_length=1, max_length=200)
 
 
 def create_game_library_router(*, workspace_dir: Callable[[str], str], lock: threading.RLock) -> APIRouter:
@@ -170,5 +176,15 @@ def create_game_library_router(*, workspace_dir: Callable[[str], str], lock: thr
             body.workspace,
             lambda library: lock_asset(library, game_id, asset_id, body.locked, now=_now(), base_revision=body.base_revision),
         )
+
+    @router.post("/api/v1/games/{game_id}/export")
+    def post_export(game_id: str, body: ExportBody):
+        def run(library: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+            game = next((item for item in library.get("games") or [] if item.get("id") == game_id), None)
+            if game is None:
+                raise GameNotFoundError("game_not_found")
+            return library, export_game(workspace_dir(body.workspace), game, workspace=body.workspace, now=_now())
+
+        return mutate(body.workspace, run)
 
     return router

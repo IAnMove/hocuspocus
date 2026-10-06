@@ -561,6 +561,49 @@ def test_uri_less_non_zero_buffer_does_not_alias_bin_chunk():
     assert report.buffers[1].blocked is True
 
 
+def test_indexed_cube_counts_twelve_triangles():
+    positions = _f32(
+        -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1,
+        -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1,
+    )
+    indices = _u16(
+        0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6,
+        0, 4, 5, 0, 5, 1, 2, 6, 7, 2, 7, 3,
+        0, 3, 7, 0, 7, 4, 1, 5, 6, 1, 6, 2,
+    )
+    blob = positions + indices
+    document = {
+        "asset": {"version": "2.0"},
+        "meshes": [{"name": "Cube", "primitives": [{"attributes": {"POSITION": 0}, "indices": 1, "mode": 4}]}],
+        "buffers": [{"byteLength": len(blob)}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(positions)},
+            {"buffer": 0, "byteOffset": len(positions), "byteLength": len(indices)},
+        ],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 8, "type": "VEC3"},
+            {"bufferView": 1, "componentType": 5123, "count": 36, "type": "SCALAR"},
+        ],
+    }
+    report = inspect_glb_bytes(pack_glb(document, blob))
+    assert report.meshes[0].triangle_count == 12
+    assert report.total_triangles == 12
+
+
+def test_non_triangle_mode_has_no_count():
+    positions = _f32(0, 0, 0, 1, 0, 0, 0, 1, 0)
+    document = {
+        "asset": {"version": "2.0"},
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "mode": 5}]}],
+        "buffers": [{"byteLength": len(positions)}],
+        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": len(positions)}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
+    }
+    report = inspect_glb_bytes(pack_glb(document, positions))
+    assert report.meshes[0].triangle_count is None
+    assert report.total_triangles is None
+
+
 def test_json_nan_is_corrupt():
     raw_json = b'{"asset":{"version":NaN}}'
     raw_json += b" " * ((4 - (len(raw_json) % 4)) % 4)
