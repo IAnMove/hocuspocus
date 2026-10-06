@@ -6,6 +6,27 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series 2D shots no longer show the straight cut of a cutout cut by its image
+border, stand grounded props on the floor, and can give a video layer its own
+clock. The render reads each pose's alpha (`series_cutouts`): a cut is a run of
+opaque pixels along the left or right border at least 8 % of the image height
+long, or along the bottom at least 15 % of its width, so a stray pixel, a
+strand of hair or feet resting on the border are not cuts. The Series compiler
+then slides a cutout whose side cut would show until that cut is just past the
+frame edge, at the same size; a bottom cut goes past the frame bottom (slid
+down in a wide shot, enlarged with the eyes on the eye line in the other
+framings); cut on both sides, it is enlarged proportionally until both cuts are
+out of the frame, at most 2.5×. A cut that is already out of the frame moves
+nothing, and `"edgeSnap": false` on a cast entry keeps the old placement. A
+prop with `"ground": true` (or `"grounded": true`) stands its lowest opaque row
+on the floor the cast stands on in that framing, or on its anchor, and ignores
+`y`. A video layer with any of `start`, `speed` (0.1–4) and `loop` (`"loop"`,
+`"hold"`, `"pingpong"`) plays on its own clock in the editor preview and in the
+headless export (`layer.playback` in the Video 2D document); without them it
+loops from its first frame as before. Take digests do not change, so no shot is
+rendered again by itself; a shot rendered again after this change gets the new
+placement when its pose is cut.
+
 Series Lab voice rooms are subtle now, and only the people in a shot are in
 its room. The first presets made a cathedral so wet that the dialogue was hard
 to follow: a 3.5 s tail 5 dB under the voice, nearly all of it diffuse. Every

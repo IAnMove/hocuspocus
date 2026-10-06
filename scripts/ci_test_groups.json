@@ -380,6 +380,7 @@
         "tests/test_series_native_render.py",
         "tests/test_series_shot_plan.py",
         "tests/test_series_layers.py",
+        "tests/test_series_cutouts.py",
         "tests/test_series_shot_extras.py",
         "tests/test_series_script_produce.py",
         "tests/test_audio_levels.py",
@@ -594,6 +595,14 @@
         "tests/test_series_shot_plan.py",
         "tests/test_series_script_produce.py",
         "tests/test_series_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_cutouts.py",
+      "paths": [
+        "tests/test_series_cutouts.py",
+        "tests/test_series_native_render.py",
+        "tests/test_series_shot_plan.py"
       ]
     },
     {

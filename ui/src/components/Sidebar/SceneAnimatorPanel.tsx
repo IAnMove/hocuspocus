@@ -67,7 +67,7 @@ import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } 
 import { rememberCharacterKitLibrary, rememberVideo3dScene } from '../../features/agent/wizardLabSession'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
-import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
+import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneProgressFromSeconds, sceneTimeToLayerTime, sceneVideoTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
 import { seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
 import type { AudioAnalysisResult, Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneMask } from '../../types'
 import { canonicalSceneFps } from '../../lib/sceneFps.ts'
@@ -498,9 +498,7 @@ export function SceneAnimatorPanel() {
         element.pause()
         const duration = finiteNumber(element.duration, 0)
         if (duration <= 0) return
-        const layerTime = sceneTimeToLayerTime(layer, sceneSeconds)
-        const finalFrame = Math.max(0, duration - 1 / fps)
-        const target = layer.animation.loop ? layerTime % duration : Math.min(finalFrame, layerTime)
+        const target = sceneVideoTime(layer, sceneSeconds, duration, fps)
         if (Math.abs(element.currentTime - target) > 1 / (fps * 2)) {
           try { element.currentTime = target } catch { /* Metadata can disappear while a source is being reassigned. */ }
         }

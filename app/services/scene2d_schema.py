@@ -199,6 +199,8 @@ def _layer() -> dict:
         }, ["type", "targetLayerId"]),
         "effects": _effects(), "strip": _strip(),
         "focus": _object({"x": _number(0, 100), "y": _number(0, 100)}, ["x", "y"]),
+        # Video layers: the clip's own clock (sceneTimeline.sceneVideoTime), apart from the motion timing.
+        "playback": _object({"start": _number(0, 3600), "loop": _enum(["loop", "hold", "pingpong"]), "speed": _number(0.1, 4)}),
         "transform": _object({
             "x": _number(), "y": _number(), "scale": _number(), "opacity": _number(),
             "rotation": _number(), "rotationX": _number(), "rotationY": _number(),

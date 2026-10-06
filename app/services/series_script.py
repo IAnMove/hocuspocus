@@ -13,7 +13,8 @@ clear message instead of halfway through a render::
     {"title": {"es": "...", "en": "..."}, "premise": {...},
      "scenes": [{"id": "cold_open", "location": "street", "variant": "day", "purpose": "..."}],
      "shots": [{"scene": "cold_open", "framing": "wide", "camera": "push",
-                "cast": [["kevin", "base", 58], {"characterId": "mark", "poseId": "wave", "x": 30, "enterFrom": "left"}],
+                "cast": [["kevin", "base", 58], {"characterId": "mark", "poseId": "wave", "x": 30, "enterFrom": "left"},
+                         ["boss", "bust", 80, {"edgeSnap": false}]],
                 "lines": [{"who": "kevin", "es": "...", "en": "...", "pauseBefore": 0.6},
                           {"who": "narrator", "es": "...", "voiceRoom": "radio"}],
                 "card": {"kind": "title", "es": ["TITLE", "Episode 3"], "en": [...]},
@@ -21,8 +22,10 @@ clear message instead of halfway through a render::
                 "sfx": [{"file": "sfx-pen.wav", "line": 1, "offset": 0.2},
                         {"file": "sfx-step.wav", "anchor": "enter", "cast": 1, "repeat": "steps"}],
                 "fx": [{"kind": "confetti", "line": 1}],
-                "props": [{"file": "prop-truck-key.png", "x": 12, "y": 74, "scale": 0.36}], "timing": {"intro": 1.0},
-                "layers": [{"file": "fg-pillar.png", "depth": 0.9, "front": true, "x": 8}], "castDepth": 0.6,
+                "props": [{"file": "prop-truck-key.png", "x": 12, "y": 74, "scale": 0.36},
+                          {"file": "prop-robot-key.png", "x": 80, "scale": 0.5, "ground": true}], "timing": {"intro": 1.0},
+                "layers": [{"file": "fg-pillar.png", "depth": 0.9, "front": true, "x": 8},
+                           {"file": "bg-crowd.mp4", "depth": 0.2, "start": 2.5, "loop": "pingpong", "speed": 0.5}], "castDepth": 0.6,
                 "voiceRoom": "cathedral", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]},
                 "foley": {"prompt": "wooden airship creaking, wind", "volume": 0.5}}]}
 """

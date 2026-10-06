@@ -89,8 +89,9 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
             {"characterId": "leo", "poseId": "wave", "x": 68, "enterFrom": "right", "enterAt": 0.5, "enterDuration": 2.4,
              "enterGait": "walk", "enterStep": 0.6}],
    "sfx": [{"file": "sfx-step.wav", "anchor": "enter", "cast": "leo", "repeat": "steps", "volume": 0.5}],
-   "props": [{"file": "prop-stapler.png", "x": 12, "y": 74, "scale": 0.2}],
-   "layers": [{"file": "fg-plant.png", "depth": 0.95, "front": true, "x": 8, "y": 62, "scale": 0.9}],
+   "props": [{"file": "prop-stapler.png", "x": 12, "y": 74, "scale": 0.2}, {"file": "prop-robot.png", "x": 80, "scale": 0.5, "ground": true}],
+   "layers": [{"file": "fg-plant.png", "depth": 0.95, "front": true, "x": 8, "y": 62, "scale": 0.9},
+              {"file": "bg-crowd.mp4", "depth": 0.2, "start": 2.5, "loop": "pingpong", "speed": 0.5}],
    "music": {"file": "mus-bumper.wav", "volume": 0.6, "start": 0},
    "card": {"kind": "title", "title": "SERIES", "body": "Episode 3 · Title"}, "voiceRoom": "cathedral"}}
 ```
@@ -106,11 +107,26 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   degrees (default 1.5, 0 for none). `enterStep` is the step in seconds (default 0.5; a slow monk 0.6–0.7): the walk
   takes a whole number of steps, so its feet land on the entrance's start, every step after it and its end, and
   the step is stretched a little to fit. `poseId` must be one of the kit's poses.
+- **cut poses (edge snap):** a pose whose figure is cut by its image border (a bust cut at the chest and on one
+  side) never shows that cut in the frame. The render reads the pose's alpha: a cut is a run of opaque pixels along
+  the left or right border at least 8 % of the image height long, or along the bottom at least 15 % of its width (a
+  stray pixel, a strand of hair or feet resting on the border are not cuts; the top is not read). A side cut that
+  would show slides the cutout until that cut is just past the frame edge, at the same size; a bottom cut goes past
+  the frame bottom (slid down in a wide shot, enlarged with the eyes on the framing's eye line otherwise); cut on both
+  sides, it is enlarged proportionally until both cuts are out of the frame (at most 2.5×). A cut already outside the
+  frame, or below it, moves nothing. The cut is read from the pose image itself, so a mirrored copy of a pose is cut
+  on the other side. Give a bust cut on its left an `x` on the left of the frame (it lands on that edge anyway), and
+  keep two cut busts on their cut sides in a two-shot. `"edgeSnap": false` on a cast entry keeps it where `x` puts it,
+  cut and all; an entry with a `transform`, or a perched character, is never moved.
 - **perched characters:** a character whose bible entry has `layout2d.perch` (a laptop on a desk) is placed on that
   prop in every framing automatically. Give it no transform.
 - **props:** a workspace image (`file`, keyed with `studio.key`) or a series asset (`assetId`), at `x`/`y` (%) and
   `scale` (fraction of the frame height), or on a location `anchor` from the bible (it then stands on that point in
-  every framing).
+  every framing). `"ground": true` (or `"grounded": true`, as on a 3D object) stands a standing figure or object on
+  the floor: its lowest opaque row goes on the line the cast's feet stand on (94 % of the frame height in a wide
+  shot or a vertical two-shot; in the other framings the set's floor through that framing's zoom, below the frame in
+  a medium shot or a close-up, like the cast's feet), or on its `anchor` when it has one. `y` is then ignored; use an
+  anchor to stand it further back. Without `ground`, `y` is the prop's centre, as before.
 - **layers (a set in depth):** a location's `layout2d.layers` (`series.update`) are drawn over its background in
   every 2D shot there, at most 8: `{"assetId" | "file", "depth": 0.3, "front": false, "opacity": 1, "x": 50, "y": 50,
   "scale": 1, "drift": 0}`. `depth` 0 is the background's far plane, 1 the nearest; the cast stands at `castDepth`
@@ -121,7 +137,11 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   frame-sized image). With layers a `push` moves every plane by its depth: the far wall grows less than the cast,
   the pillar in front more, so the push reads as depth. `drift` (frame px per second, negative to the left) slides a
   layer on its own, also in a static shot: fog or smoke, with a `scale` of 1.2 or more so its edge stays out of the
-  frame. A shot's `layers` replace its location's (in a script, `"layers"` and `"castDepth"` on the shot) and `[]`
+  frame. A video layer loops from its first frame in every shot unless it has any of `start` (the clip second shown
+  at the shot's first frame, 0–3600), `speed` (0.1–4) and `loop`: `"loop"` (start again, the default), `"hold"`
+  (keep the last frame) or `"pingpong"` (play back and forth). A 5 s clip behind many shots: give it `"loop":
+  "pingpong"` and `"speed": 0.5` so it never visibly restarts, and a different `start` in each shot (its own
+  `layers`) so the shots do not all show the same seconds. A shot's `layers` replace its location's (in a script, `"layers"` and `"castDepth"` on the shot) and `[]`
   turns them off. A bad layer is refused. Changing a location's layers renders again only its 2D shots that draw them.
 - **music:** one music track per shot (a bumper at the start of a scene, a theme); a language can have its own file.
 - **sfx:** sound effects at a line's `start`/`end` (`line`, `anchor`, `offset` s) or at a second (`at`), `volume`
